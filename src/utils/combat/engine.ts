@@ -110,6 +110,7 @@ import {
     buildForcedTargetingStatus,
     countOwnersWithSelfBuff,
     executeIntent,
+    liveHealChannelPct,
     ownerDebuffNamesFor,
     partitionReactiveAbilities,
     provokerOf,
@@ -3327,27 +3328,21 @@ export function runCombat(rawInput: CombatEngineInput): {
     // turn — never double-counted (F3).
     const recipientMaxHp = (id: string): number =>
         lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? baseHpFor(id);
-    const recipientIncomingHealPct = (id: string): number => {
-        // ARM 1 — the recipient has already acted: its published ctx ALREADY includes both the
-        // `preFight` term and (#367) the enemy-APPLIED term, because `runPlayerTurn` folds both
-        // into `scheduledTotals` and `turnCtx.incomingHealPct` is that folded total. Adding
-        // either again here would DOUBLE-COUNT: -50% would read as -100% and zero the repair.
-        const ctx = lastTurnCtxByActor.get(id);
-        if (ctx !== undefined) return ctx.incomingHealPct;
-        // ARM 2 — pre-first-turn: no ctx exists yet, so this is the ONLY place either term can
-        // enter. Not a formality (#367): 7 of the 9 corpus appliers inflict `Inc. Repair Down`
-        // from a DAMAGE clause, which can land in round 1 before the victim has taken a turn —
-        // exactly this window.
-        //
-        // ⚠️ This is deliberately an explicit `ctx !== undefined` check rather than the `??` chain
-        // it replaced. `??` falls through on a legitimate `0`, which was harmless only while the
-        // fallback was also `0`; with a non-zero enemy-applied term below, falling through on a
-        // real ctx value of `0` would double-count it.
-        return (
-            (allActorsById.get(id)?.preFight?.incomingHeal ?? 0) +
-            victimOwnEnemyHealModifiers(statusEngine, id).incomingHealPct
+    // #367: the incoming-repair % for a recipient OTHER than the acting actor. The `preFight` half
+    // comes from the recipient's published ctx (or, before its first turn, from its own
+    // `preFight`); the ENEMY-APPLIED half is taken LIVE, because a published ctx is only as fresh
+    // as that actor's last turn and a debuff applied by a SLOWER enemy lands after it. All of that
+    // arithmetic — including the subtraction that stops the live re-read from double-counting what
+    // the ctx already carries — lives in `liveHealChannelPct`, which the reactive-heal path in
+    // triggers.ts calls for the same two channels.
+    const recipientIncomingHealPct = (id: string): number =>
+        liveHealChannelPct(
+            statusEngine,
+            id,
+            'incomingHealPct',
+            lastTurnCtxByActor.get(id),
+            allActorsById.get(id)?.preFight?.incomingHeal ?? 0
         );
-    };
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects

@@ -2532,6 +2532,17 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
     return [...names];
 }
 
+/** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
+ *  means -50%). One named shape rather than three hand-written copies of the same object literal:
+ *  it is `victimOwnEnemyHealModifiers`'s return, `liveHealChannelPct`'s channel key, and
+ *  `runPlayerTurn`'s `enemyAppliedHeal` turn arg (#367). */
+export interface EnemyAppliedHealModifiers {
+    /** `Inc. Repair Down/Up` — repairs LANDING on this actor. */
+    incomingHealPct: number;
+    /** `Out. Repair Down` — repairs this actor PERFORMS. */
+    outgoingHealPct: number;
+}
+
 /** Enemy-APPLIED heal-channel modifiers carried by `victimId` in its OWN per-victim enemy store
  *  (#367). Returns additive percentage points for the two channels an enemy debuff can move:
  *  `incomingHealPct` (`Inc. Repair Down/Up` — repairs LANDING on this actor) and
@@ -2566,7 +2577,7 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
 export function victimOwnEnemyHealModifiers(
     statusEngine: StatusEngine,
     victimId: string
-): { incomingHealPct: number; outgoingHealPct: number } {
+): EnemyAppliedHealModifiers {
     let incomingHealPct = 0;
     let outgoingHealPct = 0;
     const fold = (s: ActiveAbilityStatus): void => {
@@ -2583,6 +2594,56 @@ export function victimOwnEnemyHealModifiers(
     ))
         fold(s);
     return { incomingHealPct, outgoingHealPct };
+}
+
+/**
+ * One heal channel's percentage-point total for `actorId`, read by a CROSS-ACTOR consumer — with
+ * the enemy-applied half taken LIVE rather than from a published snapshot (#367).
+ *
+ * WHY THIS EXISTS. `runPlayerTurn` folds `victimOwnEnemyHealModifiers` into the acting actor's own
+ * totals and publishes the folded result as `turnCtx.incomingHealPct` / `outgoingHealPct`. That is
+ * exactly right for the actor's own turn, but `lastTurnCtxByActor` is written ONLY at an actor's
+ * own turn — so anybody reading somebody ELSE's published ctx reads that actor's LAST TURN's
+ * totals. When the applier is SLOWER than the victim, the debuff lands after the victim's turn and
+ * a repair later in the same round would read a ctx that predates the debuff. With
+ * `Inc. Repair Down II` applied for ONE turn (Larkspur, Ripper) and `III` for one turn (Sansi),
+ * such a debuff could expire having reduced nothing at all.
+ *
+ * THE ARITHMETIC, and why it cannot double-count. `playerTurn` publishes the enemy-applied portion
+ * separately (`enemyAppliedIncomingHealPct` / `enemyAppliedOutgoingHealPct`) from the very values
+ * the fold consumed, so subtracting it removes EXACTLY what the ctx contains, and the live read
+ * puts back today's value. With a FAST applier the two are equal and the whole operation is a
+ * no-op — which is what keeps the -50% case at -50% instead of -100%.
+ *
+ * The two arms are ASYMMETRIC in what they subtract, and that is the whole fence:
+ *   - ctx present → ctx total − the ctx's own enemy-applied portion + the live one. The field is
+ *     OPTIONAL, and absent means the ctx folded no enemy term, so `?? 0` subtracts nothing — which
+ *     is correct, not a fallback.
+ *   - ctx absent (pre-first-turn) → there is no stale total to correct; the baseline is the actor's
+ *     `preFight` value and the live term is simply added. Not a formality: 7 of the 8 corpus
+ *     `Inc. Repair Down` appliers inflict it from a DAMAGE clause, which can land in round 1
+ *     before the victim has taken a turn.
+ *
+ * NOT for an actor reading its OWN current turn's totals — those are computed fresh from
+ * `dmgStats.totals` and already correct; running them through here would subtract a term the
+ * caller never added.
+ */
+export function liveHealChannelPct(
+    statusEngine: StatusEngine,
+    actorId: string,
+    channel: keyof EnemyAppliedHealModifiers,
+    /** The actor's PUBLISHED last-turn ctx, or undefined before its first turn. */
+    ctx: PlayerRoundCtx | undefined,
+    /** The pre-first-turn baseline for this channel (the actor's `preFight` value, or 0). */
+    preFightPct: number
+): number {
+    const live = victimOwnEnemyHealModifiers(statusEngine, actorId)[channel];
+    if (ctx === undefined) return preFightPct + live;
+    const stale =
+        channel === 'incomingHealPct'
+            ? ctx.enemyAppliedIncomingHealPct
+            : ctx.enemyAppliedOutgoingHealPct;
+    return ctx[channel] - (stale ?? 0) + live;
 }
 
 // DEFAULT_ENEMY_TARGET is imported from statusEngine.ts — single source of truth.
@@ -4091,12 +4152,34 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // path's incomingPctFor (playerTurn.ts). F3: pre-first-turn (no ctx yet), fall back
         // to the owner's pre-fight heal baseline — FALLBACK ONLY, never added to a ctx value
         // (the ctx already folds preFight via playerTurn's scheduledTotals fold), so no
-        // double-count. The non-self recipient path inherits the same fallback from the
-        // engine's recipientIncomingHealPct.
-        const ownerOutgoing = ownerCtx?.outgoingHealPct ?? owner.actor.preFight?.outgoingHeal ?? 0;
+        // double-count.
+        //
+        // #367: BOTH channels go through `liveHealChannelPct` rather than reading the ctx
+        // directly, because a reactive repair fires at a moment the owner did not choose — a
+        // round tail, an incoming hit — so its owner's published ctx can predate a debuff a
+        // SLOWER enemy applied earlier in the same round. That helper re-reads the enemy-applied
+        // half live and subtracts the stale half the ctx already carries; it also carries the
+        // pre-first-turn arm, which is what closes the gap this site used to have on its
+        // fallback (the old `??` chain reached `preFight` but never the enemy store, so a
+        // reactive repair firing before its owner's first turn ignored the debuff entirely).
+        // The NON-self recipient branch needs nothing here: it inherits the identical treatment
+        // from the engine's `recipientIncomingHealPct`, which calls the same helper.
+        const ownerOutgoing = liveHealChannelPct(
+            ctx.statusEngine,
+            intent.ownerId,
+            'outgoingHealPct',
+            ownerCtx,
+            owner.actor.preFight?.outgoingHeal ?? 0
+        );
         const incomingPctFor = (rid: string): number =>
             rid === intent.ownerId
-                ? (ownerCtx?.incomingHealPct ?? owner.actor.preFight?.incomingHeal ?? 0)
+                ? liveHealChannelPct(
+                      ctx.statusEngine,
+                      intent.ownerId,
+                      'incomingHealPct',
+                      ownerCtx,
+                      owner.actor.preFight?.incomingHeal ?? 0
+                  )
                 : healing.recipientIncomingHealPct(rid);
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so

@@ -50,6 +50,7 @@ import {
     selfBuffNamesForOwners,
     LIVE_TRIGGERS,
     type ReactiveAbility,
+    type EnemyAppliedHealModifiers,
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
@@ -116,6 +117,19 @@ export interface PlayerRoundCtx {
     effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
+    /** #367: the ENEMY-APPLIED portion that is ALREADY INCLUDED in `incomingHealPct` /
+     *  `outgoingHealPct` above, published separately so a CROSS-ACTOR reader can subtract this
+     *  stale value back out and re-add a live `victimOwnEnemyHealModifiers` read — see
+     *  `triggers.ts`'s `liveHealChannelPct`, which is the only thing that should consume these.
+     *  This matters because `lastTurnCtxByActor` is written only at an actor's OWN turn, so a
+     *  debuff applied by a SLOWER enemy lands after the victim published its ctx and would
+     *  otherwise be invisible to every repair in the rest of that round.
+     *
+     *  OPTIONAL DELIBERATELY: a ctx that folded no enemy term omits these, and a reader that
+     *  subtracts `?? 0` then subtracts nothing — which is the correct answer, not a degraded one.
+     *  It also keeps every existing test double that builds a `PlayerRoundCtx` by hand valid. */
+    enemyAppliedIncomingHealPct?: number;
+    enemyAppliedOutgoingHealPct?: number;
     /** Sub-project I, PR I4b/I4c — `dotDamage`-channel modifier abilities whose GATE is a
      *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
      *  Radiation… for every N% crit power" bonus), plus the ctx used to fold each group
@@ -718,7 +732,7 @@ export interface PlayerTurnArgs {
      *  `incomingPctFor`, the HoT `holderIncomingFactor`, the two cast-heal factors, and — via the
      *  `turnCtx` this function publishes into the engine's `lastTurnCtxByActor` — the engine's
      *  `recipientIncomingHealPct` for every OTHER recipient. Absent → byte-identical. */
-    enemyAppliedHeal?: { incomingHealPct: number; outgoingHealPct: number };
+    enemyAppliedHeal?: EnemyAppliedHealModifiers;
     /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -4636,6 +4650,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveMaxHp: effectiveHp,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
+        // #367: republish the enemy-applied portion of the two totals above, taken from the SAME
+        // `args.enemyAppliedHeal` the fold consumed — never recomputed from the live store here.
+        // That is the whole point: a cross-actor reader subtracts this number back out, so it must
+        // be BY CONSTRUCTION the number that went in, or the subtraction would not cancel.
+        // Spread-guarded so a clean actor's ctx is byte-identical to the pre-#367 shape.
+        ...(args.enemyAppliedHeal
+            ? {
+                  enemyAppliedIncomingHealPct: args.enemyAppliedHeal.incomingHealPct,
+                  enemyAppliedOutgoingHealPct: args.enemyAppliedHeal.outgoingHealPct,
+              }
+            : {}),
         // PR I4b/I4c: only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
         // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →

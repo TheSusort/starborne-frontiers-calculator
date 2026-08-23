@@ -729,21 +729,26 @@ describe('R4 — a critical repair reverses at its post-crit value', () => {
 // "`Inc. Repair Down` applies first, and the reduced amount is what reverses. 4,000 → 2,000 →
 // 2,000 damage." Satisfied by position: `incomingHealPct` is folded into `raw` upstream.
 //
-// ⚠️ HOW THE -50% IS INSTALLED, and why not as an enemy-applied debuff. The ruling is about the
-// `incomingHealPct` CHANNEL — the design names it as "where Inc. Repair Down lives" — so these
-// fixtures put the reduction on that channel, via the victim's `preFight.incomingHeal` block
-// (`playerTurn` folds it into `scheduledTotals.incomingHealBuff`, exactly the total that becomes
-// `lastTurnCtxByActor.incomingHealPct`, which is what `recipientIncomingHealPct` reads).
+// ⚠️ HOW THE -50% IS INSTALLED, and why the route does not matter. R6 is a ruling about the
+// `incomingHealPct` CHANNEL — the design names it as "where Inc. Repair Down lives" — not about
+// how a reduction gets onto that channel. So these fixtures install it the most direct way
+// available, via the victim's `preFight.incomingHeal` block (`playerTurn` folds it into
+// `scheduledTotals.incomingHealBuff`, exactly the total that becomes
+// `lastTurnCtxByActor.incomingHealPct`, which is what `recipientIncomingHealPct` reads). Nothing
+// about the ruling turns on the application route, and `preFight` keeps the fixture free of a
+// second actor's turn order.
 //
-// Applying a named `Inc. Repair Down II` debuff FROM Zosimos does not reach that channel in this
-// engine, and that is a PRE-EXISTING limitation with nothing to do with #362: `incomingHealBuff`
-// is summed only from an actor's own SELF statuses (`foldActorBuffTotals` /
-// `effectiveDamageStatsOf` — scheduled self-buffs + timed SELF ability statuses + preFight). An
-// enemy-inflicted debuff lands in the per-victim ENEMY store, which no incoming-heal fold reads.
-// Installing the reduction through the enemy store would therefore have produced a fixture in
-// which the reduction did nothing at all — and the "burn was halved" assertion would have failed
-// for the fixture's reason rather than the engine's. The control arm below is what makes that
-// distinction observable rather than assumed.
+// SINCE #367 THE ENEMY-STORE ROUTE REACHES THE SAME CHANNEL TOO, so a named `Inc. Repair Down II`
+// inflicted FROM Zosimos would work here as well: `buildTurnArgs` now folds
+// `victimOwnEnemyHealModifiers` into the same layer-1 totals beside `preFight`, and every
+// cross-actor reader re-reads that half live. (Before #367 it would NOT have — the per-victim enemy
+// store was read by no incoming-heal fold, so an enemy-applied reduction did nothing and the "burn
+// was halved" assertion would have failed for the fixture's reason rather than the engine's. That
+// bug is fixed; see `enemyAppliedIncomingRepair.test.ts`.) These fixtures are left on `preFight`
+// because the ruling under test is unchanged and rewriting them would buy nothing.
+//
+// The control arm below is what makes the reduction's liveness observable rather than assumed,
+// whichever route installs it.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('R6 — Inc. Repair Down II halves the repair, and the halved amount is what burns', () => {

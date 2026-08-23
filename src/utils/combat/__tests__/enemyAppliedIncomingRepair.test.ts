@@ -6,27 +6,39 @@
  * `incomingHealBuff` is summed only from an actor's OWN self-side statuses (`foldActorBuffTotals`
  * / `effectiveDamageStatsOf` — scheduled self-buffs + timed SELF ability statuses + `preFight`).
  * An enemy-inflicted debuff lands in the PER-VICTIM ENEMY store, which no incoming-heal fold read.
- * So `Inc. Repair Down I/II/III` — documented as -25/-50/-75% incoming repair, and inflicted by 9
- * corpus ships — reduced nothing at all. `reversedRepairs.engine.test.ts`'s R6 block records this
+ * So `Inc. Repair Down I/II/III` — documented as -25/-50/-75% incoming repair, and inflicted by 8
+ * corpus ships (9 carry one of these two families; the ninth, Nayra, carries only the OUTGOING
+ * one) — reduced nothing at all. `reversedRepairs.engine.test.ts`'s R6 block records this
  * as a known pre-existing limitation and routes around it via `preFight`; this file is the fix.
  *
- * The fix is ONE fold: `engine.ts`'s `buildTurnArgs` computes the victim's own enemy-applied heal
- * modifiers (`victimOwnEnemyHealModifiers`) per turn and hands them to `runPlayerTurn`, which folds
- * them into `scheduledTotals` right beside `preFight`. That single fold reaches every incoming-heal
- * reader, because they all read `dmgStats.totals.incomingHealBuff` or the `turnCtx` published from
- * it. The tests below drive the two structurally different arms:
+ * The fix is ONE fold plus one freshness correction. The fold: `engine.ts`'s `buildTurnArgs`
+ * computes the victim's own enemy-applied heal modifiers (`victimOwnEnemyHealModifiers`) per turn
+ * and hands them to `runPlayerTurn`, which folds them into `scheduledTotals` right beside
+ * `preFight` — reaching every incoming-heal reader at once, because they all read
+ * `dmgStats.totals.incomingHealBuff` or the `turnCtx` published from it. The correction: a
+ * published ctx is only as fresh as its actor's last turn, so every CROSS-ACTOR reader re-reads
+ * the enemy-applied half live through `triggers.ts`'s `liveHealChannelPct` (section 7).
  *
- *   - the SELF arm (`incomingPctFor`'s `rid === actor.id` branch) — test 5;
+ * The tests below drive the structurally different arms:
+ *
+ * (The numbers below are the SECTION banners that divide this file, not `it` ordinals — each
+ * section runs one `it` per side arm.)
+ *
+ *   - the SELF arm (`incomingPctFor`'s `rid === actor.id` branch) — section 5;
  *   - the OTHER-RECIPIENT arm (`engine.ts`'s `recipientIncomingHealPct`), which itself has two
- *     halves: the published-ctx half (test 4) and the PRE-FIRST-TURN fallback half (test 3).
+ *     halves: the published-ctx half and the PRE-FIRST-TURN fallback half — section 3/4;
+ *   - the OUTGOING channel (`Out. Repair Down II` on the HEALER) — section 6;
+ *   - and, once a published ctx is involved at all, whether it is FRESH — section 7.
  *
- * ⚠️ THE DOUBLE-COUNT TRAP, and why tests 3 and 4 differ by ONE number. Once the term is inside
- * the victim's published `turnCtx`, adding it again in `recipientIncomingHealPct` would make -50%
- * read as -100% and zero the repair outright. So the term belongs ONLY on that function's
- * pre-first-turn fallback arm. Tests 3 and 4 are the SAME fixture with only `medicSpeed` changed
- * (700 → 300), which is exactly what moves the repair from before the victim's first turn to after
- * it. Test 3 fails if the fallback arm is missing; test 4 fails if the term is added
- * unconditionally.
+ * ⚠️ THE DOUBLE-COUNT TRAP, and why section 3/4's two tests differ by ONE number. The victim's
+ * published `turnCtx` already contains the enemy-applied term, so a cross-actor reader that simply
+ * ADDED it again would make -50% read as -100% and zero the repair outright. What the reader does
+ * instead is subtract the ctx's own published enemy-applied portion and re-add a live one (see
+ * section 7 for why the live re-read is necessary), which cancels exactly when the two agree.
+ * Section 3/4's two tests are the SAME fixture with only `medicSpeed` changed (700 → 300), which
+ * is exactly what moves the repair from before the victim's first turn to after it. The 700 test
+ * fails if the pre-first-turn arm carries no term; the 300 test fails if the subtraction is
+ * missing.
  *
  * ── Harness ───────────────────────────────────────────────────────────────────────────────────
  * Copied from `reversedRepairs.channels.test.ts` — the same three roles on either side, the same
@@ -85,7 +97,11 @@ type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[numbe
 /** Zosimos's shape: a plain on-cast enemy debuff, landing through the per-victim
  *  `applyTimedAbilityStatus` seam (`playerTurn.ts`, `writeState`). `application: 'apply'` always
  *  lands, isolating the behaviour under test from the hacking-vs-security landing roll. */
-const castStatus = (buffName: string, parsedEffects: ParsedBuffEffects = {}): Ability => ({
+const castStatus = (
+    buffName: string,
+    parsedEffects: ParsedBuffEffects = {},
+    duration = 5
+): Ability => ({
     id: `cast-${buffName}`,
     type: 'debuff',
     target: 'enemy',
@@ -97,7 +113,7 @@ const castStatus = (buffName: string, parsedEffects: ParsedBuffEffects = {}): Ab
         parsedEffects,
         stacks: 1,
         isStackable: false,
-        duration: 5,
+        duration,
         application: 'apply',
     },
 });
@@ -143,6 +159,33 @@ const selfIncomingBuff = (buffName: string, incomingHeal: number): Ability => ({
         isStackable: false,
         duration: 5,
     },
+});
+
+/** A REACTIVE (passive-slot) ally repair, fired from the round tail. The only way to observe
+ *  OUTGOING-channel staleness: a CAST repair recomputes the caster's own totals at its own turn, so
+ *  it can never be stale — only a reader of the owner's PUBLISHED ctx can be, and
+ *  `triggers.ts`'s reactive-heal `ownerOutgoing` is the sole such reader in the engine.
+ *  `basis: 'hp'` is not one of the reactive path's special bases, so it falls to the executor's
+ *  default `ownerCtx?.effectiveMaxHp ?? owner.hp` — the medic's own max HP, i.e. the same RAW. */
+const reactiveAllyRepair = (pct: number): Ability => ({
+    id: 'ab-reactive-ally-repair',
+    type: 'heal',
+    target: 'lowest-hp-ally',
+    trigger: 'end-of-round',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'hp', noCrit: true },
+});
+
+/** The reactive twin of `selfRepair`: a round-tail repair on its OWN owner. Routes through
+ *  `triggers.ts`'s `incomingPctFor` `rid === intent.ownerId` branch — the third cross-actor-stale
+ *  reader, and the one neither the engine's `recipientIncomingHealPct` nor `ownerOutgoing` covers. */
+const reactiveSelfRepair = (pct: number): Ability => ({
+    id: 'ab-reactive-self-repair',
+    type: 'heal',
+    target: 'self',
+    trigger: 'end-of-round',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'hp', noCrit: true },
 });
 
 const activeSlot = (abilities: Ability[]): ShipSkills['slots'][number] => ({
@@ -241,8 +284,24 @@ interface FixtureOpts {
      *  `turnCtx` is live in `lastTurnCtxByActor` — the double-count arm. 700 puts it BEFORE, so
      *  no ctx exists and only `recipientIncomingHealPct`'s fallback arm can carry the term. */
     medicSpeed?: number;
-    /** The victim's own active-slot kit (test 5's self-repair). */
+    /** The victim's own active-slot kit (section 5's self-repair). */
     victimAbilities?: Ability[];
+    /** Zosimos's speed. 950 (the default) makes the APPLIER the fastest actor on the board, so the
+     *  debuff is standing before anything else acts. A value BELOW the victim's 500 inverts that:
+     *  the victim publishes its `turnCtx` BEFORE the debuff exists, so any CROSS-ACTOR reader that
+     *  trusts that published total reads a STALE one. Section 7 is that ordering. */
+    applierSpeed?: number;
+    /** Reactive (passive-slot) abilities on the medic — section 7's outgoing-channel arm. */
+    medicReactiveAbilities?: Ability[];
+    /** Reactive (passive-slot) abilities on the VICTIM — section 7's self-repair arm, which routes
+     *  through `triggers.ts`'s own `incomingPctFor` self branch rather than through the engine's
+     *  `recipientIncomingHealPct`. */
+    victimReactiveAbilities?: Ability[];
+    /** Duration of every inflicted status, in turns. Default 5. `1` is the corpus's real
+     *  short-lived shape (Larkspur's and Ripper's actives apply `Inc. Repair Down II` for ONE turn,
+     *  Sansi's passive applies `III` for one turn) — a debuff that can expire having reduced
+     *  nothing at all if the reduction is only visible from the victim's next turn onward. */
+    duration?: number;
 }
 
 interface FixtureRun {
@@ -274,17 +333,25 @@ interface FixtureRun {
 function runFixture(opts: FixtureOpts): FixtureRun {
     const medicSpeed = opts.medicSpeed ?? 300;
 
+    const applierSpeed = opts.applierSpeed ?? 950;
     const zosimosSlots: ShipSkills['slots'] = [
         activeSlot(
             opts.enemyStatuses.map((s) =>
-                castStatus(s.name, {
-                    ...(s.incomingHeal === undefined ? {} : { incomingHeal: s.incomingHeal }),
-                    ...(s.outgoingHeal === undefined ? {} : { outgoingHeal: s.outgoingHeal }),
-                })
+                castStatus(
+                    s.name,
+                    {
+                        ...(s.incomingHeal === undefined ? {} : { incomingHeal: s.incomingHeal }),
+                        ...(s.outgoingHeal === undefined ? {} : { outgoingHeal: s.outgoingHeal }),
+                    },
+                    opts.duration
+                )
             )
         ),
     ];
-    const medicAbilities = opts.medicAbilities ?? [];
+    const medicSlots: ShipSkills['slots'] = [
+        activeSlot(opts.medicAbilities ?? []),
+        ...(opts.medicReactiveAbilities ? [passiveSlot(opts.medicReactiveAbilities)] : []),
+    ];
 
     // `front` binds to the FRONT-MOST cell (M4), so swapping the two positions is what decides
     // which of them Zosimos's debuff lands on.
@@ -299,6 +366,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         hp: VICTIM_MAX_HP,
         slots: [
             ...(opts.victimAbilities ? [activeSlot(opts.victimAbilities)] : []),
+            ...(opts.victimReactiveAbilities ? [passiveSlot(opts.victimReactiveAbilities)] : []),
             ...(opts.victimSelfBuff
                 ? [
                       passiveSlot([
@@ -360,13 +428,13 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                   chargeCount: 0,
                   target: parseTarget('front'),
                   pattern: parsePattern('Pattern-Base'),
-                  shipSkills: { slots: [activeSlot(medicAbilities)] },
+                  shipSkills: { slots: medicSlots },
                   teamActors: [walkedAlly(victimShape)],
                   enemyAttackers: [
                       enemyShip({
                           id: ZOSIMOS_ID,
                           position: 'M1',
-                          speed: 950,
+                          speed: applierSpeed,
                           hp: ZOSIMOS_HP,
                           slots: zosimosSlots,
                       }),
@@ -380,7 +448,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                   critDamage: 0,
                   defence: 0,
                   hp: ZOSIMOS_HP,
-                  speed: 950,
+                  speed: applierSpeed,
                   position: 'M1',
                   chargeCount: 0,
                   target: parseTarget('front'),
@@ -394,7 +462,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                           position: medicPosition,
                           speed: medicSpeed,
                           hp: MEDIC_HP,
-                          slots: [activeSlot(medicAbilities)],
+                          slots: medicSlots,
                       }),
                   ],
               };
@@ -452,6 +520,10 @@ describe('#367 — an enemy-applied Inc. Repair Down reduces the repairs landing
         it(`${victimSide}-side victim: all three tiers scale by their own percentage points`, () => {
             const shared = { victimSide, medicAbilities: [allyRepair(REPAIR_PCT)] };
             const baseline = control(shared);
+            // LIVENESS, and it is load-bearing: every assertion in the loop is a RATIO off this
+            // one figure, so a fixture that drifted to a zero repair would pass all three tiers as
+            // `0 ≈ 0`. Pinning the baseline nominally is what stops that.
+            expect(baseline.healedAmount).toBe(RAW);
             for (const [name, pct, factor] of [
                 ['Inc. Repair Down I', -25, 0.75],
                 ['Inc. Repair Down II', -50, 0.5],
@@ -520,8 +592,10 @@ describe('#367 R1 — Up II (self) + Down II + Down I (enemy) nets to a full rep
 // Zosimos (950) and the victim (500), so the repair lands BEFORE the victim's first turn and
 // `lastTurnCtxByActor` holds nothing for it. 300 → the medic repairs last, so the ctx is live.
 //
-// This arm is not a formality: 7 of the 9 corpus appliers inflict `Inc. Repair Down` from a DAMAGE
-// clause, which can land in round 1 before the victim has taken a turn — exactly this window.
+// This arm is not a formality: 7 of the 8 corpus `Inc. Repair Down` appliers inflict it from a
+// DAMAGE clause, which can land in round 1 before the victim has taken a turn — exactly this
+// window. (8, not 9: 9 ships carry one of the two Repair Down families, but Nayra's is the
+// OUTGOING one. The eighth incoming applier, Sansi, inflicts reactively, on being hit.)
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('#367 — both halves of recipientIncomingHealPct', () => {
@@ -626,6 +700,115 @@ describe('#367 — the OUTGOING channel: Out. Repair Down II on the healer', () 
             expect(withDebuff.medicDebuffNames).toContain('Out. Repair Down II');
             expect(withDebuff.victimDebuffNames).toEqual([]);
 
+            expect(baseline.healedAmount).toBe(RAW);
+            expect(withDebuff.healedAmount).toBeGreaterThan(0);
+            expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
+        });
+    }
+});
+
+// ══ 7 — THE SLOWER-APPLIER ORDERING (the published ctx is STALE) ═════════════════════════════
+// Sections 1-6 all put the applier FIRST (Zosimos at speed 950), so every victim's published
+// `turnCtx` already contained the debuff. That is the easy half of the board. Invert the order and
+// a second defect appears:
+//
+//   `lastTurnCtxByActor` is written ONLY at an actor's own turn. So a cross-actor reader of a
+//   victim's `incomingHealPct` — `engine.ts`'s `recipientIncomingHealPct`, `triggers.ts`'s
+//   reactive-heal `ownerOutgoing`/`incomingPctFor` — reads that victim's LAST TURN's folded total.
+//   When the applier is SLOWER than the victim, the debuff lands AFTER the victim's turn, so a
+//   repair later in the same round reads a ctx that predates the debuff and the reduction is
+//   invisible.
+//
+// That is not a corner case: `Inc. Repair Down II` is applied for ONE turn by Larkspur's and
+// Ripper's actives and `III` for one turn by Sansi's passive, so against a faster victim such a
+// debuff could expire having reduced exactly nothing.
+//
+// THE FIX, and why these tests can tell it apart from the double-count bug: `playerTurn` publishes
+// the enemy-applied portion SEPARATELY (`enemyAppliedIncomingHealPct` /
+// `enemyAppliedOutgoingHealPct`) from the same values the fold consumed, so a cross-actor reader
+// subtracts that stale portion back out and re-adds a LIVE `victimOwnEnemyHealModifiers` read. The
+// subtraction cancels by construction. Section 3/4's "does NOT double-count" test is the guard on
+// the other side of that arithmetic: with a FASTER applier the stale and live values are equal, so
+// the de-staling must be a no-op there and the repair must still land at exactly -50%, never -100%.
+//
+// Ordering in both tests below: Zosimos is the SLOWEST actor at 400, under the victim's 500.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('#367 — a SLOWER applier still reduces a repair landing later in the same round', () => {
+    for (const victimSide of SIDES) {
+        // Turn order: victim (500) → Zosimos (400, applies the debuff) → medic (300, repairs).
+        // The victim's ctx was published one turn BEFORE the debuff existed.
+        it(`${victimSide}-side victim: INCOMING — a 1-turn Inc. Repair Down II applied after the victim's turn`, () => {
+            const shared = {
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                medicSpeed: 300,
+                applierSpeed: 400,
+                duration: 1,
+            };
+            const withDebuff = runFixture({
+                ...shared,
+                enemyStatuses: [{ name: 'Inc. Repair Down II', incomingHeal: -50 }],
+            });
+            const baseline = control(shared);
+
+            // EXISTENCE FIRST, on the live store: the 1-turn debuff really is standing when the
+            // medic repairs. (Read at run end; a duration that expired before the repair would
+            // show up here as an empty store, not as a silently green ratio.)
+            expect(withDebuff.victimDebuffNames).toContain('Inc. Repair Down II');
+            expect(baseline.victimDebuffNames).toEqual([CONTROL]);
+            // The channel is live in THIS ordering too — the medic really does repair for RAW when
+            // nothing reduces it, so a reduced figure below is a reduction and not a missing cast.
+            expect(baseline.healedAmount).toBe(RAW);
+            expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
+        });
+
+        // Turn order: medic (700, publishes its ctx) → victim (500) → Zosimos (400, applies
+        // `Out. Repair Down II` to the MEDIC) → round tail → the medic's reactive repair fires.
+        // The medic casts nothing on its own turn, so the ONLY repair in the run is the reactive
+        // one, and it reads the medic's ctx from before the debuff landed.
+        it(`${victimSide}-side victim: OUTGOING — Out. Repair Down II applied after the healer's turn`, () => {
+            const shared = {
+                victimSide,
+                medicReactiveAbilities: [reactiveAllyRepair(REPAIR_PCT)],
+                medicSpeed: 700,
+                applierSpeed: 400,
+                debuffTarget: 'medic' as const,
+                duration: 1,
+            };
+            const withDebuff = runFixture({
+                ...shared,
+                enemyStatuses: [{ name: 'Out. Repair Down II', outgoingHeal: -50 }],
+            });
+            const baseline = control(shared);
+
+            // EXISTENCE, and on the RIGHT actor: the debuff is on the HEALER's store and the
+            // recipient's store is empty, so nothing here can be the incoming channel leaking in.
+            expect(withDebuff.medicDebuffNames).toContain('Out. Repair Down II');
+            expect(withDebuff.victimDebuffNames).toEqual([]);
+            expect(baseline.healedAmount).toBe(RAW);
+            expect(withDebuff.healedAmount).toBeGreaterThan(0);
+            expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
+        });
+
+        // Turn order: victim (500, publishes its ctx) → Zosimos (400, applies the debuff) → round
+        // tail → the victim's own reactive self-repair fires. The reader here is `triggers.ts`'s
+        // `incomingPctFor` SELF branch, not the engine's `recipientIncomingHealPct` — so this is
+        // the one of the three de-staled readers the two tests above cannot reach.
+        it(`${victimSide}-side victim: INCOMING, reactive SELF-repair — the owner's own ctx is stale too`, () => {
+            const shared = {
+                victimSide,
+                victimReactiveAbilities: [reactiveSelfRepair(REPAIR_PCT)],
+                applierSpeed: 400,
+                duration: 1,
+            };
+            const withDebuff = runFixture({
+                ...shared,
+                enemyStatuses: [{ name: 'Inc. Repair Down II', incomingHeal: -50 }],
+            });
+            const baseline = control(shared);
+
+            expect(withDebuff.victimDebuffNames).toContain('Inc. Repair Down II');
             expect(baseline.healedAmount).toBe(RAW);
             expect(withDebuff.healedAmount).toBeGreaterThan(0);
             expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
