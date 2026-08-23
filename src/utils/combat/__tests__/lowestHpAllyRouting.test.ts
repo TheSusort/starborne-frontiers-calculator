@@ -565,17 +565,14 @@ describe('SP-4e site C: the standing-leech arms (engine)', () => {
     // standing leech on this target, so without the cases below the arm would be advertised and
     // never executed. These are that coverage.
     //
-    // Both cases exercise `procStandingLeechesPerVictim` ONLY, and that is the honest scope: the
-    // sibling arm in the aggregate `procStandingLeeches` is UNREACHABLE. Measured, not assumed —
-    // neutralising the per-victim arm alone turns both cases red, neutralising the aggregate arm
-    // alone leaves them green, and a `console.error` probe at the aggregate proc's leech loop
-    // recorded ZERO hits across all 6,006 tests (12,194 calls, every one filtered out before the
-    // loop by `!entries`/`amount <= 0`). The cause is structural: `normalizeCombatRoster` assigns
-    // every actor a position, so `positional` is true whenever there is a victim to damage, and
-    // both `creditDamage` call sites — the aggregate proc's only feed — sit inside `if
-    // (!positional)`. Do NOT add a "non-positional" fixture to cover that arm; a fixture that
-    // merely omits `position` is re-placed by the normalizer and lands here instead, which is a
-    // test that passes without building the case its name claims.
+    // Both cases exercise `procStandingLeechesPerVictim`, which since #374 is the only standing-leech
+    // proc there is. There used to be a sibling arm in an aggregate `procStandingLeeches`; it was
+    // measured UNREACHABLE and then deleted. The cause was structural, and it is worth keeping here
+    // because it also explains why no "non-positional" fixture would ever have covered it:
+    // `normalizeCombatRoster` assigns every actor a position, so `positional` is true whenever there
+    // is a victim to damage, and the aggregate proc's only feed sat inside `if (!positional)`. A
+    // fixture that merely omits `position` is re-placed by the normalizer and lands HERE instead —
+    // a test that passes without building the case its name claims.
     it('a standing leech on the selector repairs the worst-HP ally, not the anchor', () => {
         let low: CombatActor | undefined;
         let anchor: CombatActor | undefined;

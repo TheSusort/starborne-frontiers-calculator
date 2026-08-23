@@ -23,15 +23,15 @@
  * lands at 0 and never flips sign.
  *
  * ── WHICH SITES THIS FILE COVERS, AND WHICH IT CANNOT ─────────────────────────────────────────
- * The engine has FOUR leech heal-apply sites. This file drives the two PER-VICTIM ones, on both
- * sides of the board:
+ * The engine has TWO leech heal-apply procs, and this file drives both, on both sides of the
+ * board (it used to say FOUR — #374 deleted the two dead ones):
  *   - `procStandingLeechesPerVictim` — the damage-DEALT leech (sections 1-3, and 6);
  *   - `procTakenLeechesPerVictim` — the damage-TAKEN leech (sections 4-5, and 6).
  * Section 6 is the FRESHNESS axis, which cuts across both: which ctx each proc's SELF-side half of
  * the channel is read from. It is also where the two procs legitimately DIFFER — read its header.
- * The other two — the aggregate `procStandingLeeches` and the non-positional heal-target
- * taken-leech block — are the pair #368 measured as executed by ZERO tests in the whole corpus,
- * and they are deliberately NOT changed: see the reachability notes at each site in `engine.ts`.
+ * The two that used to sit alongside these — the aggregate `procStandingLeeches` and the
+ * non-positional heal-target taken-leech block — were the pair #368 measured as executed by ZERO
+ * tests in the whole corpus. #374 deleted them, so these two are now the whole surface.
  *
  * ── Harness ───────────────────────────────────────────────────────────────────────────────────
  * Copied from `reversedRepairs.channels.test.ts` (whose R2-channel-3 / R5-reaction-3 tests are the
@@ -63,14 +63,8 @@
  * are deterministic without a keyed provider (which is keyed per `ownerId` and would hand the two
  * SIDE arms different draws).
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-    runCombat,
-    __getAggregateStandingLeechApplications,
-    __resetAggregateStandingLeechApplications,
-    type CombatEngineInput,
-    type TeamActorEngineInput,
-} from '../engine';
+import { describe, it, expect } from 'vitest';
+import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedBuffEffects } from '../../../types/calculator';
@@ -492,18 +486,12 @@ const SIDES = ['player', 'enemy'] as const;
 // `engine.ts` carries a measured claim that the aggregate (`!positional`) half of the
 // standing-leech fork is UNREACHABLE, and that the incoming-repair fold was therefore added only to
 // the PER-VICTIM twin. Until now the executable half of that claim lived solely in `leech.test.ts`.
-// This file is the one that owns the incoming-repair claim AT the per-victim procs, and it was
-// fenced only IMPLICITLY — by its baselines happening to come out at their nominal values. That is
-// not a fence: the aggregate arm folds no incoming-repair channel at all, so a fixture that
-// silently routed through it would report an UNMODIFIED leech, which is exactly the pre-fix bug
-// this file exists to catch. Asserting the counter makes the misroute fail here as itself.
-//
-// Vitest isolates modules per test FILE, so the counter reads only this file's runs.
+// HISTORICAL (#374): this file used to assert a tripwire counter proving no fixture here routed
+// through the AGGREGATE standing-leech arm — which folded no incoming-repair channel at all, so a
+// silent misroute would have reported an UNMODIFIED leech, the exact pre-fix bug this file exists
+// to catch. That arm has been DELETED, so there is nothing left to misroute to and the counter is
+// gone with it. The per-victim procs this file measures are now the only standing-leech path.
 // ─────────────────────────────────────────────────────────────────────────────────────────────
-beforeAll(() => __resetAggregateStandingLeechApplications());
-afterAll(() => {
-    expect(__getAggregateStandingLeechApplications()).toBe(0);
-});
 
 /** The inert-marker twin of a run: the identical fixture with the payload stripped from every
  *  inflicted status, so the ratio isolates `incomingHeal` and nothing else. */
