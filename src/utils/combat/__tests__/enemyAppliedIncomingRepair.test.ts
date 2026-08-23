@@ -62,6 +62,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
+import { createEventBus, type CombatEvent } from '../events';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedBuffEffects } from '../../../types/calculator';
@@ -125,6 +126,24 @@ const allyRepair = (pct: number): Ability => ({
     id: 'ab-ally-repair',
     type: 'heal',
     target: 'lowest-hp-ally',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'hp', noCrit: true },
+});
+
+/** A cast repair aimed at the caster's WHOLE side, including itself. Fixture-only (no corpus heal
+ *  carries this target) — its sole purpose is section 8's floor test, which needs a SECOND,
+ *  undebuffed recipient in the SAME cast: `heal-performed`'s emit gate is `healRawSum > 0` for the
+ *  WHOLE cast, so a single deeply-suppressed recipient's negative `raw` would sum to a negative
+ *  total and the event would never fire at all — hiding the very corruption under test. The
+ *  medic's own undebuffed share keeps the cast's sum positive so the event fires and
+ *  `perTarget` exposes the victim's entry on its own. Both roles' `pattern: 'Pattern-Base'` is a
+ *  non-`support` pattern, so `supportFootprintAllyIds` narrows nothing here — `'all-allies'`
+ *  reaches the caster's whole side unfiltered. */
+const allAlliesRepair = (pct: number): Ability => ({
+    id: 'ab-all-allies-repair',
+    type: 'heal',
+    target: 'all-allies',
     trigger: 'on-cast',
     conditions: [],
     config: { type: 'heal', pct, basis: 'hp', noCrit: true },
@@ -318,6 +337,11 @@ interface FixtureRun {
     /** The buff names standing in the MEDIC's per-victim enemy store — the existence check for the
      *  OUTGOING-channel test, where the debuff is on the healer rather than on the recipient. */
     medicDebuffNames: string[];
+    /** Every `heal-performed` event this run emitted (section 8's floor test only — every other
+     *  section reads `healedAmount` and never taps the bus). `amount`/`perTarget[].amount` are the
+     *  REPORTED numbers `incomingHealFactor` protects: `applyHealToTarget` already floors HP on
+     *  both its paths, so a bug here would be invisible on `healedAmount` and visible ONLY here. */
+    healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[];
 }
 
 /**
@@ -387,9 +411,13 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         if (victim) victim.currentHp = START_HP;
     };
     let statusEngine: StatusEngine | undefined;
+    const bus = createEventBus();
+    const healPerfs: Extract<CombatEvent, { type: 'heal-performed' }>[] = [];
+    bus.on('heal-performed', (e) => healPerfs.push(e));
 
     const common = {
         numRounds: 1,
+        bus,
         selfBuffs: [],
         enemyDebuffs: [],
         selfDotModifier: 0,
@@ -479,6 +507,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         victimDebuffNames: statusEngine!
             .timedAbilityStatuses('enemy', undefined, VICTIM_ID)
             .map((s) => s.payload.buffName),
+        healPerfs,
         victimSelfBuffNames: statusEngine!
             .timedAbilityStatuses('self', VICTIM_ID)
             .map((s) => s.payload.buffName),
@@ -845,6 +874,70 @@ describe('#367 — a SLOWER applier still reduces a repair landing later in the 
             expect(baseline.healedAmount).toBe(RAW);
             expect(withDebuff.healedAmount).toBeGreaterThan(0);
             expect(withDebuff.healedAmount).toBeCloseTo(baseline.healedAmount * 0.5, 5);
+        });
+    }
+});
+
+// ══ 8 — THE FACTOR IS FLOORED AT ZERO (#367 §3.4) ═══════════════════════════════════════════
+// A TRIPWIRE, not a live bug: under the locked tier rule (R1, section 2 above — same-family
+// statuses overwrite by highest tier, survivors add) only ONE `Inc. Repair Down` can ever stand
+// on a victim, so the worst reachable value TODAY is -75% (`Inc. Repair Down III`). This section
+// stacks a SECOND, synthetic reducer — a self-side debuff no corpus ship carries alongside
+// `Inc. Repair Down III` — on top of it, deliberately reaching a combination the corpus cannot
+// reach yet (-50 self + -75 enemy = -125%). This is the guard for whoever adds the next
+// incoming-repair reducer, not evidence of a bug reachable today.
+//
+// Why `medicAbilities: [allAlliesRepair(...)]` instead of the usual `allyRepair`/`selfRepair`:
+// `heal-performed`'s emit gate is `healRawSum > 0` for the WHOLE cast (playerTurn.ts), so a
+// single-recipient cast whose one and only `raw` goes negative sums to a negative total and the
+// event never fires — HP stays safe either way (`applyHealToTarget` floors it), so nothing
+// would distinguish a floored repair from an unclamped negative one from OUTSIDE the engine.
+// `'all-allies'` heals the medic too (undebuffed, full RAW), which keeps the cast's sum positive
+// so the event actually fires and `perTarget` exposes the victim's entry — carrying the RAW
+// per-recipient amount BEFORE it is folded into any masking sum — on its own.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('#367 §3.4 — the incoming-repair factor is floored at zero', () => {
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: a fold below -100% reports a repair of 0, never negative`, () => {
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allAlliesRepair(REPAIR_PCT)],
+                victimSelfBuff: { name: 'FixtureRepairDown', incomingHeal: -50 },
+                enemyStatuses: [{ name: 'Inc. Repair Down III', incomingHeal: -75 }],
+            });
+
+            // EXISTENCE: both reducers actually landed (-50 self, -75 enemy = -125% summed).
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down III');
+            expect(run.victimSelfBuffNames).toContain('FixtureRepairDown');
+
+            // HP was already safe pre-fix (applyHealToTarget floors both of its paths) — a
+            // baseline, not the evidence this test exists to add.
+            expect(run.healedAmount).toBe(0);
+
+            // The evidence: the cast really emitted (proving the medic's own undebuffed share
+            // kept the sum positive — a `healPerfs.length === 0` here would mean this fixture
+            // regressed to the un-observable single-recipient case, not that the bug was fixed),
+            // and NOTHING reported anywhere in it is negative — the amount an unclamped factor
+            // would have corrupted (`healRawSum`, `heal-performed.amount`/`perTarget[].amount`,
+            // and any `overheal` carried on it).
+            expect(run.healPerfs.length).toBeGreaterThan(0);
+            for (const perf of run.healPerfs) {
+                expect(perf.amount).toBeGreaterThanOrEqual(0);
+                if (perf.overheal !== undefined) expect(perf.overheal).toBeGreaterThanOrEqual(0);
+                for (const t of perf.perTarget ?? []) {
+                    expect(t.amount).toBeGreaterThanOrEqual(0);
+                }
+            }
+
+            // The precise claim, not just "non-negative": the victim's own suppressed share
+            // floors to EXACTLY 0 (a fully-suppressed repair is 0, never damage — Reversed
+            // Repairs, #362, is the only sanctioned repair-to-damage channel, and it is an
+            // explicit status, not a sign accident).
+            const victimEntry = run.healPerfs
+                .flatMap((p) => p.perTarget ?? [])
+                .find((t) => t.targetId === VICTIM_ID);
+            expect(victimEntry?.amount).toBe(0);
         });
     }
 });
