@@ -25,8 +25,10 @@
  * ── WHICH SITES THIS FILE COVERS, AND WHICH IT CANNOT ─────────────────────────────────────────
  * The engine has FOUR leech heal-apply sites. This file drives the two PER-VICTIM ones, on both
  * sides of the board:
- *   - `procStandingLeechesPerVictim` — the damage-DEALT leech (sections 1-3);
- *   - `procTakenLeechesPerVictim` — the damage-TAKEN leech (sections 4-5).
+ *   - `procStandingLeechesPerVictim` — the damage-DEALT leech (sections 1-3, and 6);
+ *   - `procTakenLeechesPerVictim` — the damage-TAKEN leech (sections 4-5, and 6).
+ * Section 6 is the FRESHNESS axis, which cuts across both: which ctx each proc's SELF-side half of
+ * the channel is read from. It is also where the two procs legitimately DIFFER — read its header.
  * The other two — the aggregate `procStandingLeeches` and the non-positional heal-target
  * taken-leech block — are the pair #368 measured as executed by ZERO tests in the whole corpus,
  * and they are deliberately NOT changed: see the reachability notes at each site in `engine.ts`.
@@ -42,14 +44,16 @@
  *     enemy store before it asserts anything about an amount. A green amount proves nothing if the
  *     status never applied.
  *
- * Every behavioural claim is DIFFERENTIAL against an inert-marker control casting through the
- * identical path, and every one asserts the control's leech is NON-ZERO first — otherwise "reduced
- * to nothing" and "never leeched at all" are the same green.
+ * Every behavioural claim is DIFFERENTIAL against a control that travels the identical path with
+ * the PAYLOAD stripped — an inert-marker cast in sections 1-5, the same self-granted status name
+ * with empty `parsedEffects` in section 6 — and every one asserts the control's leech is NON-ZERO
+ * first, otherwise "reduced to nothing" and "never leeched at all" are the same green.
  *
  * THREE ROLES, identical on both side arms — only which side they stand on changes:
- *   - ZOSIMOS  applies the status (a plain on-cast `target: 'enemy'` debuff) and, in the
- *              damage-TAKEN sections, also attacks. Speed 950, so it always acts first and the
- *              status is standing before the leech fires.
+ *   - ZOSIMOS  applies the status (a plain on-cast `target: 'enemy'` debuff) and also attacks in
+ *              the damage-TAKEN sections and wherever a `victimSelfGrant` is set (that grant rides
+ *              `on-attacked`, so something has to hit the leecher). Speed 950, so it always acts
+ *              first and both the status and the grant are standing before the leech fires.
  *   - VICTIM   the LEECHING ship. Speed 500, at M4 so Zosimos's `front` targeting binds to it.
  *   - MEDIC    an inert bystander that exists only to be the healing ANCHOR, so nothing here can
  *              be an artefact of the leecher happening to be the heal target. It has no kit.
@@ -59,8 +63,14 @@
  * are deterministic without a keyed provider (which is keyed per `ownerId` and would hand the two
  * SIDE arms different draws).
  */
-import { describe, it, expect } from 'vitest';
-import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import {
+    runCombat,
+    __getAggregateStandingLeechApplications,
+    __resetAggregateStandingLeechApplications,
+    type CombatEngineInput,
+    type TeamActorEngineInput,
+} from '../engine';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedBuffEffects } from '../../../types/calculator';
@@ -141,6 +151,35 @@ const takenLeech = (pct: number): Ability => ({
     config: { type: 'heal', pct, basis: 'damage-taken', noCrit: true },
 });
 
+/** A SELF-side `Inc. Repair Up` the leecher grants ITSELF. The STATUS is the corpus's (Meatshield's
+ *  active: "This Unit gains Inc. Repair Up III for 2 turns"); the ability SHAPE is not — it is an
+ *  `on-attacked` reactive grant with `oncePerCombat`, for one reason only: an on-cast grant
+ *  RE-APPLIES every round (a same-tier re-cast whose duration outlasts the remaining window wins),
+ *  and the turn-after-expiry arm needs a status that actually runs out. Read section 6's header
+ *  before treating this as a re-enactment of Meatshield — it cannot be, since Meatshield deals no
+ *  damage and so never leeches. What is genuinely under test either way is the leecher's OWN
+ *  `dmgStats.totals.incomingHealBuff`, published into its `turnCtx.incomingHealPct`. */
+const selfGrant = (
+    buffName: string,
+    duration: number,
+    parsedEffects: ParsedBuffEffects = {}
+): Ability => ({
+    id: `self-grant-${buffName}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-attacked',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName,
+        parsedEffects,
+        stacks: 1,
+        isStackable: false,
+        duration,
+        oncePerCombat: true,
+    },
+});
+
 const basicAttack = (): Ability => ({
     id: 'basic-attack',
     type: 'damage',
@@ -160,15 +199,16 @@ const passiveSlot = (abilities: Ability[]): ShipSkills['slots'][number] => ({
 });
 
 /** The SELF-side arm of the channel, as a pre-fight modifier block. `preFight.incomingHeal` is the
- *  one self-side source `liveHealChannelPct` can read for an actor with no published ctx yet —
- *  which is exactly the leecher's state when its own turn fires in round 1 (`lastTurnCtxByActor`
- *  is written AFTER the turn dispatch that applied the damage).
+ *  one self-side source `liveHealChannelPct` reads without ANY published ctx, so it is visible in
+ *  every round including the first — which is why the one-round sections below use it.
  *
- *  A passive-seeded `Inc. Repair Up II` status would NOT work in a one-round fixture, and that is
- *  measured rather than assumed: the same leech credits 10,000 / 15,000 / 15,000 over three rounds
- *  with one standing from combat start, so round 1 misses it and rounds 2+ see it. A two-round
- *  fixture reading round 2 would therefore be measuring the ctx's publication timing on top of the
- *  fold under test. The residual is recorded at the fold itself in `engine.ts`. */
+ *  ⚠️ THE PARAGRAPH THAT STOOD HERE IS SUPERSEDED, and its residual is CLOSED. It said a
+ *  status-seeded `Inc. Repair Up` "would NOT work in a one-round fixture" because the leech read
+ *  the leecher's PREVIOUS turn's ctx (measured then as 10,000 / 15,000 / 15,000 over three rounds).
+ *  That was a real defect, not a property of the channel, and the #367 fix wave fixed it: the leech
+ *  now reads the ACTING turn's own ctx, so a status-seeded Up lands in round 1 too. Section 6 owns
+ *  that claim, with its own three-round measurement. `preFightIncoming` is kept for sections 2 and
+ *  4 because it is the shortest vehicle for a one-round fixture, not because it is the only one. */
 const preFightIncoming = (incomingHeal: number): PreFightCombatModifiers => ({
     ...emptyPreFightModifiers(),
     incomingHeal,
@@ -254,6 +294,12 @@ interface FixtureOpts {
     leechKind: 'dealt' | 'taken';
     /** The leecher's own pre-fight modifier block — the self-side arm of the channel. */
     victimPreFight?: PreFightCombatModifiers;
+    /** Rounds to simulate. Default 1; only the FRESHNESS section (6) runs more, because the gap it
+     *  covers is per-round by construction. */
+    numRounds?: number;
+    /** A self-granted status on the leecher (see `selfGrant`). Its presence also gives ZOSIMOS an
+     *  attack in the `'dealt'` mode, since the grant rides `on-attacked`. */
+    victimSelfGrant?: { name: string; duration: number; incomingHeal?: number };
 }
 
 interface FixtureRun {
@@ -270,6 +316,13 @@ interface FixtureRun {
     /** The leecher's `preFight.incomingHeal` as the ENGINE sees it on the live actor — the
      *  existence check for the self-side sections, which have no status to look up. */
     victimPreFightIncomingHeal: number;
+    /** The leecher's gross repair credit PER ROUND (index 0 = round 1). Same bucket as
+     *  `victimDirectHeal`, which is this array's first element. */
+    victimDirectHealByRound: number[];
+    /** The buff names standing in the leecher's OWN SELF store when the run ends — the store
+     *  `dmgStats.totals.incomingHealBuff` folds from, i.e. a direct existence check on the
+     *  self-side arm of the channel (and, when read after a longer run, on its EXPIRY). */
+    victimSelfBuffNames: string[];
 }
 
 /**
@@ -280,7 +333,10 @@ interface FixtureRun {
  * leecher 500, the medic 300 (inert, and last).
  */
 function runFixture(opts: FixtureOpts): FixtureRun {
-    const zosimosAttack = opts.leechKind === 'taken' ? ATTACK : 0;
+    // The self-grant rides `on-attacked`, so Zosimos has to actually swing for it to fire — in the
+    // `'dealt'` mode too, where it otherwise carries no attack at all.
+    const zosimosAttack =
+        opts.leechKind === 'taken' || opts.victimSelfGrant !== undefined ? ATTACK : 0;
     const zosimosSlots: ShipSkills['slots'] = [
         activeSlot([
             // The status FIRST, the attack second: clause order is the game rule (a debuff written
@@ -296,6 +352,20 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         ]),
     ];
 
+    const grant = opts.victimSelfGrant;
+    const victimPassives: Ability[] = [
+        opts.leechKind === 'dealt' ? standingLeech(LEECH_PCT) : takenLeech(LEECH_PCT),
+        ...(grant
+            ? [
+                  selfGrant(
+                      grant.name,
+                      grant.duration,
+                      grant.incomingHeal === undefined ? {} : { incomingHeal: grant.incomingHeal }
+                  ),
+              ]
+            : []),
+    ];
+
     const victimShape: RoleShape = {
         id: VICTIM_ID,
         position: 'M4',
@@ -304,8 +374,8 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         attack: opts.leechKind === 'dealt' ? ATTACK : 0,
         slots:
             opts.leechKind === 'dealt'
-                ? [activeSlot([basicAttack()]), passiveSlot([standingLeech(LEECH_PCT)])]
-                : [passiveSlot([takenLeech(LEECH_PCT)])],
+                ? [activeSlot([basicAttack()]), passiveSlot(victimPassives)]
+                : [passiveSlot(victimPassives)],
         ...(opts.victimPreFight ? { preFight: opts.victimPreFight } : {}),
     };
 
@@ -317,7 +387,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
     let statusEngine: StatusEngine | undefined;
 
     const common = {
-        numRounds: 1,
+        numRounds: opts.numRounds ?? 1,
         selfBuffs: [],
         enemyDebuffs: [],
         selfDotModifier: 0,
@@ -396,17 +466,44 @@ function runFixture(opts: FixtureOpts): FixtureRun {
 
     const result = runCombat(input);
 
+    const byRound = result.healing!.rounds.map(
+        (round) => round.perActor.get(VICTIM_ID)?.directHeal ?? 0
+    );
+
     return {
         victimHp: victim!.currentHp,
-        victimDirectHeal: result.healing!.rounds[0].perActor.get(VICTIM_ID)?.directHeal ?? 0,
+        victimDirectHeal: byRound[0] ?? 0,
+        victimDirectHealByRound: byRound,
         victimDebuffNames: statusEngine!
             .timedAbilityStatuses('enemy', undefined, VICTIM_ID)
+            .map((s) => s.payload.buffName),
+        victimSelfBuffNames: statusEngine!
+            .timedAbilityStatuses('self', VICTIM_ID)
             .map((s) => s.payload.buffName),
         victimPreFightIncomingHeal: victim!.preFight?.incomingHeal ?? 0,
     };
 }
 
 const SIDES = ['player', 'enemy'] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// THE AGGREGATE-PROC TRIPWIRE, EXTENDED TO THIS FILE (#367 fix wave).
+//
+// `engine.ts` carries a measured claim that the aggregate (`!positional`) half of the
+// standing-leech fork is UNREACHABLE, and that the incoming-repair fold was therefore added only to
+// the PER-VICTIM twin. Until now the executable half of that claim lived solely in `leech.test.ts`.
+// This file is the one that owns the incoming-repair claim AT the per-victim procs, and it was
+// fenced only IMPLICITLY — by its baselines happening to come out at their nominal values. That is
+// not a fence: the aggregate arm folds no incoming-repair channel at all, so a fixture that
+// silently routed through it would report an UNMODIFIED leech, which is exactly the pre-fix bug
+// this file exists to catch. Asserting the counter makes the misroute fail here as itself.
+//
+// Vitest isolates modules per test FILE, so the counter reads only this file's runs.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+beforeAll(() => __resetAggregateStandingLeechApplications());
+afterAll(() => {
+    expect(__getAggregateStandingLeechApplications()).toBe(0);
+});
 
 /** The inert-marker twin of a run: the identical fixture with the payload stripped from every
  *  inflicted status, so the ratio isolates `incomingHeal` and nothing else. */
@@ -464,11 +561,35 @@ describe('a leech self-repair is reduced by an enemy-applied Inc. Repair Down', 
 
 // ══ 2 — THE OTHER DIRECTION: an Up raises the same leech ══════════════════════════════════════
 // The ruling is symmetric, so the fold must be too. This arm uses the SELF side of the channel
-// (`preFight.incomingHeal`) rather than a second enemy cast carrying a positive payload: NO ship in
-// `docs/ship-skills.csv` grants `Inc. Repair Up` at all (0 occurrences, swept 2026-08-23) — it
-// reaches a ship only through the calculator's buff picker, gear, or a pre-fight modifier, all of
-// which are self-side channels. The fold is one additive sum either way; what matters is that a
-// positive total RAISES the leech instead of being ignored or clamped away.
+// rather than a second enemy cast carrying a positive payload, because `Inc. Repair Up` is a
+// self-side status in the corpus — no ship INFLICTS one on an enemy.
+//
+// ⚠️ CORRECTED 2026-08-23. The claim that stood here — "NO ship in `docs/ship-skills.csv` grants
+// `Inc. Repair Up` at all (0 occurrences)" — is FALSE. MEATSHIELD's active grants ITSELF
+// `Inc. Repair Up III` for 2 turns ("This Unit gains <unit-skill>Inc. Repair Up III</unit-skill>
+// for 2 turns"), and it is fully modelled: `src/constants/buffs.ts` gives that name
+// "+75% Incoming Repair" and `buffParser.ts` maps `%\s*Incoming\s*Repair` → `parsedEffects
+// .incomingHeal`. The repo already contradicted the sweep before it was written —
+// `skillTextParser.ts`'s masking note lists `Inc. Repair Up III` among the corpus's nine
+// repair-bearing status names.
+//
+// RE-SWEPT with an RFC-4180 CSV parser over all 149 data rows (not a fixed-width grep — one of
+// those silently truncated a count earlier in this epic), scanning every skill-text column:
+// exactly ONE `Inc. Repair Up` occurrence, Meatshield, `active_skill_text`; zero
+// `Out. Repair Up`. Cross-checked against a raw `grep -o "Inc\. Repair Up [IV]*"`, which returns
+// the same single `Inc. Repair Up III`.
+//
+// The corrected statement therefore has TWO parts, and the second is why the old one's conclusion
+// survived being built on a false premise:
+//   1. `Inc. Repair Up` DOES exist in the corpus, as a SELF-GRANTED status on Meatshield — which is
+//      exactly the freshness channel section 6 covers, so it is not a footnote.
+//   2. It still cannot reach a LEECHING ship. Meatshield has ZERO `damage` abilities on any slot
+//      (measured through `buildShipAbilities`), so a Meatshield wearing the Leech gear set deals
+//      nothing to leech off, and no ship grants an `Inc. Repair Up` to an ALLY. For a leecher the
+//      Up therefore still arrives only through the calculator's buff picker, gear, or a pre-fight
+//      modifier.
+// All of those are self-side channels; the fold is one additive sum either way, and what matters
+// here is that a positive total RAISES the leech instead of being ignored or clamped away.
 
 describe('a leech self-repair is raised by an Inc. Repair Up on the leeching ship', () => {
     for (const victimSide of SIDES) {
@@ -612,6 +733,134 @@ describe('#362 composition — a reduced leech reverses for the REDUCED amount',
             // …and the halved leech burns exactly half as much. Not the full amount — which is
             // what a fold applied BELOW the reversal, or not at all, would produce.
             expect(START_HP - reducedAndReversed.victimHp).toBeCloseTo(LEECH_RAW * 0.5, 5);
+        });
+    }
+});
+
+// ══ 6 — FRESHNESS: THE SELF-SIDE HALF COMES FROM THE ACTING TURN, NOT THE PREVIOUS ONE ═══════
+// Sections 2 and 4 prove the Up direction with `preFight.incomingHeal`, which is visible in every
+// round — so they could not see the gap this section covers. The SELF-side half of the channel
+// otherwise arrives through the leecher's published `turnCtx`, and on the two PLAYER-side turn
+// branches `lastTurnCtxByActor.set` sits BELOW the positional apply that procs the leech. So the
+// leech used to read the leecher's PREVIOUS turn:
+//
+//   MEASURED, pre-fix, player-side damage-dealt leech, three rounds, self-granted +75%:
+//     standing all fight   10,000 / 17,500 / 17,500   ← round 1 blind
+//     granted for 2 turns  10,000 / 17,500 / 17,500   ← round 1 blind AND round 3 a PHANTOM
+//   MEASURED, post-fix:
+//     standing all fight   17,500 / 17,500 / 17,500
+//     granted for 2 turns  17,500 / 17,500 / 10,000
+//
+// The ENEMY-side damage-dealt arm was already correct before the fix (that branch publishes its ctx
+// ABOVE its positional apply) and is asserted here so the two sides are held to one profile — the
+// point of the fix is that they no longer agree by accident of statement order.
+//
+// THE VEHICLE, AND WHAT IT IS AND IS NOT A MODEL OF. The status name and its +75% are the corpus's:
+// Meatshield's active grants ITSELF `Inc. Repair Up III` for 2 turns, the only `Inc. Repair Up`
+// anywhere in `docs/ship-skills.csv`, and `src/constants/buffs.ts` prices that name at +75%.
+// The SHAPE here is synthetic, deliberately and on measured grounds:
+//   - Meatshield itself can never exercise this. It has ZERO `damage` abilities on any slot, so a
+//     Meatshield wearing the Leech gear set has nothing to leech off. No ship grants an
+//     `Inc. Repair Up` to an ALLY either, so no shipped ship can hand one to a leecher. The
+//     ROUND-1 arm below is the case a real user hits — through the buff picker, gear or a pre-fight
+//     modifier, all permanent — and the EXPIRY arm is a tripwire for the first timed self-side Up
+//     that ships, not a re-enactment of one that exists.
+//   - `selfGrant` rides `on-attacked` + `oncePerCombat` so the status can actually RUN OUT: an
+//     on-cast grant re-applies every round (a same-tier re-cast that outlasts the remaining window
+//     wins), leaving no expiry to observe.
+//
+// THE TAKEN-LEECH ARM IS DELIBERATELY ASSERTED AS STILL STALE. Its recipient is the ship being
+// ATTACKED, never the actor on turn, so the acting-turn ctx cannot reach it — and it is
+// corpus-inert: the whole roster's `damage-taken` passive leeches are Malvex's and Quixilver's, and
+// both are SHIELDS, which this fold never touches (measured: 149 CSV rows built through
+// `buildShipAbilities` + `partitionReactiveAbilities`, zero `damage-taken` HEALs). Pinning the
+// stale profile makes that a tripwire rather than an omission: the day a `damage-taken` heal ships,
+// this test is what says the freshness question was never answered for that site.
+
+/** Rounds 1..3 of the leecher's gross repair credit, for one self-grant duration. */
+const threeRoundProfile = (
+    victimSide: (typeof SIDES)[number],
+    leechKind: 'dealt' | 'taken',
+    duration: number,
+    incomingHeal?: number
+): FixtureRun =>
+    runFixture({
+        victimSide,
+        leechKind,
+        enemyStatuses: [{ name: CONTROL }],
+        numRounds: 3,
+        victimSelfGrant: {
+            name: 'Inc. Repair Up III',
+            duration,
+            ...(incomingHeal === undefined ? {} : { incomingHeal }),
+        },
+    });
+
+const UP_III = 'Inc. Repair Up III';
+/** +75% incoming repair — `src/constants/buffs.ts`'s own description for this status name. */
+const UP_III_PCT = 75;
+const UP_III_RAW = LEECH_RAW * (1 + UP_III_PCT / 100);
+
+describe('the self-side half of the channel is read from the ACTING turn', () => {
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side leecher: a self-granted Inc. Repair Up III raises the damage-dealt leech in ROUND 1`, () => {
+            const withUp = threeRoundProfile(victimSide, 'dealt', 5, UP_III_PCT);
+            // The control grants the SAME status name for the SAME duration with an EMPTY payload,
+            // so the two runs differ only in the percentage points it carries — not in whether a
+            // status was granted, nor in the extra attack the grant's `on-attacked` trigger needs.
+            const baseline = threeRoundProfile(victimSide, 'dealt', 5);
+
+            // EXISTENCE FIRST, on both arms: the status really is standing in the leecher's own
+            // self store — the store `dmgStats.totals.incomingHealBuff` folds from — at the end of
+            // the run, i.e. it stood for all three rounds (duration 5).
+            expect(withUp.victimSelfBuffNames).toContain(UP_III);
+            expect(baseline.victimSelfBuffNames).toContain(UP_III);
+
+            // LIVENESS: the unmodified leech really lands its full 50% of a 20,000 hit, in EVERY
+            // round — so a fixture that stopped leeching after round 1 could not pass below.
+            expect(baseline.victimDirectHealByRound).toEqual([LEECH_RAW, LEECH_RAW, LEECH_RAW]);
+
+            // THE CLAIM. Round 1 included — that is the element that was 10,000 before the fix.
+            expect(withUp.victimDirectHealByRound).toEqual([UP_III_RAW, UP_III_RAW, UP_III_RAW]);
+        });
+
+        it(`${victimSide}-side leecher: the round after the Up expires is not a phantom`, () => {
+            const expiring = threeRoundProfile(victimSide, 'dealt', 2, UP_III_PCT);
+            const baseline = threeRoundProfile(victimSide, 'dealt', 2);
+            // EXISTENCE, both ends of the status's life, read off the same store:
+            //  - still standing when the run stops after ROUND 1 (so it was live in rounds 1-2);
+            const roundOneOnly = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [{ name: CONTROL }],
+                numRounds: 1,
+                victimSelfGrant: { name: UP_III, duration: 2, incomingHeal: UP_III_PCT },
+            });
+            expect(roundOneOnly.victimSelfBuffNames).toContain(UP_III);
+            //  - and GONE by the end of round 3, which is what makes round 3's value a claim about
+            //    an expired status rather than about a status nobody can see.
+            expect(expiring.victimSelfBuffNames).not.toContain(UP_III);
+
+            // LIVENESS: the control leeches its full amount in all three rounds.
+            expect(baseline.victimDirectHealByRound).toEqual([LEECH_RAW, LEECH_RAW, LEECH_RAW]);
+
+            // Raised while it stands, back to the plain leech the round after it expires. Pre-fix
+            // this read [LEECH_RAW, UP_III_RAW, UP_III_RAW]: wrong at BOTH ends.
+            expect(expiring.victimDirectHealByRound).toEqual([UP_III_RAW, UP_III_RAW, LEECH_RAW]);
+        });
+
+        it(`${victimSide}-side leecher: the damage-TAKEN leech's self-side half is still one turn behind`, () => {
+            const withUp = threeRoundProfile(victimSide, 'taken', 5, UP_III_PCT);
+            const baseline = threeRoundProfile(victimSide, 'taken', 5);
+
+            expect(withUp.victimSelfBuffNames).toContain(UP_III);
+            expect(baseline.victimDirectHealByRound).toEqual([LEECH_RAW, LEECH_RAW, LEECH_RAW]);
+
+            // Round 1 is the plain leech — the recipient of a taken leech is the ship being
+            // attacked, never the actor whose turn is running, so no acting-turn ctx exists for it.
+            // Corpus-inert (both `damage-taken` passive leeches in the roster are SHIELDS), and
+            // pinned so it cannot become live and unnoticed.
+            expect(withUp.victimDirectHealByRound).toEqual([LEECH_RAW, UP_III_RAW, UP_III_RAW]);
         });
     }
 });

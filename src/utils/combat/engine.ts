@@ -3340,14 +3340,40 @@ export function runCombat(rawInput: CombatEngineInput): {
     // arithmetic — including the subtraction that stops the live re-read from double-counting what
     // the ctx already carries — lives in `liveHealChannelPct`, which the reactive-heal path in
     // triggers.ts calls for the same two channels.
-    const recipientIncomingHealPct = (id: string): number =>
+    //
+    // #367 fix wave: the SELF-side half has its own freshness problem, and `freshCtx` is how a
+    // caller closes it. `lastTurnCtxByActor` is written BELOW the positional apply on the two
+    // player-side turn branches, so a leech paying its own acting actor mid-turn reads that
+    // actor's PREVIOUS turn's self-side total: absent in round 1, and one turn behind after a
+    // timed self-buff expires. A caller that already holds the acting turn's own `turnCtx` passes
+    // it here (see `actingTurnCtx`) instead of hand-rolling a second resolution: `liveHealChannelPct`
+    // still owns the arithmetic, so the ENEMY-APPLIED half is re-read live exactly as before and
+    // only the ctx the self-side baseline comes from changes. Omitted → the map, unchanged.
+    const recipientIncomingHealPct = (id: string, freshCtx?: PlayerRoundCtx): number =>
         liveHealChannelPct(
             statusEngine,
             id,
             'incomingHealPct',
-            lastTurnCtxByActor.get(id),
+            freshCtx ?? lastTurnCtxByActor.get(id),
             allActorsById.get(id)?.preFight?.incomingHeal ?? 0
         );
+
+    // #367 fix wave — THE ACTING TURN'S OWN CTX, for the window in which the map does not have it
+    // yet. Set to the acting actor's `turnCtx` the moment `runPlayerTurn` returns, on all three
+    // turn branches (focus / walked team / enemy), and cleared at every turn start and round
+    // boundary alongside `actingActorId` so the pair is never half-set. Read ONLY through
+    // `actingSelfCtx` below, i.e. only for a recipient that IS the acting actor.
+    //
+    // Outside the mid-turn window this is provably a no-op rather than a second source of truth:
+    // `lastTurnCtxByActor.set` stores this very object, so once the publish has run the override
+    // and the map entry are the SAME reference. The enemy branch publishes ABOVE its positional
+    // apply (unlike the two player branches), so on that side the override is already equal when
+    // its leeches fire — measured: an enemy-side damage-dealt leech credits the same three-round
+    // profile before and after this change.
+    let actingTurnCtx: { actorId: string; ctx: PlayerRoundCtx } | undefined;
+    /** The acting turn's own ctx IF `id` is the acting actor, else undefined (→ the map). */
+    const actingSelfCtx = (id: string): PlayerRoundCtx | undefined =>
+        actingTurnCtx?.actorId === id ? actingTurnCtx.ctx : undefined;
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
@@ -4454,8 +4480,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // per-victim twin's does. (2) It resolves its owner from `runtimesById`, which is PLAYER-side
     // only — so for an enemy owner this proc returns before the loop, and its `'lowest-hp-ally'`
     // arm is structurally dead on the enemy side. (3) Since #367 task 7 the per-victim twin folds
-    // the RECIPIENT'S INCOMING-REPAIR channel (`incomingHealFactor(recipientIncomingHealPct(rid))`)
-    // into a heal-kind leech and this half does not — so an `Inc. Repair Down` standing on a
+    // the RECIPIENT'S INCOMING-REPAIR channel into a heal-kind leech —
+    // `incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)))`, the second argument
+    // added by the #367 fix wave so the SELF-side half comes from the acting turn rather than the
+    // previous one — and this half folds neither, so an `Inc. Repair Down` standing on a
     // leeching ship would be ignored here. This half is therefore NOT team-symmetric, and
     // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
     // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
@@ -4713,6 +4741,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             //       mechanism), hence reactive, and it carries `'lowest-hp-ally'` rather
             //       than a plain `'ally'` — so it would not reach this arm even if it did land in
             //       this map.) Neither ally-facing arm has a live entry today.
+            //
+            //       RE-MEASURED 2026-08-23 by a SECOND, independent method — every one of the 149
+            //       CSV rows built through `buildShipAbilities` and split by
+            //       `partitionReactiveAbilities`, enumerating what actually survives into
+            //       `castSkills` rather than reading the text. Same answer: passive-slot
+            //       `damage-dealt` heals are Magnolia (40%, self) and Valerian (15%, self), full
+            //       stop. It also settles Valkyrie explicitly — her two entries come back as
+            //       REACTIVE (`on-own-echoing-burst-detonated`, one `self` and one
+            //       `lowest-hp-ally`), so they never enter this map and her repair is scaled by the
+            //       reactive executor's own incoming-repair fold instead. The corpus's other
+            //       `damage-dealt` heals (Iridium, Opal, Pallas, Tithonus) are all ACTIVE-slot and
+            //       likewise never enter it.
             //   (b) aligning it needs a footprint route this proc has no access to — it holds no
             //       `supportRecipients` binding.
             //   (c) deleting the arm is NOT a drop-in: control would fall through to the final
@@ -4762,26 +4802,48 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // fixed. `incomingHealFactor` floors the multiplier at 0 so a leech suppressed
                     // past -100% lands at 0 rather than crediting a negative gross repair.
                     //
-                    // WHAT IS STALE HERE, AND MEASURED. For a SELF leech the recipient IS the acting
-                    // actor, whose ctx is published only AFTER this turn's dispatch
-                    // (`lastTurnCtxByActor.set` sits below the positional apply that calls this
-                    // proc) — so the SELF-side half of the channel is read from its PREVIOUS turn's
-                    // ctx, or, before its first turn, from `preFight.incomingHeal`. The
-                    // ENEMY-APPLIED half — the ruled scenario, and the only half a debuff applied
-                    // this round can move — is live either way, which is why the ruling itself is
-                    // fully satisfied.
+                    // THE SELF-SIDE HALF IS READ FROM THE ACTING TURN, NOT THE MAP (#367 fix wave).
+                    // `actingSelfCtx(rid)` returns the acting actor's own `turnCtx` when the
+                    // recipient IS that actor — the self leech, i.e. every shipped entry in this map
+                    // (Magnolia, Valerian, the Leech gear set; all `target: 'self'`) — and undefined
+                    // for anyone else, in which case the map is still the right source and
+                    // `liveHealChannelPct` handles its enemy half exactly as before.
                     //
-                    // The consequence, MEASURED 2026-08-23 rather than reasoned: a leecher holding
-                    // a self-side `Inc. Repair Up II` (+50%) from combat start credits
-                    // 10,000 / 15,000 / 15,000 over three rounds — round 1 misses it, rounds 2+ see
-                    // it. `preFight.incomingHeal` is the one self-side source that IS visible in
-                    // round 1, which is what this task's own fixtures use for the Up direction.
-                    // KNOWN RESIDUAL, deliberately not closed here: the cast path's self arm reads
-                    // the acting actor's fresh `dmgStats.totals` instead, and giving this proc the
-                    // same freshness means either publishing the ctx earlier (a mid-turn behaviour
-                    // change for every other `lastTurnCtxByActor` reader) or threading the live
-                    // totals to all three `procLeechesForVictim` call sites. Neither is a fold.
-                    const scaled = raw * incomingHealFactor(recipientIncomingHealPct(rid));
+                    // WHY IT WAS NEEDED, MEASURED. `lastTurnCtxByActor.set` sits BELOW the positional
+                    // apply that calls this proc on the two player-side branches, so before this the
+                    // self-side half came from the actor's PREVIOUS turn: a player-side leecher whose
+                    // own kit granted it `Inc. Repair Up III` (+75%) credited 10,000 / 17,500 / 17,500
+                    // over three rounds (round 1 blind), and with the same grant lasting 2 turns it
+                    // credited 10,000 / 17,500 / 17,500 — the third round a PHANTOM, the status having
+                    // already expired. Both profiles now read 17,500 / 17,500 / 17,500 and
+                    // 17,500 / 17,500 / 10,000. `leechIncomingRepair.test.ts` section 6 owns both, on
+                    // both sides.
+                    //
+                    // WHICH CHANNEL A USER ACTUALLY REACHES THIS THROUGH — measured, because the
+                    // obvious answer is wrong. The only `Inc. Repair Up` in the whole corpus is
+                    // MEATSHIELD's self-grant (`Inc. Repair Up III`, 2 turns; 1 occurrence over the
+                    // 149 rows of docs/ship-skills.csv, re-swept with a real CSV parser), and
+                    // Meatshield can NEVER leech: `buildShipAbilities` gives it ZERO `damage`
+                    // abilities on any slot, so a Meatshield wearing the Leech gear set deals nothing
+                    // to leech off. No ship grants an `Inc. Repair Up` to an ALLY either. So for a
+                    // LEECHING ship the self-side Up arrives only from the calculator's buff picker,
+                    // gear, or a pre-fight modifier — all of which are permanent for the fight, which
+                    // is why the ROUND-1 half of this fix is the user-visible one (measured: a
+                    // picker-set `Inc. Repair Up II` on a leeching focus ship credited
+                    // 10,000 / 15,000 / 15,000 before and 15,000 × 3 after) and the EXPIRY half is a
+                    // tripwire for the first timed self-side Up that ships.
+                    //
+                    // STILL STALE BY ONE TURN, deliberately and corpus-inertly: a recipient that is
+                    // NOT the acting actor. That is (a) the `all-allies` / `lowest-hp-ally` arms, both
+                    // corpus-dead in this map (measured — see the OPEN RESIDUAL block above); (b) the
+                    // DoT-tick and detonation call sites, where `sourceId` is the DoT/burst APPLIER
+                    // rather than the actor on turn, so `actingSelfCtx` returns undefined unless they
+                    // coincide; and (c) the sibling taken-leech proc, whose recipient is the ship
+                    // being ATTACKED and therefore never the actor on turn. Closing those needs a
+                    // live self-side buff fold outside `runPlayerTurn`, which is a new engine seam,
+                    // not a fold.
+                    const scaled =
+                        raw * incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)));
                     // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
                     // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
                     // gross (unchanged) — nothing was applied there, so nothing was reversed.
@@ -4873,6 +4935,31 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // argument and the measured staleness note). A damage-TAKEN leech is a self-repair,
                 // so the recipient is always `victim` and the channel is always its own — there is
                 // no per-recipient loop to sit inside here, unlike the sibling.
+                //
+                // ⚠️ AND IT IS DEAD CODE FOR THE CURRENT ROSTER — stated here because it was
+                // previously stated only in a task report, where the next reader of this line
+                // cannot see it. MEASURED 2026-08-23, not reasoned: all 149 rows of
+                // `docs/ship-skills.csv` were built through `buildShipAbilities` and split by
+                // `partitionReactiveAbilities`, and the passive-slot `basis: 'damage-taken'`
+                // abilities that survive into `castSkills` — i.e. everything this map can hold —
+                // are exactly MALVEX (15%) and QUIXILVER (25%), and BOTH are `shield`, which this
+                // `e.kind === 'heal'` branch never reaches. Nothing in the gear/implant registry
+                // adds one either: the only `damage-taken` entry there is Adaptive Plating, also a
+                // shield, and also reactive (`on-attacked`) so it never lands in this map at all;
+                // the one gear-set LEECH is `basis: 'damage-dealt'` and belongs to the sibling.
+                // The same sweep also read the REACTIVE side of the partition, so the claim is not
+                // "no cast-path one": NO ship in the corpus repairs for a share of the damage it
+                // TAKES on any slot or trigger. The only `damage-taken` abilities anywhere are those
+                // two shields.
+                //
+                // KEPT, NOT DELETED, and for a different reason than the aggregate arm's: this
+                // proc's shield branch is very much alive (Malvex and Quixilver run through it
+                // every fight), so the site is exercised — only the heal fork is not. A heal-kind
+                // `damage-taken` leech is one CSV row away, and the fold has to be here when it
+                // arrives, not discovered missing afterwards. The freshness note in the sibling
+                // block records what is still one turn stale here, and
+                // `leechIncomingRepair.test.ts` section 6 pins that stale profile so it cannot go
+                // live unnoticed.
                 //
                 // A SEPARATE LOCAL, not another `raw *=`, for two reasons. (1) Shape parity with
                 // the sibling, where the fold MUST be per-recipient. (2) The `raw *=` chain above
@@ -4991,6 +5078,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Reset per round so a start-of-round reactive drain (round 2+) stamps duringTurnOf
         // as turn-less (undefined) rather than the previous round's last acting actor.
         actingActorId = undefined;
+        // Same reason, same pair: cleared with `actingActorId` so the acting-turn ctx override can
+        // never outlive the turn it belongs to (see `actingTurnCtx`).
+        actingTurnCtx = undefined;
 
         // Forced-targeting/stealth lookup for a roster (phase 3). Reads the status engine
         // for each actor's Concentrate Fire / Taunt / Stealth flags so resolvePositionalTarget
@@ -9879,6 +9969,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // is the one intake that runs in this same turn yet passes byDirectDamage:false,
                 // so it never uses this value as a killer.
                 actingActorId = actor.id;
+                // #367 fix wave: this actor's turn ctx does not exist until its `runPlayerTurn`
+                // returns, so clear the override HERE (one site — this assignment is shared by all
+                // three turn branches) rather than leaving the previous actor's ctx paired with the
+                // new `actingActorId`. Each branch sets it immediately after its own dispatch.
+                actingTurnCtx = undefined;
 
                 // G PR1: reset the once-per-attack counter guard at each actor turn-start so a
                 // later attack (a different turn) can counter again while all per-hit `attacked`
@@ -10377,6 +10472,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       }
                                     : undefined,
                             });
+                            // #367 fix wave: publish this turn's ctx to the acting-turn override the
+                            // moment it exists. `lastTurnCtxByActor.set(actor.id, turn.turnCtx)` sits
+                            // ~240 lines below, AFTER the positional apply that procs this actor's
+                            // standing leech — so without this the leech's self-side incoming-repair
+                            // half would read the actor's previous turn. Same object either way, so
+                            // the two agree from the publish onwards.
+                            actingTurnCtx = { actorId: actor.id, ctx: turn.turnCtx };
                             if (turnStasisHitVictims.size > 0) {
                                 // KNOWN LIMITATION, deliberate for PR8 (multi-hit full-walk epic):
                                 // this reads `inflictedEnemyDebuffs` as it stands the moment
@@ -10755,6 +10857,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                       }
                                     : undefined,
                             });
+                            // Mirror of the focus site's publish (see it for the ordering argument):
+                            // this branch's `lastTurnCtxByActor.set` also sits below its positional
+                            // apply.
+                            actingTurnCtx = { actorId: actor.id, ctx: teamTurn.turnCtx };
                             if (teamTurnStasisHitVictims.size > 0) {
                                 // KNOWN LIMITATION — see the focus site's note above its own
                                 // `reInflictedStasis` read (search `turnStasisHitVictims.size > 0`)
@@ -11203,6 +11309,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 incomingReductionNonCritPct,
                                 incomingReductionCritFamilyPct,
                             });
+                            // Set for SYMMETRY, and it is provably a no-op on this branch: unlike the
+                            // two player branches, the enemy branch's `lastTurnCtxByActor.set` sits
+                            // ABOVE its positional apply, so the map already holds this very object
+                            // when the leech fires. Kept so all three branches read one rule and a
+                            // future reordering of the enemy publish cannot silently reopen the gap on
+                            // this side alone. Measured before and after: an enemy-side damage-dealt
+                            // leech's three-round profile is unchanged.
+                            actingTurnCtx = { actorId: actor.id, ctx: enemyTurn.turnCtx };
                             // §4.5: resolve Stasis break for player victims hit by this enemy.
                             if (enemyTurnStasisHitVictims.size > 0) {
                                 // KNOWN LIMITATION — see the focus site's note above its own
@@ -11946,6 +12060,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reactive emissions would stamp duringTurnOf with the round's last acting actor and
             // buildCombatLog would nest them under that actor's turn instead of the endOfRound group.
             actingActorId = undefined;
+            // Cleared with it (see `actingTurnCtx`). Behaviourally a no-op at this point — the last
+            // actor's ctx is already in `lastTurnCtxByActor`, and it is the SAME object — but the two
+            // are kept in lockstep so no future reader has to know that.
+            actingTurnCtx = undefined;
         }
 
         // SP-4b-2 D5: decrement the GLOBAL enemy-debuff sentinel bucket once per round.

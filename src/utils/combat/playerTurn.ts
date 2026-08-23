@@ -180,6 +180,14 @@ export interface HealingRuntimeCtx {
     creditRecipient?: (recipientId: string, bucket: keyof ActorHealing, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
+    /** ONE ARGUMENT ON PURPOSE. The engine's implementation takes an optional second — a FRESH
+     *  `PlayerRoundCtx` overriding the `lastTurnCtxByActor` read, added by the #367 fix wave so the
+     *  leech procs can resolve the ACTING actor's self-side incoming-repair half before its ctx is
+     *  published. It is deliberately not exposed here: every caller through this interface already
+     *  short-circuits its OWN actor (`incomingPctFor`'s self arms in this file and in `triggers.ts`)
+     *  and reaches this function only for a DIFFERENT recipient, for whom the map is the correct
+     *  source. Widening this signature would invite a caller to pass a ctx belonging to the wrong
+     *  actor. */
     recipientIncomingHealPct: (actorId: string) => number;
     /** D-PR6: summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
      *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
