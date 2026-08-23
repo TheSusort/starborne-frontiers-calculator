@@ -21,7 +21,28 @@ Read `docs/superpowers/specs/2026-08-22-reversed-repairs-design.md` first. Its r
 - **R7 — the kill is credited to the healer** whose repair was reversed, never to the Zosimos that applied the debuff.
 - **R8 — Cheat Death intercepts** a lethal reversal and is spent, exactly as against a lethal attack.
 - **R9 — Zosimos's charge passive still fires.** It watches the enemy *casting*, upstream of all of this. No change.
-- **R10 — surfaces as overhealing** for the healer. No new report field, no damage-dealt credit.
+- ~~**R10 — surfaces as overhealing** for the healer.~~ **RETRACTED by the owner, 2026-08-23.**
+  See R10′/R7′/R11 below. Tasks 1-6 were built against the retracted R10; **Task 5b revises them.**
+
+**R10′ (replaces R10) — a reversed repair books NOTHING on the healer.** Repairs cast `0`,
+effective healing `0`, overhealing `0`. The event does not appear on the healer's line at all.
+Owner's words: *"it doesn't need to be booked as overheal. we don't need to book it as anything
+other than damage from a debuff."*
+
+**R7′ (supersedes R7) — the damage AND the kill are credited to the DEBUFF'S APPLIER** (Zosimos),
+not to the healer whose repair triggered it. It is the debuff's damage, attributed the way a DoT's
+damage and kills belong to whoever applied the DoT. The original R7 credited the healer; that was
+answered when the model was "the repair becomes damage", and the retraction changes the model.
+
+**R11 (new) — a reversal writes its own combat-log line**, including when it does not kill.
+Without one the player sees a repair land, sees it achieve nothing, and sees HP drop, with nothing
+connecting the three.
+
+> **Why this is a real code change, not a relabelling.** Every call site credits its heal bucket
+> (`directHeal` / `hotHeal`) *before* calling `applyHealToTarget`, so the closure cannot retract it.
+> R10′ therefore requires the credit to move after the call, or not to happen — at all 9 sites.
+> Returning `{consumed: 0, overheal: 0}` satisfies two thirds of R10′ and silently leaves the gross
+> cast credited, which is exactly the shape that ships green tests and wrong numbers.
 
 Additional project rules that bind every task:
 
@@ -325,7 +346,21 @@ git commit -m "fix(parser): Reversed Repairs builds as a 1-turn enemy debuff (#3
 
 **Interfaces:**
 - Consumes: the `'Reversed Repairs'` buff name from Task 2.
-- Produces: `REVERSED_REPAIRS: string` and `hasReversedRepairs(statusEngine: StatusEngine, victimId: string): boolean`, consumed by Task 5.
+- Produces: `REVERSED_REPAIRS: string` and `hasReversedRepairs(statusEngine: StatusEngine, victim: { id: string; side: 'player' | 'enemy' }): boolean`, consumed by Task 5.
+
+> **AMENDED after the Task 3 review (2026-08-22).** The signature originally took a bare
+> `victimId: string`. That is unsafe, and the review caught why: the scheduled always-active
+> enemy-debuff store (`enemyAlwaysSnap`, `statusEngine.ts:927-929`) is a **single global list with
+> no `enemyTargetId` filtering at all**. Verified empirically — with a hand-selected
+> `Reversed Repairs`, the bare-id read returned `true` for *every* id probed, player-side included.
+> A user ticking the box in the enemy-debuff picker would have reversed their OWN team's repairs.
+>
+> The scheduled arm must therefore be gated on `victim.side === 'enemy'`. The timed arm is already
+> correctly per-victim and stays ungated — that is the channel the corpus applier uses, and it must
+> keep working in both directions for team symmetry (an enemy Zosimos debuffing a player ship).
+>
+> This is why `exposedStatus.ts` reads only the timed channel. Opting into the scheduled one buys
+> simulator support and inherits the global sentinel; the side gate is the price.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -537,6 +572,16 @@ git commit -m "refactor(engine): applyHealToTarget takes a required repair sourc
 **Interfaces:**
 - Consumes: `hasReversedRepairs` (Task 3), `resolveLethalHp` (Task 1), the required `repairSourceId` (Task 4).
 
+> **Two things moved under this task after it was written — use these, not the older forms:**
+>
+> 1. `hasReversedRepairs(statusEngine, victim)` takes the **actor**, not `victim.id`. Its scheduled
+>    arm is gated on `victim.side === 'enemy'` because the scheduled store is a single global list
+>    with no per-victim keying (see the Task 3 amendment). The sample code below is already updated.
+> 2. Task 4 left the implementation's third parameter named `_repairSourceId` to satisfy
+>    `@typescript-eslint/no-unused-vars` while it was unread. **Rename it back to `repairSourceId`**
+>    as part of this task — you are now reading it. The `HealingRuntimeCtx` declaration in
+>    `playerTurn.ts` already says `repairSourceId`; only the implementation carries the underscore.
+
 - [ ] **Step 1: Write the failing tests — one per ruling**
 
 Create `src/utils/combat/__tests__/reversedRepairs.engine.test.ts`. Drive the **real engine**, not an executor double: a test-double `HealingRuntimeCtx` contains no reversal branch, so a double-based test proves nothing about production.
@@ -603,7 +648,7 @@ applyHealToTarget: (raw, victim, repairSourceId) => {
     // ("the -50% applies first") is satisfied by position alone — and PRE-deficit-clamp, which is
     // R3 ("a target at full HP takes the full amount"). Every magnitude ruling lands on this one
     // number; do not recompute any of it here.
-    if (hasReversedRepairs(statusEngine, victim.id)) {
+    if (hasReversedRepairs(statusEngine, victim)) {
         // R1: raw HP burn. No shield drain, no Protection redirect, no defence mitigation, no
         // Barrier — the damage funnel owns all four and is deliberately NOT entered. R5 follows
         // from the same choice: no counterattack, no thorns, no incoming-leech proc, no
@@ -614,7 +659,11 @@ applyHealToTarget: (raw, victim, repairSourceId) => {
         // consumables that spend on a direct hit (Barrier charges, Ironclad's nth-hit counter)
         // must not see one. R8: Cheat Death still intercepts, via the one shared death path.
         resolveLethalHp(victim, {
-            round: r,
+            // `currentRound`, NOT `r`: `r` is block-scoped to the round `for` loop and
+            // `healingCtx` is built above it, so `round: r` throws ReferenceError. `currentRound`
+            // is the engine-scope mirror that exists for exactly this, and the three emitters
+            // just above `healingCtx` already use it.
+            round: currentRound,
             statusEngine,
             cheatDeathConsumed,
             cheatDeathConsumedRound,
@@ -753,8 +802,13 @@ If a token moved on a ship that is not Zosimos, stop.
 In `src/constants/changelog.ts`, append to `UNRELEASED_CHANGES` — plain English, describing what a player sees. No emojis.
 
 ```ts
-"Combat simulator: Zosimos's charged skill now applies Reversed Repairs. While a ship carries it, every repair that lands on it damages it instead — for the repair's full value, ignoring shields, Protection and defence, and even at full health. A reversed repair can destroy the ship, and the kill is credited to whoever cast the repair. Cheat Death still saves it. Previously the status did nothing at all.",
+"Combat simulator: Zosimos's charged skill now applies Reversed Repairs. While a ship carries it, every repair that lands on it damages it instead — for the repair's full value, ignoring shields, Protection and defence, and even at full health. A reversed repair can destroy the ship. The damage and any kill are credited to the ship that applied the debuff, not to the one whose repair triggered it, and the repair itself is not counted as healing or overhealing for its caster. The combat log shows a row for each reversal. Cheat Death still saves the target. Previously the status did nothing at all.",
 ```
+
+> **REWRITTEN 2026-08-23.** The original draft said the kill was "credited to whoever cast the
+> repair" and implied the repair surfaced as overhealing. Both were true of the retracted R7/R10
+> and are false under R7′/R10′ — see the ruling table at the top. A changelog entry describing
+> behaviour the build does not have is worse than none.
 
 - [ ] **Step 5: Full verification**
 
