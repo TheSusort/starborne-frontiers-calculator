@@ -662,6 +662,10 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
     // credited to — with the burned ship as the target, the source→target shape `debuff` and
     // `dot-applied` already use. A scheduled (hand-picked) Reversed Repairs has no applier, so the
     // entry falls back to the victim and renders as the plain self-line.
+    //
+    // `healerId` (#362 fix-wave-1) rides along as a DEDICATED field, not folded into `note` (which
+    // `debuff-resisted` already owns) — DISPLAY ONLY. `actorId` stays `e.applierId ?? e.victimId`;
+    // the healer never becomes this entry's actor/attribution, only a name the formatter may show.
     'reversed-repair-log': (e, ctx) => {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         const entry: CombatLogEntry = {
@@ -669,6 +673,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.applierId ?? e.victimId,
             targets: [{ targetId: e.victimId, amount: e.amount }],
             reactions: [],
+            ...(e.healerId !== undefined ? { healerId: e.healerId } : {}),
         };
         ctx.attachEntry(entry);
     },

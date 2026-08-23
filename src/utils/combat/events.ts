@@ -510,11 +510,20 @@ export type CombatEvent =
      *  `applierId` is the actor that inflicted the status — the same actor the burn's damage and
      *  any resulting kill are credited to (R7′), NOT the healer whose repair was reversed. Absent
      *  when the status came from the calculator's hand-selected enemy-debuff picker, which carries
-     *  no applier identity. `amount` is the full face value burned (pre-clamp, post-crit). */
+     *  no applier identity. `amount` is the full face value burned (pre-clamp, post-crit).
+     *
+     *  `healerId` (#362 fix-wave-1) is the actor whose repair got reversed — `repairSourceId` at
+     *  the `applyHealToTarget` call site. It is carried SOLELY so the log line can name the repair
+     *  that was undone ("Zosimos → Nova: Medic's repair reversed 10,000"); it is a DISPLAY field
+     *  ONLY. `applierId` remains this entry's attribution — the sole id credited via `creditDealt`
+     *  and the sole candidate for `killerId` — and nothing about R7′ changes: the healer's identity
+     *  does not re-enter the damage/kill attribution through this field. Do not read `healerId` for
+     *  anything but rendering. */
     | ({
           type: 'reversed-repair-log';
           victimId: string;
           applierId?: string;
+          healerId?: string;
           amount: number;
           round: number;
       } & ReactiveStamp)

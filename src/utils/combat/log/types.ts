@@ -64,6 +64,13 @@ export interface CombatLogEntry {
     targets: CombatLogTarget[]; // 1 = single-target, N = AoE
     reactions: CombatLogEntry[]; // reactions triggered BY this entry (filled by a later task; [] for now)
     note?: string;
+    /** #362 fix-wave-1, `reversed-repair` ONLY: the healer whose repair was reversed, for DISPLAY
+     *  alone ("Zosimos → Nova: Medic's repair reversed 10,000"). A dedicated field rather than
+     *  folded into `note` — `note` is already spoken for by `debuff-resisted`. Carrying no
+     *  attribution weight: `actorId` is the debuff's APPLIER and stays the entry's sole credited
+     *  actor (R7′). Absent when the applier is unknown (scheduled channel) or, in principle, when
+     *  the healer id itself is unknown — never falls back to the applier. */
+    healerId?: string;
 }
 
 export interface CombatLogTarget {

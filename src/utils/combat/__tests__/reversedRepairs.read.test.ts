@@ -52,7 +52,11 @@ describe('reversedRepairsOn', () => {
         // CARRYING, with NO applier: a hand-selected debuff was never cast by anyone. The state
         // must be present (so the reversal fires) AND carry `applierId: undefined` (so nothing is
         // credited and the death event names no killer).
-        expect(reversedRepairsOn(se, { id: 'victim-1', side: 'enemy' })).toEqual({
+        // `toStrictEqual`, not `toEqual` (#362 fix-wave-1): `toEqual({ applierId: undefined })`
+        // also matches `{}` — it would not catch a future change that dropped the key entirely
+        // rather than setting it to `undefined`, which is a materially different state to a caller
+        // doing `'applierId' in state`.
+        expect(reversedRepairsOn(se, { id: 'victim-1', side: 'enemy' })).toStrictEqual({
             applierId: undefined,
         });
     });
@@ -67,7 +71,7 @@ describe('reversedRepairsOn', () => {
             enemyDebuffs: [scheduled(REVERSED_REPAIRS)],
         });
         expect(reversedRepairsOn(se, { id: 'player-3', side: 'player' })).toBeUndefined();
-        expect(reversedRepairsOn(se, { id: 'enemy-7', side: 'enemy' })).toEqual({
+        expect(reversedRepairsOn(se, { id: 'enemy-7', side: 'enemy' })).toStrictEqual({
             applierId: undefined,
         });
     });

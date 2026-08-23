@@ -250,6 +250,46 @@ describe('RoundEventLog', () => {
         expect(screen.getByText(/Nova: repairs reversed 900/)).toBeInTheDocument();
     });
 
+    // #362 fix-wave-1: `healerId` names the reversed repair's caster inside the label — DISPLAY
+    // ONLY. `actorId` (the applier, Hexa) stays the source of the source → victim line; `healerId`
+    // (Graphite) never becomes the entry's actor.
+    it('reversed-repair, healer present: names the healer inside the label', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'reversed-repair',
+                    actorId: 'hexa',
+                    targets: [{ targetId: 'nova', amount: 4321 }],
+                    reactions: [],
+                    healerId: 'graphite',
+                })}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Enemy Hexa → Nova: Graphite's repair reversed 4,321/)
+        ).toBeInTheDocument();
+    });
+
+    // Absent `healerId` (the pre-#362-fix-wave-1 shape, still produced whenever the repair's
+    // source id is unavailable to the caller) falls back to the plain, healer-less string —
+    // unchanged from before `healerId` existed.
+    it('reversed-repair, healer absent: falls back to the plain label', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'reversed-repair',
+                    actorId: 'hexa',
+                    targets: [{ targetId: 'nova', amount: 4321 }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Enemy Hexa → Nova: repairs reversed 4,321/)).toBeInTheDocument();
+        expect(screen.queryByText(/Graphite's repair/)).not.toBeInTheDocument();
+    });
+
     it('death: resolves the killer id to a ship name', () => {
         render(
             <RoundEventLog

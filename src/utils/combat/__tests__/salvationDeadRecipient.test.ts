@@ -51,8 +51,12 @@ const makeHealing = (
      *  assertion below stayed green. This array is what makes it go red. */
     appliedTo: string[];
     /** Task 4 (#362): the `repairSourceId` handed to each `applyHealToTarget` call, alongside
-     *  `appliedTo` — a future attribution bug (crediting the wrong healer's reversal kill) would
-     *  show up here instead of silently as `killerId: undefined`. */
+     *  `appliedTo`. Its original purpose (crediting a reversal KILL to this id) was retracted by
+     *  R7′ — that credit now goes to the debuff's applier instead, read off `reversedRepairsOn`,
+     *  never off this parameter. Its current purpose (#362 fix-wave-1) is display-only: it becomes
+     *  `reversed-repair-log`'s `healerId`, which names the repair's caster inside the combat-log
+     *  line ("Zosimos → Nova: Medic's repair reversed N"). A future bug here would show up as the
+     *  WRONG SHIP NAMED in that line, not as a misattributed kill or credit. */
     appliedSourceIds: string[];
 } => {
     const credits = new Map<string, ActorHealing>();

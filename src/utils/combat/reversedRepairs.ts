@@ -51,9 +51,11 @@ export type ReversedRepairsState = { applierId: string | undefined } | undefined
  *    and timed enemy arms right next to it, which all key off `enemyTargetId`/`enemyTargetId`-like
  *    maps. Passing a `victimId` into `snapshot(undefined, victimId)` does nothing for this arm: it
  *    ignores the id entirely and returns the same global list for ANY id, including a player-side
- *    actor's. Before this gate existed, `hasReversedRepairs` read `true` for literally every id
- *    probed — `attacker`, `foe`, `player-3`, `enemy-7`, `literally-anything` — because the
- *    scheduled arm has nothing else to filter on. The calculator's `enemyDebuffs` picker means
+ *    actor's. Before this gate existed, this read (then a boolean-returning `hasReversedRepairs`)
+ *    answered `true` for literally every id probed — `attacker`, `foe`, `player-3`, `enemy-7`,
+ *    `literally-anything` — because the scheduled arm has nothing else to filter on. Today's
+ *    `reversedRepairsOn` would answer `{ applierId: undefined }` (carrying) for every one of those
+ *    same ids without the gate — same leak, new shape. The calculator's `enemyDebuffs` picker means
  *    "debuffs the OPPOSING team carries", so without this gate a user ticking Reversed Repairs in
  *    the enemy-debuff picker would reverse their OWN team's repairs into damage. `side` is the
  *    only signal available to stop that leak, since the underlying store carries none.
@@ -75,6 +77,14 @@ export function reversedRepairsOn(
     // application. That is the Zosimos R7′ wants. It can still be absent on a timed entry whose
     // registered status omitted it (fixtures), which the `string | undefined` state models
     // honestly rather than papering over with a sentinel.
+    //
+    // ⚠️ TIE-BREAK, undecided: `.find()` returns the FIRST matching entry. If two DISTINCT Zosimos
+    // ever inflicted Reversed Repairs on the same victim (re-applying it does not currently
+    // overwrite the existing entry's caster), the second applier's damage/kill credit is silently
+    // dropped — the first applier wins every burn until its entry expires. Not fixed here: no
+    // corpus ship currently re-applies this status onto an already-carrying victim, so there is
+    // nothing to pin a fixture against; flagged so a future reader does not assume `.find()` here
+    // was an oversight.
     const timed = statusEngine
         .timedAbilityStatuses('enemy', undefined, victim.id)
         .find((s) => s.active.buffName === REVERSED_REPAIRS);

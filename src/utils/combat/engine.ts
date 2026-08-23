@@ -3552,18 +3552,18 @@ export function runCombat(rawInput: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              // `_repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
+              // `repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
               // for a cast repair, the applier for a HoT tick, the leeching actor for a leech.
               // Every call site is still REQUIRED to supply it (the parameter is not optional, so
               // `tsc` reports an arity error at any site that forgets).
               //
-              // ⚠️ IT CURRENTLY HAS NO READER. Its one consumer was the retracted R7, which
-              // credited a reversal KILL to the repair's source; R7′ moved that credit to the
-              // debuff's applier, so nothing in this closure consults it any more. Underscored to
-              // say so out loud rather than leaving a silently-unused argument. Keep it or delete
-              // it deliberately — but do NOT quietly wire it back into the reversal, which is the
-              // attribution the owner rejected.
-              applyHealToTarget: (raw, victim, _repairSourceId) => {
+              // Un-parked (#362 fix-wave-1): it went unread for one revision after R7′ moved the
+              // reversal's KILL credit to the debuff's applier (`repairSourceId` was that credit's
+              // one consumer under the retracted R7). It has a reader again — R11's log row names
+              // it as `healerId`, DISPLAY ONLY (see the reversal branch below and the
+              // `reversed-repair-log` doc comment in `events.ts`). Do NOT wire it back into the
+              // damage/kill attribution: that is the healer-fallback R7′ rejects.
+              applyHealToTarget: (raw, victim, repairSourceId) => {
                   // Dead target → all overheal, and NO reversal: a corpse takes no reversed repair.
                   if (victim.currentHp <= 0) {
                       return { reversed: false, consumed: 0, overheal: raw };
@@ -3598,7 +3598,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // The damage AND the kill belong to the Zosimos that inflicted the status,
                       // exactly the way a DoT's damage and kills belong to whoever applied the DoT.
                       // `repairSourceId` (the healer whose repair was reversed) is deliberately NOT
-                      // used here.
+                      // used for the damage credit or the kill below — only for the log row's
+                      // `healerId`, which is DISPLAY ONLY (see the `emitConsequenceLog` call below).
+                      // Naming the healer in the log does not put the healer back in the attribution
+                      // path: `applierId` stays the sole `actorId`/`creditDealt`/`killerId` — R7′ is
+                      // unaffected by a reader who merely SHOWS who cast the undone repair.
                       //
                       // ⚠️ AN EARLIER RULING SAID THE OPPOSITE and was RETRACTED by the owner. The
                       // healer did not choose this; it cast a repair. Crediting it damage — and a
@@ -3651,6 +3655,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                           ...(reversal.applierId !== undefined
                               ? { applierId: reversal.applierId }
                               : {}),
+                          // `healerId` (#362 fix-wave-1): the repair's source, for DISPLAY only —
+                          // see the guardrail above and the `reversed-repair-log` doc comment in
+                          // `events.ts`. `repairSourceId` is always a real id here (the parameter is
+                          // required at every `applyHealToTarget` call site), so this is unconditional,
+                          // unlike `applierId` which the scheduled channel can leave undefined.
+                          healerId: repairSourceId,
                           amount: raw,
                           round: currentRound,
                       });
@@ -4451,6 +4461,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // case and not a reversal: an all-allies leech credits the source's raw for
                     // every ally but applies to none of the non-anchor ones. Those keep their gross
                     // credit exactly as before — nothing reversed there because nothing landed.
+                    //
+                    // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer probe planted a throw
+                    // immediately before this call (and the sibling one at the non-positional
+                    // taken-leech site), ran the full suite (3801 tests), and neither fired. This
+                    // branch's R10′ credit move is corpus-DEAD — pre-existing, not introduced by
+                    // this pass — so an unconditional double-credit bug here would be invisible to
+                    // every test in the repository. Do not build fixtures for it now; this comment
+                    // only records that the branch rests on review, not on coverage.
                     const applied = selectorActor
                         ? healingCtx.applyHealToTarget(raw, selectorActor, sourceId)
                         : rid === healTarget!.id
@@ -4916,19 +4934,27 @@ export function runCombat(rawInput: CombatEngineInput): {
         // facts about the same hit (who dealt it vs who took it); E5 does NOT merge them.
         const roundDamage = new Map<string, ActorDamage>();
         // Per-round per-victim positional damage accumulator (victim actor id → summed damage
-        // dealt to it this round). Populated ONLY by the positional apply path's emitHit
-        // callback (all three attack sites); stays EMPTY on non-positional rounds, so the
+        // dealt to it this round). Populated by the positional apply path's emitHit callback (all
+        // three attack sites) — and, since #362, by `bookReversalDamage` below, the SECOND writer:
+        // a Reversed Repairs burn writes this victim-keyed intake unconditionally, whether or not
+        // the debuff's applier is known (see `bookReversalDamage`'s own comment for why an
+        // unknown-applier burn still lands here). Stays EMPTY on a round with neither, so the
         // RoundData.perTargetDamage field is set only when non-empty → goldens byte-identical.
         const roundPerTargetDamage = new Map<string, number>();
         // SP-F F1: per-attacker×victim dealt attribution channel — attacker id → victim id →
         // damage dealt THIS round. Mirrors EVERY `roundPerTargetDamage.set` write above with an
         // equal-amount entry keyed to that increment's CORRECT source-attacker (not always
         // `actingActorId` — reflect's source is the reflector, counter's is the counter owner,
-        // etc; see the per-site comments at each write). Σ over victims for one attacker ==
-        // that attacker's `damageDealt`; Σ over attackers for one victim == `roundPerTargetDamage`
-        // for that victim — so `damageDealt`/`damageTaken` reconcile BY CONSTRUCTION once every
-        // site mirrors correctly. Stays EMPTY when roundPerTargetDamage is empty (non-positional
-        // rounds), so RoundData.perTargetDealt is set only when non-empty → goldens byte-identical.
+        // etc; see the per-site comments at each write) — WITH ONE EXCEPTION, since #362: an
+        // applier-less Reversed Repairs burn (the scheduled channel has no caster) writes
+        // `roundPerTargetDamage` via `bookReversalDamage` but deliberately skips this map, the same
+        // way a redirected DoT-tick chunk with no single attacker does at the Protection-redirect
+        // site. Σ over victims for one attacker == that attacker's `damageDealt`; Σ over attackers
+        // for one victim == `roundPerTargetDamage` for that victim MINUS any applier-less burns on
+        // that victim — so `damageDealt`/`damageTaken` reconcile BY CONSTRUCTION once every site
+        // mirrors correctly, short by exactly that one documented gap. Stays EMPTY when
+        // roundPerTargetDamage is empty (non-positional rounds), so RoundData.perTargetDealt is set
+        // only when non-empty → goldens byte-identical.
         const roundPerTargetDealt = new Map<string, Map<string, number>>();
         const creditDealt = (attackerId: string, victimId: string, amount: number): void => {
             let byVictim = roundPerTargetDealt.get(attackerId);
@@ -4952,6 +4978,16 @@ export function runCombat(rawInput: CombatEngineInput): {
         // single attacker ("nothing to attribute there, so skip silently; the victim-keyed
         // roundPerTargetDamage write above is unaffected"). The victim demonstrably lost the HP
         // either way; inventing a dealer for it would be the fallback R7′ forbids.
+        //
+        // ⚠️ KNOWN ASYMMETRY (#362 fix-wave-1): this deliberately does NOT call `creditDamage`
+        // (below), the scalar `roundDamage`/`ActorDamage` channel that `damageDealt` and DPS-mode
+        // rows are built from. The battle REPORT is unaffected — `ShipRoundState.damageDealt`
+        // derives from `perTargetDealt`, which this DOES write — but an applier standing in
+        // DPS-mode's focus-ship seat gets a round-total row computed off the scalar channel, so a
+        // Zosimos burn is absent from that one row even though `perTargetDealt`/`perTargetDamage`
+        // carry it correctly. Not fixed here: wiring `creditDamage` in would need the same
+        // consideration `perTargetDealt`'s Task-1 mirroring got (every existing scalar-channel
+        // fixture would move), which is outside this pass's scope.
         bookReversalDamage = (victimId, applierId, amount) => {
             if (amount <= 0) return;
             roundPerTargetDamage.set(victimId, (roundPerTargetDamage.get(victimId) ?? 0) + amount);
@@ -11483,6 +11519,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // BELOW the apply and are skipped on a reversal. This
                                             // site always applies (to the heal target), so there
                                             // is no unapplied third case here.
+                                            //
+                                            // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer
+                                            // probe planted a throw immediately before this call
+                                            // (and the sibling aggregate-leech site above), ran the
+                                            // full suite (3801 tests), and neither fired. This
+                                            // non-positional taken-leech branch's R10′ credit move is
+                                            // corpus-DEAD — pre-existing, not introduced by this
+                                            // pass — so an unconditional double-credit bug here would
+                                            // be invisible to every test in the repository. Do not
+                                            // build fixtures for it now; this comment only records
+                                            // that the branch rests on review, not on coverage.
                                             const applied = healingCtx.applyHealToTarget(
                                                 raw,
                                                 healTarget!,
@@ -12081,14 +12128,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(hasWalkedTeam ? { teamDamage: Math.round(teamRoundDamage) } : {}),
             // extraTurns set ONLY when ≥ 1 (undefined preserves legacy RoundData shape).
             ...(focusTurns.length > 1 ? { extraTurns: focusTurns.length - 1 } : {}),
-            // perTargetDamage set ONLY when the positional path recorded victim damage this
-            // round (map non-empty). Non-positional rounds leave it absent → goldens byte-identical.
+            // perTargetDamage set ONLY when the positional path OR a #362 Reversed Repairs burn
+            // (`bookReversalDamage`, the second writer — see its declaration above) recorded victim
+            // damage this round (map non-empty). A round with neither leaves it absent → goldens
+            // byte-identical.
             ...(roundPerTargetDamage.size > 0
                 ? { perTargetDamage: Object.fromEntries(roundPerTargetDamage) }
                 : {}),
             // perTargetDealt (SP-F F1): attacker id -> victim id -> dealt, mirroring EVERY
-            // roundPerTargetDamage increment above to its correct source-attacker. Set ONLY when
-            // non-empty — mirrors perTargetDamage's "absent when empty" rule, goldens byte-identical.
+            // roundPerTargetDamage increment above to its correct source-attacker — EXCEPT an
+            // applier-less #362 reversal, which writes perTargetDamage but has no attacker to
+            // mirror to here (same documented exception as a redirected DoT-tick chunk with no
+            // single attacker). Set ONLY when non-empty — mirrors perTargetDamage's "absent when
+            // empty" rule, goldens byte-identical.
             ...(roundPerTargetDealt.size > 0
                 ? {
                       perTargetDealt: Object.fromEntries(

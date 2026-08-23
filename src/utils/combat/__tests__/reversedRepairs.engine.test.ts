@@ -124,6 +124,22 @@ const basicAttack = (): Ability => ({
     config: { type: 'damage', multiplier: 100, hits: 1 },
 });
 
+/** #362 fix-wave-1 (M-3): an on-attacked reactive self-repair, the "Second Wind" shape
+ *  (`equipmentAbilities.integration.test.ts`'s D-PR5) with no `procChance`/`triggerCritFilter` so
+ *  it always fires. Placed on the VICTIM's own passive slot and triggered by an incoming attack —
+ *  i.e. fired from INSIDE `triggers.ts`'s `executeIntent`, itself invoked from `drivePositionalApply`
+ *  while resolving that same attack (the plan doc's third deferral window). This is what makes the
+ *  resulting reversal genuinely reactive, unlike every other channel in this file (cast/HoT/leech),
+ *  none of which fire from inside another action's resolution. */
+const reactiveSelfRepair = (pct: number): Ability => ({
+    id: 'ab-reactive-self-repair',
+    type: 'heal',
+    target: 'self',
+    trigger: 'on-attacked',
+    conditions: [],
+    config: { type: 'heal', pct, basis: 'hp' },
+});
+
 /** A named no-payload self-buff cast from the actor's own ACTIVE slot — the grant shape verified
  *  working by `hitMitigation.integration.test.ts` (a passive-slot on-cast self-buff does not
  *  reliably apply in this engine). Used here for `Cheat Death`. */
@@ -504,6 +520,14 @@ const cheatDeaths = (events: CombatEvent[]) =>
         (e): e is Extract<CombatEvent, { type: 'cheat-death-activated' }> =>
             e.type === 'cheat-death-activated'
     );
+/** #362 fix-wave-1 (M-3): generic version of the type-narrowing filters above, for the two event
+ *  types (`attacked`, `reactive-heal-performed`) only the deferral-window test needs. */
+function eventsOfType<T extends CombatEvent['type']>(
+    events: CombatEvent[],
+    type: T
+): Extract<CombatEvent, { type: T }>[] {
+    return events.filter((e): e is Extract<CombatEvent, { type: T }> => e.type === type);
+}
 
 // ══ R1 ═══════════════════════════════════════════════════════════════════════════════════════
 // "No defensive layers. No shield drain, no Protection redirect, no defence mitigation, no
@@ -894,6 +918,16 @@ describe('R10′ — a reversed repair books nothing at all on the healer', () =
     // (E5 §4.1) and contributes nothing to the healing report. The enemy arm asserts the same
     // ruling through `heal-performed.perTarget[].overheal`, which IS team-symmetric — and both
     // arms assert the HP half.
+    //
+    // ⚠️ NOT a full team-symmetric test of the CREDIT MOVE (#362 fix-wave-1 review). The enemy-side
+    // arm's repair runs through `playerTurn.ts`'s `healEventOnly` branch (was `:4266`), which per
+    // the design brief credits NOTHING even in the control case — "not an oversight, enemy heals
+    // are excluded from the player healing buckets by design" — so there is no gross bucket for a
+    // reversal to suppress there in the first place. That arm therefore proves R10′'s HP half
+    // team-symmetrically, but it cannot and does not exercise the bucket-credit-move logic this
+    // describe block is named for: only the player arm below does that job. If this file's team
+    // symmetry is ever audited for "does every ruling have a real enemy-side instrument", this is
+    // the one exception, and it is exception BY DESIGN, not a gap.
     it('player-side victim: directHeal, effectiveHeal and overheal are ALL zero', () => {
         const DEFICIT_START = VICTIM_MAX_HP / 2; // deficit ≫ RAW, so the control fully CONSUMES
         const { reversed, control } = bothArms({
@@ -998,6 +1032,10 @@ describe('R11 — every reversal writes a combat-log row, lethal or not', () => 
             expect(rows[0].actorId).toBe(reversed.zosimosId);
             expect(rows[0].actorId).not.toBe(reversed.medicId);
             expect(rows[0].targets).toEqual([{ targetId: VICTIM_ID, amount: RAW }]);
+            // #362 fix-wave-1: `healerId` names the medic — DISPLAY ONLY. It rides alongside the
+            // applier attribution above without displacing it: `actorId` is still Zosimos, not the
+            // medic, and the assertion above already proves that independently of this one.
+            expect(rows[0].healerId).toBe(reversed.medicId);
         });
 
         it(`${victimSide}-side victim: a LETHAL reversal writes the row too, before the death row`, () => {
@@ -1018,6 +1056,83 @@ describe('R11 — every reversal writes a combat-log row, lethal or not', () => 
             const kinds = run.logEntries.map((e) => e.kind);
             expect(kinds).toContain('death');
             expect(kinds.indexOf('reversed-repair')).toBeLessThan(kinds.indexOf('death'));
+        });
+    }
+});
+
+// ══ R11, deferral-window nesting (#362 fix-wave-1, M-3) ═════════════════════════════════════════
+// The LETHAL test above proves "cause precedes consequence" for the reversal-vs-death ordering,
+// but every channel exercised so far (cast/HoT/leech) fires from the ACTOR'S OWN turn, never from
+// inside another action's resolution. `emitConsequenceLog`'s comment at the reversal branch claims
+// it "buffers correctly inside a deferral window (a reactive repair during a positional apply does
+// exactly that)" — a claim no fixture in this file had actually driven through a real deferral
+// window. This one does: the victim's own on-attacked passive reactively repairs itself while
+// ZOSIMOS's attack is being resolved (`drivePositionalApply`), and that reactive repair is what
+// gets reversed — so the row is written from INSIDE the attack's own resolution, not from a plain
+// top-level cast.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('R11 deferral-window nesting — a reactive reversal fired mid-attack still logs after the attack that triggered it', () => {
+    const REACT_PCT = 10;
+    const REACT_RAW = VICTIM_MAX_HP * (REACT_PCT / 100); // 10,000, off the victim's OWN max HP
+    const ATTACK_STAT = 5_000;
+    const reversalRows = (run: FixtureRun) =>
+        run.logEntries.filter((e) => e.kind === 'reversed-repair');
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: the reactive reversal's row is not printed above Zosimos's attack`, () => {
+            const { reversed, control } = bothArms({
+                victimSide,
+                // Headroom for BOTH the attack's own damage (~ATTACK_STAT) and the reactive burn
+                // (REACT_RAW) without the round being lethal — a death would introduce its own
+                // "cause precedes consequence" row and confound which ordering this test pins.
+                victimStartHp: VICTIM_MAX_HP / 2,
+                victimSlots: [{ slot: 'passive', abilities: [reactiveSelfRepair(REACT_PCT)] }],
+                zosimosAttack: ATTACK_STAT,
+            });
+
+            // NON-VACUITY (1): the reactive channel is really live in BOTH arms — the passive
+            // fires off being attacked regardless of the status, exactly like channel 4's own
+            // "the reactive is demonstrably live in the reversed run's own fixture" discipline.
+            const reactiveHealsOf = (run: FixtureRun) =>
+                eventsOfType(run.events, 'reactive-heal-performed').filter(
+                    (e) => e.casterId === VICTIM_ID
+                );
+            expect(reactiveHealsOf(control)).toHaveLength(1);
+            expect(reactiveHealsOf(control)[0].amount).toBe(REACT_RAW);
+            expect(reactiveHealsOf(reversed)).toHaveLength(1);
+
+            // NON-VACUITY (2): the attack that triggers the reactive really landed on the victim —
+            // "no attack, no positional apply, no genuine deferral window" would otherwise make
+            // this indistinguishable from the plain top-level LETHAL test above.
+            const attacksOn = (run: FixtureRun) =>
+                eventsOfType(run.events, 'attacked').filter((e) => e.targetId === VICTIM_ID);
+            expect(attacksOn(reversed).length).toBeGreaterThan(0);
+
+            // NON-LETHAL, so the death row cannot be what carries the ordering story here.
+            expect(destroyed(reversed.events).filter((e) => e.actorId === VICTIM_ID)).toHaveLength(
+                0
+            );
+
+            expect(reversalRows(control)).toHaveLength(0);
+
+            // This fixture's medic ALSO casts its own (unrelated) repair on the victim every round
+            // — `runFixture` always wires one — so it too reverses, on the MEDIC'S turn, and both
+            // rows carry `kind: 'reversed-repair'`. `healerId` (#362 fix-wave-1) is what tells them
+            // apart without relying on emission order alone: the reactive row's healer is the
+            // VICTIM itself (a self-heal); the cast row's healer is the medic.
+            const reactiveRow = reversalRows(reversed).find((e) => e.healerId === VICTIM_ID);
+            expect(reactiveRow).toBeDefined();
+
+            // ORDER: the attack is the cause (it is what triggered the reactive), the reversed
+            // repair is its consequence — fired from INSIDE that attack's own positional apply, in
+            // ZOSIMOS's turn, not the medic's later one. Whether `buildCombatLog` nests it into the
+            // attack entry's `.reactions[]` or simply keeps it AFTER the attack entry in emission
+            // order, it must never print above the attack that caused it.
+            const attackIndex = reversed.logEntries.findIndex((e) => e.kind === 'attack');
+            const reactiveRowIndex = reversed.logEntries.indexOf(reactiveRow!);
+            expect(attackIndex).toBeGreaterThanOrEqual(0);
+            expect(reactiveRowIndex).toBeGreaterThan(attackIndex);
         });
     }
 });

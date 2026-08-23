@@ -180,10 +180,17 @@ const formatters: Record<
     // #362 R11: "Zosimos → Jempol: repairs reversed 10,000". Booked to the debuff's APPLIER, so
     // when the applier is known this reads source → victim; a hand-picked (scheduled) Reversed
     // Repairs has no applier and the entry names the victim alone: "Jempol: repairs reversed X".
+    //
+    // #362 fix-wave-1: `entry.healerId`, when present, names the reversed repair's caster inside
+    // the label itself — "Medic's repair reversed 10,000" — DISPLAY ONLY. It never changes who
+    // `src`/`entry.actorId` is (the applier, R7′'s sole attribution); it only prefixes the amount
+    // clause. Absent → falls back to the plain "repairs reversed N" string, unchanged from before.
     'reversed-repair': (entry, ctx) => {
         const src = ctx.nameOf(entry.actorId);
         const t = entry.targets[0];
-        const label = t?.amount !== undefined ? `repairs reversed ${fmt(t.amount)}` : 'repairs reversed';
+        const verb =
+            entry.healerId !== undefined ? `${ctx.nameOf(entry.healerId)}'s repair reversed` : 'repairs reversed';
+        const label = t?.amount !== undefined ? `${verb} ${fmt(t.amount)}` : verb;
         if (t !== undefined && t.targetId !== entry.actorId)
             return `${src} → ${ctx.nameOf(t.targetId)}: ${label}`;
         return `${src}: ${label}`;
