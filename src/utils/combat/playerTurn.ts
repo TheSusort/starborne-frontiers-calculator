@@ -3950,6 +3950,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // HEALING MODE — heal/shield/cleanse consumption against the live heal
     // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
     // never supplies it, so this block is inert there (goldens byte-identical).
+    //
+    // #371 asked whether the HoT tick further down being inside this gate is a DEFECT — no ship
+    // ticks a Repair Over Time in DPS mode at all, not even for a reduced amount. ANSWERED, and the
+    // answer is no, so this is a comment rather than a fix. DPS mode does not track the holder's
+    // live HP anywhere: `healTarget` is `explicitHealTarget ?? (runMode === 'battle' ? attacker :
+    // undefined)`, so a DPS run has none, which makes the engine's `selfHpPctFor` for the player
+    // side `undefined` (engine.ts) and leaves `selfHpPct` here at its `= 100` default. So there is
+    // no live self-HP gate to mis-fire, no HP bar to under-report, and no focus-side death or
+    // termination to reach early. A tick would change no output DPS mode produces.
+    //
+    // What WOULD make this a real gap: giving DPS mode a live self-HP read of any kind — an
+    // hp-threshold gate evaluated against current HP, `lowest-hp-ally` selection, or focus-side
+    // termination. If you add one of those, revisit this gate first; the fix then has the same
+    // shape as #369's — separate what the gate genuinely protects (the player healing buckets and
+    // the report, which DPS mode has no use for) from the HP application, which is side- and
+    // mode-independent.
     // Runs at a fixed sequence point AFTER all DoT-application steps and BEFORE
     // the turnCtx assembly. Processes gated firing + passive abilities in array
     // order; heals draw the SEPARATE per-actor heal crit gate (never the damage
