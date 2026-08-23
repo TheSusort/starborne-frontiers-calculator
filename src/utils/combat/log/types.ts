@@ -68,8 +68,17 @@ export interface CombatLogEntry {
      *  alone ("Zosimos → Nova: Medic's repair reversed 10,000"). A dedicated field rather than
      *  folded into `note` — `note` is already spoken for by `debuff-resisted`. Carrying no
      *  attribution weight: `actorId` is the debuff's APPLIER and stays the entry's sole credited
-     *  actor (R7′). Absent when the applier is unknown (scheduled channel) or, in principle, when
-     *  the healer id itself is unknown — never falls back to the applier. */
+     *  actor (R7′).
+     *
+     *  PRESENT ON EVERY PRODUCED `reversed-repair` ENTRY (#362 fix-wave-2, I-2). An earlier
+     *  revision of this doc said it was "absent when the applier is unknown (scheduled channel)",
+     *  which was simply false in two ways: `engine.ts` sets `healerId` unconditionally (the repair
+     *  source is a REQUIRED parameter at every `applyHealToTarget` call site, so there is always
+     *  one), and `buildCombatLog` copies it independently of `applierId` — the two ids are on
+     *  different axes and an absent applier does not suppress the healer. Optional here only
+     *  because the field lives on the shared `CombatLogEntry`, which every OTHER entry kind
+     *  leaves unset; the formatter's healer-less fallback string is therefore defensive, not a
+     *  shape production reaches. Never falls back to the applier. */
     healerId?: string;
 }
 

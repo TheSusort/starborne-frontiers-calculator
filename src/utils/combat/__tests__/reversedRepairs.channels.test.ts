@@ -315,6 +315,7 @@ const COLLECTED = [
     'buff-applied',
     'charge-changed',
     'ship-destroyed',
+    'reversed-repair-log',
 ] as const;
 
 /**
@@ -471,9 +472,16 @@ const eventsOfType = <T extends CombatEvent['type']>(
 ): Extract<CombatEvent, { type: T }>[] =>
     events.filter((e): e is Extract<CombatEvent, { type: T }> => e.type === type);
 
-/** The victim's landed HP intake from ORDINARY attacks this round — the damage-funnel channel,
- *  read off `perActorIncoming` rather than off HP because the repair moves HP too. */
-const attackIntakeOf = (run: FixtureRun) =>
+/** The victim's landed HP intake this round, read off `perActorIncoming` rather than off HP
+ *  because the repair moves HP too.
+ *
+ *  ⚠️ SINCE #362 fix-wave-2 (C-1) THIS IS NOT "ATTACK INTAKE ALONE". A reversal burn books on
+ *  this channel too — it has to, because the battle report's HP bar reads `perActorIncoming`, and
+ *  while the burn was missing from it the bar rendered high by exactly the burned amount. So a
+ *  run whose only HP loss is a reversal reports `RAW` here, not 0. The R5 preconditions below
+ *  assert that exact figure rather than 0, which makes them a STRONGER instrument than before:
+ *  `=== RAW` says both "no ordinary attack landed" and "the burn is on the intake channel". */
+const landedIntakeOf = (run: FixtureRun) =>
     run.result.rounds[0].perActorIncoming?.[VICTIM_ID]?.incoming ?? 0;
 
 // ══ R2 ═══════════════════════════════════════════════════════════════════════════════════════
@@ -679,22 +687,41 @@ describe('R2 channel 4 — a REACTIVE repair from a passive slot reverses', () =
 describe('R2 channel 5 (the NEGATIVE case) — a shield GRANT is not a repair', () => {
     for (const victimSide of SIDES) {
         // `grantShieldToTarget` is a DIFFERENT closure with no reversal branch. The pool must grow
-        // and `currentHp` must not move — identically in both arms.
-        it(`${victimSide}-side victim: the pool grows and HP is untouched, debuff or not`, () => {
+        // and `currentHp` must not move because of the SHIELD — in both arms.
+        //
+        // THE MEDIC CASTS BOTH (#362 fix-wave-2, M-4). An earlier version of this test cast the
+        // shield ALONE, and every one of its four assertions then held identically in both arms —
+        // which meant it could not tell "the shield grant is correctly ignored by the reversal"
+        // from "the status never landed on this victim at all". A test whose two arms agree on
+        // every number is measuring nothing about the thing that differs between them.
+        //
+        // Casting `[castShield, castRepair]` in the SAME run fixes that: the shield's behaviour is
+        // still asserted arm-for-arm (pool grows by RAW in both), while the repair in the same run
+        // is the live proof that the victim really is carrying the status — the reversed arm's HP
+        // goes DOWN by RAW where the control's goes UP by it. Same victim, same turn, one run.
+        it(`${victimSide}-side victim: the pool grows in both arms while the repair beside it reverses`, () => {
             const START = VICTIM_MAX_HP / 2;
             const { reversed, control } = bothArms({
                 victimSide,
-                medicAbilities: [castShield(REPAIR_PCT)],
+                medicAbilities: [castShield(REPAIR_PCT), castRepair(REPAIR_PCT)],
                 victimStartHp: START,
             });
 
             // NON-VACUITY: the grant really lands — a fixture whose shield never applied would
-            // pass "HP unchanged" trivially.
+            // pass "the pool is untouched by the reversal" trivially.
             expect(control.victimShield).toBe(RAW);
+            // THE SHIELD IS NOT A REPAIR: the reversed arm's pool grows by exactly the same RAW.
+            // Nothing was burned off it and nothing was converted into damage.
             expect(reversed.victimShield).toBe(RAW);
-            // Not a repair: HP does not move in EITHER direction, in EITHER arm.
-            expect(control.victimHp).toBe(START);
-            expect(reversed.victimHp).toBe(START);
+
+            // THE STATUS IS DEMONSTRABLY STANDING ON THIS VICTIM IN THIS RUN — the repair cast
+            // alongside the shield burns by RAW instead of healing by it. This is the assertion
+            // the two arms disagree on, and it is what makes the two above meaningful.
+            expect(control.victimHp).toBe(START + RAW);
+            expect(reversed.victimHp).toBe(START - RAW);
+
+            // …and the burn is HP, not shield: the pool the shield granted is still whole.
+            expect(reversed.victimShield).toBe(control.victimShield);
         });
     }
 });
@@ -805,9 +832,14 @@ function expectR5Preconditions(silent: FixtureRun, instrument: FixtureRun): void
     expect(R5_START - silent.victimHp).toBe(RAW);
     // (2) The instrument's attack really landed on the victim, for at least as much as the burn —
     //     so "the reaction did not fire on the reversal" can never be read as "the burn was too
-    //     small to react to".
-    expect(attackIntakeOf(instrument)).toBeGreaterThanOrEqual(RAW);
-    expect(attackIntakeOf(silent)).toBe(0);
+    //     small to react to". The instrument arm carries NO reversal (it runs the CONTROL name),
+    //     so its whole intake is the attack.
+    expect(landedIntakeOf(instrument)).toBeGreaterThanOrEqual(RAW);
+    // (3) The silent arm's intake is EXACTLY the burn: no ordinary attack landed on it (that is
+    //     the precondition the reaction assertions rest on), and the burn IS booked on the intake
+    //     channel the HP bar reads (#362 C-1). A bare `toBe(0)` would now be false, and before
+    //     C-1 it was true for the wrong reason — the burn was simply missing from the report.
+    expect(landedIntakeOf(silent)).toBe(RAW);
 }
 
 describe('R5 reaction 1 — a counterattack does not fire on a reversed repair', () => {
@@ -968,10 +1000,37 @@ describe('the scheduled channel — a hand-picked Reversed Repairs has no applie
         expect(dealtToVictim(control)).toBe(0);
 
         // R10′ still holds on this channel: the healer books nothing either.
-        const medic = reversed.result.healing!.rounds[0].perActor.get(reversed.medicId);
-        expect(medic?.directHeal ?? 0).toBe(0);
-        expect(medic?.effectiveHeal ?? 0).toBe(0);
-        expect(medic?.overheal ?? 0).toBe(0);
+        //
+        // ⚠️ THE INSTRUMENT HAD TO CHANGE HERE (#362 fix-wave-2, M-6). This test previously read
+        // R10′ off the medic's `ActorHealing` buckets and paired the three zeros with NO control.
+        // Adding one exposed why: this fixture's medic stands on the ENEMY side, and an enemy
+        // heal credits the player healing buckets NOTHING by design (E5 §4.1). The control books
+        // zero too — so those three zeros were true of every possible build, reversal or not, and
+        // could never have gone red. A control is not decoration; adding one is what proved the
+        // assertion was measuring an empty map.
+        //
+        // The `heal-performed` channel is the one that IS live for an enemy healer, and since
+        // fix-wave-2 it carries R10′ explicitly: `reversedAmount` is the part of the cast that
+        // healed nobody. Both arms below emit the event (the repair really was cast in each), and
+        // they differ on exactly the field under test.
+        const castOf = (run: FixtureRun) =>
+            eventsOfType(run.events, 'heal-performed').filter((e) => e.casterId === run.medicId);
+
+        expect(castOf(control)).toHaveLength(1);
+        expect(castOf(control)[0].amount).toBe(RAW);
+        // CONTROL: nothing was reversed, so the field is absent and every point of it healed.
+        expect(castOf(control)[0].reversedAmount).toBeUndefined();
+        expect(castOf(control)[0].perTarget!.find((p) => p.targetId === VICTIM_ID)!.reversed).toBe(
+            undefined
+        );
+
+        // REVERSED: the same cast, the same gross amount — and all of it flagged as healing nobody.
+        expect(castOf(reversed)).toHaveLength(1);
+        expect(castOf(reversed)[0].amount).toBe(RAW);
+        expect(castOf(reversed)[0].reversedAmount).toBe(RAW);
+        expect(castOf(reversed)[0].perTarget!.find((p) => p.targetId === VICTIM_ID)!.reversed).toBe(
+            true
+        );
     });
 
     it('enemy-side victim: a LETHAL applier-less reversal kills with no killer named', () => {
@@ -990,7 +1049,10 @@ describe('the scheduled channel — a hand-picked Reversed Repairs has no applie
         expect(kills).toHaveLength(1);
         // No applier ⇒ no killer. Explicitly NOT the medic — the retracted ruling's answer.
         expect(kills[0].killerId).toBeUndefined();
-        expect(kills[0].byDirectDamage).toBeFalsy();
+        // `toBe(false)`, NOT `toBeFalsy()` (#362 fix-wave-2, M-5) — see the twin note in
+        // reversedRepairs.engine.test.ts: the field is optional, so `toBeFalsy` cannot tell an
+        // explicit `false` from a dropped field, and `engine.ts` calls the explicit `false` REQUIRED.
+        expect(kills[0].byDirectDamage).toBe(false);
     });
 
     // The GATE, end to end. `enemyDebuffs` means "debuffs the OPPOSING team carries", and the
@@ -1170,4 +1232,80 @@ describe('DPS mode — a scheduled Reversed Repairs changes nothing', () => {
         // THE FENCE: Reversed Repairs contributes nothing at all to any damage channel.
         expect(damageShape(withReversed)).toEqual(damageShape(base));
     });
+});
+
+// ══ R11's ZERO EDGE (#362 fix-wave-2, M-8) ═══════════════════════════════════════════════════
+// "Every reversal writes its own combat-log row" means every reversal that BURNED something. A
+// 0-magnitude repair reverses into a 0-magnitude burn: `victim.currentHp` does not move and
+// `bookReversalDamage` drops it on its own `amount <= 0` guard — so a row would announce
+// "repairs reversed 0" for an event with no observable consequence anywhere else in the run.
+//
+// REACHABLE, not hypothetical. The CAST path is fenced upstream (`healRawSum > 0` in
+// playerTurn.ts silences a repair that resolved to nothing), and the HoT tick bails on `raw <= 0`
+// before it applies — but the REACTIVE executor has no such pre-apply gate: it calls
+// `applyHealToTarget` per recipient first and only gates its own `reactive-heal-performed` emit on
+// the summed amount afterwards. A `pct: 0` reactive repair therefore reaches the reversal branch
+// with `raw === 0`, which is exactly the fixture below.
+//
+// TWO ROUNDS, for the reason `R2 channel 4` documents: the reactive fires at `start-of-round`,
+// before Zosimos has cast, so round 1 is always un-reversed and round 2 is the one under test.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('R11 zero edge — a 0-magnitude reversal writes no log row', () => {
+    const rowsOn = (run: FixtureRun) =>
+        eventsOfType(run.events, 'reversed-repair-log').filter((e) => e.victimId === VICTIM_ID);
+
+    for (const victimSide of SIDES) {
+        // THE INSTRUMENT. A REAL reactive repair on the identical slot reverses in round 2 and
+        // writes exactly one row, naming the victim as its own healer (it is a self-repair). This
+        // is what makes "no row" in the zero arm a statement about the magnitude rather than about
+        // a dead channel.
+        it(`${victimSide}-side victim: a real reactive repair writes its row`, () => {
+            const START = VICTIM_MAX_HP / 2;
+            const run = runFixture({
+                victimSide,
+                statusName: REVERSED,
+                victimSlots: [passiveSlot([reactiveRepair(REPAIR_PCT)])],
+                victimStartHp: START,
+                numRounds: 2,
+            });
+
+            const rows = rowsOn(run);
+            expect(rows).toHaveLength(1);
+            expect(rows[0].amount).toBe(RAW);
+            expect(rows[0].round).toBe(2);
+            expect(rows[0].healerId).toBe(VICTIM_ID);
+            // Round 1 repaired RAW (status not yet standing), round 2 burned the same RAW back off.
+            expect(run.victimHp).toBe(START);
+        });
+
+        // THE EDGE. The reactive is 0% — it still reaches the reversal branch, and must announce
+        // nothing. The MEDIC's ordinary cast repair runs in the same fixture as the live proof
+        // that the status is standing and that rows ARE being written this round: exactly one row
+        // appears, and it is the medic's, not the 0-magnitude reactive's.
+        it(`${victimSide}-side victim: a 0% reactive announces nothing while a real repair beside it does`, () => {
+            const START = VICTIM_MAX_HP / 2;
+            const run = runFixture({
+                victimSide,
+                statusName: REVERSED,
+                medicAbilities: [castRepair(REPAIR_PCT)],
+                victimSlots: [passiveSlot([reactiveRepair(0)])],
+                victimStartHp: START,
+                numRounds: 2,
+            });
+
+            const rows = rowsOn(run);
+            // TWO rows, one per ROUND, and both of them the MEDIC's. The medic acts after Zosimos
+            // in round 1 (speeds 950 → 500 → 300), so its cast is already reversed that round; the
+            // 0% reactive fires at the top of round 2 as well and contributes none. MEASURED:
+            // with the `raw > 0` guard removed this fixture produces THREE rows — the extra one
+            // is round 2's 0% reactive, reading "repairs reversed 0". (Only one, not two: round
+            // 1's reactive fires before Zosimos has cast, so it is not reversed at all.)
+            expect(rows).toHaveLength(2);
+            expect(rows.map((e) => e.healerId)).toEqual([run.medicId, run.medicId]);
+            expect(rows.map((e) => e.amount)).toEqual([RAW, RAW]);
+            // Nothing anywhere in the run announces a zero burn.
+            expect(rows.filter((e) => e.amount === 0)).toHaveLength(0);
+        });
+    }
 });

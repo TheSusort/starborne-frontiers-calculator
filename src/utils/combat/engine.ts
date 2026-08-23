@@ -3504,9 +3504,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // a self-rider once, while a later attack (a different turn) applies it again.
     const reactionFiredThisAttack = new Set<string>();
 
-    // Installed per turn (below, where the deferral flags live). Engine scope so the healing ctx —
-    // built at :3514, above the per-turn scope — can route a reversal's consequence log through the
-    // same buffer. Default is a direct emit: a reversal that somehow fires before the first turn
+    // Installed per ROUND (below, where the deferral flags live — inside the `for (let r …)` body,
+    // above the turn loop, so one install serves every turn of that round). Engine scope so the
+    // healing ctx — built above the round loop — can route a reversal's consequence log through the
+    // same buffer. Default is a direct emit: a reversal that somehow fires before the first round
     // installs one still logs, it just cannot be deferred (there is no window open to defer into).
     let emitConsequenceLog: (ev: CombatEvent) => void = (ev) => bus.emit(ev);
     // Installed per ROUND (below, next to `creditDealt`), for the same reason and by the same
@@ -3593,6 +3594,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // reversal likewise fires no bomb death-splash — the splash block is at the
                       // `applyVictimDamage` call site, gated on ITS `'destroyed'` outcome, and
                       // this path deliberately has no such block.
+                      //
+                      // NO `hp-changed` EMIT, DELIBERATELY (#362 fix-wave-2, M-2). `hp-changed` is
+                      // the trigger `on-hp-threshold-crossed` subscribes to (`triggers.ts`, the
+                      // "when this unit drops below N% HP" passives), so emitting one here would
+                      // arm a reaction off the burn. R5 says NOTHING reacts to a reversal, and
+                      // this is that ruling applied to the one reaction that does not live inside
+                      // `applyVictimDamage` — every other one is fenced by simply not entering the
+                      // funnel. Consistent, not an oversight: a player whose ship drops past 50%
+                      // to a reversed repair does not get the low-HP passive, exactly as they get
+                      // no counterattack, no Reflect and no on-damaged rider. The BAR still moves
+                      // (the intake booking below is what the report reads); only the trigger is
+                      // withheld. Do not "fix" this by emitting one without re-opening R5.
                       victim.currentHp = Math.max(0, victim.currentHp - raw);
                       // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
                       // The damage AND the kill belong to the Zosimos that inflicted the status,
@@ -3649,21 +3662,34 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // through `emitConsequenceLog` so a reversal firing inside a deferral window
                       // (a reactive repair during a positional apply does exactly that) nests under
                       // the attack that caused it instead of printing above it.
-                      emitConsequenceLog({
-                          type: 'reversed-repair-log',
-                          victimId: victim.id,
-                          ...(reversal.applierId !== undefined
-                              ? { applierId: reversal.applierId }
-                              : {}),
-                          // `healerId` (#362 fix-wave-1): the repair's source, for DISPLAY only —
-                          // see the guardrail above and the `reversed-repair-log` doc comment in
-                          // `events.ts`. `repairSourceId` is always a real id here (the parameter is
-                          // required at every `applyHealToTarget` call site), so this is unconditional,
-                          // unlike `applierId` which the scheduled channel can leave undefined.
-                          healerId: repairSourceId,
-                          amount: raw,
-                          round: currentRound,
-                      });
+                      //
+                      // `raw > 0` (#362 fix-wave-2, M-8): "every reversal" means every reversal
+                      // that BURNED something. A 0-magnitude repair reverses into a 0-magnitude
+                      // burn — `bookReversalDamage` already drops it on its own `amount <= 0`
+                      // guard and `victim.currentHp` does not move — so a row here would announce
+                      // "repairs reversed 0" for an event with no observable consequence. The gate
+                      // is the same one the CAST path applies upstream (`healRawSum > 0` in
+                      // playerTurn.ts silences a repair that resolved to nothing at all); this
+                      // extends it to the channels that have no such upstream gate (HoT ticks,
+                      // leech self-repairs, reactive repairs).
+                      if (raw > 0) {
+                          emitConsequenceLog({
+                              type: 'reversed-repair-log',
+                              victimId: victim.id,
+                              ...(reversal.applierId !== undefined
+                                  ? { applierId: reversal.applierId }
+                                  : {}),
+                              // `healerId` (#362 fix-wave-1): the repair's source, for DISPLAY only
+                              // — see the guardrail above and the `reversed-repair-log` doc comment
+                              // in `events.ts`. `repairSourceId` is always a real id here (the
+                              // parameter is required at every `applyHealToTarget` call site), so
+                              // this is unconditional, unlike `applierId` which the scheduled
+                              // channel can leave undefined.
+                              healerId: repairSourceId,
+                              amount: raw,
+                              round: currentRound,
+                          });
+                      }
                       resolveLethalHp(victim, {
                           round: currentRound,
                           statusEngine,
@@ -4969,9 +4995,27 @@ export function runCombat(rawInput: CombatEngineInput): {
         // therefore cannot see `creditDealt`/`roundPerTargetDamage` directly) — never captured into
         // a copy, so the ctx's closure reads THIS round's accumulators at call time.
         //
-        // BOTH channels, matching the DoT-tick path (~:9880), which is the attribution shape R7′
-        // names: the victim-keyed intake (`roundPerTargetDamage` → damageTaken) plus a per-applier
-        // dealt credit (`creditDealt` → damageDealt / perTargetDealt).
+        // ALL THREE channels, matching the DoT-tick path (~:9880) — which reaches them by routing
+        // through `applyVictimDamage`, and which is the attribution shape R7′ names:
+        //   1. `roundPerTargetDamage` — the victim-keyed per-round total (→ `RoundData.perTargetDamage`
+        //      → `ShipRoundState.damageTaken`).
+        //   2. `creditDealt`          — the per-applier dealt credit (→ `perTargetDealt` →
+        //      `ShipRoundState.damageDealt`).
+        //   3. `intakeFor(victim).incoming` — the per-victim INTAKE bucket (→ `perActorIncoming` →
+        //      `ShipRoundState.incomingDamage` and, through `hpLost`, the HP BAR).
+        //
+        // (3) was missing for one revision and the omission was NOT cosmetic: `battleSimulator`
+        // derives `hpPct` from `maxHp − hpLost + healed`, and `hpLost` accumulates
+        // `incoming.incoming − shieldAbsorbed − barrierAbsorbed − convertedToShield` whenever the
+        // victim has an intake entry this round (falling back to `damageTaken` only when it has
+        // none). A victim that also took an ordinary attack therefore HAS an entry, and the burn
+        // vanished from it — the bar read high by exactly the burn, every round, and a ship killed
+        // by a reversal rendered as destroyed at a healthy HP%.
+        //
+        // TDZ NOTE: `intakeFor` is a `const` declared BELOW this assignment in the same round block.
+        // Only the closure BODY names it, and the body cannot run until a turn does — long after
+        // the whole round block has been evaluated. Same discipline as `creditDealt` above: read
+        // through the binding at call time, never hoist a copy.
         //
         // An UNKNOWN applier writes the intake and skips the dealt credit — the same rule, and the
         // same wording, the Protection-redirect site uses for a redirected DoT-tick chunk with no
@@ -4980,17 +5024,21 @@ export function runCombat(rawInput: CombatEngineInput): {
         // either way; inventing a dealer for it would be the fallback R7′ forbids.
         //
         // ⚠️ KNOWN ASYMMETRY (#362 fix-wave-1): this deliberately does NOT call `creditDamage`
-        // (below), the scalar `roundDamage`/`ActorDamage` channel that `damageDealt` and DPS-mode
-        // rows are built from. The battle REPORT is unaffected — `ShipRoundState.damageDealt`
-        // derives from `perTargetDealt`, which this DOES write — but an applier standing in
-        // DPS-mode's focus-ship seat gets a round-total row computed off the scalar channel, so a
-        // Zosimos burn is absent from that one row even though `perTargetDealt`/`perTargetDamage`
-        // carry it correctly. Not fixed here: wiring `creditDamage` in would need the same
-        // consideration `perTargetDealt`'s Task-1 mirroring got (every existing scalar-channel
-        // fixture would move), which is outside this pass's scope.
+        // (below), the scalar `roundDamage`/`ActorDamage` channel that DPS-mode rows are built
+        // from. `ShipRoundState.damageDealt` and `damageTaken` — the BATTLE report's damage
+        // numbers — derive from `perTargetDealt`/`perTargetDamage`, which this DOES write, so the
+        // battle report's damage columns are complete. What is NOT complete is DPS mode: an
+        // applier standing in DPS-mode's focus-ship seat gets a round-total row computed off the
+        // scalar channel, so a Zosimos burn is absent from that one row. Not fixed here: wiring
+        // `creditDamage` in would need the same consideration `perTargetDealt`'s Task-1 mirroring
+        // got (every existing scalar-channel fixture would move), which is outside this pass's scope.
         bookReversalDamage = (victimId, applierId, amount) => {
             if (amount <= 0) return;
             roundPerTargetDamage.set(victimId, (roundPerTargetDamage.get(victimId) ?? 0) + amount);
+            // The HP the victim actually lost, on the same bucket an ordinary hit's HP portion
+            // lands in. NO `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` write: R1 says
+            // the burn passes none of those layers, so all of `incoming` is HP loss by construction.
+            intakeFor(victimId).incoming += amount;
             if (applierId !== undefined) creditDealt(applierId, victimId, amount);
         };
         // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
@@ -5215,10 +5263,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // they buffer instead; triggers.ts flushes them via `ctx.flushConsequenceLogs` immediately
         // after the attack row is emitted, so cause precedes consequence.
         let deferConsequenceLogs = false;
-        // Install the real emitter for this turn now that the deferral flags/buffer/sub-attack
-        // index it reads all exist. Reassigns the engine-scope `let` declared above healingCtx —
+        // Install the real emitter for this ROUND now that the deferral flags/buffer/sub-attack
+        // index it reads all exist. (This block sits inside the round loop, above the turn loop —
+        // the flags and buffer it closes over are per-round state, and every turn of the round
+        // shares this one emitter.) Reassigns the engine-scope `let` declared above healingCtx —
         // never captured into a copy — so healingCtx's closures (built before the round loop)
-        // read this turn's live routing at call time, not the pre-turn direct-emit default.
+        // read this round's live routing at call time, not the pre-round direct-emit default.
         emitConsequenceLog = (ev: CombatEvent) => {
             if (deferReflectLogs || deferConsequenceLogs)
                 pendingConsequenceLogs.push({ ev, subAttack: currentSubAttackIndex });

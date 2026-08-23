@@ -2,6 +2,30 @@
 
 **Issue:** #362 (Zosimos). **Date:** 2026-08-22. **Status:** design approved, ready for planning.
 
+> ## ⚠️ RETRACTIONS — READ BEFORE USING THIS DOCUMENT AS AUTHORITY
+>
+> **Two rulings in this spec were RETRACTED by the owner during implementation and replaced.**
+> The rest of the document still stands. Every passage below that carries a retracted ruling is
+> marked inline with **RETRACTED** or **SUPERSEDED**; if you are reading a passage with no such
+> marker, it is current.
+>
+> | Retracted | Replaced by | What actually shipped |
+> |---|---|---|
+> | **R7** — the reversal's damage and kill are credited to the healer whose repair was reversed. | **R7′** | The damage AND the kill belong to the **debuff's applier** (the Zosimos), the way a DoT's damage and kills belong to whoever applied the DoT. The healer gets neither. `applierId: undefined` (the scheduled channel) means **no credit and no killer** — never a fallback to the healer. |
+> | **R10** — a reversed repair surfaces as **overhealing** for the healer, delivered by returning the existing `{consumed: 0, overheal: raw}` shape. | **R10′** | A reversed repair books the healer **NOTHING**: repairs cast 0, effective healing 0, overhealing 0. The branch returns `{ reversed: true }` carrying no numbers, which is what forces every call site to move its gross credit below the call. |
+>
+> **One ruling is MISSING from this spec** because it was added after it was written:
+>
+> | Added | Ruling |
+> |---|---|
+> | **R11** | **Every reversal writes its own combat-log row, lethal or not.** Without it a non-lethal reversal emits nothing and the player watches a repair land, achieve nothing, and HP drop with no line connecting the three. The row books to the applier (R7′), carries the burned ship as its target, and carries the healer as a **display-only** `healerId`. One qualification found in review: a `raw === 0` repair reverses into a 0 burn with no observable consequence anywhere, and writes no row. |
+>
+> The standing, implemented rules live in the code: the reversal branch inside
+> `applyHealToTarget` (`src/utils/combat/engine.ts`), `src/utils/combat/reversedRepairs.ts`, and
+> the `reversedRepairs.*.test.ts` suites. Where this document and the code disagree, **the code
+> is right** — this spec is retained as the record of how the design was reasoned, not as a
+> specification to implement from.
+
 ## Problem
 
 Zosimos's charged skill reads:
@@ -29,10 +53,11 @@ Each was answered against a concrete in-fight example. Do not re-derive any of t
 | R4 | Repair crits? | **The crit carries.** A repair that would have restored 6,000 reverses into 6,000. |
 | R5 | Does anything react to it? | **Nothing reacts.** No counterattack, no Reflect thorns, no incoming-leech proc, no on-damaged passives. |
 | R6 | Stacked with `Inc. Repair Down II` (-50%)? | **The -50% applies first**, and the reduced amount is what reverses. 4,000 → 2,000 → 2,000 damage. |
-| R7 | Can it kill? Who is credited? | **Yes.** The kill is credited to **the healer whose repair was reversed**, not to the Zosimos that applied the debuff. |
+| ~~R7~~ **RETRACTED** | Can it kill? Who is credited? | ~~**Yes.** The kill is credited to **the healer whose repair was reversed**, not to the Zosimos that applied the debuff.~~ **SUPERSEDED BY R7′:** it kills, and both the damage and the kill belong to the **debuff's applier** — never the healer. See the retraction header. |
 | R8 | Cheat Death on a lethal reversal? | **Cheat Death intercepts.** The victim survives at 1 HP and spends its Cheat Death, exactly as against a lethal attack. |
 | R9 | Zosimos's own charge passive ("when an enemy performs a repair, add 1 charge")? | **Still fires.** The passive watches the enemy *casting* a repair; what happens on arrival is irrelevant. |
-| R10 | Where does it surface in the report? | **As overhealing** for the healer. Its healing total shows the repair fully wasted; its damage-dealt total is not credited. No new report field. |
+| ~~R10~~ **RETRACTED** | Where does it surface in the report? | ~~**As overhealing** for the healer. Its healing total shows the repair fully wasted; its damage-dealt total is not credited. No new report field.~~ **SUPERSEDED BY R10′:** it books the healer **nothing at all** — repairs cast 0, effective healing 0, overhealing 0. It surfaces as the applier's damage. See the retraction header. |
+| R11 *(added after this spec)* | Does a reversal show in the combat log? | **Yes — every reversal writes its own row, lethal or not**, booked to the applier, carrying the healer as a display-only name. A `raw === 0` repair is the one exception: nothing burned, nothing announced. |
 
 ### Consequences derived from the rulings, confirmed with the owner
 
@@ -94,33 +119,57 @@ against the buff table (`skillTextParser.ts:79`), which is why the status curren
 nothing.
 
 **`src/utils/combat/reversedRepairs.ts`** — new module, modelled on `exposedStatus.ts`:
-a name constant plus `hasReversedRepairs(statusEngine, victimId): boolean`.
+a name constant plus ~~`hasReversedRepairs(statusEngine, victimId): boolean`~~.
+
+> **SUPERSEDED by R7′.** A boolean is not enough once the damage and kill belong to the
+> **applier**: the read has to return *who applied it*. What shipped is
+> `reversedRepairsOn(statusEngine, victim): { applierId: string | undefined } | undefined`,
+> taking the whole victim (it needs `victim.side` for the scheduled arm's gate) rather than a
+> bare id. `applierId: undefined` is a legitimate state, not an error — see the module.
 
 One deliberate divergence from Exposed: this read covers the **scheduled** channel as well as
 the timed one. `exposedIncomingPct` reads only `timedAbilityStatuses` because "the next direct
 hit" has no standing value to model, so a manually-selected Exposed is intentionally inert. A
 1-turn duration debuff *does* have a standing value, so a Reversed Repairs selected by hand in
-the simulator must work. Both are read; presence is boolean, stacks are not meaningful.
+the simulator must work. Both are read; ~~presence is boolean,~~ stacks are not meaningful.
+
+> **Refined in implementation:** the two arms are *not* read the same way. The timed arm is
+> ungated on side (team symmetry — an enemy Zosimos must reverse a player ship's repairs); the
+> scheduled arm is gated on `victim.side === 'enemy'`, because `enemyAlwaysSnap` has no
+> per-victim keying at all and would otherwise answer "carrying" for every id in the run. The
+> module's doc comment holds the full argument.
 
 ### 2. The reversal
 
 Inside `applyHealToTarget` (`engine.ts:3535`), after the existing dead-victim early return and
 **before** the deficit clamp:
 
-- if `hasReversedRepairs(statusEngine, victim.id)` → `victim.currentHp = Math.max(0, victim.currentHp - raw)`,
-- run the shared lethal-HP path (below),
-- return `{ consumed: 0, overheal: raw }`.
+- if the victim carries the status → `victim.currentHp = Math.max(0, victim.currentHp - raw)`,
+- book the burn on the **applier** (R7′) and write the R11 log row,
+- run the shared lethal-HP path (below), with `killerId` = the applier,
+- ~~return `{ consumed: 0, overheal: raw }`~~ → **return `{ reversed: true }`**.
 
 The existing dead-victim early return stays as-is: a corpse takes no reversed repair.
 
-The return shape is the **existing** one, which is what delivers R10 with no change to the
-accounting contract. All 8 call sites already do
-`credit(id, 'effectiveHeal', consumed); credit(id, 'overheal', overheal)`, so the reversal
-books as fully-wasted healing automatically and the `raw = effective + overheal` identity
-holds. This is the specific reason the naive `incomingHealPct: -200` sign flip fails: that
-fold is unclamped, so `raw` goes negative, `consumed = max(0, min(raw, deficit))` collapses to
-0 and `overheal = raw - consumed` goes **negative** — no damage, no healing, and a negative
-number polluting the overheal statistics, with green tests throughout.
+> ### ⚠️ RETRACTED — the paragraph below was the load-bearing argument for R10, and R10 is gone
+>
+> ~~The return shape is the **existing** one, which is what delivers R10 with no change to the
+> accounting contract. All 8 call sites already do
+> `credit(id, 'effectiveHeal', consumed); credit(id, 'overheal', overheal)`, so the reversal
+> books as fully-wasted healing automatically and the `raw = effective + overheal` identity
+> holds.~~
+>
+> Under **R10′** returning that shape would be *worse than useless*, and `engine.ts` says so at
+> the branch: it books the raw as overheal, **and** the call sites' gross `directHeal`/`hotHeal`
+> credit — written *above* the call — would stand as well. So the branch returns
+> `{ reversed: true }` carrying no numbers at all, which makes every call site fail to compile
+> until it moves its gross credit *below* the call. The "no change to the accounting contract"
+> property that made the old shape attractive is exactly what made it wrong.
+
+What is still true, and is why the naive `incomingHealPct: -200` sign flip fails: that fold is
+unclamped, so `raw` goes negative, `consumed = max(0, min(raw, deficit))` collapses to 0 and
+`overheal = raw - consumed` goes **negative** — no damage, no healing, and a negative number
+polluting the overheal statistics, with green tests throughout.
 
 `repairedThisRound.add(victim.id)` must **not** fire on a reversal — nothing was repaired.
 Note that this is separate from R9: Zosimos's charge passive keys off the enemy *casting* a
@@ -128,7 +177,15 @@ repair, upstream of this closure, and is untouched.
 
 ### 3. Kill attribution — a required signature change
 
-R7 credits the kill to the healer, but `applyHealToTarget(raw, victim)` does not currently
+> **⚠️ THE PREMISE OF THIS SECTION IS RETRACTED, THE CONCLUSION IS NOT.** R7 credited the kill
+> to the healer; **R7′ credits it to the debuff's applier** (`reversal.applierId`, read off the
+> status), so `repairSourceId` is *not* the killer and never becomes one. The signature change
+> shipped anyway and is still required — for a different reason: `repairSourceId` is R11's
+> `healerId`, the display-only name on the reversal's log row. A site that forgot it would print
+> a reversal row naming nobody as the healer, on a channel where the healer is the only thing
+> the row explains. Read the paragraphs below with "kill" replaced by "log row".
+
+~~R7 credits the kill to the healer, but~~ `applyHealToTarget(raw, victim)` does not currently
 receive a source id. The callers all know it (`creditId`, `actor.id`).
 
 Change the signature to `applyHealToTarget(raw, victim, repairSourceId)` with **all three
@@ -136,9 +193,9 @@ parameters required**, dropping the `victim = healTarget` default. The ~4 sites 
 the default pass `healTarget` explicitly.
 
 Required, not optional, is the point: an optional third parameter would let a missed call site
-compile and silently book a reversal kill with `killerId: undefined`, exactly where the ruling
-is specific. Making it required turns the sweep into an arity error, so `tsc` enumerates every
-site for us instead of us enumerating them by hand.
+compile and silently book ~~a reversal kill with `killerId: undefined`~~ **a healer-less log
+row**, exactly where the ruling is specific. Making it required turns the sweep into an arity
+error, so `tsc` enumerates every site for us instead of us enumerating them by hand.
 
 ### 4. One death path, not two
 
@@ -190,9 +247,14 @@ No change. R9's charge passive already resolves to `on-enemy-repaired` and was f
 - **Parser:** the charged skill builds a `Reversed Repairs` debuff for 1 turn on the enemy.
 - **Per ruling, one engine test each:** R1 (shield/Protection/defence all untouched), R2 (all
   four channels reverse; a shield grant does not), R3 (full HP → full damage), R4 (crit
-  carries), R5 (counter/thorns/leech/on-damaged all silent), R6 (Inc. Repair Down first), R7
-  (`ship-destroyed.killerId` is the healer), R8 (Cheat Death intercepts and is spent), R10
-  (overheal bucket carries it, damage-dealt does not).
+  carries), R5 (counter/thorns/leech/on-damaged all silent), R6 (Inc. Repair Down first),
+  ~~R7 (`ship-destroyed.killerId` is the healer)~~ → **R7′ (`ship-destroyed.killerId` is the
+  APPLIER, explicitly not the healer; the burn books on the applier's damage-dealt axis)**,
+  R8 (Cheat Death intercepts and is spent), ~~R10 (overheal bucket carries it, damage-dealt does
+  not)~~ → **R10′ (repairs cast, effective healing and overhealing are ALL zero on the healer —
+  on the `ActorHealing` buckets *and* on the `heal-performed` channel the battle report's
+  healing done/received is folded from)**, **R11 (every reversal writes a log row, lethal or
+  not; a 0-magnitude one writes none)**.
 - **Corpus scan:** confirm which other ships apply or receive `Reversed Repairs`; report the
   number including zero.
 - **`realKitFingerprints > Zosimos`** re-baselined **only after** everything above lands, so

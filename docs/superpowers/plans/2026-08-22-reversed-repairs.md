@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-Read `docs/superpowers/specs/2026-08-22-reversed-repairs-design.md` first. Its ruling table is the authority; do not re-derive any ruling from code.
+Read `docs/superpowers/specs/2026-08-22-reversed-repairs-design.md` first. Its ruling table is the authority **except for R7 and R10, which the owner RETRACTED during implementation** — the spec now carries a retraction header saying so, and R7′/R10′/R11 below are what shipped. Do not re-derive any ruling from code; do not implement R7 or R10 from the spec.
 
 - **R1 — no defensive layers.** No shield drain, no Protection redirect, no defence mitigation, no Barrier. Raw HP burn at face value.
 - **R2 — every repair, any source.** Cast repairs, HoT ticks, leech self-repairs, reactive repairs. **Shield grants are not repairs** and are unaffected.
@@ -18,11 +18,15 @@ Read `docs/superpowers/specs/2026-08-22-reversed-repairs-design.md` first. Its r
 - **R4 — the crit carries.** A repair that would have restored 6,000 reverses into 6,000.
 - **R5 — nothing reacts.** No counterattack, no Reflect thorns, no incoming-leech proc, no on-damaged passives.
 - **R6 — `Inc. Repair Down` applies first**, and the reduced amount is what reverses.
-- **R7 — the kill is credited to the healer** whose repair was reversed, never to the Zosimos that applied the debuff.
+- ~~**R7 — the kill is credited to the healer** whose repair was reversed, never to the Zosimos that applied the debuff.~~ **RETRACTED by the owner, 2026-08-23** — it is exactly backwards. See **R7′** below.
 - **R8 — Cheat Death intercepts** a lethal reversal and is spent, exactly as against a lethal attack.
 - **R9 — Zosimos's charge passive still fires.** It watches the enemy *casting*, upstream of all of this. No change.
 - ~~**R10 — surfaces as overhealing** for the healer.~~ **RETRACTED by the owner, 2026-08-23.**
-  See R10′/R7′/R11 below. Tasks 1-6 were built against the retracted R10; **Task 5b revises them.**
+  See R10′/R7′/R11 below. Tasks 1-6 were built against the retracted R10 and were **revised in
+  place after the retraction** — the revision shipped in commits `eaeeecfd`, `3e07d163` and the
+  fix-wave-2 commit, and this file has **no** separate task section describing it. (An earlier
+  version of this line pointed at a "Task 5b"; that section never existed here, so the pointer
+  dangled. The revision's real record is the code and the `reversedRepairs.*.test.ts` suites.)
 
 **R10′ (replaces R10) — a reversed repair books NOTHING on the healer.** Repairs cast `0`,
 effective healing `0`, overhealing `0`. The event does not appear on the healer's line at all.
@@ -346,7 +350,26 @@ git commit -m "fix(parser): Reversed Repairs builds as a 1-turn enemy debuff (#3
 
 **Interfaces:**
 - Consumes: the `'Reversed Repairs'` buff name from Task 2.
-- Produces: `REVERSED_REPAIRS: string` and `hasReversedRepairs(statusEngine: StatusEngine, victim: { id: string; side: 'player' | 'enemy' }): boolean`, consumed by Task 5.
+- Produces: `REVERSED_REPAIRS: string` and ~~`hasReversedRepairs(statusEngine: StatusEngine, victim: { id: string; side: 'player' | 'enemy' }): boolean`~~, consumed by Task 5.
+
+> **⚠️ SUPERSEDED BY R7′ — THE READ IS NOT A BOOLEAN.** Everything below about *which channels*
+> to read, *why* the scheduled arm needs a side gate, and *why* the bare-id shape was unsafe is
+> still exactly right and still the reason the module looks the way it does. What changed is the
+> RETURN: R7′ books the burn's damage and kill on the **applier**, so the read has to say *who*,
+> not just *whether*. Shipped shape:
+>
+> ```ts
+> export type ReversedRepairsState = { applierId: string | undefined } | undefined;
+> export function reversedRepairsOn(
+>     statusEngine: StatusEngine,
+>     victim: { id: string; side: 'player' | 'enemy' }
+> ): ReversedRepairsState;
+> ```
+>
+> `applierId: undefined` is a legitimate state (the scheduled channel has no caster), NOT an
+> error and NOT a cue to fall back to the healer. **Every `hasReversedRepairs(...)` and every
+> `.toBe(true)/.toBe(false)` in the code samples and test samples below is pre-retraction
+> shorthand** — read them as `reversedRepairsOn(...)` returning a state / `undefined`.
 
 > **AMENDED after the Task 3 review (2026-08-22).** The signature originally took a bare
 > `victimId: string`. That is unsafe, and the review caught why: the scheduled always-active
@@ -489,7 +512,20 @@ git commit -m "feat(engine): Reversed Repairs status read across both enemy-stat
 
 ### Task 4: Make the repair source id a required parameter
 
-R7 credits a reversal kill to the healer, but `applyHealToTarget(raw, victim?)` receives no source id. Every caller knows it (`creditId`, `actor.id`, `intent.ownerId`).
+~~R7 credits a reversal kill to the healer, but~~ `applyHealToTarget(raw, victim?)` receives no source id. Every caller knows it (`creditId`, `actor.id`, `intent.ownerId`).
+
+> **⚠️ THE PREMISE IS RETRACTED, THE TASK IS NOT.** Under **R7′** the kill goes to the debuff's
+> APPLIER, so `repairSourceId` is never the killer. The parameter shipped anyway and is still
+> **required** for a different reason: it is **R11's `healerId`**, the display-only name on the
+> reversal's log row ("Zosimos → Nova: Medic's repair reversed 10,000"). A site that forgot it
+> would print a reversal row naming nobody as the healer. Wherever the text below says the
+> omission would misbook a *kill*, read *log row*.
+>
+> **The return type below is also pre-retraction.** Under **R10′** the shipped signature is
+> `(raw, victim, repairSourceId) => HealApplyResult`, where `HealApplyResult` is
+> `{ reversed: false; consumed: number; overheal: number } | { reversed: true }` — the reversed
+> arm carries **no numbers at all**, deliberately, so every call site fails to compile until it
+> moves its gross `directHeal`/`hotHeal` credit *below* the call.
 
 **Files:**
 - Modify: `src/utils/combat/playerTurn.ts:163-166` (the `HealingRuntimeCtx` declaration), and every call site:
@@ -501,7 +537,7 @@ R7 credits a reversal kill to the healer, but `applyHealToTarget(raw, victim?)` 
 - Test: existing suite only (no behaviour change)
 
 **Interfaces:**
-- Produces: `applyHealToTarget(raw: number, victim: CombatActor, repairSourceId: string): { consumed: number; overheal: number }` — all three required. Consumed by Task 5.
+- Produces: `applyHealToTarget(raw: number, victim: CombatActor, repairSourceId: string): HealApplyResult` — all three required. Consumed by Task 5. (~~`{ consumed: number; overheal: number }`~~ — superseded by R10′, see the note above.)
 
 - [ ] **Step 1: Change the signature — all three parameters required**
 
@@ -513,10 +549,12 @@ In `playerTurn.ts`, replace the `applyHealToTarget` declaration:
  *
  *  ALL THREE PARAMETERS ARE REQUIRED, deliberately. `victim` lost its `= healTarget` default and
  *  `repairSourceId` is not optional, so `tsc` reports an arity error at every call site rather
- *  than letting a missed one compile. #362 credits a reversal kill to the REPAIR'S SOURCE (R7),
- *  and an optional id would silently book `killerId: undefined` at exactly the site someone
- *  forgot — a hand-enumerated layer, the shape that produced two silent failures with green
- *  tests in #294/#296.
+ *  than letting a missed one compile. ⚠️ RETRACTED PREMISE: #362 credits a reversal kill to the
+ *  REPAIR'S SOURCE (R7) — under R7′ it credits the DEBUFF'S APPLIER, and required-ness instead
+ *  buys R11's `healerId`; a missed site would print a healer-less log row, not a mis-credited
+ *  kill. The conclusion is unchanged: an optional id would let the omission compile silently —
+ *  a hand-enumerated layer, the shape that produced two silent failures with green tests in
+ *  #294/#296.
  *
  *  `repairSourceId` is the actor credited with the repair: the caster for a cast repair, the
  *  APPLIER for a HoT tick (not the holder), the leeching actor for a leech, `intent.ownerId` for
@@ -525,7 +563,7 @@ applyHealToTarget: (
     raw: number,
     victim: CombatActor,
     repairSourceId: string
-) => { consumed: number; overheal: number };
+) => { consumed: number; overheal: number }; // ⚠️ SHIPPED: `=> HealApplyResult` (R10′)
 ```
 
 - [ ] **Step 2: Run `tsc` to enumerate every site**
@@ -570,7 +608,20 @@ git commit -m "refactor(engine): applyHealToTarget takes a required repair sourc
 - Test: `src/utils/combat/__tests__/reversedRepairs.engine.test.ts` (create)
 
 **Interfaces:**
-- Consumes: `hasReversedRepairs` (Task 3), `resolveLethalHp` (Task 1), the required `repairSourceId` (Task 4).
+- Consumes: ~~`hasReversedRepairs`~~ **`reversedRepairsOn`** (Task 3, see its amendment), `resolveLethalHp` (Task 1), the required `repairSourceId` (Task 4).
+
+> **⚠️ THIS TASK SHIPPED IN A REVISED FORM. R7 and R10 were retracted while it was in flight,
+> and everything below still names them.** The three concrete substitutions, in one place:
+>
+> | Written here | Shipped |
+> |---|---|
+> | `hasReversedRepairs(...)` returning a boolean | `reversedRepairsOn(...)` returning `{ applierId }` or `undefined` |
+> | `killerId: repairSourceId` (the healer) | `killerId: reversal.applierId` (the applier, R7′) — plus `bookReversalDamage` crediting the applier's dealt axis and the victim's `perTargetDamage`/`perActorIncoming` intake |
+> | `return { consumed: 0, overheal: raw }` (books the healer's overheal, R10) | `return { reversed: true }` (books the healer nothing, R10′) — and the `heal-performed` event carries `reversedAmount` / `perTarget[].reversed` so the battle report excludes it from healing done/received |
+>
+> Plus one addition with no counterpart here at all: **R11**, a `reversed-repair-log` row on
+> every reversal that burned something (`raw > 0`), booked to the applier and carrying the
+> healer as a display-only `healerId`.
 
 > **Two things moved under this task after it was written — use these, not the older forms:**
 >
@@ -622,9 +673,9 @@ Cover R1, R3, R4, R6, R7, R8, R10. Each gets a **player-side victim arm and an e
 - **R3 (full HP):** set `currentHp === effectiveMaxHp` and assert the full amount lands.
 - **R4 (crit carries):** pin the crit with `setupKeyedTestRng(seed)` **alone** — never followed by `resetRateGateRng()`, which un-seeds it. Assert the burn equals the post-crit value, and that the same fixture without the seed-forced crit burns the smaller base value.
 - **R6 (`Inc. Repair Down II` first):** the victim carries both statuses; assert the burn is the halved amount. Vacuous unless a control run without the Repair Down burns the full amount — assert both.
-- **R7 (kill credit):** assert `ship-destroyed` carries `killerId === <the healer's id>`, explicitly **not** the Zosimos that applied the debuff. Use different ids for the two so the assertion can distinguish them.
+- ~~**R7 (kill credit):** assert `ship-destroyed` carries `killerId === <the healer's id>`, explicitly **not** the Zosimos that applied the debuff.~~ **⚠️ RETRACTED — THIS IS BACKWARDS. DO NOT IMPLEMENT IT.** Under **R7′** the assertion is `killerId === <the Zosimos's id>`, explicitly **not** the healer, and the burn's damage books on the applier's damage-dealt axis with nothing on the healer's. (Still true, and still the reason the fixture is built the way it is: use different ids for the healer and the applier so the assertion can distinguish them. An applier-less reversal — the scheduled channel — carries `killerId: undefined` and credits nobody; it never falls back to the healer.)
 - **R8 (Cheat Death):** assert `raw > victim.currentHp` before the call (otherwise the victim survives anyway and the test is vacuous), then assert `currentHp === 1`, a `cheat-death-activated` event fired, and the save is spent.
-- **R10 (overhealing):** assert the healer's `overheal` bucket gained exactly `raw`, its `effectiveHeal` gained 0, and its damage-dealt total gained 0.
+- ~~**R10 (overhealing):** assert the healer's `overheal` bucket gained exactly `raw`, its `effectiveHeal` gained 0, and its damage-dealt total gained 0.~~ **RETRACTED.** Under **R10′** assert that **all three** of the healer's buckets gained `0` — `directHeal` (repairs cast) included, since asserting only `overheal === 0` passes against a build that still credits the whole repair as gross. And assert the **second** channel too: `heal-performed` feeds the battle report's healing done/received independently of these buckets, so the event must carry `reversedAmount === raw` and a `reversed: true` per-target entry, and the report must show `healingDone`/`healingReceived` of 0. A healer standing on the ENEMY side books nothing in the `ActorHealing` map by design (E5 §4.1), so on that side the buckets cannot serve as the instrument at all — use the event.
 
 - [ ] **Step 2: Run them to confirm they fail**
 
@@ -635,9 +686,29 @@ Read each failure message. A test failing for the wrong reason (fixture error, m
 
 - [ ] **Step 3: Implement the reversal**
 
+> ### ⚠️ THE SAMPLE BELOW IS PRE-RETRACTION CODE. DO NOT COPY IT.
+>
+> It was written against R7 and R10 and therefore (a) credits the kill to `repairSourceId` — the
+> healer — and (b) returns `{ consumed: 0, overheal: raw }`, booking the burn as the healer's
+> overhealing. **Both are now wrong.** It is kept because the *positional* reasoning around it
+> (why `raw` needs no recomputation, why the damage funnel is not entered, why `currentRound`
+> rather than `r`) is still exactly right and is the hard part.
+>
+> What actually shipped, and what a reader should copy instead, is the reversal branch in
+> `src/utils/combat/engine.ts`. Its differences from this sample:
+> - the read is `reversedRepairsOn(statusEngine, victim)` returning `{ applierId }`, not a boolean;
+> - `killerId: reversal.applierId` — **the applier, never the healer** (R7′), and `undefined` on
+>   the scheduled channel rather than a fallback;
+> - the burn books on the applier's dealt axis **and** the victim's intake axis
+>   (`bookReversalDamage` → `roundPerTargetDamage`, `intakeFor().incoming`, `creditDealt`);
+> - it emits a `reversed-repair-log` row when `raw > 0` (R11);
+> - it returns **`{ reversed: true }`** carrying no numbers (R10′), which is what forces every
+>   call site to move its gross credit below the call.
+
 In `engine.ts`, replace the `applyHealToTarget` closure body:
 
 ```ts
+// ⚠️ PRE-RETRACTION SAMPLE — see the warning above. Not the shipped code.
 applyHealToTarget: (raw, victim, repairSourceId) => {
     // Dead target → all overheal, and no reversal: a corpse takes no reversed repair.
     if (victim.currentHp <= 0) {
@@ -648,14 +719,16 @@ applyHealToTarget: (raw, victim, repairSourceId) => {
     // ("the -50% applies first") is satisfied by position alone — and PRE-deficit-clamp, which is
     // R3 ("a target at full HP takes the full amount"). Every magnitude ruling lands on this one
     // number; do not recompute any of it here.
+    // ⚠️ SHIPPED: `const reversal = reversedRepairsOn(statusEngine, victim); if (reversal) {`
     if (hasReversedRepairs(statusEngine, victim)) {
         // R1: raw HP burn. No shield drain, no Protection redirect, no defence mitigation, no
         // Barrier — the damage funnel owns all four and is deliberately NOT entered. R5 follows
         // from the same choice: no counterattack, no thorns, no incoming-leech proc, no
         // on-damaged passives, because none of those live on this path.
         victim.currentHp = Math.max(0, victim.currentHp - raw);
-        // R7: the kill belongs to the healer whose repair was reversed, NOT to the actor that
-        // applied the debuff. `byDirectDamage: false` — a reversed repair is not a hit, so the
+        // ⚠️ RETRACTED (R7). SHIPPED (R7′): the damage AND the kill belong to the actor that
+        // APPLIED the debuff, never to the healer — `killerId: reversal.applierId` below.
+        // `byDirectDamage: false` is right and stayed — a reversed repair is not a hit, so the
         // consumables that spend on a direct hit (Barrier charges, Ironclad's nth-hit counter)
         // must not see one. R8: Cheat Death still intercepts, via the one shared death path.
         resolveLethalHp(victim, {
@@ -670,15 +743,18 @@ applyHealToTarget: (raw, victim, repairSourceId) => {
             bus,
             emitConsequenceLog,
             actingActorId,
-            killerId: repairSourceId,
+            killerId: repairSourceId, // ⚠️ RETRACTED — R7′ passes `reversal.applierId`
             byDirectDamage: false,
         });
         // NOT repairedThisRound — nothing was repaired. (Separate from R9: Zosimos's charge
         // passive keys off the enemy CASTING a repair, upstream of this closure, and is untouched.)
         //
-        // R10: surfaces as the healer's OVERHEALING. Returning the existing shape is what delivers
-        // that with no change to the accounting contract — every call site already credits
-        // `overheal` with this value — and it keeps the `raw = effective + overheal` identity.
+        // ⚠️ RETRACTED (R10). SHIPPED (R10′): the healer books NOTHING — not repairs cast, not
+        // effective healing, not overhealing. Returning the shape below would be WORSE than
+        // useless: it books the raw as overheal AND leaves the call sites' gross credit (written
+        // ABOVE the call) standing. The shipped branch returns `{ reversed: true }` with no
+        // numbers at all, precisely so every call site fails to compile until it moves its gross
+        // credit below the call.
         return { consumed: 0, overheal: raw };
     }
     const targetMaxHp = recipientMaxHp(victim.id);

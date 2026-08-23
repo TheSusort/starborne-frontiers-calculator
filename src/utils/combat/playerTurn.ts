@@ -183,10 +183,20 @@ export interface HealingRuntimeCtx {
      *
      *  ALL THREE PARAMETERS ARE REQUIRED, deliberately. `victim` lost its `= healTarget` default
      *  and `repairSourceId` is not optional, so `tsc` reports an arity error at every call site
-     *  rather than letting a missed one compile. #362 credits a reversal kill to the REPAIR'S
-     *  SOURCE (R7), and an optional id would silently book `killerId: undefined` at exactly the
-     *  site someone forgot — a hand-enumerated layer, the shape that produced two silent failures
-     *  with green tests in #294/#296.
+     *  rather than letting a missed one compile.
+     *
+     *  WHY REQUIRED-NESS STILL BUYS SOMETHING UNDER R7′. The kill is credited to the DEBUFF'S
+     *  APPLIER (`reversal.applierId` in engine.ts's reversal branch), never to the repair's
+     *  source — so `repairSourceId` is NOT the killer and an omission here could not misattribute
+     *  a kill. What it would silently break instead is R11's log row: `healerId` is exactly this
+     *  id, so a site that forgot it would print a reversal row that names nobody as the healer,
+     *  on a channel where the healer is the only thing the row explains. Required-ness turns that
+     *  into a compile error — a hand-enumerated layer, the shape that produced two silent
+     *  failures with green tests in #294/#296.
+     *
+     *  ⚠️ AN EARLIER RULING (R7, RETRACTED) credited the reversal's damage and kill to the
+     *  REPAIR'S SOURCE, and that is what this paragraph used to cite. It is not the rule. See the
+     *  reversal branch in engine.ts for the standing one and for why it must not be flipped back.
      *
      *  `repairSourceId` is the actor credited with the repair: the caster for a cast repair, the
      *  APPLIER for a HoT tick (not the holder), the leeching actor for a leech, `intent.ownerId`
@@ -4202,6 +4212,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const healTargets: string[] = [];
         let healCritCount = 0;
         let healRawSum = 0;
+        // #362 R10′: the part of `healRawSum` that was REVERSED into damage and healed nobody.
+        // Carried on `heal-performed.reversedAmount` so the battle report can exclude it from
+        // healing done/received while the event itself still fires for the on-repair triggers.
+        let healReversedSum = 0;
         // H3.3: summed clipped excess (overheal) across this cast's repairs on the heal target.
         // Carried on heal-performed.overheal for an `overheal`-basis reactive shield (Abundant Renewal).
         let overhealSum = 0;
@@ -4218,6 +4232,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             amount: number;
             overheal?: number;
             didCrit?: boolean;
+            /** #362: this recipient's `amount` was burned off its HP, not restored. */
+            reversed?: true;
         }[] = [];
 
         // ── The support pass, as a unit ────────────────────────────────────────────────────
@@ -4262,6 +4278,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             // player path): surfaces on heal-performed.perTarget so an enemy healer's
                             // Abundant Renewal shields its over-repaired allies too.
                             let perTargetOverheal: number | undefined;
+                            /** #362: this recipient took the repair as damage (Reversed Repairs). */
+                            let wasReversed = false;
                             if (recipientActor) {
                                 const applied = healing.applyHealToTarget(
                                     raw,
@@ -4276,9 +4294,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 // the burned amount as wasted healing.
                                 if (!applied.reversed && applied.overheal > 0)
                                     perTargetOverheal = applied.overheal;
+                                if (applied.reversed) wasReversed = true;
                             }
                             healTargets.push(rid);
                             healRawSum += raw;
+                            // R10′ (#362), the SECOND channel: `heal-performed` feeds the battle
+                            // report's healing done/received (battleSimulator.ts), which is a
+                            // different surface from the ActorHealing buckets above. Mark the
+                            // reversed portion instead of dropping the recipient — see the
+                            // `heal-performed` doc in events.ts for why the event must still fire.
+                            if (wasReversed) healReversedSum += raw;
                             healPerTarget.push({
                                 targetId: rid,
                                 amount: raw,
@@ -4286,6 +4311,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                     ? { overheal: perTargetOverheal }
                                     : {}),
                                 ...(didCrit ? { didCrit: true } : {}),
+                                ...(wasReversed ? { reversed: true as const } : {}),
                             });
                         }
                         continue;
@@ -4308,6 +4334,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         let perTargetOverheal: number | undefined;
+                        /** #362: this recipient took the repair as damage (Reversed Repairs). */
+                        let wasReversed = false;
                         // Per-recipient application: apply HP + capture the clipped over-repair on
                         // EACH recipient's OWN actor (mirrors the enemy event-only path), so an AoE
                         // heal restores every ally's real HP and each over-repaired ally's overheal
@@ -4334,6 +4362,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             const victimActor =
                                 perRecipientActor ?? healing.recipientActor(healing.targetId)!;
                             const applied = healing.applyHealToTarget(raw, victimActor, actor.id);
+                            if (applied.reversed) wasReversed = true;
                             if (!applied.reversed) {
                                 healing.credit(actor.id, 'directHeal', raw);
                                 healing.credit(actor.id, 'effectiveHeal', applied.consumed);
@@ -4343,7 +4372,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 // the map empty and every existing golden stays byte-identical.
                                 if (perRecipientActor) {
                                     healing.creditRecipient?.(rid, 'directHeal', raw);
-                                    healing.creditRecipient?.(rid, 'effectiveHeal', applied.consumed);
+                                    healing.creditRecipient?.(
+                                        rid,
+                                        'effectiveHeal',
+                                        applied.consumed
+                                    );
                                     healing.creditRecipient?.(rid, 'overheal', applied.overheal);
                                 }
                                 overhealSum += applied.overheal;
@@ -4354,6 +4387,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         }
                         healTargets.push(rid);
                         healRawSum += raw;
+                        // R10′ (#362), the SECOND channel — see the twin comment on the enemy
+                        // (`healEventOnly`) path above and the `heal-performed` doc in events.ts.
+                        if (wasReversed) healReversedSum += raw;
                         healPerTarget.push({
                             targetId: rid,
                             amount: raw,
@@ -4361,6 +4397,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 ? { overheal: perTargetOverheal }
                                 : {}),
                             ...(didCrit ? { didCrit: true } : {}),
+                            ...(wasReversed ? { reversed: true as const } : {}),
                         });
                     }
                 } else if (cfg.type === 'shield') {
@@ -4498,6 +4535,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     round: r,
                     amount: healRawSum,
                     ...(healCritCount > 0 ? { critHits: healCritCount } : {}),
+                    // #362 R10′: present only when > 0, so every non-reversed cast emits the exact
+                    // shape it emitted before and no existing fixture moves. `amount` stays GROSS
+                    // — the emit gate above (`healRawSum > 0`) must keep firing for a fully-reversed
+                    // repair, or R9 (Zosimos's own "when an enemy performs a repair" charge passive)
+                    // and every other on-repair rider would go blind exactly when Zosimos lands.
+                    ...(healReversedSum > 0 ? { reversedAmount: healReversedSum } : {}),
                     ...(overhealSum > 0 ? { overheal: overhealSum } : {}),
                     perTarget: healPerTarget,
                 });

@@ -235,6 +235,13 @@ describe('RoundEventLog', () => {
     // A hand-picked (scheduled) Reversed Repairs has no applier, so the entry books to the victim
     // itself. It must still render a real line rather than a source → target line naming the same
     // ship twice.
+    //
+    // #362 fix-wave-2 (I-2): the entry carries `healerId`, because PRODUCTION always does — the
+    // repair's source is a required parameter at every `applyHealToTarget` call site and
+    // `buildCombatLog` copies it independently of `applierId`, so "no applier" never implies "no
+    // healer". This test previously omitted it and asserted `Nova: repairs reversed 900`, a string
+    // production cannot emit: the self-line and the healer clause are on different axes and both
+    // apply at once here.
     it('reversed-repair: collapses to a self-line when there is no applier', () => {
         render(
             <RoundEventLog
@@ -243,11 +250,15 @@ describe('RoundEventLog', () => {
                     actorId: 'nova',
                     targets: [{ targetId: 'nova', amount: 900 }],
                     reactions: [],
+                    healerId: 'graphite',
                 })}
                 roster={roster}
             />
         );
-        expect(screen.getByText(/Nova: repairs reversed 900/)).toBeInTheDocument();
+        // ONE ship named as the line's subject (no "Nova → Nova"), and the healer named inside
+        // the label — the real applier-less shape.
+        expect(screen.getByText(/Nova: Graphite's repair reversed 900/)).toBeInTheDocument();
+        expect(screen.queryByText(/Nova → Nova/)).not.toBeInTheDocument();
     });
 
     // #362 fix-wave-1: `healerId` names the reversed repair's caster inside the label — DISPLAY
@@ -271,9 +282,12 @@ describe('RoundEventLog', () => {
         ).toBeInTheDocument();
     });
 
-    // Absent `healerId` (the pre-#362-fix-wave-1 shape, still produced whenever the repair's
-    // source id is unavailable to the caller) falls back to the plain, healer-less string —
-    // unchanged from before `healerId` existed.
+    // Absent `healerId` is a FORMATTER-LEVEL fallback that production no longer reaches (#362
+    // fix-wave-2, I-2): `engine.ts` sets the field on every reversal row it emits, from a
+    // parameter that is required at every call site. The branch is kept — the field is optional on
+    // the shared `CombatLogEntry` and a stored/replayed pre-fix-wave-1 log would still hit it —
+    // and this test pins what it renders. It is a DEFENSIVE-BRANCH test, not a claim that the
+    // shape is reachable; do not cite it as evidence that production can omit the healer.
     it('reversed-repair, healer absent: falls back to the plain label', () => {
         render(
             <RoundEventLog

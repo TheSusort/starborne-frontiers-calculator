@@ -189,7 +189,9 @@ const formatters: Record<
         const src = ctx.nameOf(entry.actorId);
         const t = entry.targets[0];
         const verb =
-            entry.healerId !== undefined ? `${ctx.nameOf(entry.healerId)}'s repair reversed` : 'repairs reversed';
+            entry.healerId !== undefined
+                ? `${ctx.nameOf(entry.healerId)}'s repair reversed`
+                : 'repairs reversed';
         const label = t?.amount !== undefined ? `${verb} ${fmt(t.amount)}` : verb;
         if (t !== undefined && t.targetId !== entry.actorId)
             return `${src} → ${ctx.nameOf(t.targetId)}: ${label}`;

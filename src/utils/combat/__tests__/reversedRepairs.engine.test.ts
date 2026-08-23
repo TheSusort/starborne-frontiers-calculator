@@ -54,7 +54,7 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 import { emptyPreFightModifiers } from '../preFight/types';
 import type { Position } from '../../../types/encounters';
-import { LOG_EVENT_TYPES } from '../../calculators/battleSimulator';
+import { assembleBattleResult, LOG_EVENT_TYPES } from '../../calculators/battleSimulator';
 import { buildCombatLog, type RosterEntry } from '../log/buildCombatLog';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 import type { CombatLogEntry } from '../log/types';
@@ -223,9 +223,7 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
     position: args.position,
     target: parseTarget('front'),
     pattern: parsePattern('Pattern-Base'),
-    ...(args.incomingHeal !== undefined
-        ? { preFight: preFightWith(args.incomingHeal) }
-        : {}),
+    ...(args.incomingHeal !== undefined ? { preFight: preFightWith(args.incomingHeal) } : {}),
     walk: {
         shipSkills: { slots: args.slots ?? [] },
         stats: {
@@ -249,9 +247,7 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
 const enemyShip = (args: RoleShape): EnemyAttackerInput =>
     ({
         id: args.id,
-        ...(args.incomingHeal !== undefined
-            ? { preFight: preFightWith(args.incomingHeal) }
-            : {}),
+        ...(args.incomingHeal !== undefined ? { preFight: preFightWith(args.incomingHeal) } : {}),
         stats: {
             attack: args.attack ?? 0,
             crit: args.crit ?? 0,
@@ -314,6 +310,9 @@ interface FixtureRun {
     /** The run's event stream folded by the REAL `buildCombatLog`, flattened to every entry
      *  (reactions included). R11's row is only a log row if this is where it shows up. */
     logEntries: CombatLogEntry[];
+    /** The victim's effective max HP for this run — the denominator the battle report's `hpPct`
+     *  divides by, so the report block can state its expectation in HP rather than in percent. */
+    victimMaxHp: number;
 }
 
 /**
@@ -491,6 +490,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         logEntries: flattenCombatLog({
             combatLog: buildCombatLog(events, roster, new Map()),
         }),
+        victimMaxHp,
     };
 }
 
@@ -534,6 +534,16 @@ function eventsOfType<T extends CombatEvent['type']>(
 // Barrier. A raw HP burn at face value." All four are owned by the damage funnel
 // (`applyVictimDamage`), which the reversal deliberately never enters — so the rulings are
 // satisfied by the branch's POSITION, and these tests prove it sits there.
+//
+// ⚠️ COVERAGE, STATED HONESTLY (#362 fix-wave-2, M-7): R1 names FOUR layers and this block drives
+// THREE of them with a live instrument — shield drain, defence mitigation and the Protection
+// redirect each get a fixture in which an ordinary attack demonstrably IS reduced/redirected while
+// the reversal is not. The FOURTH, Barrier, is argued STRUCTURALLY only (see the R8 header below:
+// Barrier lives inside `applyVictimDamage`, and the reversal never calls it — the same one fact
+// that fences the other three). That argument is sound, and it is the same argument the three
+// measured layers rest on, but it is DOCUMENTATION-GRADE, not a measurement: if Barrier ever moves
+// out of the damage funnel, nothing in this file goes red. Recorded so a later reader does not
+// mistake the prose for a test.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('R1 — the reversal drains HP, never the shield pool', () => {
@@ -818,7 +828,10 @@ describe('R7′ — a lethal reversal credits the debuff applier, never the heal
             // see one — and `triggers.ts` gates the killer-targeted on-destroyed reactions
             // (Faust's purge, Martyrdom, Paracelsus) on this flag, so a `true` here would make
             // them spend on a kill their owner never chose.
-            expect(kills[0].byDirectDamage).toBeFalsy();
+            // `toBe(false)`, NOT `toBeFalsy()` (#362 fix-wave-2, M-5): the field is OPTIONAL, so
+            // `toBeFalsy` also passes when it is simply absent — i.e. against a build that stopped
+            // setting it. `engine.ts` calls the explicit `false` REQUIRED, not merely defensible.
+            expect(kills[0].byDirectDamage).toBe(false);
         });
 
         // The DAMAGE half of R7′, which the kill assertion above cannot reach: a NON-lethal
@@ -944,6 +957,14 @@ describe('R10′ — a reversed repair books nothing at all on the healer', () =
         expect(controlRound.perActor.get(control.medicId)!.effectiveHeal).toBe(RAW);
         expect(controlRound.perActor.get(control.medicId)!.overheal).toBe(0);
         expect(controlRound.perRecipient.get(VICTIM_ID)!.directHeal).toBe(RAW);
+        // …and the RECIPIENT axis is populated too, with the whole repair landing as effective
+        // (#362 fix-wave-2, M-6): without this the victim's three zeros below could equally mean
+        // "the per-recipient map is never written in this fixture". `overheal` has no non-zero
+        // control available here BY FIXTURE DESIGN — the deficit is ≫ RAW so the control clips
+        // nothing — and the `heal-performed` over-repair test below is where that one is measured
+        // against a full-HP control instead.
+        expect(controlRound.perRecipient.get(VICTIM_ID)!.effectiveHeal).toBe(RAW);
+        expect(controlRound.perRecipient.get(VICTIM_ID)!.overheal).toBe(0);
 
         // R10′: nothing. The medic may have no entry at all (nothing was ever credited to it), so
         // read through an optional chain rather than `!` — a `toBe(0)` on a missing entry would
@@ -1133,6 +1154,185 @@ describe('R11 deferral-window nesting — a reactive reversal fired mid-attack s
             const reactiveRowIndex = reversed.logEntries.indexOf(reactiveRow!);
             expect(attackIndex).toBeGreaterThanOrEqual(0);
             expect(reactiveRowIndex).toBeGreaterThan(attackIndex);
+        });
+    }
+});
+
+// ══ C-1 ══════════════════════════════════════════════════════════════════════════════════════
+// THE BATTLE REPORT (`assembleBattleResult` → `ShipRoundState`). Every test above measures an
+// ENGINE channel; this block measures the user-facing surface those channels feed, because the
+// two disagreed and the report is what the player actually reads.
+//
+// R10′ was implemented against the `ActorHealing` buckets — but `heal-performed` is a SECOND,
+// independent channel into the same report (`healDone`/`healReceived`), and the burn's intake was
+// only booked on `perTargetDamage`, not on `perActorIncoming`, which is what `hpPct` reads. The two
+// omissions compounded in the SAME direction: the report credited the medic healing it never did
+// AND under-counted the HP the victim lost, so the bar read high by the burn — permanently, and by
+// exactly the amount that was reversed.
+//
+// Four numbers per victim row, all four asserted here against a CONTROL arm that differs only in
+// the status name:
+//   1. `healingDone`     (the medic's row)  — R10′, the heal-performed channel.
+//   2. `healingReceived` (the victim's row) — R10′, the perTarget channel.
+//   3. `incomingDamage`  (the victim's row) — the intake booking.
+//   4. `hpPct`           (the victim's row) — the bar, which is 1–3 compounded.
+//
+// The `hpPct` assertion is pinned to the LIVE actor's real final HP rather than to a literal, so
+// it cannot drift into agreeing with a wrong report: the fixture's own `victimHp` is the referee.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('the battle report — a reversed repair is not healing, and its burn is HP lost', () => {
+    /** The run's round-1 rows, as `assembleBattleResult` (the real battle-report assembler) folds
+     *  them. Built from the SAME engine output the assertions above read, so nothing here is a
+     *  hand-made stand-in for the pipeline. */
+    const reportRows = (run: FixtureRun, victimSide: 'player' | 'enemy') => {
+        const foeSide = victimSide === 'player' ? 'enemy' : 'player';
+        const rd = run.result.rounds[0];
+        const battle = assembleBattleResult({
+            events: run.events,
+            perRoundPerTarget: { [rd.round]: rd.perTargetDamage ?? {} },
+            perRoundPerIncoming: { [rd.round]: rd.perActorIncoming ?? {} },
+            perRoundPerDealt: { [rd.round]: rd.perTargetDealt ?? {} },
+            roster: [
+                {
+                    actorId: run.medicId,
+                    side: victimSide,
+                    name: 'Medic',
+                    position: 'M1',
+                    maxHp: MEDIC_HP,
+                },
+                {
+                    actorId: VICTIM_ID,
+                    side: victimSide,
+                    name: 'Victim',
+                    position: 'M4',
+                    maxHp: run.victimMaxHp,
+                },
+                {
+                    // Zosimos's OWN row is never read by any assertion here (only the medic's and
+                    // the victim's are), so its maxHp is a placeholder rather than the fixture's
+                    // real figure — it only has to be non-zero so `clampPct` has a denominator.
+                    actorId: run.zosimosId,
+                    side: foeSide,
+                    name: 'Zosimos',
+                    position: 'M1',
+                    maxHp: MEDIC_HP,
+                },
+            ],
+            numRounds: 1,
+        });
+        const ships = battle.rounds[0].ships;
+        return {
+            medic: ships.find((s) => s.actorId === run.medicId)!,
+            victim: ships.find((s) => s.actorId === VICTIM_ID)!,
+        };
+    };
+
+    /** The bar the report draws, and the bar the ship's REAL HP justifies. They must be equal. */
+    const livePct = (run: FixtureRun) => (100 * run.victimHp) / run.victimMaxHp;
+
+    for (const victimSide of SIDES) {
+        // ARM A — the reversal is the ONLY thing that touches the victim's HP this round. This arm
+        // isolates the heal-performed half: with no attack the victim has no intake entry at all,
+        // so `hpLost` falls back to `damageTaken` (which already carried the burn) and the ONLY
+        // way the bar can be wrong is the phantom healing cancelling the loss back out.
+        it(`${victimSide}-side victim: a reversal-only round books no healing and moves the bar down`, () => {
+            const START = VICTIM_MAX_HP; // full HP ⇒ the control's repair is entirely wasted
+            const { reversed, control } = bothArms({ victimSide, victimStartHp: START });
+
+            const rev = reportRows(reversed, victimSide);
+            const ctl = reportRows(control, victimSide);
+
+            // NON-VACUITY: the identical fixture, minus the status name, reports the medic doing
+            // RAW of healing and the victim receiving it. Every zero below is measured against this.
+            expect(ctl.medic.healingDone).toBe(RAW);
+            expect(ctl.victim.healingReceived).toBe(RAW);
+            expect(ctl.victim.hpPct).toBe(100);
+            expect(control.victimHp).toBe(START); // …all of it clipped: the victim was already full
+
+            // (1) + (2) — R10′ on the report's two healing axes.
+            expect(rev.medic.healingDone).toBe(0);
+            expect(rev.victim.healingReceived).toBe(0);
+            // (3) the burn is HP the victim lost…
+            expect(rev.victim.damageTaken).toBe(RAW);
+            // (4) …and the bar says so. Pinned to the LIVE actor, which really is down by RAW.
+            expect(reversed.victimHp).toBe(START - RAW);
+            expect(rev.victim.hpPct).toBe(livePct(reversed));
+            expect(rev.victim.hpPct).toBeLessThan(100);
+        });
+
+        // ARM B — an ordinary attack AND the reversal in the SAME round. This is the arm the
+        // intake booking exists for: the attack gives the victim a `perActorIncoming` entry, so
+        // `hpLost` stops falling back to `damageTaken` and reads the intake bucket instead — where
+        // the burn was missing. Both halves of the defect are live here at once.
+        it(`${victimSide}-side victim: an attack AND a reversal in one round, and the bar matches real HP`, () => {
+            const START = VICTIM_MAX_HP;
+            const { reversed, control } = bothArms({
+                victimSide,
+                victimStartHp: START,
+                zosimosAttack: 40_000,
+            });
+
+            const rev = reportRows(reversed, victimSide);
+            const ctl = reportRows(control, victimSide);
+
+            // The attack is LIVE and identical in both arms (no RNG in this fixture) — so any gap
+            // between the arms' HP numbers is the reversal and nothing else.
+            const attackDamage = ctl.victim.incomingDamage;
+            expect(attackDamage).toBeGreaterThan(0);
+            expect(attackDamage).toBeLessThan(START - RAW); // survivable, both arms
+
+            // CONTROL: the medic really repairs, and the bar reflects attack minus repair.
+            expect(ctl.medic.healingDone).toBe(RAW);
+            expect(ctl.victim.healingReceived).toBe(RAW);
+            expect(control.victimHp).toBe(START - attackDamage + RAW);
+            expect(ctl.victim.hpPct).toBe(livePct(control));
+
+            // REVERSED, (1) + (2): nothing was healed, by anyone, for anyone.
+            expect(rev.medic.healingDone).toBe(0);
+            expect(rev.victim.healingReceived).toBe(0);
+            // (3): the intake bucket carries the attack AND the burn — the burn passes no shield,
+            // Barrier or defence layer, so all of it is HP loss.
+            expect(rev.victim.incomingDamage).toBe(attackDamage + RAW);
+            expect(rev.victim.damageTaken).toBe(attackDamage + RAW);
+            // (4): the bar. The victim really is down by attack + burn, and the report agrees to
+            // the point — this is the assertion that read 90% on a 70% ship.
+            expect(reversed.victimHp).toBe(START - attackDamage - RAW);
+            expect(rev.victim.hpPct).toBe(livePct(reversed));
+            // …and the two arms differ by exactly 2 × RAW of bar (the repair the control got, plus
+            // the burn the reversed run took), which is the whole size of the reported error.
+            expect(ctl.victim.hpPct - rev.victim.hpPct).toBeCloseTo(
+                (100 * 2 * RAW) / VICTIM_MAX_HP,
+                10
+            );
+        });
+
+        // The event still FIRES. R9 (Zosimos's "when an enemy performs a repair" charge passive)
+        // and every other on-repair rider key off `heal-performed`, so the fix marks the reversed
+        // portion rather than suppressing the emit. If a future change silences the event to make
+        // the healing numbers zero, this is the assertion that catches it.
+        it(`${victimSide}-side victim: heal-performed still fires, carrying the reversed portion`, () => {
+            const { reversed } = bothArms({
+                victimSide,
+                victimStartHp: VICTIM_MAX_HP / 2,
+            });
+
+            const perfs = healPerformed(reversed.events).filter(
+                (e) => e.casterId === reversed.medicId
+            );
+            expect(perfs).toHaveLength(1);
+            // GROSS `amount` is unchanged — it is what the emit gate and the riders read.
+            expect(perfs[0].amount).toBe(RAW);
+            // …and the whole of it is flagged as having healed nobody.
+            expect(perfs[0].reversedAmount).toBe(RAW);
+            const pt = perfs[0].perTarget!.find((p) => p.targetId === VICTIM_ID);
+            expect(pt).toBeDefined();
+            expect(pt!.amount).toBe(RAW);
+            expect(pt!.reversed).toBe(true);
+            // A reversed repair damages; it does not WASTE. `overheal` must stay absent on both
+            // axes even though the recipient's deficit was never filled.
+            expect(pt!.overheal).toBeUndefined();
+            expect(perfs[0].overheal).toBeUndefined();
         });
     }
 });
