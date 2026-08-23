@@ -910,7 +910,8 @@ describe('#367 — a SLOWER applier still reduces a repair landing later in the 
 // (header, "Every behavioural claim is DIFFERENTIAL"): that convention exists because a NOMINAL
 // assertion would pass on a fixture whose repair was zero all along. Here zero IS the claim — the
 // floor makes the victim's repair exactly 0, an absolute floor rather than a ratio, so there is no
-// ratio to take and no control arm to take it against. Non-vacuity is carried instead by the two
+// RATIO to take. (A control arm is constructible — a no-reducer run repairs > 0 — so the honest
+// claim is that the ratio is impossible, not the control.) Non-vacuity is carried instead by the two
 // existence assertions (both reducers really landed) plus `healPerfs.length > 0` — the cast really
 // emitted, which it can only do because the medic's own undebuffed share kept the sum positive.
 // ═════════════════════════════════════════════════════════════════════════════════════════════

@@ -386,8 +386,12 @@ describe('#369 — a foreign applier with no turn ctx yet still skips the tick',
 // With the block now running for enemy actors as well, the two source reads (`selfAbilityStatuses`
 // and `entry.activeSelfBuffs`) are consumed on both sides of the board for the first time. Nothing
 // above places a HoT on the side OPPOSING a holder, so nothing above pins that those reads stay
-// per-actor and per-side. This fixture does: BOTH holders carry a SELF-applied HoT, at DIFFERENT
-// percentages, and each one's HP gain names which source it read.
+// PER-SIDE. This fixture does: BOTH holders carry a SELF-applied HoT, at DIFFERENT percentages,
+// and each one's HP gain names which source it read.
+//
+// Scope, precisely: this pins the CROSS-SIDE claim and the not-global claim. It does NOT pin the
+// per-ACTOR half — each side here has exactly one holder, so a fold that leaked across actors on
+// the SAME side would be invisible to this fixture. That gap is unpinned, not disproven.
 //
 // The two percentages must DIFFER for this to measure anything. With the same pct on both sides,
 // a holder that read the OTHER side's source would land on exactly the right number and the test
@@ -495,8 +499,9 @@ describe('#369 — a HoT on each side stays scoped to its own holder', () => {
 
 // ══ 7: the tick DOES arm `'target-repaired-this-round'`, on both sides ════════════════════════
 //
-// ⚠️ THIS IS THE HALF OF R2 THAT IS *NOT* SUPPRESSED, and the distinction matters because a
-// comment in `playerTurn.ts` once claimed the opposite. R2 says a HoT tick fires no on-repaired
+// ⚠️ THIS IS THE CHANNEL R2 DOES NOT COVER — not "half of R2". Calling it that would be the
+// very conflation `playerTurn.ts` was rewritten to forbid, and a comment there once claimed the
+// opposite outright. R2 says a HoT tick fires no on-repaired
 // TRIGGER and emits no `heal-performed` — asserted above, on both sides. It says nothing about
 // `repairedThisRound`, which is a DIFFERENT channel: `applyHealToTarget` adds its victim to that
 // set whenever `consumed > 0` (engine.ts:3756), the engine reads it back as

@@ -4206,11 +4206,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // while `actor` is `runtime.actor` and every runtime is built over one of those same
             // objects (engine.ts:2391 `actor: attacker`, :2492 `actor: teamActor`, :2769
             // `enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor)`) — so it returned
-            // the identical object on both sides. Verified empirically too: a probe comparing the
-            // two over the whole test suite reported zero divergences from any `runCombat` path
-            // (the only divergences at all came from `enemyActions.test.ts`'s hand-built healing
-            // spies, whose `recipientActor` fabricates a fresh `{ id, currentHp }` — i.e. a test
-            // double, not production). Dropping the round-trip also drops the one way it could
+            // the identical object on both sides, on every reachable path. Both HoT sources are
+            // keyed to `actor.id` as well (`timedAbilityStatuses('self', actor.id)` and
+            // `snapshot(actor.id)`), so the holder IS the acting actor by construction — a
+            // stronger statement than "the lookup happened to be redundant".
+            // Dropping the round-trip also drops the one way it could
             // ever have answered wrongly: `allActorsById` is keyed by id with the enemy entries
             // built LAST, so a player/enemy id collision would have resolved to the enemy.
             const applied = healing.applyHealToTarget(raw, actor, creditId);
