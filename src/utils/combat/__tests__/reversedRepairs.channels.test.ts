@@ -117,8 +117,11 @@ const castRepair = (pct: number): Ability => ({
  *  `target: 'ally'` FANS to the whole side, the caster included — the shape `healing.test.ts`'s
  *  own foreign-applier fixture uses and documents. So the applier holds a copy and self-ticks too,
  *  which is why the applier's `hotHeal` is a SUM and the test asserts `> 0` on it rather than an
- *  exact figure. The exact figures are asserted on `effectiveHeal`/`overheal`, which only the
- *  holder-is-the-anchor tick can book — i.e. only the victim's. */
+ *  exact figure. Since #369 the applier's own OFF-anchor self-tick is applied as well, so
+ *  `effectiveHeal`/`overheal` are sums too: on the player arm the victim's tick is the consumed
+ *  one (it starts at half HP) and the medic's own is pure `overheal` (it sits at full HP). The
+ *  player-side test below therefore isolates the victim's tick by a DIFFERENCE between its two
+ *  arms, not by a zero — see its own inline note. */
 const allyHotBuff = (hotPct: number): Ability => ({
     id: 'ab-ally-hot',
     type: 'buff',
@@ -284,8 +287,11 @@ interface FixtureOpts {
      *  (the default everywhere else) the grant would be capped away and the test would pass or
      *  fail for a reason that has nothing to do with the reversal. */
     zosimosChargeCount?: number;
-    /** `'victim'` anchors the healing report on the victim — required by the HoT channel, whose
-     *  tick applies HP only when the holder IS the anchor. Player-side arm only. */
+    /** `'victim'` anchors the healing report on the victim instead of the focus. Player-side arm
+     *  only (the anchor is always player-side). It used to be REQUIRED by the HoT channel, whose
+     *  tick applied HP only when the holder WAS the anchor — #369 removed that restriction, so
+     *  this is now optional everywhere. The one caller that still passes it does so only to stay
+     *  byte-identical to its pre-#369 form; see constraint (a) in that describe's header. */
     healAnchor?: 'focus' | 'victim';
     /** Top-level `enemyDebuffs` — the calculator's buff-picker channel (the SCHEDULED arm of the
      *  status read). These carry NO applier identity, which is the whole point of the fixture that
@@ -520,12 +526,15 @@ describe('R2 channel 2 — a HoT tick reverses', () => {
     //
     //  (a) The tick used to apply HP only when the holder WAS the healing anchor — `tickHot`
     //      returned early on `if (actor.id !== healing.targetId)` after crediting the gross
-    //      bucket. That is gone: the tick now resolves the holder through
-    //      `healing.recipientActor` and applies to it wherever it stands. This fixture still
-    //      anchors the report on the victim (`healAnchor: 'victim'`) — it no longer has to, but
-    //      keeping it makes the source-axis figures below a clean two-tick sum instead of a
-    //      three-tick one, and the OFF-anchor case has its own coverage in
-    //      `enemySideHotTick.test.ts`.
+    //      bucket. That is gone: the tick now applies to the acting holder wherever it stands.
+    //      This fixture still passes `healAnchor: 'victim'`, but only to keep it byte-identical
+    //      to its pre-#369 form — the anchor no longer influences ANY figure asserted below.
+    //      Verified, not assumed: flipping this fixture to `healAnchor: 'focus'` leaves every
+    //      assertion in the player-side test green and unchanged. (It could not have been
+    //      otherwise — the anchor cannot change the tick COUNT. `runFixture`'s player arm has
+    //      exactly two player-side actors, the medic-focus and the victim, so the `target: 'ally'`
+    //      fan produces exactly two holders and two ticks under either anchor.) The OFF-anchor
+    //      case has its own dedicated coverage in `enemySideHotTick.test.ts`.
     //  (b) The WHOLE HoT block used to sit inside `if (!healEventOnly)`, so an enemy-side holder
     //      never ticked at all. #369 replaced that whole-block gate with a credit-only gate inside
     //      `tickHot`: an enemy holder now moves its own HP and books nothing on the player healing

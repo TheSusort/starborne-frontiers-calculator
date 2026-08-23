@@ -905,6 +905,14 @@ describe('#367 — a SLOWER applier still reduces a repair landing later in the 
 // `'all-allies'` heals the medic too (undebuffed, full RAW), which keeps the cast's sum positive
 // so the event actually fires and `perTarget` exposes the victim's entry — carrying the RAW
 // per-recipient amount BEFORE it is folded into any masking sum — on its own.
+//
+// AND WHY THIS SECTION ALONE SKIPS THE FILE'S DIFFERENTIAL-AGAINST-AN-INERT-CONTROL CONVENTION
+// (header, "Every behavioural claim is DIFFERENTIAL"): that convention exists because a NOMINAL
+// assertion would pass on a fixture whose repair was zero all along. Here zero IS the claim — the
+// floor makes the victim's repair exactly 0, an absolute floor rather than a ratio, so there is no
+// ratio to take and no control arm to take it against. Non-vacuity is carried instead by the two
+// existence assertions (both reducers really landed) plus `healPerfs.length > 0` — the cast really
+// emitted, which it can only do because the medic's own undebuffed share kept the sum positive.
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('#367 §3.4 — the incoming-repair factor is floored at zero', () => {

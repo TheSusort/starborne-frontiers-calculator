@@ -4196,22 +4196,32 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // `actor.id !== healing.targetId` early-return that used to sit here was a legacy
             // restriction that credited the gross bucket and then silently withheld the HP from
             // every off-anchor holder, PLAYER SIDE INCLUDED.
-            const holderActor =
-                actor.id === healing.targetId ? actor : healing.recipientActor(actor.id);
-            const applied = holderActor
-                ? healing.applyHealToTarget(raw, holderActor, creditId)
-                : undefined;
+            //
+            // The holder IS this acting actor, by construction: both source loops below read
+            // `selfAbilityStatuses` / `entry.activeSelfBuffs`, which are this actor's OWN status
+            // stores. So `actor` is passed straight through — no `recipientActor(actor.id)`
+            // round-trip. That lookup used to sit here for the off-anchor case and was pure
+            // indirection: `recipientActor` is `allActorsById.get(id)` (engine.ts:3783) over
+            // `[...teamCombatActors, attacker, ...enemyAttackerActors]` (engine.ts:2834/2844),
+            // while `actor` is `runtime.actor` and every runtime is built over one of those same
+            // objects (engine.ts:2391 `actor: attacker`, :2492 `actor: teamActor`, :2769
+            // `enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor)`) — so it returned
+            // the identical object on both sides. Verified empirically too: a probe comparing the
+            // two over the whole test suite reported zero divergences from any `runCombat` path
+            // (the only divergences at all came from `enemyActions.test.ts`'s hand-built healing
+            // spies, whose `recipientActor` fabricates a fresh `{ id, currentHp }` — i.e. a test
+            // double, not production). Dropping the round-trip also drops the one way it could
+            // ever have answered wrongly: `allActorsById` is keyed by id with the enemy entries
+            // built LAST, so a player/enemy id collision would have resolved to the enemy.
+            const applied = healing.applyHealToTarget(raw, actor, creditId);
             // `healEventOnly` gates CREDIT, never APPLICATION (E5 §4.1) — the same split the
             // enemy cast-heal arm below already uses. An enemy holder's tick moves its own HP and
             // contributes NOTHING to the player healing buckets, which is the actual invariant the
             // old whole-block gate was protecting (see enemyActions.test.ts's HoT describe).
             if (healEventOnly) return;
             // R10′ (#362): a reversed tick books nothing at all, gross bucket included.
-            if (applied?.reversed) return;
+            if (applied.reversed) return;
             healing.credit(creditId, 'hotHeal', raw);
-            // Holder not resolvable in the actor map → gross credit only, the pre-#369 off-anchor
-            // behaviour. Defensive: every real run resolves it.
-            if (!applied) return;
             healing.credit(creditId, 'effectiveHeal', applied.consumed);
             healing.credit(creditId, 'overheal', applied.overheal);
             // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
@@ -4226,9 +4236,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         };
         // #369: BOTH sides tick. The gate that used to wrap this whole block was suppressing the
         // tick itself in order to suppress its CREDIT — `tickHot` now separates the two, so an
-        // enemy holder moves its own HP and books nothing. R2: no `heal-performed` is emitted from
-        // this block and `repairedThisRound` is not set, on either side — a HoT tick is not a
-        // "performed repair" and fires no on-repaired trigger.
+        // enemy holder moves its own HP and books nothing.
+        //
+        // R2 (unchanged by #369): this block emits NO `heal-performed`, on either side, and fires
+        // NO on-repaired TRIGGER — a HoT tick is not a "performed repair", so nothing subscribed
+        // to the repair event reacts to it.
+        //
+        // R2 is NOT a claim about `repairedThisRound`, and the two must not be conflated: an
+        // on-repaired trigger and the `'target-repaired-this-round'` ability CONDITION are
+        // different channels. The tick DOES enter `repairedThisRound` — `applyHealToTarget` adds
+        // its victim whenever `consumed > 0` (engine.ts:3756), the set is read back as
+        // `targetRepairedThisRound` when an actor's turn args are built (engine.ts:8310), and that
+        // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts:407-412;
+        // Nayra's charged purge and its Stasis/Exposed inflicts). #369 therefore WIDENED that
+        // condition's reach: before it, only a player-side ANCHOR holder could arm the flag from a
+        // tick; now an enemy holder and an off-anchor player holder do too. That is deliberate —
+        // the owner's ruling is that any HP restoration counts as being repaired this round, so
+        // the widening makes every holder agree with what a player-side anchor holder already did.
+        // Fenced on both side arms in `enemySideHotTick.test.ts`.
         //
         // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
         // payload.stacks already folds accumulating per-round counts / timed configured stacks.

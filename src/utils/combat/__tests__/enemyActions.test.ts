@@ -636,8 +636,12 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['attacker', 'tank'],
-            // `recipientActor` is READ by the HoT path since #369: an off-anchor holder is resolved
-            // through it. `enemyIds` remains an E5 field the HoT path never touches.
+            // Neither of these two is read by the path this describe exercises: `tickHot` passes
+            // the acting actor straight to `applyHealToTarget` (the holder IS that actor, by
+            // construction — its own status stores are the only sources the block reads), and
+            // `enemyIds` is an E5 cast-heal field. Both are present only because
+            // `HealingRuntimeCtx` requires them. So the fabricated `{ id, currentHp }` object below
+            // is inert here; do not read it as a statement about what the engine resolves.
             enemyIds: ['attacker'],
             recipientActor: (id) => ({ id, currentHp: 10000 }) as CombatActor,
         };

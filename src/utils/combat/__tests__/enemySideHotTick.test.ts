@@ -39,6 +39,12 @@
  *     fixture, and it is two-armed (1 round: skipped; 2 rounds: ticks once) so "no HP moved"
  *     cannot pass vacuously.
  *
+ * Sections 6 and 7 need shapes `runFixture` cannot express and build their own inputs inline:
+ * section 6 puts a SELF-applied HoT on a holder on EACH side at different percentages (cross-side
+ * source scoping), and section 7 adds an OBSERVER on the side opposing the holder, carrying an
+ * ability gated on `'target-repaired-this-round'`. Both reuse this file's roster builders and its
+ * `activeSlot` helper; neither uses the MEDIC role, because a self-applied HoT needs no applier ctx.
+ *
  * NO RNG SEEDING, and nothing in this file needs any: every actor has `crit: 0` and `attack: 0`,
  * so no rate gate has a live stream and no damage confounds the holder's HP.
  */
@@ -48,6 +54,7 @@ import { createEventBus, type CombatEvent } from '../events';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
+import type { StatusEngine } from '../statusEngine';
 import type { Position } from '../../../types/encounters';
 
 /** The player focus's id, fixed by the engine. Always the heal anchor here. */
@@ -311,9 +318,15 @@ describe('#369 — an enemy-side HoT holder ticks', () => {
 // ══ 3 + 4: the side-independent half — an OFF-ANCHOR player ally ══════════════════════════════
 
 describe('#369 — an off-anchor player holder ticks', () => {
-    it('an off-anchor PLAYER ally carrying a HoT gains HP', () => {
+    it('an off-anchor PLAYER ally carrying a HoT gains HP, and still emits no heal-performed', () => {
         const run = runFixture({ holderSide: 'player' });
         expect(run.holderHpAfter - START).toBe(EXPECTED_TICK);
+        // R2, the PLAYER arm of the assertion the enemy test above makes (team symmetry): a HoT
+        // tick is not a "performed repair" on either side, so the block emits no `heal-performed`
+        // even now that an off-anchor player holder really is pool-applied. The HP assertion above
+        // is what stops this from passing vacuously — a fixture that never ticked would satisfy
+        // "no heal-performed" trivially.
+        expect(healPerformed(run)).toHaveLength(0);
     });
 
     it('the tick lands even on a legacy run with the recipient axis off', () => {
@@ -364,6 +377,306 @@ describe('#369 — a foreign applier with no turn ctx yet still skips the tick',
 
             const twoRounds = runFixture({ holderSide, applierSlot: 'passive', numRounds: 2 });
             expect(twoRounds.holderHpAfter - START).toBe(EXPECTED_TICK);
+        });
+    }
+});
+
+// ══ 6: cross-side SOURCE SCOPING — each holder ticks its OWN HoT and nothing else ═════════════
+//
+// With the block now running for enemy actors as well, the two source reads (`selfAbilityStatuses`
+// and `entry.activeSelfBuffs`) are consumed on both sides of the board for the first time. Nothing
+// above places a HoT on the side OPPOSING a holder, so nothing above pins that those reads stay
+// per-actor and per-side. This fixture does: BOTH holders carry a SELF-applied HoT, at DIFFERENT
+// percentages, and each one's HP gain names which source it read.
+//
+// The two percentages must DIFFER for this to measure anything. With the same pct on both sides,
+// a holder that read the OTHER side's source would land on exactly the right number and the test
+// would be blind to it. At 10 vs 30 (over equal max HP) every wrong source is a distinct value:
+// reading the other side's gives the other side's figure, reading both gives their sum.
+// Verified as an instrument, not assumed: handing the player holder the ENEMY percentage while
+// leaving the assertions alone turns the first expectation red (`expected 30000 to be 10000`).
+
+/** A SELF-targeted HoT. Self-applied deliberately: `applierId === actor.id` short-circuits
+ *  `hotApplierMaxHp` to the holder's own effective HP, so neither holder needs a foreign applier
+ *  to have banked a turn ctx and the two sides stay independent by construction. */
+const selfHotBuff = (hotPct: number): Ability => ({
+    id: `ab-self-hot-${hotPct}`,
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName: 'Repair Over Time II',
+        parsedEffects: { hotPct },
+        stacks: 1,
+        isStackable: false,
+        duration: 5,
+    },
+});
+
+const PLAYER_HOT_PCT = 10;
+const ENEMY_HOT_PCT = 30;
+
+describe('#369 — a HoT on each side stays scoped to its own holder', () => {
+    it('each holder gains exactly its OWN percentage, neither the other side’s nor the sum', () => {
+        const bus = createEventBus();
+        let playerHolder: CombatActor | undefined;
+        let enemyHolder: CombatActor | undefined;
+        // `FOE_ID` is the inert filler enemy in `runFixture`; here the same id carries the ENEMY
+        // holder's HoT. Both holders start at half HP so both ticks have room to be consumed.
+        const seed = (actors: CombatActor[]): void => {
+            playerHolder = actors.find((a) => a.id === HOLDER_ID);
+            enemyHolder = actors.find((a) => a.id === FOE_ID);
+            if (playerHolder) playerHolder.currentHp = START;
+            if (enemyHolder) enemyHolder.currentHp = START;
+        };
+
+        runCombat({
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            defensePenetration: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            healTargetId: FOCUS_ID,
+            mode: 'healing',
+            perRecipientHealApply: true,
+            hacking: 100_000,
+            __testTapActors: seed,
+            bus,
+            // ── The FOCUS: the heal anchor (`healTargetId: FOCUS_ID` above), inert, and carrying
+            // no HoT of its own (empty active slot). So neither holder under test is the anchor,
+            // and the anchor contributes no tick of its own to either side's figure.
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: INERT_HP,
+            speed: 1,
+            position: 'M1',
+            chargeCount: 0,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+            shipSkills: { slots: [activeSlot([])] },
+            teamActors: [
+                walkedAlly({
+                    id: HOLDER_ID,
+                    position: 'M4' as Position,
+                    speed: 500,
+                    hp: HOLDER_MAX_HP,
+                    slots: [activeSlot([selfHotBuff(PLAYER_HOT_PCT)])],
+                }),
+            ],
+            enemyAttackers: [
+                enemyShip({
+                    id: FOE_ID,
+                    position: 'M4',
+                    speed: 400,
+                    hp: HOLDER_MAX_HP,
+                    slots: [activeSlot([selfHotBuff(ENEMY_HOT_PCT)])],
+                }),
+            ],
+        });
+
+        // 10% of its own 100,000 — the PLAYER holder's own pct, and only it. Reading the enemy
+        // holder's source instead would give 30,000; reading both would give 40,000.
+        expect(playerHolder!.currentHp - START).toBe((HOLDER_MAX_HP * PLAYER_HOT_PCT) / 100);
+        // 30% of its own 100,000 — the ENEMY holder's own pct, the mirror of the same claim
+        // (10,000 for the wrong source, 40,000 for both).
+        expect(enemyHolder!.currentHp - START).toBe((HOLDER_MAX_HP * ENEMY_HOT_PCT) / 100);
+    });
+});
+
+// ══ 7: the tick DOES arm `'target-repaired-this-round'`, on both sides ════════════════════════
+//
+// ⚠️ THIS IS THE HALF OF R2 THAT IS *NOT* SUPPRESSED, and the distinction matters because a
+// comment in `playerTurn.ts` once claimed the opposite. R2 says a HoT tick fires no on-repaired
+// TRIGGER and emits no `heal-performed` — asserted above, on both sides. It says nothing about
+// `repairedThisRound`, which is a DIFFERENT channel: `applyHealToTarget` adds its victim to that
+// set whenever `consumed > 0` (engine.ts:3756), the engine reads it back as
+// `targetRepairedThisRound` while building each actor's turn args (engine.ts:8310), and that flag
+// gates the `'target-repaired-this-round'` ability CONDITION (Nayra's charged purge and its
+// Stasis/Exposed inflicts).
+//
+// #369 widened that condition's reach: before it, only a player-side ANCHOR holder could arm the
+// flag from a tick, because only the anchor was pool-applied. Now an enemy holder and an
+// off-anchor player holder arm it too. Per the owner's ruling — any HP restoration counts as being
+// repaired this round — that is correct and intended, and it makes every holder agree with what a
+// player-side anchor holder already did before the change. Nothing covered it either way, so this
+// is its fence.
+//
+// HOW IT IS OBSERVED: an OBSERVER on the side opposing the holder, acting AFTER it, carries one
+// ability — a self-buff gated on `'target-repaired-this-round'`. The gate reads whether the
+// OBSERVER'S OWN TURN TARGET was repaired, so the observer must resolve the HOLDER as its target.
+// On the enemy-holder arm that is forced: the holder is the only enemy. On the player-holder arm
+// the opposing side also carries the inert focus, and `parseTarget('front')` picks the front column
+// (M4, the holder) over the focus at M1 — and the positive arm's own pass is the proof of it, since
+// the focus is never repaired in either arm and locking onto it would leave the gate shut in both.
+//
+// The observer deliberately carries NO attack ability. `nayraEnemyRepairedPurge.test.ts` adds a
+// basic hit to its gated caster "so targetId resolves", which reads like a requirement to copy —
+// it is not one here: this fixture was run BOTH with and without such a hit and both arms are green
+// either way, so the turn target resolves from the parsed target alone. One fewer moving part, and
+// no damage anywhere near the holder's HP.
+//
+// The gate is read off the observer's own self-buff store through `__testTapStatusEngine`, the same
+// channel `nayraEnemyRepairedPurge.test.ts` reads (there keyed by an enemy actor's id, which is
+// what the player-holder arm below needs).
+
+const WITNESS = 'Repaired Target Witness';
+const OBSERVER_ID = 'observer';
+
+/** The observer's gated self-buff: applied only if its turn TARGET was repaired this round. */
+const repairedGateWitness = (): Ability => ({
+    id: 'ab-witness',
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [{ subject: 'target-repaired-this-round', derivable: true }],
+    config: {
+        type: 'buff',
+        buffName: WITNESS,
+        parsedEffects: { attack: 10 },
+        stacks: 1,
+        isStackable: false,
+        duration: 99,
+    },
+});
+
+interface RepairedGateRun {
+    holderHpAfter: number;
+    observerSelfBuffNames: string[];
+}
+
+function runRepairedGateFixture(args: {
+    holderSide: 'player' | 'enemy';
+    /** `false` strips the HoT from the holder's slot — the control arm: nothing repairs it, so the
+     *  gate must stay closed. Everything else about the fixture is identical. */
+    hot: boolean;
+}): RepairedGateRun {
+    const bus = createEventBus();
+    let holder: CombatActor | undefined;
+    const seed = (actors: CombatActor[]): void => {
+        holder = actors.find((a) => a.id === HOLDER_ID);
+        if (holder) holder.currentHp = START;
+    };
+    let statusEngine: StatusEngine | undefined;
+
+    // Speed 500 for the holder, 100 for the observer: the holder must tick BEFORE the observer's
+    // gate is evaluated, or the flag would not be set yet whatever the code did. Load-bearing, and
+    // measured as such: at holder speed 50 (slower than the observer) both arms report the gate
+    // shut, so the ordering — not some always-on grant — is what makes the positive arm pass.
+    const holderSlots: ShipSkills['slots'] = args.hot
+        ? [activeSlot([selfHotBuff(HOT_PCT)])]
+        : [activeSlot([])];
+    const holderShape: RoleShape = {
+        id: HOLDER_ID,
+        position: 'M4' as Position,
+        speed: 500,
+        hp: HOLDER_MAX_HP,
+        slots: holderSlots,
+    };
+    const observerSlots: ShipSkills['slots'] = [activeSlot([repairedGateWitness()])];
+
+    const common = {
+        numRounds: 1,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        hasChargedSkill: false,
+        startCharged: false,
+        defensePenetration: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        healTargetId: FOCUS_ID,
+        mode: 'healing' as const,
+        perRecipientHealApply: true,
+        hacking: 100_000,
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        __testTapActors: seed,
+        __testTapStatusEngine: (e: StatusEngine) => {
+            statusEngine = e;
+        },
+        bus,
+        chargeCount: 0,
+        target: parseTarget('front'),
+        pattern: parsePattern('Pattern-Base'),
+    };
+
+    const input: CombatEngineInput =
+        args.holderSide === 'enemy'
+            ? {
+                  // The player FOCUS is the observer (it is also the anchor — harmless, it holds no
+                  // HoT and is never repaired). The enemy side is the holder ALONE, so the
+                  // observer's target cannot be anyone else.
+                  ...common,
+                  hp: INERT_HP,
+                  speed: 100,
+                  position: 'M4' as const,
+                  shipSkills: { slots: observerSlots },
+                  teamActors: [],
+                  enemyAttackers: [enemyShip(holderShape)],
+              }
+            : {
+                  // Off-anchor PLAYER holder: the inert focus is the anchor, the holder is a walked
+                  // team actor, and the observer is the lone enemy.
+                  ...common,
+                  hp: INERT_HP,
+                  speed: 1,
+                  position: 'M1' as const,
+                  shipSkills: { slots: [activeSlot([])] },
+                  teamActors: [walkedAlly(holderShape)],
+                  enemyAttackers: [
+                      enemyShip({
+                          id: OBSERVER_ID,
+                          position: 'M1',
+                          speed: 100,
+                          hp: INERT_HP,
+                          slots: observerSlots,
+                      }),
+                  ],
+              };
+
+    runCombat(input);
+    // On the enemy-holder arm the observer IS the focus, whose self-buff store is keyed by the
+    // engine's fixed focus id rather than by `OBSERVER_ID`.
+    const observerKey = args.holderSide === 'enemy' ? FOCUS_ID : OBSERVER_ID;
+    return {
+        holderHpAfter: holder!.currentHp,
+        observerSelfBuffNames: statusEngine!
+            .timedAbilityStatuses('self', observerKey)
+            .map((b) => b.active.buffName),
+    };
+}
+
+describe("#369 — a HoT tick counts as being repaired this round ('target-repaired-this-round')", () => {
+    for (const holderSide of ['enemy', 'player'] as const) {
+        it(`${holderSide}-side holder: its tick arms the gate, and without the HoT the gate stays shut`, () => {
+            const ticked = runRepairedGateFixture({ holderSide, hot: true });
+            const control = runRepairedGateFixture({ holderSide, hot: false });
+
+            // PRECONDITION on both arms, so neither can pass for the wrong reason: the HoT arm
+            // really ticked, and the control arm really was never repaired.
+            expect(ticked.holderHpAfter - START).toBe(EXPECTED_TICK);
+            expect(control.holderHpAfter).toBe(START);
+
+            // THE RULED BEHAVIOUR: the tick restored HP, so the holder counts as repaired this
+            // round and the observer's gated buff lands.
+            expect(ticked.observerSelfBuffNames).toContain(WITNESS);
+            // …and the gate really is the thing being measured: the identical fixture with no HoT
+            // leaves it shut. Without this arm an always-firing buff would look like a pass.
+            expect(control.observerSelfBuffNames).not.toContain(WITNESS);
         });
     }
 });
