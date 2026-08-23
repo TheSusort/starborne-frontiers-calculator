@@ -828,7 +828,9 @@ describe('the self-side half of the channel is read from the ACTING turn', () =>
             const expiring = threeRoundProfile(victimSide, 'dealt', 2, UP_III_PCT);
             const baseline = threeRoundProfile(victimSide, 'dealt', 2);
             // EXISTENCE, both ends of the status's life, read off the same store:
-            //  - still standing when the run stops after ROUND 1 (so it was live in rounds 1-2);
+            //  - still standing when the run stops after ROUND 1. That is what this probe SHOWS;
+            //    round 2's liveness is inferred from the 2-turn duration plus round 2's own
+            //    amount, not measured here. A `numRounds: 2` probe would close the gap.
             const roundOneOnly = runFixture({
                 victimSide,
                 leechKind: 'dealt',

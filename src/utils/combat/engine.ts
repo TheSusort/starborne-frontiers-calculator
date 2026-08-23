@@ -4483,7 +4483,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // the RECIPIENT'S INCOMING-REPAIR channel into a heal-kind leech —
     // `incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)))`, the second argument
     // added by the #367 fix wave so the SELF-side half comes from the acting turn rather than the
-    // previous one — and this half folds neither, so an `Inc. Repair Down` standing on a
+    // previous one — and this half does not, so an `Inc. Repair Down` standing on a
     // leeching ship would be ignored here. This half is therefore NOT team-symmetric, and
     // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
     // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
@@ -4733,7 +4733,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             //   (a) the arm is CORPUS-DEAD. `standingLeeches` is built from passive-slot heal/shield
             //       abilities with basis `'damage-dealt'` that survive the reactive partition, and
             //       the whole corpus contributes exactly TWO, both `self`: Magnolia (heal 40%) and
-            //       Valerian (heal 15%) — re-measured over all 147 rows of docs/ship-skills.csv,
+            //       Valerian (heal 15%) — re-measured over all 149 rows of docs/ship-skills.csv,
             //       SP-4e fix wave 1. (An earlier list also named Malvex and Quixilver: those are
             //       `damage-taken` shields and live in the SIBLING map that feeds
             //       `procTakenLeechesPerVictim`, never here. Valkyrie's ally-facing leech is
