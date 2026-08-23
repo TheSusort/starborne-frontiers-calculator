@@ -5075,9 +5075,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             return d;
         };
-        // Single damage-credit point: every channel write flows through here so standing
-        // leeches (damage-leech spec) can proc at credit time. With no leeches registered
-        // this is byte-identical to the bare dmg() writes (the goldens are the referee).
+        // Single damage-credit point: every channel write flows through here. It exists for that
+        // funnelling alone now — no leech rides this write any more. #374 deleted the aggregate
+        // `procStandingLeeches` this used to call, having shown it unreachable by construction
+        // (every route to `!positional`, where its two feeds sit, also zeroes the amount).
+        // `procStandingLeechesPerVictim` is the only standing-leech proc left, and it is wired at
+        // the positional apply sites instead.
         const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
             dmg(sourceId)[channel] += amount;
             input.__testTapCreditDamage?.(sourceId, channel, amount);
@@ -11537,8 +11540,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     );
                                 } else {
                                     // SP-U U2: the enemy's non-positional INCOMING-damage accounting tail
-                                    // (applyIncomingToTarget + the damage-taken heal/shield leech block + the
-                                    // single legacy `attacked` emit below) is a different model from the
+                                    // (applyIncomingToTarget + the single legacy `attacked` emit below; the
+                                    // damage-taken heal/shield leech block that used to sit here too was
+                                    // deleted by #374, measured never entered on either arm) is a different
+                                    // model from the
                                     // player→enemy outgoing credit — it is NOT extracted here; its unification
                                     // is deferred to U5 (real DPS enemy keystone), when the scalar sink dies.
                                     ({
