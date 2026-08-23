@@ -99,3 +99,57 @@ export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGa
         ...(payload.application ? { application: payload.application } : {}),
     };
 }
+
+/**
+ * The INCOMING-REPAIR multiplier for a summed incoming-heal percentage, floored at 0 (#367 §3.4).
+ *
+ * WHY IT IS FLOORED. The summed percentage fed in is unclamped by construction. Under the locked
+ * tier rule (R1: same-family statuses overwrite by highest tier, survivors add) only ONE
+ * `Inc. Repair Down` can stand today, so the worst reachable value is −75% and the floor is a
+ * no-op — this is a TRIPWIRE for the next incoming-repair reducer, not a fix for a live bug.
+ * Nothing upstream stops a future second reducer from pushing the sum past −100%, and a factor
+ * below 0 would flip the repair's SIGN.
+ *
+ * HP itself is safe either way: `applyHealToTarget` floors both of its paths (`Math.max(0,
+ * Math.min(raw, deficit))` normally, `Math.max(0, raw)` under a #362 reversal), so a negative raw
+ * can never move HP the wrong way. What an unfloored factor silently corrupts is the ACCOUNTING
+ * built from that raw — `healing.credit(...)`, `healRawSum`, `heal-performed.amount` /
+ * `perTarget[].amount`, the battle report's healing done/received, and a negative reported
+ * `overheal` (`raw − 0` once the deficit clamp zeroes `consumed`). The guard is for the numbers a
+ * reader would report, not for the bar.
+ *
+ * A fully-suppressed repair floors to 0, never damage: Reversed Repairs (#362) is the only
+ * sanctioned repair-to-damage channel, and it is an explicit status, not a sign accident reached by
+ * folding percentages past −100%.
+ *
+ * WHY IT LIVES IN THIS LEAF MODULE. It has SIX consumption sites across three files that import
+ * each other in one direction only — `runPlayerTurn`'s player and `healEventOnly` cast arms and its
+ * HoT tick (`playerTurn.ts`), the reactive-heal executor (`triggers.ts`), and the two per-victim
+ * leech procs `procStandingLeechesPerVictim` / `procTakenLeechesPerVictim` (`engine.ts`, added by
+ * #367 task 7 when the owner ruled a leech self-repair is a repair like any other). It was
+ * originally a closure inside `runPlayerTurn` whose doc was honestly scoped to "this file's three
+ * sites", which made it an INCOMPLETE tripwire: #367 routed `triggers.ts`'s `incomingPctFor`
+ * through `liveHealChannelPct`, so for the first time that site could see an enemy-applied
+ * reduction while being the only one not clamped. `buffTotals` is the leaf all three files already
+ * import — the "import-cycle safe: … come from ./buffTotals (leaf module), not from ./playerTurn
+ * (which imports triggers.ts)" note on `triggers.ts`'s `victimEnemyBuffs` is the same argument — so
+ * a single definition serves all six without a cycle. A value import of `playerTurn` from
+ * `triggers` would be one, which is why this did not simply get exported where it stood.
+ *
+ * NOT a consumer, deliberately: the two leech heal-apply sites `engine.ts` did NOT change — the
+ * aggregate `procStandingLeeches` and the non-positional heal-target taken-leech block. Both are
+ * corpus-DEAD (re-measured 2026-08-23 with an ungated throw at each across the whole 6,414-test
+ * suite; neither fired), so a fold there would be an unverifiable change to unexercised code. Each
+ * site carries its own note; the aggregate's is additionally tripwired.
+ *
+ * ⚠️ NO OUTGOING TWIN, DELIBERATELY. The outgoing channel (`Out. Repair Down`) is unfloored at
+ * every one of its sites — `(1 + outgoingHealBuff / 100)` in both `playerTurn` cast arms and
+ * `(1 + ownerOutgoing / 100)` in the reactive executor — so it is at least CONSISTENT today.
+ * Flooring it in one of the three would rebuild exactly the partial tripwire this function exists
+ * to remove. Its own reachability argument is the same shape (one tier-shadowed family,
+ * `Out. Repair Down II` at −50%, so −100% is unreachable today). If a second outgoing reducer ever
+ * ships, add the twin at ALL THREE sites in one change, not here first.
+ */
+export function incomingHealFactor(pct: number): number {
+    return Math.max(0, 1 + pct / 100);
+}

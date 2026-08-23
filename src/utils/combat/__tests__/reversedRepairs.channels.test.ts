@@ -117,8 +117,11 @@ const castRepair = (pct: number): Ability => ({
  *  `target: 'ally'` FANS to the whole side, the caster included — the shape `healing.test.ts`'s
  *  own foreign-applier fixture uses and documents. So the applier holds a copy and self-ticks too,
  *  which is why the applier's `hotHeal` is a SUM and the test asserts `> 0` on it rather than an
- *  exact figure. The exact figures are asserted on `effectiveHeal`/`overheal`, which only the
- *  holder-is-the-anchor tick can book — i.e. only the victim's. */
+ *  exact figure. Since #369 the applier's own OFF-anchor self-tick is applied as well, so
+ *  `effectiveHeal`/`overheal` are sums too: on the player arm the victim's tick is the consumed
+ *  one (it starts at half HP) and the medic's own is pure `overheal` (it sits at full HP). The
+ *  player-side test below therefore isolates the victim's tick by a DIFFERENCE between its two
+ *  arms, not by a zero — see its own inline note. */
 const allyHotBuff = (hotPct: number): Ability => ({
     id: 'ab-ally-hot',
     type: 'buff',
@@ -284,8 +287,11 @@ interface FixtureOpts {
      *  (the default everywhere else) the grant would be capped away and the test would pass or
      *  fail for a reason that has nothing to do with the reversal. */
     zosimosChargeCount?: number;
-    /** `'victim'` anchors the healing report on the victim — required by the HoT channel, whose
-     *  tick applies HP only when the holder IS the anchor. Player-side arm only. */
+    /** `'victim'` anchors the healing report on the victim instead of the focus. Player-side arm
+     *  only (the anchor is always player-side). It used to be REQUIRED by the HoT channel, whose
+     *  tick applied HP only when the holder WAS the anchor — #369 removed that restriction, so
+     *  this is now optional everywhere. The one caller that still passes it does so only to stay
+     *  byte-identical to its pre-#369 form; see constraint (a) in that describe's header. */
     healAnchor?: 'focus' | 'victim';
     /** Top-level `enemyDebuffs` — the calculator's buff-picker channel (the SCHEDULED arm of the
      *  status read). These carry NO applier identity, which is the whole point of the fixture that
@@ -514,16 +520,25 @@ describe('R2 channel 1 — a CAST repair reverses', () => {
 });
 
 describe('R2 channel 2 — a HoT tick reverses', () => {
-    // ⚠️ TWO STRUCTURAL CONSTRAINTS, both pre-existing and neither introduced by #362:
+    // ⚠️ TWO STRUCTURAL CONSTRAINTS THAT USED TO SHAPE THIS DESCRIBE, BOTH LIFTED BY #369.
+    // Neither was ever a #362 behaviour; both were pre-existing restrictions in `tickHot`, and
+    // #369 removed them. They are recorded here because they still explain the fixture's shape:
     //
-    //  (a) The HoT tick applies HP only when the holder IS the healing anchor
-    //      (`playerTurn.ts`: `if (actor.id === healing.targetId)`). So this fixture anchors the
-    //      report on the victim (`healAnchor: 'victim'`) instead of on the focus.
-    //  (b) The WHOLE HoT tick block sits inside `if (!healEventOnly)`, and `healEventOnly` is
-    //      `true` for every enemy-side actor (`engine.ts` `enemyTurnBindings`). An enemy-side
-    //      holder therefore never ticks a HoT at all, in ANY implementation. The enemy arm is
-    //      not omitted — it is asserted below as the structural fact it is, with the CONTROL run
-    //      proving the channel is dead there rather than merely quiet.
+    //  (a) The tick used to apply HP only when the holder WAS the healing anchor — `tickHot`
+    //      returned early on `if (actor.id !== healing.targetId)` after crediting the gross
+    //      bucket. That is gone: the tick now applies to the acting holder wherever it stands.
+    //      This fixture still passes `healAnchor: 'victim'`, but only to keep it byte-identical
+    //      to its pre-#369 form — the anchor no longer influences ANY figure asserted below.
+    //      Verified, not assumed: flipping this fixture to `healAnchor: 'focus'` leaves every
+    //      assertion in the player-side test green and unchanged. (It could not have been
+    //      otherwise — the anchor cannot change the tick COUNT. `runFixture`'s player arm has
+    //      exactly two player-side actors, the medic-focus and the victim, so the `target: 'ally'`
+    //      fan produces exactly two holders and two ticks under either anchor.) The OFF-anchor
+    //      case has its own dedicated coverage in `enemySideHotTick.test.ts`.
+    //  (b) The WHOLE HoT block used to sit inside `if (!healEventOnly)`, so an enemy-side holder
+    //      never ticked at all. #369 replaced that whole-block gate with a credit-only gate inside
+    //      `tickHot`: an enemy holder now moves its own HP and books nothing on the player healing
+    //      map. So the enemy arm below is a real behavioural arm, not a structural fence.
     //
     // THE ATTRIBUTION TRAP: `applyHealToTarget`'s `repairSourceId` for a HoT is the APPLIER, not
     // the holder. With a self-applied HoT the two coincide and an attribution bug is invisible, so
@@ -567,30 +582,55 @@ describe('R2 channel 2 — a HoT tick reverses', () => {
         const controlHot = round(control).perActor.get(FOCUS_ID)!.hotHeal;
         const reversedHot = round(reversed).perActor.get(FOCUS_ID)!.hotHeal;
         expect(controlHot - reversedHot).toBe(RAW);
-        // The consumption split isolates the VICTIM's tick specifically: a tick whose holder is
-        // not the anchor books `hotHeal` and nothing else, so `effectiveHeal`/`overheal` here can
-        // only have come from the victim's own tick — and R10′ says the reversed one books neither.
+        // The consumption split, read the same DIFFERENTIAL way and for the same reason.
+        //
+        // ⚠️ #369 CHANGED WHAT THESE FOUR NUMBERS CONTAIN. Before it, an off-anchor tick booked
+        // `hotHeal` and nothing else, so the whole consumption split belonged to the victim's tick
+        // alone. Now the medic's own off-anchor self-tick applies too — and the medic sits at FULL
+        // HP, so it contributes exactly one tick of pure `overheal` in BOTH arms (it carries no
+        // debuff, so nothing reverses it). The victim's tick is therefore isolated by the
+        // difference, not by a zero: R10′ says the reversed one books neither bucket.
         expect(round(control).perActor.get(FOCUS_ID)!.effectiveHeal).toBe(RAW);
-        expect(round(control).perActor.get(FOCUS_ID)!.overheal).toBe(0);
         expect(round(reversed).perActor.get(FOCUS_ID)!.effectiveHeal).toBe(0);
-        expect(round(reversed).perActor.get(FOCUS_ID)!.overheal).toBe(0);
+        // The medic's self-tick: one tick of overheal, identical across the arms.
+        expect(round(control).perActor.get(FOCUS_ID)!.overheal).toBe(RAW);
+        expect(round(reversed).perActor.get(FOCUS_ID)!.overheal).toBe(RAW);
     });
 
-    // NOT a behavioural claim about #362 — a fence over constraint (b) above. If a future change
-    // ever lets an enemy-side holder tick a HoT, this test goes red and whoever makes that change
-    // owes the enemy arm of the test above.
-    it('enemy-side victim: the HoT channel does not exist at all (healEventOnly skips the tick)', () => {
+    // #369 lifted the enemy-side gate this slot used to fence, so this is now the REAL enemy arm
+    // of the player-side test above — the arm the old fence said whoever lifted the gate would
+    // owe. The channel is live on both sides, so a reversal reverses it on both sides too.
+    //
+    // No `healAnchor` here, deliberately: the anchor is always player-side, so an enemy holder is
+    // NEVER the anchor. This arm therefore also exercises the off-anchor apply path, which is the
+    // other half of what #369 changed.
+    it('enemy-side victim: HP down by the tick, and the same fixture heals without the debuff', () => {
         const START = VICTIM_MAX_HP / 2;
-        const control = runFixture({
-            victimSide: 'enemy',
-            statusName: CONTROL,
-            medicAbilities: [allyHotBuff(REPAIR_PCT)],
-            medicSpeed: 900,
-            victimStartHp: START,
-        });
-        // The CONTROL run is the measurement: the tick restores nothing on an enemy holder, so
-        // there is no repair here for a reversal to reverse.
-        expect(control.victimHp).toBe(START);
+        // Same ordering requirement as the player arm: the foreign applier must have banked a turn
+        // ctx before the holder ticks, or the tick is skipped outright.
+        const arm = (statusName: string) =>
+            runFixture({
+                victimSide: 'enemy',
+                statusName,
+                medicAbilities: [allyHotBuff(REPAIR_PCT)],
+                medicSpeed: 900,
+                victimStartHp: START,
+            });
+        const control = arm(CONTROL);
+        const reversed = arm(REVERSED);
+
+        // The channel is LIVE on the enemy side: the tick is the medic's 100,000 max HP × 10%.
+        expect(control.victimHp - START).toBe(RAW);
+        // …and with the debuff standing, the same RAW comes off HP instead.
+        expect(START - reversed.victimHp).toBe(RAW);
+
+        // E5 §4.1 / #369: the enemy tick moves HP and credits NOTHING on the player healing map,
+        // on either arm. This is the invariant the lifted whole-block gate was protecting, and the
+        // HP assertions above are what stop it from passing vacuously.
+        for (const run of [control, reversed]) {
+            expect([...run.result.healing!.rounds[0].perActor.keys()]).toEqual([]);
+            expect([...run.result.healing!.rounds[0].perRecipient.keys()]).toEqual([]);
+        }
     });
 });
 

@@ -590,26 +590,38 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 4 Task 5 (code-review fix): HoT-ticking guard.
+// #369: HoT ticking APPLIES on both sides; only its CREDIT is gated.
 //
 // The healing block ticks HoT (Repair Over Time) sources ABOVE the cast
-// heal/shield/cleanse loop, crediting `hotHeal` (and, when the holder is the
-// heal target, applying to the target). That ticking is NOT a cast — it has
-// its own pre-loop. In event-only (enemy) mode it MUST be suppressed too,
-// otherwise a HoT-carrying enemy would credit the PLAYER healing map under
-// its own id (and could mutate the tank's HP). This proves the
-// `if (!healEventOnly)` guard around BOTH HoT loops.
+// heal/shield/cleanse loop. That ticking is NOT a cast — it has its own
+// pre-loop.
+//
+// HISTORY, because this describe used to assert the opposite. Phase 4c PR 4
+// Task 5 wrapped BOTH HoT loops in `if (!healEventOnly)`, so a HoT-carrying
+// enemy could not credit the PLAYER healing map under its own id. That
+// suppressed the tick ITSELF in order to suppress its credit, which meant no
+// enemy ship ever gained its Repair Over Time HP (#369). The gate is now
+// inside `tickHot` and covers the credit calls only: the holder's HP moves on
+// either side, and an enemy holder still books NOTHING on the player map.
+// Both halves are asserted below — the applied amount AND the empty credit
+// list — which is why the original invariant is still fenced here.
 // ----------------------------------------------------------------------
-describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', () => {
+describe('#369: HoT ticking applies on both sides, and only credits behind healEventOnly', () => {
     interface HealingSpy {
         healing: HealingRuntimeCtx;
         credits: { actorId: string; bucket: string; amount: number }[];
         applied: number[];
+        /** WHICH actor each `applyHealToTarget` call named as its victim. #369 makes this
+         *  load-bearing: the tick must land on the HOLDER, never on the heal anchor ('tank') —
+         *  "could mutate the tank's HP" was half of what the old whole-block gate was preventing,
+         *  and an amount-only spy cannot tell the two apart. */
+        appliedTo: string[];
         shields: number[];
     }
     const makeHealingSpy = (): HealingSpy => {
         const credits: { actorId: string; bucket: string; amount: number }[] = [];
         const applied: number[] = [];
+        const appliedTo: string[] = [];
         const shields: number[] = [];
         const healing: HealingRuntimeCtx = {
             targetId: 'tank',
@@ -617,17 +629,23 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
             recipientMaxHp: () => 10000,
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => 10000,
-            applyHealToTarget: (raw) => {
+            applyHealToTarget: (raw, victim) => {
                 applied.push(raw);
+                appliedTo.push(victim.id);
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: (raw) => shields.push(raw),
             playerIds: ['attacker', 'tank'],
-            // E5 fields (unused by the HoT-ticking path — present for type-correctness).
+            // Neither of these two is read by the path this describe exercises: `tickHot` passes
+            // the acting actor straight to `applyHealToTarget` (the holder IS that actor, by
+            // construction — its own status stores are the only sources the block reads), and
+            // `enemyIds` is an E5 cast-heal field. Both are present only because
+            // `HealingRuntimeCtx` requires them. So the fabricated `{ id, currentHp }` object below
+            // is inert here; do not read it as a statement about what the engine resolves.
             enemyIds: ['attacker'],
             recipientActor: (id) => ({ id, currentHp: 10000 }) as CombatActor,
         };
-        return { healing, credits, applied, shields };
+        return { healing, credits, applied, appliedTo, shields };
     };
 
     // An always-active self-buff carrying hotPct 10. Always-active because it has no
@@ -645,7 +663,8 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
     // buff name to the buff so loop (b)'s expandBuffs surfaces the hotPct.
     // actor.id is 'attacker' so the status engine surfaces the always-active HoT buff in
     // snapshot(actor.id).activeSelfBuffs (selfAlwaysSnap only populates for the 'attacker'
-    // owner). holder ('attacker') !== heal target ('tank') → loop (b) credits hotHeal only.
+    // owner). holder ('attacker') !== heal target ('tank'), so this runtime is also the OFF-ANCHOR
+    // case: since #369 loop (b) applies to the holder itself, not to the anchor.
     const makeRuntime = (): PlayerActorRuntime => {
         const actor = createActor({
             id: 'attacker',
@@ -745,24 +764,35 @@ describe('Phase 4c PR 4 Task 5 fix: HoT ticking is gated behind healEventOnly', 
         };
     };
 
-    it('event-only mode: HoT ticking credits/applies NOTHING on the player map', () => {
+    it('event-only mode: the HoT tick APPLIES to the holder and credits NOTHING', () => {
         const spy = makeHealingSpy();
         runPlayerTurn(makeArgs(makeRuntime(), spy.healing, true));
 
-        // The guard suppressed BOTH HoT loops: no hotHeal credit, no applyHealToTarget,
-        // no shield grant under the enemy id.
+        // #369: the tick itself happens — effectiveHp 10,000 × hotPct 10% × 1 stack — and it
+        // lands on the HOLDER, not on the heal anchor.
+        expect(spy.applied).toEqual([1000]);
+        expect(spy.appliedTo).toEqual(['attacker']);
+        // …while nothing at all is booked on the player healing map. That is the invariant the
+        // old whole-block gate was protecting, now enforced without suppressing the tick.
         expect(spy.credits).toHaveLength(0);
-        expect(spy.applied).toHaveLength(0);
         expect(spy.shields).toHaveLength(0);
     });
 
-    it('normal mode: the same HoT source DOES credit hotHeal (proves the source is real)', () => {
+    it('normal mode: the same tick ALSO credits the player healing map', () => {
         const spy = makeHealingSpy();
         runPlayerTurn(makeArgs(makeRuntime(), spy.healing, false));
 
-        // Contrast: with the guard inactive (player path), loop (b) ticks the HoT and
-        // credits the holder's hotHeal bucket. (Holder !== target → no applyHealToTarget.)
-        expect(spy.credits.some((c) => c.bucket === 'hotHeal' && c.amount > 0)).toBe(true);
+        // The application is identical to the event-only arm — the only thing `healEventOnly`
+        // governs is the credit below.
+        expect(spy.applied).toEqual([1000]);
+        expect(spy.appliedTo).toEqual(['attacker']);
+        // Gross plus the consumption split (the stub consumes the whole raw). Credited to the
+        // APPLIER, which for a scheduled snapshot HoT is the holder itself.
+        expect(spy.credits).toEqual([
+            { actorId: 'attacker', bucket: 'hotHeal', amount: 1000 },
+            { actorId: 'attacker', bucket: 'effectiveHeal', amount: 1000 },
+            { actorId: 'attacker', bucket: 'overheal', amount: 0 },
+        ]);
     });
 });
 

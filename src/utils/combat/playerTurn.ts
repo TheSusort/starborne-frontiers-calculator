@@ -50,6 +50,7 @@ import {
     selfBuffNamesForOwners,
     LIVE_TRIGGERS,
     type ReactiveAbility,
+    type EnemyAppliedHealModifiers,
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
@@ -85,6 +86,7 @@ import {
     calculateBuffTotals,
     expandBuffEntry,
     expandEnemyDebuffs,
+    incomingHealFactor,
     payloadToSelectedBuff,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
@@ -116,6 +118,19 @@ export interface PlayerRoundCtx {
     effectiveMaxHp: number;
     outgoingHealPct: number;
     incomingHealPct: number;
+    /** #367: the ENEMY-APPLIED portion that is ALREADY INCLUDED in `incomingHealPct` /
+     *  `outgoingHealPct` above, published separately so a CROSS-ACTOR reader can subtract this
+     *  stale value back out and re-add a live `victimOwnEnemyHealModifiers` read — see
+     *  `triggers.ts`'s `liveHealChannelPct`, which is the only thing that should consume these.
+     *  This matters because `lastTurnCtxByActor` is written only at an actor's OWN turn, so a
+     *  debuff applied by a SLOWER enemy lands after the victim published its ctx and would
+     *  otherwise be invisible to every repair in the rest of that round.
+     *
+     *  OPTIONAL DELIBERATELY: a ctx that folded no enemy term omits these, and a reader that
+     *  subtracts `?? 0` then subtracts nothing — which is the correct answer, not a degraded one.
+     *  It also keeps every existing test double that builds a `PlayerRoundCtx` by hand valid. */
+    enemyAppliedIncomingHealPct?: number;
+    enemyAppliedOutgoingHealPct?: number;
     /** Sub-project I, PR I4b/I4c — `dotDamage`-channel modifier abilities whose GATE is a
      *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
      *  Radiation… for every N% crit power" bonus), plus the ctx used to fold each group
@@ -165,6 +180,14 @@ export interface HealingRuntimeCtx {
     creditRecipient?: (recipientId: string, bucket: keyof ActorHealing, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
+    /** ONE ARGUMENT ON PURPOSE. The engine's implementation takes an optional second — a FRESH
+     *  `PlayerRoundCtx` overriding the `lastTurnCtxByActor` read, added by the #367 fix wave so the
+     *  leech procs can resolve the ACTING actor's self-side incoming-repair half before its ctx is
+     *  published. It is deliberately not exposed here: every caller through this interface already
+     *  short-circuits its OWN actor (`incomingPctFor`'s self arms in this file and in `triggers.ts`)
+     *  and reaches this function only for a DIFFERENT recipient, for whom the map is the correct
+     *  source. Widening this signature would invite a caller to pass a ctx belonging to the wrong
+     *  actor. */
     recipientIncomingHealPct: (actorId: string) => number;
     /** D-PR6: summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
      *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
@@ -711,6 +734,14 @@ export interface PlayerTurnArgs {
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
      *  damage sites. Absent → byte-identical. */
     preFight?: PreFightCombatModifiers;
+    /** #367: enemy-APPLIED heal-channel modifiers carried by THIS acting actor in its own
+     *  per-victim enemy store (`triggers.ts`'s `victimOwnEnemyHealModifiers`), in additive
+     *  percentage points. Folded into the scheduled self-buff totals right beside `preFight`
+     *  below, which is what makes ONE fold reach all five incoming-heal readers: the self arm of
+     *  `incomingPctFor`, the HoT `holderIncomingFactor`, the two cast-heal factors, and — via the
+     *  `turnCtx` this function publishes into the engine's `lastTurnCtxByActor` — the engine's
+     *  `recipientIncomingHealPct` for every OTHER recipient. Absent → byte-identical. */
+    enemyAppliedHeal?: EnemyAppliedHealModifiers;
     /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -1787,6 +1818,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
         scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
         scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
+    }
+    // #367: the enemy-APPLIED half of the same two heal channels, folded into the same layer-1
+    // totals as `preFight` above and for the same reason — every downstream heal consumer reads
+    // these totals, so folding here is what makes the fix reach all of them at once instead of
+    // patching each call site one by one. Additive percentage points; a plain sum, because R1's
+    // tier shadowing (`Inc. Repair Down I` is absent from the store whenever a `II` is live)
+    // already happened inside the status engine's `applyTimedAbilityStatus` before this read.
+    // Absent → byte-identical.
+    if (args.enemyAppliedHeal) {
+        scheduledTotals.incomingHealBuff += args.enemyAppliedHeal.incomingHealPct;
+        scheduledTotals.outgoingHealBuff += args.enemyAppliedHeal.outgoingHealPct;
     }
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
@@ -3931,6 +3973,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             rid === actor.id
                 ? dmgStats.totals.incomingHealBuff
                 : healing.recipientIncomingHealPct(rid);
+        // `incomingHealFactor` (the incoming-repair multiplier, floored at 0 — #367 §3.4) used to
+        // be a closure here. It moved to the `buffTotals` leaf module so the reactive-heal executor
+        // in `triggers.ts` can share the ONE definition: its doc scoped itself to "this file's
+        // three sites", and that omission left the fourth consumption site unclamped. #367 task 7
+        // added a fifth and sixth in `engine.ts` (the two per-victim leech procs). Read that doc
+        // before touching any of the six.
         // D-PR5: caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
         // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
         // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
@@ -4089,8 +4137,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
         // but DO get the HOLDER's incomingHeal amplification (dmgStats.totals.incomingHealBuff,
-        // since the holder is the acting actor). Holder === target → the consumption split
-        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal.
+        // since the holder is the acting actor). #369: the HP lands on the HOLDER whichever side
+        // it stands on and whether or not it is the anchor, and the consumption split
+        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal — except on the
+        // enemy side, which applies the HP and credits nothing (E5 §4.1).
         //
         // Applier max HP at tick time:
         //  - applier === this acting actor (self-granted HoT) → local effectiveHp.
@@ -4102,15 +4152,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
         // applier = status.casterId) and scheduled snapshot buffs (entry.activeSelfBuffs ×
         // selfBuffLookup, expanded SelectedGameBuff.parsedEffects.hotPct × stacks, applier = holder).
-        const holderIncomingFactor = 1 + dmgStats.totals.incomingHealBuff / 100;
+        // #367 §3.4: floored via `incomingHealFactor` (doc in `buffTotals.ts`) — this tick is
+        // already guarded by `if (raw <= 0) return;` below, so the floor is a no-op here today,
+        // but it keeps this site consistent with the other THREE rather than relying solely on that
+        // guard if the surrounding code ever changes.
+        const holderIncomingFactor = incomingHealFactor(dmgStats.totals.incomingHealBuff);
         // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.
         const hotApplierMaxHp = (applierId: string | undefined): number | undefined => {
             if (applierId === undefined || applierId === actor.id) return effectiveHp;
             return healing.applierMaxHp(applierId);
         };
-        // Credit one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor)
-        // to the applier's hotHeal bucket, and route consumption (holder === target) to the
-        // applier's effectiveHeal/overheal.
+        // Apply one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor) to the
+        // HOLDER, report the landed HP on `hot-ticked` (BOTH sides — that is the derived HP bar's
+        // only view of a tick), then — player side only — credit it to the applier's hotHeal bucket
+        // and route its consumption split to the applier's effectiveHeal/overheal.
         const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
             if (hotPct <= 0 || stacks <= 0) return;
             const maxHp = hotApplierMaxHp(applierId);
@@ -4123,15 +4178,58 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
             // R10′ (#362): the gross bucket here is `hotHeal`, not `directHeal` — and like every
-            // other site it now books BELOW the apply, so a reversed tick books nothing at all on
-            // the applier. A holder that is NOT the heal target is never pool-applied (pre-existing
-            // behaviour), so nothing can be reversed there and its gross credit is unconditional.
-            if (actor.id !== healing.targetId) {
-                healing.credit(creditId, 'hotHeal', raw);
-                return;
-            }
-            // Holder === target → the heal lands on the target; split consumption to the applier.
+            // other site it books BELOW the apply, so a reversed tick books nothing at all on the
+            // applier. That ordering matters MORE since #369, not less: an off-anchor holder is now
+            // pool-applied too, so it can carry `Reversed Repairs` and reverse its own tick — which
+            // it never could while the anchor-only early-return withheld the apply.
+            // #369: the tick applies to the HOLDER, whichever side it stands on and whether or
+            // not the holder is the healing anchor. `applyHealToTarget` has taken its victim
+            // explicitly since #362, so nothing on this path is anchor-specific any more — the
+            // `actor.id !== healing.targetId` early-return that used to sit here was a legacy
+            // restriction that credited the gross bucket and then silently withheld the HP from
+            // every off-anchor holder, PLAYER SIDE INCLUDED.
+            //
+            // The holder IS this acting actor, by construction: both source loops below read
+            // `selfAbilityStatuses` / `entry.activeSelfBuffs`, which are this actor's OWN status
+            // stores. So `actor` is passed straight through — no `recipientActor(actor.id)`
+            // round-trip. That lookup used to sit here for the off-anchor case and was pure
+            // indirection: `recipientActor` is `allActorsById.get(id)` (engine.ts:3783) over
+            // `[...teamCombatActors, attacker, ...enemyAttackerActors]` (engine.ts:2834/2844),
+            // while `actor` is `runtime.actor` and every runtime is built over one of those same
+            // objects (engine.ts:2391 `actor: attacker`, :2492 `actor: teamActor`, :2769
+            // `enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor)`) — so it returned
+            // the identical object on both sides, on every reachable path. Both HoT sources are
+            // keyed to `actor.id` as well (`timedAbilityStatuses('self', actor.id)` and
+            // `snapshot(actor.id)`), so the holder IS the acting actor by construction — a
+            // stronger statement than "the lookup happened to be redundant".
+            // Dropping the round-trip also drops the one way it could
+            // ever have answered wrongly: `allActorsById` is keyed by id with the enemy entries
+            // built LAST, so a player/enemy id collision would have resolved to the enemy.
             const applied = healing.applyHealToTarget(raw, actor, creditId);
+            // REPORTING (final-review FIX 1). `assembleBattleResult` does not read `currentHp` — it
+            // derives each ship's `hpPct` from `maxHp − hpLost + healed`, and `healed` comes only
+            // from `heal-performed.perTarget`, which this block deliberately never emits (R2). So
+            // every tick applied above was HP the Simulator's bar could not see. `hot-ticked` is
+            // the reporting channel for it: assembler-only, NO subscriber, so R2 is untouched (see
+            // the event's doc in events.ts). Emitted ABOVE the `healEventOnly` return because the
+            // bar has to be right on BOTH sides — an enemy holder's HP moved just as much as a
+            // player one's — and above the reversal return because a reversed tick restored
+            // nothing. `applied.consumed`, not `raw`: overheal never moved the bar.
+            if (!applied.reversed && applied.consumed > 0) {
+                bus.emit({
+                    type: 'hot-ticked',
+                    holderId: actor.id,
+                    ...(applierId !== undefined ? { applierId } : {}),
+                    amount: applied.consumed,
+                    round: r,
+                });
+            }
+            // `healEventOnly` gates CREDIT, never APPLICATION (E5 §4.1) — the same split the
+            // enemy cast-heal arm below already uses. An enemy holder's tick moves its own HP and
+            // contributes NOTHING to the player healing buckets, which is the actual invariant the
+            // old whole-block gate was protecting (see enemyActions.test.ts's HoT describe).
+            if (healEventOnly) return;
+            // R10′ (#362): a reversed tick books nothing at all, gross bucket included.
             if (applied.reversed) return;
             healing.credit(creditId, 'hotHeal', raw);
             healing.credit(creditId, 'effectiveHeal', applied.consumed);
@@ -4146,24 +4244,47 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 healing.creditRecipient?.(actor.id, 'overheal', applied.overheal);
             }
         };
-        // Event-only (enemy) mode: HoT ticking must not credit or apply to the player healing map.
-        if (!healEventOnly) {
-            // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
-            // payload.stacks already folds accumulating per-round counts / timed configured stacks.
-            for (const s of selfAbilityStatuses) {
-                const hotPct = s.payload.parsedEffects.hotPct;
+        // #369: BOTH sides tick. The gate that used to wrap this whole block was suppressing the
+        // tick itself in order to suppress its CREDIT — `tickHot` now separates the two, so an
+        // enemy holder moves its own HP and books nothing.
+        //
+        // R2 (unchanged by #369): this block emits NO `heal-performed`, on either side, and fires
+        // NO on-repaired TRIGGER — a HoT tick is not a "performed repair", so nothing subscribed
+        // to the repair event reacts to it.
+        //
+        // It DOES emit `hot-ticked` (final-review FIX 1, see the emit inside `tickHot`), which is
+        // not a counter-example to R2: nothing in the engine subscribes to that type, so it arms no
+        // trigger and can chain nothing. It exists only so `battleSimulator`'s DERIVED HP bar can
+        // see HP that this block really moved. Do not add a listener for it.
+        //
+        // R2 is NOT a claim about `repairedThisRound`, and the two must not be conflated: an
+        // on-repaired trigger and the `'target-repaired-this-round'` ability CONDITION are
+        // different channels. The tick DOES enter `repairedThisRound` — `applyHealToTarget` adds
+        // its victim whenever `consumed > 0` (engine.ts:3756), the set is read back as
+        // `targetRepairedThisRound` when an actor's turn args are built (engine.ts:8310), and that
+        // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts:407-412;
+        // Nayra's charged purge and its Stasis/Exposed inflicts). #369 therefore WIDENED that
+        // condition's reach: before it, only a player-side ANCHOR holder could arm the flag from a
+        // tick; now an enemy holder and an off-anchor player holder do too. That is deliberate —
+        // the owner's ruling is that any HP restoration counts as being repaired this round, so
+        // the widening makes every holder agree with what a player-side anchor holder already did.
+        // Fenced on both side arms in `enemySideHotTick.test.ts`.
+        //
+        // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
+        // payload.stacks already folds accumulating per-round counts / timed configured stacks.
+        for (const s of selfAbilityStatuses) {
+            const hotPct = s.payload.parsedEffects.hotPct;
+            if (!hotPct) continue;
+            tickHot(s.casterId, hotPct, s.payload.stacks);
+        }
+        // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
+        // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
+        // SelectedGameBuff carries the effective stacks already.
+        for (const ab of entry.activeSelfBuffs) {
+            for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                const hotPct = b.parsedEffects?.hotPct;
                 if (!hotPct) continue;
-                tickHot(s.casterId, hotPct, s.payload.stacks);
-            }
-            // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
-            // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
-            // SelectedGameBuff carries the effective stacks already.
-            for (const ab of entry.activeSelfBuffs) {
-                for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
-                    const hotPct = b.parsedEffects?.hotPct;
-                    if (!hotPct) continue;
-                    tickHot(undefined, hotPct, b.stacks ?? 1);
-                }
+                tickHot(undefined, hotPct, b.stacks ?? 1);
             }
         }
 
@@ -4267,7 +4388,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                                 (1 + healModifier / 100) *
                                 (1 + dmgStats.totals.outgoingHealBuff / 100) *
-                                (1 + incomingPctFor(rid) / 100);
+                                incomingHealFactor(incomingPctFor(rid));
                             // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                             raw *= 1 + healAmpPctFor(rid) / 100;
                             // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
@@ -4327,7 +4448,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             (didCrit ? 1 + effectiveCritDamage / 100 : 1) *
                             (1 + healModifier / 100) *
                             (1 + dmgStats.totals.outgoingHealBuff / 100) *
-                            (1 + incomingPctFor(rid) / 100);
+                            incomingHealFactor(incomingPctFor(rid));
                         // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                         raw *= 1 + healAmpPctFor(rid) / 100;
                         // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
@@ -4617,6 +4738,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         effectiveMaxHp: effectiveHp,
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
+        // #367: republish the enemy-applied portion of the two totals above, taken from the SAME
+        // `args.enemyAppliedHeal` the fold consumed — never recomputed from the live store here.
+        // That is the whole point: a cross-actor reader subtracts this number back out, so it must
+        // be BY CONSTRUCTION the number that went in, or the subtraction would not cancel.
+        // Spread-guarded so a clean actor's ctx is byte-identical to the pre-#367 shape.
+        ...(args.enemyAppliedHeal
+            ? {
+                  enemyAppliedIncomingHealPct: args.enemyAppliedHeal.incomingHealPct,
+                  enemyAppliedOutgoingHealPct: args.enemyAppliedHeal.outgoingHealPct,
+              }
+            : {}),
         // PR I4b/I4c: only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
         // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →

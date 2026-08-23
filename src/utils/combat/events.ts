@@ -303,6 +303,52 @@ export type CombatEvent =
           mode?: 'reduce-duration';
           durationTurns?: number;
       } & ReactiveStamp)
+    /** ASSEMBLER-ONLY: one `Repair Over Time` tick restored HP to its holder (playerTurn's
+     *  `tickHot`). NOT a repair event and NOT a log event — it exists for exactly one consumer,
+     *  `battleSimulator.ts`'s `healReceived` fold, and has NO subscriber anywhere in the engine.
+     *
+     *  WHY IT EXISTS. `assembleBattleResult` does not read `currentHp`; it DERIVES each ship's
+     *  `hpPct` as `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
+     *  `heal-performed.perTarget`. A HoT tick emits no `heal-performed` (see R2 below) and
+     *  `RoundData` carries no healing buckets, so before this event every HoT tick was HP the
+     *  Simulator's bar, its low-HP colour, its `N% HP` aria-label, the round card's "HP"/
+     *  "Healing received" figures — and its BOARD-CELL EFFECT MARKER — could not see.
+     *  `boardOverlays.ts`'s `effect` is a 3-way priority — `damageTaken` → `healingReceived` →
+     *  `shieldsAbsorbed` — so a holder that ticked and took NO damage that round now shows a HEAL
+     *  marker on its cell, where before it showed a shield marker or none at all. (A holder that
+     *  also took damage is unaffected: damage still wins.) Correct, and listed here because it is a
+     *  consumer this doc's enumeration originally missed. #369 made that hole general: while the HoT block
+     *  was wrapped in `if (!healEventOnly)` and `tickHot` returned early off-anchor, only the
+     *  player-side ANCHOR holder ever gained HP from a tick, so the derived bar diverged for
+     *  exactly one ship; once every holder on both sides ticks, it diverges for every one of them.
+     *
+     *  R2 IS WHY THIS IS NOT A `heal-performed`. A HoT tick is not a "performed repair": it fires
+     *  no on-repaired trigger and emits no `heal-performed`, on either side (fenced on both arms in
+     *  `enemySideHotTick.test.ts`). Reporting the tick must therefore not go through the repair
+     *  event, and this event must stay inert: NOTHING may subscribe to it. Subscribing would arm a
+     *  reaction off a tick and break R2 through the back door — the same reason the reversed-repair
+     *  path deliberately withholds `hp-changed` (engine.ts, #362 M-2). This is also NOT a claim
+     *  about `repairedThisRound`: a tick does arm the `'target-repaired-this-round'` CONDITION, a
+     *  different channel, and conflating the two is a documented hazard on this file's history.
+     *
+     *  NO DOUBLE-COUNT: `tickHot` is the only emit site, and the HoT block is the one repair
+     *  channel that emits no `heal-performed`, so the assembler's two inputs are disjoint by
+     *  construction. It is deliberately NOT emitted from the shared `applyHealToTarget`, which
+     *  every repair channel funnels through — a cast repair would then be counted twice.
+     *
+     *  `amount` is the HP ACTUALLY RESTORED (`applyHealToTarget`'s `consumed`), not the tick's
+     *  gross: overheal never moved the bar, so crediting the gross would over-report it. A
+     *  REVERSED tick (#362) emits nothing at all — it removed HP, and that loss is already on the
+     *  victim's intake axis via `bookReversalDamage`. `holderId` is the ship whose HP moved;
+     *  `applierId` names who granted the HoT (absent for a scheduled/self-attributed grant) and is
+     *  carried for future display only — no consumer reads it today. */
+    | {
+          type: 'hot-ticked';
+          holderId: string;
+          applierId?: string;
+          round: number;
+          amount: number;
+      }
     /** A cleanse cast resolved. `casterId` is the cleansing actor; `count` is the number of
      *  debuffs ACTUALLY removed. Team-symmetric (the enemy-cleanse-lift, #166-era): BOTH the
      *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic

@@ -643,11 +643,11 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
     // ── Test 1: foreign-applier HoT scales with the CASTER's max HP, attributed to caster ──
     // Healer (attacker, fast, hp 10000) grants the TARGET (walked, hp 8000) a 2-turn
     // Repair Over Time II buff (hotPct 15) via an ally-targeted buff ability. The buff fans to
-    // all players, so the attacker also holds it (self-tick → hotHeal only, holder ≠ target).
-    // The TARGET's tick (holder === target) scales with the CASTER's effectiveMaxHp (10000),
-    // NOT the target's (8000): 10000 × 15% = 1500, credited to the CASTER, full overheal at
-    // full HP. If it used the holder's HP it would be 1200 — so overheal isolates the foreign
-    // tick (only holder===target credits overheal).
+    // all players, so the attacker also holds it and self-ticks too.
+    // The TARGET's tick scales with the CASTER's effectiveMaxHp (10000), NOT the target's
+    // (8000): 10000 × 15% = 1500, credited to the CASTER. Both holders sit at full HP, so every
+    // tick is pure overheal — and 8000 would give 1200, so the overheal TOTAL below still
+    // discriminates the two bases (see the arithmetic there).
     it('foreign-applier HoT: scales with caster max HP, credited to caster, overheal at full HP', () => {
         idCounter = 0;
         const result = runCombat(
@@ -676,15 +676,27 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
         );
         // The attacker re-casts the ally HoT every round (it fires its active slot each turn),
         // so the 2-turn window on the target never lapses — the target ticks all 3 rounds. Each
-        // target tick (holder === target) scales with the CASTER's effectiveMaxHp 10000 × 15% =
-        // 1500, credited to the CASTER, full overheal at full HP → 3 × 1500 = 4500.
-        expect(sumHeal(result, 'overheal', 'attacker')).toBe(4500);
+        // target tick scales with the CASTER's effectiveMaxHp 10000 × 15% = 1500, credited to the
+        // CASTER, full overheal at full HP → 3 × 1500 = 4500.
+        //
+        // #369 DOUBLED THIS NUMBER, and the doubling is the fix. The attacker holds a fanned copy
+        // of its own HoT, and before #369 an OFF-ANCHOR holder (the attacker is not the anchor —
+        // 't1' is) booked `hotHeal` and then never received the HP, so its own 3 × 1500 never
+        // reached a pool and never became overheal. Now it does: 4500 (target) + 4500 (the
+        // attacker's own self-ticks, also at full HP) = 9000.
+        //
+        // Still a discriminating figure for the CASTER-max-HP rule this test exists for: were the
+        // target's tick scaled off the HOLDER's 8000 instead, it would be 3 × 1200 = 3600 and the
+        // total would read 8100, not 9000.
+        expect(sumHeal(result, 'overheal', 'attacker')).toBe(9000);
         expect(sumHeal(result, 'effectiveHeal', 'attacker')).toBe(0);
         // Attribution: the HoT credits the APPLIER (attacker), never the holder t1.
         expect(sumHeal(result, 'hotHeal', 't1')).toBe(0);
         // hotHeal to the caster = its OWN self-tick (it also holds the fanned buff: 1500/round
         // ×3) + the target's foreign tick (1500/round ×3) = 9000. The target tick uses the
-        // CASTER's 10000 (1500), NOT the holder/target's 8000×15%=1200 — proven by overheal=4500.
+        // CASTER's 10000 (1500), NOT the holder/target's 8000×15%=1200, which would read 8100.
+        // Unchanged by #369: the GROSS bucket was always credited for an off-anchor tick; what
+        // changed is that the HP now lands too (see the overheal note above).
         expect(sumHeal(result, 'hotHeal', 'attacker')).toBe(9000);
     });
 

@@ -15,7 +15,9 @@
  *     `perTargetDamage` increment keyed to its correct source-attacker).
  *   - damage TAKEN per victim   = `perRoundPerTarget[round][victimId]` (the reliable,
  *     symmetric source for BOTH sides; we do NOT use `hp-changed`).
- *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only).
+ *   - heals = `heal-performed` { casterId, targets[], amount } (healing mode only), PLUS
+ *     `hot-ticked` { holderId, amount } for the HP a `Repair Over Time` tick restored — a tick
+ *     emits no `heal-performed` (R2) and would otherwise be invisible to the derived HP below.
  *   - death = `ship-destroyed` { actorId }.
  *   - buffs = `buff-applied` / `buff-expired` / `debuff-applied` / `dot-applied`.
  *
@@ -28,9 +30,12 @@
  * player cast resolve no victim and SP-4c-2d deleted the actor, and `runPlayerTurn` emits no
  * `ability-performed` at all for a turn with no victim.)
  *
- * HP% is derived as maxHp minus cumulative actual HP loss (from perRoundPerIncoming when
- * present — post-shield/barrier HP damage — plus healing received), falling back to raw
- * perTargetDamage only when no incoming bucket exists for that actor (legacy goldens).
+ * HP% is DERIVED, never read off `currentHp`: maxHp minus cumulative actual HP loss (from
+ * perRoundPerIncoming when present — post-shield/barrier HP damage — plus healing received),
+ * falling back to raw perTargetDamage only when no incoming bucket exists for that actor (legacy
+ * goldens). Because it is derived, any HP restoration this assembler is not told about is HP the
+ * bar simply never shows — see `ShipRoundState.healingReceived` for which repair channels reach it
+ * today and which are still missing.
  *
  * Debuff persistence: `activeDebuffs` is infliction-only — there is no `debuff-expired`
  * event in the stream, so once a debuff is added it accumulates and persists for the rest
@@ -125,8 +130,28 @@ export interface ShipRoundState {
      * hand-crafted test emits that omit `perTarget`; the engine itself always populates it.
      * Entries flagged `reversed` (#362) are EXCLUDED: that recipient lost the HP instead of
      * gaining it, and the loss is already on its `damageTaken`/`incomingDamage` axis.
-     * CAVEAT (pre-existing, out of F2 scope): HoT-tick and reactive-heal channels are not
-     * `heal-performed` casts and are not included here.
+     *
+     * PLUS `Repair Over Time` ticks, via `hot-ticked` (final-review FIX 1). A tick is not a
+     * `heal-performed` cast — R2 — but it does restore HP, and this figure feeds the DERIVED
+     * `hpPct` below, so excluding it made every HoT holder's bar under-report. Unlike the
+     * `heal-performed` half, a `hot-ticked` amount is already the HP that LANDED (post-overheal).
+     *
+     * ⚠️ STILL INCOMPLETE, and the remainder is a known follow-up, not an oversight: every OTHER
+     * repair channel that emits no `heal-performed` is still missing here — reactive heals
+     * (`reactive-heal-performed`, which this assembler does not read) and standing-leech
+     * self-repairs (which emit nothing at all). Those are real HP the derived `hpPct` cannot see.
+     * `hot-ticked` closed the HoT channel because #369 made it the one that affects every holder
+     * on both sides; the general hole is filed separately as **#372**.
+     *
+     * ⚠️ THE TWO HALVES ALSO USE DIFFERENT BASES, and #372 is where that is tracked too. The
+     * `heal-performed` half books `perTarget[].amount`, which is GROSS — `playerTurn` sets it to
+     * the pre-clamp `raw` and carries the clipped portion separately as `pt.overheal`, which this
+     * fold does NOT subtract. The `hot-ticked` half books the HP that LANDED. So the HoT half is
+     * the more correct of the two, and it is the GROSS basis that makes the derived `hpPct` below
+     * over-report: `healed` is cumulative across rounds, so every over-repaired cast pushes the
+     * derived bar further above the engine's real `currentHp` until `clampPct` pins it at 100%. Do
+     * NOT read a raised bar as evidence of missing channels — that is #372's other half, and the
+     * two errors point in OPPOSITE directions on the same number.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
@@ -220,6 +245,11 @@ const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
 export const ASSEMBLED_EVENT_TYPES = [
     'ability-performed',
     'heal-performed',
+    // A `Repair Over Time` tick's landed HP. Read for the SAME reason `heal-performed` is: this
+    // assembler derives `hpPct` rather than reading `currentHp`, and a HoT tick emits no
+    // `heal-performed` (R2 — it is not a "performed repair"). Without it every HoT holder's bar
+    // under-reports by every tick it ever received. See the `hot-ticked` doc in combat/events.ts.
+    'hot-ticked',
     'ship-destroyed',
     'buff-applied',
     'buff-expired',
@@ -229,11 +259,17 @@ export const ASSEMBLED_EVENT_TYPES = [
 ] as const satisfies readonly CombatEvent['type'][];
 
 /**
- * The full set of event types captured for the hierarchical `combatLog` builder
- * (`buildCombatLog`). Superset of `ASSEMBLED_EVENT_TYPES` — adds the round/turn boundaries,
- * per-hit (`attacked`/`hp-changed`), charge, shield, and effect events the builder folds.
- * `simulateBattle` subscribes from THIS list so the builder sees the complete stream while
- * the assembler's own type-guarded loops simply ignore the extra event types.
+ * `simulateBattle`'s COMPLETE subscription surface: every event type either consumer folds.
+ * Superset of `ASSEMBLED_EVENT_TYPES` — it adds the round/turn boundaries, per-hit
+ * (`attacked`/`hp-changed`), charge, shield, and effect events the hierarchical `combatLog`
+ * builder (`buildCombatLog`) needs. `simulateBattle` subscribes from THIS list so the builder sees
+ * the complete stream while the assembler's own type-guarded loops simply ignore the extra types.
+ *
+ * "Superset of ASSEMBLED" is ENFORCED, not just documented (the compile-time check below), so an
+ * assembler input must be listed here too even when the log builder has no handler for it —
+ * `hot-ticked` is exactly that case. `buildCombatLog`'s handler map is a guarded `Partial`, so a
+ * type with no handler is an inert pass-through there; do not read a name's presence in this list
+ * as a claim that it renders a log line.
  */
 export const LOG_EVENT_TYPES = [
     'round-started',
@@ -246,6 +282,8 @@ export const LOG_EVENT_TYPES = [
     'attacked',
     'hp-changed',
     'heal-performed',
+    // Assembler-only (no buildCombatLog handler) — see the note above and the event's own doc.
+    'hot-ticked',
     'shield-applied',
     'shield-applied-log',
     'shield-destroyed-log',
@@ -429,6 +467,7 @@ export function assembleBattleResult(args: {
         // per-recipient breakdown (`heal-performed.perTarget`); an even split across `targets`
         // is only the FALLBACK for hand-crafted test emits that omit `perTarget` (the engine
         // itself always populates it — see the `heal-performed` event doc in events.ts).
+        // `hot-ticked` feeds the RECEIVED half only (final-review FIX 1) — see its branch below.
         const healDone = new Map<string, number>();
         const healReceived = new Map<string, number>();
         for (const e of roundEvents) {
@@ -460,6 +499,18 @@ export function assembleBattleResult(args: {
                         healReceived.set(tid, (healReceived.get(tid) ?? 0) + per);
                     }
                 }
+            } else if (e.type === 'hot-ticked') {
+                // A `Repair Over Time` tick, on either side. RECIPIENT AXIS ONLY, deliberately:
+                // `hpPct` is derived (`maxHp − hpLost + healed`), so without this the tick's HP is
+                // invisible to the bar, its colour and its aria-label — the hole this event was
+                // added to close. `healDone` is left alone: the applier's gross tick belongs to the
+                // healing report's `hotHeal` bucket, and a HoT tick is not a repair the applier
+                // PERFORMED (R2), so it must not appear on a "healing done" axis built from
+                // `heal-performed`. `e.amount` is already the HP that landed (post-overheal,
+                // post-reversal — a reversed tick emits nothing), which is exactly what `healed`
+                // means here. Disjoint from the branch above by construction: this block is the one
+                // repair channel that emits no `heal-performed`, so nothing is counted twice.
+                healReceived.set(e.holderId, (healReceived.get(e.holderId) ?? 0) + e.amount);
             }
         }
 
