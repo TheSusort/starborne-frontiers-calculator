@@ -12079,6 +12079,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 buffNames: selfBuffNamesForOwners(statusEngine, [a.id]),
                 debuffNames: enemyDebuffNamesForTarget(a),
             });
+            // #372: the same tail instant, for the same reason — the Simulator must REPORT HP,
+            // not re-derive it. Every actor in `allActors` is read the same way, so this is
+            // team-symmetric by construction.
+            //
+            // DELIBERATELY HP ONLY. `healingReceived` still accumulates from events, and this
+            // snapshot could NOT fix it: the natural source, the round's per-recipient healing axis
+            // (`currentRoundRecipientHealing`), is PLAYER-SIDE ONLY. Measured — on the enemy-side
+            // arm of `reversedRepairs.engine.test.ts` that map is empty for every actor even when an
+            // enemy medic really repaired an enemy victim for 10 000. Substituting it here regressed
+            // the enemy side from correct to 0. See the follow-up issue; that axis has to become
+            // team-symmetric before this snapshot can carry repair too.
+            bus.emit({
+                type: 'hp-snapshot',
+                actorId: a.id,
+                round: r,
+                currentHp: a.currentHp,
+                maxHp: recipientMaxHp(a.id),
+                shieldPool: a.shieldPool,
+            });
         }
 
         // SP-4c-2d DELETED THE POST-DRAIN RE-FOLD. It was gated on `dpsEnemyTarget` (roster

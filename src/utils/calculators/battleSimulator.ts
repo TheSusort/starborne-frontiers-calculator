@@ -250,6 +250,10 @@ export const ASSEMBLED_EVENT_TYPES = [
     // `heal-performed` (R2 — it is not a "performed repair"). Without it every HoT holder's bar
     // under-reports by every tick it ever received. See the `hot-ticked` doc in combat/events.ts.
     'hot-ticked',
+    // #372: the engine's own end-of-round HP / shield / repaired-this-round read. AUTHORITATIVE
+    // for the actors it names — everything below prefers it over the derived accumulation, which
+    // survives only as a fallback for hand-built streams that emit no snapshot.
+    'hp-snapshot',
     'ship-destroyed',
     'buff-applied',
     'buff-expired',
@@ -284,6 +288,7 @@ export const LOG_EVENT_TYPES = [
     'heal-performed',
     // Assembler-only (no buildCombatLog handler) — see the note above and the event's own doc.
     'hot-ticked',
+    'hp-snapshot',
     'shield-applied',
     'shield-applied-log',
     'shield-destroyed-log',
@@ -449,6 +454,16 @@ export function assembleBattleResult(args: {
             activeDebuffs.set(e.actorId, new Set(e.debuffNames));
         }
 
+        // #372: the engine's own end-of-round HP read, same tail instant as the status snapshot
+        // above and the same authoritative-for-the-actors-it-names contract. Every real run
+        // populates this for every actor; only hand-built event streams leave it empty, and those
+        // fall back to the derived arithmetic below.
+        const hpSnapshots = new Map<string, { currentHp: number; maxHp: number }>();
+        for (const e of roundEvents) {
+            if (e.type !== 'hp-snapshot') continue;
+            hpSnapshots.set(e.actorId, { currentHp: e.currentHp, maxHp: e.maxHp });
+        }
+
         // SP-F F1: damage dealt per attacker this round, re-derived from `perRoundPerDealt`
         // (attacker id -> victim id -> dealt, sourced from `RoundData.perTargetDealt`) instead
         // of the old `ability-performed`-summed anchor-only aggregate. Summing each attacker's
@@ -543,6 +558,7 @@ export function assembleBattleResult(args: {
             const healedThisRound = healReceived.get(entry.actorId) ?? 0;
             const healed = (cumulativeHealed.get(entry.actorId) ?? 0) + healedThisRound;
             cumulativeHealed.set(entry.actorId, healed);
+            const snapshot = hpSnapshots.get(entry.actorId);
 
             return {
                 actorId: entry.actorId,
@@ -550,6 +566,11 @@ export function assembleBattleResult(args: {
                 damageDealt: dealt.get(entry.actorId) ?? 0,
                 damageTaken: taken,
                 healingDone: healDone.get(entry.actorId) ?? 0,
+                // STILL EVENT-DERIVED, and still wrong for a leech (reads 0 for a ship repairing
+                // itself all fight). The `hp-snapshot` above cannot fix it — see the note at its
+                // emit site in engine.ts: the round's per-recipient healing axis is player-side
+                // only, so substituting it here regressed the enemy side from correct to 0. Pinned
+                // as a known gap in `battleSimulatorLeechHpBar.test.ts`.
                 healingReceived: healedThisRound,
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
@@ -557,10 +578,17 @@ export function assembleBattleResult(args: {
                 incomingDamage: incomingHpThisRound,
                 incomingShieldAbsorbed: incoming?.shieldAbsorbed ?? 0,
                 incomingBarrierAbsorbed: incoming?.barrierAbsorbed ?? 0,
-                hpPct:
-                    entry.maxHp > 0
-                        ? clampPct((100 * (entry.maxHp - hpLost + healed)) / entry.maxHp)
-                        : 0,
+                // #372: REPORT the engine's HP when it told us, and only derive when it did not.
+                // The derived form cannot see any repair channel that emits no `heal-performed` —
+                // every leech site, reactive repairs — and renders a Cheat-Death survivor at 1 HP
+                // as 0%. `hpLost`/`healed` are still accumulated above for the fallback arm.
+                hpPct: snapshot
+                    ? snapshot.maxHp > 0
+                        ? clampPct((100 * snapshot.currentHp) / snapshot.maxHp)
+                        : 0
+                    : entry.maxHp > 0
+                      ? clampPct((100 * (entry.maxHp - hpLost + healed)) / entry.maxHp)
+                      : 0,
                 shieldPct:
                     shield?.pool > 0 ? clampPct((100 * (shield?.pool ?? 0)) / entry.maxHp) : 0,
                 alive,
