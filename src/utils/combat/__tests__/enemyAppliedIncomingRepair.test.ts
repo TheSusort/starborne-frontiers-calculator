@@ -736,11 +736,21 @@ describe('#367 — the OUTGOING channel: Out. Repair Down II on the healer', () 
         });
 
         // The direction check: `Out. Repair Down` belongs to the ship PERFORMING the repair, not
-        // to the one receiving it. This is the only assertion that can tell the implemented fold
-        // apart from one that mistakenly read `outgoingHealPct` off the RECIPIENT's own enemy
-        // store — an implementation like that would pass every other test in this file, including
-        // the one directly above (whose `victimDebuffNames` assertion only proves the fixture
-        // placed the debuff on the medic, not that the engine reads it from there).
+        // to the one receiving it. It fences the fold against one that read `outgoingHealPct` off
+        // the RECIPIENT's own enemy store instead of the healer's.
+        //
+        // That bug breaks this test and the one directly above SYMMETRICALLY, and the probe run
+        // confirmed it: swapping the fold to read off `rid` reddens both, on both side arms. The
+        // reason is that each fixture is the other's mirror — here the debuff sits on the victim,
+        // so a recipient-store read finds it and wrongly halves; above it sits on the medic, so a
+        // recipient-store read finds an EMPTY store and wrongly fails to halve. Neither test alone
+        // distinguishes "reads the right store" from "reads the store this fixture happens to have
+        // populated"; the PAIR does, which is why the pair exists.
+        //
+        // (An earlier version of this comment claimed the bug would slip past every other test in
+        // the file. That was false — the probe output in the task report disproves it. Left
+        // recorded because the file's whole method is that a claim about what a test catches is
+        // itself a claim that has to be measured.)
         it(`${victimSide}-side victim: placed on the RECIPIENT instead of the healer, does nothing`, () => {
             const shared = {
                 victimSide,
