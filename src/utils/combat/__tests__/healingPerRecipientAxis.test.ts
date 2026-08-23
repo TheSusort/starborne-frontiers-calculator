@@ -220,7 +220,9 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
         ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
 
     // Passive-slot standing leech (basis damage-dealt, self) — procs through engine.ts's
-    // `procStandingLeeches`, which calls the shared `creditLandedRepair` closure.
+    // `procStandingLeechesPerVictim`, which calls the shared `creditLandedRepair` closure.
+    // (Named `procStandingLeeches` here until #374 deleted that dead aggregate twin; the payout
+    // this fixture measures always came from the per-victim proc.)
     const standingLeechAb = (): Ability =>
         ab({
             type: 'heal',

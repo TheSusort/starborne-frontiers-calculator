@@ -3,9 +3,9 @@
  *
  * Before E2, standing damage-dealt leeches were suppressed on the positional path: the
  * firing-hit damage lands per-victim via `applyPositionalDamage`, but the aggregate
- * `creditDamage(... 'direct' ...)` (which is what `procStandingLeeches` rides) is SKIPPED
- * for the positional case (no double-count). So a positional AoE attacker's own
- * standing leech never fired.
+ * `creditDamage(... 'direct' ...)` — which is what the since-deleted `procStandingLeeches` rode
+ * (#374) — is SKIPPED for the positional case (no double-count). So a positional AoE attacker's
+ * own standing leech never fired.
  *
  * E2 wires an `onVictimResolved` callback at the player→enemy positional sites that procs
  * the ACTING attacker's standing leeches off EACH footprint victim's dealt damage. Because
@@ -189,13 +189,14 @@ describe('E2 T3 — per-victim standing leech on the positional path', () => {
  * positional path the enemy's firing hit lands per-victim via drivePositionalApply, but the
  * leech block only credited the single heal target off the aggregate `damage` (gated out by
  * `!enemyPositional`). So a player victim's "when damaged, heal/shield" reactive never fired
- * when the enemy used a positional AoE.
+ * when the enemy used a positional AoE. That non-positional block was deleted in #374 — it was
+ * never entered on either arm — so this per-victim proc is now the only taken-leech path.
  *
  * E2 wires an `onVictimResolved` callback at the ENEMY positional site that procs EACH player
  * victim's OWN taken-leeches (takenLeechesByOwner.get(victim.id)) off the per-victim
  * `{shieldBefore, hpDamage, barriered}` outcome, applying to the victim's OWN pool via the
- * Task-1 closures. The Barrier carve-out and requiresHpDamage gate are evaluated PER VICTIM,
- * mirroring the non-positional block.
+ * Task-1 closures. The Barrier carve-out and requiresHpDamage gate are evaluated PER VICTIM
+ * (they mirrored the non-positional block, which #374 deleted).
  *
  * Harness: a positioned, OFFENSIVE enemy at M1 firing `front` with a Line-Range-1 AoE. The
  * front-most player (focus 'attacker' at M4) is the origin victim (full damage); the M3 team

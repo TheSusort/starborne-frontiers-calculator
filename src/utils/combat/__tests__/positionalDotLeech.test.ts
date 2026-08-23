@@ -1,14 +1,15 @@
 /**
  * SP-4b-2b Task 2b — a `basis:'damage-dealt'` STANDING leech pays out on a POSITIONAL DoT tick.
  *
- * THE DEFECT (pre-existing, masked by the dummy path). A standing damage-dealt leech is procced
- * from exactly two places:
+ * THE DEFECT (pre-existing, masked by the dummy path). A standing damage-dealt leech was procced
+ * from exactly two places at the time this was written:
  *   1. `creditDamage(sourceId, channel, amount)` → `procStandingLeeches` — the NON-positional
- *      aggregate channel. The dummy enemy's DoT tick routes through it
+ *      aggregate channel. The dummy enemy's DoT tick routed through it
  *      (`credit: (sourceId, dotType, damage) => creditDamage(sourceId, dotType, damage)`), so
- *      against the dummy a `leechScope:'all'` leech DID pay out on DoT ticks.
+ *      against the dummy a `leechScope:'all'` leech DID pay out on DoT ticks. Once the dummy was
+ *      removed nothing could reach this proc at all, and #374 deleted it.
  *   2. `procStandingLeechesPerVictim(sourceId, amount)` — the POSITIONAL per-victim channel,
- *      wired at all three attack sites through `procLeechesForVictim`.
+ *      wired at all three attack sites through `procLeechesForVictim`. Since #374, the only one.
  *
  * The positional per-victim DoT-tick branch used neither: its `credit` callback accumulated into
  * `total` / `tickDealtBySource` / `perActorDot` and stopped there. So the moment a run faced a

@@ -1704,8 +1704,8 @@ export interface HealingRoundEngine {
      *
      *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the direct cast
      *  site (playerTurn.ts), HoT ticks (playerTurn.ts `tickHot` — raw into the HOLDER's `hotHeal`),
-     *  standing + per-victim + taken leeches and the non-positional taken-leech block (engine.ts,
-     *  all four via `creditLandedRepair`), and reactive repairs (triggers.ts). That completeness is
+     *  the per-victim standing and taken leeches (engine.ts, both via `creditLandedRepair`), and
+     *  reactive repairs (triggers.ts). That completeness is
      *  load-bearing: the healing report's `effectiveHealing`/`overheal` read this axis, so a source
      *  that credited only `perActor` would silently vanish from the reported consumption.
      *
@@ -1857,28 +1857,6 @@ export function __getNoVictimTurnCount(): number {
 }
 export function __resetNoVictimTurnCount(): void {
     noVictimTurnCount = 0;
-}
-/**
- * TEST-ONLY EXECUTABLE TRIPWIRE (SP-4e). Counts iterations of the AGGREGATE `procStandingLeeches`
- * entry loop — the `!positional` half of the standing-leech fork, whose live twin is
- * `procStandingLeechesPerVictim`. The aggregate half is UNREACHABLE (see the block on the proc
- * itself for the measurement), and this counter is how that claim stays true: `leech.test.ts` —
- * the file that owns standing-leech coverage on every target flavour — asserts it is still 0 after
- * its whole suite has run. A comment cannot fail; this can.
- *
- * Deliberately NOT a `throw`: the arm is dead, but a throw at the loop head would turn a future
- * reachability change into a crash in a user's browser rather than a red test. Deliberately not
- * gated on an env flag either — an unreachable `++` costs nothing in production.
- *
- * Module-level and NOT reset per run: `__resetAggregateStandingLeechApplications` is the test's job.
- * Vitest isolates modules per test FILE, so each file reads only its own runs.
- */
-let aggregateStandingLeechApplications = 0;
-export function __getAggregateStandingLeechApplications(): number {
-    return aggregateStandingLeechApplications;
-}
-export function __resetAggregateStandingLeechApplications(): void {
-    aggregateStandingLeechApplications = 0;
 }
 /**
  * TEST-ONLY EXECUTABLE TRIPWIRE: A TURN NEVER BINDS A DEAD VICTIM — ON EITHER SIDE.
@@ -4442,193 +4420,32 @@ export function runCombat(rawInput: CombatEngineInput): {
         selfBuffNamesForOwners(statusEngine, [actorId]).includes('Taunt') ||
         provokerOf(statusEngine, actorId) !== undefined;
 
-    // Proc an owner's standing leeches against a damage credit (heals immediately at
-    // credit time — a DoT-tick leech lands during the enemy turn, which is the correct
-    // survival timing). Simplified drain-style fold (spec §4): healModifier only + a
-    // deterministic heal-crit draw on the owner's activeHealCritGate at the RUNTIME's
-    // standing crit/critDamage (base+gear stats — the per-turn folded effectiveCrit only
-    // exists mid-turn). NO heal-performed emission (chain guard: leech procs never feed
-    // on-ally-critically-repaired). Healing mode only; inert when no leeches registered.
-    //
-    // ⚠️ UNREACHABLE as of SP-4e (measured, 2026-08-20), and TRIPWIRED — see below.
-    //
-    // THE EVIDENCE IS THE MEASUREMENT, not a structural argument. A `console.error` probe on the
-    // leech loop below recorded ZERO hits across the whole suite (6,006 tests) while a probe at the
-    // function entry recorded 12,194 calls: every one is filtered out by `amount <= 0` / `!entries`
-    // before the loop. RE-MEASURED 2026-08-23 (#367 task 7) with an UNGATED `throw` immediately
-    // before this proc's heal-apply call: it did not fire in any of the suite's 6,414 tests, every
-    // one of which ran to completion on that pass.
-    // The reachability chain is that this proc's ONLY feed (`creditDamage`) is
-    // called from exactly two sites, both inside `if (!positional)`, and no fixture in the corpus
-    // reaches either with a registered leech entry. Do NOT restate that as "positional is always
-    // true": `positional` (see the gate in the turn loop) is also false when there is no target,
-    // no pattern, or no `positionalScalars` — none of which is about having a victim. The zero is
-    // an empirical fact about the corpus, not a theorem.
-    //
-    // TRIPWIRE (executable, not a comment): the loop head bumps
-    // `aggregateStandingLeechApplications`, and `leech.test.ts` — the file that owns standing-leech
-    // coverage on self / ally / all-allies / detonation scope — asserts it is still 0 once its
-    // whole suite has run. A change that makes this arm reachable turns that file RED instead of
-    // silently activating untested code.
-    //
-    // KEPT, NOT DELETED: it is the non-positional half of a deliberate `!positional`/`positional`
-    // fork (its live twin is `procStandingLeechesPerVictim` below), and deleting one half of such a
-    // fork is how the two drift — the leech-channel defect class closed in #328.
-    //
-    // ⚠️ BUT DO NOT CITE THAT FORK AS "TWO COPIES KEPT IN SYNC": they have ALREADY drifted, and
-    // this half is the weaker one. (1) Its `'ally'` arm has no `ownerIsEnemy` guard, while the
-    // per-victim twin's does. (2) It resolves its owner from `runtimesById`, which is PLAYER-side
-    // only — so for an enemy owner this proc returns before the loop, and its `'lowest-hp-ally'`
-    // arm is structurally dead on the enemy side. (3) Since #367 task 7 the per-victim twin folds
-    // the RECIPIENT'S INCOMING-REPAIR channel into a heal-kind leech —
-    // `incomingHealFactor(recipientIncomingHealPct(rid, actingSelfCtx(rid)))`, the second argument
-    // added by the #367 fix wave so the SELF-side half comes from the acting turn rather than the
-    // previous one — and this half does not, so an `Inc. Repair Down` standing on a
-    // leeching ship would be ignored here. This half is therefore NOT team-symmetric, and
-    // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
-    // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
-    // the per-victim copy can be covered by a test — do not write a fixture claiming to cover this
-    // one. Making this half symmetric is a real fix, not this rung's scope; the tripwire is what
-    // guarantees the question comes back before the code goes live.
-    //
-    // DIVERGENCE (3) IS A DELIBERATE NON-CHANGE, on the same evidence. The measurement above says
-    // this arm is executed by no test in the corpus, so a fold here could be neither verified nor
-    // falsified by anything in the repository — the reason #367 task 7 stopped at the per-victim
-    // twin rather than mirroring into dead code. Adding it is the FIRST thing to do if this arm is
-    // ever made reachable, and the tripwire below is what forces that question to be asked.
-    const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
-        if (!healingCtx || amount <= 0) return;
-        const entries = standingLeeches.get(sourceId);
-        if (!entries) return;
-        const owner = runtimesById.get(sourceId);
-        if (!owner) return;
-        for (const e of entries) {
-            // The tripwire (see the ⚠️ block above). Bumped BEFORE the scope filter so it counts
-            // every entry this dead arm actually walks, not only the ones that pay out.
-            aggregateStandingLeechApplications++;
-            if (e.scope === 'detonation' && channel !== 'detonation') continue;
-            let raw = amount * (e.pct / 100);
-            if (e.kind === 'heal') {
-                raw *= 1 + owner.healModifier / 100;
-                if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
-                    raw *= 1 + owner.critDamage / 100;
-                }
-            }
-            // SP-4e: the named selector resolves SIDE-RELATIVE to the leech's owner
-            // (lowestHpAllyIdForOwner), owner excluded; `undefined` → NO recipient, never the
-            // owner. Distinct from the `ally` arm below, which names the player heal ANCHOR.
-            const selectorRecipientId =
-                e.target === 'lowest-hp-ally' ? lowestHpAllyIdForOwner(sourceId) : undefined;
-            const recipients =
-                e.target === 'lowest-hp-ally'
-                    ? selectorRecipientId === undefined
-                        ? []
-                        : [selectorRecipientId]
-                    : e.target === 'ally'
-                      ? [healTarget!.id]
-                      : e.target === 'all-allies'
-                        ? healingCtx.playerIds
-                        : [sourceId];
-            for (const rid of recipients) {
-                // SP-4e: a SELECTOR-resolved recipient applies to its OWN pool — the shape
-                // `procStandingLeechesPerVictim` already uses. Every other target keeps this
-                // aggregate path's long-standing anchor-only application, which is why arming the
-                // selector here is zero-churn: no existing entry takes this branch.
-                //
-                // ⚠️ An earlier draft ended that sentence with "widening those is Task 4's scope,
-                // not this rung's". Task 4 has SHIPPED and it widened NOTHING here: it changed
-                // `recipientsFor` (playerTurn.ts) only, so a cast `'ally'` now means the caster's
-                // support footprint while BOTH leech procs still answer `'ally'` with the anchor.
-                // That divergence is deliberate and belongs to no scheduled task — the three
-                // reasons are recorded once, at the per-victim twin's `'ally'` arm (its OPEN
-                // RESIDUAL block). Do not read this paragraph as a pending deletion.
-                const selectorActor =
-                    selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
-                if (e.kind === 'heal') {
-                    // R10′ (#362): the gross `directHeal` credit moved BELOW the apply, so a
-                    // reversed repair can suppress it. Above the call it was unretractable — the
-                    // closure cannot un-credit — and the source would have kept its gross repairs
-                    // for a repair that healed nobody.
-                    //
-                    // `undefined` = this recipient was never POOL-APPLIED at all, which is a third
-                    // case and not a reversal: an all-allies leech credits the source's raw for
-                    // every ally but applies to none of the non-anchor ones. Those keep their gross
-                    // credit exactly as before — nothing reversed there because nothing landed.
-                    //
-                    // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer probe planted a throw
-                    // immediately before this call (and the sibling one at the non-positional
-                    // taken-leech site), ran the full suite (3801 tests), and neither fired. This
-                    // branch's R10′ credit move is corpus-DEAD — pre-existing, not introduced by
-                    // this pass — so an unconditional double-credit bug here would be invisible to
-                    // every test in the repository. Do not build fixtures for it now; this comment
-                    // only records that the branch rests on review, not on coverage.
-                    //
-                    // STILL DEAD, re-measured 2026-08-23 (#367 task 7): an ungated `throw` here did
-                    // not fire across the whole 6,414-test suite. That measurement is also why this
-                    // call keeps `raw` while its per-victim twin now scales by the recipient's
-                    // incoming-repair channel — divergence (3) in this proc's ⚠️ header block.
-                    const applied = selectorActor
-                        ? healingCtx.applyHealToTarget(raw, selectorActor, sourceId)
-                        : rid === healTarget!.id
-                          ? healingCtx.applyHealToTarget(raw, healTarget!, sourceId)
-                          : undefined;
-                    if (applied === undefined) {
-                        healingCtx.credit(sourceId, 'directHeal', raw);
-                    } else if (!applied.reversed) {
-                        healingCtx.credit(sourceId, 'directHeal', raw);
-                        healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
-                        healingCtx.credit(sourceId, 'overheal', applied.overheal);
-                        // Recipient axis (SP-3b Task 7): only a recipient whose pool this loop
-                        // actually touched LANDS here — an all-allies leech credits the source's
-                        // raw for every ally but applies to none of the others, so only the
-                        // applied case may mirror.
-                        creditLandedRepair(
-                            rid,
-                            'directHeal',
-                            raw,
-                            applied.consumed,
-                            applied.overheal
-                        );
-                    }
-                } else {
-                    healingCtx.credit(sourceId, 'shield', raw);
-                    if (selectorActor) healingCtx.grantShieldToTarget(raw, selectorActor);
-                    else if (rid === healTarget!.id) healingCtx.grantShieldToTarget(raw);
-                }
-            }
-        }
-    };
-
     // E2 Task 3: PER-VICTIM standing-leech proc for the POSITIONAL apply path.
     //
-    // The non-positional `procStandingLeeches` above rides the aggregate `creditDamage(...
-    // 'direct' ...)` write — but that write is SUPPRESSED for the positional case (the firing-hit
-    // damage lands per-victim via applyPositionalDamage, so crediting it again would double-count).
-    // So on the positional path NO standing leech fired before E2. This proc restores it by
+    // HISTORY: there used to be a second, AGGREGATE proc (`procStandingLeeches`) riding the
+    // `creditDamage(... 'direct' ...)` write — but that write is SUPPRESSED for the positional case
+    // (the firing-hit damage lands per-victim via applyPositionalDamage, so crediting it again would
+    // double-count), so on the positional path NO standing leech fired before E2. E2 restored it
+    // here, and #374 DELETED the aggregate proc once it was shown unreachable by construction:
+    // every route to `!positional` also zeroes the credited amount, so it could never pay out.
+    // THIS IS NOW THE ONLY STANDING-LEECH PROC. It works by
     // running once per FOOTPRINT VICTIM (wired via drivePositionalApply's `onVictimResolved`),
     // leeching off THAT victim's already-role-scaled dealt damage — so origin victims contribute
     // full damage and covered victims contribute half automatically (the caller passes the
     // per-victim `damage`).
     //
-    // It reuses procStandingLeeches's ENTRY-LEVEL fold math (pct → raw, healModifier, heal-crit
-    // draw) but does its OWN pool application via the Task-1 parametrized closures
-    // (applyHealToTarget(raw, actor, repairSourceId) / grantShieldToTarget(raw, actor)), resolving
-    // each recipient's actor — so a covered enemy's leech can repair the right ally, not just the
-    // heal target. Since #367 task 7 it ALSO folds a term the aggregate has no equivalent of: the
-    // RECIPIENT'S incoming-repair channel, applied per `rid` inside the recipient loop (see the
-    // block at that line). So "reuses the fold math" describes the shared entry-level chain, not
-    // the whole of it — the two halves have drifted here on purpose, and divergence (3) in the
-    // aggregate's ⚠️ block is the record of why.
+    // The entry-level fold is pct → raw → healModifier → heal-crit draw; pool application goes
+    // through the Task-1 parametrized closures (applyHealToTarget(raw, actor, repairSourceId) /
+    // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
+    // leech can repair the right ally, not just the heal target. Since #367 task 7 it also folds
+    // the RECIPIENT'S incoming-repair channel, applied per `rid` inside the recipient loop (see the
+    // block at that line) — a term the deleted aggregate proc never had, which is part of why that
+    // proc was not worth keeping alive.
     //
-    // WHAT THE AGGREGATE `procStandingLeeches` NOW DOES (rewritten SP-4e fix wave 1 — the previous
-    // wording said it was left "UNTOUCHED", which stopped being true the moment SP-4e armed its
-    // selector arm, and cited a line range that had drifted twice over). It was touched: it gained
-    // a `'lowest-hp-ally'` arm that applies to the SELECTED recipient's own pool. Every other
-    // target flavour there keeps its long-standing anchor-only application — `'ally'` →
-    // `[healTarget.id]`, `'all-allies'` → the whole roster credited but only the anchor's pool
-    // touched. An earlier draft of this sentence said "widening those is Task 4's scope, not this
-    // rung's". Task 4 has SHIPPED and it did NOT widen them: it changed `recipientsFor` only, so
-    // both leech procs still answer `'ally'` with the anchor while `recipientsFor` answers it with
+    // TARGET FLAVOURS. `'lowest-hp-ally'` applies to the SELECTED recipient's own pool. `'ally'`
+    // answers with the player heal ANCHOR (`[healTarget.id]`) — deliberately NOT the same thing as
+    // a cast's `'ally'`, which Task 4 changed to mean the caster's support footprint via
+    // `recipientsFor`. That divergence is intentional; `recipientsFor` answers it with
     // the caster's support footprint. That divergence is deliberate and recorded as an OPEN
     // RESIDUAL at the `'ally'` arm below (with the three reasons it was not a drop-in); it belongs
     // to no scheduled task, so do not read this paragraph as a pending deletion. The tests that pin the
@@ -4641,7 +4458,8 @@ export function runCombat(rawInput: CombatEngineInput): {
     // RECIPIENT RESOLUTION: via `allRuntimesById` (NOT allActorsById) — the focus attacker is
     // keyed 'attacker', not its real id. `self` → the acting owner; `ally` → the heal target;
     // `all-allies` → every player id. A recipient with no resolvable runtime actor is credited but
-    // not pool-applied (mirrors procStandingLeeches's effect for the all-allies non-target case).
+    // not pool-applied (an all-allies leech credits every ally's raw but touches only the pools it
+    // can resolve).
     //
     // HEAL-CRIT-GATE CADENCE: this fires once per victim, so a heal-kind leech draws the owner's
     // `activeHealCritGate` ONCE PER VICTIM (an N-victim AoE makes N draws, in footprint order).
@@ -4695,11 +4513,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!owner) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
         for (const e of entries) {
-            // Restored to the aggregate `procStandingLeeches`'s gate verbatim (:3834). This copy
-            // kept only the first conjunct, which degenerates "a detonation-scoped leech skips
-            // non-detonation channels" into "skips everything" — the root cause of the whole
-            // four-instance leech-channel class. The parameter is REQUIRED, not optional: an
-            // optional one lets a new call site silently default and re-create the bug.
+            // BOTH conjuncts are load-bearing. This copy once kept only the first, which
+            // degenerates "a detonation-scoped leech skips non-detonation channels" into "skips
+            // everything" — the root cause of the whole four-instance leech-channel class. The
+            // `channel` parameter is REQUIRED, not optional: an optional one lets a new call site
+            // silently default and re-create the bug.
             if (e.scope === 'detonation' && channel !== 'detonation') continue;
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
@@ -4875,11 +4693,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     };
 
     // E2 Task 5: PER-VICTIM damage-TAKEN leech proc for the POSITIONAL enemy branch
-    // (enemy→player). The non-positional consumption block (~:4025) credits ONLY the heal
-    // target off the aggregate `damage`, gated by `!enemyPositional` — so on the positional
-    // path NO taken leech fired before E2 (each player victim took only its OWN per-victim AoE
-    // share, and the heal-target-only single-row credit would have been wrong). This proc
-    // restores it by running once per FOOTPRINT VICTIM (wired via drivePositionalApply's
+    // (enemy→player). There used to be a non-positional consumption block crediting ONLY the heal
+    // target off the aggregate `damage`, gated by `!enemyPositional` — so on the positional path NO
+    // taken leech fired before E2 (each player victim took only its OWN per-victim AoE share, and
+    // the heal-target-only single-row credit would have been wrong). E2 restored it here, and #374
+    // deleted that block: measurement showed it was never entered on either arm (heal or shield),
+    // and no shipped ship even has a heal-kind taken leech (Malvex and Quixilver both grant
+    // SHIELDS). THIS IS NOW THE ONLY TAKEN-LEECH PROC. It runs once per FOOTPRINT VICTIM (wired via
+    // drivePositionalApply's
     // `onVictimResolved` at the enemy site), procing THAT victim's OWN taken-leeches
     // (takenLeechesByOwner.get(victim.id)) off the per-victim `damage` it took, applying to the
     // victim's OWN pool via the Task-1 closures.
@@ -5254,12 +5075,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             return d;
         };
-        // Single damage-credit point: every channel write flows through here so standing
-        // leeches (damage-leech spec) can proc at credit time. With no leeches registered
-        // this is byte-identical to the bare dmg() writes (the goldens are the referee).
+        // Single damage-credit point: every channel write flows through here. It exists for that
+        // funnelling alone now — no leech rides this write any more. #374 deleted the aggregate
+        // `procStandingLeeches` this used to call, having shown it unreachable by construction
+        // (every route to `!positional`, where its two feeds sit, also zeroes the amount).
+        // `procStandingLeechesPerVictim` is the only standing-leech proc left, and it is wired at
+        // the positional apply sites instead.
         const creditDamage = (sourceId: string, channel: LeechChannel, amount: number): void => {
             dmg(sourceId)[channel] += amount;
-            procStandingLeeches(sourceId, channel, amount);
             input.__testTapCreditDamage?.(sourceId, channel, amount);
         };
         // ── SP-4b-2 D1: the DIRECT channel's positional twin ──────────────────────────────
@@ -11555,9 +11378,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // dereferences `tgt` throughout.
                             if (damage > 0 && tgt !== undefined) {
                                 // Phase-5 per-victim accounting notes (see detailed notes below): (1) the
-                                // damage-taken leech now fires PER VICTIM on the positional path too (E2 T5,
-                                // procTakenLeechesPerVictim at the enemy site); the non-positional block below
-                                // stays gated to `!enemyPositional` and heal-target-only; (2) since PR5b
+                                // damage-taken leech fires PER VICTIM (E2 T5, procTakenLeechesPerVictim at
+                                // the enemy site), which since #374 is the only taken-leech path — the
+                                // `!enemyPositional` heal-target-only block below was deleted; (2) since PR5b
                                 // sink.addIncoming keys each victim's AoE share into ITS OWN per-actor
                                 // bucket (the heal-target row is no longer inflated) — surfacing those other
                                 // per-actor buckets as result rows is the still-deferred symmetric-accounting
@@ -11717,8 +11540,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     );
                                 } else {
                                     // SP-U U2: the enemy's non-positional INCOMING-damage accounting tail
-                                    // (applyIncomingToTarget + the damage-taken heal/shield leech block + the
-                                    // single legacy `attacked` emit below) is a different model from the
+                                    // (applyIncomingToTarget + the single legacy `attacked` emit below; the
+                                    // damage-taken heal/shield leech block that used to sit here too was
+                                    // deleted by #374, measured never entered on either arm) is a different
+                                    // model from the
                                     // player→enemy outgoing credit — it is NOT extracted here; its unification
                                     // is deferred to U5 (real DPS enemy keystone), when the scalar sink dies.
                                     ({
@@ -11737,143 +11562,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     // §4.5: the non-positional firing hit is DIRECT-channel. The Stasis
                                     // break already fired via onHitBreakStasis inside runPlayerTurn
                                     // (before the ability debuffs), so no additional break call needed here.
-                                }
-
-                                // Damage-taken procs (per ATTACK, on the aggregate — spec §5): applied
-                                // AFTER this attack's drain so the proc never absorbs its own trigger.
-                                // raw scales from the FULL attack damage, not the HP portion. Quixilver's
-                                // punch-through gate (requiresHpDamage): shield present at attack start
-                                // AND HP damage dealt; Malvex is unconditional.
-                                // Per-attack (not per-hit): per-hit application would restructure the
-                                // shield-drain arithmetic and risk float-float golden churn; the accuracy
-                                // delta is below the fidelity of the flat enemy model — on the in-game
-                                // verify list (spec §5).
-                                // Same heal/shield fold as procStandingLeeches, but the recipient is fixed
-                                // to the heal target — the healing-accounting model is single-target. With
-                                // positional selection (Task C3) the enemy's HP/shield drain re-routes to the
-                                // selected player (`tgt`, above), but these damage-taken HEAL/SHIELD leech
-                                // procs still credit the heal target's accounting. Inert unless a player runs
-                                // a "when damaged, heal/shield" reactive (the heal target's takenLeechesByOwner
-                                // slice non-empty) — no current fixture does — so the legacy path stays
-                                // byte-identical. Retargeting the
-                                // single-target healing accounting to an arbitrary victim is out of scope for
-                                // Phase 2 (incoming-damage routing).
-                                // Barrier carve-out (decision #7): an attack FULLY BLOCKED by Barrier deals no
-                                // damage taken at all, so its damage-taken procs are skipped entirely — there is
-                                // nothing to leech from. (Distinct from a shield absorb, where the convention
-                                // still leeches off the full attack: a shield takes the hit, Barrier nullifies it.)
-                                //
-                                // POSITIONAL SPLIT (E2 T4/T5): taken-leeches are now collected PER OWNER
-                                // (takenLeechesByOwner, keyed by each owner's id), but the NON-positional
-                                // consumption HERE reads only the heal target's slice — the legacy single-row
-                                // healing-accounting model lands every enemy attack on the heal target, so its
-                                // values stay byte-identical. The POSITIONAL path no longer defers: each player
-                                // victim procs its OWN taken-leech off the damage IT took via
-                                // procTakenLeechesPerVictim (wired at the enemy drivePositionalApply site, with
-                                // the per-victim Barrier carve-out + requiresHpDamage gate). This block is
-                                // gated to `!enemyPositional` so the two paths never double-count. Inert on the
-                                // non-positional path unless a player runs a damage-taken reactive in healing
-                                // mode (no current fixture does → the heal target's slice is empty).
-                                // SP-U U5 (R6 decouple): guard the eager read — `healTarget` can be
-                                // undefined once enemy attackers no longer require a heal target
-                                // (future real DPS enemy). No heal target ⟹ no taken-leech slice ⟹
-                                // the block below is skipped. Byte-identical for the existing corpus
-                                // (healTarget always defined when an enemy attacker acts).
-                                const healTargetTakenLeeches = healTarget
-                                    ? (takenLeechesByOwner.get(healTarget.id) ?? [])
-                                    : [];
-                                if (
-                                    !enemyPositional &&
-                                    healTargetTakenLeeches.length > 0 &&
-                                    healingCtx &&
-                                    !barriered
-                                ) {
-                                    const rt = runtimesById.get(healTarget!.id);
-                                    for (const e of healTargetTakenLeeches) {
-                                        if (
-                                            e.requiresHpDamage &&
-                                            !(shieldBefore > 0 && hpDamage > 0)
-                                        ) {
-                                            continue;
-                                        }
-                                        let raw = damage * (e.pct / 100);
-                                        if (e.kind === 'heal' && rt) {
-                                            raw *= 1 + rt.healModifier / 100;
-                                            if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
-                                                raw *= 1 + rt.critDamage / 100;
-                                            }
-                                        }
-                                        if (e.kind === 'heal') {
-                                            // R10′ (#362): all four credits, gross included, sit
-                                            // BELOW the apply and are skipped on a reversal. This
-                                            // site always applies (to the heal target), so there
-                                            // is no unapplied third case here.
-                                            //
-                                            // ⚠️ UNEXERCISED (#362 fix-wave-1 review): a reviewer
-                                            // probe planted a throw immediately before this call
-                                            // (and the sibling aggregate-leech site above), ran the
-                                            // full suite (3801 tests), and neither fired. This
-                                            // non-positional taken-leech branch's R10′ credit move is
-                                            // corpus-DEAD — pre-existing, not introduced by this
-                                            // pass — so an unconditional double-credit bug here would
-                                            // be invisible to every test in the repository. Do not
-                                            // build fixtures for it now; this comment only records
-                                            // that the branch rests on review, not on coverage.
-                                            //
-                                            // STILL DEAD, re-measured 2026-08-23 (#367 task 7): an
-                                            // ungated `throw` here did not fire in any of the
-                                            // suite's 6,414 tests. Two hand-built attempts to force
-                                            // the `!enemyPositional` arm also failed — OMITTING
-                                            // `position` and `pattern` on the `enemyAttackers` input
-                                            // does NOT produce a non-positional enemy turn (the
-                                            // per-victim twin's probe fired in both attempts), so
-                                            // do not assume that is the way in.
-                                            //
-                                            // SECOND CONSEQUENCE, same cause: this block does NOT
-                                            // fold the heal target's INCOMING-REPAIR channel, while
-                                            // its positional twin `procTakenLeechesPerVictim` does
-                                            // since #367 task 7. So an `Inc. Repair Down` on the
-                                            // heal target would not reduce a taken-leech that
-                                            // arrived here. Left alone for the same reason as the
-                                            // credit move — unverifiable code is not worth changing
-                                            // — and it is the first thing to add if this arm is ever
-                                            // made reachable.
-                                            const applied = healingCtx.applyHealToTarget(
-                                                raw,
-                                                healTarget!,
-                                                healTarget!.id
-                                            );
-                                            if (!applied.reversed) {
-                                                healingCtx.credit(
-                                                    healTarget!.id,
-                                                    'directHeal',
-                                                    raw
-                                                );
-                                                healingCtx.credit(
-                                                    healTarget!.id,
-                                                    'effectiveHeal',
-                                                    applied.consumed
-                                                );
-                                                healingCtx.credit(
-                                                    healTarget!.id,
-                                                    'overheal',
-                                                    applied.overheal
-                                                );
-                                                // Recipient axis (SP-3b Task 7): the non-positional
-                                                // taken-leech always lands on the heal target.
-                                                creditLandedRepair(
-                                                    healTarget!.id,
-                                                    'directHeal',
-                                                    raw,
-                                                    applied.consumed,
-                                                    applied.overheal
-                                                );
-                                            }
-                                        } else {
-                                            healingCtx.credit(healTarget!.id, 'shield', raw);
-                                            healingCtx.grantShieldToTarget(raw);
-                                        }
-                                    }
                                 }
 
                                 // Per-hit `attacked` (Phase 4c PR 1): one event per hit of the enemy's fired
@@ -12395,6 +12083,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 round: r,
                 buffNames: selfBuffNamesForOwners(statusEngine, [a.id]),
                 debuffNames: enemyDebuffNamesForTarget(a),
+            });
+            // #372: the same tail instant, for the same reason — the Simulator must REPORT HP,
+            // not re-derive it. Every actor in `allActors` is read the same way, so this is
+            // team-symmetric by construction.
+            //
+            // DELIBERATELY HP ONLY. `healingReceived` still accumulates from events, and this
+            // snapshot could NOT fix it: the natural source, the round's per-recipient healing axis
+            // (`currentRoundRecipientHealing`), is PLAYER-SIDE ONLY. Measured — on the enemy-side
+            // arm of `reversedRepairs.engine.test.ts` that map is empty for every actor even when an
+            // enemy medic really repaired an enemy victim for 10 000. Substituting it here regressed
+            // the enemy side from correct to 0. See the follow-up issue; that axis has to become
+            // team-symmetric before this snapshot can carry repair too.
+            bus.emit({
+                type: 'hp-snapshot',
+                actorId: a.id,
+                round: r,
+                currentHp: a.currentHp,
+                maxHp: recipientMaxHp(a.id),
+                shieldPool: a.shieldPool,
             });
         }
 

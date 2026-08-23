@@ -136,11 +136,11 @@ export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGa
  * a single definition serves all six without a cycle. A value import of `playerTurn` from
  * `triggers` would be one, which is why this did not simply get exported where it stood.
  *
- * NOT a consumer, deliberately: the two leech heal-apply sites `engine.ts` did NOT change — the
- * aggregate `procStandingLeeches` and the non-positional heal-target taken-leech block. Both are
- * corpus-DEAD (re-measured 2026-08-23 with an ungated throw at each across the whole 6,414-test
- * suite; neither fired), so a fold there would be an unverifiable change to unexercised code. Each
- * site carries its own note; the aggregate's is additionally tripwired.
+ * HISTORICAL: two leech heal-apply sites in `engine.ts` were deliberately left unfolded here — the
+ * aggregate `procStandingLeeches` and the non-positional heal-target taken-leech block — because
+ * both were corpus-DEAD (measured with ungated probes across the whole suite; neither fired), so a
+ * fold there would have been an unverifiable change to unexercised code. #374 DELETED both, so
+ * there is no longer an unfolded site to account for.
  *
  * ⚠️ NO OUTGOING TWIN, DELIBERATELY. The outgoing channel (`Out. Repair Down`) is unfloored at
  * every one of its sites — `(1 + outgoingHealBuff / 100)` in both `playerTurn` cast arms and

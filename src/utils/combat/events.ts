@@ -640,6 +640,38 @@ export type CombatEvent =
               shieldPool: number;
           };
       }
+    /** LOG-ONLY: an end-of-round snapshot of one actor's REAL HP and shield pool. Emitted once
+     *  per actor at the round tail, in the same loop as
+     *  `status-snapshot` and under the same log-only contract: no `ReactiveStamp`, and no combat
+     *  listener subscribes to it.
+     *
+     *  WHY IT EXISTS (#372). `assembleBattleResult` used to DERIVE each ship's HP as
+     *  `(maxHp − hpLost + healed) / maxHp`, accumulating `healed` from `heal-performed.perTarget`.
+     *  `heal-performed` has exactly ONE production emit site (playerTurn.ts, the cast path), so
+     *  every other channel that restores HP was invisible to the Simulator's HP bar, its low-HP
+     *  colour, its aria-label and its "Healing received" figure — reactive repairs, every leech
+     *  site, and Cheat Death survival at 1 HP (which rendered as 0%). `hot-ticked` was added to
+     *  patch one instance of that hole; this event closes it for the BAR by reporting the engine's
+     *  own `currentHp` instead of re-deriving it.
+     *
+     *  AUTHORITATIVE for the actors it names — the assembler PREFERS it over its accumulation, the
+     *  same contract `status-snapshot` has. The derived path remains as a fallback purely for
+     *  hand-built event streams (see `battleAssemble.test.ts`), which name no actor here.
+     *
+     *  HP ONLY, deliberately. It does NOT carry the round's repair, so the row's `healingReceived`
+     *  is still event-derived and still blind to a leech. The natural source — the round's
+     *  per-recipient healing axis — is PLAYER-SIDE ONLY (measured: empty for every actor on the
+     *  enemy-side arm of `reversedRepairs.engine.test.ts`, even where an enemy medic really
+     *  repaired an enemy victim), so carrying it here regressed the enemy side from correct to 0.
+     *  That axis needs to become team-symmetric first. */
+    | {
+          type: 'hp-snapshot';
+          actorId: string;
+          round: number;
+          currentHp: number;
+          maxHp: number;
+          shieldPool: number;
+      }
     /** LOG-ONLY: an end-of-round snapshot of the statuses one actor actually still carries,
      *  read live from the StatusEngine (`statusNames`). Emitted once per actor at the round
      *  tail, after every decrement and drain has settled. Carries NO `ReactiveStamp`; NO combat
