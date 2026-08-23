@@ -54,6 +54,10 @@ import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 import { emptyPreFightModifiers } from '../preFight/types';
 import type { Position } from '../../../types/encounters';
+import { LOG_EVENT_TYPES } from '../../calculators/battleSimulator';
+import { buildCombatLog, type RosterEntry } from '../log/buildCombatLog';
+import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import type { CombatLogEntry } from '../log/types';
 
 const REVERSED = 'Reversed Repairs';
 /** A control run plants an unmodelled status name through the identical path, so every comparison
@@ -291,6 +295,9 @@ interface FixtureRun {
      *  can tell the healer from the debuff applier. */
     medicId: string;
     zosimosId: string;
+    /** The run's event stream folded by the REAL `buildCombatLog`, flattened to every entry
+     *  (reactions included). R11's row is only a log row if this is where it shows up. */
+    logEntries: CombatLogEntry[];
 }
 
 /**
@@ -336,14 +343,14 @@ function runFixture(opts: FixtureOpts): FixtureRun {
 
     const bus = createEventBus();
     const events: CombatEvent[] = [];
-    // A single catch-all subscription would need one `bus.on` per event type; these three are the
-    // only channels any assertion below reads, and collecting them by name keeps each test's filter
-    // explicit about what it is looking for.
-    for (const type of [
-        'ship-destroyed',
-        'cheat-death-activated',
-        'heal-performed',
-    ] as const) {
+    // Subscribes from `LOG_EVENT_TYPES` — the PRODUCTION list `simulateBattle` itself subscribes
+    // from — rather than a hand-written set, deliberately. `buildCombatLog` has a handler keyed on
+    // each type, but the bus only subscribes from that list, so a log-only twin omitted from it is
+    // dead code and its row is invisible in the real app. Reading the production list here means
+    // the R11 log-row tests below would fail if `reversed-repair-log` were left out of it.
+    // `cheat-death-activated` is the one extra: it is a REAL combat event (Yazid listens to it),
+    // not a log twin, so it is deliberately absent from LOG_EVENT_TYPES.
+    for (const type of [...LOG_EVENT_TYPES, 'cheat-death-activated'] as const) {
         bus.on(type, (e: CombatEvent) => events.push(e));
     }
 
@@ -445,14 +452,29 @@ function runFixture(opts: FixtureOpts): FixtureRun {
 
     const result = runCombat(input);
 
+    const medicId = opts.victimSide === 'player' ? FOCUS_ID : MEDIC_ID;
+    const zosimosId = opts.victimSide === 'player' ? ZOSIMOS_ID : FOCUS_ID;
+    // Every id in the run, on the side it really stands on — buildCombatLog drops any actor the
+    // roster does not name, so an incomplete roster here would silently swallow the row under test.
+    const foeSide: 'player' | 'enemy' = opts.victimSide === 'player' ? 'enemy' : 'player';
+    const roster: RosterEntry[] = [
+        { actorId: medicId, side: opts.victimSide, name: 'Medic' },
+        { actorId: VICTIM_ID, side: opts.victimSide, name: 'Victim' },
+        { actorId: zosimosId, side: foeSide, name: 'Zosimos' },
+        { actorId: PROTECTOR_ID, side: opts.victimSide, name: 'Protector' },
+    ];
+
     return {
         victimHp: victim!.currentHp,
         victimShield: victim!.shieldPool,
         protectorHp: protector?.currentHp ?? 0,
         events,
         result,
-        medicId: opts.victimSide === 'player' ? FOCUS_ID : MEDIC_ID,
-        zosimosId: opts.victimSide === 'player' ? ZOSIMOS_ID : FOCUS_ID,
+        medicId,
+        zosimosId,
+        logEntries: flattenCombatLog({
+            combatLog: buildCombatLog(events, roster, new Map()),
+        }),
     };
 }
 
@@ -733,15 +755,20 @@ describe('R6 — Inc. Repair Down II halves the repair, and the halved amount is
     }
 });
 
-// ══ R7 ═══════════════════════════════════════════════════════════════════════════════════════
-// "It can kill, and the kill is credited to the HEALER whose repair was reversed — never to the
-// Zosimos that applied the debuff." The two carry different ids in both arms, so the assertion
-// can tell them apart.
+// ══ R7′ ══════════════════════════════════════════════════════════════════════════════════════
+// "It can kill, and the damage AND the kill belong to the DEBUFF'S APPLIER — the Zosimos that
+// inflicted the status — not to the healer whose repair was reversed." Attributed the way a DoT's
+// damage and kills belong to whoever applied the DoT.
+//
+// ⚠️ THIS INVERTS THE ORIGINAL RULING, which named the healer. The owner retracted that. The
+// fixture's medic and Zosimos carry deliberately DIFFERENT ids in BOTH arms, which is the whole
+// reason these assertions can tell them apart — a fixture where they coincided would pass either
+// way. Every arm asserts the applier IS named and the healer is NOT.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-describe('R7 — a lethal reversal credits the healer, not the debuff applier', () => {
+describe('R7′ — a lethal reversal credits the debuff applier, never the healer', () => {
     for (const victimSide of SIDES) {
-        it(`${victimSide}-side victim: ship-destroyed names the medic as killer`, () => {
+        it(`${victimSide}-side victim: ship-destroyed names Zosimos as killer, not the medic`, () => {
             const LETHAL_START = RAW / 2; // strictly less than the repair → the burn is lethal
             const { reversed, control } = bothArms({
                 victimSide,
@@ -759,13 +786,40 @@ describe('R7 — a lethal reversal credits the healer, not the debuff applier', 
             const kills = destroyed(reversed.events).filter((e) => e.actorId === VICTIM_ID);
             expect(kills).toHaveLength(1);
             expect(reversed.victimHp).toBe(0);
-            // The healer, explicitly not the applier. The two ids differ in both arms.
+            // The applier, explicitly not the healer. The two ids differ in both arms.
             expect(reversed.medicId).not.toBe(reversed.zosimosId);
-            expect(kills[0].killerId).toBe(reversed.medicId);
-            expect(kills[0].killerId).not.toBe(reversed.zosimosId);
+            expect(kills[0].killerId).toBe(reversed.zosimosId);
+            expect(kills[0].killerId).not.toBe(reversed.medicId);
             // A reversed repair is not a hit: the consumables that spend on a direct hit must not
-            // see one.
+            // see one — and `triggers.ts` gates the killer-targeted on-destroyed reactions
+            // (Faust's purge, Martyrdom, Paracelsus) on this flag, so a `true` here would make
+            // them spend on a kill their owner never chose.
             expect(kills[0].byDirectDamage).toBeFalsy();
+        });
+
+        // The DAMAGE half of R7′, which the kill assertion above cannot reach: a NON-lethal
+        // reversal books its burn on the applier's dealt axis and on the victim's taken axis.
+        it(`${victimSide}-side victim: the burn books as the applier's damage dealt`, () => {
+            const START = VICTIM_MAX_HP / 2; // deficit ≫ RAW ⇒ the burn is survivable
+            const { reversed, control } = bothArms({ victimSide, victimStartHp: START });
+
+            const dealtBy = (run: FixtureRun, attackerId: string) =>
+                run.result.rounds[0].perTargetDealt?.[attackerId]?.[VICTIM_ID] ?? 0;
+            const takenBy = (run: FixtureRun) =>
+                run.result.rounds[0].perTargetDamage?.[VICTIM_ID] ?? 0;
+
+            // NON-VACUITY: without the status the same fixture books NOTHING on either axis — so
+            // the numbers below cannot be an artefact of some other damage in the fixture.
+            expect(dealtBy(control, control.zosimosId)).toBe(0);
+            expect(takenBy(control)).toBe(0);
+
+            // The burn really happened…
+            expect(START - reversed.victimHp).toBe(RAW);
+            // …and it is booked, in full, on the APPLIER.
+            expect(dealtBy(reversed, reversed.zosimosId)).toBe(RAW);
+            expect(takenBy(reversed)).toBe(RAW);
+            // …and NOT on the healer. This is the assertion the retracted ruling would fail.
+            expect(dealtBy(reversed, reversed.medicId)).toBe(0);
         });
     }
 });
@@ -823,18 +877,24 @@ describe('R8 — Cheat Death intercepts a lethal reversal and is spent by it', (
     }
 });
 
-// ══ R10 ══════════════════════════════════════════════════════════════════════════════════════
-// "Surfaces as OVERHEALING for the healer. Its healing total shows the repair fully wasted; its
-// damage-dealt total is not credited. No new report field." Delivered by returning the EXISTING
-// `{ consumed: 0, overheal: raw }` shape, which every call site already books that way.
+// ══ R10′ ═════════════════════════════════════════════════════════════════════════════════════
+// "A reversed repair books NOTHING on the healer." Repairs cast 0, effective healing 0,
+// overhealing 0. Owner's words: "we don't need to book it as anything other than damage from a
+// debuff" — and that damage is R7′'s, on the applier.
+//
+// ⚠️ THIS REPLACES A RETRACTED RULING that surfaced the reversal as the healer's OVERHEALING.
+// All three buckets are asserted, not just `overheal`: the gross `directHeal` credit is written by
+// the CALL SITE, above the apply, and the closure cannot retract it — so a build that returned
+// `{consumed: 0, overheal: 0}` and changed nothing else would pass an overheal-only assertion
+// while still crediting the medic the full repair as repairs cast.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
-describe('R10 — a reversed repair books as the healer’s overheal, and as nobody’s damage', () => {
+describe('R10′ — a reversed repair books nothing at all on the healer', () => {
     // The source-axis buckets exist only for a PLAYER healer: an enemy heal is `healEventOnly`
     // (E5 §4.1) and contributes nothing to the healing report. The enemy arm asserts the same
     // ruling through `heal-performed.perTarget[].overheal`, which IS team-symmetric — and both
-    // arms assert the HP and damage halves.
-    it('player-side victim: the healer’s overheal gains RAW and its effectiveHeal gains 0', () => {
+    // arms assert the HP half.
+    it('player-side victim: directHeal, effectiveHeal and overheal are ALL zero', () => {
         const DEFICIT_START = VICTIM_MAX_HP / 2; // deficit ≫ RAW, so the control fully CONSUMES
         const { reversed, control } = bothArms({
             victimSide: 'player',
@@ -844,49 +904,36 @@ describe('R10 — a reversed repair books as the healer’s overheal, and as nob
         const controlRound = control.result.healing!.rounds[0];
         const reversedRound = reversed.result.healing!.rounds[0];
 
-        // NON-VACUITY: with a real deficit the control books the OPPOSITE split — all effective,
-        // no overheal. On a full-HP victim both runs would book `overheal: RAW` and the assertion
-        // could not fail.
+        // NON-VACUITY: the identical fixture DOES book on the medic without the status — the full
+        // repair as gross, and all of it effective. Every zero below is measured against these.
+        expect(controlRound.perActor.get(control.medicId)!.directHeal).toBe(RAW);
         expect(controlRound.perActor.get(control.medicId)!.effectiveHeal).toBe(RAW);
         expect(controlRound.perActor.get(control.medicId)!.overheal).toBe(0);
+        expect(controlRound.perRecipient.get(VICTIM_ID)!.directHeal).toBe(RAW);
 
-        expect(reversedRound.perActor.get(reversed.medicId)!.effectiveHeal).toBe(0);
-        expect(reversedRound.perActor.get(reversed.medicId)!.overheal).toBe(RAW);
-        // The raw = effective + overheal identity still holds.
-        expect(reversedRound.perActor.get(reversed.medicId)!.directHeal).toBe(RAW);
+        // R10′: nothing. The medic may have no entry at all (nothing was ever credited to it), so
+        // read through an optional chain rather than `!` — a `toBe(0)` on a missing entry would
+        // throw rather than assert.
+        const medic = reversedRound.perActor.get(reversed.medicId);
+        expect(medic?.directHeal ?? 0).toBe(0);
+        expect(medic?.effectiveHeal ?? 0).toBe(0);
+        expect(medic?.overheal ?? 0).toBe(0);
 
-        // The recipient axis agrees.
-        expect(reversedRound.perRecipient.get(VICTIM_ID)!.overheal).toBe(RAW);
-        expect(reversedRound.perRecipient.get(VICTIM_ID)!.effectiveHeal).toBe(0);
+        // The recipient axis agrees: the victim was not repaired, so it books nothing either.
+        const recipient = reversedRound.perRecipient.get(VICTIM_ID);
+        expect(recipient?.directHeal ?? 0).toBe(0);
+        expect(recipient?.effectiveHeal ?? 0).toBe(0);
+        expect(recipient?.overheal ?? 0).toBe(0);
     });
 
     for (const victimSide of SIDES) {
-        it(`${victimSide}-side victim: the burn is credited as nobody’s damage`, () => {
+        it(`${victimSide}-side victim: heal-performed reports NO over-repair for the reversed repair`, () => {
             const { reversed, control } = bothArms({
                 victimSide,
-                victimStartHp: VICTIM_MAX_HP / 2,
-                // A real attack, so every damage channel this asserts on is demonstrably non-zero
-                // in BOTH runs — "no damage credited" over an all-zero board is vacuous.
-                zosimosAttack: 20_000,
-            });
-
-            const dmgOf = (run: FixtureRun) => run.result.rounds[0].perTargetDamage?.[VICTIM_ID] ?? 0;
-            const intakeOf = (run: FixtureRun) =>
-                run.result.rounds[0].perActorIncoming?.[VICTIM_ID]?.incoming ?? 0;
-
-            // The channels are live.
-            expect(dmgOf(control)).toBeGreaterThan(0);
-            expect(intakeOf(control)).toBeGreaterThan(0);
-            // …and the reversal added nothing to either, while unmistakably moving HP.
-            expect(dmgOf(reversed)).toBe(dmgOf(control));
-            expect(intakeOf(reversed)).toBe(intakeOf(control));
-            expect(control.victimHp - reversed.victimHp).toBe(2 * RAW);
-        });
-
-        it(`${victimSide}-side victim: heal-performed reports the whole repair as over-repair`, () => {
-            const { reversed, control } = bothArms({
-                victimSide,
-                victimStartHp: VICTIM_MAX_HP / 2,
+                // FULL HP: the control's repair is entirely WASTED here, so it reports the whole
+                // RAW as over-repair. That is what makes the reversed arm's absent `overheal`
+                // falsifiable — on a deficit fixture both arms would report none.
+                victimStartHp: VICTIM_MAX_HP,
             });
 
             const perTargetOf = (run: FixtureRun) =>
@@ -895,16 +942,82 @@ describe('R10 — a reversed repair books as the healer’s overheal, and as nob
                     .flatMap((e) => e.perTarget ?? [])
                     .filter((t) => t.targetId === VICTIM_ID);
 
-            // NON-VACUITY: the control's repair lands entirely, so it reports NO over-repair.
+            // NON-VACUITY: the control's repair is fully wasted, so it DOES report over-repair.
             const controlRows = perTargetOf(control);
             expect(controlRows).toHaveLength(1);
             expect(controlRows[0].amount).toBe(RAW);
-            expect(controlRows[0].overheal ?? 0).toBe(0);
+            expect(controlRows[0].overheal).toBe(RAW);
 
+            // The reversed repair is not over-repair — it is damage. The row still exists (the
+            // cast happened, and R9's charge passive rides it) but carries no over-repair.
             const reversedRows = perTargetOf(reversed);
             expect(reversedRows).toHaveLength(1);
             expect(reversedRows[0].amount).toBe(RAW);
-            expect(reversedRows[0].overheal).toBe(RAW);
+            expect(reversedRows[0].overheal).toBeUndefined();
+        });
+    }
+});
+
+// ══ R11 ══════════════════════════════════════════════════════════════════════════════════════
+// "A reversal writes its own combat-log line, including when it does not kill."
+//
+// The NON-LETHAL case is the one that matters: a lethal reversal at least produces a death row, so
+// something in the log moves. A non-lethal one previously emitted NOTHING — the player watched a
+// repair land, achieve nothing, and HP drop, with no line connecting the three.
+//
+// These assertions run through the REAL `buildCombatLog` over the REAL event stream, subscribed
+// from the production `LOG_EVENT_TYPES` list. An event nothing displays is not a log line, so a
+// bus-level `expect(events).toContainEqual(...)` would not have been enough: it would pass with
+// the type missing from LOG_EVENT_TYPES, or with no handler in buildCombatLog, in both of which
+// cases the row is invisible in the app.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('R11 — every reversal writes a combat-log row, lethal or not', () => {
+    const reversalRows = (run: FixtureRun) =>
+        run.logEntries.filter((e) => e.kind === 'reversed-repair');
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: a NON-lethal reversal produces one row naming the applier, the victim and the amount`, () => {
+            const START = VICTIM_MAX_HP / 2; // deficit ≫ RAW ⇒ survivable
+            const { reversed, control } = bothArms({ victimSide, victimStartHp: START });
+
+            // NON-VACUITY: the same fixture without the status writes no such row — so the row is
+            // the reversal's, not something every run of this fixture produces.
+            expect(reversalRows(control)).toHaveLength(0);
+            // …and the reversal really was non-lethal (the death row is what would otherwise have
+            // carried the story).
+            expect(reversed.victimHp).toBe(START - RAW);
+            expect(destroyed(reversed.events).filter((e) => e.actorId === VICTIM_ID)).toHaveLength(
+                0
+            );
+
+            const rows = reversalRows(reversed);
+            expect(rows).toHaveLength(1);
+            // Booked to the APPLIER (matching R7′'s damage credit), with the burned ship as the
+            // target and the burn as its amount.
+            expect(rows[0].actorId).toBe(reversed.zosimosId);
+            expect(rows[0].actorId).not.toBe(reversed.medicId);
+            expect(rows[0].targets).toEqual([{ targetId: VICTIM_ID, amount: RAW }]);
+        });
+
+        it(`${victimSide}-side victim: a LETHAL reversal writes the row too, before the death row`, () => {
+            const LETHAL_START = RAW / 2;
+            const run = runFixture({
+                victimSide,
+                statusName: REVERSED,
+                victimStartHp: LETHAL_START,
+            });
+
+            expect(run.victimHp).toBe(0);
+            const rows = reversalRows(run);
+            expect(rows).toHaveLength(1);
+            expect(rows[0].actorId).toBe(run.zosimosId);
+
+            // ORDER: the burn is the cause, the death is the consequence — the log must read that
+            // way. Both are rank-2 consequence rows, so they keep emission order.
+            const kinds = run.logEntries.map((e) => e.kind);
+            expect(kinds).toContain('death');
+            expect(kinds.indexOf('reversed-repair')).toBeLessThan(kinds.indexOf('death'));
         });
     }
 });

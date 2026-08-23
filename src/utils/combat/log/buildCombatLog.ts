@@ -64,6 +64,9 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     'shield-destroyed': 2,
     'cheat-death': 2,
     'buff-expired': 2,
+    // A consequence of the repair row above it (#362 R11), so it must sort AFTER the `heal` entry
+    // that triggered it — otherwise the log reads "repairs reversed" before the repair.
+    'reversed-repair': 2,
 };
 
 /** Stable rank sort of one turn's top-level entries. Stable, so entries sharing a rank keep their
@@ -650,6 +653,21 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             kind: 'shield-destroyed',
             actorId: e.victimId,
             targets: [{ targetId: e.victimId }],
+            reactions: [],
+        };
+        ctx.attachEntry(entry);
+    },
+
+    // #362 R11. Booked to the debuff's APPLIER — the same actor the burn's damage and kill are
+    // credited to — with the burned ship as the target, the source→target shape `debuff` and
+    // `dot-applied` already use. A scheduled (hand-picked) Reversed Repairs has no applier, so the
+    // entry falls back to the victim and renders as the plain self-line.
+    'reversed-repair-log': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const entry: CombatLogEntry = {
+            kind: 'reversed-repair',
+            actorId: e.applierId ?? e.victimId,
+            targets: [{ targetId: e.victimId, amount: e.amount }],
             reactions: [],
         };
         ctx.attachEntry(entry);

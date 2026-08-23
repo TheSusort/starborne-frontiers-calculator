@@ -17,9 +17,23 @@ import type { StatusEngine } from './statusEngine';
 export const REVERSED_REPAIRS = 'Reversed Repairs';
 
 /**
- * Whether this victim's incoming repairs are reversed.
+ * The carrier state read off a victim, or `undefined` when its repairs are not reversed.
  *
- * Boolean, not a magnitude: reversal is not a scaling factor and stacks mean nothing here.
+ * NOT a magnitude: reversal is not a scaling factor and stacks mean nothing here. What the state
+ * carries instead is `applierId` — the actor that inflicted the status — because R7′ books the
+ * burn's damage AND its kill on the APPLIER, the way a DoT's damage and kills belong to whoever
+ * applied the DoT. (The retracted R7 booked them on the healer whose repair was reversed; see the
+ * reversal branch in `engine.ts` for why that is wrong and must not be restored.)
+ *
+ * `applierId: undefined` is a LEGITIMATE state, not an error: a hand-selected debuff in the
+ * calculator's enemy-debuff picker (the scheduled arm below) was never cast by anyone, so there is
+ * nobody to credit. Callers must skip the credit rather than fall back to the healer — that
+ * fallback is precisely the attribution R7′ rejects.
+ */
+export type ReversedRepairsState = { applierId: string | undefined } | undefined;
+
+/**
+ * Whether this victim's incoming repairs are reversed, and by whom.
  *
  * Reads BOTH enemy-side channels, but only the TIMED arm is unconditionally per-victim, and only
  * that arm is safe on both teams:
@@ -53,16 +67,24 @@ export const REVERSED_REPAIRS = 'Reversed Repairs';
  * fundamentally different keying, and collapsing them either breaks Zosimos's cross-team debuff or
  * reopens the enemy-picker leak.
  */
-export function hasReversedRepairs(
+export function reversedRepairsOn(
     statusEngine: StatusEngine,
     victim: { id: string; side: 'player' | 'enemy' }
-): boolean {
+): ReversedRepairsState {
+    // TIMED arm — `casterId` is "the actor that CAST this ability" (statusEngine.ts), stamped at
+    // application. That is the Zosimos R7′ wants. It can still be absent on a timed entry whose
+    // registered status omitted it (fixtures), which the `string | undefined` state models
+    // honestly rather than papering over with a sentinel.
     const timed = statusEngine
         .timedAbilityStatuses('enemy', undefined, victim.id)
-        .some((s) => s.active.buffName === REVERSED_REPAIRS);
-    if (timed) return true;
-    if (victim.side !== 'enemy') return false;
-    return statusEngine
+        .find((s) => s.active.buffName === REVERSED_REPAIRS);
+    if (timed) return { applierId: timed.casterId };
+    if (victim.side !== 'enemy') return undefined;
+    const scheduled = statusEngine
         .snapshot(undefined, victim.id)
         .activeEnemyDebuffs.some((b) => b.buffName === REVERSED_REPAIRS);
+    // SCHEDULED arm — no caster, ever. `SelectedGameBuff` carries no applier identity, and there
+    // genuinely is none: the user ticked a box. `applierId: undefined` → no damage credit and no
+    // killer on the death event (`recordDestroyed` already tolerates an undefined `killerId`).
+    return scheduled ? { applierId: undefined } : undefined;
 }

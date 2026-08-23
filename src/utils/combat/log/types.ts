@@ -51,7 +51,10 @@ export type CombatLogEntryKind =
     | 'buff-expired'
     | 'debuff-resisted'
     | 'shield-destroyed'
-    | 'cheat-death';
+    | 'cheat-death'
+    /** #362 R11: an incoming repair was turned into raw HP damage on its recipient. Booked to the
+     *  DEBUFF'S APPLIER (the actor credited with the damage), with the burned ship in `targets`. */
+    | 'reversed-repair';
 
 export interface CombatLogEntry {
     kind: CombatLogEntryKind;

@@ -11,15 +11,21 @@
  * input; and a wrong hand-built shape yields a vacuous red that turns green once you "fix"
  * production to match the mistake.
  *
- * `hasReversedRepairs` takes the victim's `{ id, side }` rather than a bare id (#362 fix-wave-1):
+ * `reversedRepairsOn` takes the victim's `{ id, side }` rather than a bare id (#362 fix-wave-1):
  * the scheduled channel is a single global list with no per-victim keying at all, so a bare id
  * gave callers no way to stop it leaking across teams. See `reversedRepairs.ts` for the full
  * explanation of why the gate lives on `side` and only on the scheduled arm.
+ *
+ * TASK 5B: the read returns a STATE (`{ applierId }`) rather than a boolean, because R7′ books the
+ * burn's damage and its kill on the actor that inflicted the status. The scheduled arm — a debuff
+ * hand-ticked in the buff picker — was cast by nobody, so its `applierId` is `undefined`. That is a
+ * real, expected state, and it is asserted here rather than merely tolerated: a future change that
+ * started inventing a sentinel applier for it would go red.
  */
 import { describe, it, expect } from 'vitest';
 import { createStatusEngine } from '../statusEngine';
 import type { SelectedGameBuff } from '../../../types/calculator';
-import { hasReversedRepairs, REVERSED_REPAIRS } from '../reversedRepairs';
+import { reversedRepairsOn, REVERSED_REPAIRS } from '../reversedRepairs';
 
 /** The calculator buff-picker's exact output shape: no skillSource and no skillDuration, which
  *  the status engine classifies as ALWAYS-ACTIVE (the scheduled channel). Copied from
@@ -32,10 +38,10 @@ const scheduled = (buffName: string): SelectedGameBuff => ({
     isStackable: false,
 });
 
-describe('hasReversedRepairs', () => {
-    it('is false on a clean actor', () => {
+describe('reversedRepairsOn', () => {
+    it('is undefined on a clean actor', () => {
         const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
-        expect(hasReversedRepairs(se, { id: 'victim-1', side: 'enemy' })).toBe(false);
+        expect(reversedRepairsOn(se, { id: 'victim-1', side: 'enemy' })).toBeUndefined();
     });
 
     it('reads the scheduled channel for an enemy-side victim (a hand-selected debuff in the simulator)', () => {
@@ -43,7 +49,12 @@ describe('hasReversedRepairs', () => {
             selfBuffs: [],
             enemyDebuffs: [scheduled(REVERSED_REPAIRS)],
         });
-        expect(hasReversedRepairs(se, { id: 'victim-1', side: 'enemy' })).toBe(true);
+        // CARRYING, with NO applier: a hand-selected debuff was never cast by anyone. The state
+        // must be present (so the reversal fires) AND carry `applierId: undefined` (so nothing is
+        // credited and the death event names no killer).
+        expect(reversedRepairsOn(se, { id: 'victim-1', side: 'enemy' })).toEqual({
+            applierId: undefined,
+        });
     });
 
     // Regression pin (#362 fix-wave-1): `enemyAlwaysSnap` (statusEngine.ts) builds from a single
@@ -55,8 +66,10 @@ describe('hasReversedRepairs', () => {
             selfBuffs: [],
             enemyDebuffs: [scheduled(REVERSED_REPAIRS)],
         });
-        expect(hasReversedRepairs(se, { id: 'player-3', side: 'player' })).toBe(false);
-        expect(hasReversedRepairs(se, { id: 'enemy-7', side: 'enemy' })).toBe(true);
+        expect(reversedRepairsOn(se, { id: 'player-3', side: 'player' })).toBeUndefined();
+        expect(reversedRepairsOn(se, { id: 'enemy-7', side: 'enemy' })).toEqual({
+            applierId: undefined,
+        });
     });
 
     it('does not confuse it with the other repair-named statuses', () => {
@@ -64,6 +77,6 @@ describe('hasReversedRepairs', () => {
             selfBuffs: [],
             enemyDebuffs: [scheduled('Inc. Repair Down II'), scheduled('Block Repair')],
         });
-        expect(hasReversedRepairs(se, { id: 'victim-1', side: 'enemy' })).toBe(false);
+        expect(reversedRepairsOn(se, { id: 'victim-1', side: 'enemy' })).toBeUndefined();
     });
 });

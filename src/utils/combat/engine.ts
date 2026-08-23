@@ -90,7 +90,7 @@ import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { resolveLethalHp } from './lethalHp';
-import { hasReversedRepairs } from './reversedRepairs';
+import { reversedRepairsOn } from './reversedRepairs';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -3509,6 +3509,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // same buffer. Default is a direct emit: a reversal that somehow fires before the first turn
     // installs one still logs, it just cannot be deferred (there is no window open to defer into).
     let emitConsequenceLog: (ev: CombatEvent) => void = (ev) => bus.emit(ev);
+    // Installed per ROUND (below, next to `creditDealt`), for the same reason and by the same
+    // pattern as `emitConsequenceLog` above: the reversal branch inside `applyHealToTarget` has to
+    // book its burn on the round accumulators (`roundPerTargetDamage` / `roundPerTargetDealt`),
+    // and those are declared fresh each round BELOW this ctx. Read through the binding at call
+    // time; never copy its value into the healingCtx object literal.
+    //
+    // Default is a NO-OP, unlike emitConsequenceLog's default direct-emit: a reversal firing before
+    // the first round installed one has no round accumulator to book into, so there is nothing
+    // meaningful to fall back to.
+    let bookReversalDamage: (
+        victimId: string,
+        applierId: string | undefined,
+        amount: number
+    ) => void = () => {};
     // The SHARED healing ctx (built once; closures capture the live target + currentRoundHealing
     // through the `let`/the target reference). Constructed whenever `healTarget` is set — which
     // includes `'battle'` runs (battle mode anchors `healTarget` to the focus actor above), NOT
@@ -3538,13 +3552,21 @@ export function runCombat(rawInput: CombatEngineInput): {
               // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
-              // `repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
-              // for a cast repair, the holder for a HoT/leech. Read below for the R7 reversal-kill
-              // credit; every call site is required to supply it.
-              applyHealToTarget: (raw, victim, repairSourceId) => {
+              // `_repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
+              // for a cast repair, the applier for a HoT tick, the leeching actor for a leech.
+              // Every call site is still REQUIRED to supply it (the parameter is not optional, so
+              // `tsc` reports an arity error at any site that forgets).
+              //
+              // ⚠️ IT CURRENTLY HAS NO READER. Its one consumer was the retracted R7, which
+              // credited a reversal KILL to the repair's source; R7′ moved that credit to the
+              // debuff's applier, so nothing in this closure consults it any more. Underscored to
+              // say so out loud rather than leaving a silently-unused argument. Keep it or delete
+              // it deliberately — but do NOT quietly wire it back into the reversal, which is the
+              // attribution the owner rejected.
+              applyHealToTarget: (raw, victim, _repairSourceId) => {
                   // Dead target → all overheal, and NO reversal: a corpse takes no reversed repair.
                   if (victim.currentHp <= 0) {
-                      return { consumed: 0, overheal: raw };
+                      return { reversed: false, consumed: 0, overheal: raw };
                   }
                   // ── #362 Reversed Repairs ────────────────────────────────────────────────
                   // "Incoming repairs damage this unit instead" (Zosimos's charged skill).
@@ -3561,7 +3583,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // R2 ("every repair, any source") is satisfied by position too: cast repairs,
                   // HoT ticks, leech self-repairs and reactive repairs all funnel through here.
                   // Shield GRANTS are not repairs and go through grantShieldToTarget, untouched.
-                  if (hasReversedRepairs(statusEngine, victim)) {
+                  const reversal = reversedRepairsOn(statusEngine, victim);
+                  if (reversal) {
                       // R1: a raw HP burn at face value. No shield drain, no Protection redirect,
                       // no defence mitigation, no Barrier — `applyVictimDamage` owns all four and
                       // is deliberately NOT entered. R5 ("nothing reacts") follows from the same
@@ -3571,13 +3594,38 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // `applyVictimDamage` call site, gated on ITS `'destroyed'` outcome, and
                       // this path deliberately has no such block.
                       victim.currentHp = Math.max(0, victim.currentHp - raw);
-                      // R7: the kill belongs to the HEALER whose repair was reversed, not to the
-                      // Zosimos that applied the debuff — hence `repairSourceId`, not
-                      // `actingActorId`. `byDirectDamage: false` because a reversed repair is not
-                      // a hit: the consumables that spend on a direct hit (Barrier charges,
-                      // Ironclad's nth-hit counter) must not see one. R8: Cheat Death still
-                      // intercepts, through the ONE shared death path the damage funnel uses —
-                      // and it is the only survival layer that reaches a reversed repair.
+                      // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
+                      // The damage AND the kill belong to the Zosimos that inflicted the status,
+                      // exactly the way a DoT's damage and kills belong to whoever applied the DoT.
+                      // `repairSourceId` (the healer whose repair was reversed) is deliberately NOT
+                      // used here.
+                      //
+                      // ⚠️ AN EARLIER RULING SAID THE OPPOSITE and was RETRACTED by the owner. The
+                      // healer did not choose this; it cast a repair. Crediting it damage — and a
+                      // kill on its own ally — would put an enemy's debuff on a support ship's
+                      // damage line and, worse, name a medic as its own team-mate's killer. If you
+                      // are here because "the healer caused it", that is the argument that was
+                      // already rejected: do not flip it back.
+                      //
+                      // `applierId` is undefined when the status came from the scheduled channel
+                      // (a debuff hand-ticked in the calculator's enemy-debuff picker was never
+                      // cast by anyone). NO FALLBACK TO THE HEALER — that is the very attribution
+                      // R7′ rejects. No credit, and `killerId: undefined` on the death event, which
+                      // `recordDestroyed` already tolerates (a DoT-tick batch has no killer either).
+                      //
+                      // `byDirectDamage: false` is REQUIRED, not merely defensible: `triggers.ts`
+                      // gates the killer-targeted on-destroyed reactions (Faust's purge,
+                      // Martyrdom, Paracelsus) on it, so a `true` here would make those triggers
+                      // spend on a kill their owner never chose. It is also correct on its own
+                      // terms — a reversed repair is not a hit, so the consumables that spend on a
+                      // direct hit (Barrier charges, Ironclad's nth-hit counter) must not see one.
+                      //
+                      // R8: Cheat Death still intercepts, through the ONE shared death path the
+                      // damage funnel uses — the only survival layer that reaches a reversed repair.
+                      //
+                      // The burn's numeric booking (R7′'s damage half) mirrors what the DoT tick
+                      // path does — victim-keyed intake plus a per-applier dealt credit — and is
+                      // written by `bookReversalDamage`, installed per round below.
                       //
                       // `currentRound`, `actingActorId` and `emitConsequenceLog` are engine-scope
                       // `let`s declared BELOW this ctx. Reading them at CALL time is safe (the run
@@ -3590,6 +3638,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // exactly this reason ("so closures defined once outside the loop can stamp
                       // the correct round"), and the charge-changed emitters just above already
                       // read it the same way.
+                      bookReversalDamage(victim.id, reversal.applierId, raw);
+                      // R11: every reversal writes its own combat-log row, lethal or not. Without
+                      // it a non-lethal reversal emits NOTHING — the player watches a repair land,
+                      // achieve nothing, and HP drop, with no line connecting the three. Routed
+                      // through `emitConsequenceLog` so a reversal firing inside a deferral window
+                      // (a reactive repair during a positional apply does exactly that) nests under
+                      // the attack that caused it instead of printing above it.
+                      emitConsequenceLog({
+                          type: 'reversed-repair-log',
+                          victimId: victim.id,
+                          ...(reversal.applierId !== undefined
+                              ? { applierId: reversal.applierId }
+                              : {}),
+                          amount: raw,
+                          round: currentRound,
+                      });
                       resolveLethalHp(victim, {
                           round: currentRound,
                           statusEngine,
@@ -3598,7 +3662,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           bus,
                           emitConsequenceLog,
                           actingActorId,
-                          killerId: repairSourceId,
+                          killerId: reversal.applierId,
                           byDirectDamage: false,
                       });
                       // Deliberately NOT `repairedThisRound.add(...)` — nothing was repaired, so
@@ -3606,14 +3670,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // charge passive keys off an enemy CASTING a repair, upstream of this
                       // closure, and is untouched by any of this.)
                       //
-                      // R10: the reversal surfaces as the healer's OVERHEALING. Returning the
-                      // EXISTING result shape is what delivers that with no change to the
-                      // accounting contract — every call site already credits `overheal` with
-                      // this value — and it keeps the `raw = effective + overheal` identity. It
-                      // is also why the naive `incomingHealPct: -200` sign flip fails: that fold
-                      // is unclamped, so it books `consumed: 0` plus a NEGATIVE overheal — no
-                      // damage, no healing, garbage statistics, green tests throughout.
-                      return { consumed: 0, overheal: raw };
+                      // ── R10′: NOTHING books on the healer ────────────────────────────────────
+                      // Not repairs cast, not effective healing, not overhealing. "We don't need
+                      // to book it as anything other than damage from a debuff" — and that damage
+                      // is booked above, on the applier.
+                      //
+                      // ⚠️ A RETRACTED EARLIER RULING surfaced it as the healer's OVERHEALING, and
+                      // this branch used to deliver that by returning `{consumed: 0, overheal: raw}`
+                      // — a shape every call site already credited. Returning that today would be
+                      // WORSE than useless: it books the raw as overheal, and the call sites' gross
+                      // `directHeal`/`hotHeal` credit (written BEFORE this call) would stand too.
+                      // Hence the `{ reversed: true }` arm carrying no numbers at all: it makes
+                      // every site fail to compile until it moves its gross credit below the call.
+                      //
+                      // This is also still why the naive `incomingHealPct: -200` sign flip fails:
+                      // that fold is unclamped, so it books `consumed: 0` plus a NEGATIVE overheal
+                      // — no damage, no healing, garbage statistics, green tests throughout.
+                      return { reversed: true };
                   }
                   const targetMaxHp = recipientMaxHp(victim.id);
                   // Clamp the deficit at 0: a max-HP buff expiring can shrink effectiveMaxHp
@@ -3623,7 +3696,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                   const consumed = Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp));
                   victim.currentHp += consumed;
                   if (consumed > 0) repairedThisRound.add(victim.id);
-                  return { consumed, overheal: raw - consumed };
+                  return { reversed: false, consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw, victim = healTarget) => {
                   if (victim.currentHp <= 0) return 0; // dead → no-op
@@ -4369,28 +4442,37 @@ export function runCombat(rawInput: CombatEngineInput): {
                 const selectorActor =
                     selectorRecipientId !== undefined ? healingCtx.recipientActor(rid) : undefined;
                 if (e.kind === 'heal') {
-                    healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (selectorActor) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(
+                    // R10′ (#362): the gross `directHeal` credit moved BELOW the apply, so a
+                    // reversed repair can suppress it. Above the call it was unretractable — the
+                    // closure cannot un-credit — and the source would have kept its gross repairs
+                    // for a repair that healed nobody.
+                    //
+                    // `undefined` = this recipient was never POOL-APPLIED at all, which is a third
+                    // case and not a reversal: an all-allies leech credits the source's raw for
+                    // every ally but applies to none of the non-anchor ones. Those keep their gross
+                    // credit exactly as before — nothing reversed there because nothing landed.
+                    const applied = selectorActor
+                        ? healingCtx.applyHealToTarget(raw, selectorActor, sourceId)
+                        : rid === healTarget!.id
+                          ? healingCtx.applyHealToTarget(raw, healTarget!, sourceId)
+                          : undefined;
+                    if (applied === undefined) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                    } else if (!applied.reversed) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
+                        healingCtx.credit(sourceId, 'overheal', applied.overheal);
+                        // Recipient axis (SP-3b Task 7): only a recipient whose pool this loop
+                        // actually touched LANDS here — an all-allies leech credits the source's
+                        // raw for every ally but applies to none of the others, so only the
+                        // applied case may mirror.
+                        creditLandedRepair(
+                            rid,
+                            'directHeal',
                             raw,
-                            selectorActor,
-                            sourceId
+                            applied.consumed,
+                            applied.overheal
                         );
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
-                    } else if (rid === healTarget!.id) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(
-                            raw,
-                            healTarget!,
-                            sourceId
-                        );
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
-                        // Recipient axis (SP-3b Task 7): only the heal target's share LANDS here —
-                        // an all-allies leech credits the source's raw for every ally but applies
-                        // to none of the others, so only this branch may mirror.
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -4565,18 +4647,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
                 const recipientActor = allRuntimesById.get(rid)?.actor;
                 if (e.kind === 'heal') {
-                    healingCtx.credit(sourceId, 'directHeal', raw);
-                    if (recipientActor) {
-                        const { consumed, overheal } = healingCtx.applyHealToTarget(
-                            raw,
-                            recipientActor,
-                            sourceId
-                        );
-                        healingCtx.credit(sourceId, 'effectiveHeal', consumed);
-                        healingCtx.credit(sourceId, 'overheal', overheal);
+                    // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
+                    // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
+                    // gross (unchanged) — nothing was applied there, so nothing was reversed.
+                    const applied = recipientActor
+                        ? healingCtx.applyHealToTarget(raw, recipientActor, sourceId)
+                        : undefined;
+                    if (applied === undefined) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                    } else if (!applied.reversed) {
+                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
+                        healingCtx.credit(sourceId, 'overheal', applied.overheal);
                         // Recipient axis (SP-3b Task 7) — this per-victim path repairs whichever
                         // ally it resolved, so the landing id is `rid`, not the heal target.
-                        creditLandedRepair(rid, 'directHeal', raw, consumed, overheal);
+                        creditLandedRepair(
+                            rid,
+                            'directHeal',
+                            raw,
+                            applied.consumed,
+                            applied.overheal
+                        );
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -4634,13 +4725,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             }
             if (e.kind === 'heal') {
-                healingCtx.credit(victim.id, 'directHeal', raw);
-                const { consumed, overheal } = healingCtx.applyHealToTarget(raw, victim, victim.id);
-                healingCtx.credit(victim.id, 'effectiveHeal', consumed);
-                healingCtx.credit(victim.id, 'overheal', overheal);
-                // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
-                // source and recipient coincide here — the axes still differ in meaning.
-                creditLandedRepair(victim.id, 'directHeal', raw, consumed, overheal);
+                // R10′ (#362): every bucket, gross included, is booked BELOW the apply and only
+                // when the repair was not reversed. This site always applies (the victim is
+                // resolved), so there is no third case here.
+                const applied = healingCtx.applyHealToTarget(raw, victim, victim.id);
+                if (!applied.reversed) {
+                    healingCtx.credit(victim.id, 'directHeal', raw);
+                    healingCtx.credit(victim.id, 'effectiveHeal', applied.consumed);
+                    healingCtx.credit(victim.id, 'overheal', applied.overheal);
+                    // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
+                    // source and recipient coincide here — the axes still differ in meaning.
+                    creditLandedRepair(
+                        victim.id,
+                        'directHeal',
+                        raw,
+                        applied.consumed,
+                        applied.overheal
+                    );
+                }
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
                 // H3.6: this engine standing-leech shield site intentionally does NOT emit
@@ -4835,6 +4937,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 roundPerTargetDealt.set(attackerId, byVictim);
             }
             byVictim.set(victimId, (byVictim.get(victimId) ?? 0) + amount);
+        };
+        // #362 R7′: book a Reversed Repairs burn on this round's accumulators. Reassigns the
+        // engine-scope `let` declared above `healingCtx` (which is built before the round loop and
+        // therefore cannot see `creditDealt`/`roundPerTargetDamage` directly) — never captured into
+        // a copy, so the ctx's closure reads THIS round's accumulators at call time.
+        //
+        // BOTH channels, matching the DoT-tick path (~:9880), which is the attribution shape R7′
+        // names: the victim-keyed intake (`roundPerTargetDamage` → damageTaken) plus a per-applier
+        // dealt credit (`creditDealt` → damageDealt / perTargetDealt).
+        //
+        // An UNKNOWN applier writes the intake and skips the dealt credit — the same rule, and the
+        // same wording, the Protection-redirect site uses for a redirected DoT-tick chunk with no
+        // single attacker ("nothing to attribute there, so skip silently; the victim-keyed
+        // roundPerTargetDamage write above is unaffected"). The victim demonstrably lost the HP
+        // either way; inventing a dealer for it would be the fallback R7′ forbids.
+        bookReversalDamage = (victimId, applierId, amount) => {
+            if (amount <= 0) return;
+            roundPerTargetDamage.set(victimId, (roundPerTargetDamage.get(victimId) ?? 0) + amount);
+            if (applierId !== undefined) creditDealt(applierId, victimId, amount);
         };
         // D-PR3: per-victim direct-damage intake index (Ironclad nth-hit) + once-per-round block flags.
         const directIntakeIndex = new Map<string, number>();
@@ -11358,28 +11479,41 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             }
                                         }
                                         if (e.kind === 'heal') {
-                                            healingCtx.credit(healTarget!.id, 'directHeal', raw);
-                                            const { consumed, overheal } =
-                                                healingCtx.applyHealToTarget(
-                                                    raw,
-                                                    healTarget!,
-                                                    healTarget!.id
-                                                );
-                                            healingCtx.credit(
-                                                healTarget!.id,
-                                                'effectiveHeal',
-                                                consumed
-                                            );
-                                            healingCtx.credit(healTarget!.id, 'overheal', overheal);
-                                            // Recipient axis (SP-3b Task 7): the non-positional
-                                            // taken-leech always lands on the heal target.
-                                            creditLandedRepair(
-                                                healTarget!.id,
-                                                'directHeal',
+                                            // R10′ (#362): all four credits, gross included, sit
+                                            // BELOW the apply and are skipped on a reversal. This
+                                            // site always applies (to the heal target), so there
+                                            // is no unapplied third case here.
+                                            const applied = healingCtx.applyHealToTarget(
                                                 raw,
-                                                consumed,
-                                                overheal
+                                                healTarget!,
+                                                healTarget!.id
                                             );
+                                            if (!applied.reversed) {
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'directHeal',
+                                                    raw
+                                                );
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'effectiveHeal',
+                                                    applied.consumed
+                                                );
+                                                healingCtx.credit(
+                                                    healTarget!.id,
+                                                    'overheal',
+                                                    applied.overheal
+                                                );
+                                                // Recipient axis (SP-3b Task 7): the non-positional
+                                                // taken-leech always lands on the heal target.
+                                                creditLandedRepair(
+                                                    healTarget!.id,
+                                                    'directHeal',
+                                                    raw,
+                                                    applied.consumed,
+                                                    applied.overheal
+                                                );
+                                            }
                                         } else {
                                             healingCtx.credit(healTarget!.id, 'shield', raw);
                                             healingCtx.grantShieldToTarget(raw);

@@ -240,6 +240,7 @@ export const LOG_EVENT_TYPES = [
     'shield-applied-log',
     'shield-destroyed-log',
     'cheat-death-log',
+    'reversed-repair-log',
     'buff-applied',
     'buff-expired',
     'debuff-applied',

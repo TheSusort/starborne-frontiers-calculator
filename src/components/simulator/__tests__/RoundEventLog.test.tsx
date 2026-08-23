@@ -214,6 +214,42 @@ describe('RoundEventLog', () => {
         ],
     });
 
+    // #362 R11. The row is booked to the debuff's APPLIER (the actor the burn's damage and kill are
+    // credited to), with the burned ship as its target — so it must read source → victim, not as a
+    // self-line on the victim.
+    it('reversed-repair: names the applier, the burned ship and the amount', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'reversed-repair',
+                    actorId: 'hexa',
+                    targets: [{ targetId: 'nova', amount: 4321 }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Enemy Hexa → Nova: repairs reversed 4,321/)).toBeInTheDocument();
+    });
+
+    // A hand-picked (scheduled) Reversed Repairs has no applier, so the entry books to the victim
+    // itself. It must still render a real line rather than a source → target line naming the same
+    // ship twice.
+    it('reversed-repair: collapses to a self-line when there is no applier', () => {
+        render(
+            <RoundEventLog
+                round={oneEntryRound({
+                    kind: 'reversed-repair',
+                    actorId: 'nova',
+                    targets: [{ targetId: 'nova', amount: 900 }],
+                    reactions: [],
+                })}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Nova: repairs reversed 900/)).toBeInTheDocument();
+    });
+
     it('death: resolves the killer id to a ship name', () => {
         render(
             <RoundEventLog

@@ -73,7 +73,7 @@ const makeHealing = (
             appliedTo.push(victim.id);
             appliedSourceIds.push(repairSourceId);
             const consumed = Math.min(raw, 500);
-            return { consumed, overheal: raw - consumed };
+            return { reversed: false, consumed, overheal: raw - consumed };
         },
         grantShieldToTarget: () => 0,
         playerIds,

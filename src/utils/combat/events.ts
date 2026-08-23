@@ -500,6 +500,24 @@ export type CombatEvent =
      *  buildCombatLog. NO combat listener subscribes to it (cannot chain). Buffered on the
      *  positional path (defer-flush) to nest under the triggering attack. */
     | ({ type: 'cheat-death-log'; actorId: string; round: number } & ReactiveStamp)
+    /** LOG-ONLY (#362 R11): a `Reversed Repairs` carrier took an incoming repair as raw HP damage.
+     *  Emitted on EVERY reversal, lethal or not — a non-lethal one otherwise produces no event at
+     *  all, leaving the player to watch a repair land, achieve nothing and HP drop with nothing
+     *  connecting the three. NO combat listener subscribes (cannot chain); it exists solely for
+     *  buildCombatLog. Buffered through `emitConsequenceLog` so a reversal inside a deferral window
+     *  nests under the attack that raised it.
+     *
+     *  `applierId` is the actor that inflicted the status — the same actor the burn's damage and
+     *  any resulting kill are credited to (R7′), NOT the healer whose repair was reversed. Absent
+     *  when the status came from the calculator's hand-selected enemy-debuff picker, which carries
+     *  no applier identity. `amount` is the full face value burned (pre-clamp, post-crit). */
+    | ({
+          type: 'reversed-repair-log';
+          victimId: string;
+          applierId?: string;
+          amount: number;
+          round: number;
+      } & ReactiveStamp)
     /** Emitted at every actor.charges mutation so the log can show charge state and
      *  manipulation. `oldCharge`/`newCharge` bracket the mutation; `reason` distinguishes
      *  the three mutation paths:

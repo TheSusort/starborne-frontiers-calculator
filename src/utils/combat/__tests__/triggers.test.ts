@@ -2716,7 +2716,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
@@ -3240,7 +3240,7 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw) => {
                 applied.push(raw);
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: ['A'],
@@ -3512,7 +3512,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw, victim, repairSourceId) => {
                 applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,

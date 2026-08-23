@@ -287,6 +287,10 @@ interface FixtureOpts {
     /** `'victim'` anchors the healing report on the victim — required by the HoT channel, whose
      *  tick applies HP only when the holder IS the anchor. Player-side arm only. */
     healAnchor?: 'focus' | 'victim';
+    /** Top-level `enemyDebuffs` — the calculator's buff-picker channel (the SCHEDULED arm of the
+     *  status read). These carry NO applier identity, which is the whole point of the fixture that
+     *  uses them. Default `[]`, so every other test in this file is untouched. */
+    scheduledEnemyDebuffs?: SelectedGameBuff[];
     numRounds?: number;
 }
 
@@ -360,7 +364,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
     const common = {
         numRounds: opts.numRounds ?? 1,
         selfBuffs: [],
-        enemyDebuffs: [],
+        enemyDebuffs: opts.scheduledEnemyDebuffs ?? [],
         selfDotModifier: 0,
         defensePenetrationBuff: 0,
         hasChargedSkill: false,
@@ -545,15 +549,23 @@ describe('R2 channel 2 — a HoT tick reverses', () => {
         const round = (run: FixtureRun) => run.result.healing!.rounds[0];
         expect(round(control).perActor.get(FOCUS_ID)!.hotHeal).toBeGreaterThan(0);
         expect(round(control).perActor.get(VICTIM_ID)).toBeUndefined();
-        expect(round(reversed).perActor.get(FOCUS_ID)!.hotHeal).toBeGreaterThan(0);
         expect(round(reversed).perActor.get(VICTIM_ID)).toBeUndefined();
+
+        // R10′ — the GROSS bucket for this channel is `hotHeal`, not `directHeal`, and the reversed
+        // tick books none of it. A DIFFERENTIAL rather than a zero, deliberately: `target: 'ally'`
+        // fans to the caster too, so the medic also holds a copy and self-ticks — and that tick is
+        // NOT reversed (the medic carries no debuff). The applier's `hotHeal` therefore drops by
+        // exactly the victim's tick and no more.
+        const controlHot = round(control).perActor.get(FOCUS_ID)!.hotHeal;
+        const reversedHot = round(reversed).perActor.get(FOCUS_ID)!.hotHeal;
+        expect(controlHot - reversedHot).toBe(RAW);
         // The consumption split isolates the VICTIM's tick specifically: a tick whose holder is
         // not the anchor books `hotHeal` and nothing else, so `effectiveHeal`/`overheal` here can
-        // only have come from the victim's own tick — and R10 says the reversed one is overheal.
+        // only have come from the victim's own tick — and R10′ says the reversed one books neither.
         expect(round(control).perActor.get(FOCUS_ID)!.effectiveHeal).toBe(RAW);
         expect(round(control).perActor.get(FOCUS_ID)!.overheal).toBe(0);
         expect(round(reversed).perActor.get(FOCUS_ID)!.effectiveHeal).toBe(0);
-        expect(round(reversed).perActor.get(FOCUS_ID)!.overheal).toBe(RAW);
+        expect(round(reversed).perActor.get(FOCUS_ID)!.overheal).toBe(0);
     });
 
     // NOT a behavioural claim about #362 — a fence over constraint (b) above. If a future change
@@ -595,6 +607,15 @@ describe('R2 channel 3 — a damage-dealt LEECH self-repair reverses', () => {
             expect(leeched).toBeGreaterThan(0);
             // …and the reversal takes exactly that amount off instead.
             expect(START - reversed.victimHp).toBe(leeched);
+
+            // R10′ on the leech channel. A self-leech's "healer" is the victim itself, so this is
+            // the same ruling read on the one channel where source and recipient coincide — and it
+            // is the only coverage of the ENGINE's leech call sites' credit move (the cast and
+            // reactive sites are covered elsewhere in this file and in the engine suite).
+            const bucketOf = (run: FixtureRun) =>
+                run.result.healing!.rounds[0].perActor.get(VICTIM_ID)?.directHeal ?? 0;
+            expect(bucketOf(control)).toBeGreaterThan(0);
+            expect(bucketOf(reversed)).toBe(0);
         });
     }
 });
@@ -628,17 +649,24 @@ describe('R2 channel 4 — a REACTIVE repair from a passive slot reverses', () =
             // `basis: 'target-hp'` → 10% of the victim's 100,000 max HP.
             expect(reactivesOf(control)[0].amount).toBe(RAW);
 
+            // Optional, not `!`: under R10′ a reversed round credits the owner NOTHING, so its
+            // per-round entry can be absent entirely. A `!` here would throw on the very state
+            // the ruling requires.
             const perRound = (run: FixtureRun, i: number) =>
-                run.result.healing!.rounds[i].perActor.get(VICTIM_ID)!;
+                run.result.healing!.rounds[i].perActor.get(VICTIM_ID);
             // ROUND 1 — status not yet standing: both arms repair, identically. The channel is
             // demonstrably LIVE, in the reversed run's own fixture.
-            expect(perRound(control, 0).effectiveHeal).toBe(RAW);
-            expect(perRound(reversed, 0).effectiveHeal).toBe(RAW);
+            expect(perRound(control, 0)!.effectiveHeal).toBe(RAW);
+            expect(perRound(reversed, 0)!.effectiveHeal).toBe(RAW);
             // ROUND 2 — Zosimos's round-1 cast is standing. Only the reversed arm burns.
-            expect(perRound(control, 1).effectiveHeal).toBe(RAW);
-            expect(perRound(control, 1).overheal).toBe(0);
-            expect(perRound(reversed, 1).effectiveHeal).toBe(0);
-            expect(perRound(reversed, 1).overheal).toBe(RAW);
+            expect(perRound(control, 1)!.directHeal).toBe(RAW);
+            expect(perRound(control, 1)!.effectiveHeal).toBe(RAW);
+            expect(perRound(control, 1)!.overheal).toBe(0);
+            // R10′: all three buckets, gross included. Asserting only `overheal === 0` would pass
+            // against a build that still credited the owner the whole repair as repairs cast.
+            expect(perRound(reversed, 1)?.directHeal ?? 0).toBe(0);
+            expect(perRound(reversed, 1)?.effectiveHeal ?? 0).toBe(0);
+            expect(perRound(reversed, 1)?.overheal ?? 0).toBe(0);
 
             // …and the HP endpoints agree: +2×RAW for the control, exactly back to START for the
             // reversal (round 1 repaired RAW, round 2 burned the same RAW off).
@@ -875,6 +903,111 @@ describe('R5 root cause — a reversed repair emits no `attacked` event', () => 
             expect(attackedOn(silent)).toHaveLength(0);
         });
     }
+});
+
+// ══ THE SCHEDULED CHANNEL — a reversal with NO APPLIER ═══════════════════════════════════════
+// R7′ books the burn on the actor that inflicted the status. A debuff hand-ticked in the
+// calculator's enemy-debuff picker was never cast by anyone, so there is no such actor: the read
+// yields `{ applierId: undefined }`.
+//
+// That is a REAL state, not an error, and it must not be papered over: no fallback to the healer
+// (the very attribution R7′ rejects), no invented sentinel id. The burn still lands, nothing is
+// credited to anyone, and nothing crashes.
+//
+// TEAM SYMMETRY here is the side GATE, not a mirrored burn. `enemyAlwaysSnap` (statusEngine.ts)
+// builds from a single GLOBAL list with no per-victim keying at all — pass it any id and it
+// answers the same — so the scheduled arm is gated on `victim.side === 'enemy'`. The player-side
+// arm below is that gate measured end-to-end: the same picker entry must leave a PLAYER victim's
+// repairs healing normally. (`reversedRepairs.read.test.ts` pins the same gate at the read.)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('the scheduled channel — a hand-picked Reversed Repairs has no applier', () => {
+    const pickerEntry = (buffName: string): SelectedGameBuff => ({
+        id: buffName,
+        buffName,
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: {},
+    });
+
+    /** Total damage booked as DEALT to the victim, summed over every attacker. */
+    const dealtToVictim = (run: FixtureRun) =>
+        Object.values(run.result.rounds[0].perTargetDealt ?? {}).reduce(
+            (sum, byVictim) => sum + (byVictim[VICTIM_ID] ?? 0),
+            0
+        );
+
+    it('enemy-side victim: the burn lands, and it is credited to nobody', () => {
+        const START = VICTIM_MAX_HP / 2;
+        const arm = (enemyDebuffs: SelectedGameBuff[]) =>
+            runFixture({
+                victimSide: 'enemy',
+                // No CAST status at all: the medic still repairs, but Zosimos's own debuff ability
+                // plants a name nothing models, so the ONLY Reversed Repairs in the run is the
+                // hand-picked one. Otherwise the timed arm would answer first and supply a caster.
+                statusName: CONTROL,
+                medicAbilities: [castRepair(REPAIR_PCT)],
+                victimStartHp: START,
+                scheduledEnemyDebuffs: enemyDebuffs,
+            });
+
+        const control = arm([]);
+        const reversed = arm([pickerEntry(REVERSED)]);
+
+        // NON-VACUITY: without the picker entry the very same fixture REPAIRS for RAW.
+        expect(control.victimHp - START).toBe(RAW);
+        // …and with it, the same RAW is burned off instead.
+        expect(START - reversed.victimHp).toBe(RAW);
+
+        // The victim-keyed intake IS booked — it demonstrably lost the HP, and the
+        // Protection-redirect site sets the same precedent for a chunk with no single attacker.
+        expect(reversed.result.rounds[0].perTargetDamage?.[VICTIM_ID] ?? 0).toBe(RAW);
+        // But NOTHING is credited as dealt: not to the medic whose repair it was, not to anyone.
+        // A build that fell back to the healer would book RAW here.
+        expect(dealtToVictim(reversed)).toBe(0);
+        expect(dealtToVictim(control)).toBe(0);
+
+        // R10′ still holds on this channel: the healer books nothing either.
+        const medic = reversed.result.healing!.rounds[0].perActor.get(reversed.medicId);
+        expect(medic?.directHeal ?? 0).toBe(0);
+        expect(medic?.effectiveHeal ?? 0).toBe(0);
+        expect(medic?.overheal ?? 0).toBe(0);
+    });
+
+    it('enemy-side victim: a LETHAL applier-less reversal kills with no killer named', () => {
+        const run = runFixture({
+            victimSide: 'enemy',
+            statusName: CONTROL,
+            medicAbilities: [castRepair(REPAIR_PCT)],
+            victimStartHp: RAW / 2, // < RAW ⇒ lethal
+            scheduledEnemyDebuffs: [pickerEntry(REVERSED)],
+        });
+
+        expect(run.victimHp).toBe(0);
+        const kills = eventsOfType(run.events, 'ship-destroyed').filter(
+            (e) => e.actorId === VICTIM_ID
+        );
+        expect(kills).toHaveLength(1);
+        // No applier ⇒ no killer. Explicitly NOT the medic — the retracted ruling's answer.
+        expect(kills[0].killerId).toBeUndefined();
+        expect(kills[0].byDirectDamage).toBeFalsy();
+    });
+
+    // The GATE, end to end. `enemyDebuffs` means "debuffs the OPPOSING team carries", and the
+    // underlying store has no per-victim keying to enforce it — so without the side gate this
+    // picker entry would reverse the USER'S OWN team's repairs into damage.
+    it('player-side victim: the same picker entry leaves a player victim healing normally', () => {
+        const START = VICTIM_MAX_HP / 2;
+        const run = runFixture({
+            victimSide: 'player',
+            statusName: CONTROL,
+            medicAbilities: [castRepair(REPAIR_PCT)],
+            victimStartHp: START,
+            scheduledEnemyDebuffs: [pickerEntry(REVERSED)],
+        });
+        // Repaired, not burned — the delta's SIGN is the assertion.
+        expect(run.victimHp - START).toBe(RAW);
+    });
 });
 
 // ══ R9 ═══════════════════════════════════════════════════════════════════════════════════════

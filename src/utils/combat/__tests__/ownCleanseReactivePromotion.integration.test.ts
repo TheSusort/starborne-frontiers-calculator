@@ -586,7 +586,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             applierMaxHp: () => 1000,
             applyHealToTarget: (raw, victim, repairSourceId) => {
                 applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
-                return { consumed: raw, overheal: 0 };
+                return { reversed: false, consumed: raw, overheal: 0 };
             },
             grantShieldToTarget: () => 0,
             playerIds: PLAYER_IDS,
