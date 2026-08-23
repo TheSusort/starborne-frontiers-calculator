@@ -1336,3 +1336,66 @@ describe('the battle report — a reversed repair is not healing, and its burn i
         });
     }
 });
+
+// ══ Negative-raw clamp (code-review finding, #362) ══════════════════════════════════════════════
+// `incomingHealPct` is unclamped (R6's own channel), so a big enough `Inc. Repair Down` — beyond
+// -100%, not just R6's -50% — flips a positive repair into a negative `raw` by the time it reaches
+// the reversal branch. The non-reversed path three lines below the reversal handles that case
+// safely: `Math.max(0, Math.min(raw, targetMaxHp - currentHp))` floors a negative `raw` at 0. The
+// reversal branch owes the SAME guarantee — a reversal only ever REMOVES HP — via its own
+// `burn = Math.max(0, raw)` clamp.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('the negative-raw clamp — a repair reduced past -100% burns nothing, and never heals', () => {
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: -200% Inc. Repair Down flips raw negative, and the reversal burns nothing instead of healing`, () => {
+            // Near max HP (not AT max), so a buggy `currentHp - raw` with raw = -RAW would have
+            // pushed the victim's HP to 105,000 — past its own 100,000 max — making the uncapped
+            // heal an observable violation, not just a same-value coincidence.
+            const START = VICTIM_MAX_HP - RAW / 2; // 95,000
+
+            // (1) THE INSTRUMENT: short of the sign flip, the fold still heals normally — proving
+            // -200% really is what flips the sign, rather than this fixture always landing on 0
+            // for some unrelated reason (e.g. START already at the deficit clamp).
+            const halved = runFixture({
+                victimSide,
+                statusName: CONTROL,
+                victimStartHp: START,
+                incomingRepairDownPct: -50,
+            });
+            expect(halved.victimHp).toBe(START + RAW / 2);
+
+            // (2) The pre-existing (non-reversed) path already handles a negative raw safely: its
+            // deficit clamp floors at 0, so a CONTROL run at -200% reports no change at all.
+            const flippedControl = runFixture({
+                victimSide,
+                statusName: CONTROL,
+                victimStartHp: START,
+                incomingRepairDownPct: -200,
+            });
+            expect(flippedControl.victimHp).toBe(START);
+
+            // (3) THE FINDING: the reversal branch must agree. Before the fix, `victim.currentHp =
+            // Math.max(0, victim.currentHp - raw)` with a negative raw RAISED HP, uncapped by max
+            // HP — silently, since `bookReversalDamage` and the log row both gate on a positive
+            // amount. After the fix, `burn = Math.max(0, raw)` is 0, so nothing moves.
+            const flippedReversal = runFixture({
+                victimSide,
+                statusName: REVERSED,
+                victimStartHp: START,
+                incomingRepairDownPct: -200,
+            });
+            expect(flippedReversal.victimHp).toBe(START); // did not rise
+            expect(flippedReversal.victimHp).toBeLessThanOrEqual(VICTIM_MAX_HP); // never past max
+
+            // No damage booked and no log row — the burn was genuinely zero, not merely displayed
+            // as zero (mirrors R11's "a 0-magnitude burn writes no row" gate).
+            const dealtBy = (run: FixtureRun, attackerId: string) =>
+                run.result.rounds[0].perTargetDealt?.[attackerId]?.[VICTIM_ID] ?? 0;
+            expect(dealtBy(flippedReversal, flippedReversal.zosimosId)).toBe(0);
+            expect(
+                flippedReversal.logEntries.filter((e) => e.kind === 'reversed-repair')
+            ).toHaveLength(0);
+        });
+    }
+});

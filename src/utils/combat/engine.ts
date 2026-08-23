@@ -3606,7 +3606,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // no counterattack, no Reflect and no on-damaged rider. The BAR still moves
                       // (the intake booking below is what the report reads); only the trigger is
                       // withheld. Do not "fix" this by emitting one without re-opening R5.
-                      victim.currentHp = Math.max(0, victim.currentHp - raw);
+                      //
+                      // `burn` clamps `raw` at 0: a reversal only ever REMOVES HP. The normal
+                      // (non-reversed) path below floors its own effect at 0 via the deficit
+                      // clamp (`Math.max(0, Math.min(raw, targetMaxHp - victim.currentHp))`), and
+                      // this path owes that same guarantee — `incomingHealPct` is unclamped
+                      // upstream, so `raw` can already be negative by the time it reaches here,
+                      // and a negative `raw` here would silently RAISE `currentHp`, uncapped by
+                      // max HP, with no log row and no booked amount.
+                      const burn = Math.max(0, raw);
+                      victim.currentHp = Math.max(0, victim.currentHp - burn);
                       // ── R7′ ATTRIBUTION: the APPLIER, never the healer ───────────────────────
                       // The damage AND the kill belong to the Zosimos that inflicted the status,
                       // exactly the way a DoT's damage and kills belong to whoever applied the DoT.
@@ -3655,7 +3664,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // exactly this reason ("so closures defined once outside the loop can stamp
                       // the correct round"), and the charge-changed emitters just above already
                       // read it the same way.
-                      bookReversalDamage(victim.id, reversal.applierId, raw);
+                      bookReversalDamage(victim.id, reversal.applierId, burn);
                       // R11: every reversal writes its own combat-log row, lethal or not. Without
                       // it a non-lethal reversal emits NOTHING — the player watches a repair land,
                       // achieve nothing, and HP drop, with no line connecting the three. Routed
@@ -3663,7 +3672,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // (a reactive repair during a positional apply does exactly that) nests under
                       // the attack that caused it instead of printing above it.
                       //
-                      // `raw > 0` (#362 fix-wave-2, M-8): "every reversal" means every reversal
+                      // `burn > 0` (#362 fix-wave-2, M-8): "every reversal" means every reversal
                       // that BURNED something. A 0-magnitude repair reverses into a 0-magnitude
                       // burn — `bookReversalDamage` already drops it on its own `amount <= 0`
                       // guard and `victim.currentHp` does not move — so a row here would announce
@@ -3672,7 +3681,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       // playerTurn.ts silences a repair that resolved to nothing at all); this
                       // extends it to the channels that have no such upstream gate (HoT ticks,
                       // leech self-repairs, reactive repairs).
-                      if (raw > 0) {
+                      if (burn > 0) {
                           emitConsequenceLog({
                               type: 'reversed-repair-log',
                               victimId: victim.id,
@@ -3686,7 +3695,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                               // this is unconditional, unlike `applierId` which the scheduled
                               // channel can leave undefined.
                               healerId: repairSourceId,
-                              amount: raw,
+                              amount: burn,
                               round: currentRound,
                           });
                       }
