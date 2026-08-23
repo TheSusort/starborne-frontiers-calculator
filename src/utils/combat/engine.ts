@@ -117,6 +117,7 @@ import {
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
+    victimOwnEnemyHealModifiers,
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
@@ -3326,10 +3327,27 @@ export function runCombat(rawInput: CombatEngineInput): {
     // turn — never double-counted (F3).
     const recipientMaxHp = (id: string): number =>
         lastTurnCtxByActor.get(id)?.effectiveMaxHp ?? baseHpFor(id);
-    const recipientIncomingHealPct = (id: string): number =>
-        lastTurnCtxByActor.get(id)?.incomingHealPct ??
-        allActorsById.get(id)?.preFight?.incomingHeal ??
-        0;
+    const recipientIncomingHealPct = (id: string): number => {
+        // ARM 1 — the recipient has already acted: its published ctx ALREADY includes both the
+        // `preFight` term and (#367) the enemy-APPLIED term, because `runPlayerTurn` folds both
+        // into `scheduledTotals` and `turnCtx.incomingHealPct` is that folded total. Adding
+        // either again here would DOUBLE-COUNT: -50% would read as -100% and zero the repair.
+        const ctx = lastTurnCtxByActor.get(id);
+        if (ctx !== undefined) return ctx.incomingHealPct;
+        // ARM 2 — pre-first-turn: no ctx exists yet, so this is the ONLY place either term can
+        // enter. Not a formality (#367): 7 of the 9 corpus appliers inflict `Inc. Repair Down`
+        // from a DAMAGE clause, which can land in round 1 before the victim has taken a turn —
+        // exactly this window.
+        //
+        // ⚠️ This is deliberately an explicit `ctx !== undefined` check rather than the `??` chain
+        // it replaced. `??` falls through on a legitimate `0`, which was harmless only while the
+        // fallback was also `0`; with a non-zero enemy-applied term below, falling through on a
+        // real ctx value of `0` would double-count it.
+        return (
+            (allActorsById.get(id)?.preFight?.incomingHeal ?? 0) +
+            victimOwnEnemyHealModifiers(statusEngine, id).incomingHealPct
+        );
+    };
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
@@ -8386,6 +8404,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // runPlayerTurn). Side-agnostic — enemy attackers walk the same path.
                 // Conditional spread → absent for every existing caller (byte-identical).
                 ...(a.preFight ? { preFight: a.preFight } : {}),
+                // #367: this actor's own enemy-APPLIED heal-channel modifiers (`Inc./Out. Repair
+                // Down/Up`), computed fresh per turn from its per-victim ability stores. Folded
+                // into the same layer-1 totals as `preFight` inside `runPlayerTurn`. Team-agnostic
+                // for free: the enemy store is keyed by victim id regardless of side, and this
+                // helper is called for every acting actor on both sides. Spread-guarded like
+                // `preFight` so a clean actor omits the key entirely and every existing fixture
+                // stays byte-identical.
+                ...(() => {
+                    const m = victimOwnEnemyHealModifiers(statusEngine, a.id);
+                    return m.incomingHealPct !== 0 || m.outgoingHealPct !== 0
+                        ? { enemyAppliedHeal: m }
+                        : {};
+                })(),
                 // Sub-project I, PR I3 (Layer 1): team-aura distribution. Union THIS actor's
                 // LIVING same-side allies' `all-allies` passive modifier abilities, EXCLUDING
                 // the actor's own id (its own aura is already in its own modifierAbilities —

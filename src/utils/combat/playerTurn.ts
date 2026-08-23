@@ -711,6 +711,14 @@ export interface PlayerTurnArgs {
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
      *  damage sites. Absent → byte-identical. */
     preFight?: PreFightCombatModifiers;
+    /** #367: enemy-APPLIED heal-channel modifiers carried by THIS acting actor in its own
+     *  per-victim enemy store (`triggers.ts`'s `victimOwnEnemyHealModifiers`), in additive
+     *  percentage points. Folded into the scheduled self-buff totals right beside `preFight`
+     *  below, which is what makes ONE fold reach all five incoming-heal readers: the self arm of
+     *  `incomingPctFor`, the HoT `holderIncomingFactor`, the two cast-heal factors, and — via the
+     *  `turnCtx` this function publishes into the engine's `lastTurnCtxByActor` — the engine's
+     *  `recipientIncomingHealPct` for every OTHER recipient. Absent → byte-identical. */
+    enemyAppliedHeal?: { incomingHealPct: number; outgoingHealPct: number };
     /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -1787,6 +1795,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
         scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
         scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
+    }
+    // #367: the enemy-APPLIED half of the same two heal channels, folded into the same layer-1
+    // totals as `preFight` above and for the same reason — every downstream heal consumer reads
+    // these totals, so folding here is what makes the fix reach all of them at once instead of
+    // patching each call site one by one. Additive percentage points; a plain sum, because R1's
+    // tier shadowing (`Inc. Repair Down I` is absent from the store whenever a `II` is live)
+    // already happened inside the status engine's `applyTimedAbilityStatus` before this read.
+    // Absent → byte-identical.
+    if (args.enemyAppliedHeal) {
+        scheduledTotals.incomingHealBuff += args.enemyAppliedHeal.incomingHealPct;
+        scheduledTotals.outgoingHealBuff += args.enemyAppliedHeal.outgoingHealPct;
     }
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
