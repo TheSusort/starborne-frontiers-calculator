@@ -4146,8 +4146,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // bucket (mirrors DoT sourceId attribution). HoT heals NEVER crit and ignore
         // healModifier/outgoingHeal (they are the applier's standing effect, not a cast),
         // but DO get the HOLDER's incomingHeal amplification (dmgStats.totals.incomingHealBuff,
-        // since the holder is the acting actor). Holder === target → the consumption split
-        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal.
+        // since the holder is the acting actor). #369: the HP lands on the HOLDER whichever side
+        // it stands on and whether or not it is the anchor, and the consumption split
+        // (applyHealToTarget) is credited to the APPLIER's effectiveHeal/overheal — except on the
+        // enemy side, which applies the HP and credits nothing (E5 §4.1).
         //
         // Applier max HP at tick time:
         //  - applier === this acting actor (self-granted HoT) → local effectiveHp.
@@ -4169,9 +4171,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (applierId === undefined || applierId === actor.id) return effectiveHp;
             return healing.applierMaxHp(applierId);
         };
-        // Credit one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor)
-        // to the applier's hotHeal bucket, and route consumption (holder === target) to the
-        // applier's effectiveHeal/overheal.
+        // Apply one HoT tick (raw = applierMaxHp × hotPct% × stacks × holderIncomingFactor) to the
+        // HOLDER, then — player side only — credit it to the applier's hotHeal bucket and route
+        // its consumption split to the applier's effectiveHeal/overheal.
         const tickHot = (applierId: string | undefined, hotPct: number, stacks: number): void => {
             if (hotPct <= 0 || stacks <= 0) return;
             const maxHp = hotApplierMaxHp(applierId);
@@ -4184,17 +4186,32 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
             // R10′ (#362): the gross bucket here is `hotHeal`, not `directHeal` — and like every
-            // other site it now books BELOW the apply, so a reversed tick books nothing at all on
-            // the applier. A holder that is NOT the heal target is never pool-applied (pre-existing
-            // behaviour), so nothing can be reversed there and its gross credit is unconditional.
-            if (actor.id !== healing.targetId) {
-                healing.credit(creditId, 'hotHeal', raw);
-                return;
-            }
-            // Holder === target → the heal lands on the target; split consumption to the applier.
-            const applied = healing.applyHealToTarget(raw, actor, creditId);
-            if (applied.reversed) return;
+            // other site it books BELOW the apply, so a reversed tick books nothing at all on the
+            // applier. That ordering matters MORE since #369, not less: an off-anchor holder is now
+            // pool-applied too, so it can carry `Reversed Repairs` and reverse its own tick — which
+            // it never could while the anchor-only early-return withheld the apply.
+            // #369: the tick applies to the HOLDER, whichever side it stands on and whether or
+            // not the holder is the healing anchor. `applyHealToTarget` has taken its victim
+            // explicitly since #362, so nothing on this path is anchor-specific any more — the
+            // `actor.id !== healing.targetId` early-return that used to sit here was a legacy
+            // restriction that credited the gross bucket and then silently withheld the HP from
+            // every off-anchor holder, PLAYER SIDE INCLUDED.
+            const holderActor =
+                actor.id === healing.targetId ? actor : healing.recipientActor(actor.id);
+            const applied = holderActor
+                ? healing.applyHealToTarget(raw, holderActor, creditId)
+                : undefined;
+            // `healEventOnly` gates CREDIT, never APPLICATION (E5 §4.1) — the same split the
+            // enemy cast-heal arm below already uses. An enemy holder's tick moves its own HP and
+            // contributes NOTHING to the player healing buckets, which is the actual invariant the
+            // old whole-block gate was protecting (see enemyActions.test.ts's HoT describe).
+            if (healEventOnly) return;
+            // R10′ (#362): a reversed tick books nothing at all, gross bucket included.
+            if (applied?.reversed) return;
             healing.credit(creditId, 'hotHeal', raw);
+            // Holder not resolvable in the actor map → gross credit only, the pre-#369 off-anchor
+            // behaviour. Defensive: every real run resolves it.
+            if (!applied) return;
             healing.credit(creditId, 'effectiveHeal', applied.consumed);
             healing.credit(creditId, 'overheal', applied.overheal);
             // Recipient axis (SP-3b Task 7): the tick lands on the HOLDER (this acting actor),
@@ -4207,24 +4224,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 healing.creditRecipient?.(actor.id, 'overheal', applied.overheal);
             }
         };
-        // Event-only (enemy) mode: HoT ticking must not credit or apply to the player healing map.
-        if (!healEventOnly) {
-            // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
-            // payload.stacks already folds accumulating per-round counts / timed configured stacks.
-            for (const s of selfAbilityStatuses) {
-                const hotPct = s.payload.parsedEffects.hotPct;
+        // #369: BOTH sides tick. The gate that used to wrap this whole block was suppressing the
+        // tick itself in order to suppress its CREDIT — `tickHot` now separates the two, so an
+        // enemy holder moves its own HP and books nothing. R2: no `heal-performed` is emitted from
+        // this block and `repairedThisRound` is not set, on either side — a HoT tick is not a
+        // "performed repair" and fires no on-repaired trigger.
+        //
+        // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
+        // payload.stacks already folds accumulating per-round counts / timed configured stacks.
+        for (const s of selfAbilityStatuses) {
+            const hotPct = s.payload.parsedEffects.hotPct;
+            if (!hotPct) continue;
+            tickHot(s.casterId, hotPct, s.payload.stacks);
+        }
+        // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
+        // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
+        // SelectedGameBuff carries the effective stacks already.
+        for (const ab of entry.activeSelfBuffs) {
+            for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
+                const hotPct = b.parsedEffects?.hotPct;
                 if (!hotPct) continue;
-                tickHot(s.casterId, hotPct, s.payload.stacks);
-            }
-            // (b) Scheduled snapshot HoTs (applier = the holder itself). Mirror resolveSelfBuffTotals'
-            // lookup consumption: expandBuffs applies the per-round stack override, so the expanded
-            // SelectedGameBuff carries the effective stacks already.
-            for (const ab of entry.activeSelfBuffs) {
-                for (const b of expandBuffEntry(ab, selfBuffLookup.get(ab.buffName) ?? [])) {
-                    const hotPct = b.parsedEffects?.hotPct;
-                    if (!hotPct) continue;
-                    tickHot(undefined, hotPct, b.stacks ?? 1);
-                }
+                tickHot(undefined, hotPct, b.stacks ?? 1);
             }
         }
 
