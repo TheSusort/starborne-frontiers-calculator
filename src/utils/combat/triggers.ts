@@ -2537,8 +2537,8 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
  *  `incomingHealPct` (`Inc. Repair Down/Up` — repairs LANDING on this actor) and
  *  `outgoingHealPct` (`Out. Repair Down` — repairs this actor PERFORMS).
  *
- *  PAYLOAD CHANNELS ONLY, deliberately — the two per-victim ability stores (timed, where all ten
- *  corpus appliers land, and aura/accumulating). The SCHEDULED channel is excluded for two
+ *  PAYLOAD CHANNELS ONLY, deliberately — the two per-victim ability stores (timed, where every
+ *  corpus applier lands, and aura/accumulating). The SCHEDULED channel is excluded for two
  *  reasons: (1) `upsertBuff` is hardcoded to the global `__enemy__` key, so the per-victim
  *  scheduled store is empty in every run today; (2) reading the GLOBAL `__enemy__` bucket here —
  *  as `victimEnemyBuffs` does for the DAMAGE channel — would be actively WRONG for this purpose:
@@ -2558,7 +2558,11 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
  *  Carries the same NEUTRAL-ctx approximation as `victimEnemyBuffs`/`ownerDebuffNamesFor` on the
  *  aura/accumulating branch. It does not bite here: every corpus status in these two channels
  *  (`Inc. Repair Down I/II/III`, `Out. Repair Down II`) is TIMED, and the timed channel is gated
- *  at application time, before this read. */
+ *  at application time, before this read. Verified against `docs/ship-skills.csv` (2026-08-23):
+ *  9 ships carry one of these across 15 clause occurrences, and EVERY occurrence carries an
+ *  explicit "for N turns" — there is no permanent or stacking variant to fall into the aura arm.
+ *  Two of the nine inflict reactively rather than from a damage clause (Sansi on being hit,
+ *  Nayra on an enemy repairing); both are still timed. */
 export function victimOwnEnemyHealModifiers(
     statusEngine: StatusEngine,
     victimId: string
