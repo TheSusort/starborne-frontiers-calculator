@@ -122,17 +122,25 @@ export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGa
  * sanctioned repair-to-damage channel, and it is an explicit status, not a sign accident reached by
  * folding percentages past −100%.
  *
- * WHY IT LIVES IN THIS LEAF MODULE. It has FOUR consumption sites across two files that import
+ * WHY IT LIVES IN THIS LEAF MODULE. It has SIX consumption sites across three files that import
  * each other in one direction only — `runPlayerTurn`'s player and `healEventOnly` cast arms and its
- * HoT tick (`playerTurn.ts`), plus the reactive-heal executor (`triggers.ts`). It was originally a
- * closure inside `runPlayerTurn` whose doc was honestly scoped to "this file's three sites", which
- * made it an INCOMPLETE tripwire: #367 routed `triggers.ts`'s `incomingPctFor` through
- * `liveHealChannelPct`, so for the first time that site could see an enemy-applied reduction while
- * being the only one not clamped. `buffTotals` is the leaf both files already import — the
- * "import-cycle safe: … come from ./buffTotals (leaf module), not from ./playerTurn (which imports
- * triggers.ts)" note on `triggers.ts`'s `victimEnemyBuffs` is the same argument — so a single
- * definition serves all four without a cycle. A value import of `playerTurn` from `triggers` would
- * be one, which is why this did not simply get exported where it stood.
+ * HoT tick (`playerTurn.ts`), the reactive-heal executor (`triggers.ts`), and the two per-victim
+ * leech procs `procStandingLeechesPerVictim` / `procTakenLeechesPerVictim` (`engine.ts`, added by
+ * #367 task 7 when the owner ruled a leech self-repair is a repair like any other). It was
+ * originally a closure inside `runPlayerTurn` whose doc was honestly scoped to "this file's three
+ * sites", which made it an INCOMPLETE tripwire: #367 routed `triggers.ts`'s `incomingPctFor`
+ * through `liveHealChannelPct`, so for the first time that site could see an enemy-applied
+ * reduction while being the only one not clamped. `buffTotals` is the leaf all three files already
+ * import — the "import-cycle safe: … come from ./buffTotals (leaf module), not from ./playerTurn
+ * (which imports triggers.ts)" note on `triggers.ts`'s `victimEnemyBuffs` is the same argument — so
+ * a single definition serves all six without a cycle. A value import of `playerTurn` from
+ * `triggers` would be one, which is why this did not simply get exported where it stood.
+ *
+ * NOT a consumer, deliberately: the two leech heal-apply sites `engine.ts` did NOT change — the
+ * aggregate `procStandingLeeches` and the non-positional heal-target taken-leech block. Both are
+ * corpus-DEAD (re-measured 2026-08-23 with an ungated throw at each across the whole 6,414-test
+ * suite; neither fired), so a fold there would be an unverifiable change to unexercised code. Each
+ * site carries its own note; the aggregate's is additionally tripwired.
  *
  * ⚠️ NO OUTGOING TWIN, DELIBERATELY. The outgoing channel (`Out. Repair Down`) is unfloored at
  * every one of its sites — `(1 + outgoingHealBuff / 100)` in both `playerTurn` cast arms and

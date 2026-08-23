@@ -91,6 +91,11 @@ import { emitPerVictimAttacked } from './emitPerVictimAttacked';
 import { CombatEvent, CombatEventBus, createEventBus } from './events';
 import { resolveLethalHp } from './lethalHp';
 import { reversedRepairsOn } from './reversedRepairs';
+// `incomingHealFactor` lives in the `buffTotals` LEAF module precisely so every consumer of the
+// incoming-repair channel shares ONE floored definition — read its doc for why a channel clamped
+// at some of its sites and not others is worse than one clamped nowhere. The two per-victim leech
+// procs below are its fifth and sixth call sites.
+import { incomingHealFactor } from './buffTotals';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -4424,7 +4429,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // THE EVIDENCE IS THE MEASUREMENT, not a structural argument. A `console.error` probe on the
     // leech loop below recorded ZERO hits across the whole suite (6,006 tests) while a probe at the
     // function entry recorded 12,194 calls: every one is filtered out by `amount <= 0` / `!entries`
-    // before the loop. The reachability chain is that this proc's ONLY feed (`creditDamage`) is
+    // before the loop. RE-MEASURED 2026-08-23 (#367 task 7) with an UNGATED `throw` immediately
+    // before this proc's heal-apply call: it did not fire in any of the suite's 6,414 tests, every
+    // one of which ran to completion on that pass.
+    // The reachability chain is that this proc's ONLY feed (`creditDamage`) is
     // called from exactly two sites, both inside `if (!positional)`, and no fixture in the corpus
     // reaches either with a registered leech entry. Do NOT restate that as "positional is always
     // true": `positional` (see the gate in the turn loop) is also false when there is no target,
@@ -4445,12 +4453,21 @@ export function runCombat(rawInput: CombatEngineInput): {
     // this half is the weaker one. (1) Its `'ally'` arm has no `ownerIsEnemy` guard, while the
     // per-victim twin's does. (2) It resolves its owner from `runtimesById`, which is PLAYER-side
     // only — so for an enemy owner this proc returns before the loop, and its `'lowest-hp-ally'`
-    // arm is structurally dead on the enemy side. This half is therefore NOT team-symmetric, and
+    // arm is structurally dead on the enemy side. (3) Since #367 task 7 the per-victim twin folds
+    // the RECIPIENT'S INCOMING-REPAIR channel (`incomingHealFactor(recipientIncomingHealPct(rid))`)
+    // into a heal-kind leech and this half does not — so an `Inc. Repair Down` standing on a
+    // leeching ship would be ignored here. This half is therefore NOT team-symmetric, and
     // the locked symmetry rule is satisfied only by the per-victim twin. Anything added here still
     // has to be added there (that is the anti-drift rule), but the reverse does not hold, and only
     // the per-victim copy can be covered by a test — do not write a fixture claiming to cover this
     // one. Making this half symmetric is a real fix, not this rung's scope; the tripwire is what
     // guarantees the question comes back before the code goes live.
+    //
+    // DIVERGENCE (3) IS A DELIBERATE NON-CHANGE, on the same evidence. The measurement above says
+    // this arm is executed by no test in the corpus, so a fold here could be neither verified nor
+    // falsified by anything in the repository — the reason #367 task 7 stopped at the per-victim
+    // twin rather than mirroring into dead code. Adding it is the FIRST thing to do if this arm is
+    // ever made reachable, and the tripwire below is what forces that question to be asked.
     const procStandingLeeches = (sourceId: string, channel: LeechChannel, amount: number): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = standingLeeches.get(sourceId);
@@ -4517,6 +4534,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // this pass — so an unconditional double-credit bug here would be invisible to
                     // every test in the repository. Do not build fixtures for it now; this comment
                     // only records that the branch rests on review, not on coverage.
+                    //
+                    // STILL DEAD, re-measured 2026-08-23 (#367 task 7): an ungated `throw` here did
+                    // not fire across the whole 6,414-test suite. That measurement is also why this
+                    // call keeps `raw` while its per-victim twin now scales by the recipient's
+                    // incoming-repair channel — divergence (3) in this proc's ⚠️ header block.
                     const applied = selectorActor
                         ? healingCtx.applyHealToTarget(raw, selectorActor, sourceId)
                         : rid === healTarget!.id
@@ -4560,10 +4582,15 @@ export function runCombat(rawInput: CombatEngineInput): {
     // full damage and covered victims contribute half automatically (the caller passes the
     // per-victim `damage`).
     //
-    // It REUSES procStandingLeeches's fold math (pct → raw, healModifier, heal-crit draw) but does
-    // its OWN pool application via the Task-1 parametrized closures (applyHealToTarget(raw, actor, repairSourceId) /
-    // grantShieldToTarget(raw, actor)), resolving each recipient's actor — so a covered enemy's
-    // leech can repair the right ally, not just the heal target.
+    // It reuses procStandingLeeches's ENTRY-LEVEL fold math (pct → raw, healModifier, heal-crit
+    // draw) but does its OWN pool application via the Task-1 parametrized closures
+    // (applyHealToTarget(raw, actor, repairSourceId) / grantShieldToTarget(raw, actor)), resolving
+    // each recipient's actor — so a covered enemy's leech can repair the right ally, not just the
+    // heal target. Since #367 task 7 it ALSO folds a term the aggregate has no equivalent of: the
+    // RECIPIENT'S incoming-repair channel, applied per `rid` inside the recipient loop (see the
+    // block at that line). So "reuses the fold math" describes the shared entry-level chain, not
+    // the whole of it — the two halves have drifted here on purpose, and divergence (3) in the
+    // aggregate's ⚠️ block is the record of why.
     //
     // WHAT THE AGGREGATE `procStandingLeeches` NOW DOES (rewritten SP-4e fix wave 1 — the previous
     // wording said it was left "UNTOUCHED", which stopped being true the moment SP-4e armed its
@@ -4713,16 +4740,58 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // take an explicit victim). Runtime maps, not allActorsById: the focus is 'attacker'.
                 const recipientActor = allRuntimesById.get(rid)?.actor;
                 if (e.kind === 'heal') {
+                    // #367 task 7 — THE RECIPIENT'S INCOMING-REPAIR CHANNEL. Owner ruling
+                    // (2026-08-23): a leech self-repair IS a repair, so `Inc. Repair Down II` on a
+                    // leeching ship halves its leech and an `Inc. Repair Up II` raises it. Before
+                    // this line the fold above was `healModifier` + a heal-crit draw and nothing
+                    // else, so the channel #367 wired into the cast, HoT and reactive paths reached
+                    // every repair channel in the engine EXCEPT the leech ones.
+                    //
+                    // PER RECIPIENT, not per entry — hence inside this loop rather than beside the
+                    // `healModifier` multiply above: the channel belongs to whoever the repair
+                    // LANDS on, and an `all-allies` leech lands on a whole side of differently
+                    // debuffed ships. `raw` stays the pre-channel amount for the next `rid`.
+                    //
+                    // HEAL KIND ONLY. A shield GRANT is not a repair (the same line #362 draws at
+                    // `grantShieldToTarget`), so the `else` arm below is deliberately untouched.
+                    //
+                    // `recipientIncomingHealPct` is engine-scope and wraps `liveHealChannelPct` —
+                    // the ONE resolution path #367 consolidated (the published ctx's stale
+                    // enemy-applied portion subtracted, a live read re-added). A second hand-rolled
+                    // resolution here would reintroduce exactly the freshness bug that consolidation
+                    // fixed. `incomingHealFactor` floors the multiplier at 0 so a leech suppressed
+                    // past -100% lands at 0 rather than crediting a negative gross repair.
+                    //
+                    // WHAT IS STALE HERE, AND MEASURED. For a SELF leech the recipient IS the acting
+                    // actor, whose ctx is published only AFTER this turn's dispatch
+                    // (`lastTurnCtxByActor.set` sits below the positional apply that calls this
+                    // proc) — so the SELF-side half of the channel is read from its PREVIOUS turn's
+                    // ctx, or, before its first turn, from `preFight.incomingHeal`. The
+                    // ENEMY-APPLIED half — the ruled scenario, and the only half a debuff applied
+                    // this round can move — is live either way, which is why the ruling itself is
+                    // fully satisfied.
+                    //
+                    // The consequence, MEASURED 2026-08-23 rather than reasoned: a leecher holding
+                    // a self-side `Inc. Repair Up II` (+50%) from combat start credits
+                    // 10,000 / 15,000 / 15,000 over three rounds — round 1 misses it, rounds 2+ see
+                    // it. `preFight.incomingHeal` is the one self-side source that IS visible in
+                    // round 1, which is what this task's own fixtures use for the Up direction.
+                    // KNOWN RESIDUAL, deliberately not closed here: the cast path's self arm reads
+                    // the acting actor's fresh `dmgStats.totals` instead, and giving this proc the
+                    // same freshness means either publishing the ctx earlier (a mid-turn behaviour
+                    // change for every other `lastTurnCtxByActor` reader) or threading the live
+                    // totals to all three `procLeechesForVictim` call sites. Neither is a fold.
+                    const scaled = raw * incomingHealFactor(recipientIncomingHealPct(rid));
                     // R10′ (#362): the gross `directHeal` credit moved BELOW the apply so a
                     // reversed repair suppresses it too. An UNRESOLVABLE recipient still credits
                     // gross (unchanged) — nothing was applied there, so nothing was reversed.
                     const applied = recipientActor
-                        ? healingCtx.applyHealToTarget(raw, recipientActor, sourceId)
+                        ? healingCtx.applyHealToTarget(scaled, recipientActor, sourceId)
                         : undefined;
                     if (applied === undefined) {
-                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'directHeal', scaled);
                     } else if (!applied.reversed) {
-                        healingCtx.credit(sourceId, 'directHeal', raw);
+                        healingCtx.credit(sourceId, 'directHeal', scaled);
                         healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
                         healingCtx.credit(sourceId, 'overheal', applied.overheal);
                         // Recipient axis (SP-3b Task 7) — this per-victim path repairs whichever
@@ -4730,7 +4799,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         creditLandedRepair(
                             rid,
                             'directHeal',
-                            raw,
+                            scaled,
                             applied.consumed,
                             applied.overheal
                         );
@@ -4764,6 +4833,14 @@ export function runCombat(rawInput: CombatEngineInput): {
     //   - Same heal/shield fold (pct → raw, healModifier, heal-crit gate/noCrit) and the same
     //     directHeal/effectiveHeal/overheal vs shield bucket split, credited to the victim.
     //
+    // ⚠️ THAT MIRROR IS NO LONGER EXACT, as of #367 task 7. A heal-kind leech here additionally
+    // folds the VICTIM'S INCOMING-REPAIR channel (`incomingHealFactor(recipientIncomingHealPct)`)
+    // — the owner ruled a leech self-repair is a repair, so `Inc. Repair Down` reduces it — and the
+    // non-positional block does NOT. Deliberate: that block is executed by no test in the corpus
+    // (re-measured 2026-08-23 with an ungated `throw` over the whole 6,414-test suite; it did not
+    // fire), and shipping an unverifiable change to unexercised code was ruled out. Its own site
+    // carries the matching note. If it is ever made reachable, add the fold there first.
+    //
     // HEAL-CRIT-GATE CADENCE: this fires once per victim, so a heal-kind leech draws the
     // victim's `activeHealCritGate` ONCE PER VICTIM (matching procStandingLeechesPerVictim).
     const procTakenLeechesPerVictim = (
@@ -4791,12 +4868,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             }
             if (e.kind === 'heal') {
+                // #367 task 7 — the recipient's INCOMING-REPAIR channel, the sibling of the fold
+                // in `procStandingLeechesPerVictim` (read its block for the ruling, the reuse
+                // argument and the measured staleness note). A damage-TAKEN leech is a self-repair,
+                // so the recipient is always `victim` and the channel is always its own — there is
+                // no per-recipient loop to sit inside here, unlike the sibling.
+                //
+                // A SEPARATE LOCAL, not another `raw *=`, for two reasons. (1) Shape parity with
+                // the sibling, where the fold MUST be per-recipient. (2) The `raw *=` chain above
+                // is gated on `rt` resolving, and this channel does not depend on a runtime at all
+                // — folding it in there would silently skip it for a victim with no runtime entry.
+                // Not a claim that the shield arm needed protecting: that arm never enters the
+                // chain above either, since it is `e.kind === 'heal' && rt`.
+                const scaled = raw * incomingHealFactor(recipientIncomingHealPct(victim.id));
                 // R10′ (#362): every bucket, gross included, is booked BELOW the apply and only
                 // when the repair was not reversed. This site always applies (the victim is
                 // resolved), so there is no third case here.
-                const applied = healingCtx.applyHealToTarget(raw, victim, victim.id);
+                const applied = healingCtx.applyHealToTarget(scaled, victim, victim.id);
                 if (!applied.reversed) {
-                    healingCtx.credit(victim.id, 'directHeal', raw);
+                    healingCtx.credit(victim.id, 'directHeal', scaled);
                     healingCtx.credit(victim.id, 'effectiveHeal', applied.consumed);
                     healingCtx.credit(victim.id, 'overheal', applied.overheal);
                     // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
@@ -4804,7 +4894,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     creditLandedRepair(
                         victim.id,
                         'directHeal',
-                        raw,
+                        scaled,
                         applied.consumed,
                         applied.overheal
                     );
@@ -11615,6 +11705,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                                             // be invisible to every test in the repository. Do not
                                             // build fixtures for it now; this comment only records
                                             // that the branch rests on review, not on coverage.
+                                            //
+                                            // STILL DEAD, re-measured 2026-08-23 (#367 task 7): an
+                                            // ungated `throw` here did not fire in any of the
+                                            // suite's 6,414 tests. Two hand-built attempts to force
+                                            // the `!enemyPositional` arm also failed — OMITTING
+                                            // `position` and `pattern` on the `enemyAttackers` input
+                                            // does NOT produce a non-positional enemy turn (the
+                                            // per-victim twin's probe fired in both attempts), so
+                                            // do not assume that is the way in.
+                                            //
+                                            // SECOND CONSEQUENCE, same cause: this block does NOT
+                                            // fold the heal target's INCOMING-REPAIR channel, while
+                                            // its positional twin `procTakenLeechesPerVictim` does
+                                            // since #367 task 7. So an `Inc. Repair Down` on the
+                                            // heal target would not reduce a taken-leech that
+                                            // arrived here. Left alone for the same reason as the
+                                            // credit move — unverifiable code is not worth changing
+                                            // — and it is the first thing to add if this arm is ever
+                                            // made reachable.
                                             const applied = healingCtx.applyHealToTarget(
                                                 raw,
                                                 healTarget!,

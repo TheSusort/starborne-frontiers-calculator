@@ -3968,8 +3968,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `incomingHealFactor` (the incoming-repair multiplier, floored at 0 — #367 §3.4) used to
         // be a closure here. It moved to the `buffTotals` leaf module so the reactive-heal executor
         // in `triggers.ts` can share the ONE definition: its doc scoped itself to "this file's
-        // three sites", and that omission left the fourth consumption site unclamped. Read that
-        // doc before touching any of the four.
+        // three sites", and that omission left the fourth consumption site unclamped. #367 task 7
+        // added a fifth and sixth in `engine.ts` (the two per-victim leech procs). Read that doc
+        // before touching any of the six.
         // D-PR5: caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
         // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
         // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
