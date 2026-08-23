@@ -2606,8 +2606,8 @@ export function victimOwnEnemyHealModifiers(
  * own turn — so anybody reading somebody ELSE's published ctx reads that actor's LAST TURN's
  * totals. When the applier is SLOWER than the victim, the debuff lands after the victim's turn and
  * a repair later in the same round would read a ctx that predates the debuff. With
- * `Inc. Repair Down II` applied for ONE turn (Larkspur, Ripper) and `III` for one turn (Sansi),
- * such a debuff could expire having reduced nothing at all.
+ * `Inc. Repair Down II` applied for ONE turn (Larkspur, Ripper, Sha Xing) and `III` for one turn
+ * (Sansi), such a debuff could expire having reduced nothing at all.
  *
  * THE ARITHMETIC, and why it cannot double-count. `playerTurn` publishes the enemy-applied portion
  * separately (`enemyAppliedIncomingHealPct` / `enemyAppliedOutgoingHealPct`) from the very values
@@ -2627,6 +2627,12 @@ export function victimOwnEnemyHealModifiers(
  * NOT for an actor reading its OWN current turn's totals — those are computed fresh from
  * `dmgStats.totals` and already correct; running them through here would subtract a term the
  * caller never added.
+ *
+ * ⚠️ THE CHANNEL IS NOW ASYMMETRICALLY FRESH, and only the enemy half is live. The ctx's own
+ * SELF-side contribution (`Inc. Repair Up`, a pre-fight baseline, any timed self-buff) is still
+ * whatever was published at the holder's last turn — so a self-buff that expired since then is
+ * still counted here for the rest of the round. That staleness is PRE-EXISTING and out of scope
+ * for #367; do not read "live" above as a claim about the whole channel.
  */
 export function liveHealChannelPct(
     statusEngine: StatusEngine,

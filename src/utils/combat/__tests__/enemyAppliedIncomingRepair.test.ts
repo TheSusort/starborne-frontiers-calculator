@@ -274,10 +274,10 @@ interface FixtureOpts {
      *  SOURCE instead — the only way to exercise the OUTGOING channel, which belongs to the healer
      *  rather than to the recipient. */
     debuffTarget?: 'victim' | 'medic';
-    /** A self-side incoming-repair buff on the victim's own passive slot (test 2's `Inc. Repair
-     *  Up II`), standing from combat start. */
+    /** A self-side incoming-repair buff on the victim's own passive slot (section 2's R1 fixture uses
+     *  `Inc. Repair Up II` here), standing from combat start. */
     victimSelfBuff?: { name: string; incomingHeal: number };
-    /** The medic's own active-slot kit. Omitted → the medic does nothing (test 5, where the victim
+    /** The medic's own active-slot kit. Omitted → the medic does nothing (section 5, where the victim
      *  repairs itself). */
     medicAbilities?: Ability[];
     /** 300 (the default) puts the medic's repair AFTER the victim's own turn, so the victim's
@@ -298,7 +298,8 @@ interface FixtureOpts {
      *  `recipientIncomingHealPct`. */
     victimReactiveAbilities?: Ability[];
     /** Duration of every inflicted status, in turns. Default 5. `1` is the corpus's real
-     *  short-lived shape (Larkspur's and Ripper's actives apply `Inc. Repair Down II` for ONE turn,
+     *  short-lived shape (Larkspur's, Ripper's and Sha Xing's actives apply `Inc. Repair Down II` for ONE
+     *  turn,
      *  Sansi's passive applies `III` for one turn) — a debuff that can expire having reduced
      *  nothing at all if the reduction is only visible from the victim's next turn onward. */
     duration?: number;
@@ -312,7 +313,7 @@ interface FixtureRun {
      *  Read off the LIVE status engine, which is the exact store the fix folds from — so this is a
      *  direct existence check on the thing under test, not a proxy for it. */
     victimDebuffNames: string[];
-    /** The buff names standing in the victim's own SELF store (test 2's `Inc. Repair Up II`). */
+    /** The buff names standing in the victim's own SELF store (section 2's `Inc. Repair Up II`). */
     victimSelfBuffNames: string[];
     /** The buff names standing in the MEDIC's per-victim enemy store — the existence check for the
      *  OUTGOING-channel test, where the debuff is on the healer rather than on the recipient. */
@@ -719,8 +720,8 @@ describe('#367 — the OUTGOING channel: Out. Repair Down II on the healer', () 
 //   repair later in the same round reads a ctx that predates the debuff and the reduction is
 //   invisible.
 //
-// That is not a corner case: `Inc. Repair Down II` is applied for ONE turn by Larkspur's and
-// Ripper's actives and `III` for one turn by Sansi's passive, so against a faster victim such a
+// That is not a corner case: `Inc. Repair Down II` is applied for ONE turn by Larkspur's,
+// Ripper's and Sha Xing's actives and `III` for one turn by Sansi's passive, so against a faster victim such a
 // debuff could expire having reduced exactly nothing.
 //
 // THE FIX, and why these tests can tell it apart from the double-count bug: `playerTurn` publishes
