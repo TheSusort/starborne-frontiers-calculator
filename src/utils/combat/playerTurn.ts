@@ -86,6 +86,7 @@ import {
     calculateBuffTotals,
     expandBuffEntry,
     expandEnemyDebuffs,
+    incomingHealFactor,
     payloadToSelectedBuff,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
@@ -3964,30 +3965,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             rid === actor.id
                 ? dmgStats.totals.incomingHealBuff
                 : healing.recipientIncomingHealPct(rid);
-        /** #367 §3.4: the incoming-repair multiplier, floored at 0. The summed incoming-heal % fed
-         *  in above is unclamped by construction — under R1 (same-family statuses overwrite by
-         *  highest tier, survivors add) only ONE `Inc. Repair Down` can stand today, so the worst
-         *  reachable value is -75%, but nothing upstream stops a future second reducer from
-         *  pushing the sum past -100%. A factor below 0 would flip the repair's SIGN.
-         *
-         *  HP itself is already safe either way: `applyHealToTarget` floors both of its paths
-         *  (`Math.max(0, Math.min(raw, deficit))` normally, `Math.max(0, raw)` under a #362
-         *  reversal), so a negative `raw` can never move HP the wrong way. What it silently
-         *  corrupts instead is the ACCOUNTING built from `raw` — `healing.credit(...)`,
-         *  `healRawSum`, `heal-performed.amount`/`perTarget[].amount`, the battle report's healing
-         *  done/received, and a negative reported `overheal` (`raw − 0` when the deficit clamp
-         *  zeroes `consumed`). Clamping the factor here guarantees `raw >= 0` at every one of this
-         *  file's three consumption sites (this one, the mirrored `healEventOnly` arm below, and
-         *  `holderIncomingFactor`'s HoT tick) without touching HP at all — the guard is for the
-         *  numbers a reader would report, not for the bar.
-         *
-         *  A fully-suppressed repair floors to 0, never damage: Reversed Repairs (#362) is the
-         *  only sanctioned repair-to-damage channel, and it is an explicit status, not a sign
-         *  accident reached by folding percentages past -100%.
-         *
-         *  UNREACHABLE TODAY under the locked tier rule above — this is a tripwire for the next
-         *  incoming-repair reducer, not a fix for a live bug. */
-        const incomingHealFactor = (pct: number): number => Math.max(0, 1 + pct / 100);
+        // `incomingHealFactor` (the incoming-repair multiplier, floored at 0 — #367 §3.4) used to
+        // be a closure here. It moved to the `buffTotals` leaf module so the reactive-heal executor
+        // in `triggers.ts` can share the ONE definition: its doc scoped itself to "this file's
+        // three sites", and that omission left the fourth consumption site unclamped. Read that
+        // doc before touching any of the four.
         // D-PR5: caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
         // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
         // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
@@ -4161,9 +4143,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (selfAbilityStatuses = timed + active, payload.parsedEffects.hotPct × payload.stacks,
         // applier = status.casterId) and scheduled snapshot buffs (entry.activeSelfBuffs ×
         // selfBuffLookup, expanded SelectedGameBuff.parsedEffects.hotPct × stacks, applier = holder).
-        // #367 §3.4: floored via `incomingHealFactor` (see its doc comment above) — this tick is
+        // #367 §3.4: floored via `incomingHealFactor` (doc in `buffTotals.ts`) — this tick is
         // already guarded by `if (raw <= 0) return;` below, so the floor is a no-op here today,
-        // but it keeps this site consistent with the other two rather than relying solely on that
+        // but it keeps this site consistent with the other THREE rather than relying solely on that
         // guard if the surrounding code ever changes.
         const holderIncomingFactor = incomingHealFactor(dmgStats.totals.incomingHealBuff);
         // Resolve the applier's effective max HP for a HoT tick; undefined → caller skips.

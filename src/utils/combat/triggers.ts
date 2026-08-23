@@ -20,7 +20,12 @@ import { conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers } from '../calculators/affinityUtils';
-import { expandEnemyDebuffs, payloadToSelectedBuff, expandBuffEntry } from './buffTotals';
+import {
+    expandEnemyDebuffs,
+    incomingHealFactor,
+    payloadToSelectedBuff,
+    expandBuffEntry,
+} from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
 // top-level evaluation), so there is no initialization-order hazard.
@@ -2557,6 +2562,18 @@ export interface EnemyAppliedHealModifiers {
  *  player ship would have its own team's inflicted `Inc. Repair Down` applied to itself. Do not
  *  "unify" this with `victimEnemyBuffs` without re-reading that function's jsdoc.
  *
+ *  ⚠️ THAT REASONING IS ABOUT A PLAYER VICTIM ONLY, AND IT LEAVES A RESIDUAL GAP. For an ENEMY
+ *  victim the global `__enemy__` bucket is exactly the right source — it holds the debuffs the
+ *  player side inflicted on enemies, which is what an enemy victim's own incoming-repair channel
+ *  should read — and this function does not read it. So an `Inc. Repair Down` ticked by hand in the
+ *  calculator's ENEMY-DEBUFF PICKER still has NO arithmetic effect on an enemy's repairs: exactly
+ *  the symptom #367 was filed for, surviving on the scheduled channel because `upsertBuff` is
+ *  hardcoded to `DEFAULT_ENEMY_TARGET` (statusEngine.ts) and no actor carries that id, so the
+ *  per-victim read below finds nothing. Deliberately NOT fixed here — reading the global bucket
+ *  needs a victim-side condition (enemy victims only) that the DAMAGE channel's helper does not
+ *  have either, and getting it wrong re-introduces the player-side self-debuff bug above. Filed as
+ *  a follow-up; the two payload channels below are the ones #367 fixed.
+ *
  *  TIER SHADOWING IS INHERITED, NOT IMPLEMENTED. `applyTimedAbilityStatus` already family-keys
  *  and tier-upserts (`deriveFamilyKey`), so an `Inc. Repair Down I` is already absent from the
  *  store whenever an `Inc. Repair Down II` is live. The fold is therefore a plain additive sum,
@@ -4279,13 +4296,21 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         // own clipped excess, not the aggregate.
                         (overhealByAlly[rid] ?? 0)
                       : nonTargetHpBasis;
+            // #367 final review: the INCOMING factor goes through `incomingHealFactor` (floored at
+            // 0 — doc in `buffTotals.ts`), the same helper the three `playerTurn` consumption sites
+            // use. It was unfloored here while they were clamped, and #367 is what made that matter:
+            // routing `incomingPctFor` through `liveHealChannelPct` above means this site can now
+            // see an ENEMY-APPLIED reduction for the first time, so the branch widened what can
+            // reach an unclamped factor. The OUTGOING factor is deliberately left unfloored — it is
+            // unfloored at every one of its sites, and clamping one of three would rebuild exactly
+            // the partial tripwire this change removes (see the helper's ⚠️ note).
             let raw =
                 cfg.type === 'heal'
                     ? basisValue *
                       (effectivePct / 100) *
                       (1 + owner.healModifier / 100) *
                       (1 + ownerOutgoing / 100) *
-                      (1 + incomingPctFor(rid) / 100)
+                      incomingHealFactor(incomingPctFor(rid))
                     : basisValue * (effectivePct / 100);
             // D-PR6: recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
             // shields). Rolls the recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
