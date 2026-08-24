@@ -1193,6 +1193,31 @@ Run: `npx vitest run src/components/calculator/__tests__/DefenseShipCard.test.ts
 
 Expected: FAIL — no `result` prop, no `Measured EHP` text.
 
+- [ ] **Step 0 (carried from Task 4's review): fix `hasPassive`**
+
+Task 4 shipped `hasPassive={!!selectedShip}` because THIS PLAN told it to. That is wrong and diverges
+from both sibling calculators. `ShipConfigCard.tsx:94-99` and `HealerConfigCard` use:
+
+```typescript
+    // Show the Passive slot whenever the ship has passive skill text to read/edit — not only
+    // when the parser auto-filled abilities. Defensive/repair passives (e.g. Anemone) parse to
+    // nothing but still need the Edit button so users can read and add abilities manually.
+    const hasPassive =
+        config.shipSkills.slots.some((s) => s.slot === 'passive') ||
+        (selectedShip ? !!getSkillRowForSlot(selectedShip, 'passive') : false);
+```
+
+Adopt it verbatim in `DefenseShipCard.tsx` and pass `hasPassive={hasPassive}`. Import
+`getSkillRowForSlot` from wherever `ShipConfigCard` imports it.
+
+**Why it matters:** `!!selectedShip` renders an editable Passive row with a live Edit button for ANY
+selected ship, including one with no passive skill text at all — letting a user fabricate an ability
+for a slot that does not exist for that ship in-game. The first clause also matters: it keeps a
+manually-added passive slot visible when no ship is selected.
+
+Add a test arm asserting a ship WITHOUT passive text does not get a Passive row, and one WITH text
+does. Without that arm this silently regresses to the same bug.
+
 - [ ] **Step 3: Render the block**
 
 Add `result?: DefenseSurvivabilityResult;` to `DefenseShipCardProps`, and render above the existing

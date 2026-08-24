@@ -134,7 +134,17 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
       ⚠️ `selfDefenceBuffMitigation.test.ts` is now the SOLE regression gate for this behaviour; the
       goldens are blind to it by construction. If that file is ever deleted or weakened the engine
       loses its only guard on the sign and the floor.
-- [x] Task 4: **complete** (commit `854afabd`; review pending). Suite **582 / 6474** (+1 file,
+- [x] Task 4: **complete** (commit `854afabd`, review PASS — 0 Critical, 2 Important, 3 Minor).
+      **PLAN DEFECT 3 (mine): `hasPassive={!!selectedShip}` is WRONG** and diverges from BOTH sibling
+      calculators, which use `slots.some(passive) || !!getSkillRowForSlot(ship,'passive')`
+      (`ShipConfigCard.tsx:94-99`, with a comment explaining why). Mine renders an editable Passive
+      row with a live Edit button for ANY selected ship, including ships with no passive text —
+      letting a user fabricate an ability for a slot that does not exist in-game. The implementer
+      complied with my brief correctly; the brief was wrong. **Folded into Task 6 Step 0** (same
+      file), WITH a required test arm, since Task 6 locks this UI in further.
+      Reviewer verified the RED by reconstructing the pre-implementation state in a worktree, and
+      confirmed 'Active'/'Charged' has no other source on a blank page (GameBuffPicker renders those
+      words only per-selected-buff, and a fresh config has `buffs: []`). Suite **582 / 6474** (+1 file,
       +2 tests, both its own). Observed RED was a clean query miss
       (`Unable to find an element with the text: Active`), NOT a crash — the sibling smoke test
       passed, proving the harness was sound and the test failed for the right reason.
