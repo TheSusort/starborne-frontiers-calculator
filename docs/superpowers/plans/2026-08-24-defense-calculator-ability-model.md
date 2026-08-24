@@ -1218,6 +1218,35 @@ manually-added passive slot visible when no ship is selected.
 Add a test arm asserting a ship WITHOUT passive text does not get a Passive row, and one WITH text
 does. Without that arm this silently regresses to the same bug.
 
+- [ ] **Step 0b (carried from Task 5): pass the defender's real targeting**
+
+Task 5 left `simulateDefenseSurvivability`'s optional `targeting` unset, because THIS PLAN's Step-4
+code omitted it. Consequence: the defender's cast falls back to the adapter's synthetic
+single-target-front pattern instead of its real parsed kit. That is not cosmetic — the defender takes
+its own turns, so an AoE defender kills attackers more slowly than it really would, its incoming
+pressure stays higher for longer, and its measured EHP reads LOW. Precisely the silent-understatement
+class this epic exists to remove.
+
+`HealingCalculatorPage.tsx:121-128` has the helper, module-local and unexported:
+
+```typescript
+const targetingOf = (ship?: Ship): ShipTargeting | undefined => {
+    if (!ship) return undefined;
+    try {
+        return parseShipTargeting(ship);
+    } catch {
+        return undefined;
+    }
+};
+```
+
+**Extract it to a shared module** (e.g. `src/utils/calculators/shipTargeting.ts`), have BOTH pages
+import it, and pass `targeting: targetingOf(config.shipId ? getShipById(config.shipId) : undefined)`
+in the defense page's sim input. Do not copy-paste a second private copy — a third would follow.
+
+This is a pure function move: keep the try/catch and its comment verbatim. The healing suite is the
+safety net for the extraction — if any healing test moves, STOP, because the move was not pure.
+
 - [ ] **Step 3: Render the block**
 
 Add `result?: DefenseSurvivabilityResult;` to `DefenseShipCardProps`, and render above the existing

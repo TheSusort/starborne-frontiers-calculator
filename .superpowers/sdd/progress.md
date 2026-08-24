@@ -207,7 +207,16 @@ contradicting the shipped code).
 - **Stronger "oversight, not design" evidence than my `selfIncoming` parallel:** every OTHER
   direct-damage site (counter, reactive, Protection fallback) ALREADY uses buff-folded defence. The
   positional applied path was the sole hold-out.
-- [ ] Task 5: page wires the survivability sim
+- [x] Task 5: **complete** (commit `baa87c44`; review pending). Suite **582 / 6474** — unchanged, as
+      a wiring task with no new tests should be.
+      **PLAN DEFECT 4 (mine): my Step-4 code omitted `targeting`.** The defender's cast therefore
+      fell back to synthetic single-target-front instead of its real parsed kit — an AoE defender
+      kills attackers slower than it would in game, incoming pressure stays high longer, and
+      measured EHP reads LOW. **Folded into Task 6 Step 0b**, extracting the healing page's private
+      `targetingOf` to a shared module rather than making a second copy.
+      Implementer's ONE deliberate deviation was correct: seeded the enemy/team id refs at 1, not the
+      healing page's 2, because this page's rosters start EMPTY rather than pre-seeded — copying
+      verbatim would have made the first added enemy display as "Enemy 2".
 - [ ] Task 6: measured-EHP results block
 - [ ] Task 7: documentation + changelog
 
