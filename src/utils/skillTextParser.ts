@@ -2579,8 +2579,7 @@ export function detectEveryTurnTrigger(
     // detectX helper); passed the literal 'start-of-turn' trigger, it can only ever come back
     // as that literal or undefined, so the narrowing cast here is safe.
     return phrasePosTrigger(text, EVERY_TURN_RE, anchorPos, 'start-of-turn') as
-        | 'start-of-turn'
-        | undefined;
+        'start-of-turn' | undefined;
 }
 
 /**

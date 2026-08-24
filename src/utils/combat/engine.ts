@@ -9610,7 +9610,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 i.ability.type !== 'charge';
             const take = (queue: Intent[]): Intent[] => {
                 const ready: Intent[] = [];
-                for (let i = 0; i < queue.length; ) {
+                for (let i = 0; i < queue.length;) {
                     if (isGrant(queue[i])) ready.push(queue.splice(i, 1)[0]);
                     else i++;
                 }

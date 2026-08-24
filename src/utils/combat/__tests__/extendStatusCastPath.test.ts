@@ -180,15 +180,13 @@ const enemyDebuffTurns = (statusEngine: StatusEngine, victimId: string): number 
     statusEngine
         .timedAbilityStatuses('enemy', undefined, victimId)
         .find((s) => s.payload.buffName === 'Defense Down')?.active.turnsRemaining as
-        | number
-        | undefined;
+        number | undefined;
 
 const selfBuffTurns = (statusEngine: StatusEngine, ownerId: string): number | undefined =>
     statusEngine
         .timedAbilityStatuses('self', ownerId)
         .find((s) => s.payload.buffName === 'Attack Up')?.active.turnsRemaining as
-        | number
-        | undefined;
+        number | undefined;
 
 // ---------------------------------------------------------------------------
 // Sokol — charged debuff-extend (target 'enemy').

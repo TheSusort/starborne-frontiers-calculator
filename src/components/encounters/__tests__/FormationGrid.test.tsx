@@ -16,7 +16,7 @@ const firstRowLabels = (): string[] => {
     const topRow = within(grid)
         .getAllByText(/^[TMB][1-4]$/)
         .filter((el) => /^T[1-4]$/.test(el.textContent ?? ''))
-        .map((el) => el.textContent as string);
+        .map((el) => el.textContent);
     return topRow;
 };
 

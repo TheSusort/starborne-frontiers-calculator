@@ -28,9 +28,13 @@ afterEach(() => {
     resetRateGateRng();
 });
 
-// Proper TextEncoder/Decoder interface definitions
+// Proper TextEncoder/Decoder interface definitions.
+// `encode` is pinned to Uint8Array<ArrayBuffer>: since TS 5.7 the typed arrays are
+// generic over their buffer, and lib.dom's TextEncoder promises the non-shared
+// ArrayBuffer. A bare `Uint8Array` defaults to ArrayBufferLike, which includes
+// SharedArrayBuffer and so fails to satisfy the global we assign to below.
 interface TextEncoderInterface {
-    encode(input?: string): Uint8Array;
+    encode(input?: string): Uint8Array<ArrayBuffer>;
     encodeInto(input: string, dest: Uint8Array): { read: number; written: number };
 }
 
@@ -42,7 +46,7 @@ interface TextDecoderInterface {
 if (typeof TextEncoder === 'undefined') {
     global.TextEncoder = class implements TextEncoderInterface {
         encoding = 'utf-8';
-        encode(text: string = ''): Uint8Array {
+        encode(text: string = ''): Uint8Array<ArrayBuffer> {
             const arr = new Uint8Array(text.length);
             for (let i = 0; i < text.length; i++) {
                 arr[i] = text.charCodeAt(i);

@@ -23,11 +23,7 @@ export interface LiveTraffic {
 }
 
 export type UserSortField =
-    | 'email'
-    | 'total_autogear_runs'
-    | 'total_data_imports'
-    | 'total_activity'
-    | 'last_active';
+    'email' | 'total_autogear_runs' | 'total_data_imports' | 'total_activity' | 'last_active';
 export type SortDirection = 'asc' | 'desc';
 
 export interface AllUsersParams {

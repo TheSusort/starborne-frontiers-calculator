@@ -294,9 +294,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
         // Clear baseline caches at the start of a new analysis session
         // This ensures we start fresh, but the caches persist across calls within the session
-        const { baselineStatsCache, baselineBreakdownCache } = await import(
-            '../../utils/gear/potentialCalculator'
-        );
+        const { baselineStatsCache, baselineBreakdownCache } =
+            await import('../../utils/gear/potentialCalculator');
         baselineStatsCache.clear();
         baselineBreakdownCache.clear();
 
