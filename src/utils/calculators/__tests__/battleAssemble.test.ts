@@ -226,6 +226,104 @@ describe('assembleBattleResult — heals', () => {
         expect(find(result, 1, 'player-team').healingReceived).toBe(2000);
         expect(find(result, 1, 'attacker').shieldsAbsorbed).toBe(0);
     });
+
+    // #383 — `healingDone` PREFERS the engine's own per-source repair axis
+    // (`hp-snapshot.repairPerformed`) over this event accumulation, the same contract `hpPct`
+    // (#372) and `healingReceived` (#375) already have. The event sum survives only as the
+    // fallback for hand-built streams that name no actor on a snapshot.
+    //
+    // A SENTINEL, deliberately unequal to the `heal-performed` amount: if the assembler were
+    // still summing the event, or if the read sat behind a fallback that resolved to the same
+    // number, this test would pass while measuring nothing (the #375 `??`-ambiguity lesson).
+    it('#383 prefers hp-snapshot.repairPerformed over the heal-performed sum', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'heal-performed',
+                casterId: 'attacker',
+                targets: ['player-team'],
+                round: 1,
+                amount: 4000,
+            },
+            {
+                type: 'hp-snapshot',
+                actorId: 'attacker',
+                round: 1,
+                currentHp: 10000,
+                maxHp: 10000,
+                shieldPool: 0,
+                repairPerformed: 12345,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(find(result, 1, 'attacker').healingDone).toBe(12345);
+    });
+
+    // ...and ABSENT (not 0) means "not measured" — a legacy run with per-recipient accounting off
+    // carries no `repairPerformed`, and must keep falling back to the event sum rather than
+    // reporting every caster as having healed nothing. `??`, not `||`, is what makes a measured
+    // ZERO distinguishable from an unmeasured one.
+    it('#383 falls back to the heal-performed sum when the snapshot omits repairPerformed', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'heal-performed',
+                casterId: 'attacker',
+                targets: ['player-team'],
+                round: 1,
+                amount: 4000,
+            },
+            {
+                type: 'hp-snapshot',
+                actorId: 'attacker',
+                round: 1,
+                currentHp: 10000,
+                maxHp: 10000,
+                shieldPool: 0,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(find(result, 1, 'attacker').healingDone).toBe(4000);
+    });
+
+    // A measured ZERO is reported as zero, not fallen back over. This is the arm that makes the
+    // fix meaningful for the channel it closes: a caster whose repair was entirely reversed
+    // (#362 R10') is measured at 0 and must REPORT 0, even though `heal-performed` still fired.
+    it('#383 reports a measured zero rather than falling back', () => {
+        const events: CombatEvent[] = [
+            {
+                type: 'heal-performed',
+                casterId: 'attacker',
+                targets: ['player-team'],
+                round: 1,
+                amount: 4000,
+            },
+            {
+                type: 'hp-snapshot',
+                actorId: 'attacker',
+                round: 1,
+                currentHp: 10000,
+                maxHp: 10000,
+                shieldPool: 0,
+                repairPerformed: 0,
+            },
+        ];
+        const result = assembleBattleResult({
+            events,
+            perRoundPerTarget: {},
+            roster: roster(),
+            numRounds: 1,
+        });
+        expect(find(result, 1, 'attacker').healingDone).toBe(0);
+    });
 });
 
 describe('assembleBattleResult — death + outcome + trim', () => {

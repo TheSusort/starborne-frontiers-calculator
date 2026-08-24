@@ -316,6 +316,11 @@ export type CombatEvent =
      *  particular the GROSS/consumed difference is now visible: the axis books the tick's gross,
      *  this event books what landed, so an over-repairing HoT reports differently on the two arms.
      *
+     *  ⚠️ AND IT FEEDS THE RECEIVED AXIS ONLY — never `healingDone`. #383 gave that column its own
+     *  per-source axis and deliberately left ticks off it (locked ruling R2, #367: a tick is not a
+     *  repair PERFORMED). If you are ever tempted to credit a tick's holder with having done it,
+     *  that is the ruling you would be breaking.
+     *
      *  WHY IT EXISTS. `assembleBattleResult` does not read `currentHp`; it DERIVES each ship's
      *  `hpPct` as `maxHp − hpLost + healed`, and `healed` was accumulated exclusively from
      *  `heal-performed.perTarget`. A HoT tick emits no `heal-performed` (see R2 below) and
@@ -678,6 +683,27 @@ export type CombatEvent =
      *  contract `healingReceived` has always been held to (pinned on BOTH sides in
      *  `reversedRepairs.engine.test.ts`). `effectiveHeal` would read 0 for every wasted repair.
      *
+     *  `repairPerformed` (#383) closes the THIRD axis, the SOURCE counterpart of `repairReceived`:
+     *  the HP this actor REPAIRED onto anyone this round, itself included. `healingDone` used to
+     *  sum `heal-performed.casterId`, so it reached the cast channel only — a leecher reported 0
+     *  done beside 800 received, and a reactive repairer credited nobody at all. Read off a
+     *  side-agnostic per-source axis (`currentRoundSourceRepair`) credited at every site whose
+     *  pool application succeeds: both per-victim leeches, the reactive executor, and BOTH cast
+     *  arms. That last one matters — the cast channel already reported correctly on both sides
+     *  (measured), so an axis that omitted it would have zeroed every medic while fixing the leech.
+     *
+     *  It is a SIBLING of the engine's `perActor` source axis, not a widening of it. `perActor` is
+     *  PLAYER-ONLY by design (E5 §4.1 — an enemy heal must not enter the player healing buckets)
+     *  and stays that way; this axis has no side, exactly like `repairReceived`.
+     *
+     *  A HoT TICK IS DELIBERATELY ABSENT from it (locked ruling R2, #367: a tick is not a repair
+     *  PERFORMED — no `heal-performed`, no on-repaired trigger). `repairReceived` books ticks and
+     *  `repairPerformed` does not; the asymmetry between the two fields is the contract, not a gap.
+     *
+     *  GROSS and reversal-suppressed on the same terms as `repairReceived`: the raw that arrived,
+     *  pre-overheal-clipping, and nothing at all for a repair a `Reversed Repairs` recipient took
+     *  as damage (#362 R10′ — a reversed repair heals for nothing and stays off BOTH axes).
+     *
      *  ABSENT (not 0) when the run has per-recipient accounting off — a legacy single-target
      *  healing run, where the axis is empty by design. The assembler falls back to its event
      *  accumulation there, so absent means "not measured" while 0 means "measured, none landed". */
@@ -689,6 +715,7 @@ export type CombatEvent =
           maxHp: number;
           shieldPool: number;
           repairReceived?: number;
+          repairPerformed?: number;
       }
     /** LOG-ONLY: an end-of-round snapshot of the statuses one actor actually still carries,
      *  read live from the StatusEngine (`statusNames`). Emitted once per actor at the round

@@ -123,10 +123,35 @@ export interface ShipRoundState {
      */
     damageTaken: number;
     /**
-     * Healing this actor actually did this round: summed `heal-performed.amount` MINUS the
-     * portion that was reversed into damage (#362 R10′ — `heal-performed.reversedAmount`). A
-     * repair whose recipient carried `Reversed Repairs` healed nobody, so it books nothing here
-     * even though the cast happened and the event fired.
+     * The GROSS repair this actor PERFORMED this round — onto anyone, itself included — READ from
+     * `hp-snapshot.repairPerformed` (#383), the engine's own per-source repair axis. That is the
+     * primary and, on every real run, the only source.
+     *
+     * ── THE FALLBACK ARM, for hand-built event streams that carry no snapshot ─────────────────
+     * Summed `heal-performed.amount` MINUS the portion that was reversed into damage (#362 R10′ —
+     * `heal-performed.reversedAmount`). A repair whose recipient carried `Reversed Repairs` healed
+     * nobody, so it books nothing even though the cast happened and the event fired.
+     *
+     * ⚠️ #383 REPLACED THAT ACCUMULATION AS THE PRIMARY SOURCE, for the reason its twin
+     * `healingReceived` was replaced in #375: `heal-performed` has exactly ONE production emit
+     * site, the cast path, so the accumulation reached the cast channel and nothing else. A ship
+     * repairing itself off Magnolia's leech reported 0 done beside 800 received, and a reactive
+     * repairer was credited by nothing at all (`reactive-heal-performed` is deliberately absent
+     * from `ASSEMBLED_EVENT_TYPES`).
+     *
+     * NOT THE SAME DEFECT AS #375, despite the shape. That one was SIDE-shaped — two enemy arms
+     * of the recipient axis were missing. This one is CHANNEL-shaped: measured before the fix, an
+     * enemy cast medic already reported `healingDone` correctly, because the `healEventOnly` arm
+     * emits `heal-performed` too. Which is exactly why the axis had to cover the cast channel
+     * before it could be substituted here — an axis credited at the leech and reactive sites
+     * alone would have zeroed every medic in the game while fixing the leech.
+     *
+     * A HoT TICK IS ON NEITHER ARM, deliberately (locked ruling R2, #367: a tick is not a repair
+     * PERFORMED). Its holder's `healingReceived` books it; nobody's `healingDone` does.
+     *
+     * BOTH ARMS ARE GROSS and both suppress reversal, so they agree on the cast channel by
+     * construction — which is what made the substitution byte-identical for it (measured: zero
+     * golden churn, against a `+1` probe that fails 11 snapshots).
      */
     healingDone: number;
     /**
@@ -261,6 +286,10 @@ const clampPct = (value: number): number => Math.max(0, Math.min(100, value));
  */
 export const ASSEMBLED_EVENT_TYPES = [
     'ability-performed',
+    // FALLBACK-ONLY on a real run for BOTH heal axes now: `healingReceived` has read
+    // `hp-snapshot.repairReceived` since #375 and `healingDone` reads
+    // `hp-snapshot.repairPerformed` since #383. Still listed because the derived arm stays
+    // reachable for hand-built streams, and because this event has other folds.
     'heal-performed',
     // A `Repair Over Time` tick's landed HP. Added when `hpPct` was still derived, to stop every
     // HoT holder's bar under-reporting by each tick. FALLBACK-ONLY NOW: since #372 the bar reads
@@ -269,10 +298,11 @@ export const ASSEMBLED_EVENT_TYPES = [
     // arm is still reachable, and because a tick emits no `heal-performed` (R2 — it is not a
     // "performed repair"), so nothing else would report it there.
     'hot-ticked',
-    // #372/#375: the engine's own end-of-round HP read, plus (#375) the round's gross repair onto
-    // each actor. AUTHORITATIVE for the actors it names — the row's `hpPct` and `healingReceived`
-    // both prefer it over the derived accumulation, which survives only as a fallback for
-    // hand-built streams that emit no snapshot.
+    // #372/#375/#383: the engine's own end-of-round HP read, plus the round's gross repair onto
+    // each actor (#375) and the gross repair each actor performed (#383). AUTHORITATIVE for the
+    // actors it names — the row's `hpPct`, `healingReceived` and `healingDone` all prefer it over
+    // the derived accumulation, which survives only as a fallback for hand-built streams that emit
+    // no snapshot.
     'hp-snapshot',
     'ship-destroyed',
     'buff-applied',
@@ -482,9 +512,16 @@ export function assembleBattleResult(args: {
         // actor, read off the engine's per-recipient healing axis. Kept OPTIONAL all the way
         // through, because absent and 0 mean different things here — see the field's doc in
         // events.ts and the `healingReceived` read below.
+        // `repairPerformed` (#383) is the SOURCE-side twin of `repairReceived`, optional for the
+        // same reason and read the same way — see the `healingDone` assignment below.
         const hpSnapshots = new Map<
             string,
-            { currentHp: number; maxHp: number; repairReceived?: number }
+            {
+                currentHp: number;
+                maxHp: number;
+                repairReceived?: number;
+                repairPerformed?: number;
+            }
         >();
         for (const e of roundEvents) {
             if (e.type !== 'hp-snapshot') continue;
@@ -492,6 +529,7 @@ export function assembleBattleResult(args: {
                 currentHp: e.currentHp,
                 maxHp: e.maxHp,
                 ...(e.repairReceived !== undefined ? { repairReceived: e.repairReceived } : {}),
+                ...(e.repairPerformed !== undefined ? { repairPerformed: e.repairPerformed } : {}),
             });
         }
 
@@ -596,7 +634,16 @@ export function assembleBattleResult(args: {
                 side: entry.side,
                 damageDealt: dealt.get(entry.actorId) ?? 0,
                 damageTaken: taken,
-                healingDone: healDone.get(entry.actorId) ?? 0,
+                // #383: REPORTED from the engine's per-SOURCE repair axis when it told us, and
+                // event-derived only when it did not — the same contract `healingReceived` got in
+                // #375, one axis over. The derived form sums `heal-performed.casterId`, which has
+                // exactly one production emit site (the cast path), so a leecher reported 0 done
+                // beside its 800 received and a reactive repairer was credited by nothing at all.
+                // The cast channel itself was already correct on BOTH sides here, which is why the
+                // axis has to cover it too — see the `hp-snapshot` doc in events.ts. `??`, not
+                // `||`: a measured 0 is a real answer (an entirely reversed repair) and must not
+                // fall through to the accumulation.
+                healingDone: snapshot?.repairPerformed ?? healDone.get(entry.actorId) ?? 0,
                 // #375: REPORTED from the engine's per-recipient healing axis when it told us, and
                 // event-derived only when it did not. The derived form reaches only the channels
                 // that emit an event — `heal-performed` (cast-only) and `hot-ticked` — so a ship
