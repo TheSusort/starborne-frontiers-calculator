@@ -134,7 +134,21 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
       ⚠️ `selfDefenceBuffMitigation.test.ts` is now the SOLE regression gate for this behaviour; the
       goldens are blind to it by construction. If that file is ever deleted or weakened the engine
       loses its only guard on the sign and the floor.
-- [ ] Task 4: `SkillSlotList` in the defense card (BASE `cb2b9607`)
+- [x] Task 4: **complete** (commit `854afabd`; review pending). Suite **582 / 6474** (+1 file,
+      +2 tests, both its own). Observed RED was a clean query miss
+      (`Unable to find an element with the text: Active`), NOT a crash — the sibling smoke test
+      passed, proving the harness was sound and the test failed for the right reason.
+      **PLAN DEFECT 2 (mine):** I put the REQUIRED `onShipSkillsChange` prop in Task 4 but its page
+      wiring in Task 5 — so Task 4 could not typecheck at its own gate. The implementer added
+      minimal real wiring (`updateConfigShipSkills`, mirroring `updateConfigBuffs`) rather than a
+      stub. Correct call. **Same shape as PLAN DEFECT 0: I keep drawing task boundaries that split a
+      required prop from its only caller.**
+      **STALE-FILE TRAP it caught:** `.superpowers/sdd/` still held `task-5-*` and `task-7-*` from
+      the MERGED #367 epic, same filenames, different epic. A Task 5 dispatch pointing at that brief
+      would have handed an agent another epic's requirements. Moved to `archive-367/`.
+      **Instrument note:** my grep-for-"358" heuristic mislabelled my OWN `task-8-brief.md` as stale
+      (it cites the spec path, not the issue number). mtime was the correct instrument. Two
+      instruments disagreed and the content-based one was wrong.
 
 ## ⛔ PROCESS RULE ADDED (incident, 2026-08-24) — DO NOT run a reviewer concurrently with an
 ## implementer in the SAME working tree.
