@@ -111,38 +111,37 @@ const grantCO2ToAllAllies = (): Ability => ({
  *  (Sentinel's own charged skill has no damage ability at all). No board position: this is the
  *  non-positional "team walk" shape (teamWalk.test.ts), which routes `all-allies` targeting to
  *  every player actor id, including the top-level focus ('attacker'), without one. */
-const granterAlly = (): TeamActor =>
-    ({
-        id: 'granter',
-        speed: 200,
-        chargeCount: 99,
-        startCharged: true,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        walk: {
-            shipSkills: {
-                slots: [
-                    { slot: 'active', abilities: [dmg(0)] },
-                    { slot: 'charged', abilities: [grantCO2ToAllAllies(), dmg(0)] },
-                ],
-            },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: true,
+const granterAlly = (): TeamActor => ({
+    id: 'granter',
+    speed: 200,
+    chargeCount: 99,
+    startCharged: true,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [dmg(0)] },
+                { slot: 'charged', abilities: [grantCO2ToAllAllies(), dmg(0)] },
+            ],
         },
-    }) as TeamActor;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: true,
+    },
+});
 
 /** The focus attacker under test. `speed` (100) is slower than the granter (200), so a present
  *  granter's grant is always live before the focus's own turn each round. `chargedMultiplier`

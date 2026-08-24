@@ -49,35 +49,34 @@ const teamActor = (
     position: Position,
     slots: ShipSkills['slots'] = [],
     hp = HP
-): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        role: 'ATTACKER',
-        position,
-        walk: {
-            shipSkills: { slots },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+): TeamActorEngineInput => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    role: 'ATTACKER',
+    position,
+    walk: {
+        shipSkills: { slots },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** A positioned enemy. `attack` > 0 makes it fire one real 100% direct hit at the front player. */
 const enemy = (attack: number) =>
@@ -102,7 +101,7 @@ const enemy = (attack: number) =>
                                   trigger: 'on-cast',
                                   conditions: [],
                                   config: { type: 'damage', multiplier: 100 },
-                              } as Ability,
+                              },
                           ],
                       },
                   ]

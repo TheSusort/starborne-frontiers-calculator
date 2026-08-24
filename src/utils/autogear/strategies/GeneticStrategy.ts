@@ -87,10 +87,10 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         if (hasImplants) {
             // Add implant slots except ultimate
             slots.push(
-                'implant_major' as GearSlotName,
-                'implant_minor_alpha' as GearSlotName,
-                'implant_minor_gamma' as GearSlotName,
-                'implant_minor_sigma' as GearSlotName
+                'implant_major',
+                'implant_minor_alpha',
+                'implant_minor_gamma',
+                'implant_minor_sigma'
             );
         }
 

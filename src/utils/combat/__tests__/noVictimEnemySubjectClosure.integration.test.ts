@@ -38,32 +38,31 @@ const HURT_PCT = 0.4;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** A Hermes-shaped repair, plus one self-shield carrying the gate under test. */
-const repairKitWithGatedShield = (gate: Condition): ShipSkills =>
-    ({
-        slots: [
-            {
-                slot: 'active',
-                abilities: [
-                    {
-                        id: 'repair1',
-                        type: 'heal',
-                        target: 'all-allies',
-                        trigger: 'on-cast',
-                        conditions: [],
-                        config: { type: 'heal', pct: 27, basis: 'hp' },
-                    },
-                    {
-                        id: 'gatedShield',
-                        type: 'shield',
-                        target: 'self',
-                        trigger: 'on-cast',
-                        conditions: [gate],
-                        config: { type: 'shield', pct: 50, basis: 'hp' },
-                    },
-                ],
-            },
-        ],
-    }) as ShipSkills;
+const repairKitWithGatedShield = (gate: Condition): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'repair1',
+                    type: 'heal',
+                    target: 'all-allies',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'heal', pct: 27, basis: 'hp' },
+                },
+                {
+                    id: 'gatedShield',
+                    type: 'shield',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [gate],
+                    config: { type: 'shield', pct: 50, basis: 'hp' },
+                },
+            ],
+        },
+    ],
+});
 
 const noVictimRun = (gate: Condition) => {
     const bus = createEventBus();
@@ -120,25 +119,24 @@ const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-const passiveEnemyAt = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-front',
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const passiveEnemyAt = (position: Position): EnemyAttacker => ({
+    id: 'enemy-front',
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 const healingEngineBase = (shipSkills: ShipSkills): CombatEngineInput => ({
     attack: 10_000,
@@ -225,17 +223,16 @@ const shieldGatedBuff = (gate: Condition): Ability => ({
     },
 });
 
-const enemyActorAt = (id: string, position: Position, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: SHIELD_HP, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyActorAt = (id: string, position: Position, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: SHIELD_HP, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+});
 
 const seedShield = (actorId: string, pool: number) => (actors: CombatActor[]) => {
     const a = actors.find((x) => x.id === actorId);
@@ -285,13 +282,12 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
     beforeEach(() => setupKeyedTestRng(12345));
 
     describe('enemy-debuff', () => {
-        const gate = (): Condition =>
-            ({
-                subject: 'enemy-debuff',
-                countComparator: 'eq',
-                countThreshold: 0,
-                derivable: true,
-            }) as Condition;
+        const gate = (): Condition => ({
+            subject: 'enemy-debuff',
+            countComparator: 'eq',
+            countThreshold: 0,
+            derivable: true,
+        });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
             setupKeyedTestRng(12345);
@@ -335,13 +331,12 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
     });
 
     describe('enemy-dot-count', () => {
-        const gate = (): Condition =>
-            ({
-                subject: 'enemy-dot-count',
-                countComparator: 'eq',
-                countThreshold: 0,
-                derivable: true,
-            }) as Condition;
+        const gate = (): Condition => ({
+            subject: 'enemy-dot-count',
+            countComparator: 'eq',
+            countThreshold: 0,
+            derivable: true,
+        });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
             setupKeyedTestRng(12345);
@@ -382,13 +377,12 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
     });
 
     describe('enemy-shield', () => {
-        const gate = (): Condition =>
-            ({
-                subject: 'enemy-shield',
-                countComparator: 'eq',
-                countThreshold: 0,
-                derivable: true,
-            }) as Condition;
+        const gate = (): Condition => ({
+            subject: 'enemy-shield',
+            countComparator: 'eq',
+            countThreshold: 0,
+            derivable: true,
+        });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
             setupKeyedTestRng(12345);
@@ -436,14 +430,14 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
                             ],
                         },
                     ],
-                } as ShipSkills,
+                },
             });
             const gate: Condition = {
                 subject: 'enemy-buff',
                 countComparator: 'gte',
                 countThreshold: 1,
                 derivable: true,
-            } as Condition;
+            };
             const bus = createEventBus();
             const shieldsOnFocus: number[] = [];
             bus.on('shield-applied', (e: Extract<CombatEvent, { type: 'shield-applied' }>) => {

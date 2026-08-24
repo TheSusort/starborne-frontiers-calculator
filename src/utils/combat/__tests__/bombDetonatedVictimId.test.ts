@@ -218,7 +218,7 @@ function makeArgs(runtime: PlayerActorRuntime, pendingBombs: PendingBomb[]): Pla
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-    } as PlayerTurnArgs;
+    };
 }
 
 const SKILLS: ShipSkills = {
@@ -233,7 +233,7 @@ const SKILLS: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'damage', multiplier: 80, hits: 1 },
-                } as Ability,
+                },
                 {
                     id: 'detonate',
                     type: 'damage',
@@ -241,7 +241,7 @@ const SKILLS: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
-                } as Ability,
+                },
             ],
         },
     ],

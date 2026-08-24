@@ -83,34 +83,33 @@ describe('extracted shapes (mutation guard)', () => {
 });
 
 /** Heliodor as the sole enemy: reaction-heals and duration-shrinks whenever directly damaged. */
-const heliodor = (): EnemyAttacker =>
-    ({
-        id: 'heliodor',
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 500_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'noop',
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 0 },
-                        },
-                    ],
-                },
-                { slot: 'passive', abilities: passiveAbilitiesOf(HELIODOR_R2) },
-            ],
-        },
-    }) as EnemyAttacker;
+const heliodor = (): EnemyAttacker => ({
+    id: 'heliodor',
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 500_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'noop',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 0 },
+                    },
+                ],
+            },
+            { slot: 'passive', abilities: passiveAbilitiesOf(HELIODOR_R2) },
+        ],
+    },
+});
 
 /** Ruiner attacks Heliodor. The hit is DIRECT damage, so Heliodor's on-attacked passive fires:
  *  it repairs itself (a REACTIVE heal) and shrinks its own debuff durations. Ruiner should see

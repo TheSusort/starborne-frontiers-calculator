@@ -47,15 +47,14 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 });
 
 // A pure-target enemy: low/zero attack, big HP, positioned. Effectively a stationary target.
-const enemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: selection,
@@ -243,23 +242,22 @@ const damagingEnemyAt = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 5000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // Run a combat and return the set of distinct player actor ids that took an hp-changed hit.
 const hpChangedTargets = (input: CombatEngineInput): Set<string> => {
@@ -315,35 +313,34 @@ describe('Task C3 — enemy attacker positional target selection (side-symmetric
 // A pure-target enemy with a high-speed ACTIVE-slot Taunt self-buff. With speed ≫ focus,
 // it acts first and self-buffs Taunt before the focus resolves its target. Its own basic
 // attack would target the player heal target (irrelevant to the focus's selection).
-const tauntingEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const tauntingEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        config: {
                             type: 'buff',
-                            target: 'self',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Taunt',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            } as Ability['config'],
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Taunt',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
     it('front selection redirects to the back-most enemy when it carries Taunt', () => {
@@ -382,36 +379,35 @@ describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
 // A pure-target enemy that casts a 99-turn 'Provoke' debuff onto its target (the player
 // focus) from a high-speed ACTIVE slot. With speed ≫ focus it acts first; the inflicted
 // Provoke carries casterId = this enemy's id, so provokerOf(focus) returns this enemy.
-const provokingEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const provokingEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'debuff',
+                        target: 'enemy',
+                        config: {
                             type: 'debuff',
-                            target: 'enemy',
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Provoke',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 99,
-                            } as Ability['config'],
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Provoke',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 describe('Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker', () => {
     it('front selection redirects to the back-most enemy when it cast-applies Provoke to the focus', () => {
@@ -493,7 +489,7 @@ const reactiveProvokerTeamActorAt = (
                                           isStackable: false,
                                           application: 'inflict',
                                           duration: 99,
-                                      } as Ability['config'],
+                                      },
                                   }),
                               ],
                           },

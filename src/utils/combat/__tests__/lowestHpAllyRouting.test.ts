@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { resolveSupportRecipients } from '../supportRecipients';
-import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs } from '../playerTurn';
+import { runPlayerTurn, PlayerActorRuntime } from '../playerTurn';
 import { createActor, CombatActor } from '../state';
 import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { createEventBus, CombatEvent } from '../events';
@@ -205,7 +205,7 @@ describe("SP-4e 'lowest-hp-ally' on the on-cast buff-extend path", () => {
             round: 1,
             targetId: enemy.id,
             sameSideLiving: [runtime.actor, wounded, healthy],
-        } as PlayerTurnArgs);
+        });
 
         expect(selfBuffTurns(statusEngine, wounded.id)).toBe(3);
         expect(selfBuffTurns(statusEngine, healthy.id)).toBe(2);
@@ -241,7 +241,7 @@ describe("SP-4e 'lowest-hp-ally' on the on-cast buff-extend path", () => {
             round: 1,
             targetId: enemy.id,
             sameSideLiving: [runtime.actor],
-        } as PlayerTurnArgs);
+        });
 
         expect(selfBuffTurns(statusEngine, runtime.actor.id)).toBe(2);
     });
@@ -369,15 +369,14 @@ const enemyShip = (
     id: string,
     position: Position,
     skills: ShipSkills | undefined
-): EnemyAttackerInput =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 50_000, speed: 100 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        ...(skills ? { shipSkills: skills } : {}),
-    }) as EnemyAttackerInput;
+): EnemyAttackerInput => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 50_000, speed: 100 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    ...(skills ? { shipSkills: skills } : {}),
+});
 
 /** Locked symmetry rule: the ENEMY mirror of HEAL_BASE — the healer is an enemy, and the selector
  *  resolves over the ENEMY roster (the caster's OWN side). The player focus carries no support at
@@ -625,7 +624,7 @@ describe('SP-4e site C: the standing-leech arms (engine)', () => {
                     },
                     chargeCount: 0,
                     startCharged: false,
-                    position: 'M4' as Position,
+                    position: 'M4',
                     shipSkills: {
                         slots: [
                             { slot: 'active', abilities: [damageAb()] },

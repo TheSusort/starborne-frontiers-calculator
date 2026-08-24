@@ -410,35 +410,34 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
             id: string,
             position: Position,
             affinity: AffinityName
-        ): NonNullable<CombatEngineInput['teamActors']>[number] =>
-            ({
-                id,
-                speed: 90,
-                chargeCount: 0,
-                startCharged: false,
-                selfBuffs: [],
-                enemyDebuffs: [],
-                position,
-                affinity,
-                walk: {
-                    shipSkills: { slots: [] },
-                    stats: {
-                        attack: 0,
-                        crit: 0,
-                        critDamage: 0,
-                        defensePenetration: 0,
-                        hacking: 0,
-                        defence: 0,
-                        hp: 1_000_000_000,
-                    },
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
-                    affinityDamageModifier: 0,
-                    affinityCritCap: 100,
-                    affinityCritPenalty: 0,
-                    hasChargedSkill: false,
+        ): NonNullable<CombatEngineInput['teamActors']>[number] => ({
+            id,
+            speed: 90,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            affinity,
+            walk: {
+                shipSkills: { slots: [] },
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
                 },
-            }) as NonNullable<CombatEngineInput['teamActors']>[number];
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
         runCombat({
             // Focus player fires an all-pattern AoE so a normal round schedules (the enemy
             // acts via its speed). The focus has crit 0 so it does not emit its own crit signal
@@ -489,7 +488,7 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
                     target: parsedTarget('front'),
                     pattern: allPattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+                },
             ],
             bus,
         });
@@ -523,35 +522,34 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
             id: string,
             position: Position,
             affinity: AffinityName
-        ): NonNullable<CombatEngineInput['teamActors']>[number] =>
-            ({
-                id,
-                speed: 90,
-                chargeCount: 0,
-                startCharged: false,
-                selfBuffs: [],
-                enemyDebuffs: [],
-                position,
-                affinity,
-                walk: {
-                    shipSkills: { slots: [] },
-                    stats: {
-                        attack: 0,
-                        crit: 0,
-                        critDamage: 0,
-                        defensePenetration: 0,
-                        hacking: 0,
-                        defence: 0,
-                        hp: 1_000_000_000,
-                    },
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
-                    affinityDamageModifier: 0,
-                    affinityCritCap: 100,
-                    affinityCritPenalty: 0,
-                    hasChargedSkill: false,
+        ): NonNullable<CombatEngineInput['teamActors']>[number] => ({
+            id,
+            speed: 90,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            affinity,
+            walk: {
+                shipSkills: { slots: [] },
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 1_000_000_000,
                 },
-            }) as NonNullable<CombatEngineInput['teamActors']>[number];
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
         runCombat({
             // Focus player at M4 (the enemy AoE's anchor): antimatter → neutral vs chemical.
             // It fires a whole-team AoE at the enemy (damage 5000) so a normal round schedules.
@@ -601,7 +599,7 @@ describe('per-victim crit — attacker ability-performed crit signal (Task 5)', 
                     target: parsedTarget('front'),
                     pattern: allPattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+                },
             ],
             bus,
         });

@@ -50,15 +50,14 @@ const enemyAt = (
     position: Position,
     defence: number,
     hp = 1_000_000_000
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // A bomb pre-seeded with countdown 1 — bursts on the holder's OWN very first turn (round 1).
 // burst = damagePerStack × stacks × affinityMult (neutral mults) = 1000 × 2 = 2000.
@@ -111,7 +110,7 @@ const collect = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['bomb-detonated', 'reactive-damage-performed'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -172,40 +171,39 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
             id: string,
             position: Position,
             defence: number
-        ): TeamActorEngineInput =>
-            ({
-                id,
-                speed: 1,
-                chargeCount: 0,
-                startCharged: false,
-                selfBuffs: [],
-                enemyDebuffs: [],
-                position,
-                walk: {
-                    shipSkills: { slots: [] } as ShipSkills,
-                    stats: {
-                        attack: 0,
-                        crit: 0,
-                        critDamage: 0,
-                        defensePenetration: 0,
-                        defence,
-                        hp: 1_000_000_000,
-                        hacking: 0,
-                    },
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
-                    affinityDamageModifier: 0,
-                    affinityCritCap: 100,
-                    affinityCritPenalty: 0,
-                    hasChargedSkill: false,
+        ): TeamActorEngineInput => ({
+            id,
+            speed: 1,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            walk: {
+                shipSkills: { slots: [] },
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    defence,
+                    hp: 1_000_000_000,
+                    hacking: 0,
                 },
-            }) as TeamActorEngineInput;
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
 
         const { events } = collect(
             CASTER_BASE({
                 // The focus 'attacker' IS the bomb victim now (still M4), with no offense of its
                 // own — mirrors the zero-offense caster idiom, just swapped roles.
-                shipSkills: { slots: [] } as ShipSkills,
+                shipSkills: { slots: [] },
                 enemyAttackers: [
                     // The caster moves to the enemy side; it still needs A position (any) so
                     // isPositional(attacker.position, enemyAttackerActors) is satisfied for the
@@ -269,7 +267,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
                         enemyDebuffs: [],
                         position: 'T4',
                         walk: {
-                            shipSkills: { slots: [] } as ShipSkills,
+                            shipSkills: { slots: [] },
                             stats: {
                                 attack: 0,
                                 crit: 0,
@@ -286,7 +284,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
                             affinityCritPenalty: 0,
                             hasChargedSkill: false,
                         },
-                    } as TeamActorEngineInput,
+                    },
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
                     actors.find((a) => a.id === 'ally')?.pendingBombs.push(bomb('some-enemy'));
@@ -342,7 +340,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
             affinityCritPenalty: 0,
             defence: 0,
             hp: 1_000_000_000,
-            shipSkills: { slots: [] } as ShipSkills,
+            shipSkills: { slots: [] },
             ...overrides,
         });
 
@@ -366,7 +364,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
                 ...NONPOS_BASE({
                     // No passive at all — the true DPS baseline this caster would produce
                     // without the splash reactive ability wired.
-                    shipSkills: { slots: [] } as ShipSkills,
+                    shipSkills: { slots: [] },
                     __testTapActors: (actors: CombatActor[]) => {
                         actors
                             .find((a) => a.id === BARE_ENEMY_ID)

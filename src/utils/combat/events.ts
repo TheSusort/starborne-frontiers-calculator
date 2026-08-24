@@ -773,7 +773,7 @@ export function createEventBus(): CombatEventBus {
         },
         emit(event) {
             for (const listener of listeners.get(event.type) ?? []) {
-                listener(event as unknown as Extract<CombatEvent, { type: CombatEventType }>);
+                listener(event);
             }
         },
     };

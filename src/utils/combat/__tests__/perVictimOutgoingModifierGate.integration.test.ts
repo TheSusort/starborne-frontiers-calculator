@@ -54,23 +54,22 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A single positioned, passive (attack:0) enemy — security:0 so any inflict-type debuff
 // always lands (mirrors enemyDebuffNameSpecificGate.integration.test.ts).
-const passiveEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const passiveEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 const engineBase = (
     shipSkills: ShipSkills,

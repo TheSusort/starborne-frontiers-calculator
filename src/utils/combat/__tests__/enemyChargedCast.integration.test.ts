@@ -16,7 +16,7 @@ import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers'
 import { createEventBus, type CombatEvent } from '../events';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 import type { StatusEngine } from '../statusEngine';
 
@@ -104,19 +104,18 @@ const CURATOR_R4_TEXT =
 const FRONTLINE_R2_TEXT =
     'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
 
-const makeShip = (over: Partial<Ship>): Ship =>
-    ({
-        id: 'reactor',
-        name: 'Reactor',
-        rarity: 'legendary',
-        faction: 'AURELIAN_SOVEREIGNTY',
-        type: 'DEFENDER',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        ...over,
-    }) as Ship;
+const makeShip = (over: Partial<Ship>): Ship => ({
+    id: 'reactor',
+    name: 'Reactor',
+    rarity: 'legendary',
+    faction: 'AURELIAN_SOVEREIGNTY',
+    type: 'DEFENDER',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    ...over,
+});
 
 /** Build the reaction ship's passive abilities from REAL text via buildShipAbilities, then keep
  *  ONLY the on-enemy-charged-cast ones (drop the auto-fill on-cast siblings — see deviation note). */
@@ -202,7 +201,7 @@ const buffingChargedEnemy = (opts: {
                     abilities: [enemyDamage(400, `${opts.id}-c`), { ...buff, id: `${opts.id}-bc` }],
                 },
             ],
-        } as ShipSkills,
+        },
     };
 };
 

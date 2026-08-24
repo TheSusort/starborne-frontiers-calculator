@@ -271,7 +271,7 @@ describe('self-HP-threshold gate in runPlayerTurn', () => {
             selfHpPct?: number;
         };
 
-        const turn = runPlayerTurn(argsWithoutHpPct as PlayerTurnArgs);
+        const turn = runPlayerTurn(argsWithoutHpPct);
         expect(turn.directDamage).toBe(10000);
     });
 });

@@ -122,29 +122,27 @@ const aegisActor = (position: Position, pattern: ParsedPattern): TeamActorEngine
         },
     }) as unknown as TeamActorEngineInput;
 
-const enemyDebuffer = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-debuffer',
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [applyDebuff()] }] },
-    }) as EnemyAttacker;
+const enemyDebuffer = (position: Position): EnemyAttacker => ({
+    id: 'enemy-debuffer',
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [applyDebuff()] }] },
+});
 
-const enemyBreaker = (position: Position, attack: number): EnemyAttacker =>
-    ({
-        id: 'enemy-breaker',
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
-    }) as EnemyAttacker;
+const enemyBreaker = (position: Position, attack: number): EnemyAttacker => ({
+    id: 'enemy-breaker',
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+});
 
 const focus = (): CombatEngineInput => ({
     enemyAttackers: [],

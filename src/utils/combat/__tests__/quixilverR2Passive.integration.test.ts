@@ -108,47 +108,45 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
 /** A plain ally: no offence, no passive, slower than Quixilver so it never acts before the grant. */
-const ally = (id: string, position: Position): TeamActor =>
-    ({
-        id,
-        speed: 2,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage()] }] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const ally = (id: string, position: Position): TeamActor => ({
+    id,
+    speed: 2,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage()] }] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** Slowest actor on the board, so its hits always land after Quixilver's end-of-turn grant. */
-const offensiveEnemy = (abilities: Ability[]): EnemyAttacker =>
-    ({
-        id: 'enemy-1',
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M1' as Position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities }] },
-    }) as EnemyAttacker;
+const offensiveEnemy = (abilities: Ability[]): EnemyAttacker => ({
+    id: 'enemy-1',
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M1',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities }] },
+});
 
 /**
  * Quixilver as the FOCUS actor at M1 (back row), fastest on the board, carrying the real parsed

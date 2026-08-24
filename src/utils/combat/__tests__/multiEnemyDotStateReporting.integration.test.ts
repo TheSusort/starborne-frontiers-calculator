@@ -38,7 +38,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import type { ActiveDoTStack, PendingBomb, CombatActor } from '../state';
-import type { ShipSkills, Ability } from '../../../types/abilities';
+import type { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
@@ -74,21 +74,20 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
  *  a positioned enemy only perturbs the stream once it ACTS offensively), so adding a second one
  *  cannot shift any draw the assertions depend on. `hp` is overridable so a fixture can decide
  *  which carrier dies and when. */
-const inertEnemy = (id: string, position: Position, hp = HUGE_HP): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp,
-            speed: 50,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-    }) as EnemyAttacker;
+const inertEnemy = (id: string, position: Position, hp = HUGE_HP): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp,
+        speed: 50,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+});
 
 /** The anchor cell alone (range MUST be 0 — see DEFAULT_BASE_PATTERN). */
 const singleCell = (): ParsedPattern => ({ raw: 'single', shape: 'base', range: 0, modifiers: {} });
@@ -106,7 +105,7 @@ const damageKit = (multiplier: number): ShipSkills => ({
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'damage', multiplier },
-                } as Ability,
+                },
             ],
         },
     ],

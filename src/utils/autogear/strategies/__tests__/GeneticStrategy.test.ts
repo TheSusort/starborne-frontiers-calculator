@@ -33,14 +33,14 @@ function makeGear(id: string, slot: string, stat: keyof BaseStats, amount: numbe
         setBonus: null,
         mainStat: { name: stat, value: amount, type: 'flat' } as GearPiece['mainStat'],
         subStats: [],
-    } as unknown as GearPiece;
+    };
 }
 
 function makeShip(): Ship {
     return {
         id: 'ship1',
         name: 'Test Ship',
-        type: 'ATTACKER' as ShipTypeName,
+        type: 'ATTACKER',
         rarity: 'legendary',
         faction: 'TERRAN',
         level: 60,
@@ -49,7 +49,7 @@ function makeShip(): Ship {
         equipment: {},
         implants: {},
         refits: [],
-    } as unknown as Ship;
+    };
 }
 
 describe('GeneticStrategy.findOptimalGear', () => {

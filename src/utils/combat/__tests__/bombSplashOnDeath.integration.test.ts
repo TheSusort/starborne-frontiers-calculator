@@ -76,15 +76,14 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 // Origin-only footprint: the direct hit touches ONLY the anchor enemy (front), not the ally.
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // Focus attacker at M4: attack 5000 vs defence 0, multiplier 100% (1x), 1 hit, no crit →
 // firing-hit damage = 5000 (kills the front enemy when its HP ≤ 5000). Its active also applies

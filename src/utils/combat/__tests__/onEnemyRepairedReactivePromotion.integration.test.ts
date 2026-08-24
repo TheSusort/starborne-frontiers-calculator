@@ -184,29 +184,27 @@ describe('Ruiner (player-side) — Bomb routes to the REPAIRER, capped once per 
     });
 
     // enemy-x: fastest, self-heals AND grants itself one extra action → repairs TWICE this round.
-    const enemyX = (): EnemyAttacker =>
-        ({
-            id: 'enemy-x',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [
-                    { slot: 'active', abilities: [selfHeal('x-heal')] },
-                    { slot: 'passive', abilities: [extraAction('x-extra')] },
-                ],
-            },
-        }) as EnemyAttacker;
+    const enemyX = (): EnemyAttacker => ({
+        id: 'enemy-x',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [selfHeal('x-heal')] },
+                { slot: 'passive', abilities: [extraAction('x-extra')] },
+            ],
+        },
+    });
 
     // enemy-y: no extra action → repairs ONCE this round. A DIFFERENT repairer from enemy-x.
-    const enemyY = (): EnemyAttacker =>
-        ({
-            id: 'enemy-y',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [{ slot: 'active', abilities: [selfHeal('y-heal')] }] },
-        }) as EnemyAttacker;
+    const enemyY = (): EnemyAttacker => ({
+        id: 'enemy-y',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [{ slot: 'active', abilities: [selfHeal('y-heal')] }] },
+    });
 
     const BASE = (): CombatEngineInput => ({
         attack: 0,
@@ -256,7 +254,7 @@ describe('Ruiner (enemy-side) — team symmetry: an enemy Ruiner reacts to a PLA
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [ruinerBombAbility()] }] },
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,
@@ -329,30 +327,28 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
     // enemy-healer heals enemy-defender (its only OTHER living enemy ally) each of its turns.
     // `twice` grants it an extra action so it repairs enemy-defender TWICE in one round —
     // proving Amartya carries NO per-round cap (unlike Ruiner).
-    const enemyHealer = (twice: boolean): EnemyAttacker =>
-        ({
-            id: 'enemy-healer',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: twice
-                    ? [
-                          { slot: 'active', abilities: [healWorstHpAlly('heal-ally')] },
-                          { slot: 'passive', abilities: [extraAction('healer-extra')] },
-                      ]
-                    : [{ slot: 'active', abilities: [healWorstHpAlly('heal-ally')] }],
-            },
-        }) as EnemyAttacker;
+    const enemyHealer = (twice: boolean): EnemyAttacker => ({
+        id: 'enemy-healer',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: twice
+                ? [
+                      { slot: 'active', abilities: [healWorstHpAlly('heal-ally')] },
+                      { slot: 'passive', abilities: [extraAction('healer-extra')] },
+                  ]
+                : [{ slot: 'active', abilities: [healWorstHpAlly('heal-ally')] }],
+        },
+    });
 
-    const enemyDefender = (): EnemyAttacker =>
-        ({
-            id: 'enemy-defender',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [] } as ShipSkills,
-        }) as EnemyAttacker;
+    const enemyDefender = (): EnemyAttacker => ({
+        id: 'enemy-defender',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [] },
+    });
 
     const BASE = (twice: boolean): CombatEngineInput => ({
         attack: 0,
@@ -408,21 +404,21 @@ describe('Amartya (player-side) — Defense Shred lands on the REPAIRED RECIPIEN
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'active', abilities: [healAllAllies('aoe-heal')] }] },
-        } as EnemyAttacker;
+        };
         const def1: EnemyAttacker = {
             id: 'enemy-def-1',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
             chargeCount: 0,
             startCharged: false,
-            shipSkills: { slots: [] } as ShipSkills,
-        } as EnemyAttacker;
+            shipSkills: { slots: [] },
+        };
         const def2: EnemyAttacker = {
             id: 'enemy-def-2',
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 400 },
             chargeCount: 0,
             startCharged: false,
-            shipSkills: { slots: [] } as ShipSkills,
-        } as EnemyAttacker;
+            shipSkills: { slots: [] },
+        };
 
         // Tap heal-performed too, to PROVE the fan-out came from a SINGLE cast (not several).
         const bus = createEventBus();
@@ -458,7 +454,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [amartyaDefenseShredAbility()] }] },
-        } as EnemyAttacker;
+        };
 
         const recipientAlly: TeamActor = {
             id: 'ally-recipient',
@@ -485,7 +481,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
                 affinityCritPenalty: 0,
                 hasChargedSkill: false,
             },
-        } as TeamActor;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,

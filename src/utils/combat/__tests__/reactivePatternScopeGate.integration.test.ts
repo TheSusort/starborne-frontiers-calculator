@@ -59,7 +59,7 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { parsePattern } from '../../targetingParser';
-import type { Ability, AbilityTrigger, ShipSkills } from '../../../types/abilities';
+import type { Ability, AbilityTrigger } from '../../../types/abilities';
 import type { ParsedPattern, ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
@@ -683,7 +683,7 @@ const focusBoard = (opts: {
     pattern: realPattern(opts.ship),
     selfBuffs: opts.focusSelfBuffs ?? [],
     shipSkills: {
-        slots: [{ slot: 'passive', abilities: [opts.ability] } as ShipSkills['slots'][number]],
+        slots: [{ slot: 'passive', abilities: [opts.ability] }],
     },
     teamActors: Object.entries(PLAYER_CELLS).map(([id, cell]) =>
         buffedAlly(id, cell, opts.allyStatus)

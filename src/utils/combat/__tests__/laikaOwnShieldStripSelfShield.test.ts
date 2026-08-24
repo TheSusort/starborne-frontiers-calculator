@@ -153,16 +153,15 @@ const BASE: CombatEngineInput = {
 
 // A single positional enemy carrying a pre-fight shield (50% of its own Max HP) so there is
 // REAL shield present to strip before Laika's first turn.
-const shieldedEnemy = (): EnemyAttacker =>
-    ({
-        id: 'enemy-front',
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 100_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: 50 },
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const shieldedEnemy = (): EnemyAttacker => ({
+    id: 'enemy-front',
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 100_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: 50 },
+    shipSkills: { slots: [] },
+});
 
 describe('Laika (player-side) — self-shield fires on a REAL shield strip, not on-cast', () => {
     it('the CHARGED skill (removes 40% of the enemy Shield) fires the reactive self-shield (30% of Max HP)', () => {
@@ -214,7 +213,7 @@ describe('Laika (enemy-side) — team symmetry: an enemy Laika reacts to its OWN
             target: parsedTarget('front'),
             pattern: basePattern(),
             shipSkills: laikaShipSkills(),
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,
@@ -222,7 +221,7 @@ describe('Laika (enemy-side) — team symmetry: an enemy Laika reacts to its OWN
             critDamage: 0,
             defensePenetration: 0,
             chargeCount: 0,
-            shipSkills: { slots: [] } as ShipSkills,
+            shipSkills: { slots: [] },
             numRounds: 1,
             selfBuffs: [],
             enemyDebuffs: [],

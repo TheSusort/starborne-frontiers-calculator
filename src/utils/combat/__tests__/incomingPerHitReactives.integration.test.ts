@@ -88,7 +88,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { resetRateGateRng } from '../../calculators/rateAccumulator';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -359,48 +359,46 @@ describe('PR6 Tier 1 — incoming reactives fire once per sub-attack (player att
 });
 
 /** A player team actor at `position` carrying `slots`, which never attacks. */
-const teamVictim = (id: string, position: Position, slots: ShipSkills['slots']): TeamActor =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const teamVictim = (id: string, position: Position, slots: ShipSkills['slots']): TeamActor => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** An enemy that fires an N-hit cast at the player front. */
-const offensiveEnemy = (id: string, position: Position, hits: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 100, critDamage: 100, defence: 0, hp: HP, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity: 'antimatter',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [attackSkill(hits)] },
-    }) as EnemyAttacker;
+const offensiveEnemy = (id: string, position: Position, hits: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 100, critDamage: 100, defence: 0, hp: HP, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [attackSkill(hits)] },
+});
 
 const noopActive: ShipSkills['slots'][number] = {
     slot: 'active',

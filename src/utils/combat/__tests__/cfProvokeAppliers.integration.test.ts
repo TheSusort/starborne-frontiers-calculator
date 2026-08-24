@@ -56,7 +56,7 @@ const bulwarkAbility: Ability = {
         isStackable: false,
         application: 'inflict',
         duration: 1,
-    } as Ability['config'],
+    },
     autoFilled: true,
 };
 
@@ -77,7 +77,7 @@ const doomsayerAbility: Ability = {
         isStackable: false,
         application: 'inflict',
         duration: 1,
-    } as Ability['config'],
+    },
     autoFilled: true,
 };
 
@@ -147,14 +147,13 @@ function ally(id: string, position: Position): TeamActorEngineInput {
 }
 
 /** A non-positional enemy attacker that hits the heal target each round (real damage). */
-const enemyHitter = (id: string, speed = 5): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyHitter = (id: string, speed = 5): EnemyAttacker => ({
+    id,
+    stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 /** Collect every `debuff-applied` event matching the given buffName. */
 function debuffApplied(
@@ -321,14 +320,13 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
     });
 
     /** A pure-target enemy with a fixed attack (no skills → never acts as first activator). */
-    const enemyWithAttack = (id: string, attack: number, speed = 5): EnemyAttacker =>
-        ({
-            id,
-            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [] },
-        }) as EnemyAttacker;
+    const enemyWithAttack = (id: string, attack: number, speed = 5): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [] },
+    });
 
     it('applies Concentrate Fire to the highest-attack enemy when the owner is first activator', () => {
         // Owner speed 1000 → it is the FIRST real activator of the round → first-activator gate
@@ -442,7 +440,7 @@ describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of r
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [noopActive, { slot: 'passive', abilities: [doomsayerAbility] }] },
-        } as EnemyAttacker;
+        };
 
         const events = debuffApplied(
             BASE({

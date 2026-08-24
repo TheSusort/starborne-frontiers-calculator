@@ -125,17 +125,16 @@ const offensiveEnemyAt = (
     position: Position,
     selection: ParsedTarget['selection'],
     hp: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1000, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [damageSlot()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 1000, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [damageSlot()] },
+});
 
 describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, ability channel is per-victim', () => {
     it('Case 1 (scheduled): a scheduled Defense Down applies to ALL victim ids (global __enemy__)', () => {

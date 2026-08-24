@@ -91,49 +91,47 @@ const victimStats = (hp: number): CombatStatBlock => ({
 
 // A positioned, zero-offense PLAYER team victim (walked so it has real stats/position). Its active
 // slot is empty → its own turn deals nothing (it is purely a damageable target).
-const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [] } as ShipSkills,
-            stats: victimStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: victimStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A positioned ENEMY attacker that fires a positional AoE detonate skill at the player team.
-const enemyDetonator = (id: string, position: Position, dets: Ability[]): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: ENEMY_ATTACK,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000,
-            speed: 100,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        shipSkills: { slots: [detonateSlot(...dets)] },
-    }) as EnemyAttacker;
+const enemyDetonator = (id: string, position: Position, dets: Ability[]): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: ENEMY_ATTACK,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000,
+        speed: 100,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    shipSkills: { slots: [detonateSlot(...dets)] },
+});
 
 // A pre-seeded bomb with all multipliers neutral (bomb payout = stacks × damagePerStack × powerPct).
 const bomb = (damagePerStack: number, stacks: number, sourceId = 'enemy-det'): PendingBomb => ({
@@ -198,7 +196,7 @@ const collect = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['bomb-detonated', 'dot-detonated', 'ship-destroyed'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -408,8 +406,8 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
                     chargeCount: 0,
                     startCharged: false,
                     position: 'M4',
-                    shipSkills: { slots: [] } as ShipSkills,
-                } as EnemyAttacker,
+                    shipSkills: { slots: [] },
+                },
                 {
                     id: 'e-cover',
                     stats: {
@@ -423,8 +421,8 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
                     chargeCount: 0,
                     startCharged: false,
                     position: 'M3',
-                    shipSkills: { slots: [] } as ShipSkills,
-                } as EnemyAttacker,
+                    shipSkills: { slots: [] },
+                },
             ],
             __testTapActors: (actors: CombatActor[]) => {
                 actors.find((a) => a.id === 'e-origin')?.pendingBombs.push(SEED_BOMB());

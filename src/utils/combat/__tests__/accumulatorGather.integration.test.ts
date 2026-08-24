@@ -51,15 +51,14 @@ const enemyAt = (
     attack = 0,
     speed = 1,
     shipSkills: ShipSkills = { slots: [] }
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills,
+});
 
 /** An identical-to-the-focus walked team ship: same attack, so it doubles the side's direct. */
 const TEAM_STATS = {

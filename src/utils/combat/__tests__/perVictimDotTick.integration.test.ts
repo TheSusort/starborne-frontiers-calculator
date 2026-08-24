@@ -80,15 +80,14 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A positioned, zero-offense, finite-HP enemy victim. speed 1 → it takes a turn each round (so its
 // OWN-turn DoT tick can fire). attack 0 → it contributes 0 direct.
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // A pre-seeded corrosion stack. tick = stacks × (tier/100) × min(victimOwnMaxHp, 500_000) (neutral mults).
 const corrosion = (
@@ -182,36 +181,35 @@ const teamStats = (hp: number): CombatStatBlock => ({
     hacking: 0,
 });
 
-const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [basicSlot()] },
-            stats: teamStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [basicSlot()] },
+        stats: teamStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // Tap an ordered event log.
 const collect = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['dot-ticked', 'ship-destroyed', 'turn-started'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -365,7 +363,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                 (e as CombatEvent & { targetId: string }).targetId === 'attacker'
         );
         expect(ticks.length).toBeGreaterThanOrEqual(1);
-        expect((ticks[0] as CombatEvent & { round: number }).round).toBe(2);
+        expect(ticks[0].round).toBe(2);
 
         // Healing-mode accounting: the tank's INCOMING intake recorded the 500 DoT tick in round 2
         // (routed via applyIncomingToTarget → playerSink, NOT a player damage row).
@@ -475,7 +473,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                         isStackable: false,
                         parsedEffects: {},
                     },
-                } as Ability,
+                },
             ],
         });
 
@@ -503,7 +501,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                     enemyStasised = fn;
                 },
                 bus,
-            } as CombatEngineInput);
+            });
             return { result, events };
         })();
         // The victim is genuinely stasised at end-of-run (Stasis duration 9 spans all 3 rounds).
@@ -547,7 +545,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                             target: parsedTarget('front'),
                             pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
                             shipSkills: { slots: [stasisOnlyInflict(9)] },
-                        } as EnemyAttacker,
+                        },
                     ],
                     __testTapActors: (actors: CombatActor[]) => {
                         actors
@@ -559,7 +557,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
                     playerStasised = fn;
                 },
                 bus,
-            } as CombatEngineInput);
+            });
             return { result };
         })();
         expect(playerStasised?.('team-ally')).toBe(true);

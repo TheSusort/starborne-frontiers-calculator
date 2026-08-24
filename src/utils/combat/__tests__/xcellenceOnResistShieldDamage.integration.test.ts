@@ -80,38 +80,37 @@ function xcellenceShip(id: string): Ship {
         secondPassiveSkillText: rec.passives[1],
         activeTarget: 'front',
         activePattern: 'Pattern-Base',
-    } as Ship;
+    };
 }
 
 /** A harmless target — just needs to be alive so Xcellence's debuffs have somewhere to land (and
  *  miss). Its default security (100) vs Xcellence's forced hacking 0 guarantees a 0% landing
  *  chance, mirroring ravagerResistReaction.integration.test.ts's `makeTarget`. */
-const makeTarget = (id: string): Ship =>
-    ({
-        id,
-        name: 'Target',
-        rarity: 'legendary',
-        faction: 'AURELIAN_SOVEREIGNTY',
-        type: 'Defender',
-        baseStats: {
-            hp: 0,
-            attack: 0,
-            defence: 0,
-            hacking: 200,
-            security: 100,
-            crit: 0,
-            critDamage: 0,
-            speed: 50,
-        },
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activeSkillText: 'This Unit deals <unit-damage>10% damage</unit-damage>.',
-        chargeSkillCharge: 0,
-        activeTarget: 'front',
-        activePattern: 'Pattern-Base',
-    }) as Ship;
+const makeTarget = (id: string): Ship => ({
+    id,
+    name: 'Target',
+    rarity: 'legendary',
+    faction: 'AURELIAN_SOVEREIGNTY',
+    type: 'Defender',
+    baseStats: {
+        hp: 0,
+        attack: 0,
+        defence: 0,
+        hacking: 200,
+        security: 100,
+        crit: 0,
+        critDamage: 0,
+        speed: 50,
+    },
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activeSkillText: 'This Unit deals <unit-damage>10% damage</unit-damage>.',
+    chargeSkillCharge: 0,
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+});
 
 /** Xcellence placement. `hacking` defaults to 0 (forced resist — every inflicted debuff misses).
  *  Pass `hacking: 200` for the control case (>= the target's default security 100 → every debuff

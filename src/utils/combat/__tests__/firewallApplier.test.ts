@@ -42,7 +42,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -56,7 +56,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -64,38 +64,37 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 /** An enemy attacker that lands a timed Def Down debuff on the player focus every round.
  *  application:'apply' always lands (no affinity disadvantage here) → emits debuff-applied
  *  with targetId = the carrier ('attacker') every round. */
-const debuffEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-debuff',
+const debuffEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy', // enemy's "enemy" = the player carrier
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy', // enemy's "enemy" = the player carrier
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Def Down',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'apply',
-                                duration: 1,
-                            },
+                            buffName: 'Def Down',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 1,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 /** No-op active so the focus takes a turn without ending the combat early. */
 const noopActive: ShipSkills['slots'][number] = {

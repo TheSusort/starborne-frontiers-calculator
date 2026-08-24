@@ -1,16 +1,8 @@
 import { supabase } from '../config/supabase';
 import type { GearSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
-import type { GearSetName } from '../constants/gearSets';
 import type { AffinityName, Ship } from '../types/ship';
-import type {
-    Stat,
-    StatName,
-    StatType,
-    FlexibleStats,
-    PercentageStat,
-    FlatStat,
-} from '../types/stats';
+import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
 
 export interface UserProfile {
@@ -320,14 +312,14 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 value: stat.value,
                 type: 'percentage',
                 id: stat.id,
-            } as PercentageStat;
+            };
         } else {
             return {
                 name: stat.name as FlexibleStats,
                 value: stat.value,
                 type: 'flat',
                 id: stat.id,
-            } as FlatStat;
+            };
         }
     };
 
@@ -486,9 +478,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         ? {
                               name: statsData.mainStat.name,
                               value: statsData.mainStat.value,
-                              type: (statsData.mainStat.type === 'percentage'
-                                  ? 'percentage'
-                                  : 'flat') as StatType,
+                              type:
+                                  statsData.mainStat.type === 'percentage'
+                                      ? ('percentage' as const)
+                                      : ('flat' as const),
                               id: statsData.mainStat.id || '',
                           }
                         : undefined,
@@ -518,9 +511,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         ? {
                               name: statsData.mainStat.name,
                               value: statsData.mainStat.value,
-                              type: (statsData.mainStat.type === 'percentage'
-                                  ? 'percentage'
-                                  : 'flat') as StatType,
+                              type:
+                                  statsData.mainStat.type === 'percentage'
+                                      ? ('percentage' as const)
+                                      : ('flat' as const),
                               id: statsData.mainStat.id || '',
                           }
                         : undefined,
@@ -622,21 +616,21 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         level: internalGear.level,
                         stars: internalGear.stars,
                         rarity: internalGear.rarity,
-                        setBonus: internalGear.setBonus as GearSetName | null,
+                        setBonus: internalGear.setBonus,
                         mainStat: internalGear.mainStat
                             ? internalGear.mainStat.type === 'percentage'
-                                ? ({
+                                ? {
                                       name: internalGear.mainStat.name as StatName,
                                       value: internalGear.mainStat.value,
                                       type: 'percentage' as const,
                                       id: internalGear.mainStat.id,
-                                  } as PercentageStat)
-                                : ({
+                                  }
+                                : {
                                       name: internalGear.mainStat.name as FlexibleStats,
                                       value: internalGear.mainStat.value,
                                       type: 'flat' as const,
                                       id: internalGear.mainStat.id,
-                                  } as FlatStat)
+                                  }
                             : null,
                         subStats: internalGear.subStats,
                     };

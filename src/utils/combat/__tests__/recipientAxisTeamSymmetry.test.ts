@@ -159,25 +159,24 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
     },
 });
 
-const enemyShip = (args: RoleShape): EnemyAttackerInput =>
-    ({
-        id: args.id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: args.hp,
-            speed: args.speed,
-            hacking: 100_000,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position: args.position,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
-        shipSkills: { slots: args.slots ?? [] },
-    }) as EnemyAttackerInput;
+const enemyShip = (args: RoleShape): EnemyAttackerInput => ({
+    id: args.id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: args.hp,
+        speed: args.speed,
+        hacking: 100_000,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position: args.position,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills: { slots: args.slots ?? [] },
+});
 
 // ── The fixture ───────────────────────────────────────────────────────────────────────────────
 
@@ -205,14 +204,14 @@ function runFixture(opts: FixtureOpts): FixtureRun {
     // applier-ctx rule — without this the tick is skipped and the fixture measures nothing).
     const medicShape: RoleShape = {
         id: MEDIC_ID,
-        position: 'M2' as Position,
+        position: 'M2',
         speed: 900,
         hp: MEDIC_MAX_HP,
         slots: [activeSlot([opts.channel === 'cast' ? allyRepair : allyHotBuff])],
     };
     const holderShape: RoleShape = {
         id: HOLDER_ID,
-        position: 'M4' as Position,
+        position: 'M4',
         speed: 500,
         hp: HOLDER_MAX_HP,
         slots: [],

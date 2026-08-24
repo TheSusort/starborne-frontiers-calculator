@@ -61,7 +61,7 @@ export const EngineeringStatsPage: React.FC = () => {
             if (editingStats?.shipType === shipType) {
                 setEditingStats(undefined);
             }
-        } catch (error) {
+        } catch {
             // Error is already handled in the hook
         }
     };

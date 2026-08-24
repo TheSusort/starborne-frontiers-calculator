@@ -16,12 +16,17 @@ const DB_NAME = 'starborneFrontiers';
 const DB_VERSION = 1;
 const STORE_NAME = 'data';
 
+// `IDBRequest.error` is `DOMException | null`, so rejecting with it directly can hand a
+// caller `null` as the reason — nothing downstream can read a message off that.
+const requestError = (request: IDBRequest, what: string): Error =>
+    request.error ?? new Error(`IndexedDB ${what} failed with no error set`);
+
 // Initialize IndexedDB
 const initDB = (): Promise<IDBDatabase> => {
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(requestError(request, 'open'));
         request.onsuccess = () => resolve(request.result);
 
         request.onupgradeneeded = (event) => {
@@ -48,7 +53,7 @@ export const getFromIndexedDB = async (key: string): Promise<any> => {
         const store = transaction.objectStore(STORE_NAME);
         const request = store.get(key);
 
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(requestError(request, 'get'));
         request.onsuccess = () => resolve(request.result);
     });
 };
@@ -61,7 +66,7 @@ export const setInIndexedDB = async (key: string, value: any): Promise<void> => 
         const store = transaction.objectStore(STORE_NAME);
         const request = store.put(value, key);
 
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(requestError(request, 'put'));
         request.onsuccess = () => resolve();
     });
 };
@@ -77,7 +82,7 @@ export const clearIndexedDBStorage = async (): Promise<void> => {
         const transaction = db.transaction(STORE_NAME, 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.clear();
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(requestError(request, 'clear'));
         request.onsuccess = () => resolve();
     });
 };
@@ -88,7 +93,7 @@ export const removeFromIndexedDB = async (key: string): Promise<void> => {
         const transaction = db.transaction(STORE_NAME, 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.delete(key);
-        request.onerror = () => reject(request.error);
+        request.onerror = () => reject(requestError(request, 'delete'));
         request.onsuccess = () => resolve();
     });
 };

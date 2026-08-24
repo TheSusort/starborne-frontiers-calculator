@@ -160,8 +160,8 @@ function offensiveEnemyAt(id: string, position: Position, attack: number): Enemy
                     ],
                 },
             ],
-        } as ShipSkills,
-    } as EnemyAttacker;
+        },
+    };
 }
 
 const FOCUS_HP = 1_000_000_000;
@@ -292,7 +292,7 @@ function enemyActorAt(
         startCharged: false,
         position,
         shipSkills: { slots },
-    } as EnemyAttacker;
+    };
 }
 
 const enemyScenarioInput = (paracelsusSlots: ShipSkills['slots']): CombatEngineInput => ({

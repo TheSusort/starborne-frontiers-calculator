@@ -123,32 +123,31 @@ const critCorrosionAllyAt = (id: string, position: Position): TeamActor => ({
 });
 
 // A passive positioned enemy (bare basic attack) with huge HP so it survives the round.
-const basicEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 0 } })],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+const basicEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 0 } })],
+            },
+        ],
+    },
+});
 
 const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // Focus 'attacker' at M4 targeting 'front'.

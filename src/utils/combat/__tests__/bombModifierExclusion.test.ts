@@ -34,7 +34,7 @@ import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
 import type { SelectedGameBuff } from '../../../types/calculator';
-import { ShipSkills, Ability } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor, PendingBomb } from '../state';
@@ -190,8 +190,8 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
                         position: 'M1',
                         target: parsedTarget('front'),
                         pattern: basePattern(),
-                        shipSkills: { slots: [] } as ShipSkills,
-                    } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+                        shipSkills: { slots: [] },
+                    },
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
                     actors

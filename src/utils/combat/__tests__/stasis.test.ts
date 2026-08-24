@@ -130,26 +130,25 @@ const offensiveEnemyAt = (
     selection: ParsedTarget['selection'],
     skills: ShipSkills['slots'][number],
     speedOverride = 1
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 2000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: speedOverride,
-            security: 0,
-            hacking: 200,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [skills] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 2000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: speedOverride,
+        security: 0,
+        hacking: 200,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [skills] },
+});
 
 /**
  * SP-4c-1: an inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
@@ -164,26 +163,25 @@ const offensiveEnemyAt = (
  * enemy lives; once it dies the focus retargets onto this bystander, which is the same
  * death-retargeting the engine already does and is what the post-kill rounds are meant to observe.
  */
-const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [] },
-    }) as EnemyAttacker;
+const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [] },
+});
 
 /** A walked team actor. attackOverride defaults to 0 (no offense). */
 const teamAttackerAt = (
@@ -243,7 +241,7 @@ const run = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     for (const t of INTERESTING_TYPES) {
-        bus.on(t, (e) => events.push(e as CombatEvent));
+        bus.on(t, (e) => events.push(e));
     }
     const result = runCombat({ ...input, bus });
     return { events, result };
@@ -428,7 +426,7 @@ describe('B2 Task 3 — Stasis turn-skip: (ii) DoTs still tick on a stasised act
                             },
                         ],
                     },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -527,7 +525,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iii) Stasis(2) decrements on skipped 
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(2)] },
-                } as EnemyAttacker,
+                },
             ],
             __testTapIsStasised: (fn) => {
                 capturedIsStasised = fn;
@@ -628,7 +626,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iv) other timed statuses still decrem
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisAndDefenseDownAttack(3, 2)] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -801,7 +799,7 @@ describe('B2 Task 3 — Stasis turn-skip: (vi) player stasised by enemy — roun
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(2)] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -998,7 +996,7 @@ describe('B3 Task 1 — reactive suppression: (a) on-attacked self-buff suppress
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(4)] },
-                } as EnemyAttacker,
+                },
                 // attack-enemy: bare attacker that triggers the on-attacked listener each round.
                 {
                     id: 'attack-enemy',
@@ -1018,7 +1016,7 @@ describe('B3 Task 1 — reactive suppression: (a) on-attacked self-buff suppress
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1138,7 +1136,7 @@ describe('B3 Task 1 — reactive suppression: (b) start-of-round self-buff suppr
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack(), startOfRoundAttackUpSlot()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1252,7 +1250,7 @@ describe('B3 Task 1 — reactive suppression: (c) incoming DoT damage still tick
                             },
                         ],
                     },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1333,7 +1331,7 @@ describe('B3 Task 1 — reactive suppression: (d) non-stasised focus — on-atta
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1424,7 +1422,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // breaker-enemy: plain direct hit at the focus every round
                 {
                     id: 'breaker-enemy',
@@ -1444,7 +1442,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
             __testTapIsStasised: (fn) => {
                 capturedIsStasised = fn;
@@ -1568,7 +1566,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                             },
                         ],
                     },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1667,7 +1665,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(4)] },
-                } as EnemyAttacker,
+                },
                 {
                     id: 'breaker-enemy',
                     stats: {
@@ -1686,7 +1684,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -1758,7 +1756,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 {
                     id: 'breaker-enemy',
                     stats: {
@@ -1777,7 +1775,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
         });
@@ -1854,7 +1852,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // tiny-attacker: minimal damage direct hit — still breaks Stasis
                 {
                     id: 'tiny-attacker',
@@ -1874,7 +1872,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -2055,7 +2053,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // breaker-enemy: fires a direct 3000-damage hit at the stasised focus each round.
                 // Barrier fully absorbs the hit (0 HP loss), but the direct attack still "connects"
                 // and must break Stasis (spec §3).
@@ -2077,7 +2075,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -2241,7 +2239,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                             },
                         ],
                     },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -2345,7 +2343,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // akula-enemy: has doesntBreakStasis — its direct hits must NOT break Stasis
                 {
                     id: 'akula-enemy',
@@ -2366,7 +2364,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
                     doesntBreakStasis: true,
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -2447,7 +2445,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // Same stats as akula-enemy but NO doesntBreakStasis flag → breaks Stasis normally.
                 {
                     id: 'normal-enemy',
@@ -2468,7 +2466,7 @@ describe("B3 Task 3 — Akula don't-break", () => {
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
                     // doesntBreakStasis: NOT set — the ONLY difference from the activation test
-                } as EnemyAttacker,
+                },
             ],
         });
 

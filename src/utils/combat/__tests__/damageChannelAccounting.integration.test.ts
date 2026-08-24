@@ -305,34 +305,33 @@ const frontAlly = (maxHp: number): TeamActorEngineInput => ({
  * no kit and no attack so the ONLY damage in the run is enemy→player and the accounting cannot be
  * confused with the focus's own output.
  */
-const playerSideWithMaxHp = (maxHp: number): CombatEngineInput =>
-    ({
-        ...bareInput(),
-        numRounds: ROUNDS,
-        attack: 0,
-        shipSkills: { slots: [] },
-        hp: maxHp,
-        position: 'T1',
-        mode: 'healing',
-        healTargetId: HEAL_TARGET_ID,
-        teamActors: [frontAlly(maxHp)],
-        enemyAttackers: [
-            {
-                id: 'e1',
-                stats: {
-                    attack: 10_000,
-                    crit: 0,
-                    critDamage: 0,
-                    speed: 10,
-                    defence: 0,
-                    hp: 500_000,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                shipSkills: damageKit(),
+const playerSideWithMaxHp = (maxHp: number): CombatEngineInput => ({
+    ...bareInput(),
+    numRounds: ROUNDS,
+    attack: 0,
+    shipSkills: { slots: [] },
+    hp: maxHp,
+    position: 'T1',
+    mode: 'healing',
+    healTargetId: HEAL_TARGET_ID,
+    teamActors: [frontAlly(maxHp)],
+    enemyAttackers: [
+        {
+            id: 'e1',
+            stats: {
+                attack: 10_000,
+                crit: 0,
+                critDamage: 0,
+                speed: 10,
+                defence: 0,
+                hp: 500_000,
             },
-        ],
-    }) as CombatEngineInput;
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: damageKit(),
+        },
+    ],
+});
 
 /** Total the enemy booked into the PER-VICTIM channel for one round. */
 const enemyPositionalIn = (round: RoundData): number =>
@@ -493,7 +492,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
             ...playerSideWithMaxHp(1_000_000),
             teamActors: [gunner],
             enemyAttackers: bareEnemy(),
-        } as CombatEngineInput);
+        });
 
         expect(result.rounds.map((r) => r.perTargetDealt?.['ally']?.['e1'] ?? 0)).toEqual([
             PER_CAST,

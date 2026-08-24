@@ -123,29 +123,28 @@ const teamActor = (
     critDamage: number,
     skills: ShipSkills,
     positional = false
-): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        ...(positional
-            ? { position: 'M4' as Position, target: parsedTarget('front'), pattern: basePattern() }
-            : {}),
-        walk: {
-            shipSkills: skills,
-            stats: teamStats(attack, critDamage),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+): TeamActorEngineInput => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    ...(positional
+        ? { position: 'M4', target: parsedTarget('front'), pattern: basePattern() }
+        : {}),
+    walk: {
+        shipSkills: skills,
+        stats: teamStats(attack, critDamage),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // The Wildfire aura-source team actor: passive-only (never itself fires a damage ability), so
 // it never contributes an Inferno tick of its own — isolating the DISTRIBUTED bonus on the
@@ -161,25 +160,24 @@ const wildfireAuraSource = (
 // A single positioned, passive (attack:0) enemy — security:0 so a Scorching Radiation inflict
 // targeting it always lands (mirrors wildfireDotDamageCritPower.integration.test.ts).
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
-const passiveEnemyAt = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-front',
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const passiveEnemyAt = (position: Position): EnemyAttacker => ({
+    id: 'enemy-front',
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: bareEnemy(),
@@ -386,51 +384,49 @@ describe('Wildfire refit-3 team-wide Inferno aura, scaled by the SOURCE crit pow
 
         // Enemy hacking 300 vs the focus's default security (100, unset) → inflict landing
         // chance clamp((300-100)/100) = 1.0 — always lands.
-        const dealerEnemy = (id: string, includeSr: boolean): EnemyAttacker =>
-            ({
-                id,
-                stats: {
-                    attack: ALLY_ATTACK,
-                    crit: 0,
-                    critDamage: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 100,
-                    hacking: 300,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: includeSr
-                                ? [
-                                      basicDamage(100, 'e-ally-dmg'),
-                                      scorchingRadiationInflict('e-ally-sr'),
-                                      infernoDot('e-ally-dot'),
-                                  ]
-                                : [basicDamage(100, 'e-ally-dmg'), infernoDot('e-ally-dot')],
-                        },
-                    ],
-                },
-            }) as EnemyAttacker;
+        const dealerEnemy = (id: string, includeSr: boolean): EnemyAttacker => ({
+            id,
+            stats: {
+                attack: ALLY_ATTACK,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 100,
+                hacking: 300,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: includeSr
+                            ? [
+                                  basicDamage(100, 'e-ally-dmg'),
+                                  scorchingRadiationInflict('e-ally-sr'),
+                                  infernoDot('e-ally-dot'),
+                              ]
+                            : [basicDamage(100, 'e-ally-dmg'), infernoDot('e-ally-dot')],
+                    },
+                ],
+            },
+        });
 
-        const sourceEnemy = (includeAura: boolean): EnemyAttacker =>
-            ({
-                id: 'e-wildfire',
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: WILDFIRE_CRIT_POWER,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 100,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                shipSkills: passiveOnly(...(includeAura ? [wildfireTeamAura()] : [])),
-            }) as EnemyAttacker;
+        const sourceEnemy = (includeAura: boolean): EnemyAttacker => ({
+            id: 'e-wildfire',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: WILDFIRE_CRIT_POWER,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 100,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: passiveOnly(...(includeAura ? [wildfireTeamAura()] : [])),
+        });
 
         const withMod = infernoTicksByRound(
             baseEngineInput({

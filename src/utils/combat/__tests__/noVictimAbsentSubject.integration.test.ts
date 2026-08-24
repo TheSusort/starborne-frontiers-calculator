@@ -31,32 +31,31 @@ import type { Condition, ShipSkills } from '../../../types/abilities';
 const HURT_PCT = 0.4;
 
 /** A Hermes-shaped repair, plus one self-shield carrying the gate under test. */
-const repairKitWithGatedShield = (gate: Condition): ShipSkills =>
-    ({
-        slots: [
-            {
-                slot: 'active',
-                abilities: [
-                    {
-                        id: 'repair1',
-                        type: 'heal',
-                        target: 'all-allies',
-                        trigger: 'on-cast',
-                        conditions: [],
-                        config: { type: 'heal', pct: 27, basis: 'hp' },
-                    },
-                    {
-                        id: 'gatedShield',
-                        type: 'shield',
-                        target: 'self',
-                        trigger: 'on-cast',
-                        conditions: [gate],
-                        config: { type: 'shield', pct: 50, basis: 'hp' },
-                    },
-                ],
-            },
-        ],
-    }) as ShipSkills;
+const repairKitWithGatedShield = (gate: Condition): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'repair1',
+                    type: 'heal',
+                    target: 'all-allies',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'heal', pct: 27, basis: 'hp' },
+                },
+                {
+                    id: 'gatedShield',
+                    type: 'shield',
+                    target: 'self',
+                    trigger: 'on-cast',
+                    conditions: [gate],
+                    config: { type: 'shield', pct: 50, basis: 'hp' },
+                },
+            ],
+        },
+    ],
+});
 
 const supportRun = (gate: Condition) => {
     const bus = createEventBus();
@@ -98,7 +97,7 @@ describe('SP-4d: a no-victim turn resolves no enemy-derived gate', () => {
             compareStat: 'hp',
             statComparator: 'gt',
             derivable: true,
-        } as Condition);
+        });
         expect(shieldsOnFocus).toEqual([]);
         // The negative half, and the reason this is not a "block everything" test: the repair the
         // whole no-victim path exists to deliver must still land.
@@ -111,13 +110,13 @@ describe('SP-4d: a no-victim turn resolves no enemy-derived gate', () => {
             hpComparator: 'above',
             hpPercent: 50,
             derivable: true,
-        } as Condition);
+        });
         expect(shieldsOnFocus).toEqual([]);
         expect(allyRepairs.length).toBeGreaterThan(0);
     });
 
     it('an UNGATED shield on the same cast still lands — the turn is not being suppressed', () => {
-        const { shieldsOnFocus } = supportRun({ subject: 'always', derivable: true } as Condition);
+        const { shieldsOnFocus } = supportRun({ subject: 'always', derivable: true });
         expect(shieldsOnFocus.length).toBeGreaterThan(0);
     });
 
@@ -184,7 +183,7 @@ describe('SP-4d: a no-victim turn resolves no enemy-derived gate', () => {
                         ],
                     },
                 ],
-            } as ShipSkills,
+            },
             teamActors: [bareAlly()],
             enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
             bus,

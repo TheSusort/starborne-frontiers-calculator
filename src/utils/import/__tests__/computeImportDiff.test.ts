@@ -241,8 +241,8 @@ describe('computeImportDiff — gear', () => {
     it('excludes implant slots from all gear counts', () => {
         const implant = makeGear({
             id: 'imp-1',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            slot: 'implant_major' as any,
+
+            slot: 'implant_major',
             rarity: 'legendary',
             stars: 6,
         });
@@ -258,16 +258,14 @@ describe('computeImportDiff — gear', () => {
 
 describe('computeImportDiff — implants', () => {
     it('counts new implants in implants.added', () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const g = makeGear({ id: 'imp-1', slot: 'implant_major' as any });
+        const g = makeGear({ id: 'imp-1', slot: 'implant_major' });
         const diff = computeImportDiff([], [], [], [g]);
         expect(diff.implants.added).toBe(1);
         expect(diff.gear.added).toBe(0);
     });
 
     it('counts removed implants in implants.removed', () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const g = makeGear({ id: 'imp-1', slot: 'implant_major' as any });
+        const g = makeGear({ id: 'imp-1', slot: 'implant_major' });
         const diff = computeImportDiff([], [g], [], []);
         expect(diff.implants.removed).toBe(1);
         expect(diff.gear.removed).toBe(0);
@@ -276,8 +274,8 @@ describe('computeImportDiff — implants', () => {
     it('highlights new legendary implants', () => {
         const g = makeGear({
             id: 'imp-1',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            slot: 'implant_major' as any,
+
+            slot: 'implant_major',
             rarity: 'legendary',
         });
         const diff = computeImportDiff([], [], [], [g]);
@@ -288,8 +286,8 @@ describe('computeImportDiff — implants', () => {
     it('does not highlight existing legendary implants', () => {
         const g = makeGear({
             id: 'imp-1',
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            slot: 'implant_major' as any,
+
+            slot: 'implant_major',
             rarity: 'legendary',
         });
         const diff = computeImportDiff([], [g], [], [g]);

@@ -27,7 +27,7 @@
  * damage this hit" and "the tick lands on the entry's NEXT turn" cleanly separated per round.
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -153,50 +153,48 @@ const HP = 10_000_000; // large enough nothing ever dies; small enough pct math 
 // PLAYER-side Voron: a fast, positioned player TEAM victim hit by a slow ENEMY attacker.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const playerVoron = (id: string, position: Position): TeamActor =>
-    ({
-        id,
-        speed: 1000, // acts (and ticks) BEFORE the attacker every round.
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [voronPassive] }, // no active ability needed — it never attacks.
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const playerVoron = (id: string, position: Position): TeamActor => ({
+    id,
+    speed: 1000, // acts (and ticks) BEFORE the attacker every round.
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [voronPassive] }, // no active ability needed — it never attacks.
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 const offensiveEnemy = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+});
 
 const noopActive: ShipSkills['slots'][number] = {
     slot: 'active',
@@ -304,17 +302,16 @@ describe('Voron replaces a direct hit with a generic DoT (D/turns per tick, SP-A
 // ENEMY-side Voron: team symmetry — a positioned ENEMY victim hit by the PLAYER focus attacker.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const enemyVoron = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [voronPassive] },
-    }) as EnemyAttacker;
+const enemyVoron = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [voronPassive] },
+});
 
 const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
@@ -370,34 +367,33 @@ describe('Voron replaces a direct hit — ENEMY side (team symmetry)', () => {
 // Orel: the transform is gated on the ATTACKER holding Taunt or Provoke.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const playerOrel = (id: string, position: Position): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [orelPassive] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const playerOrel = (id: string, position: Position): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [orelPassive] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** An enemy attacker with NO Taunt/Provoke — plain basic attack only. */
 const plainEnemy = (id: string, position: Position, selection: ParsedTarget['selection']) =>
@@ -408,17 +404,16 @@ const tauntedEnemy = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [tauntSelfBuff, basicAttack()] }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [tauntSelfBuff, basicAttack()] }] },
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GUARD: a malformed ability config (turns:0) — never produced by the parser today
@@ -440,34 +435,33 @@ const voronPassiveZeroTurns: ShipSkills['slots'][number] = {
     abilities: [voronTransformZeroTurns],
 };
 
-const playerVoronZeroTurns = (id: string, position: Position): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [voronPassiveZeroTurns] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const playerVoronZeroTurns = (id: string, position: Position): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [voronPassiveZeroTurns] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 describe('convertHitToSelfDot guard: a non-positive rounds (malformed turns:0 config) is a no-op', () => {
     it('creates no generic DoT entry and lets the hit land as a normal direct hit instead of vanishing', () => {

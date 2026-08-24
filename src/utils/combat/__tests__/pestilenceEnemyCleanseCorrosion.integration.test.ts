@@ -110,17 +110,16 @@ const enemyAt = (
     position: any,
     slots: ShipSkills['slots'],
     speed: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed, security: 0 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: pt('front'),
-        pattern: basePattern(),
-        shipSkills: { slots },
-    }) as unknown as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed, security: 0 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: pt('front'),
+    pattern: basePattern(),
+    shipSkills: { slots },
+});
 
 function runAndCollect(input: CombatEngineInput) {
     const bus = createEventBus();

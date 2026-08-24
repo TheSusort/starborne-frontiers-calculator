@@ -68,7 +68,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -82,7 +82,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** Build the Chrono Reaver ability for a rarity via the real implant resolution path. */
@@ -133,7 +133,7 @@ const dummySink = (): EnemyAttacker => ({
     startCharged: false,
     shipSkills: {
         slots: [{ slot: 'active', abilities: [damage(1, 'es-a')] }],
-    } as ShipSkills,
+    },
 });
 
 // ─── Player / engine input ────────────────────────────────────────────────────────
@@ -494,72 +494,70 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
      * which would cut this 8-round charge ledger to a single row. 0 attack + no skills make this
      * RNG-stream-inert, and speed 1 puts it last in every turn order.
      */
-    const bystander = (): EnemyAttacker =>
-        ({
-            id: 'bystander',
-            position: 'M1' as Position,
-            target: parsedFront,
-            pattern: basePattern,
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defence: 0,
-                hp: 1_000_000_000,
-                speed: 1,
-                security: 0,
-                hacking: 0,
-            },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [] },
-        }) as EnemyAttacker;
+    const bystander = (): EnemyAttacker => ({
+        id: 'bystander',
+        position: 'M1',
+        target: parsedFront,
+        pattern: basePattern,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security: 0,
+            hacking: 0,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [] },
+    });
 
-    const stasisBot = (turns: number): EnemyAttacker =>
-        ({
-            id: 'stasis-bot',
-            position: POS_FRONT,
-            target: parsedFront,
-            pattern: basePattern,
-            stats: {
-                attack: 1,
-                crit: 0,
-                critDamage: 0,
-                defence: 0,
-                hp: 1, // killed by the killer in round 1 → Stasis applied once, never re-applied
-                speed: 300, // acts before killer (200) and focus (100)
-                security: 0,
-                hacking: 200, // vs focus default security → Stasis lands (chance 1.0)
-            },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            damage(1, 'sb-dmg'),
-                            {
-                                id: 'sb-stasis',
+    const stasisBot = (turns: number): EnemyAttacker => ({
+        id: 'stasis-bot',
+        position: POS_FRONT,
+        target: parsedFront,
+        pattern: basePattern,
+        stats: {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1, // killed by the killer in round 1 → Stasis applied once, never re-applied
+            speed: 300, // acts before killer (200) and focus (100)
+            security: 0,
+            hacking: 200, // vs focus default security → Stasis lands (chance 1.0)
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        damage(1, 'sb-dmg'),
+                        {
+                            id: 'sb-stasis',
+                            type: 'debuff',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: {
                                 type: 'debuff',
-                                target: 'enemy',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: {
-                                    type: 'debuff',
-                                    buffName: 'Stasis',
-                                    application: 'inflict',
-                                    duration: turns,
-                                    stacks: 1,
-                                    isStackable: false,
-                                    parsedEffects: {},
-                                },
-                            } as Ability,
-                        ],
-                    },
-                ],
-            } as ShipSkills,
-        }) as EnemyAttacker;
+                                buffName: 'Stasis',
+                                application: 'inflict',
+                                duration: turns,
+                                stacks: 1,
+                                isStackable: false,
+                                parsedEffects: {},
+                            },
+                        },
+                    ],
+                },
+            ],
+        },
+    });
 
     // A walked team ally that one-shots the stasis bot in round 1 (speed 200 → after the bot,
     // before the focus; attack 10000 >> bot hp 1). Mirrors the `killer` pattern in stasis.test.ts.

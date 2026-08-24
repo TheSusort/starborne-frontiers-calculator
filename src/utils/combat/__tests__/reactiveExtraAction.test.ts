@@ -50,15 +50,14 @@ const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0
 
 // A positioned, finite-HP enemy attacker with zero offense — a stationary damageable target.
 // `hp` is sized to bracket the focus's firing-hit damage so it dies exactly when intended.
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // A positioned focus attacker that lands a real, lethal positional hit on the enemy at M4.
 // attack 5000 × 100% × 1 hit vs defence 0, no crit → firing-hit damage = 5000. Healing mode

@@ -166,16 +166,15 @@ describe('AbilityCard', () => {
      * makes a victimless dot/debuff work, so removing options would leave the user nowhere to go.
      */
     describe('victimless-infliction warning', () => {
-        const at = (over: Partial<Ability>): Ability =>
-            ({
-                id: 'v1',
-                type: 'dot',
-                target: 'enemy',
-                trigger: 'start-of-round',
-                conditions: [],
-                config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
-                ...over,
-            }) as Ability;
+        const at = (over: Partial<Ability>): Ability => ({
+            id: 'v1',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'start-of-round',
+            conditions: [],
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 2 },
+            ...over,
+        });
 
         it('flags an ALREADY-SAVED dot that the engine drops', () => {
             // "At the start of the round, inflict Corrosion on an enemy" — authorable today,

@@ -80,7 +80,7 @@ export const StatModifierInput: React.FC<Props> = ({
             newStats[index] = {
                 ...currentStat,
                 [field]: field === 'value' ? Number(value) : value,
-            } as Stat;
+            };
         }
 
         onChange(newStats);
@@ -186,9 +186,7 @@ export const StatModifierInput: React.FC<Props> = ({
                             <div className="shrink-0" style={{ minWidth: '8rem' }}>
                                 <Select
                                     value={stat.name}
-                                    onChange={(value) =>
-                                        handleStatChange(index, 'name', value as StatName)
-                                    }
+                                    onChange={(value) => handleStatChange(index, 'name', value)}
                                     options={statOptions}
                                 />
                             </div>
@@ -211,9 +209,7 @@ export const StatModifierInput: React.FC<Props> = ({
                                 <div className="shrink-0 w-28">
                                     <Select
                                         value={stat.type}
-                                        onChange={(value) =>
-                                            handleStatChange(index, 'type', value as StatType)
-                                        }
+                                        onChange={(value) => handleStatChange(index, 'type', value)}
                                         options={typeOptions}
                                     />
                                 </div>
@@ -269,9 +265,7 @@ export const StatModifierInput: React.FC<Props> = ({
                                 <Select
                                     label="Stat"
                                     value={stat.name}
-                                    onChange={(value) =>
-                                        handleStatChange(index, 'name', value as StatName)
-                                    }
+                                    onChange={(value) => handleStatChange(index, 'name', value)}
                                     options={statOptions}
                                     className="w-full"
                                 />
@@ -296,9 +290,7 @@ export const StatModifierInput: React.FC<Props> = ({
                                 <Select
                                     label="Type"
                                     value={stat.type}
-                                    onChange={(value) =>
-                                        handleStatChange(index, 'type', value as StatType)
-                                    }
+                                    onChange={(value) => handleStatChange(index, 'type', value)}
                                     options={
                                         statOptions.find((option) => option.value === stat.name)
                                             ?.allowedTypes || []

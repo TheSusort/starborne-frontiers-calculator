@@ -150,40 +150,39 @@ const offensiveEnemy = (
     selection: ParsedTarget['selection'],
     attack: number,
     opts: { speed?: number } = {}
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: opts.speed ?? 1,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: `${id}-hit`,
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 100 },
-                        },
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: opts.speed ?? 1,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: `${id}-hit`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],

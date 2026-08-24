@@ -1020,7 +1020,7 @@ export const AbilityCard: React.FC<Props> = ({
                         // array, so the stored ability stays canonical — same rule as roleFilter.
                         if (values.length === 0) {
                             const { factionFilter: _removed, ...rest } = ability;
-                            onChange(rest as Ability);
+                            onChange(rest);
                         } else {
                             onChange({ ...ability, factionFilter: values as FactionKey[] });
                         }
@@ -1100,7 +1100,7 @@ export const AbilityCard: React.FC<Props> = ({
                             onChange={(value) => {
                                 if (value === 'any') {
                                     const { triggerCritFilter: _removed, ...rest } = ability;
-                                    onChange(rest as Ability);
+                                    onChange(rest);
                                 } else {
                                     onChange({
                                         ...ability,
@@ -1122,7 +1122,7 @@ export const AbilityCard: React.FC<Props> = ({
                                 // never an empty array, so the stored ability stays canonical.
                                 if (values.length === 0) {
                                     const { roleFilter: _removed, ...rest } = ability;
-                                    onChange(rest as Ability);
+                                    onChange(rest);
                                 } else {
                                     onChange({
                                         ...ability,

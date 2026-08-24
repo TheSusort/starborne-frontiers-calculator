@@ -382,39 +382,38 @@ describe('status-grant gate path — LIVE self-debuff/Provoke positive (Task 6)'
     // An enemy attacker that lands a 99-turn 'Provoke' debuff on whatever it targets
     // (the heal target / tank). attack 1, speed 1 → it acts AFTER the focus, so round 1
     // the grant gate still sees no Provoke; round 2 it is live.
-    const provokeEnemy = (): EnemyAttacker =>
-        ({
-            id: 'e1',
-            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            enemyAb({
-                                type: 'damage',
-                                config: { type: 'damage', multiplier: 100 },
-                            }),
-                            enemyAb({
+    const provokeEnemy = (): EnemyAttacker => ({
+        id: 'e1',
+        stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({
+                            type: 'damage',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        enemyAb({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
                                 type: 'debuff',
-                                target: 'enemy',
-                                config: {
-                                    type: 'debuff',
-                                    buffName: 'Provoke',
-                                    parsedEffects: {},
-                                    stacks: 1,
-                                    isStackable: false,
-                                    application: 'inflict',
-                                    duration: 99,
-                                },
-                            }),
-                        ],
-                    },
-                ],
-            } as ShipSkills,
-        }) as EnemyAttacker;
+                                buffName: 'Provoke',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 99,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        },
+    });
 
     it('a Provoke-gated self-buff GRANT FIRES once an enemy lands Provoke on the tank (live)', () => {
         idCounter = 0;
@@ -468,38 +467,37 @@ describe('status-grant gate path — LIVE enemy-buff/Taunt positive (item 11)', 
     // An enemy attacker that grants ITSELF a 99-turn 'Taunt' self-buff. attack 1, speed 1 →
     // it acts AFTER the focus, so round 1 the grant gate still sees no enemy Taunt; round 2
     // playerEnemyBuffNames() returns ['Taunt'] for the enemy and the gate is live.
-    const tauntEnemy = (): EnemyAttacker =>
-        ({
-            id: 'e1',
-            stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            enemyAb({
-                                type: 'damage',
-                                config: { type: 'damage', multiplier: 100 },
-                            }),
-                            enemyAb({
+    const tauntEnemy = (): EnemyAttacker => ({
+        id: 'e1',
+        stats: { attack: 1, crit: 0, critDamage: 0, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({
+                            type: 'damage',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        enemyAb({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
                                 type: 'buff',
-                                target: 'self',
-                                config: {
-                                    type: 'buff',
-                                    buffName: 'Taunt',
-                                    parsedEffects: {},
-                                    stacks: 1,
-                                    isStackable: false,
-                                    duration: 99,
-                                },
-                            }),
-                        ],
-                    },
-                ],
-            } as ShipSkills,
-        }) as EnemyAttacker;
+                                buffName: 'Taunt',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        },
+    });
 
     it('an enemy-buff(Taunt)-gated self-buff GRANT FIRES once an enemy holds Taunt (live)', () => {
         idCounter = 0;
@@ -557,45 +555,44 @@ describe('TIMED enemy-debuff infliction honors per-enemy debuffLandingChance (Ta
      *  configurable `stats.hacking` driving the live landing roll (vs the target's default
      *  security 100). attack 1, speed 1 → acts after the focus. `hacking` omitted → defaults
      *  to 200 → 100% landing. */
-    const provokeEnemy = (hacking?: number): EnemyAttacker =>
-        ({
-            id: 'e1',
-            stats: {
-                attack: 1,
-                crit: 0,
-                critDamage: 0,
-                speed: 1,
-                ...(hacking !== undefined ? { hacking } : {}),
-            },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            enemyAb({
-                                type: 'damage',
-                                config: { type: 'damage', multiplier: 100 },
-                            }),
-                            enemyAb({
+    const provokeEnemy = (hacking?: number): EnemyAttacker => ({
+        id: 'e1',
+        stats: {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            speed: 1,
+            ...(hacking !== undefined ? { hacking } : {}),
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        enemyAb({
+                            type: 'damage',
+                            config: { type: 'damage', multiplier: 100 },
+                        }),
+                        enemyAb({
+                            type: 'debuff',
+                            target: 'enemy',
+                            config: {
                                 type: 'debuff',
-                                target: 'enemy',
-                                config: {
-                                    type: 'debuff',
-                                    buffName: 'Provoke',
-                                    parsedEffects: {},
-                                    stacks: 1,
-                                    isStackable: false,
-                                    application: 'inflict',
-                                    duration: 99,
-                                },
-                            }),
-                        ],
-                    },
-                ],
-            } as ShipSkills,
-        }) as EnemyAttacker;
+                                buffName: 'Provoke',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                application: 'inflict',
+                                duration: 99,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        },
+    });
 
     const cond: Ability['conditions'] = [
         { subject: 'self-debuff', derivable: true, buffName: 'Provoke' },

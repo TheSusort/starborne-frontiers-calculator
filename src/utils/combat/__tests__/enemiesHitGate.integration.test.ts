@@ -69,13 +69,12 @@ const berserkerPassiveAbilities = (): Ability[] => {
     return passive.abilities;
 };
 
-const berserkerShipSkills = (): ShipSkills =>
-    ({
-        slots: [
-            { slot: 'active', abilities: [hit()] },
-            { slot: 'passive', abilities: berserkerPassiveAbilities() },
-        ],
-    }) as ShipSkills;
+const berserkerShipSkills = (): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: [hit()] },
+        { slot: 'passive', abilities: berserkerPassiveAbilities() },
+    ],
+});
 
 /** A harmless dummy enemy: no active abilities of its own (never acts meaningfully), huge HP
  *  (never dies to the focus's splash hit), positioned so it counts toward the footprint. */
@@ -152,7 +151,7 @@ const berserkerEnemy = (id: string): NonNullable<CombatEngineInput['enemyAttacke
     stats: { attack: 1000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
     chargeCount: 0,
     startCharged: false,
-    position: 'M4' as Position,
+    position: 'M4',
     target: parsedTarget('front'),
     pattern: allPattern(),
     shipSkills: berserkerShipSkills(),
@@ -260,8 +259,9 @@ const tygrActiveAbilities = (): Ability[] => {
     return active.abilities;
 };
 
-const tygrShipSkills = (): ShipSkills =>
-    ({ slots: [{ slot: 'active', abilities: tygrActiveAbilities() }] }) as ShipSkills;
+const tygrShipSkills = (): ShipSkills => ({
+    slots: [{ slot: 'active', abilities: tygrActiveAbilities() }],
+});
 
 const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
     const result = runCombat({
@@ -295,7 +295,7 @@ const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
             ? {
                   healTargetId: 'attacker',
                   mode: 'healing',
-                  position: 'M4' as Position,
+                  position: 'M4',
                   target: parsedTarget('front'),
                   pattern: allPattern(),
                   enemyAttackers: enemyPositions.map((p, i) => dummyVictim(`dummy-${i}`, p)),

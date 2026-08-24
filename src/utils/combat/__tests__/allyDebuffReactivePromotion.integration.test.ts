@@ -112,72 +112,70 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
         slots: [noopActiveSlot(), { slot: 'passive', abilities: [oleanderRotGrant()] }],
     });
 
-    const allyA = (): TeamActor =>
-        ({
-            id: 'ally-a',
-            speed: 130,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            walk: {
-                // TWO debuffs in ONE cast → two debuff-applied events from the SAME ally in the
-                // SAME round, proving the per-ally cap (not a plain once-per-round-overall cap).
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [debuffAbility('Def Down'), debuffAbility('Hacking Down')],
-                        },
-                    ],
-                },
-                stats: {
-                    attack: 100,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 100,
-                    defence: 0,
-                    hp: 10_000,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
+    const allyA = (): TeamActor => ({
+        id: 'ally-a',
+        speed: 130,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            // TWO debuffs in ONE cast → two debuff-applied events from the SAME ally in the
+            // SAME round, proving the per-ally cap (not a plain once-per-round-overall cap).
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [debuffAbility('Def Down'), debuffAbility('Hacking Down')],
+                    },
+                ],
             },
-        }) as TeamActor;
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 100,
+                defence: 0,
+                hp: 10_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
 
-    const allyB = (): TeamActor =>
-        ({
-            id: 'ally-b',
-            speed: 120,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            walk: {
-                shipSkills: {
-                    slots: [{ slot: 'active', abilities: [debuffAbility('Speed Down')] }],
-                },
-                stats: {
-                    attack: 100,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 100,
-                    defence: 0,
-                    hp: 10_000,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
+    const allyB = (): TeamActor => ({
+        id: 'ally-b',
+        speed: 120,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [debuffAbility('Speed Down')] }],
             },
-        }) as TeamActor;
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 100,
+                defence: 0,
+                hp: 10_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
 
     const BASE = (): CombatEngineInput => ({
         // SP-4b-2b: a real opponent for the allies to debuff. Inert (0 attack) and never dies:
@@ -228,7 +226,7 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [oleanderRotGrant()] }] },
-        } as EnemyAttacker;
+        };
 
         const enemyAllyDebuffer: EnemyAttacker = {
             id: 'enemy-ally',
@@ -243,7 +241,7 @@ describe('Oleander (enemy-side) — team symmetry: an enemy Oleander reacts to i
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'active', abilities: [debuffAbility('Def Down')] }] },
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,
@@ -308,98 +306,95 @@ describe('Hayyan RoT-repair — extracted ability shape (mutation guard)', () =>
 });
 
 /** An enemy that lands a timed (non-DoT) debuff on the player focus every round. */
-const debuffEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-debuff',
+const debuffEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Def Down',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'apply',
-                                duration: 1,
-                            },
+                            buffName: 'Def Down',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 1,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 /** An enemy that lands a DoT (not a timed debuff) on the player focus every round. */
-const dotEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-dot',
+const dotEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-dot',
+                        type: 'dot',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'dot',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'dot',
-                                dotType: 'corrosion',
-                                tier: 5,
-                                stacks: 1,
-                                duration: 3,
-                            },
+                            dotType: 'corrosion',
+                            tier: 5,
+                            stacks: 1,
+                            duration: 3,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
-
-const hayyanTeamActor = (): TeamActor =>
-    ({
-        id: 'hayyan',
-        speed: 80,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        walk: {
-            shipSkills: { slots: [{ slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HAYYAN_HP,
+                    },
+                ],
             },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+        ],
+    },
+});
+
+const hayyanTeamActor = (): TeamActor => ({
+    id: 'hayyan',
+    speed: 80,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: { slots: [{ slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HAYYAN_HP,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 const HAYYAN_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // SP-4b-2b default only — every call site below overrides this with the specific debuffer/DoT
@@ -497,7 +492,7 @@ describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN
             startCharged: false,
             position: 'M4', // front-most enemy → the focus's `front enemy` debuff lands here
             shipSkills: { slots: [] },
-        } as EnemyAttacker;
+        };
 
         const enemyHayyan: EnemyAttacker = {
             id: 'enemy-hayyan',
@@ -506,7 +501,7 @@ describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN
             startCharged: false,
             position: 'M3', // behind the victim, so it is never the debuff's own target
             shipSkills: { slots: [{ slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }] },
-        } as EnemyAttacker;
+        };
 
         const playerDebuffSkills: ShipSkills = {
             slots: [{ slot: 'active', abilities: [debuffAbility('Def Down')] }],

@@ -1,8 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { GearUpgradeAnalysis } from '../GearUpgradeAnalysis';
-import type { ShipTypeName } from '../../../constants';
-import type { StatName } from '../../../types/stats';
 
 // Mock all context hooks and the analysis utility
 vi.mock('../../../utils/gear/potentialCalculator', () => ({
@@ -49,9 +47,9 @@ describe('GearUpgradeAnalysis auto-start', () => {
         render(
             <GearUpgradeAnalysis
                 inventory={[]}
-                shipRoles={['ATTACKER' as ShipTypeName]}
+                shipRoles={['ATTACKER']}
                 mode="analysis"
-                initialStats={['security' as StatName]}
+                initialStats={['security']}
             />
         );
         // Loading state is synchronously set before the first await inside handleAnalyze
@@ -63,13 +61,7 @@ describe('GearUpgradeAnalysis auto-start', () => {
     });
 
     it('does not auto-start when initialStats is absent', () => {
-        render(
-            <GearUpgradeAnalysis
-                inventory={[]}
-                shipRoles={['ATTACKER' as ShipTypeName]}
-                mode="analysis"
-            />
-        );
+        render(<GearUpgradeAnalysis inventory={[]} shipRoles={['ATTACKER']} mode="analysis" />);
         // No auto-start — button shows default text
         expect(screen.getByRole('button', { name: /analyze gear/i })).toBeInTheDocument();
     });
@@ -78,7 +70,7 @@ describe('GearUpgradeAnalysis auto-start', () => {
         render(
             <GearUpgradeAnalysis
                 inventory={[]}
-                shipRoles={['ATTACKER' as ShipTypeName]}
+                shipRoles={['ATTACKER']}
                 mode="analysis"
                 initialStats={[]}
             />

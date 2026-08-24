@@ -68,15 +68,14 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 
 // A positioned, finite-HP enemy with zero offense (a stationary, damageable target). `hp`
 // is sized per-test to sit at/above the expected firing-hit damage so death brackets it.
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: selection,
@@ -310,17 +309,16 @@ const offensiveEnemyAt = (
     selection: ParsedTarget['selection'],
     pattern: ParsedPattern,
     attack = 5000
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 describe('Task 9 — positional AoE damage apply at the enemy site (enemy→player)', () => {
     // Player roster: focus 'attacker' at M4 (front, the heal target) + a passive team victim at
@@ -416,7 +414,7 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
                         {
                             ...offensiveEnemyAt('enemy-1', 'M1', 'front', basePattern()),
                             pattern: undefined, // no pattern → legacy single-apply path
-                        } as EnemyAttacker,
+                        },
                     ],
                 },
                 undefined,

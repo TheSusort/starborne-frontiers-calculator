@@ -81,7 +81,7 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['buff-applied', 'buff-expired', 'debuff-applied'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     runCombat({ ...input, bus });
     return events;
 };

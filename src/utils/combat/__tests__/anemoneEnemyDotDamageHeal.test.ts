@@ -121,15 +121,14 @@ const corrosion = (
     sourceId: string
 ): ActiveDoTStack => ({ tier, stacks, remainingRounds, sourceId });
 
-const enemyAt = (id: string, position: Position, hp: number, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 const teamStats = (hp: number) => ({
     attack: 0,
@@ -141,28 +140,27 @@ const teamStats = (hp: number) => ({
     hacking: 0,
 });
 
-const teamAlly = (id: string, position: Position, hp: number, speed: number): TeamActor =>
-    ({
-        id,
-        speed,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [basicSlot()] },
-            stats: teamStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-        },
-    }) as TeamActor;
+const teamAlly = (id: string, position: Position, hp: number, speed: number): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [basicSlot()] },
+        stats: teamStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 // Tap an ordered log of reactive-heal-performed events (the log-only event a reactive heal emits
 // — see triggers.ts's #2 log-visibility comment; it never re-triggers on-repair listeners).
@@ -298,7 +296,7 @@ describe('Anemone (enemy-side) — team symmetry: an enemy Anemone reacts to a P
             startCharged: false,
             position: 'M4',
             shipSkills: anemoneFocusSkills(),
-        } as EnemyAttacker;
+        };
 
         const teamVictim: TeamActor = teamAlly('team-victim', 'M2', 10_000, 10);
 

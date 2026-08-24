@@ -50,25 +50,24 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A single positioned, passive (attack:0) enemy — the sole recipient of the focus attacker's
 // positional cast. security:0 so any inflict-type debuff always lands (mirrors isStasised.test.ts).
-const passiveEnemyAt = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-front',
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const passiveEnemyAt = (position: Position): EnemyAttacker => ({
+    id: 'enemy-front',
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 const engineBase = (shipSkills: ShipSkills): CombatEngineInput => ({
     attack: 10_000,

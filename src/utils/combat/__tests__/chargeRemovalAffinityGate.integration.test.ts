@@ -20,7 +20,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 import { getAffinityMatchup } from '../../calculators/affinityUtils';
 
@@ -70,7 +70,7 @@ const chargeHolder = (id: string, affinity: EnemyAttacker['affinity']): EnemyAtt
     startCharged: true,
     shipSkills: {
         slots: [{ slot: 'active', abilities: [enemyDamage(1, `${id}-a`)] }],
-    } as ShipSkills,
+    },
 });
 
 /** Player focus (the applier) holding the under-test charge-removal ability. Speed 100 → acts

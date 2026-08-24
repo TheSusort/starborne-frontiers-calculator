@@ -37,23 +37,22 @@ const ADJACENT_ONLY_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-s
 // the targeted enemy and all enemies adjacent to it.").
 const TARGET_AND_ADJACENT_TEXT = `This Unit applies <unit-skill>${DEBUFF_NAME}</unit-skill> for 2 turns to the targeted enemy and all enemies adjacent to it.`;
 
-const ship = (id: string, over: Partial<Ship>): Ship =>
-    ({
-        id,
-        name: id,
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE',
-        type: 'Attacker',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activePattern: 'Pattern-Base',
-        activeTarget: 'front',
-        chargeSkillCharge: 0,
-        ...over,
-    }) as Ship;
+const ship = (id: string, over: Partial<Ship>): Ship => ({
+    id,
+    name: id,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'Attacker',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activePattern: 'Pattern-Base',
+    activeTarget: 'front',
+    chargeSkillCharge: 0,
+    ...over,
+});
 
 interface Placement {
     ship: Ship;

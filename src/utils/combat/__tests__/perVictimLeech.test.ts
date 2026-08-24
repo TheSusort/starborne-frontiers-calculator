@@ -73,15 +73,14 @@ const lineRange1Pattern = (): ParsedPattern => ({
 });
 
 // A positioned, finite-HP enemy with zero offense (a stationary, damageable target).
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 /** Sum a healing bucket over every round for `actorId` (defaults to the focus). */
 const sumHeal = (
@@ -274,17 +273,16 @@ describe('E2 T5 — per-victim taken leech on the positional enemy branch', () =
         position: Position,
         attack: number,
         hp = 1_000_000_000
-    ): EnemyAttacker =>
-        ({
-            id,
-            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 10 },
-            chargeCount: 0,
-            startCharged: false,
-            position,
-            target: parsedTarget('front'),
-            pattern: lineRange1Pattern(),
-            shipSkills: { slots: [basicAttack()] },
-        }) as EnemyAttacker;
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern: lineRange1Pattern(),
+        shipSkills: { slots: [basicAttack()] },
+    });
 
     // 1v(focus+team): the enemy AoE hits BOTH players. The focus ('attacker', M4) is the origin
     // victim (full damage); the M3 team player is the covered victim (half). HP huge so nobody

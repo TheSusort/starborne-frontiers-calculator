@@ -49,7 +49,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                         <div className="absolute top-1 left-1">
                             {!isImplant && (
                                 <img
-                                    src={GEAR_SETS[gear.setBonus as GearSetName]?.iconUrl as string}
+                                    src={GEAR_SETS[gear.setBonus as GearSetName]?.iconUrl}
                                     alt={gear.setBonus as string}
                                     className="w-5"
                                 />

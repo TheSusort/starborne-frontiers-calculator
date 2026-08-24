@@ -66,7 +66,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -80,7 +80,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /**
@@ -172,14 +172,18 @@ function ally(id: string, position: Position, hp: number): TeamActorEngineInput 
 }
 
 /** A non-positional enemy attacker that hits the heal target each round (real damage). */
-const enemyHitter = (id: string, attack: number, hp = 1_000_000_000, speed = 1000): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyHitter = (
+    id: string,
+    attack: number,
+    hp = 1_000_000_000,
+    speed = 1000
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: [],
@@ -290,7 +294,7 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
             target: parsedTarget('front'),
             pattern: basePattern(),
             shipSkills: { slots: [noopActive] },
-        } as EnemyAttacker;
+        };
 
         // Back enemy carrier: huge HP (survives) + the Last Stand passive. When the front enemy
         // dies it becomes the sole living enemy → its on-ally-destroyed reaction's last-standing
@@ -306,7 +310,7 @@ describe('D-PR16 Last Stand (last-standing → self Barrier + Block Debuff co-gr
             shipSkills: {
                 slots: [noopActive, { slot: 'passive', abilities: [lastStandAbility] }],
             },
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             ...BASE(),

@@ -137,24 +137,23 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
  * omitted → defaults to 200 → 100% landing (so the ONLY thing that can resist is the
  * Block Debuff immunity fold).
  */
-const debuffEnemy = (debuff: Ability): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        debuff,
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const debuffEnemy = (debuff: Ability): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    debuff,
+                ],
+            },
+        ],
+    },
+});
 
 /** Focus actor (heal target) shipSkills granting a recurring `Block Debuff` self-buff. */
 const blockDebuffSelfSkills = (): ShipSkills => ({
@@ -273,35 +272,34 @@ describe('Block Debuff — cast-side timed/persistent landing fold (engine)', ()
 // An enemy attacker casting a basic attack + an Inferno III DoT. `hacking` omitted →
 // defaults to 200 → 100% landing, so the ONLY thing that can block the DoT is the
 // Block Debuff immunity branch.
-const infernoIIIEnemy = (): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        enemyAb({
+const infernoIIIEnemy = (): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    enemyAb({
+                        type: 'dot',
+                        config: {
                             type: 'dot',
-                            config: {
-                                type: 'dot',
-                                dotType: 'inferno',
-                                // Inferno III MAGNITUDE (15/30/45 = I/II/III) — the value the tick
-                                // math and dotResistLabel both consume; 45 → 'Inferno III'.
-                                tier: 45,
-                                stacks: 2,
-                                duration: 3,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            dotType: 'inferno',
+                            // Inferno III MAGNITUDE (15/30/45 = I/II/III) — the value the tick
+                            // math and dotResistLabel both consume; 45 → 'Inferno III'.
+                            tier: 45,
+                            stacks: 2,
+                            duration: 3,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 const runDotWith = (focusSkills: ShipSkills, bus?: ReturnType<typeof createEventBus>) =>
     runCombat(
@@ -918,7 +916,7 @@ describe('Block Debuff — integration (engine)', () => {
         const highHackingEnemy: EnemyAttacker = {
             ...debuffEnemy(timedAttackDown),
             stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking: 5000 },
-        } as EnemyAttacker;
+        };
 
         const immune = e1Effects(
             runCombat(

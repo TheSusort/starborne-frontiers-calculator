@@ -254,15 +254,14 @@ const basicAttack: ShipSkills = {
 
 /** A positioned ENEMY carrier of the defense-substitution passive — high defence, never
  *  targeted (no `target`/`pattern` of its own needed: it does 0 damage and is never hit). */
-const enemyMeatshield = (id: string, position: Position, defence: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [meatshieldPassive] },
-    }) as EnemyAttacker;
+const enemyMeatshield = (id: string, position: Position, defence: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [meatshieldPassive] },
+});
 
 /** A positioned ENEMY ally victim — low (0) defence of its own. `role` optionally sets the
  *  ShipTypeName for role-filtered classification (mirrors the player-side `teamActor` helper). */
@@ -271,16 +270,15 @@ const enemyAlly = (
     position: Position,
     defence: number,
     role?: EnemyAttacker['role']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] },
-        role,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+    role,
+});
 
 const ENEMY_SIDE_BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],

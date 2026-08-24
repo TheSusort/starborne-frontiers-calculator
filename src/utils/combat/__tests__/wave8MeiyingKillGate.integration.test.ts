@@ -77,15 +77,14 @@ const frontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selectio
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // Caster kit: the real Meiying passive + a hand-built active that kills the front target, WITH
 // or WITHOUT first seeding it a debuff.
@@ -168,53 +167,51 @@ describe('Ship-kit W8 Task 13: team symmetry — an enemy-side Meiying gates ide
     // Mirror roster: the killed victim is the focus 'attacker' (player side, M4); its neighbours
     // are PLAYER-side walked team actors. The Meiying caster moves to enemyAttackers, carrying
     // the same active(debuff?+lethal) + real passive kit, targeting 'front' (the focus at M4).
-    const teamNeighbour = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-        ({
-            id,
-            speed: 1,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            position,
-            walk: {
-                shipSkills: { slots: [] } as ShipSkills,
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    defence: 0,
-                    hp,
-                    hacking: 0,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
-            },
-        }) as TeamActorEngineInput;
-
-    const enemyMeiying = (killsDebuffedVictim: boolean): EnemyAttacker =>
-        ({
-            id: 'meiying-enemy',
+    const teamNeighbour = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+        id,
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position,
+        walk: {
+            shipSkills: { slots: [] },
             stats: {
-                attack: 100_000,
+                attack: 0,
                 crit: 0,
                 critDamage: 0,
+                defensePenetration: 0,
                 defence: 0,
-                hp: 1_000_000_000,
-                speed: 100,
+                hp,
+                hacking: 0,
             },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4' as Position,
-            target: frontTarget(),
-            pattern: basePattern(),
-            shipSkills: casterSkills(killsDebuffedVictim),
-        }) as EnemyAttacker;
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    const enemyMeiying = (killsDebuffedVictim: boolean): EnemyAttacker => ({
+        id: 'meiying-enemy',
+        stats: {
+            attack: 100_000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        target: frontTarget(),
+        pattern: basePattern(),
+        shipSkills: casterSkills(killsDebuffedVictim),
+    });
 
     const BASE = (killsDebuffedVictim: boolean): CombatEngineInput => ({
         attack: 0,
@@ -222,7 +219,7 @@ describe('Ship-kit W8 Task 13: team symmetry — an enemy-side Meiying gates ide
         critDamage: 0,
         defensePenetration: 0,
         chargeCount: 0,
-        shipSkills: { slots: [] } as ShipSkills,
+        shipSkills: { slots: [] },
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

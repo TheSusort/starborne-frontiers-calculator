@@ -81,15 +81,14 @@ const singleTargetPattern = (): ParsedPattern => ({
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-const victimAt = (id: string, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1, security: 0 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const victimAt = (id: string, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1, security: 0 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 const bomb = (countdown: number, sourceId: string): PendingBomb => ({
     countdown,

@@ -15,7 +15,7 @@ import { createActor, PendingBomb } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { ShipSkills } from '../../../types/abilities';
 import { AffinityName } from '../../../types/ship';
 
 const ATTACKER_AFFINITY: AffinityName = 'thermal';
@@ -122,7 +122,7 @@ function makeArgs(runtime: PlayerActorRuntime, pendingBombs: PendingBomb[]): Pla
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-    } as PlayerTurnArgs;
+    };
 }
 
 // A skill that BOTH deals damage (realistic firing hit) and detonates bombs.
@@ -138,7 +138,7 @@ const SKILLS: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'damage', multiplier: 80, hits: 1 },
-                } as Ability,
+                },
                 {
                     id: 'detonate',
                     type: 'damage',
@@ -146,7 +146,7 @@ const SKILLS: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'detonate-dot', dotType: 'bomb', powerPct: 100 },
-                } as Ability,
+                },
             ],
         },
     ],

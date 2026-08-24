@@ -84,17 +84,16 @@ const offensiveEnemyAt = (
     attack: number,
     hp: number,
     speed: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 /** Cumulative damage credited to `actorId` across the run via the round perTargetDamage maps. */
 const totalPerTargetDamage = (result: ReturnType<typeof runCombat>, actorId: string): number => {
@@ -216,17 +215,16 @@ const reactiveEnemyAt = (
     attack: number,
     hp: number,
     speed: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills,
+});
 
 /**
  * A positional two-team battle where the PLAYER FOCUS ('attacker') fires at the enemy roster.
@@ -372,24 +370,23 @@ describe('Task 3 — player→enemy attacked emit: enemy COUNTERS fire when the 
             reactiveEnemyShip({ secondPassiveSkillText: CENTURION_P2 })
         );
         // An inert front victim enemy the player anchors (no reactive, big HP).
-        const victimEnemy = (): EnemyAttacker =>
-            ({
-                id: 'victim',
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 1,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                position: 'M4',
-                target: parsedTarget('front'),
-                pattern: basePattern(),
-                shipSkills: { slots: [] },
-            }) as EnemyAttacker;
+        const victimEnemy = (): EnemyAttacker => ({
+            id: 'victim',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: { slots: [] },
+        });
 
         // ADJACENT: Centurion at M3 (adjacent to M4 victim) → its on-ally-attacked counter fires.
         const adjResult = runCombat(
@@ -441,17 +438,16 @@ describe('Task 3 — player→enemy attacked emit: a NON-counter enemy reactive 
     };
 
     /** An enemy carrying the reactive self-buff in its passive slot. */
-    const reactiveBuffEnemy = (id: string, hp: number): EnemyAttacker =>
-        ({
-            id,
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4',
-            target: parsedTarget('front'),
-            pattern: basePattern(),
-            shipSkills: { slots: [{ slot: 'passive', abilities: [selfBuffAbility] }] },
-        }) as EnemyAttacker;
+    const reactiveBuffEnemy = (id: string, hp: number): EnemyAttacker => ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: { slots: [{ slot: 'passive', abilities: [selfBuffAbility] }] },
+    });
 
     /** Run a battle capturing buff-applied events. */
     const runWithBuffs = (input: CombatEngineInput) => {

@@ -3,19 +3,18 @@ import { GearPiece } from '../../types/gear';
 import { WishlistEntry } from '../../types/wishlist';
 import { computeImportDiff } from './computeImportDiff';
 
-const makeGear = (overrides: Partial<GearPiece> = {}): GearPiece =>
-    ({
-        id: 'g1',
-        slot: 'weapon',
-        stars: 6,
-        rarity: 'legendary',
-        setBonus: null,
-        mainStat: { name: 'attack', value: 100, type: 'flat' },
-        subStats: [],
-        shipId: undefined,
-        level: 16,
-        ...overrides,
-    }) as GearPiece;
+const makeGear = (overrides: Partial<GearPiece> = {}): GearPiece => ({
+    id: 'g1',
+    slot: 'weapon',
+    stars: 6,
+    rarity: 'legendary',
+    setBonus: null,
+    mainStat: { name: 'attack', value: 100, type: 'flat' },
+    subStats: [],
+    shipId: undefined,
+    level: 16,
+    ...overrides,
+});
 
 const entry: WishlistEntry = {
     id: 'w1',
@@ -45,7 +44,7 @@ describe('computeImportDiff wishlist hits', () => {
     });
 
     it('does not match implants (slot not in GEAR_SLOTS)', () => {
-        const implant = makeGear({ id: 'i1', slot: 'implant_major' as GearPiece['slot'] });
+        const implant = makeGear({ id: 'i1', slot: 'implant_major' });
         const diff = computeImportDiff([], [], [], [implant], null, [entry]);
         expect(diff.wishlistHits).toEqual([]);
     });

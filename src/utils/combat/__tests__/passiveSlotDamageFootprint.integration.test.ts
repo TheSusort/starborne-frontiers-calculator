@@ -165,15 +165,14 @@ const enemyAt = (
     attack = 0,
     speed = 1,
     shipSkills: ShipSkills = { slots: [] }
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills,
+});
 
 const FOCUS_ATTACK = 1000;
 

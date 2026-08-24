@@ -183,7 +183,7 @@ export const LeaderboardPage: React.FC = () => {
                                 acc[eq.slot] = eq.gear_id;
                                 return acc;
                             },
-                            {} as Record<GearSlotName, string>
+                            {}
                         ),
                         refits: data.ship_refits.map((refit: any) => ({
                             id: refit.id,

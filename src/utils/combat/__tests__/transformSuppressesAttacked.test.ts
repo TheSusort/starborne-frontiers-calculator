@@ -10,7 +10,7 @@
  * (Orel without Taunt = transform gate closed = identical "no transform → attacked fires" path).
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -61,48 +61,46 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-const victimActor = (id: string, position: Position, passive: Ability): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: {
-                slots: [{ slot: 'passive', abilities: [passive] }] as ShipSkills['slots'],
-            },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const victimActor = (id: string, position: Position, passive: Ability): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: {
+            slots: [{ slot: 'passive', abilities: [passive] }] as ShipSkills['slots'],
         },
-    }) as TeamActorEngineInput;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
-const offensiveEnemy = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
-    }) as EnemyAttacker;
+const offensiveEnemy = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+});
 
 const noopActive: ShipSkills['slots'][number] = {
     slot: 'active',

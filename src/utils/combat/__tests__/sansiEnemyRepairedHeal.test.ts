@@ -152,19 +152,18 @@ const enemyActor = (
     speed: number,
     abilities: Ability[],
     passives: Ability[] = []
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                { slot: 'active', abilities },
-                ...(passives.length ? [{ slot: 'passive' as const, abilities: passives }] : []),
-            ],
-        },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            { slot: 'active', abilities },
+            ...(passives.length ? [{ slot: 'passive' as const, abilities: passives }] : []),
+        ],
+    },
+});
 
 describe('Sansi (player-side) — reactive heal SCALES by the repaired-enemy count', () => {
     it('a SINGLE AoE repair of 2 enemies heals Sansi 5% × 2 (= 10% of max HP), not a flat 5%', () => {
@@ -246,7 +245,7 @@ describe('Sansi (enemy-side) — team symmetry: an enemy Sansi reacts to a PLAYE
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [sansiHealAbility()] }] },
-        } as EnemyAttacker;
+        };
 
         // A second player actor so the player's all-allies heal repairs TWO players (count 2).
         const otherAlly: TeamActor = {
@@ -274,7 +273,7 @@ describe('Sansi (enemy-side) — team symmetry: an enemy Sansi reacts to a PLAYE
                 affinityCritPenalty: 0,
                 hasChargedSkill: false,
             },
-        } as TeamActor;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,

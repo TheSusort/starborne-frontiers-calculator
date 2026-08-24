@@ -6,15 +6,14 @@ import type { RegisteredAbilityStatus } from '../statusEngine';
 
 // Always-active seed (skillDuration null → appears every round for owner 'attacker';
 // enemyDebuffs with no enemyTargetId resolve to the default '__enemy__' target).
-const buff = (buffName: string): SelectedGameBuff =>
-    ({
-        id: buffName,
-        buffName,
-        stacks: 1,
-        parsedEffects: {},
-        isStackable: false,
-        skillDuration: null,
-    }) as SelectedGameBuff;
+const buff = (buffName: string): SelectedGameBuff => ({
+    id: buffName,
+    buffName,
+    stacks: 1,
+    parsedEffects: {},
+    isStackable: false,
+    skillDuration: null,
+});
 
 describe('buildForcedTargetingStatus', () => {
     it('reads Stealth and Taunt from the self-buff store', () => {

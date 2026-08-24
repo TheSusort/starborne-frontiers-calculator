@@ -49,7 +49,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -63,7 +63,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /**

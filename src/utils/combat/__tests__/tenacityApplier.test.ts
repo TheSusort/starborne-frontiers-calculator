@@ -50,7 +50,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -64,7 +64,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -85,14 +85,13 @@ const manualEnemy = (
     attack: number,
     speed = 50,
     extra: Partial<EnemyAttacker> = {}
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        ...extra,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    ...extra,
+});
 
 /** An always-active, no-payload Barrier self-buff (same shape as barrier.test.ts) — fully
  *  nullifies incoming HP damage so the carrier survives every round while the pre-barrier

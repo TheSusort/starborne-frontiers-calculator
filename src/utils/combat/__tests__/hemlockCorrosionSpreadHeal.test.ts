@@ -115,15 +115,14 @@ const hemlockFocusSkills = (): ShipSkills => ({
     ],
 });
 
-const enemyAt = (id: string, position: Position, hp: number, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 function run(input: CombatEngineInput) {
     const bus = createEventBus();
@@ -388,7 +387,7 @@ describe('Team symmetry — an ENEMY-side Hemlock reacts to a PLAYER-side spread
                     { slot: 'passive', abilities: [hemlockHealAbility()] },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         const teamStats = (hp: number) => ({
             attack: 0,
@@ -399,26 +398,25 @@ describe('Team symmetry — an ENEMY-side Hemlock reacts to a PLAYER-side spread
             hp,
             hacking: 0,
         });
-        const ally = (id: string, position: Position): TeamActor =>
-            ({
-                id,
-                speed: 1,
-                chargeCount: 0,
-                startCharged: false,
-                selfBuffs: [],
-                enemyDebuffs: [],
-                position,
-                walk: {
-                    shipSkills: { slots: [] },
-                    stats: teamStats(1_000_000_000),
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
-                    affinityDamageModifier: 0,
-                    affinityCritCap: 100,
-                    affinityCritPenalty: 0,
-                    hasChargedSkill: false,
-                },
-            }) as TeamActor;
+        const ally = (id: string, position: Position): TeamActor => ({
+            id,
+            speed: 1,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            position,
+            walk: {
+                shipSkills: { slots: [] },
+                stats: teamStats(1_000_000_000),
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
 
         const input: CombatEngineInput = {
             attack: 0,

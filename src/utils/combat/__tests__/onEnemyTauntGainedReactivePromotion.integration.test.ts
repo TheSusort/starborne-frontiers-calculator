@@ -131,24 +131,22 @@ describe('Amartya (player-side) — Exposed lands on the SPECIFIC opposing actor
     });
 
     // enemy-tauntgainer grants itself Taunt on its own turn.
-    const enemyTauntGainer = (): EnemyAttacker =>
-        ({
-            id: 'enemy-tauntgainer',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [tauntSelfBuffSlot()] },
-        }) as EnemyAttacker;
+    const enemyTauntGainer = (): EnemyAttacker => ({
+        id: 'enemy-tauntgainer',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 1000 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [tauntSelfBuffSlot()] },
+    });
 
     // enemy-bystander never gains any buff — proves Exposed does NOT land on an unrelated enemy.
-    const enemyBystander = (): EnemyAttacker =>
-        ({
-            id: 'enemy-bystander',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: { slots: [] } as ShipSkills,
-        }) as EnemyAttacker;
+    const enemyBystander = (): EnemyAttacker => ({
+        id: 'enemy-bystander',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 500 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: { slots: [] },
+    });
 
     const BASE = (): CombatEngineInput => ({
         attack: 0,
@@ -209,7 +207,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [amartyaExposedAbility()] }] },
-        } as EnemyAttacker;
+        };
 
         const tauntGainingAlly: TeamActor = {
             id: 'ally-tauntgainer',
@@ -236,7 +234,7 @@ describe('Amartya (enemy-side) — team symmetry: an enemy Amartya reacts to a P
                 affinityCritPenalty: 0,
                 hasChargedSkill: false,
             },
-        } as TeamActor;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,

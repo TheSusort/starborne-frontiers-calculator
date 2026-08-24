@@ -107,7 +107,7 @@ export const GearPage: React.FC = () => {
             addNotification('success', 'Gear piece removed successfully');
             setPendingDeleteId(null);
             setShowDeleteConfirm(false);
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to remove gear piece');
         }
     };
@@ -130,7 +130,7 @@ export const GearPage: React.FC = () => {
             setEditingPiece(undefined);
             setIsFormVisible(false);
             addNotification('success', 'Gear piece saved successfully');
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to save gear piece');
         }
     };
@@ -153,7 +153,7 @@ export const GearPage: React.FC = () => {
                 calibration: { shipId },
             });
             addNotification('success', 'Gear calibrated successfully');
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to calibrate gear');
         }
     };
@@ -164,7 +164,7 @@ export const GearPage: React.FC = () => {
                 calibration: undefined,
             });
             addNotification('success', 'Calibration removed successfully');
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to remove calibration');
         }
     };

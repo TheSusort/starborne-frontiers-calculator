@@ -87,25 +87,24 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
     abilities: [ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } })],
 });
 
-const basicEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const basicEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // A 0-max-HP roster: what USED to be the "pressure source" idiom (placed but unhittable, so the

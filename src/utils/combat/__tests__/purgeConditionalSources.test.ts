@@ -423,7 +423,7 @@ describe('C2b-2 T4 Integration: Rhodium end-of-round most-buffs purge', () => {
                 abilities: [
                     ab({
                         type: 'purge',
-                        target: 'enemy-most-buffs' as AbilityTarget,
+                        target: 'enemy-most-buffs',
                         trigger: 'end-of-round' as const,
                         config: { type: 'purge', count: 2 },
                     }),
@@ -825,7 +825,7 @@ describe('C2b-2 T6 Integration: Faust on-destroyed killer-targeted purge', () =>
         },
         chargeCount: 0,
         startCharged: false,
-        position: 'M4' as Position,
+        position: 'M4',
         target: parsedTarget('front'),
         pattern: basePattern(),
         shipSkills: {

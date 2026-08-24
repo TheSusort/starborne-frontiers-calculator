@@ -93,17 +93,16 @@ const selfCleanseSkills = (count: number): ShipSkills => ({
     ],
 });
 
-const enemyAt = (id: string, position: Position, shipSkills: ShipSkills): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: 40_000, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, shipSkills: ShipSkills): EnemyAttacker => ({
+    id,
+    stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: 40_000, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills,
+});
 
 // Player FOCUS at M4 fires `front` (anchors the enemy at M4) and acts FIRST (speed 200), immortal.
 const playerVsEnemy = (

@@ -396,35 +396,34 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
     });
 
     /** A player victim at M3 carrying the frac-gated reactive, with a chosen max HP. */
-    const victim = (hp: number): NonNullable<CombatEngineInput['teamActors']>[number] =>
-        ({
-            id: 'victim',
-            speed: 1,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            position: 'M3' as Position,
-            affinity: 'antimatter',
-            walk: {
-                shipSkills: { slots: [{ slot: 'passive', abilities: [tenacityLike()] }] },
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 0,
-                    defence: 0,
-                    hp,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
+    const victim = (hp: number): NonNullable<CombatEngineInput['teamActors']>[number] => ({
+        id: 'victim',
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: 'M3',
+        affinity: 'antimatter',
+        walk: {
+            shipSkills: { slots: [{ slot: 'passive', abilities: [tenacityLike()] }] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp,
             },
-        }) as NonNullable<CombatEngineInput['teamActors']>[number];
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
 
     /** A 3-hit ENEMY attacker at M4 pointed at the player victim (enemy→player positional path). */
     const enemyMultiHit = () =>
@@ -440,7 +439,7 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
             },
             chargeCount: 0,
             startCharged: false,
-            position: 'M4' as Position,
+            position: 'M4',
             affinity: 'antimatter',
             target: parsedTarget('front'),
             pattern: basePattern(),
@@ -455,14 +454,14 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
         // `deferEmission` / `emitDeferred`, so its interleaving needs its own lock.
         const stream: CombatEvent[] = [];
         bus.on('ability-performed', (e) => {
-            if (e.actorId === 'enemy-mh') stream.push(e as CombatEvent);
+            if (e.actorId === 'enemy-mh') stream.push(e);
         });
         bus.on('attacked', (e) => {
-            if (e.attackerId === 'enemy-mh') stream.push(e as CombatEvent);
+            if (e.attackerId === 'enemy-mh') stream.push(e);
             if (e.targetId === 'victim') attacked.push(e);
         });
         bus.on('buff-applied', (e) => {
-            if (e.buffName === 'Buff Protection') protections.push(e as CombatEvent);
+            if (e.buffName === 'Buff Protection') protections.push(e);
         });
         runCombat({
             // The focus player sits at M1 and does nothing meaningful; the enemy is the attacker.
@@ -734,35 +733,36 @@ describe('outgoing reactive triggers — per-sub-attack fan-out', () => {
         });
 
     /** A do-nothing same-side ally at M3 carrying `abilities` as its passive slot. */
-    const observer = (abilities: Ability[]): NonNullable<CombatEngineInput['teamActors']>[number] =>
-        ({
-            id: 'observer',
-            speed: 1,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            position: 'M3' as Position,
-            affinity: 'antimatter',
-            walk: {
-                shipSkills: { slots: [{ slot: 'passive', abilities }] },
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
+    const observer = (
+        abilities: Ability[]
+    ): NonNullable<CombatEngineInput['teamActors']>[number] => ({
+        id: 'observer',
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: 'M3',
+        affinity: 'antimatter',
+        walk: {
+            shipSkills: { slots: [{ slot: 'passive', abilities }] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 1_000_000_000,
             },
-        }) as NonNullable<CombatEngineInput['teamActors']>[number];
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
 
     /** The focus cast with `riders` bolted on as its own passive slot. */
     const focusWithRiders = (

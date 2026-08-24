@@ -231,34 +231,32 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
 
     // Faster than the buffing enemy: lands a real, removable debuff on Nuqtu BEFORE the
     // self-buff reactive fires this same round.
-    const debuffEnemy = (id: string): EnemyAttacker =>
-        ({
-            id,
-            stats: {
-                attack: 1,
-                crit: 0,
-                critDamage: 0,
-                defence: 0,
-                hp: 1_000_000_000,
-                speed: 1000,
-            },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [{ slot: 'active', abilities: [debuffOnCast('deb', 'Attack Down')] }],
-            },
-        }) as EnemyAttacker;
+    const debuffEnemy = (id: string): EnemyAttacker => ({
+        id,
+        stats: {
+            attack: 1,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1000,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [{ slot: 'active', abilities: [debuffOnCast('deb', 'Attack Down')] }],
+        },
+    });
 
-    const buffEnemy = (id: string, speed: number, buffName = 'Damage Up I'): EnemyAttacker =>
-        ({
-            id,
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: {
-                slots: [{ slot: 'active', abilities: [selfBuffOnCast('buf', buffName)] }],
-            },
-        }) as EnemyAttacker;
+    const buffEnemy = (id: string, speed: number, buffName = 'Damage Up I'): EnemyAttacker => ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: {
+            slots: [{ slot: 'active', abilities: [selfBuffOnCast('buf', buffName)] }],
+        },
+    });
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
         enemyAttackers: [],
@@ -298,23 +296,22 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
     });
 
     it('once-per-round cap: TWO opposing self-buffs in one round cleanse only ONCE, but grant Terran Bolster III TWICE', () => {
-        const debuffEnemyB = (id: string): EnemyAttacker =>
-            ({
-                id,
-                stats: {
-                    attack: 1,
-                    crit: 0,
-                    critDamage: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 950,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                shipSkills: {
-                    slots: [{ slot: 'active', abilities: [debuffOnCast('deb-b', 'Defense Down')] }],
-                },
-            }) as EnemyAttacker;
+        const debuffEnemyB = (id: string): EnemyAttacker => ({
+            id,
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 950,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [debuffOnCast('deb-b', 'Defense Down')] }],
+            },
+        });
 
         const { buffsApplied, result } = runAndCollectBuffs(
             BASE({
@@ -337,40 +334,39 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
     });
 
     it('a same-side ALLY buffing itself does NOT wake the reactive (opposing-scoped)', () => {
-        const allyBuff = (): TeamActor =>
-            ({
-                id: 'ally-buffer',
-                speed: 950,
-                chargeCount: 0,
-                startCharged: false,
-                selfBuffs: [],
-                enemyDebuffs: [],
-                walk: {
-                    shipSkills: {
-                        slots: [
-                            {
-                                slot: 'active',
-                                abilities: [selfBuffOnCast('ally-buf', 'Damage Up I')],
-                            },
-                        ],
-                    },
-                    stats: {
-                        attack: 0,
-                        crit: 0,
-                        critDamage: 0,
-                        defensePenetration: 0,
-                        hacking: 0,
-                        defence: 0,
-                        hp: 20_000,
-                    },
-                    selfDotModifier: 0,
-                    defensePenetrationBuff: 0,
-                    affinityDamageModifier: 0,
-                    affinityCritCap: 100,
-                    affinityCritPenalty: 0,
-                    hasChargedSkill: false,
+        const allyBuff = (): TeamActor => ({
+            id: 'ally-buffer',
+            speed: 950,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            walk: {
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [selfBuffOnCast('ally-buf', 'Damage Up I')],
+                        },
+                    ],
                 },
-            }) as TeamActor;
+                stats: {
+                    attack: 0,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 0,
+                    defence: 0,
+                    hp: 20_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        });
 
         const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ teamActors: [allyBuff()], enemyAttackers: [debuffEnemy('enemy-deb')] })
@@ -389,8 +385,8 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
             stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
             chargeCount: 0,
             startCharged: false,
-            shipSkills: { slots: [] } as ShipSkills,
-        } as EnemyAttacker;
+            shipSkills: { slots: [] },
+        };
 
         const { buffsApplied, result } = runAndCollectBuffs(
             BASE({ enemyAttackers: [debuffEnemy('enemy-deb'), passiveEnemy] })
@@ -408,21 +404,20 @@ describe('Nuqtu (player-side) — an opposing buff wakes the self-cleanse + Terr
 
 describe('Nuqtu (enemy-side) — team symmetry: an enemy Nuqtu reacts to a PLAYER self-buff', () => {
     it("a player self-buffing wakes the enemy Nuqtu's self-cleanse + Terran Bolster III grant", () => {
-        const enemyDebuffsAttacker = (id: string): EnemyAttacker =>
-            ({
-                id,
-                stats: {
-                    attack: 1,
-                    crit: 0,
-                    critDamage: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 5,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                shipSkills: { slots: [] } as ShipSkills,
-            }) as EnemyAttacker;
+        const enemyDebuffsAttacker = (id: string): EnemyAttacker => ({
+            id,
+            stats: {
+                attack: 1,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 5,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: { slots: [] },
+        });
 
         const enemyNuqtu: EnemyAttacker = {
             id: 'enemy-nuqtu',

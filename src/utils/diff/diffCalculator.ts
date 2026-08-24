@@ -76,8 +76,8 @@ export const generateDiff = (
     }
 
     // Handle objects - limit the number of properties to prevent stack overflow
-    const obj1Keys = Object.keys(obj1 as Record<string, unknown>);
-    const obj2Keys = Object.keys(obj2 as Record<string, unknown>);
+    const obj1Keys = Object.keys(obj1);
+    const obj2Keys = Object.keys(obj2);
     const allKeys = new Set([...obj1Keys, ...obj2Keys]);
 
     // If there are too many keys, do a shallow comparison

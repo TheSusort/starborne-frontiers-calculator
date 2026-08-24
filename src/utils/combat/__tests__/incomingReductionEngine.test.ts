@@ -44,7 +44,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 function makePiece(over: Partial<GearPiece>): GearPiece {
     return {
@@ -57,7 +57,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 function makeGetGearPiece(map: Record<string, GearPiece>): (id: string) => GearPiece | undefined {
     return (id) => map[id];
@@ -209,8 +209,8 @@ const offensiveEnemy = (
         position,
         target: parsedTarget(selection),
         pattern: basePattern(),
-        shipSkills: { slots } as ShipSkills,
-    } as EnemyAttacker;
+        shipSkills: { slots },
+    };
 };
 
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({

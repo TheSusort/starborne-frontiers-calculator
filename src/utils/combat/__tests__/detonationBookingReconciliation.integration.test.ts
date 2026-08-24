@@ -142,7 +142,7 @@ const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => (
                 stacks,
                 isStackable: true,
             },
-        } as Ability,
+        },
     ],
 });
 
@@ -163,7 +163,7 @@ const fullBlockAuraPassive = (): ShipSkills['slots'][number] => ({
                 blockPct: 1.0,
                 oncePerRound: false,
             },
-        } as Ability,
+        },
     ],
 });
 
@@ -381,8 +381,8 @@ const detonateFixture = (
     healTargetId: 'attacker',
     mode: 'healing',
     position: 'M4',
-    target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
-    pattern: { raw: 'line-range-1', shape: 'line', range: 1, modifiers: {} } as ParsedPattern,
+    target: { raw: 'front', side: 'enemy', selection: 'front' },
+    pattern: { raw: 'line-range-1', shape: 'line', range: 1, modifiers: {} },
     enemyAttackers: [
         enemyAt('enemy-front', 'M4'),
         enemyAt('enemy-mid', 'M3', PROTECTOR_DEFENCE, [protectionAuraPassive(PROT_STACKS)]),
@@ -595,13 +595,13 @@ describe('forced bomb detonation booking (forceDetonateBombOnVictim)', () => {
                 healTargetId: 'attacker',
                 mode: 'healing',
                 position: 'M4',
-                target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
+                target: { raw: 'front', side: 'enemy', selection: 'front' },
                 pattern: {
                     raw: 'base',
                     shape: 'base',
                     range: 0,
                     modifiers: {},
-                } as ParsedPattern,
+                },
                 enemyAttackers: [
                     enemyAt('enemy-front', 'M4'),
                     withProtector

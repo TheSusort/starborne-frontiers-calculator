@@ -35,7 +35,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
-import type { CombatActor, ActiveDoTStack } from '../state';
+import type { CombatActor } from '../state';
 
 let idc = 0;
 const ab = (p: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
@@ -57,25 +57,24 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A single positioned, passive (attack:0) enemy — the sole recipient of the focus attacker's
 // positional cast. security:0 so the Scorching Radiation debuff-inflict always lands.
-const passiveEnemyAt = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-front',
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
+const passiveEnemyAt = (position: Position): EnemyAttacker => ({
+    id: 'enemy-front',
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
 
 // critDamage: 150 — the caster's own crit power. With perUnit 0.1 (Wildfire's base passive,
 // "1% additional … for every 10% crit power") the scaling contributes 150 * 0.1 = +15%.
@@ -257,25 +256,24 @@ describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a/I4b) — 
 describe('Wildfire dotDamage crit-power scaling — I4b per-victim/per-tick gating', () => {
     // A passive, high-HP, positioned enemy — reused for both the (targeted) front victim and
     // the (untouched) covered victim in the AoE test below.
-    const passiveVictimAt = (id: string, position: Position, security = 0): EnemyAttacker =>
-        ({
-            id,
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defence: 0,
-                hp: 1_000_000_000,
-                speed: 1,
-                security,
-            },
-            chargeCount: 0,
-            startCharged: false,
-            position,
-            target: parsedTarget('front'),
-            pattern: basePattern(),
-            shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-        }) as EnemyAttacker;
+    const passiveVictimAt = (id: string, position: Position, security = 0): EnemyAttacker => ({
+        id,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 1,
+            security,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+    });
 
     it('AoE mixed-victim: the SAME applier ctx boosts a tick on a Scorching-Radiation victim but NOT a tick on an untouched victim', () => {
         idc = 0;
@@ -323,7 +321,7 @@ describe('Wildfire dotDamage crit-power scaling — I4b per-victim/per-tick gati
                     stacks: 1,
                     remainingRounds: 5,
                     sourceId: 'attacker',
-                } as ActiveDoTStack);
+                });
             },
         } as CombatEngineInput);
 

@@ -141,7 +141,7 @@ const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => (
                 stacks,
                 isStackable: true,
             },
-        } as Ability,
+        },
     ],
 });
 
@@ -349,36 +349,35 @@ describe('Bloodthirst emits no repair off a DoT-transformed sub-attack (locked r
     /** 'anchor' self-casts a long Hit Mitigation from its ACTIVE slot and acts first (speed 999
      *  vs the focus's forced speed 1 below), so the block is armed before the focus attacker's
      *  cast lands. Shape copied from perSubAttackEvents.integration.test.ts's `blockingEnemyAt`. */
-    const mitigatingAnchor = (): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
-        ({
-            id: 'anchor',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 999 },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4' as Position,
-            affinity: 'antimatter',
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            ab({
+    const mitigatingAnchor = (): NonNullable<CombatEngineInput['enemyAttackers']>[number] => ({
+        id: 'anchor',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 999 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        affinity: 'antimatter',
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'self',
+                            config: {
                                 type: 'buff',
-                                target: 'self',
-                                config: {
-                                    type: 'buff',
-                                    buffName: 'Hit Mitigation',
-                                    parsedEffects: {},
-                                    stacks: 1,
-                                    isStackable: false,
-                                    duration: 99, // never expires inside the fixture
-                                },
-                            }),
-                        ],
-                    },
-                ],
-            },
-        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+                                buffName: 'Hit Mitigation',
+                                parsedEffects: {},
+                                stacks: 1,
+                                isStackable: false,
+                                duration: 99, // never expires inside the fixture
+                            },
+                        }),
+                    ],
+                },
+            ],
+        },
+    });
 
     it('the diverted sub-attack emits no repair at all while its siblings repair normally', () => {
         idc = 0;

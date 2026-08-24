@@ -139,7 +139,7 @@ describe('Cheat-Death unremovable survival + family counting — enemy-side vict
             __testTapApplyOutgoingToEnemy: (fn) => {
                 wrapper ??= fn;
             },
-        } as CombatEngineInput);
+        });
         if (!wrapper) throw new Error('test tap was never invoked');
 
         const victim = enemyVictim('cdEnemy', 2000);

@@ -301,12 +301,10 @@ describe('equivalence: explicit edge cases', () => {
             subStats: [],
         };
         const inv = generateEligibleInventory(99, 4).map((p, i) =>
-            i === 0
-                ? { ...p, slot: 'weapon' as const, setBonus: 'DECIMATION' as GearPiece['setBonus'] }
-                : p
+            i === 0 ? { ...p, slot: 'weapon' as const, setBonus: 'DECIMATION' } : p
         );
         const gearById = new Map<string, GearPiece>([
-            ['eq-hull', equippedHull as GearPiece],
+            ['eq-hull', equippedHull],
             ...inv.map((p) => [p.id, p] as [string, GearPiece]),
         ]);
         const { slow, fast } = runBothPaths(
@@ -335,7 +333,7 @@ describe('equivalence: explicit edge cases', () => {
     it('DEBUFFER_CORROSION with DECIMATION set piece (role-specific bonus)', () => {
         const ship = makeTestShip({ type: 'DEBUFFER_CORROSION' });
         const inv = generateEligibleInventory(21, 6).map((p, i) =>
-            i === 0 ? { ...p, setBonus: 'DECIMATION' as GearPiece['setBonus'] } : p
+            i === 0 ? { ...p, setBonus: 'DECIMATION' } : p
         );
         const gearById = new Map(inv.map((p) => [p.id, p]));
         const { slow, fast } = runBothPaths(

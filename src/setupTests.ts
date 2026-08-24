@@ -8,15 +8,8 @@ import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
 import { setupKeyedTestRng, resetRateGateRng } from './utils/calculators/rateAccumulator';
 
-// Create proper types for the matchers
-type Matchers = typeof matchers & {
-    toBeInTheDocument(): void;
-    toHaveTextContent(text: string | RegExp): void;
-    // Add other matcher types as needed
-};
-
 // Extend Vitest's expect method with testing-library methods
-expect.extend(matchers as unknown as Matchers);
+expect.extend(matchers);
 
 // Cleanup after each test case
 afterEach(() => {

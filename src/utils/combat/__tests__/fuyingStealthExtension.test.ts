@@ -418,7 +418,7 @@ function makeHarmlessEnemy(): CombatActor {
         side: 'enemy',
         kind: 'enemy',
         stats: { ...baseStats(), attack: 0, hp: 1_000_000_000 },
-        position: 'M1' as Position,
+        position: 'M1',
     });
 }
 
@@ -462,9 +462,9 @@ describe('Fuying’s named Stealth extension — production engine wiring (#363)
             stats: baseStats(),
             position: FUYING_POSITION,
         });
-        const allyM1 = makeAlly('ally-outside', 'M1' as Position);
-        const allyM2 = makeAlly('ally-xaoc', 'M2' as Position);
-        const allyM3 = makeAlly('ally-tianchao', 'M3' as Position);
+        const allyM1 = makeAlly('ally-outside', 'M1');
+        const allyM2 = makeAlly('ally-xaoc', 'M2');
+        const allyM3 = makeAlly('ally-tianchao', 'M3');
         const footprint = supportFootprintAllyIds({
             pattern: activePattern(),
             anchor: fuying.position,
@@ -479,9 +479,9 @@ describe('Fuying’s named Stealth extension — production engine wiring (#363)
     it('scopes both ways, faction-blind, and by name — all in one production-routed cast', () => {
         const ability = fuyingStealthExtendAbility();
         const fuyingRuntime = makeFuyingRuntime(ability, FUYING_POSITION);
-        const allyOutside = makeAlly('ally-outside', 'M1' as Position); // Tianchao-eligible position, OUTSIDE footprint
-        const allyXaoc = makeAlly('ally-xaoc', 'M2' as Position); // INSIDE footprint, NON-Tianchao
-        const allyTianchao = makeAlly('ally-tianchao', 'M3' as Position); // INSIDE footprint
+        const allyOutside = makeAlly('ally-outside', 'M1'); // Tianchao-eligible position, OUTSIDE footprint
+        const allyXaoc = makeAlly('ally-xaoc', 'M2'); // INSIDE footprint, NON-Tianchao
+        const allyTianchao = makeAlly('ally-tianchao', 'M3'); // INSIDE footprint
 
         const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
         statusEngine.beginRound(1);
@@ -517,7 +517,7 @@ describe('Fuying’s named Stealth extension — production engine wiring (#363)
             targetId: undefined, // the buff branch needs no enemy target
             activePattern: activePattern(),
             sameSideLiving: [fuyingRuntime.actor, allyOutside, allyXaoc, allyTianchao],
-        } as PlayerTurnArgs;
+        };
 
         // PRE-CONDITION: her charged skill actually fires this turn (charges >= chargeCount(0)).
         expect(fuyingRuntime.hasChargedSkill && fuyingRuntime.actor.charges >= 0).toBe(true);

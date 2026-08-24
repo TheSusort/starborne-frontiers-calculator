@@ -34,7 +34,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -119,7 +119,7 @@ const enemyWithChargedSlot = (
             },
             { slot: 'charged', abilities: [chargedAbility] },
         ],
-    } as ShipSkills,
+    },
 });
 
 // ─── Engine input ───────────────────────────────────────────────────────────────

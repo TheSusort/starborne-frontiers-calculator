@@ -284,17 +284,16 @@ const offensiveEnemyAt = (
     hp: number,
     speed: number,
     slots: ShipSkills['slots']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: e2eParsedTarget(selection),
-        pattern: e2eBasePattern(),
-        shipSkills: { slots },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: e2eParsedTarget(selection),
+    pattern: e2eBasePattern(),
+    shipSkills: { slots },
+});
 
 // Build the battle. `withPassive` toggles the enemy Liberator's on-enemy-destroyed
 // extra-action passive (the control: identical otherwise).
@@ -352,7 +351,7 @@ const runE2E = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const TYPES: CombatEvent['type'][] = ['turn-started', 'ship-destroyed'];
-    for (const t of TYPES) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of TYPES) bus.on(t, (e) => events.push(e));
     runCombat({ ...input, bus });
     return events;
 };

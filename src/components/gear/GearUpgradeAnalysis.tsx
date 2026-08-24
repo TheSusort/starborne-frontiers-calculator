@@ -270,7 +270,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
             }
 
             addNotification('success', 'Gear upgrades simulated successfully');
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to simulate gear upgrades');
         } finally {
             // Small delay to show 100% completion before hiding progress bar
@@ -284,7 +284,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         try {
             await clearUpgrades();
             addNotification('success', 'Gear upgrades cleared');
-        } catch (error) {
+        } catch {
             addNotification('error', 'Failed to clear gear upgrades');
         }
     };

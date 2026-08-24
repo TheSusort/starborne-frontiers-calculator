@@ -213,7 +213,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                         getStatType(stat.Attribute.Type, stat.Attribute.Attribute)
                     )
                 ),
-                setBonus: getSetBonus(item.Set) as GearSetName,
+                setBonus: getSetBonus(item.Set),
                 shipId: item.EquippedOnUnit || undefined,
             };
 
@@ -259,8 +259,8 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                     )
                 ),
                 shipId: item.EquippedOnUnit || undefined,
-                setBonus: getImplantSetBonus(item.Set) as GearSetName,
-            } as GearPiece);
+                setBonus: getImplantSetBonus(item.Set),
+            });
         }
     });
 
@@ -649,7 +649,7 @@ const getDamageReduction = (name: string, refitCount: number): number => {
 function createStat(name: StatName, value: number, type: StatType): Stat {
     if (PERCENTAGE_ONLY_STATS.includes(name as PercentageOnlyStats) || type === 'percentage') {
         return {
-            name: name as PercentageOnlyStats | FlexibleStats,
+            name: name,
             value,
             type: 'percentage',
         };

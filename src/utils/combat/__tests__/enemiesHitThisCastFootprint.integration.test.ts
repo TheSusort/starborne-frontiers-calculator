@@ -49,7 +49,7 @@
  * retirement note, mirroring how cases (a) and (c) were retired in SP-4d Task 7.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
+import { runCombat, type TeamActorEngineInput } from '../engine';
 import { runPlayerTurn, type PlayerActorRuntime, type PlayerTurnArgs } from '../playerTurn';
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
@@ -331,7 +331,7 @@ describe('SP-4d Task 8 — cast path, integration control: the repair still land
             ],
             enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
             bus,
-        } as CombatEngineInput);
+        });
         expect(allyRepairs.length).toBeGreaterThan(0);
     });
 });

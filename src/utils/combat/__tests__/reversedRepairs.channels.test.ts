@@ -239,25 +239,24 @@ const walkedAlly = (args: RoleShape): TeamActorEngineInput => ({
     },
 });
 
-const enemyShip = (args: RoleShape): EnemyAttackerInput =>
-    ({
-        id: args.id,
-        stats: {
-            attack: args.attack ?? 0,
-            crit: args.crit ?? 0,
-            critDamage: args.critDamage ?? 0,
-            defence: args.defence ?? 0,
-            hp: args.hp,
-            speed: args.speed,
-            hacking: 100_000,
-        },
-        chargeCount: args.chargeCount ?? 0,
-        startCharged: false,
-        position: args.position,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
-        shipSkills: { slots: args.slots ?? [] },
-    }) as EnemyAttackerInput;
+const enemyShip = (args: RoleShape): EnemyAttackerInput => ({
+    id: args.id,
+    stats: {
+        attack: args.attack ?? 0,
+        crit: args.crit ?? 0,
+        critDamage: args.critDamage ?? 0,
+        defence: args.defence ?? 0,
+        hp: args.hp,
+        speed: args.speed,
+        hacking: 100_000,
+    },
+    chargeCount: args.chargeCount ?? 0,
+    startCharged: false,
+    position: args.position,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills: { slots: args.slots ?? [] },
+});
 
 // ── The fixture ───────────────────────────────────────────────────────────────────────────────
 
@@ -347,7 +346,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
 
     const victimShape: RoleShape = {
         id: VICTIM_ID,
-        position: 'M4' as Position,
+        position: 'M4',
         speed: 500,
         hp: victimMaxHp,
         attack: victimAttack,

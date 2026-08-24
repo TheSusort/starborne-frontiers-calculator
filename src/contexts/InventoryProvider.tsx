@@ -279,7 +279,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const totalItems = count || 0;
 
             // Load all batches
-            // eslint-disable-next-line no-constant-condition
             while (true) {
                 // Bail if the user signed out while we were awaiting a batch.
                 // activeProfileIdRef.current is set to null synchronously in handleSignOut
@@ -491,7 +490,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                     .select()
                     .single();
 
-                if (gearError || !gearData) throw gearError;
+                if (gearError) throw gearError;
+                // Split from the `gearError` check above: the insert can return no row without
+                // setting an error, and the combined `throw gearError` then threw `null` — the
+                // catch below reverted the optimistic update against a reason it could not read.
+                if (!gearData) throw new Error('Gear insert returned no row');
 
                 // Update state with real data
                 //await loadInventory();

@@ -47,23 +47,22 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 // refit-active passive via getShipSkillRows; `refits` length picks which passive is active
 // (>= 2 → second passive). A bare baseStats is fine — combat stats come from statOverrides
 // (simulateBattle) or the CombatEngineInput scalars (runCombat).
-const ship = (id: string, over: Partial<Ship>): Ship =>
-    ({
-        id,
-        name: id,
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE',
-        type: 'Attacker',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activePattern: 'Pattern-Base',
-        activeTarget: 'front',
-        chargeSkillCharge: 0,
-        ...over,
-    }) as Ship;
+const ship = (id: string, over: Partial<Ship>): Ship => ({
+    id,
+    name: id,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'Attacker',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activePattern: 'Pattern-Base',
+    activeTarget: 'front',
+    chargeSkillCharge: 0,
+    ...over,
+});
 
 const skillsFor = (s: Ship): ShipSkills => buildShipAbilities(s);
 

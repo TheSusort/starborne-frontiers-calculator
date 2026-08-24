@@ -85,69 +85,67 @@ const namedDebuff = (name: string): Ability =>
 // The enemy debuffer: acts first (speed 1000), casts FOUR distinct debuffs at `'all-enemies'`
 // (from its own perspective the player side) over a whole-team pattern, so every living player
 // actor — the focus AND every team actor — picks up all four.
-const debuffer = (): EnemyAttacker =>
-    ({
-        id: 'debuffer',
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1000,
-            security: 100,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4' as Position,
-        target: parseTarget('all'),
-        pattern: parsePattern('Pattern-All'),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        namedDebuff('Fuying-Wiring-Debuff-A'),
-                        namedDebuff('Fuying-Wiring-Debuff-B'),
-                        namedDebuff('Fuying-Wiring-Debuff-C'),
-                        namedDebuff('Fuying-Wiring-Debuff-D'),
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+const debuffer = (): EnemyAttacker => ({
+    id: 'debuffer',
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1000,
+        security: 100,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parseTarget('all'),
+    pattern: parsePattern('Pattern-All'),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    namedDebuff('Fuying-Wiring-Debuff-A'),
+                    namedDebuff('Fuying-Wiring-Debuff-B'),
+                    namedDebuff('Fuying-Wiring-Debuff-C'),
+                    namedDebuff('Fuying-Wiring-Debuff-D'),
+                ],
+            },
+        ],
+    },
+});
 
 // A bystander team ally inside the future wings-support-not-self footprint — it never acts
 // itself, it only needs a position (so the debuffer's whole-team AoE finds it) and a name that
 // is never the caster.
-const allyWing = (position: Position, hp: number): TeamActor =>
-    ({
-        id: 'ally-wing',
-        speed: 5,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const allyWing = (position: Position, hp: number): TeamActor => ({
+    id: 'ally-wing',
+    speed: 5,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 // Fuying's charged skill: "cleanses 1 debuff for every 50% crit power this Unit has",
 // target `'all-allies'`, count 1, countScaling per 50 — same shape Amartya's purge uses.
@@ -190,12 +188,12 @@ const BASE = (critDamage: number): CombatEngineInput => ({
     defence: 0,
     hp: 1_000_000_000,
     speed: 50, // slower than the debuffer (1000), so the debuffs land before Fuying cleanses
-    position: 'M1' as Position,
+    position: 'M1',
     // No support-scoped pattern on the focus's own kit (see file-header scoping note).
     pattern: basePattern(),
     healTargetId: 'attacker',
     mode: 'healing',
-    teamActors: [allyWing('M2' as Position, 50_000)],
+    teamActors: [allyWing('M2', 50_000)],
     enemyAttackers: [debuffer()],
 });
 

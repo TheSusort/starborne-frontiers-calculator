@@ -155,7 +155,7 @@ describe('applyArenaModifiers', () => {
     it('ignores modifiers for stats not in BaseStats', () => {
         const result = applyArenaModifiers(baseStats, {
             nonexistent: 100,
-        } as unknown as Record<string, number>);
+        });
         expect(result).toEqual(baseStats);
     });
 });

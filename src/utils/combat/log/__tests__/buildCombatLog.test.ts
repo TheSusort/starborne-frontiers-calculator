@@ -570,7 +570,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 abilityType: 'damage',
                 // didHit intentionally omitted — undefined at runtime
-            } as CombatEvent),
+            }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -950,7 +950,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 amount: 100,
                 // perTarget intentionally omitted (older/hand-crafted event)
-            } as CombatEvent),
+            }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -1005,7 +1005,7 @@ describe('buildCombatLog', () => {
                 round: 1,
                 amount: 400,
                 // perTarget intentionally omitted
-            } as CombatEvent),
+            }),
             ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
             ev({ type: 'round-ended', round: 1 }),
         ];
@@ -2101,7 +2101,7 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            } as CombatEvent),
+            }),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
@@ -2115,7 +2115,7 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            ev({ type: 'shield-destroyed', victimId: 'B', round: 1 } as CombatEvent),
+            ev({ type: 'shield-destroyed', victimId: 'B', round: 1 }),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
@@ -2156,7 +2156,7 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
                 reactive: true,
                 duringTurnOf: 'A',
                 triggerActorId: 'A',
-            } as CombatEvent),
+            }),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const attack = rounds[0].turns[0].entries.find((e) => e.kind === 'attack');
@@ -2170,7 +2170,7 @@ describe('buildCombatLog — stats-snapshot (Task 6c)', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
             ev({ type: 'turn-started', actorId: 'A', round: 1 }),
-            ev({ type: 'cheat-death-activated', actorId: 'B', round: 1 } as CombatEvent),
+            ev({ type: 'cheat-death-activated', actorId: 'B', round: 1 }),
         ];
         const rounds = buildCombatLog(events, roster, initialCharge);
         const all = rounds[0].turns.flatMap((t) => t.entries).concat(rounds[0].endOfRound);
@@ -2562,7 +2562,7 @@ describe('buildCombatLog — target-less rows from a non-roster-bound cast', () 
                       round: 1,
                       damage: 10000,
                       isPrimaryTarget: true,
-                  } as CombatEvent),
+                  }),
               ]
             : []),
         ev({

@@ -296,7 +296,7 @@ export const AutogearPage: React.FC = () => {
     // Helper function to get config for a specific ship
     const getShipConfig = (shipId: string) => {
         const ship = getShipById(shipId);
-        const defaultRole = ship?.type || ('ATTACKER' as ShipTypeName);
+        const defaultRole = ship?.type || 'ATTACKER';
 
         return (
             shipConfigs[shipId] || {
@@ -1731,7 +1731,7 @@ export const AutogearPage: React.FC = () => {
                         if (shipSettings) {
                             void resetConfig(shipSettings.id);
                             updateShipConfig(shipSettings.id, {
-                                shipRole: 'ATTACKER' as ShipTypeName,
+                                shipRole: 'ATTACKER',
                                 statPriorities: [],
                                 setPriorities: [],
                                 statBonuses: [],

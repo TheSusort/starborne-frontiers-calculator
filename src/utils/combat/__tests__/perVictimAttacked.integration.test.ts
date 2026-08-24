@@ -66,15 +66,14 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 
 // A positioned, finite-HP enemy with zero offense (a stationary, damageable target). Huge HP so
 // the firing hit never kills it (kept alive → it can be resolved as a victim).
-const enemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 /**
  * A positional battle where the PLAYER FOCUS ('attacker') fires at the enemy roster. Focus at M4,
@@ -167,29 +166,28 @@ const teamStats = (): CombatStatBlock => ({
 
 // The acting WALKED-TEAM ally: positioned at M4, fires `front` with the supplied pattern + a 100%
 // damage active. Anchors the front enemy (M4), covering the enemy at M3 under a Line-Range-1 pattern.
-const teamAttacker = (pattern: ParsedPattern): TeamActorEngineInput =>
-    ({
-        id: 'team-attacker',
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position: 'M4',
-        target: parsedTarget('front'),
-        pattern,
-        walk: {
-            shipSkills: { slots: [basicAttack()] },
-            stats: teamStats(),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamAttacker = (pattern: ParsedPattern): TeamActorEngineInput => ({
+    id: 'team-attacker',
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position: 'M4',
+    target: parsedTarget('front'),
+    pattern,
+    walk: {
+        shipSkills: { slots: [basicAttack()] },
+        stats: teamStats(),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // The focus player ('attacker') is zero-offense, empty slot, parked at M1 (out of the footprint) so
 // only the walked-team ally deals damage. Two enemies: the anchor at M4 and a covered enemy at M3.
@@ -283,41 +281,43 @@ const victimStats = (hp: number): CombatStatBlock => ({
 
 // A positioned, zero-offense PLAYER team victim (walked so it has real stats/position). Empty active
 // slot → it deals nothing; it is purely a damageable target.
-const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [] } as ShipSkills,
-            stats: victimStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: victimStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // A positioned ENEMY attacker that fires `front` with the supplied pattern + a 100% damage active.
 // attack kept small so the firing hit marks the high-HP victims without killing them.
-const enemyAttackerAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 100 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyAttackerAt = (
+    id: string,
+    position: Position,
+    pattern: ParsedPattern
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 100 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // A positional battle where a POSITIONED ENEMY ('enemy-aoe') fires at the player roster. The focus
 // player ('attacker') is parked OUT of the footprint (M1, zero offense, empty slot) so the only
@@ -477,24 +477,27 @@ const multiHitAttack = (): ShipSkills['slots'][number] => ({
 
 // A 3-hit enemy AoE attacker. attack high enough that one hit overkills the (low-HP) covered
 // victim while the (huge-HP) anchor survives all three.
-const multiHitEnemyAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 100_000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 100,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: { slots: [multiHitAttack()] },
-    }) as EnemyAttacker;
+const multiHitEnemyAt = (
+    id: string,
+    position: Position,
+    pattern: ParsedPattern
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 100_000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 100,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: { slots: [multiHitAttack()] },
+});
 
 describe('PR7 CodeRabbit fix — per-victim hitOutcomes (drop-out victim under-emits)', () => {
     it('a covered victim killed on hit 1 emits exactly ONE attacked; the surviving anchor emits one per hit', () => {

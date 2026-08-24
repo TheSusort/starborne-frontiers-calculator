@@ -135,34 +135,33 @@ const holderTeamActor = (
         startCharged: false,
     },
     attack = 0
-): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: charge.chargeCount,
-        startCharged: charge.startCharged,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
-            stats: {
-                attack,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: charge.chargeCount,
+    startCharged: charge.startCharged,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
+        stats: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+    },
+});
 
 /** `speed` stays 1 (slower than every holder above, so its hit lands after the block is armed) for
  *  every fixture except the bounce-back ones, where the holder IS this attacker and has to act
@@ -172,17 +171,16 @@ const offensiveEnemy = (
     position: Position,
     abilities: Ability[] = [basicAttack()],
     speed = 1
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities }] },
+});
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
@@ -315,19 +313,18 @@ describe('Hit Mitigation blocks the next direct hit and spreads it as a self-DoT
         // (case 2) — because an enemy-side block that converted nothing would satisfy the first half
         // on its own. No amount is compared ACROSS sides (RNG is keyed by ownerId): each side is
         // checked against its own expected value, DIRECT_HIT / ROUNDS, derived from its own attacker.
-        const enemyHolder = (): EnemyAttacker =>
-            ({
-                id: 'holder',
-                stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
-                chargeCount: 0,
-                startCharged: false,
-                position: 'M4' as Position,
-                target: parsedTarget('front'),
-                pattern: basePattern(),
-                shipSkills: {
-                    slots: [{ slot: 'active', abilities: [hitMitigationSelfBuff(), noopDamage()] }],
-                },
-            }) as EnemyAttacker;
+        const enemyHolder = (): EnemyAttacker => ({
+            id: 'holder',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: {
+                slots: [{ slot: 'active', abilities: [hitMitigationSelfBuff(), noopDamage()] }],
+            },
+        });
 
         const input = BASE_PLAYER_SIDE({
             // Two rounds so the round-1 conversion has a turn-start tick step to land on: the holder

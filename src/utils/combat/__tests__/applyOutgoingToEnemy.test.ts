@@ -167,7 +167,7 @@ const captureWrapper = (
                 invokeDuringRun?.(fn);
             }
         },
-    } as CombatEngineInput);
+    });
     if (!wrapper) throw new Error('test tap was never invoked — applyOutgoingToEnemy not built');
     return { wrapper, destroyed, cheated, result };
 };

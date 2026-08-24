@@ -25,19 +25,18 @@ const ENFORCER_TEXT =
     'At the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.';
 const DEFIANT_TEXT = 'When adjacent to a Supporter, this Unit gains 20% HP.';
 
-const makeShip = (over: Partial<Ship>): Ship =>
-    ({
-        id: 'unit',
-        name: 'Unit',
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE',
-        type: 'ATTACKER',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        ...over,
-    }) as Ship;
+const makeShip = (over: Partial<Ship>): Ship => ({
+    id: 'unit',
+    name: 'Unit',
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'ATTACKER',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    ...over,
+});
 
 /** Real production shipSkills for a ship whose R0 passive is `passiveText`. */
 const skillsFromPassive = (passiveText: string): ShipSkills =>

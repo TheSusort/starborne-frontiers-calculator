@@ -151,46 +151,44 @@ const wholeTeamPattern = () => parsePattern('Pattern-All');
  *  footprint) and a debuff to lose. No active skill at all, so it cannot damage anyone and cannot
  *  fire Cultivator's OTHER passive (the patternScoped `on-ally-attacked` 8% repair): with zero
  *  damage anywhere in the fixture, the only reactive repair that can fire is the on-own-cleanse one. */
-const bystanderAlly = (id: string, position: Position, hp: number): TeamActor =>
-    ({
-        id,
-        speed: 5,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-        },
-    }) as TeamActor;
-
-const bystanderEnemy = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 5, security: 100 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
+const bystanderAlly = (id: string, position: Position, hp: number): TeamActor => ({
+    id,
+    speed: 5,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
         shipSkills: { slots: [] },
-    }) as EnemyAttacker;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+const bystanderEnemy = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 5, security: 100 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills: { slots: [] },
+});
 
 function runWithBus(input: CombatEngineInput) {
     const bus = createEventBus();
@@ -270,7 +268,7 @@ const PLAYER_LEG = (): CombatEngineInput => {
                 shipSkills: {
                     slots: [{ slot: 'active', abilities: [allOpposingDebuff('deb-all-players')] }],
                 },
-            } as EnemyAttacker,
+            },
         ],
     };
 };
@@ -385,7 +383,7 @@ const ENEMY_LEG = (): CombatEngineInput => {
                 target: kit.target,
                 pattern: kit.pattern,
                 shipSkills: kit.skills,
-            } as EnemyAttacker,
+            },
         ],
     };
 };

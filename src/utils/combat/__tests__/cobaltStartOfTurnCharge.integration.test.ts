@@ -114,7 +114,7 @@ const dummySink = (): EnemyAttacker => ({
     startCharged: false,
     shipSkills: {
         slots: [{ slot: 'active', abilities: [damage(1, 'es-a')] }],
-    } as ShipSkills,
+    },
 });
 
 /** A heavy hitter that acts BEFORE the focus (speed 200 > 100) and dents it below 99% every turn,
@@ -127,7 +127,7 @@ const heavyHitter = (): EnemyAttacker => ({
     startCharged: false,
     shipSkills: {
         slots: [{ slot: 'active', abilities: [damage(100, 'hv-a')] }],
-    } as ShipSkills,
+    },
 });
 
 // ─── Player / engine input ────────────────────────────────────────────────────────

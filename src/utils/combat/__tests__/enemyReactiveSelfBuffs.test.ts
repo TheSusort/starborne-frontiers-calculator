@@ -54,46 +54,44 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 
 // Chakara-shaped enemy: basic attack + a `start-of-round` self Attack Up (+100% attack,
 // 99 turns). The reactive buff fires at the round head and folds into this same round's hit.
-const buffedEnemy = (): EnemyAttacker =>
-    ({
-        id: 'chakara',
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                basicAttack(),
-                {
-                    slot: 'passive',
-                    abilities: [
-                        ab({
+const buffedEnemy = (): EnemyAttacker => ({
+    id: 'chakara',
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            basicAttack(),
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'start-of-round',
+                        config: {
                             type: 'buff',
-                            target: 'self',
-                            trigger: 'start-of-round',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // Control: identical basic attack, NO reactive self-buff.
-const controlEnemy = (): EnemyAttacker =>
-    ({
-        id: 'control',
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] } as ShipSkills,
-    }) as EnemyAttacker;
+const controlEnemy = (): EnemyAttacker => ({
+    id: 'control',
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // A `lowest-speed-ally`-gated (derivable) start-of-round self Attack Up — Chakara's REAL gate.
 // The buff only folds in when the owner is the slowest on its (enemy) side.
@@ -118,95 +116,91 @@ const lowestSpeedGatedBuffSlot = (): ShipSkills['slots'][number] => ({
 });
 
 // Enemy carrying the `lowest-speed-ally`-gated start-of-round self Attack Up, at a given speed.
-const gatedEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [basicAttack(), lowestSpeedGatedBuffSlot()],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const gatedEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [basicAttack(), lowestSpeedGatedBuffSlot()],
+    },
+});
 
 // Enemy carrying an UNGATED start-of-round self Attack Up (the existing buffedEnemy shape),
 // at a given speed/id — used as the "everyone gets the buff" baseline.
-const ungatedBuffedEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                basicAttack(),
-                {
-                    slot: 'passive',
-                    abilities: [
-                        ab({
+const ungatedBuffedEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            basicAttack(),
+            {
+                slot: 'passive',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'start-of-round',
+                        config: {
                             type: 'buff',
-                            target: 'self',
-                            trigger: 'start-of-round',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // A plain enemy with NO start-of-round buff, at a given speed/id.
-const plainEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] } as ShipSkills,
-    }) as EnemyAttacker;
+const plainEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // An enemy whose ACTIVE slot grants an on-cast (no trigger) self Attack Up alongside its hit.
 // This is the NON-reactive cast path, which already worked before PR1 — guards against regression.
-const onCastSelfBuffEnemy = (): EnemyAttacker =>
-    ({
-        id: 'oncast',
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const onCastSelfBuffEnemy = (): EnemyAttacker => ({
+    id: 'oncast',
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        config: {
                             type: 'buff',
-                            target: 'self',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            },
-                        }),
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // Variant of BASE that accepts an arbitrary list of enemy attackers (multi-enemy scenarios).
 const BASE_MULTI = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => ({
@@ -398,32 +392,30 @@ describe('enemy attacker reactive self-buffs (Chakara-as-enemy)', () => {
 
 describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', () => {
     /** Minimal Ship stub (mirrors the integration-test harness). */
-    const makeShip = (over: Partial<Ship>): Ship =>
-        ({
-            id: 'test-ship',
-            name: 'Test Ship',
-            rarity: 'legendary',
-            faction: 'TERRAN_COMBINE',
-            type: 'Attacker',
-            baseStats: {} as Ship['baseStats'],
-            equipment: {},
-            implants: {},
-            refits: [],
-            ...over,
-        }) as Ship;
+    const makeShip = (over: Partial<Ship>): Ship => ({
+        id: 'test-ship',
+        name: 'Test Ship',
+        rarity: 'legendary',
+        faction: 'TERRAN_COMBINE',
+        type: 'Attacker',
+        baseStats: {} as Ship['baseStats'],
+        equipment: {},
+        implants: {},
+        refits: [],
+        ...over,
+    });
 
     /** Minimal legendary implant_major GearPiece stub for the given set bonus. */
-    const makeImplant = (id: string, setBonus: string): GearPiece =>
-        ({
-            id,
-            slot: 'implant_major',
-            level: 16,
-            stars: 6,
-            rarity: 'legendary',
-            mainStat: null,
-            subStats: [],
-            setBonus,
-        }) as GearPiece;
+    const makeImplant = (id: string, setBonus: string): GearPiece => ({
+        id,
+        slot: 'implant_major',
+        level: 16,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: null,
+        subStats: [],
+        setBonus,
+    });
 
     const place = (
         ship: Ship,
@@ -496,7 +488,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
                     crit: 0,
                     critDamage: 0,
                     speed: 100,
-                } as Ship['baseStats'],
+                },
                 implants: opts.withSpearhead ? { implant_major: 'spearhead-legendary' } : {},
                 affinity: 'antimatter',
                 activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
@@ -509,7 +501,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
                     : { chargeSkillCharge: 0 }),
                 activeTarget: 'front',
                 activePattern: 'Pattern-Base',
-            } as Partial<Ship>);
+            });
 
         it('an enemy carrier firing its CHARGED skill grants Attack Up I to every ENEMY ally; no PLAYER actor gets it', () => {
             setRateGateRng(() => 0); // always-fire the Spearhead procChance gate
@@ -589,14 +581,14 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
                     crit: 0,
                     critDamage: 0,
                     speed: 100,
-                } as Ship['baseStats'],
+                },
                 implants: opts.withFont ? { implant_major: 'font-legendary' } : {},
                 affinity: 'antimatter',
                 activeSkillText,
                 chargeSkillCharge: 0,
                 activeTarget: repair === 'damage' ? 'front' : 'allies',
                 activePattern: 'Pattern-Base',
-            } as Partial<Ship>);
+            });
         };
 
         it('an enemy carrier that repairs another enemy ally grants Power Infused Nanobots to that ally; carrier excluded; no PLAYER actor gets it', () => {

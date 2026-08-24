@@ -54,15 +54,14 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 });
 
 // Positioned, finite-HP enemy with zero offense — a stationary, damageable target.
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
     raw: selection,
@@ -339,19 +338,18 @@ const offensiveEnemyAt = (
     pattern: ParsedPattern,
     speed: number,
     attack: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern,
-        // A real basic-attack damage ability — REQUIRED for the firing hit to produce
-        // `positionalScalars` so the enemy-site positional apply (Task 9) lands on the player roster.
-        shipSkills: { slots: [basicAttack()] } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern,
+    // A real basic-attack damage ability — REQUIRED for the firing hit to produce
+    // `positionalScalars` so the enemy-site positional apply (Task 9) lands on the player roster.
+    shipSkills: { slots: [basicAttack()] },
+});
 
 describe('Task 2 — Harvester on-ally-destroyed extra action under positional ally death', () => {
     it('the surviving Harvester focus takes a same-round extra turn when an enemy AoE kills a positioned ally', () => {

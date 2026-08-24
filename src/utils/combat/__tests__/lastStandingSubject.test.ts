@@ -115,14 +115,13 @@ function ally(id: string, position: Position, hp: number): TeamActorEngineInput 
 }
 
 /** A non-positional enemy attacker that hits the heal target each round with real damage. */
-const enemyHitter = (id: string, attack: number, speed = 1000): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyHitter = (id: string, attack: number, speed = 1000): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: [],

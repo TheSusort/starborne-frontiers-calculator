@@ -79,84 +79,81 @@ const onCritInflictDebuff = (): Ability => {
     return { ...base, id: 'ocdi', config: { ...base.config, application: 'inflict' } } as Ability;
 };
 
-const punchingBag = (id: string, position: Position, security = 0): EnemyAttacker =>
-    ({
-        id,
+const punchingBag = (id: string, position: Position, security = 0): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+});
+
+/** An enemy-side attacker carrying the SAME on-crit reactive debuff (the mirror). */
+const critingEnemy = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 5000,
+        crit: 100,
+        critDamage: 150,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 900,
+        hacking: 250,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: {
+        slots: [
+            { slot: 'active', abilities: [hit()] },
+            { slot: 'passive', abilities: [onCritDebuff()] },
+        ],
+    },
+});
+
+/** A player-side team actor that just stands there and takes hits (an enemy-side crit victim). */
+const bystander = (id: string, position: Position, security = 0): TeamActorEngineInput => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
         stats: {
             attack: 0,
             crit: 0,
             critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
+            defensePenetration: 0,
+            hacking: 0,
             security,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-    }) as EnemyAttacker;
-
-/** An enemy-side attacker carrying the SAME on-crit reactive debuff (the mirror). */
-const critingEnemy = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 5000,
-            crit: 100,
-            critDamage: 150,
             defence: 0,
             hp: 1_000_000_000,
-            speed: 900,
-            hacking: 250,
         },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: {
-            slots: [
-                { slot: 'active', abilities: [hit()] },
-                { slot: 'passive', abilities: [onCritDebuff()] },
-            ],
-        },
-    }) as EnemyAttacker;
-
-/** A player-side team actor that just stands there and takes hits (an enemy-side crit victim). */
-const bystander = (id: string, position: Position, security = 0): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                security,
-                defence: 0,
-                hp: 1_000_000_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-        },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 const focus = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: [],
@@ -391,7 +388,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
                                 { slot: 'passive', abilities: [onCritInflictDebuff()] },
                             ],
                         },
-                    } as EnemyAttacker,
+                    },
                 ],
             })
         );
@@ -446,9 +443,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
                     bystander('ally-mid', 'M3'),
                     bystander('ally-back', 'M2'),
                 ],
-                enemyAttackers: [
-                    { ...enemy, stats: { ...enemy.stats, crit: 50 } } as EnemyAttacker,
-                ],
+                enemyAttackers: [{ ...enemy, stats: { ...enemy.stats, crit: 50 } }],
             })
         );
 

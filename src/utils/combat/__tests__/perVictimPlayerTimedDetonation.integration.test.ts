@@ -80,15 +80,14 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 // A positioned, zero-offense, finite-HP enemy victim. speed 1 → it takes a turn each round. attack 0
 // → it contributes 0 direct (keeps allPlayersDirect clean). Present so the PLAYER actors are
 // positional against it (isPositional(playerActor.position, enemyAttackerActors) is true).
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // A pre-seeded TIMED bomb. burst = stacks × damagePerStack × affinityMult × (1 + detMod/100).
 // With neutral mults: burst = stacks × damagePerStack. countdown drives the timed expiry.
@@ -196,29 +195,28 @@ const teamStats = (hp: number): CombatStatBlock => ({
     hacking: 0,
 });
 
-const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100, // acts each round
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [basicSlot()] },
-            stats: teamStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 100, // acts each round
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [basicSlot()] },
+        stats: teamStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // Tap an ordered event log.
 const collect = (input: CombatEngineInput) => {
@@ -230,7 +228,7 @@ const collect = (input: CombatEngineInput) => {
         'ship-destroyed',
         'turn-started',
     ];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
