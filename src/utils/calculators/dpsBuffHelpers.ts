@@ -98,6 +98,22 @@ export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): numb
     return selected.reduce((sum, s) => sum + (s.parsedEffects.incomingDamage ?? 0) * s.stacks, 0);
 }
 
+/** Sum the self-/friendly-side DEFENCE modifier from a victim's OWN buffs. Twin of
+ *  toSelfIncomingDamageModifier, and deliberately the SAME reducer toEnemyModifiers uses for the
+ *  enemy-sourced defence channel — so a victim's own Defense Up and an enemy's Defense Shred meet
+ *  additively in ONE signed percentage channel (engine victimIncomingModifiers, addendum A2).
+ *  Positive = more defence = less damage taken; negative = less defence.
+ *
+ *  SIGN-AGNOSTIC BY RULING (addendum A5): this carries the NEGATIVE self-sourced entries too —
+ *  Overload ('-10% Defense', stacking to 10 -> -100%) and Supercharged I/III. Those are self-buffs
+ *  with a stated defensive cost; before this term the app granted their damage upside and ignored
+ *  the cost. Do NOT filter to positives, and do NOT special-case by buff name. The -100% floor is
+ *  handled downstream by victimDefenceMitigation's `effectiveDefense > 0` guard (pinned by a test),
+ *  not by clamping here — a clamp here would also silently swallow an over-shred. */
+export function toSelfDefenseModifier(selected: SelectedGameBuff[]): number {
+    return selected.reduce((sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks, 0);
+}
+
 export function toDotAndPenModifiers(
     attacker: SelectedGameBuff[],
     enemy: SelectedGameBuff[]

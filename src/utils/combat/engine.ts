@@ -20,7 +20,11 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import { toEnemyModifiers, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
+import {
+    toEnemyModifiers,
+    toSelfDefenseModifier,
+    toSelfIncomingDamageModifier,
+} from '../calculators/dpsBuffHelpers';
 import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
@@ -7096,9 +7100,46 @@ export function runCombat(rawInput: CombatEngineInput): {
             // dedicated channel (incomingDotReductionPct / Vortex Veil); bombs apply through
             // the detonation/bombPortion path which never reads incomingDamageModifierPct.
             // Locked by bombModifierExclusion.test.ts.
-            const selfIncoming = toSelfIncomingDamageModifier(
-                victimSelfBuffs(statusEngine, victimId, selfBuffLookup)
-            );
+            // ONE read, both terms: victimSelfBuffs is a three-channel status-engine fold and this
+            // runs per victim per hit, so it is deliberately not called twice.
+            const victimSelf = victimSelfBuffs(statusEngine, victimId, selfBuffLookup);
+            const selfIncoming = toSelfIncomingDamageModifier(victimSelf);
+            // ADDENDUM A2: the victim's OWN defence modifiers (`parsedEffects.defense`) fold
+            // ADDITIVELY into the SAME signed percentage channel enemy-sourced Defense Shred
+            // already rides, consumed at victimDamage.ts's
+            // `v.defence * (1 + v.defenceModifierPct / 100)`. Positive (Defense Up I/II/III) = more
+            // defence = less damage taken.
+            //
+            // WHY THIS SITE, and not buff-folding `victimDefenseProfileOf`'s `defence` field:
+            //  (i) `effectiveStatsOf` folds only TWO of the three self-buff channels (scheduled +
+            //      timed, see its module header) — routing through the percentage channel reads the
+            //      same three-channel `victimSelfBuffs` the `selfIncoming` twin above uses, so an
+            //      AURA-granted defence buff is not silently dropped and the two channels stay in
+            //      lockstep.
+            //  (ii) `defence` stays `substitutedDefenceFor(v, v.stats.defence)`, so Meatshield
+            //      defence-substitution semantics are untouched (buff-folding that field would force
+            //      a choice about WHOSE buffs to fold when the carrier's defence is substituted in).
+            //
+            // WHY IT IS A DEFECT AND NOT A DESIGN CHOICE: every OTHER direct-damage site in this
+            // engine already mitigates on the defender's BUFF-FOLDED defence — the counter-attack
+            // (`effectiveStatsOf(...attacker).defence`), the reactive proc
+            // (`effectiveStatsOf(...victim).defence`) and the Protection-cascade fallback all do.
+            // The positional APPLIED path was the sole hold-out, reading the base stat with an
+            // enemy-only modifier channel. (The `selfIncoming` twin one line above is the same
+            // oversight already fixed for the incoming-damage channel by D-PR12.)
+            //
+            // SIGN-AGNOSTIC BY RULING (addendum A5): this carries NEGATIVE self-sourced defence too
+            // — Overload ('-10% Defense', stacking to 10 -> -100%) and Refine's Supercharged. Those
+            // buffs' damage upside was already applied while their stated defensive cost was not.
+            // No name-special-casing, no positive-only filter. At -100% the effective defence
+            // reaches 0 and victimDefenceMitigation's `effectiveDefense > 0` guard floors the
+            // reduction at 0 rather than inverting it into a damage bonus.
+            //
+            // NO DOUBLE COUNT: `enemy.enemyDefenseModifier` reads the victim's ENEMY-debuff store
+            // only; `defence` above is the RAW base stat; and pre-fight (squad-leader) defence is a
+            // raw stat MUTATION (`PreFightStatBlock.defence`), not a modifier channel — unlike the
+            // incoming twin, which needs its `preFightIncoming` term for exactly that reason.
+            const selfDefense = toSelfDefenseModifier(victimSelf);
             // F3: the victim's pre-fight incomingDamage baseline (squad-leader "±N% incoming
             // direct damage") folds ADDITIVELY into the same per-victim channel the D-PR12
             // self-buff term rides (consumed via defenseProfileOf → incomingDamageModifierPct).
@@ -7107,7 +7148,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // the buff channel, this is DIRECT damage only (DoTs/bombs never read it).
             const preFightIncoming = allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
             return {
-                enemyDefenseModifier: enemy.enemyDefenseModifier,
+                enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense,
                 incomingDamageModifier:
                     enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed,
             };
@@ -7228,8 +7269,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // substitutedDefenceFor doc comment above for the full rule.
                 defence: substitutedDefenceFor(v, v.stats.defence),
                 // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
-                // Direction-agnostic — v.id keys the victim's own enemy-debuff store
-                // regardless of side.
+                // Addendum A2: ALSO the victim's own self-sourced defence modifiers (Defense Up,
+                // and by the A5 ruling the negative Overload/Supercharged half) — see the
+                // `selfDefense` block in victimIncomingModifiers for why they ride this channel
+                // rather than being folded into `defence` above.
+                // Direction-agnostic — v.id keys the victim's own enemy-debuff AND self-buff
+                // stores regardless of side.
                 defenceModifierPct: m.enemyDefenseModifier,
                 // B1/PR7b + D-PR12: per-victim incoming-damage modifier; combines
                 // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage

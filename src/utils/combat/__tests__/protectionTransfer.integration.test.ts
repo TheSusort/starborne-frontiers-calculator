@@ -943,17 +943,31 @@ describe('Protection transfer — the cascade divides by the caller’s own miti
             expect.objectContaining({ stat: 'defence', value: 100 })
         );
 
-        // The buff moves the victim's LIVE effective defence (what the funnel's old recompute
-        // read) while leaving the caller's damage read where it was. Both facts have to hold for
-        // this fixture to measure the divergence it claims — the first is pinned above, the
-        // second by the equality below.
+        // The buff moves the victim's own damage read, so this fixture's two arms really are two
+        // different mitigations — which is what makes the core assertion below a test of the
+        // cascade rather than a tautology.
+        //
+        // PREMISE UPDATED BY ADDENDUM A2. This line used to assert `buffedVictim` was CLOSE TO
+        // `unbuffedVictim`: pre-fix the buff moved the victim's LIVE effective defence (what the
+        // funnel's old recompute read) while leaving the caller's damage read on the BASE stat.
+        // That gap WAS the A2 defect, and the equality was pinning it. Now the victim's own
+        // 'Defense Up' folds into `defenceModifierPct`, so a +100% buff really does mitigate on
+        // 2x VICTIM_DEFENCE and the victim takes strictly LESS. The core assertion below is
+        // unchanged and passed both before and after the fix — it is about the PROTECTOR's chunk,
+        // which must stay pinned to the protector's own defence no matter what the victim's
+        // mitigation turns out to be.
         const unbuffedVictim = totalIncoming(build(false), 'attacker');
         const buffedVictim = totalIncoming(build(true), 'attacker');
         expect(unbuffedVictim).toBeCloseTo(0.7 * ENEMY_ATTACK * mit(VICTIM_DEFENCE), 4);
-        expect(buffedVictim).toBeCloseTo(unbuffedVictim, 6);
+        expect(buffedVictim).toBeCloseTo(0.7 * ENEMY_ATTACK * mit(2 * VICTIM_DEFENCE), 4);
+        // Direction, stated outright: more defence must mean less damage taken.
+        expect(buffedVictim).toBeLessThan(unbuffedVictim);
 
         // THE CORE ASSERTION. Pre-fix the funnel divided by mit(1000) (the buffed live stat) while
-        // the caller had mitigated with mit(500), inflating the chunk by ≈12.8%.
+        // the caller had mitigated with mit(500), inflating the chunk by ≈12.8%. Post-A2 the caller
+        // mitigates on 1000 too, so the two agree for a different reason — but the assertion is
+        // still the one that matters: `cause.targetMitigation` is threaded down rather than
+        // re-derived, so the protector's chunk tracks the PROTECTOR's defence either way.
         expect(totalIncoming(build(true), 'prot-1')).toBeCloseTo(expectedChunk, 4);
     });
 });

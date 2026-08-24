@@ -211,12 +211,17 @@ describe('simulateDefenseSurvivability', () => {
     // the channel Task 5/6 must expect a defensive buff to move, and the one the gate test below
     // then proves a condition can suppress.
     //
-    // The two EQUALITIES are pinned tripwires for measured inertness, not blessings of it — see the
-    // Task 2 report's findings A and B. Both are PRE-EXISTING (a `selfBuffs`-route Defense Up II is
-    // inert identically, so neither is an ability-model regression). If either goes red because the
-    // engine gained a defensive read, that is the finding being fixed: delete the pin, don't loosen
-    // it. NOTE on `isMultiplicative`: a documented NO-OP — set false, never surface it as a toggle.
-    it('a self-buff on the incoming-damage channel reduces measured intake; the modifier and defence channels are inert', () => {
+    // FINDING A IS NOW FIXED (addendum A2). This test used to pin a SECOND equality: a defender's
+    // own 'Defense Up II' left the measured number untouched, because the applied per-victim read
+    // (`victimDefenseProfileOf`) took the BASE `stats.defence` while the only defence-modifier term
+    // carried enemy-sourced debuffs. That pin was a tripwire for measured inertness, never a
+    // blessing of it, and the fix deleted it rather than loosening it — the `defenceUp` arm below
+    // now asserts the buff REDUCES intake, by the exact figure the old pin's own comment predicted.
+    //
+    // The one remaining EQUALITY (finding B, the `modifier` channel) stays a tripwire. It is
+    // PRE-EXISTING and out of scope. NOTE on `isMultiplicative`: a documented NO-OP — set false,
+    // never surface it as a toggle.
+    it('self-buffs on the incoming-damage AND defence channels reduce measured intake; the modifier channel is inert', () => {
         // Non-zero base defence so the Defense Up pin multiplies something real.
         const armoured = { ...DEFENDER, defence: 5_000 };
         const mkRun = (abilities: Ability[]) => {
@@ -281,13 +286,19 @@ describe('simulateDefenseSurvivability', () => {
         expect(warded.breakdown.gross).toBeLessThan(plain.breakdown.gross);
         // FINDING B: the 'incomingDamage' MODIFIER channel has no defensive bucket at all.
         expect(modifierAura.breakdown.gross).toBe(plain.breakdown.gross);
-        // FINDING A: a defender's own Defense Up is inert against incoming damage. The applied
-        // per-victim read (`victimDefenseProfileOf`, engine.ts:7229) uses `v.stats.defence` — the
-        // BASE stat — so the buffed value never reaches it. Measured with a probe: the cast-level
-        // read (`victimDefenceFor`, engine.ts:7919) DID return 6500 on this fixture while the
-        // applied damage stayed at the base-5000 value; a defender with base defence 6500 takes
-        // 7064/round instead of 8331.
-        expect(defenceUp.breakdown.gross).toBe(plain.breakdown.gross);
+        // FINDING A, FIXED (addendum A2): a defender's own '+30% Defense' now folds into the same
+        // per-victim `defenceModifierPct` channel an enemy's Defense Shred rides, so the applied
+        // read mitigates on 5000 x 1.30 = 6500. 7064/round instead of 8331 -> 21192 over three
+        // rounds. That is precisely the number the pre-fix probe predicted for "a defender with
+        // base defence 6500" while the applied damage was still stuck at the base-5000 value.
+        //
+        // DIRECTION, not just magnitude. `defenceModifierPct` is a SIGNED channel and the consumer
+        // is `v.defence * (1 + pct/100)`; a term folded in with the wrong sign would turn Defense Up
+        // into a debuff and STILL move this number off `plain`. The exact figure above pins WHICH
+        // WAY only because 21192 happens to be the reduced value — so assert the direction outright
+        // rather than leaving it implied by a constant a future re-measure might re-bless.
+        expect(defenceUp.breakdown.gross).toBe(21_192);
+        expect(defenceUp.breakdown.gross).toBeLessThan(plain.breakdown.gross);
     });
 
     // ── toConversion IS NOT INERT ────────────────────────────────────────────
@@ -341,20 +352,25 @@ describe('simulateDefenseSurvivability', () => {
     // unconditionally. If these two numbers match, the ability model is not reaching the engine and
     // the epic has demonstrated nothing.
     //
-    // FIXTURE CORRECTION (Task 2): the brief gated a 'Defense Up II' (`parsedEffects.defense`)
-    // buff. Measured, that buff moves NOTHING on either run (both 24993) — see finding A pinned in
-    // the channel test above — so the comparison was zero-vs-zero and could never have proven
-    // anything either way. Swapped to the channel that demonstrably reaches the measured number,
-    // 'Inc. Damage Down II' (`parsedEffects.incomingDamage`). The test's SHAPE is untouched: same
-    // ship, same pressure, same unmet `hp-threshold` gate, same strict inequality.
+    // FIXTURE HISTORY (Task 2 -> addendum A2): the brief gated a 'Defense Up II'
+    // (`parsedEffects.defense`) buff, but at the time that buff moved NOTHING on either run (both
+    // 24993 — the pre-fix finding A), so the comparison was zero-vs-zero and could never have
+    // proven anything either way. It was swapped to 'Inc. Damage Down II' as a workaround. The A2
+    // fix made the defence channel live, so this is now REVERTED to its intended and strictly
+    // stronger form: it proves a gated *defence* buff is suppressed, not merely that some channel
+    // is. The test's SHAPE is unchanged throughout: same ship, same pressure, same unmet
+    // `hp-threshold` gate, same strict inequality.
     it('a conditionally-gated defensive buff does NOT apply while its condition is unmet', () => {
-        // Non-zero base defence: keeps this fixture's arithmetic identical to the channel test
-        // above, so the two are directly comparable (ungated 17496 / gated 24993 = plain).
+        // Non-zero base defence, and load-bearing here in a way it is not for the incoming-damage
+        // channel: a `defense` buff is a MULTIPLIER on the defence stat, so at defence 0 the gated
+        // and ungated runs would be identical no matter whether the gate worked. Keeps this
+        // fixture's arithmetic identical to the channel test above, so the two are directly
+        // comparable (ungated 21192 / gated 24993 = plain).
         const armoured = { ...DEFENDER, defence: 5_000 };
         const defenseUp = {
             type: 'buff' as const,
-            buffName: 'Inc. Damage Down II', // '-30% Incoming Direct Damage' — constants/buffs.ts:311
-            parsedEffects: { incomingDamage: -30 },
+            buffName: 'Defense Up II', // '+30% Defense' — constants/buffs.ts:51
+            parsedEffects: { defense: 30 },
             stacks: 1,
             isStackable: false,
             duration: 'recurring' as const,
@@ -396,9 +412,10 @@ describe('simulateDefenseSurvivability', () => {
             })
         );
 
-        // The ungated run is genuinely mitigating, or the comparison proves nothing: 5832/round
-        // instead of the unmitigated 8331 — not merely non-zero, the mitigated value exactly.
-        expect(ungated.breakdown.gross).toBe(17_496);
+        // The ungated run is genuinely mitigating, or the comparison proves nothing: 7064/round
+        // (defence 5000 x 1.30 = 6500) instead of the unmitigated 8331 — not merely non-zero, the
+        // mitigated value exactly.
+        expect(ungated.breakdown.gross).toBe(21_192);
         // Gate unmet → the buff never applies → each hit lands at full strength → strictly more
         // damage taken, and exactly the no-buff figure.
         expect(gated.breakdown.gross).toBe(24_993);

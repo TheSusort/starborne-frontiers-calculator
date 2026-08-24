@@ -95,14 +95,17 @@ export interface DefenseSurvivabilityResult {
  * in `__tests__/defenseSurvivabilitySim.test.ts` for the pinned figures). A caller wiring UI onto
  * this result must not promise more than the engine delivers:
  *   • REACHES IT: shield grants, name-keyed statuses (Barrier, Shield Converter — the latter only
- *     with a NUMERIC duration, `holdsShieldConverter` reads the timed channel only), and self-buffs
- *     carrying `parsedEffects.incomingDamage` ('Inc. Damage Down', the per-victim D-PR12 channel).
+ *     with a NUMERIC duration, `holdsShieldConverter` reads the timed channel only), self-buffs
+ *     carrying `parsedEffects.incomingDamage` ('Inc. Damage Down', the per-victim D-PR12 channel),
+ *     and — since the addendum A2 fix — a defender's OWN `parsedEffects.defense` buff
+ *     ('Defense Up'), which folds into the same per-victim `defenceModifierPct` channel as an
+ *     enemy's Defense Shred. That channel is SIGN-AGNOSTIC (A5): a self-buff whose card text
+ *     carries a defensive COST ('Overload', '-10% Defense' per stack) makes the measured number go
+ *     UP, which is correct.
  *   • DOES NOT: a `modifier` ability on the 'incomingDamage' channel (no bucket in
- *     `modifierTotalsFromAbilities` — attacker-side folds only), and a defender's OWN
- *     `parsedEffects.defense` buff ('Defense Up'), because the applied per-victim read
- *     (`victimDefenseProfileOf`, engine.ts) takes the victim's BASE `stats.defence`. Both are
- *     pre-existing engine behaviour, identical through the older `selfBuffs` route — not something
- *     this boundary introduced, and not something it can paper over.
+ *     `modifierTotalsFromAbilities` — attacker-side folds only). Pre-existing engine behaviour,
+ *     identical through the older `selfBuffs` route — not something this boundary introduced, and
+ *     not something it can paper over.
  */
 export function simulateDefenseSurvivability(
     input: DefenseSimulationInput
