@@ -268,7 +268,22 @@ User ruling: **raw EHP headline + rounds beside it** (spec ADDENDUM 2 / B1-B3, `
   document it; ADD the raw axis to `RoundData.perActorIncoming` (turns 194 zero-information golden
   rows into 219 real `raw > post` pins); no division; **PARK path 3 (corpus-unreachable) per the
   established #357 stance** — add it to that issue.
-- [ ] Task 9: raw-EHP engine work — Phase 1 DONE, Phase 2 authorised
+- [x] Task 9: **complete** (commit `99e85a0a`; review running). Suite **584 / 6497** (+1 file,
+      +17 tests). **Goldens: 219/0 and 194/0 — ZERO deletions**, every added line one of the two new
+      fields; I re-verified both myself. **All 219 dps rows now carry `raw > post`** (I counted:
+      219 gt, 0 eq, 0 lt) — rows that previously held NO information are now a real numeric pin on
+      the dominant fold path. Ruling 3 paid off.
+      6 of 7 folding paths fixed, one non-vacuous test each (mutating ONLY its own site). Path 3
+      parked, corpus-unreachable → **belongs on #357**.
+      **Instrument note (mine): my first row-count regex returned 0 pairs.** That is a BROKEN
+      INSTRUMENT, not evidence of absence — a direct grep plainly showed a real pair. Fixed the
+      measurement instead of reporting the zero.
+- [x] Task 7: **complete** (commit `3e33d4f7`; review pending). Suite **584 / 6498**.
+      Ranking guard RED observation: with the comparator flipped the reduce never advances past its
+      `null` seed, so NO card gets the marker — it discriminates. Docs section had been partly
+      written by `99e85a0a`; it added only the missing pieces and verified no changelog overlap.
+
+## ALL 9 TASKS IMPLEMENTED. Remaining: Task 6/7/9 reviews, then the whole-branch review.
 - [ ] Task 7: documentation + changelog
 
 ## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
