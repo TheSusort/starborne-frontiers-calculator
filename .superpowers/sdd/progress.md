@@ -93,7 +93,28 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
          **ungated 17_496 vs gated 24_993, strictly greater. The gate proof STANDS.**
 - [x] Task 3: **complete** (commit `58d7b085`, review PASS — 0 Critical, 0 Important, 2 Minor). Suite 580/6460 — UNCHANGED, as a
       type-only task should be. `as unknown as` grep found no casts touching `DefenseShipConfig`.
-- [x] Task 8: **complete** (commit `79372d56`; review pending). Suite **581 / 6467** — +1 file,
+- [x] Task 8: **complete** (commits `79372d56` + fix wave `cb2b9607`; review spec-COMPLIANT,
+      0 Critical, 4 Important + 3 Minor — ALL FIXED). Final suite **581 / 6472**.
+      **The review's two big finds, both by MEASUREMENT not argument:**
+      (F1) **`* s.stacks` was pinned NOWHERE** — deleting it left the WHOLE repo green (5991 tests),
+      because every arm used `stacks: 1`. That factor is the entire basis of the Overload ruling:
+      without it a 10-stack Overload is -10%, not -100%, and the changelog's Butcher figures are
+      fiction. Now pinned + mutation-verified (red: `-10 !== -50`).
+      (F2) **MY ERROR, propagated to 5 places:** I wrote that the floor guard stops defence
+      "inverting into a damage bonus". `calculateDamageReduction` = `88.3505*exp(-((4.5552-log10 d)/1.3292)^2)`
+      is bounded `[0, 88.3505]` and CAN NEVER go negative — measured `d=0 -> 0`, `d=-2500 -> NaN`.
+      The guard prevents **NaN propagation**, not inversion. Two corollaries: at EXACTLY -100% the
+      guard is a NO-OP (reduction already 0), so only an OVERSHOOT arm exercises it; and
+      `expect(x).not.toBeGreaterThan(cap)` is **NaN-BLIND** (`NaN > x` is false) — it passed on the
+      exact failure it named. Corrected in spec A5.1/A5.2 and all 5 sites; assertion is now
+      `not.toBeNaN()`.
+      (F3) stale-neighbour comment at `engine.ts:~5548` still described the just-fixed defect as
+      current. (F4) a `protectionTransfer` test became a TAUTOLOGY on its own named axis post-fix —
+      restored via a 50%-pen aura, mutation-verified. (F5) changelog "did nothing whatsoever"
+      overstated — Defense Up already worked on counter/reactive/Protection-fallback paths.
+      **METHOD NOTE: I told the reviewer to judge the TESTS, not the green, because Phase 1 had
+      already proven the goldens are blind here. Every one of these findings is invisible to a
+      passing suite.** Suite **581 / 6467** — +1 file,
       +7 tests, all its own; reconciles exactly. ZERO snapshot movement, as Phase 1 predicted.
       The change is ONE term: `enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense`,
       plus a `toSelfDefenseModifier` helper twinning `toSelfIncomingDamageModifier`.
@@ -113,7 +134,7 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
       ⚠️ `selfDefenceBuffMitigation.test.ts` is now the SOLE regression gate for this behaviour; the
       goldens are blind to it by construction. If that file is ever deleted or weakened the engine
       loses its only guard on the sign and the floor.
-- [ ] Task 4: `SkillSlotList` in the defense card
+- [ ] Task 4: `SkillSlotList` in the defense card (BASE `cb2b9607`)
 
 ## ⛔ PROCESS RULE ADDED (incident, 2026-08-24) — DO NOT run a reviewer concurrently with an
 ## implementer in the SAME working tree.
