@@ -177,6 +177,13 @@ export interface HealingRuntimeCtx {
      *  ⚠️ Call ONLY under `perRecipientApply` and ONLY where the pool application actually
      *  succeeded — see `HealingRoundEngine.perRecipient` for the full contract. */
     creditRecipient?: (recipientId: string, bucket: keyof ActorHealing, amount: number) => void;
+    /** #383: credit the gross repair against the actor that PERFORMED it (the side-agnostic
+     *  `repairPerformed` axis behind `hp-snapshot`). The SOURCE-side twin of `creditRecipient`,
+     *  with the same two rules: call it ONLY under `perRecipientApply`, and ONLY where the pool
+     *  application actually succeeded. NOT from a HoT tick — locked ruling R2 (#367): a tick is
+     *  not a repair PERFORMED. See `HealingRoundEngine.perRecipient`'s doc for the full contract
+     *  and `creditPerformedRepair` in engine.ts for the in-engine twin. */
+    creditPerformed?: (sourceId: string, amount: number) => void;
     /** Recipient stats via lastTurnCtxByActor with base-stat fallback (pre-first-turn). */
     recipientMaxHp: (actorId: string) => number;
     /** ONE ARGUMENT ON PURPOSE. The engine's implementation takes an optional second — a FRESH
@@ -4461,6 +4468,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                     );
                                     healing.creditRecipient?.(rid, 'overheal', applied.overheal);
                                 }
+                                // Source axis (#383): the same reasoning one step over. The player
+                                // healing buckets stay uncredited above by design (E5 §4.1), but
+                                // "who performed this repair" has no side to it either — an enemy
+                                // medic repairing an enemy ally DID perform that repair, and the
+                                // Simulator's "Healing done" column has always reported it (via
+                                // `heal-performed`, which this arm emits). This credit is what
+                                // keeps that true once the column reads the axis instead.
+                                if (!applied.reversed && healing.perRecipientApply) {
+                                    healing.creditPerformed?.(actor.id, raw);
+                                }
                             }
                             healTargets.push(rid);
                             healRawSum += raw;
@@ -4544,6 +4561,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                         applied.consumed
                                     );
                                     healing.creditRecipient?.(rid, 'overheal', applied.overheal);
+                                }
+                                // Source axis (#383): the caster performed this repair. Gated on
+                                // `perRecipientApply` rather than on `perRecipientActor` — the
+                                // axis is only READ when the flag is on, and the flag is what
+                                // decides whether the snapshot carries the field at all.
+                                //
+                                // The sibling `else` branch below (an unresolvable recipient,
+                                // credited gross with nothing applied) deliberately gets NO credit:
+                                // no application happened, so no repair was performed. That is a
+                                // free choice, not a behaviour change — measured over the whole
+                                // suite, that branch is reached 22 times and `perRecipientApply` is
+                                // false at every one of them, so it can never reach this axis.
+                                if (healing.perRecipientApply) {
+                                    healing.creditPerformed?.(actor.id, raw);
                                 }
                                 overhealSum += applied.overheal;
                                 if (applied.overheal > 0) perTargetOverheal = applied.overheal;

@@ -1727,6 +1727,13 @@ export interface HealingRoundEngine {
      *  per-recipient via `grantShieldToTarget`, but no recipient-side shield TOTAL is computed, and
      *  the healing report keeps both source-keyed to match.
      *
+     *  THERE IS NOW A THIRD AXIS BESIDE THESE TWO (#383): `currentRoundSourceRepair`, keyed by the
+     *  actor that PERFORMED a repair. It is what `hp-snapshot.repairPerformed` reports and what the
+     *  Simulator's "Healing done" column reads. It exists as a SIBLING rather than as a widening of
+     *  `perActor` precisely because `perActor` must stay player-only — read `creditPerformedRepair`
+     *  for its contract, which is this one's twin in every respect but the one that matters: a HoT
+     *  tick credits `perRecipient` and must NEVER credit the source axis (R2, #367).
+     *
      *  ⚠️ For whoever extends this next: mirror a repair ONLY where its pool application actually
      *  happened. Several sources credit the source axis's raw bucket for recipients they never
      *  repair (a non-heal-target `all-allies` leech share), and mirroring those invents a landing.
@@ -3280,6 +3287,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         return h;
     };
+    /** #383: per-SOURCE repair total, keyed by the actor that PERFORMED the repair — the
+     *  side-agnostic sibling of `currentRoundHealing`'s `perActor`, which is player-only by design
+     *  (E5 §4.1) and must stay that way. A single gross number rather than an `ActorHealing`: the
+     *  only consumer is `hp-snapshot.repairPerformed`, which reports the raw that arrived, and
+     *  inventing effective/overheal buckets nobody reads would just be more to keep in sync.
+     *  Rebound per round in the same place as its siblings, for the same reason. */
+    let currentRoundSourceRepair = new Map<string, number>();
     // H1 Task 6: per-round shield-granted accumulator (recipient actor id → total shield
     // actually added to its pool THIS round, post-cap delta). Mirrors `currentRoundHealing`'s
     // lifecycle: declared once here, captured by grantShieldToTarget's live closure, and rebound
@@ -3572,6 +3586,12 @@ export function runCombat(rawInput: CombatEngineInput): {
               creditRecipient: (recipientId, bucket, amount) => {
                   recipientHealFor(recipientId)[bucket] += amount;
               },
+              creditPerformed: (sourceId, amount) => {
+                  currentRoundSourceRepair.set(
+                      sourceId,
+                      (currentRoundSourceRepair.get(sourceId) ?? 0) + amount
+                  );
+              },
               recipientMaxHp,
               recipientIncomingHealPct,
               recipientIncomingHealAmpPct: (rid) =>
@@ -3859,6 +3879,30 @@ export function runCombat(rawInput: CombatEngineInput): {
         healingCtx.creditRecipient?.(recipientId, rawBucket, raw);
         healingCtx.creditRecipient?.(recipientId, 'effectiveHeal', consumed);
         healingCtx.creditRecipient?.(recipientId, 'overheal', overheal);
+    };
+
+    /**
+     * #383: mirror a repair onto the per-SOURCE axis (`currentRoundSourceRepair`), keyed by the
+     * actor that PERFORMED it. The `runCombat`-local twin of `creditLandedRepair`, with the same
+     * three rules — call it wherever a repair's pool application SUCCEEDS, with the same gross
+     * `raw` the source bucket used, and only where the application actually happened.
+     *
+     * ⚠️ GATED on `perRecipientApply` for the same reason the landing axis is: the assembler tells
+     * "not measured" (fall back to the `heal-performed` sum) from "measured, none performed" by
+     * whether `hp-snapshot.repairPerformed` is present at all, and an ungated credit here would
+     * make a legacy healing run look measured when it is not.
+     *
+     * ⚠️ A HoT TICK MUST NOT CALL THIS (locked ruling R2, #367). Ticking is not performing a
+     * repair — the tick books `repairReceived` on its holder and credits no source. If you are
+     * adding a credit inside `tickHot`, you are adding the wrong one.
+     *
+     * Like its twin, this is a closure and not an export: the cast path (playerTurn.ts) and the
+     * reactive executor (triggers.ts) live in other modules and reach the same accumulator through
+     * `healingCtx.creditPerformed`, which duplicates the flag check inline.
+     */
+    const creditPerformedRepair = (sourceId: string, raw: number): void => {
+        if (!healingCtx?.perRecipientApply) return;
+        healingCtx.creditPerformed?.(sourceId, raw);
     };
 
     // --- Phase 3 reactive triggers ---
@@ -4691,6 +4735,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                             applied.consumed,
                             applied.overheal
                         );
+                        // Source axis (#383) — the LEECHING actor performed this repair, whoever it
+                        // landed on. `sourceId`, not `rid`: an `all-allies` leech share repairs an
+                        // ally, and the leecher is still the one who did it.
+                        creditPerformedRepair(sourceId, scaled);
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
@@ -4814,6 +4862,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         applied.consumed,
                         applied.overheal
                     );
+                    // Source axis (#383): same coincidence, same distinction — the victim repaired
+                    // ITSELF off the damage it took, so it is credited on both axes.
+                    creditPerformedRepair(victim.id, scaled);
                 }
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
@@ -8999,6 +9050,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (healTarget) {
             currentRoundHealing = new Map<string, ActorHealing>();
             currentRoundRecipientHealing = new Map<string, ActorHealing>();
+            currentRoundSourceRepair = new Map<string, number>();
             const targetMaxHp = recipientMaxHp(healTarget.id);
             // Clamp to [0, 100]: a shrunk effectiveMaxHp (expired max-HP buff) can leave
             // currentHp > targetMaxHp, pushing the ratio above 100 — cap it so the reported
@@ -12110,7 +12162,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             // this axis has always been held to; see the `hp-snapshot` doc in events.ts. OMITTED
             // rather than zeroed when per-recipient accounting is off, so the assembler can tell
             // "not measured" from "measured, none landed".
+            //
+            // #383 ADDED THE SOURCE HALF (`repairPerformed`) beside it, for the third surface of
+            // the same defect: `healingDone` summed `heal-performed.casterId`, so a leecher
+            // reported 0 done next to its 800 received. Read off `currentRoundSourceRepair`, the
+            // side-agnostic sibling of `perActor` — see the `hp-snapshot` doc in events.ts for why
+            // a sibling and not a widening, and for why a HoT tick is deliberately not on it.
             const roundRepair = currentRoundRecipientHealing.get(a.id);
+            const roundPerformed = currentRoundSourceRepair.get(a.id);
             bus.emit({
                 type: 'hp-snapshot',
                 actorId: a.id,
@@ -12123,6 +12182,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           repairReceived: roundRepair
                               ? roundRepair.directHeal + roundRepair.hotHeal
                               : 0,
+                          repairPerformed: roundPerformed ?? 0,
                       }
                     : {}),
             });

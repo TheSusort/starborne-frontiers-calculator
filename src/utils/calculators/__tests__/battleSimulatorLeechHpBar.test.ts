@@ -191,17 +191,32 @@ describe('#372 the HP bar reports real HP, not a derived figure', () => {
         expect(lastRow(false, HARMLESS).healingReceived).toBe(0);
     });
 
-    // ── STILL OPEN, on the OTHER axis ────────────────────────────────────────────────────────
-    // "Healing done" has the identical hole and #375 does NOT close it: `healDone` accumulates
-    // from `heal-performed.casterId`, which a leech never emits, so this leecher reports 0 done
-    // while reporting 800 received. It cannot be fixed the same way — the engine's SOURCE axis
-    // (`perActor`) is player-only BY DESIGN (E5 §4.1, an enemy heal must not enter the player
-    // healing buckets), so there is no team-symmetric total to read. Pinned rather than described,
-    // so whoever takes it on finds a red test instead of a comment.
-    it('does NOT yet report the leech as healing DONE (source axis is player-only by design)', () => {
+    // ── THE THIRD AXIS, closed by #383 ───────────────────────────────────────────────────────
+    // "Healing done" had the identical hole: `healDone` accumulated from `heal-performed.casterId`,
+    // which a leech never emits, so this leecher reported 0 done beside 800 received — the repair
+    // visibly happened and nobody was credited for it.
+    //
+    // It could NOT be closed the way #375 closed the received axis. That one substituted the
+    // engine's per-RECIPIENT axis, which is side-agnostic because a landing has no side. The
+    // SOURCE axis next to it (`perActor`) is player-only BY DESIGN (E5 §4.1 — an enemy heal must
+    // not enter the player healing buckets), so widening it would have regressed the healing
+    // report. #383 added a `perActor`-shaped SIBLING that is side-agnostic
+    // (`hp-snapshot.repairPerformed`) instead, credited at every site where a repair's pool
+    // application succeeds.
+    //
+    // This assertion was the pinned gap (`toBe(0)`, a deliberate tripwire). It is now the claim.
+    it('reports the leech as healing DONE', () => {
         const leeching = lastRow(true);
-        // Liveness: the repair happened and IS reported on the received axis.
+        const control = lastRow(false);
+
+        // Liveness: the repair happened and is reported on the received axis.
         expect(leeching.healingReceived).toBe(800);
-        expect(leeching.healingDone).toBe(0);
+        // The inert control credits nothing, so the 800 below is this leech and not some other
+        // channel the fixture happens to run.
+        expect(control.healingDone).toBe(0);
+
+        // ONE repair, credited once on each axis: Magnolia repairs HERSELF, so source and
+        // recipient are the same ship and the two columns must agree.
+        expect(leeching.healingDone).toBe(800);
     });
 });

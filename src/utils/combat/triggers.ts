@@ -4346,6 +4346,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                         ctx.healing.creditRecipient?.(rid, 'effectiveHeal', applied.consumed);
                         ctx.healing.creditRecipient?.(rid, 'overheal', applied.overheal);
                     }
+                    // Source axis (#383): the reacting owner performed this repair. Before this,
+                    // the channel credited NOBODY on the done axis — `reactive-heal-performed` is
+                    // deliberately absent from the Simulator's assembled-event allowlist, and the
+                    // executor emits no `heal-performed`, so an Isha repairing 3% of her max HP
+                    // every time she was hit showed the repair on her received column and left the
+                    // done column at 0. Same gate, same gross `raw`, same not-reversed branch as
+                    // the recipient credit above.
+                    if (ctx.healing.perRecipientApply) {
+                        ctx.healing.creditPerformed?.(intent.ownerId, raw);
+                    }
                 }
             } else {
                 ctx.healing.credit(intent.ownerId, 'shield', raw);
