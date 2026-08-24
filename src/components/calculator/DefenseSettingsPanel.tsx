@@ -2,6 +2,7 @@ import React from 'react';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { Button } from '../ui/Button';
+import { Input } from '../ui/Input';
 import { SelectedGameBuff } from '../../types/calculator';
 import { GameBuffPicker } from './GameBuffPicker';
 
@@ -10,6 +11,8 @@ interface DefenseSettingsPanelProps {
     onToggle: () => void;
     defenseBuffs: SelectedGameBuff[];
     onDefenseBuffsChange: (v: SelectedGameBuff[]) => void;
+    rounds: number;
+    onRoundsChange: (rounds: number) => void;
 }
 
 export const DefenseSettingsPanel: React.FC<DefenseSettingsPanelProps> = ({
@@ -17,6 +20,8 @@ export const DefenseSettingsPanel: React.FC<DefenseSettingsPanelProps> = ({
     onToggle,
     defenseBuffs,
     onDefenseBuffsChange,
+    rounds,
+    onRoundsChange,
 }) => (
     <div className="card space-y-2">
         <Button
@@ -33,6 +38,17 @@ export const DefenseSettingsPanel: React.FC<DefenseSettingsPanelProps> = ({
         </Button>
         <CollapsibleForm isVisible={isOpen}>
             <div className="space-y-4 pt-2">
+                <Input
+                    label="Rounds"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={rounds}
+                    onChange={(e) =>
+                        onRoundsChange(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))
+                    }
+                    helpLabel="Length of the survivability window"
+                />
                 <p className="text-sm text-theme-text-secondary">
                     Shared buffs applied to all ship configurations
                 </p>
