@@ -18,6 +18,39 @@ import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Ship } from '../../types/ship';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
+import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
+import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
+import { asFactionKey } from '../../constants/factions';
+
+/** Engine stats + kit for a defender built from a real ship. Shared by the URL-param initial
+ *  config and the ship-picker, which previously duplicated the stat mapping. */
+const defenderFieldsFromShip = (
+    ship: Ship,
+    final: ReturnType<typeof calculateTotalStats>['final'],
+    getGearPiece: Parameters<typeof buildShipAbilitiesWithEquipment>[1]
+) => ({
+    shipId: ship.id,
+    name: ship.name,
+    hp: Math.round(final.hp),
+    defense: Math.round(final.defence),
+    security: Math.round(final.security ?? 0),
+    attack: Math.round(final.attack ?? 0),
+    crit: Math.round(final.crit ?? 0),
+    critDamage: Math.round(final.critDamage ?? 0),
+    // NOT `?? 0` for these two. A speed-0 defender never takes a turn, so its self-shields and
+    // self-buffs never fire and its measured EHP is silently understated; hacking 0 would also
+    // misreport its own outbound landing. These fallbacks match `healerStatsFromShip` in
+    // HealingCalculatorPage.tsx:173-174, which is the reference implementation.
+    speed: Math.round(final.speed ?? 100),
+    hacking: Math.round(final.hacking ?? 200),
+    healModifier: Math.round(final.healModifier ?? 0),
+    chargeCount: ship.chargeSkillCharge ?? 0,
+    startCharged: false,
+    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
+    affinity: ship.affinity,
+    role: ship.type,
+    faction: asFactionKey(ship.faction),
+});
 
 const DefenseCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
@@ -44,25 +77,37 @@ const DefenseCalculatorPage: React.FC = () => {
                     ship.id
                 );
                 const final = statsBreakdown.final;
-                const hp = Math.round(final.hp);
-                const defense = Math.round(final.defence);
-                const security = Math.round(final.security ?? 0);
+                const fields = defenderFieldsFromShip(ship, final, getGearPiece);
                 return [
                     {
                         id: '1',
-                        shipId: ship.id,
-                        name: ship.name,
-                        hp,
-                        defense,
-                        security,
-                        damageReduction: calculateDamageReduction(defense),
-                        effectiveHP: calculateEffectiveHP(hp, defense),
+                        ...fields,
+                        damageReduction: calculateDamageReduction(fields.defense),
+                        effectiveHP: calculateEffectiveHP(fields.hp, fields.defense),
                         buffs: [],
                     },
                 ];
             }
         }
-        return [{ id: '1', name: 'Ship 1', hp: 10000, defense: 5000, security: 70, buffs: [] }];
+        return [
+            {
+                id: '1',
+                name: 'Ship 1',
+                hp: 10000,
+                defense: 5000,
+                security: 70,
+                buffs: [],
+                shipSkills: buildDefaultShipSkills(),
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                speed: 100,
+                hacking: 200,
+                healModifier: 0,
+                chargeCount: 0,
+                startCharged: false,
+            },
+        ];
     };
 
     const [configs, setConfigs] = useState<DefenseShipConfig[]>(getInitialConfig);
@@ -104,6 +149,15 @@ const DefenseCalculatorPage: React.FC = () => {
             damageReduction: calculateDamageReduction(5000),
             effectiveHP: calculateEffectiveHP(10000, 5000),
             buffs: [],
+            shipSkills: buildDefaultShipSkills(),
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            speed: 100,
+            hacking: 200,
+            healModifier: 0,
+            chargeCount: 0,
+            startCharged: false,
         };
         setConfigs((prev) => [...prev, newConfig]);
         setNextId((n) => n + 1);
@@ -143,22 +197,16 @@ const DefenseCalculatorPage: React.FC = () => {
             ship.id
         );
         const final = statsBreakdown.final;
-        const hp = Math.round(final.hp);
-        const defense = Math.round(final.defence);
-        const security = Math.round(final.security ?? 0);
+        const fields = defenderFieldsFromShip(ship, final, getGearPiece);
         const { selfBuffs } = buildSkillBuffAutoFill(ship);
         setConfigs((prev) =>
             prev.map((c) =>
                 c.id === configId
                     ? {
                           ...c,
-                          shipId: ship.id,
-                          name: ship.name,
-                          hp,
-                          defense,
-                          security,
-                          damageReduction: calculateDamageReduction(defense),
-                          effectiveHP: calculateEffectiveHP(hp, defense),
+                          ...fields,
+                          damageReduction: calculateDamageReduction(fields.defense),
+                          effectiveHP: calculateEffectiveHP(fields.hp, fields.defense),
                           buffs: mergeAutoFill(c.buffs, selfBuffs),
                       }
                     : c

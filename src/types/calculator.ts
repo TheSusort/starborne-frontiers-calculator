@@ -265,6 +265,11 @@ export type EnemyShipConfigNumericField = Exclude<
     'shipId' | 'name' | 'shipSkills'
 >;
 
+/** A defender config for the engine-backed Defense Calculator. Carries `shipSkills` so the combat
+ *  engine walks the ship's real kit, plus the offensive/turn stats the engine needs because the
+ *  defender TAKES ITS OWN TURNS (its self-shields fire on its turn; see
+ *  `simulateDefenseSurvivability`). `effectiveHP`/`damageReduction` remain the STATIC formula
+ *  baseline displayed next to the measured figure. */
 export interface DefenseShipConfig {
     id: string;
     shipId?: string;
@@ -275,6 +280,22 @@ export interface DefenseShipConfig {
     effectiveHP?: number;
     damageReduction?: number;
     buffs: SelectedGameBuff[];
+    shipSkills: ShipSkills;
+    attack: number;
+    crit: number;
+    critDamage: number;
+    speed: number;
+    hacking: number;
+    /** The defender's REAL heal modifier. Load-bearing: a defender with self-repair must actually
+     *  repair, and a hardcoded 0 here silently understates every sustain tank. */
+    healModifier: number;
+    chargeCount: number;
+    startCharged: boolean;
+    /** Board slot. Absent → the adapter places the defender itself. */
+    position?: Position;
+    affinity?: AffinityName;
+    role?: ShipTypeName;
+    faction?: FactionKey;
 }
 
 /** A healer config for the engine-backed Healing Calculator. Mirrors DPSShipConfig but
