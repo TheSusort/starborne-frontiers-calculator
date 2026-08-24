@@ -1345,6 +1345,18 @@ git commit -m "feat(calculators): report measured EHP with an intake breakdown (
 - Modify: `src/pages/DocumentationPage.tsx`
 - Modify: `src/constants/changelog.ts`
 
+- [ ] **Step 0 (carried from Task 9): guard the RANKING**
+
+Task 9 flagged that `DefenseCalculatorPage`'s `bestShip` reduce — which decides the `isBest`
+highlight — is exercised by NO test. That reduce is the user-visible payoff of the whole raw-EHP
+correction: before it, the ranking was INVERTED for surviving ships (a tankier ship reported a lower
+number and was ranked worse). A silent regression there restores the original bug with a green suite.
+
+Add a page-level test asserting that of two configs under identical enemy pressure, the one that
+withstands MORE raw damage carries the best-ship marker. Make it discriminate: give the two configs
+clearly different defence so their measured figures differ, and confirm the test FAILS if the reduce
+is inverted (flip the comparator locally, watch it go red, restore). Report both observations.
+
 - [ ] **Step 1: Find the defense calculator's docs section**
 
 Run: `grep -n "Defense Calculator" src/pages/DocumentationPage.tsx`
