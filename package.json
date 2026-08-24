@@ -5,20 +5,20 @@
     "private": true,
     "//dependencies": "Runtime only — packages that end up in the browser bundle. Build tooling, type-only packages and node-side script deps belong in devDependencies: `npm run audit` scans production deps only, so anything listed here widens the security gate to code we never ship.",
     "dependencies": {
-        "@cloudinary/react": "^1.13.1",
-        "@cloudinary/url-gen": "^1.21.0",
-        "@supabase/supabase-js": "^2.105.1",
+        "@cloudinary/react": "^1.14.4",
+        "@cloudinary/url-gen": "^1.22.0",
+        "@supabase/supabase-js": "^2.112.3",
         "canvas-confetti": "^1.9.4",
         "html-to-image": "^1.11.13",
-        "lucide-react": "^0.546.0",
+        "lucide-react": "^0.577.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-helmet-async": "^2.0.5",
-        "react-router-dom": "^7.18.1",
+        "react-router-dom": "^7.18.2",
         "recharts": "^2.15.1",
-        "uuid": "^14.0.0",
+        "uuid": "^14.0.2",
         "web-vitals": "^2.1.4",
-        "zod": "^4.3.6"
+        "zod": "^4.4.3"
     },
     "scripts": {
         "start": "vite",
