@@ -1692,6 +1692,12 @@ export interface HealingRoundEngine {
      *  separately from shieldAbsorbed (Barrier does not drain the shield pool). Task 2 adds the
      *  UI display surface; this field exists now so the blocked total is observable. */
     barrierAbsorbed: number;
+    /** Per-round direct-hit damage nullified by `Shield Converter` and turned into Shield, for the
+     *  heal target. Netted against `incomingDamage` for display exactly as `barrierAbsorbed` is —
+     *  the hit ARRIVED (the attacker keeps its damage-dealt credit) but was converted rather than
+     *  applied. Surfaced so the intake breakdown's four terms close; without it a Shield Converter
+     *  ship shows an unexplained residual. */
+    convertedToShield: number;
     /** Per-actor incoming accounting bucket. The heal target's `incomingDamage`/`shieldAbsorbed`/
      *  `barrierAbsorbed` row totals above are sourced from this map's `healTarget.id` entry (PR5b);
      *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
@@ -12422,6 +12428,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 incomingDamage: healTargetIntake?.incoming ?? 0,
                 shieldAbsorbed: healTargetIntake?.shieldAbsorbed ?? 0,
                 barrierAbsorbed: healTargetIntake?.barrierAbsorbed ?? 0,
+                convertedToShield: healTargetIntake?.convertedToShield ?? 0,
                 perActorIncoming,
                 // Per-enemy effects: de-dupe each enemy's own self-buffs/debuffs by buffName
                 // (keep the first occurrence so the UI shows each effect once per enemy per round),

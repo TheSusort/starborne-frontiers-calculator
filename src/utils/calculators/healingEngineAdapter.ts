@@ -183,6 +183,10 @@ export interface HealingRoundData {
     /** Full-immunity blocked total this round; distinct from shieldAbsorbed — Barrier never
      *  touches the shield pool. */
     barrierAbsorbed: number;
+    /** Direct-hit damage nullified by `Shield Converter` and turned into Shield. A FOURTH mitigation
+     *  channel alongside shieldAbsorbed/barrierAbsorbed, and like them already contained in
+     *  `incomingDamage` — never add these together. */
+    convertedToShield: number;
     targetHpPct: number; // ENTERING the round
     targetShieldPool: number; // ENTERING the round
     totalRoundHealing: number; // directHeal + hotHeal (raw; shield separate)
@@ -794,6 +798,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         const incomingRaw = hr?.incomingDamage ?? 0;
         const shieldAbsorbedRaw = hr?.shieldAbsorbed ?? 0;
         const barrierAbsorbedRaw = hr?.barrierAbsorbed ?? 0;
+        const convertedToShieldRaw = hr?.convertedToShield ?? 0;
 
         // teamHealing = Σ non-focus PLAYER entries' raw (direct + HoT). Team shield contributes to
         // the pool mechanically (the engine consumes it) but is NOT separately reported here.
@@ -858,6 +863,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             incomingDamage: Math.round(incomingRaw),
             shieldAbsorbed: Math.round(shieldAbsorbedRaw),
             barrierAbsorbed: Math.round(barrierAbsorbedRaw),
+            convertedToShield: Math.round(convertedToShieldRaw),
             targetHpPct: Math.round(hr?.targetHpPctStart ?? 100),
             targetShieldPool: Math.round(hr?.targetShieldStart ?? 0),
             totalRoundHealing: Math.round(totalRoundRaw),
