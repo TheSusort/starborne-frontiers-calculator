@@ -2671,8 +2671,23 @@ const DocumentationPage: React.FC = () => {
                                         Defense Calculator
                                     </h4>
                                     <p className="text-theme-text mb-2">
-                                        Analyze defensive capabilities including effective HP,
-                                        damage reduction, and survivability metrics.
+                                        Runs the real combat engine over each ship&apos;s own parsed
+                                        skills, rather than the older static formula alone, and
+                                        reports both figures side by side so you can see where they
+                                        agree and where they don&apos;t.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Enemy Attackers, Allies &amp; Rounds:
+                                        </span>{' '}
+                                        Under Combat Settings, build the enemy team bombarding the
+                                        ship &mdash; real ships (their parsed skills fire for real)
+                                        or quick manual attack/defense lines &mdash; and optionally
+                                        add supporting allies (healers, protectors) on the
+                                        ship&apos;s own side. Both rosters and the length of the
+                                        fight (1&ndash;50 rounds) are shared across every ship
+                                        configuration you are comparing, so swapping in a different
+                                        build tests it against the exact same pressure.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Measured EHP:</span> the raw
@@ -2693,13 +2708,25 @@ const DocumentationPage: React.FC = () => {
                                         the figure is a lower bound, not a limit — it is everything
                                         that was thrown, so it stops rising once the window ends.
                                     </p>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> beneath
                                         it (to hull, absorbed by shield, blocked by Barrier,
                                         converted to shield) describes what actually reached the
                                         ship <em>after</em> Defense, and is labelled with its own
                                         sub-total. Those rows are on a different axis from the
                                         headline and are not meant to add up to it.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">The ship fights back:</span>{' '}
+                                        the defender takes its own turns rather than standing still,
+                                        so its self-buffs and self-repair fire for real, and a
+                                        high-attack build that kills an attacker partway through the
+                                        fight lowers its own incoming pressure for every round after
+                                        that. That means a ship can out-measure another with a
+                                        stronger defensive kit on paper simply by hitting back
+                                        harder &mdash; an accepted, real consequence of measuring
+                                        survivability with the actual engine instead of a static
+                                        formula.
                                     </p>
                                 </div>
 

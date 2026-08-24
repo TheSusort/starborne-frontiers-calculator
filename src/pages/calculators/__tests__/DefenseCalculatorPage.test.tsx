@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
 
@@ -68,5 +68,54 @@ describe('DefenseCalculatorPage', () => {
         fireEvent.click(screen.getByText(/Combat Settings/i));
         fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
         expect(await screen.findByText(/Measured EHP/i)).toBeInTheDocument();
+    });
+
+    // Carried from Task 9: `bestShip` (the reduce behind the `isBest` highlight) had NO test. Before
+    // the fix this epic made, the ranking was INVERTED for survivors — a tankier ship reported a
+    // SMALLER measured figure and lost the "Best ship configuration" marker to the weaker one. This
+    // test gives two configs deliberately lopsided defence (0 vs 20,000, plus HP as a safety margin
+    // against exact-formula assumptions) under identical enemy pressure, so one dies on round 1 and
+    // the other survives the whole window — driving their measured EHP figures far enough apart that
+    // the comparison can't tie. It asserts the SURVIVOR (the one that withstood more raw damage)
+    // carries the marker, not the casualty.
+    it('gives the best-ship marker to the config that withstands more raw damage, not less', async () => {
+        renderDefenseCalculatorPage();
+
+        // Add a second config. Both still read the same default hp/defense at this point, so
+        // `getAllByLabelText` unambiguously returns [ship1, ship2] in render order.
+        fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+
+        const hpInputs = screen.getAllByLabelText('HP');
+        const defenseInputs = screen.getAllByLabelText('Defense');
+        expect(hpInputs).toHaveLength(2);
+        expect(defenseInputs).toHaveLength(2);
+
+        // Config 1 ("Ship 1"): fragile — dies to the first hit.
+        fireEvent.change(hpInputs[0], { target: { value: '50' } });
+        fireEvent.change(defenseInputs[0], { target: { value: '0' } });
+        // Config 2 ("Ship 2"): effectively unkillable — outlasts the whole round window.
+        fireEvent.change(hpInputs[1], { target: { value: '999999999' } });
+        fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+
+        // Add one enemy attacker so there is pressure to measure at all.
+        fireEvent.click(screen.getByText(/Combat Settings/i));
+        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+
+        const survivorNote = await screen.findByText(/Survived all/i);
+        const destroyedNote = screen.getByText(/Destroyed round/i);
+
+        const survivorCard = survivorNote.closest('.card');
+        const destroyedCard = destroyedNote.closest('.card');
+        expect(survivorCard).not.toBeNull();
+        expect(destroyedCard).not.toBeNull();
+        expect(survivorCard).not.toBe(destroyedCard);
+
+        // The tankier config (the survivor) must carry the marker; the one that died first must not.
+        expect(
+            within(survivorCard as HTMLElement).getByText('Best ship configuration')
+        ).toBeInTheDocument();
+        expect(
+            within(destroyedCard as HTMLElement).queryByText('Best ship configuration')
+        ).not.toBeInTheDocument();
     });
 });
