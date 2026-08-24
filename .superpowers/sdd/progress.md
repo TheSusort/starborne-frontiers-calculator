@@ -207,7 +207,11 @@ contradicting the shipped code).
 - **Stronger "oversight, not design" evidence than my `selfIncoming` parallel:** every OTHER
   direct-damage site (counter, reactive, Protection fallback) ALREADY uses buff-folded defence. The
   positional applied path was the sole hold-out.
-- [x] Task 5: **complete** (commit `baa87c44`; review pending). Suite **582 / 6474** — unchanged, as
+- [x] Task 5: **complete** (commit `baa87c44`, review PASS — 0 Critical, 0 Important, 2 Minor).
+      Reviewer verified memo deps TRANSITIVELY and confirmed `getShipById` is `useCallback`-memoized
+      in `ShipsContext`, so `enemyInputs` only gets a new identity when the roster really changes —
+      the memo will not thrash per keystroke. Also cleared the id-seeding deviation and checked the
+      Task 6 collision surface (the two carried fixes are docs-only commits touching no code). Suite **582 / 6474** — unchanged, as
       a wiring task with no new tests should be.
       **PLAN DEFECT 4 (mine): my Step-4 code omitted `targeting`.** The defender's cast therefore
       fell back to synthetic single-target-front instead of its real parsed kit — an AoE defender
@@ -251,6 +255,16 @@ path.** Found by Task 2, verified independently by me at three sites:
   never loosen it.**
 
 ## Minor findings roll-up (for the final whole-branch review to triage)
+- **Task 5 / code health: ~230 lines + module helpers are now duplicated VERBATIM between
+  `HealingCalculatorPage` and `DefenseCalculatorPage`.** This was deliberate — I instructed
+  "copy, do not re-derive" because drift between the two mappings is the worse failure (the
+  positional-apply gate fails SILENTLY when `pattern` is missing). But the debt is real and now sits
+  in a third place. Suggested follow-up: extract a shared `useEnemyTeamRoster` hook when a fourth
+  calculator needs the same shape. NOT blocking.
+- **Task 5 / test-env (pre-existing, shared with `HealingCalculatorPage.test.tsx`):** the page test
+  mocks `ShipsContext` returning a FRESH `getShipById` closure per call, so the memo-stability
+  guarantee is exercised only by the real context, never by a test. The thing most likely to regress
+  into N-sims-per-keystroke has no guard.
 - Task 1: the two new scalar pass-throughs are only tested at ZERO. Reviewer checked precedent:
   `barrierAbsorbed` (the direct sibling) also has zero adapter-level and zero non-zero golden
   coverage, so this is existing pattern, not regression. The underlying computation IS covered with
