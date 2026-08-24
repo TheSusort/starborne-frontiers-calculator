@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
+import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import { ShipSelector } from '../ship/ShipSelector';
@@ -9,7 +10,7 @@ import { Input } from '../ui/Input';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
-import { ShipSkillList } from '../ship/ShipSkillList';
+import { SkillSlotList } from '../skills/SkillSlotList';
 import { GameBuffPicker } from './GameBuffPicker';
 
 interface DefenseShipCardProps {
@@ -22,6 +23,7 @@ interface DefenseShipCardProps {
     onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
+    onShipSkillsChange: (shipSkills: ShipSkills) => void;
 }
 
 export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
@@ -34,9 +36,9 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     onUpdate,
     onSelectShip,
     onBuffsChange,
+    onShipSkillsChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
-    const [skillRefOpen, setSkillRefOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
 
@@ -108,6 +110,16 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
 
                 <CollapsibleForm isVisible={advancedOpen}>
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
+                        Skills
+                    </div>
+                    <SkillSlotList
+                        shipSkills={config.shipSkills}
+                        hasPassive={!!selectedShip}
+                        ship={selectedShip}
+                        onChange={onShipSkillsChange}
+                    />
+
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                         Ship Buffs
                     </div>
                     <GameBuffPicker
@@ -118,28 +130,6 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         onChange={onBuffsChange}
                         noEffectLabel="No defensive effect"
                     />
-
-                    {selectedShip && (
-                        <>
-                            <Button
-                                variant="link"
-                                onClick={() => setSkillRefOpen((v) => !v)}
-                                className="w-full flex justify-between items-center mt-4 border-b border-dark-border pb-4 mb-4"
-                            >
-                                <span className="flex items-center gap-2">
-                                    <ChevronDownIcon
-                                        className={`text-sm text-theme-text-secondary h-8 w-8 p-2 transition-transform duration-300 ${skillRefOpen ? 'rotate-180' : ''}`}
-                                    />
-                                    Skill Reference
-                                </span>
-                            </Button>
-                            <CollapsibleForm isVisible={skillRefOpen}>
-                                <div className="pt-2 pb-4 border-b border-dark-border mb-4">
-                                    <ShipSkillList ship={selectedShip} />
-                                </div>
-                            </CollapsibleForm>
-                        </>
-                    )}
                 </CollapsibleForm>
 
                 <div className="mt-4 pt-4 border-t border-dark-border">

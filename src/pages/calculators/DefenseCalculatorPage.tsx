@@ -16,6 +16,7 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { Ship } from '../../types/ship';
+import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
@@ -218,6 +219,10 @@ const DefenseCalculatorPage: React.FC = () => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, buffs } : c)));
     };
 
+    const updateConfigShipSkills = (id: string, shipSkills: ShipSkills) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, shipSkills } : c)));
+    };
+
     const globalBuffTotals = useMemo(
         () => ({
             defenseBuff: globalBuffs.reduce(
@@ -328,6 +333,9 @@ const DefenseCalculatorPage: React.FC = () => {
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
                                 onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
+                                onShipSkillsChange={(shipSkills) =>
+                                    updateConfigShipSkills(config.id, shipSkills)
+                                }
                             />
                         ))}
                     </div>
