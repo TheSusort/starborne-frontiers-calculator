@@ -37,6 +37,12 @@ policy, so both are unit-testable without rendering a page.
   (full suite) · `npm run audit:skills` (0 findings).
 - Commit normally — **no `--no-verify`** for code commits. `docs/` is gitignored, so plan/spec
   edits need `git add -f`.
+- **The husky pre-commit hook runs lint-staged + `tsc` + the full test suite** — so a knowingly-red
+  test CANNOT be committed. Every task must end green. `npm run lint` is NOT in the hook, so run it
+  explicitly (`--max-warnings 0`; warnings are fatal at the final gate).
+- **"0 failures" is not sufficient — reconcile test COUNTS too.** `apexShieldDestroyedNoise`'s
+  `beforeAll` times out under full-suite load and reports as 3 SKIPPED, not as a failure. Record
+  file/test counts each task and explain any delta.
 
 ---
 
@@ -712,30 +718,16 @@ git commit -m "feat(calculators): add defense survivability boundary over the co
   `speed`, `hacking`, `chargeCount`, `startCharged`, `position?`, `affinity?`, `role?`, `faction?`.
   Tasks 4-6 read these.
 
-- [ ] **Step 1: Write the failing test**
+This is a **type-extension task with no new test.** Its gate is `tsc` plus a green existing suite:
+the new fields have no observable behaviour until Task 4 renders them and Task 5 feeds them to the
+sim. Do NOT write a UI test here that only Task 4 can satisfy — husky runs the full suite on commit,
+so a knowingly-red test cannot be committed, and weakening it to pass would make it vacuous.
 
-Create `src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx` if it does not exist. Follow
-the render-harness conventions of the nearest existing page test — inspect
-`src/pages/calculators/__tests__/` and copy the provider wrapper that page tests already use rather
-than inventing one. The assertion to add:
+`tsc` is the enumerator for this task (Step 2): it names every construction site that must be
+updated. That is a stronger gate than a hand-written list, but note its known limit — it does not
+flag test doubles built through `as unknown as …` casts, so grep for those separately.
 
-```typescript
-    it('a blank config starts with default ship skills, not an empty kit', () => {
-        renderDefenseCalculatorPage();
-        // The Advanced section hosts the skill editor; a blank config still has editable slots.
-        fireEvent.click(screen.getByText(/Show Advanced/i));
-        expect(screen.getByText('Active')).toBeInTheDocument();
-        expect(screen.getByText('Charged')).toBeInTheDocument();
-    });
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `npx vitest run src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`
-
-Expected: FAIL — no `Active` / `Charged` slot rows (no `SkillSlotList` yet; Task 4 adds it).
-
-- [ ] **Step 3: Extend the type**
+- [ ] **Step 1: Extend the type**
 
 In `src/types/calculator.ts`, replace the `DefenseShipConfig` interface with:
 
@@ -778,14 +770,14 @@ Add any imports `src/types/calculator.ts` is missing (`ShipSkills`, `Position`, 
 `ShipTypeName`, `FactionKey`) — check the file's existing import block first, most are already there
 for `HealerShipConfig` and `EnemyShipConfig`.
 
-- [ ] **Step 4: Run `tsc` to enumerate every construction site**
+- [ ] **Step 2: Run `tsc` to enumerate every construction site**
 
 Run: `npx tsc --noEmit`
 
 Expected: errors at each `DefenseShipConfig` literal — `getInitialConfig` (two returns), `addConfig`,
-and any test fixture. Use this list as the work list for Step 5; do not guess at the sites.
+and any test fixture. Use this list as the work list for Step 3; do not guess at the sites.
 
-- [ ] **Step 5: Fill the new fields at every construction site**
+- [ ] **Step 3: Fill the new fields at every construction site**
 
 In `src/pages/calculators/DefenseCalculatorPage.tsx`, add these imports:
 
@@ -847,13 +839,13 @@ existing `damageReduction` / `effectiveHP` / `buffs: mergeAutoFill(...)` lines u
 the `buildSkillBuffAutoFill` call in place for now** — Task 6 removes it once the measured figure is
 the headline, and removing it here would drop the static baseline's buffs mid-stack.
 
-- [ ] **Step 6: Verify `tsc` is clean**
+- [ ] **Step 4: Verify `tsc` is clean**
 
 Run: `npx tsc --noEmit`
 
 Expected: no errors.
 
-- [ ] **Step 7: Full suite + validate, then commit**
+- [ ] **Step 5: Full suite + validate, then commit**
 
 ```bash
 npm run lint && npx tsc --noEmit && npm test && npm run audit:skills
@@ -861,7 +853,8 @@ git add src/types/calculator.ts src/pages/calculators/DefenseCalculatorPage.tsx
 git commit -m "feat(calculators): DefenseShipConfig carries shipSkills and engine stats (#358)"
 ```
 
-(The Step 1 test still fails until Task 4 — that is expected; note it in the task report.)
+The full suite must be GREEN here. If anything is red, the type extension broke an existing
+construction site — fix it, do not defer it to Task 4.
 
 ---
 
@@ -877,11 +870,26 @@ git commit -m "feat(calculators): DefenseShipConfig carries shipSkills and engin
 - Produces: a new `onShipSkillsChange: (shipSkills: ShipSkills) => void` prop on
   `DefenseShipCardProps`, wired by Task 5.
 
-- [ ] **Step 1: Confirm the Task 3 test still fails for the right reason**
+- [ ] **Step 1: Write the failing test**
 
-Run: `npx vitest run src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`
+Create `src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx` if it does not exist. Follow
+the render-harness conventions of the nearest existing page test — inspect
+`src/pages/calculators/__tests__/` and copy the provider wrapper those tests already use rather than
+inventing one.
 
-Expected: FAIL on the missing `Active` / `Charged` rows — not on a render crash.
+```typescript
+    it('a blank config exposes editable skill slots', () => {
+        renderDefenseCalculatorPage();
+        // The Advanced section hosts the skill editor; a blank config still has editable slots.
+        fireEvent.click(screen.getByText(/Show Advanced/i));
+        expect(screen.getByText('Active')).toBeInTheDocument();
+        expect(screen.getByText('Charged')).toBeInTheDocument();
+    });
+```
+
+Run it and confirm it FAILS on the missing `Active` / `Charged` rows — not on a render crash. A
+crash means the harness is wrong, and a test that fails for the wrong reason proves nothing when it
+later passes.
 
 - [ ] **Step 2: Add the prop and render the editor**
 
@@ -944,26 +952,16 @@ git commit -m "feat(calculators): render the skill editor in the defense card (#
 - Produces: `simResults: Map<string, DefenseSurvivabilityResult>` keyed by config id, consumed by
   Task 6's card props and the `isBest` ranking.
 
-- [ ] **Step 1: Write the failing test**
+Like Task 3, this task's **visible** deliverable only completes in Task 6 (the card renders the
+measured figure). Its gate is therefore `tsc` + a green suite + the existing page test still
+passing. The end-to-end page assertion lives in Task 6, which is where it can actually pass.
 
-Add to `src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`:
+What you CAN and SHOULD verify here: the sim runs without throwing on a page with zero enemies (the
+adapter synthesizes an inert practice target for an empty roster), and the existing
+`DefenseCalculatorPage` test still renders. If wiring the sim breaks that test, the memo dependencies
+are wrong — fix it here.
 
-```typescript
-    it('reports a measured EHP once an attacker applies pressure', async () => {
-        renderDefenseCalculatorPage();
-        fireEvent.click(screen.getByText(/Combat Settings/i));
-        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
-        expect(await screen.findByText(/Measured EHP/i)).toBeInTheDocument();
-    });
-```
-
-- [ ] **Step 2: Run it to verify it fails**
-
-Run: `npx vitest run src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx -t "measured EHP"`
-
-Expected: FAIL — no `Add Enemy` control and no `Measured EHP` text.
-
-- [ ] **Step 3: Add the rounds control to `DefenseSettingsPanel`**
+- [ ] **Step 1: Add the rounds control to `DefenseSettingsPanel`**
 
 Add to `DefenseSettingsPanelProps`:
 
@@ -990,7 +988,7 @@ Inside the `CollapsibleForm`, above the `GameBuffPicker`:
 
 Import `Input` from `../ui/Input`.
 
-- [ ] **Step 4: Add enemy, team and rounds state to the page**
+- [ ] **Step 2: Add enemy, team and rounds state to the page**
 
 In `src/pages/calculators/DefenseCalculatorPage.tsx`, mirror the healing page's state shape:
 
@@ -1006,13 +1004,13 @@ Copy the enemy add/remove/select/update handlers and the `TeamShipConfig` handle
 `HealingCalculatorPage.tsx` verbatim — they are page-local and identical in shape. Do **not**
 re-derive them; drift between the two pages is the failure mode here.
 
-- [ ] **Step 5: Map UI configs to adapter inputs**
+- [ ] **Step 3: Map UI configs to adapter inputs**
 
 Add the `enemyInputs` and `teamActors` memos, copied from `HealingCalculatorPage.tsx:543` and
 `:616` unchanged (they map `EnemyAttackerConfig → EnemyAttackerInput` and
 `TeamShipConfig → TeamActorInput`, and both mappings are already correct).
 
-- [ ] **Step 6: Run the sim, memoized**
+- [ ] **Step 4: Run the sim, memoized**
 
 ```typescript
     const simResults = useMemo(() => {
@@ -1056,7 +1054,7 @@ If `final.healModifier` is not a field on the stats breakdown, grep how
 here. A self-repairing defender that reports 0 heal modifier silently under-reports its own
 survivability, which is exactly the class of silent understatement this epic exists to remove.
 
-- [ ] **Step 7: Render the panels**
+- [ ] **Step 5: Render the panels**
 
 Add `<EnemyAttackersPanel …>` and `<TeamPanel …>` next to the existing `<DefenseSettingsPanel …>`,
 passing the handlers from Step 4. Pass `rounds` / `onRoundsChange={setRounds}` to
@@ -1064,21 +1062,14 @@ passing the handlers from Step 4. Pass `rounds` / `onRoundsChange={setRounds}` t
 own global buff picker) and `enemyAffinity` from the first enemy's affinity, defaulting to
 `'antimatter'`.
 
-- [ ] **Step 8: Switch `isBest` to measured EHP**
+- [ ] **Step 6: Switch `isBest` to measured EHP**
 
 Replace the `bestShip` / `bestEffectiveHP` reducers with ones reading
 `simResults.get(c.id)?.measuredEHP ?? 0`. Keep `mergedBuffTotals` and `computeBuffedStats` — Task 6
 still displays the static baseline, and `DamageReductionChart` / `SecurityEHPChart` still consume
 them unchanged.
 
-- [ ] **Step 9: Run the test to verify it passes**
-
-Run: `npx vitest run src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`
-
-Expected: PASS (the `Measured EHP` text arrives with Task 6's card block — if this test needs Task
-6 to pass, say so in the report and land the two together rather than weakening the assertion).
-
-- [ ] **Step 10: Validate and commit**
+- [ ] **Step 7: Validate and commit**
 
 ```bash
 npm run lint && npx tsc --noEmit && npm test && npm run audit:skills
@@ -1136,9 +1127,21 @@ conventions of the nearest existing card test in that directory:
     });
 ```
 
+Also add the page-level assertion — the proof the wiring from Task 5 reaches the card — to
+`src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`:
+
+```typescript
+    it('reports a measured EHP once an attacker applies pressure', async () => {
+        renderDefenseCalculatorPage();
+        fireEvent.click(screen.getByText(/Combat Settings/i));
+        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+        expect(await screen.findByText(/Measured EHP/i)).toBeInTheDocument();
+    });
+```
+
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `npx vitest run src/components/calculator/__tests__/DefenseShipCard.test.tsx`
+Run: `npx vitest run src/components/calculator/__tests__/DefenseShipCard.test.tsx src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`
 
 Expected: FAIL — no `result` prop, no `Measured EHP` text.
 
@@ -1202,7 +1205,7 @@ from the page.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `npx vitest run src/components/calculator/__tests__/DefenseShipCard.test.tsx`
+Run: `npx vitest run src/components/calculator/__tests__/DefenseShipCard.test.tsx src/pages/calculators/__tests__/DefenseCalculatorPage.test.tsx`
 
 Expected: PASS.
 
