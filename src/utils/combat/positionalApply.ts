@@ -5,6 +5,7 @@ import { resolvePositionalTarget, type ActorTargetingStatus } from './positional
 import {
     victimHitDamage,
     victimDefenceMitigation,
+    victimHitDamagePreMitigation,
     type AttackerDamageScalars,
     type VictimDefenseProfile,
 } from './victimDamage';
@@ -258,7 +259,14 @@ export function applyPositionalDamage(args: {
          * reads a buff-folded defence the caller never used. Trailing and optional so existing
          * stub callers compile unchanged.
          */
-        targetMitigation?: number
+        targetMitigation?: number,
+        /**
+         * #358 ADDENDUM 2: the PRE-defence-mitigation amount this hit threw at the victim — the
+         * same computation as `damage` with the defence term removed. Recorded by the funnel as
+         * the victim's RAW intake so "measured EHP" counts damage thrown, not damage that got
+         * through. Trailing and optional so existing stub callers compile unchanged.
+         */
+        preMitigation?: number
     ) => VictimDamageOutcome;
     emitHit?: (
         victim: CombatActor,
@@ -422,14 +430,23 @@ export function applyPositionalDamage(args: {
                 roleScale,
                 equipReductionPct
             );
+            const rawBase = victimHitDamagePreMitigation(
+                scalars,
+                defenseProfile,
+                didCrit,
+                roleScale,
+                equipReductionPct
+            );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
+            const rawDmg = ampPct !== 0 ? rawBase * (1 + ampPct / 100) : rawBase;
             const outcome = applyToVictim(
                 victim,
                 dmg,
                 isAnchor,
                 h,
-                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct)
+                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct),
+                rawDmg
             );
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a

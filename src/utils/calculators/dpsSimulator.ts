@@ -297,11 +297,20 @@ export interface RoundData {
      *  `incoming` = total damage taken, `shieldAbsorbed` = shield drained, `barrierAbsorbed`
      *  = barrier-blocked, `convertedToShield` = nullified by `Shield Converter` and turned into
      *  Shield instead. Set ONLY when at least one actor has a nonzero entry — absent on
-     *  rounds without per-victim intake (legacy RoundData shape preserved, goldens byte-identical). */
+     *  rounds without per-victim intake (legacy RoundData shape preserved, goldens byte-identical).
+     *
+     *  #358 ADDENDUM 2: `incomingRaw` is `incoming` BEFORE the victim's defence-mitigation factor —
+     *  the raw damage THROWN at it. `incoming` is post-defence (every direct-damage caller folds
+     *  the factor before the funnel sees it), so it FALLS as a ship gets tankier. `incomingRaw` is
+     *  therefore the axis a measured effective-HP figure must read, and is >= `incoming` always,
+     *  equal at zero effective defence. It is NOT a term of the intake breakdown:
+     *  `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` partition `incoming`, and mixing the
+     *  two axes breaks that identity. */
     perActorIncoming?: Record<
         string,
         {
             incoming: number;
+            incomingRaw: number;
             shieldAbsorbed: number;
             barrierAbsorbed: number;
             convertedToShield: number;

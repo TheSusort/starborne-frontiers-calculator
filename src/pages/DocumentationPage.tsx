@@ -2670,9 +2670,36 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Defense Calculator
                                     </h4>
-                                    <p className="text-theme-text">
+                                    <p className="text-theme-text mb-2">
                                         Analyze defensive capabilities including effective HP,
                                         damage reduction, and survivability metrics.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Measured EHP:</span> the raw
+                                        damage thrown at the ship across the simulated window,
+                                        before its Defense reduced any of it. This is the same
+                                        quantity the Effective HP formula estimates, so more Defense
+                                        raises it and the two can be compared directly — where they
+                                        disagree, the measured figure is the one that saw the real
+                                        shields, self-buffs and enemy pressure.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Rounds survived</span> sits
+                                        beside it, and is part of reading the number rather than
+                                        extra detail. Measured EHP only grows when the ship lives
+                                        another round, so it moves in whole rounds: two ships that
+                                        die on the same round show the same figure even if one is
+                                        slightly tankier. For a ship that survives the whole window
+                                        the figure is a lower bound, not a limit — it is everything
+                                        that was thrown, so it stops rising once the window ends.
+                                    </p>
+                                    <p className="text-theme-text">
+                                        <span className="text-primary">The breakdown</span> beneath
+                                        it (to hull, absorbed by shield, blocked by Barrier,
+                                        converted to shield) describes what actually reached the
+                                        ship <em>after</em> Defense, and is labelled with its own
+                                        sub-total. Those rows are on a different axis from the
+                                        headline and are not meant to add up to it.
                                     </p>
                                 </div>
 

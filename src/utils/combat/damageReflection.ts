@@ -35,3 +35,19 @@ export function reflectedDamageForHit(args: {
     const incoming = 1 - args.attackerIncomingReductionPct / 100;
     return Math.max(0, base * affinity * defence * incoming);
 }
+
+/** #358 ADDENDUM 2: the same reflected hit WITHOUT the reflect victim's (i.e. the original
+ *  attacker's) defence term — the raw amount thrown at it. Same expression with an exact 1 in the
+ *  defence slot, so the mitigated sibling above stays byte-identical. */
+export function reflectedDamagePreDefenceForHit(args: {
+    reflectPct: number;
+    netHpDamage: number;
+    affinityDamageModifier: number;
+    attackerIncomingReductionPct: number;
+}): number {
+    if (args.reflectPct <= 0 || args.netHpDamage <= 0) return 0;
+    const base = (args.reflectPct / 100) * args.netHpDamage;
+    const affinity = 1 + args.affinityDamageModifier / 100;
+    const incoming = 1 - args.attackerIncomingReductionPct / 100;
+    return Math.max(0, base * affinity * 1 * incoming);
+}

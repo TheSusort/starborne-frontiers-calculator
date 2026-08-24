@@ -42,6 +42,7 @@ const result: HealingSimulationResult = {
             shieldAbsorbed: 0,
             barrierAbsorbed: 0,
             convertedToShield: 0,
+            incomingDamageRaw: 0,
             targetHpPct: 90,
             targetShieldPool: 0,
             totalRoundHealing: 5000,

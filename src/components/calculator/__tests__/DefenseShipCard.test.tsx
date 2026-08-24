@@ -81,16 +81,19 @@ describe('DefenseShipCard', () => {
         mockGetShipById.mockReturnValue(undefined);
     });
 
-    it('marks a survivor distinctly and shows the absorbed total as a lower bound', () => {
+    // #358 ADDENDUM 2 — TWO AXES ON ONE CARD. `measuredEHP` is RAW damage THROWN at the ship;
+    // `breakdown.gross` and its four terms are what ARRIVED, after defence mitigated it. They do
+    // NOT sum, so every fixture below keeps them DISTINCT (raw strictly above gross). A fixture
+    // where the two are equal — as this one used to be — cannot tell the axes apart and would
+    // pass even if the card rendered the wrong one.
+    it('marks a survivor distinctly and shows the raw figure with its rounds beside it', () => {
         renderCard({
             result: {
-                measuredEHP: 30_000,
+                measuredEHP: 80_000, // THROWN
                 survived: true,
                 elapsedRounds: 3,
-                // toHp deliberately != measuredEHP/gross (5,000 absorbed by shield) so the
-                // "To hull" row's number can't collide with the Measured EHP row's — a fixture
-                // where every field is 30_000 makes `getByText('30,000')` ambiguous (matches
-                // both rows) rather than proving the Measured EHP row specifically.
+                // Every number distinct so `getByText` proves the row it claims to: raw 80,000 vs
+                // arrived 30,000, split 25,000 hull + 5,000 shield.
                 breakdown: {
                     toHp: 25_000,
                     toShield: 5_000,
@@ -102,20 +105,47 @@ describe('DefenseShipCard', () => {
             },
         });
         expect(screen.getByText(/Measured EHP/i)).toBeInTheDocument();
-        expect(screen.getByText('30,000')).toBeInTheDocument();
+        expect(screen.getByText('80,000')).toBeInTheDocument();
+        // ROUNDS BESIDE THE FIGURE (owner ruling). Required, not decorative: the metric only moves
+        // when the round of death moves, so the rounds are what separate two equal headlines.
+        expect(screen.getByText(/over 3 rounds/i)).toBeInTheDocument();
         // A survivor's number is a lower bound, never a death threshold.
         expect(screen.getByText(/Survived/i)).toBeInTheDocument();
+        expect(screen.getByText(/lower bound, not a limit/i)).toBeInTheDocument();
+    });
+
+    it('labels the breakdown axis so the raw headline is not read as its total', () => {
+        renderCard({
+            result: {
+                measuredEHP: 80_000,
+                survived: true,
+                elapsedRounds: 3,
+                breakdown: {
+                    toHp: 25_000,
+                    toShield: 5_000,
+                    toBarrier: 0,
+                    toConversion: 0,
+                    gross: 30_000,
+                },
+                rounds: [],
+            },
+        });
+        // The breakdown carries its OWN sub-total, explicitly labelled as the post-defence axis —
+        // without it a reader sums 25,000 + 5,000 against an 80,000 headline and calls it a bug.
+        expect(screen.getByText(/Reached the ship \(after defence\)/i)).toBeInTheDocument();
+        expect(screen.getByText('30,000')).toBeInTheDocument();
+        expect(screen.getByText(/raw damage withstood/i)).toBeInTheDocument();
     });
 
     it('names the round a casualty died in', () => {
         renderCard({
             result: {
-                measuredEHP: 120_000,
+                measuredEHP: 300_000, // THROWN
                 survived: false,
                 destroyedRound: 2,
                 elapsedRounds: 2,
                 breakdown: {
-                    toHp: 120_000,
+                    toHp: 120_000, // ARRIVED — roughly the ship's HP, as it always is on a casualty
                     toShield: 0,
                     toBarrier: 0,
                     toConversion: 0,

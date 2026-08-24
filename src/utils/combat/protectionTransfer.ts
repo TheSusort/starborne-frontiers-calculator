@@ -25,10 +25,17 @@ export interface ProtectionChunk {
     stacks: number;
     perStack: number;
     total: number;
+    /** #358 ADDENDUM 2: this chunk BEFORE the protector's own defence term (`mit`), i.e. the raw
+     *  amount thrown at the protector. Read straight off the P-space inflow — no division. */
+    perStackPreMitigation: number;
+    totalPreMitigation: number;
 }
 
 export interface CascadeResult {
     targetRemainder: number;
+    /** #358 ADDENDUM 2: the fraction of the ORIGINAL hit the target keeps (`1 - frac1`). The
+     *  caller scales its own pre-defence figure by this instead of dividing `targetRemainder`. */
+    targetRetainedFraction: number;
     chunks: ProtectionChunk[];
 }
 
@@ -40,7 +47,7 @@ export function protectionCascade(
     protectors: ProtectorInput[]
 ): CascadeResult {
     if (protectors.length === 0 || targetMit <= 0 || fullTargetDamage <= 0) {
-        return { targetRemainder: fullTargetDamage, chunks: [] };
+        return { targetRemainder: fullTargetDamage, targetRetainedFraction: 1, chunks: [] };
     }
 
     const P = fullTargetDamage / targetMit; // pre-target-defense damage
@@ -51,15 +58,18 @@ export function protectionCascade(
     let flow = frac1 * P; // P-space inflow to the current protector
     for (let i = 0; i < protectors.length; i++) {
         const nextFrac = i + 1 < protectors.length ? fracFor(protectors[i + 1].stacks) : 0;
+        const keptPreMit = (1 - nextFrac) * flow; // P-space: pre-protector-defence
         const kept = (1 - nextFrac) * flow * protectors[i].mit; // this protector's HP damage
         chunks.push({
             stacks: protectors[i].stacks,
             perStack: kept / protectors[i].stacks,
             total: kept,
+            perStackPreMitigation: keptPreMit / protectors[i].stacks,
+            totalPreMitigation: keptPreMit,
         });
         flow = nextFrac * flow; // pass the remainder to the next protector
     }
-    return { targetRemainder, chunks };
+    return { targetRemainder, targetRetainedFraction: 1 - frac1, chunks };
 }
 
 export function protectionStacks(activeSelfBuffs: { buffName: string; stacks?: number }[]): number {

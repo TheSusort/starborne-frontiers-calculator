@@ -58,6 +58,8 @@ export interface DefenseIntakeBreakdown {
 export interface DefenseSurvivabilityRound {
     round: number;
     incomingDamage: number;
+    /** #358 ADDENDUM 2: raw damage THROWN at the defender this round (pre defence mitigation). */
+    incomingDamageRaw: number;
     shieldAbsorbed: number;
     barrierAbsorbed: number;
     convertedToShield: number;
@@ -68,8 +70,36 @@ export interface DefenseSurvivabilityRound {
 }
 
 export interface DefenseSurvivabilityResult {
-    /** Σ incomingDamage over the ELAPSED rounds. When `survived` is true this is a LOWER BOUND on
-     *  the ship's durability, not a death threshold — the UI must render survivors distinctly. */
+    /**
+     * #358 ADDENDUM 2: Σ `incomingDamageRaw` over the ELAPSED rounds — the RAW damage THROWN at
+     * the defender before its own defence mitigated any of it. The conventional meaning of
+     * effective HP, and the same quantity the static formula estimates, so the two finally measure
+     * the same thing and their disagreement is informative.
+     *
+     * IT WAS Σ `incomingDamage` (post-mitigation), and that INVERTED the ranking: a ship that dies
+     * absorbs ≈ its HP no matter how tanky it is, and a ship that SURVIVES shows only the damage
+     * that leaked through, so a tankier ship reported a SMALLER number while `isBest` ranks
+     * highest-first. Measured on Isha: 1,408 against a static-formula 543,950 — not two estimates
+     * disagreeing, two different quantities.
+     *
+     * ── TWO PROPERTIES A READER MUST NOT MISTAKE FOR BUGS ──────────────────────────────────────
+     *
+     * 1. ON A SURVIVOR THIS NUMBER IS DEFENCE-INDEPENDENT, and that is correct. Raw damage thrown
+     *    is a property of the ATTACKERS, not of the defender; defence changes only how much of it
+     *    lands. Over a fixed `rounds` window a survivor is hit the same number of times whatever
+     *    its defence, so the figure is FLAT (measured: 60,000 at defence 0, 5k, 5k+30%, and 20k).
+     *    It is a LOWER BOUND on durability, not a death threshold — the UI renders survivors
+     *    distinctly for exactly this reason. Defence raises the number only by buying more ROUNDS,
+     *    which is the casualty regime below.
+     *
+     * 2. IT IS QUANTISED BY THE ROUND. The metric only moves when the round of DEATH moves, so its
+     *    quantum is one round of enemy throughput. Measured: defence 5,000 and defence 5,000 +30%
+     *    both report exactly 300,000 because both die on round 5, even though the second really is
+     *    tankier. That is inherent to a round-based simulation, not a defect, and it is why the
+     *    owner's ruling pairs this figure with ROUNDS SURVIVED in the results block — the rounds
+     *    display is REQUIRED, not decorative. The continuous counterpart is the static formula
+     *    already shown beside it.
+     */
     measuredEHP: number;
     survived: boolean;
     destroyedRound?: number;
@@ -147,6 +177,7 @@ export function simulateDefenseSurvivability(
     const rounds: DefenseSurvivabilityRound[] = healingResult.rounds.map((r) => ({
         round: r.round,
         incomingDamage: r.incomingDamage,
+        incomingDamageRaw: r.incomingDamageRaw,
         shieldAbsorbed: r.shieldAbsorbed,
         barrierAbsorbed: r.barrierAbsorbed,
         convertedToShield: r.convertedToShield,
@@ -156,6 +187,9 @@ export function simulateDefenseSurvivability(
 
     // GROSS. Not gross + absorbed — `incomingDamage` already contains the mitigation terms.
     const gross = rounds.reduce((sum, r) => sum + r.incomingDamage, 0);
+    // #358 ADDENDUM 2: the RAW (pre-defence-mitigation) axis. Deliberately NOT `gross` — the
+    // breakdown's four terms partition `gross`, and re-basing them on raw would break that.
+    const grossRaw = rounds.reduce((sum, r) => sum + r.incomingDamageRaw, 0);
     const toShield = rounds.reduce((sum, r) => sum + r.shieldAbsorbed, 0);
     const toBarrier = rounds.reduce((sum, r) => sum + r.barrierAbsorbed, 0);
     const toConversion = rounds.reduce((sum, r) => sum + r.convertedToShield, 0);
@@ -163,7 +197,7 @@ export function simulateDefenseSurvivability(
     const destroyedRound = healingResult.summary.destroyedRound;
 
     return {
-        measuredEHP: gross,
+        measuredEHP: grossRaw,
         survived: destroyedRound === undefined,
         ...(destroyedRound !== undefined ? { destroyedRound } : {}),
         elapsedRounds: rounds.length,

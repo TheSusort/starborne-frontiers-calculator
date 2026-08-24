@@ -68,7 +68,7 @@ import {
     type SubAttackOutcome,
 } from './positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from './victimDamage';
-import { victimHitDamage, victimDefenceMitigation } from './victimDamage';
+import { victimHitDamageParts, victimDefenceMitigation } from './victimDamage';
 import {
     incomingReductionForHit,
     incomingBlockForIntake,
@@ -77,7 +77,7 @@ import {
     addIncomingAbilityDeduped,
     withLiveAllyScopedOwners,
 } from './incomingEffects';
-import { reflectedDamageForHit } from './damageReflection';
+import { reflectedDamageForHit, reflectedDamagePreDefenceForHit } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
@@ -1675,6 +1675,14 @@ interface ReactiveSideCtx {
  *  heal-target scalars; no reader until PR5b flips them). Keyed by victim actor id. */
 interface ActorIntake {
     incoming: number;
+    /** #358 ADDENDUM 2: the same intake BEFORE the victim's defence-mitigation factor — the raw
+     *  damage THROWN at this victim. `incoming` is post-defence (every direct-damage caller folds
+     *  the factor before the funnel sees it), which made a tankier ship report a SMALLER measured
+     *  EHP. Recorded at the same instant and scaled by the same incoming-block / Protection
+     *  factors, so `incomingRaw >= incoming` always, with equality at zero effective defence.
+     *  A path that applies no defence mitigation at all (DoT ticks, bomb/detonation bursts) books
+     *  the identical amount on both. */
+    incomingRaw: number;
     shieldAbsorbed: number;
     barrierAbsorbed: number;
     /** Direct-hit damage nullified by `Shield Converter` and turned into Shield. Netted against
@@ -1691,6 +1699,9 @@ export interface HealingRoundEngine {
     targetHpPctStart: number;
     targetShieldStart: number;
     incomingDamage: number;
+    /** #358 ADDENDUM 2: the heal target's per-round intake BEFORE defence mitigation. See
+     *  `ActorIntake.incomingRaw`. */
+    incomingDamageRaw: number;
     shieldAbsorbed: number;
     /** Per-round total fully blocked by an active Barrier (full damage immunity). Tracked
      *  separately from shieldAbsorbed (Barrier does not drain the shield pool). Task 2 adds the
@@ -1776,6 +1787,8 @@ export interface HealingRoundEngine {
 interface DamageAccountingSink {
     /** today: intakeFor(victimId).incoming += amount */
     addIncoming: (amount: number, victimId: string) => void;
+    /** #358 ADDENDUM 2: today: intakeFor(victimId).incomingRaw += amount */
+    addIncomingRaw: (amount: number, victimId: string) => void;
     /** today: intakeFor(victimId).shieldAbsorbed += amount */
     addShieldAbsorbed: (amount: number, victimId: string) => void;
     /** today: intakeFor(victimId).barrierAbsorbed += amount */
@@ -1826,7 +1839,11 @@ function convertHitToSelfDot(
     victim: CombatActor,
     sink: DamageAccountingSink,
     damage: number,
-    rounds: number
+    rounds: number,
+    /** #358 ADDENDUM 2: the pre-defence twin of `damage`, reversed off `.incomingRaw` in lockstep
+     *  so the raw axis nets to zero for a deferred hit exactly as `.incoming` does. Defaults to
+     *  `damage` for a caller on a path that folds no defence. */
+    damageRaw = damage
 ): number {
     if (rounds <= 0) return 0;
     victim.genericDoTEntries.push({
@@ -1837,6 +1854,7 @@ function convertHitToSelfDot(
         perTickAmount: damage / rounds,
     });
     sink.addIncoming(-damage, victim.id);
+    sink.addIncomingRaw(-damageRaw, victim.id);
     return damage;
 }
 /**
@@ -5222,6 +5240,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (!entry) {
                 entry = {
                     incoming: 0,
+                    incomingRaw: 0,
                     shieldAbsorbed: 0,
                     barrierAbsorbed: 0,
                     convertedToShield: 0,
@@ -5426,6 +5445,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  pre-defence amount. Absent → the block falls back to re-deriving one from the
                  *  victim's live defence (see the fallback's note for what that misses). */
                 targetMitigation?: number;
+                /** #358 ADDENDUM 2: the PRE-defence-mitigation amount the caller folded
+                 *  `targetMitigation` into to produce `rawDamage` for this victim. Recorded on the
+                 *  victim's `.incomingRaw` axis alongside `.incoming`, scaled by the same
+                 *  incoming-block / Protection-retention factors. ABSENT means "this path applies
+                 *  no defence mitigation" (DoT ticks, bomb/detonation bursts, the flat-basis
+                 *  reactive) and the funnel books `rawDamage` on both axes. Never reconstructed by
+                 *  dividing by `targetMitigation` — that is lossy and undefined at a factor of 0. */
+                preMitigationDamage?: number;
                 /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
                  *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
                  *  non-positional (inherently single-target) call site; explicitly false only for
@@ -5439,6 +5466,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // becomes mutable so the block step can shave it; everything downstream (addIncoming,
             // shield drain, hp damage) operates on the post-block value.
             let damage = rawDamage;
+            // #358 ADDENDUM 2: the raw (pre-defence) twin of `damage`. `??` — NOT `||` — so a
+            // legitimately-zero pre-mitigation figure is honoured instead of falling through.
+            let damageRaw = cause?.preMitigationDamage ?? rawDamage;
             // Barrier — FULL DAMAGE IMMUNITY (locked game rule). Hoisted ABOVE addIncoming (it's a
             // pure read of the victim's active self-buffs — moving it earlier is byte-identical) so
             // the block step below can gate on it: a fully-Barrier-immune intake must NOT roll
@@ -5513,6 +5543,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }
                     );
                     damage = damage * (1 - blocked);
+                    damageRaw = damageRaw * (1 - blocked);
                 }
             }
             // Protection damage transfer. A living ally holding Protection stacks intercepts a
@@ -5622,6 +5653,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 isProtectionTransfer: true,
                                 shieldPenetrationPct: 0,
                                 bombPortion: 0,
+                                // #358 ADDENDUM 2: the P-space inflow this chunk was cut from,
+                                // BEFORE the protector's own `mit` — read off the cascade, not
+                                // recovered by dividing `perStack`.
+                                preMitigationDamage: chunk.perStackPreMitigation,
                             });
                             intakeTotal += outcome.incomingBooked;
                             perStackIntake.push(outcome.incomingBooked);
@@ -5721,9 +5756,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     });
                     // The victim now only takes the non-transferred remainder.
                     damage = cascade.targetRemainder;
+                    // Same retention fraction on the raw axis — read off the cascade rather than
+                    // derived by dividing `targetRemainder` by the pre-cascade `damage`.
+                    damageRaw = damageRaw * cascade.targetRetainedFraction;
                 }
             }
             sink.addIncoming(damage, victim.id);
+            sink.addIncomingRaw(damageRaw, victim.id);
             // The intake just recorded — post incoming-block, post Protection redirect. Returned as
             // `incomingBooked` (minus any transform reversal below) so every caller that books a
             // per-victim display amount can book the number the funnel actually recorded instead of
@@ -5806,7 +5845,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             victim,
                             sink,
                             damage,
-                            transform.config.turns
+                            transform.config.turns,
+                            damageRaw
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
                         // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
@@ -5899,7 +5939,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     victim,
                     sink,
                     damage,
-                    HIT_MITIGATION_DOT_ROUNDS
+                    HIT_MITIGATION_DOT_ROUNDS,
+                    damageRaw
                 );
                 damage = 0;
                 consumeHitMitigation(statusEngine, victim.id);
@@ -6412,6 +6453,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 isReflected: true,
                                 shieldPenetrationPct: 0,
                                 bombPortion: 0,
+                                // #358 ADDENDUM 2: the same reflected hit without the reflect
+                                // victim's (the original attacker's) defence term.
+                                preMitigationDamage: reflectedDamagePreDefenceForHit({
+                                    reflectPct,
+                                    netHpDamage: reflectBasis,
+                                    affinityDamageModifier,
+                                    attackerIncomingReductionPct,
+                                }),
                             });
                             perActorReflected.set(
                                 attacker.id,
@@ -6576,6 +6625,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             addIncoming: (amount, victimId) => {
                 intakeFor(victimId).incoming += amount;
             },
+            addIncomingRaw: (amount, victimId) => {
+                intakeFor(victimId).incomingRaw += amount;
+            },
             addShieldAbsorbed: (amount, victimId) => {
                 intakeFor(victimId).shieldAbsorbed += amount;
             },
@@ -6634,6 +6686,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  victim, supplied by the positional apply. See applyVictimDamage's
                  *  `cause.targetMitigation`. */
                 targetMitigation?: number;
+                /** #358 ADDENDUM 2 — see applyVictimDamage's `cause.preMitigationDamage`. */
+                preMitigationDamage?: number;
             } = {
                 killerId: actingActorId,
                 byDirectDamage: true,
@@ -6672,7 +6726,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             isPrimaryTarget?: boolean,
             // A2: the defence mitigation factor already folded into `damage` for this victim,
             // supplied by the positional apply. See applyVictimDamage's `cause.targetMitigation`.
-            targetMitigation?: number
+            targetMitigation?: number,
+            /** #358 ADDENDUM 2 — the pre-defence twin of `damage`, supplied by the positional
+             *  apply. See applyVictimDamage's `cause.preMitigationDamage`. */
+            preMitigationDamage?: number
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
             // H1 T4: positional player→enemy hits are all-direct (no detonation slice here), so
@@ -6683,6 +6740,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 shieldPenetrationPct: attackerShieldPenOf(actingActorId),
                 isPrimaryTarget,
                 targetMitigation,
+                preMitigationDamage,
             });
         // TEST-ONLY: hand the genuine wrapper out once (no production caller until Task 8). The
         // closure is per-round-identical in behaviour (only `r` differs), so capturing it on the
@@ -6716,7 +6774,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ownerStats.crit / 100
             );
 
-            const raw = victimHitDamage(
+            const rawParts = victimHitDamageParts(
                 {
                     effectiveAttack: ownerStats.attack,
                     // `multiplier` is the PER-HIT value, so the full counter total is
@@ -6749,6 +6807,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 didCrit,
                 1 // roleScale: a counter is a single full hit
             );
+            const raw = rawParts.damage;
+            const rawPreMit = rawParts.preMitigation;
             if (raw <= 0) return;
 
             // `sink` (outer scope, SP-U U1) accumulates the attacker's incoming regardless of
@@ -6773,6 +6833,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     killerId: owner.id,
                     byDirectDamage: true,
                     isCounter: true,
+                    // #358 ADDENDUM 2: the counter walk folds the ATTACKER's defence through
+                    // `victimHitDamage`; `rawPreMit` is the same walk without it.
+                    preMitigationDamage: rawPreMit,
                     // Mirror Reflect (no shield penetration on the reactive hit). EffectiveStats has NO
                     // shieldPenetration field; we deliberately pass 0.
                     shieldPenetrationPct: 0,
@@ -6873,6 +6936,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             const victimStats = effectiveStatsOf(statusEngine, selfBuffLookup, victim);
 
             let raw: number;
+            /** #358 ADDENDUM 2: the pre-defence twin of `raw`. */
+            let rawPreMit: number;
             let didCrit: boolean;
 
             if (opts?.flatBasis !== undefined) {
@@ -6890,6 +6955,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // bomb-splash-on-death precedent (engine.ts ~4187, `splashDamageForBomb`), which
                 // is likewise flat/no-affinity.
                 raw = Math.round((opts.flatBasis * multiplier) / 100);
+                // A flat copy folds NO defence, so raw and pre-defence coincide.
+                rawPreMit = raw;
                 didCrit = false;
             } else {
                 // Deterministic per-(owner, ability) crit gate — a NEW map (reactiveDamageCritGates),
@@ -6927,7 +6994,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           ? shieldBasisPct
                           : multiplier;
 
-                raw = victimHitDamage(
+                const procParts = victimHitDamageParts(
                     {
                         effectiveAttack: basisStat,
                         // Fold hit count into the multiplier and pass hits:1 (mirrors
@@ -6956,6 +7023,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     didCrit,
                     1 // roleScale: a reactive proc is a single full hit
                 );
+                raw = procParts.damage;
+                rawPreMit = procParts.preMitigation;
             }
             // Guard: swallows zero/negative procs (defensive — a 0-attack or 0-multiplier proc
             // credits nothing), matching the pre-fix zero-damage guard.
@@ -7003,6 +7072,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                     killerId: ownerId,
                     byDirectDamage: true,
                     isCounter: true,
+                    // #358 ADDENDUM 2: equals `raw` on the flat-basis branch (which folds no
+                    // defence at all) and the pre-defence walk on the attack-basis branch.
+                    preMitigationDamage: rawPreMit,
                     shieldPenetrationPct: 0,
                     bombPortion: 0,
                 });
@@ -7352,7 +7424,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 /** A2: the defence mitigation factor already folded into `damage` for this
                  *  victim — forwarded into `cause.targetMitigation` so the Protection cascade
                  *  divides by the factor that was applied instead of re-deriving one. */
-                targetMitigation?: number
+                targetMitigation?: number,
+                /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
+                preMitigation?: number
             ) => VictimDamageOutcome;
             // E2 (per-victim leech): OPTIONAL per-direction hook. drivePositionalApply is ONE
             // helper shared by all three sites (focus / team / enemy); since standing (player→
@@ -7453,11 +7527,24 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // rather than all under the first attack row. Save/restore rather than clear:
                     // a reflect proc re-enters the funnel from INSIDE this call and still belongs
                     // to the same sub-attack.
-                    applyToVictim: (victim, damage, isAnchor, subAttackIndex, targetMitigation) => {
+                    applyToVictim: (
+                        victim,
+                        damage,
+                        isAnchor,
+                        subAttackIndex,
+                        targetMitigation,
+                        preMitigation
+                    ) => {
                         const prevSubAttack = currentSubAttackIndex;
                         currentSubAttackIndex = subAttackIndex;
                         try {
-                            return args.applyToVictim(victim, damage, isAnchor, targetMitigation);
+                            return args.applyToVictim(
+                                victim,
+                                damage,
+                                isAnchor,
+                                targetMitigation,
+                                preMitigation
+                            );
                         } finally {
                             currentSubAttackIndex = prevSubAttack;
                         }
@@ -7750,12 +7837,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // it, exactly as the firing hit's positional loop does — so the factor handed
                     // to `applyToVictim` is provably the one baked into `damage`.
                     const defenseProfile = victimDefenseProfileOf(victim, profileOpts);
-                    const damage = victimHitDamage(
+                    const damageParts = victimHitDamageParts(
                         hit.scalars,
                         defenseProfile,
                         hit.didCrit,
                         roleScale
                     );
+                    const damage = damageParts.damage;
                     if (!(damage > 0)) continue;
                     // `isAnchor: false` — this instance is not the cast's primary-target hit, so it
                     // must not satisfy a `requirePrimaryTarget` reflect gate (Nosorog).
@@ -7769,7 +7857,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                         victim,
                         damage,
                         false,
-                        victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct)
+                        victimDefenceMitigation(defenseProfile, hit.scalars.defensePenetrationPct),
+                        // #358 ADDENDUM 2: the SECOND positional damage path into the funnel owes
+                        // it the same pre-defence figure the firing hit hands down.
+                        damageParts.preMitigation
                     );
                     // Credit the intake the funnel RECORDED, exactly as the firing hit's emitHit
                     // does — a Protection cascade / incoming block / DoT transform all move the
@@ -7950,7 +8041,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 victim: CombatActor,
                 damage: number,
                 isAnchor?: boolean,
-                targetMitigation?: number
+                targetMitigation?: number,
+                /** #358 ADDENDUM 2 — the pre-defence twin of `damage`. */
+                preMitigation?: number
             ) => VictimDamageOutcome;
         }
         const playerTurnBindings: TurnBindings = {
@@ -7963,8 +8056,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
             healEventOnly: false,
-            applyToVictim: (victim, damage, isAnchor, targetMitigation) =>
-                applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation),
+            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
+                applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation, preMitigation),
         };
         const enemyTurnBindings: TurnBindings = {
             opposingRoster: allPlayerActors,
@@ -7987,13 +8080,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
             // team. Likewise applyToVictim routes the firing hit as INCOMING damage to the struck
             // player actor (applyIncomingToTarget), not as a player damage row.
-            applyToVictim: (victim, damage, isAnchor, targetMitigation) =>
+            applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
                 applyIncomingToTarget(
                     damage,
                     victim,
                     // The default `cause` only materializes when the arg is OMITTED, so passing
                     // targetMitigation means restating the direct-damage defaults it carries.
-                    { killerId: actingActorId, byDirectDamage: true, targetMitigation },
+                    {
+                        killerId: actingActorId,
+                        byDirectDamage: true,
+                        targetMitigation,
+                        preMitigationDamage: preMitigation,
+                    },
                     isAnchor
                 ),
         };
@@ -11679,6 +11777,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         killerId: actingActorId,
                                         byDirectDamage: true,
                                         bombPortion: enemyDetonationDamage,
+                                        // #358 ADDENDUM 2 — KNOWN UNFIXED FOLD PATH, PARKED
+                                        // (owner ruling; tracked with the corpus-unreachable group,
+                                        // #357). `damage` here is `directDamage + detonationDamage`
+                                        // and its DIRECT slice is already post-defence-mitigation
+                                        // (playerTurn's `postDefenseFactor` folds
+                                        // `1 - damageReduction/100`). It therefore passes NO
+                                        // `preMitigationDamage`, so the funnel books the
+                                        // post-mitigation figure on the raw axis for this path —
+                                        // the one place `.incomingRaw` under-reports.
+                                        //
+                                        // NOT FIXED DELIBERATELY. This site is CORPUS-UNREACHABLE:
+                                        // a stack-frame probe over the whole combat + calculator
+                                        // suite (406 files / 3935 tests) recorded ZERO calls
+                                        // through it — every enemy attack in every fixture takes
+                                        // the positional branch (`enemyPositional`, :11303). The
+                                        // fix would need a new `PlayerTurnResult` field that no
+                                        // test could exercise, so it would ship unverified. The
+                                        // other six folding paths ARE covered; see
+                                        // `ActorIntake.incomingRaw`.
                                     }));
                                     // §4.5: the non-positional firing hit is DIRECT-channel. The Stasis
                                     // break already fired via onHitBreakStasis inside runPlayerTurn
@@ -12361,12 +12478,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     string,
                     {
                         incoming: number;
+                        incomingRaw: number;
                         shieldAbsorbed: number;
                         barrierAbsorbed: number;
                         convertedToShield: number;
                     }
                 > = {};
                 for (const [id, v] of perActorIncoming) {
+                    // #358 ADDENDUM 2: `incomingRaw` is deliberately NOT a term of this emptiness
+                    // gate. Both axes are written by the SAME pair of calls at the single booking
+                    // site, and the raw axis is a non-negative scaling of the same amount, so a
+                    // bucket with `incoming === 0` from a real intake also has `incomingRaw === 0`
+                    // (and a DoT-transform reversal nets both to 0 together). Adding the term would
+                    // therefore change no row while making this gate diverge from the one
+                    // `perActorShield` above uses. Left out so it stays byte-identical.
                     if (
                         v.incoming === 0 &&
                         v.shieldAbsorbed === 0 &&
@@ -12376,6 +12501,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         continue;
                     out[id] = {
                         incoming: v.incoming,
+                        incomingRaw: v.incomingRaw,
                         shieldAbsorbed: v.shieldAbsorbed,
                         barrierAbsorbed: v.barrierAbsorbed,
                         convertedToShield: v.convertedToShield,
@@ -12481,6 +12607,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 targetHpPctStart,
                 targetShieldStart,
                 incomingDamage: healTargetIntake?.incoming ?? 0,
+                incomingDamageRaw: healTargetIntake?.incomingRaw ?? 0,
                 shieldAbsorbed: healTargetIntake?.shieldAbsorbed ?? 0,
                 barrierAbsorbed: healTargetIntake?.barrierAbsorbed ?? 0,
                 convertedToShield: healTargetIntake?.convertedToShield ?? 0,

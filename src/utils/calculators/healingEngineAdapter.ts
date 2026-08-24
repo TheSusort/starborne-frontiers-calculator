@@ -183,6 +183,13 @@ export interface HealingRoundData {
     /** Full-immunity blocked total this round; distinct from shieldAbsorbed — Barrier never
      *  touches the shield pool. */
     barrierAbsorbed: number;
+    /** #358 ADDENDUM 2: `incomingDamage` BEFORE the victim's defence-mitigation factor — the RAW
+     *  damage thrown at the focus this round. `incomingDamage` is post-defence, so it FALLS as a
+     *  ship gets tankier; this is the axis a measured effective-HP figure must read. Always
+     *  >= `incomingDamage`, equal at zero effective defence. NOT part of the intake breakdown —
+     *  `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` partition `incomingDamage`, and
+     *  mixing the two axes breaks that identity. */
+    incomingDamageRaw: number;
     /** Direct-hit damage nullified by `Shield Converter` and turned into Shield. A FOURTH mitigation
      *  channel alongside shieldAbsorbed/barrierAbsorbed, and like them already contained in
      *  `incomingDamage` — never add these together. */
@@ -798,6 +805,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         const incomingRaw = hr?.incomingDamage ?? 0;
         const shieldAbsorbedRaw = hr?.shieldAbsorbed ?? 0;
         const barrierAbsorbedRaw = hr?.barrierAbsorbed ?? 0;
+        const incomingRawPreDefence = hr?.incomingDamageRaw ?? 0;
         const convertedToShieldRaw = hr?.convertedToShield ?? 0;
 
         // teamHealing = Σ non-focus PLAYER entries' raw (direct + HoT). Team shield contributes to
@@ -863,6 +871,7 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
             incomingDamage: Math.round(incomingRaw),
             shieldAbsorbed: Math.round(shieldAbsorbedRaw),
             barrierAbsorbed: Math.round(barrierAbsorbedRaw),
+            incomingDamageRaw: Math.round(incomingRawPreDefence),
             convertedToShield: Math.round(convertedToShieldRaw),
             targetHpPct: Math.round(hr?.targetHpPctStart ?? 100),
             targetShieldPool: Math.round(hr?.targetShieldStart ?? 0),

@@ -54,6 +54,13 @@ describe('simulateDefenseSurvivability', () => {
     // ── THE DOUBLE-COUNT TRIPWIRE ────────────────────────────────────────────
     // A SHIELDED fixture is mandatory here. On an unshielded run shieldAbsorbed is 0, so the
     // correct formula and the double-counting one agree and the bug ships green.
+    //
+    // #358 ADDENDUM 2 — WHY `measuredEHP === gross` STILL HOLDS HERE. `measuredEHP` now reads the
+    // RAW (pre-defence) axis while `gross` stays post-mitigation, so the two coincide only at zero
+    // effective defence — which `DEFENDER.defence: 0` guarantees for this fixture. The equality is
+    // therefore still the right assertion for the double-count trap it was written for, but it is
+    // NOT a statement that the two axes are the same thing. See the addendum-2 block at the bottom
+    // of this file for the axis separation; add defence here and this line must change.
     it('measured EHP is GROSS intake — it does NOT add shield/barrier absorption on top', () => {
         idCounter = 0;
         const result = simulateDefenseSurvivability(
@@ -94,6 +101,8 @@ describe('simulateDefenseSurvivability', () => {
         );
         expect(result.survived).toBe(true);
         expect(result.destroyedRound).toBeUndefined();
+        // 3 rounds x 1,000 THROWN. Unchanged by addendum 2 only because this fixture's defence is
+        // 0 — with defence the raw figure would stay 3,000 while the post-mitigation one fell.
         expect(result.measuredEHP).toBe(3_000);
         expect(result.elapsedRounds).toBe(3);
     });
@@ -107,6 +116,7 @@ describe('simulateDefenseSurvivability', () => {
         expect(result.survived).toBe(false);
         expect(result.destroyedRound).toBe(2);
         // EHP counts only the rounds that actually elapsed, not the configured window.
+        // 2 rounds x 60,000 THROWN (addendum 2's raw axis; identical here at defence 0).
         expect(result.measuredEHP).toBe(120_000);
     });
 
@@ -420,5 +430,174 @@ describe('simulateDefenseSurvivability', () => {
         // damage taken, and exactly the no-buff figure.
         expect(gated.breakdown.gross).toBe(24_993);
         expect(gated.breakdown.gross).toBeGreaterThan(ungated.breakdown.gross);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// #358 ADDENDUM 2 — `measuredEHP` counts RAW damage withstood
+//
+// THE DESIGN ERROR THIS BLOCK EXISTS TO FENCE. `measuredEHP` used to be Σ `incomingDamage`, which
+// the engine records POST defence mitigation (the funnel's own doc: "the DEFENCE mitigation factor
+// the CALLER already folded into `rawDamage`"). So it counted damage that got THROUGH, and a
+// tankier ship reported a SMALLER number — while the page ranks highest-first. The ranking was
+// inverted. Measured live on Isha: 1,408 against a static-formula 543,950.
+//
+// WHY EVERY PROPERTY BELOW IS PINNED HERE. Before this block, NOTHING in the repo gated the
+// direction. Measured, not assumed: every pre-existing `measuredEHP` assertion in this file sits on
+// a `defence: 0` fixture (where raw and post coincide exactly), and the two fixtures that DO carry
+// defence assert on `breakdown.gross`, which stays on the post-mitigation axis by design. Applying
+// the whole fix moved ZERO assertions in this file and ZERO in
+// `selfDefenceBuffMitigation.test.ts`. A re-inversion would have shipped green.
+//
+// THE BREAKDOWN STAYS POST-MITIGATION (spec B3). `toHp`/`toShield`/`toBarrier`/`toConversion`
+// partition what ARRIVED, and `breakdown.gross` is their sum-basis. Re-basing them on raw would
+// break that identity, so the headline and the breakdown are on DIFFERENT axes and must never be
+// presented as if they summed.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
+    /** A defence sweep on one fixture shape. `rounds`/`attack` decide which regime we are in. */
+    const sweep = (opts: {
+        rounds: number;
+        attack: number;
+        defence: number;
+        abilities?: Ability[];
+    }) => {
+        idCounter = 0;
+        return simulateDefenseSurvivability(
+            BASE({
+                rounds: opts.rounds,
+                defender: { ...DEFENDER, defence: opts.defence },
+                enemies: [attacker(opts.attack)],
+                shipSkills: skills(opts.abilities ?? []),
+            })
+        );
+    };
+
+    // ── THE DIRECTION TEST (spec B3, mandatory) ───────────────────────────────────────────────
+    //
+    // MUST BE IN THE CASUALTY REGIME. Raw damage THROWN does not depend on the defender's defence;
+    // only how many ROUNDS it survives does. So defence raises this number by buying rounds, which
+    // only happens when the ship actually dies. The survivor regime is pinned separately below.
+    //
+    // A magnitude-only assertion cannot catch a re-inversion — the number still MOVES when the sign
+    // flips. This is an ordered chain of strict inequalities, so only the direction satisfies it.
+    it('DIRECTION: more defence RAISES measured EHP (casualty regime)', () => {
+        const CASUALTY = { rounds: 30, attack: 60_000 };
+        const d0 = sweep({ ...CASUALTY, defence: 0 });
+        const d5k = sweep({ ...CASUALTY, defence: 5_000 });
+        const d20k = sweep({ ...CASUALTY, defence: 20_000 });
+
+        // LIVENESS: all three really died, or this is not the casualty regime and the chain below
+        // would be measuring the survivor plateau instead.
+        expect(d0.survived).toBe(false);
+        expect(d5k.survived).toBe(false);
+        expect(d20k.survived).toBe(false);
+
+        // More defence → more rounds survived → more raw damage withstood.
+        expect(d5k.measuredEHP).toBeGreaterThan(d0.measuredEHP);
+        expect(d20k.measuredEHP).toBeGreaterThan(d5k.measuredEHP);
+        expect(d5k.elapsedRounds).toBeGreaterThan(d0.elapsedRounds);
+        expect(d20k.elapsedRounds).toBeGreaterThan(d5k.elapsedRounds);
+
+        // Re-measured, not loosened. 60,000 thrown per round × rounds survived.
+        expect(d0.measuredEHP).toBe(120_000); // 2 rounds
+        expect(d5k.measuredEHP).toBe(300_000); // 5 rounds
+        expect(d20k.measuredEHP).toBe(720_000); // 12 rounds
+
+        // THE OLD METRIC, FOR CONTRAST — and the reason this fix exists. The post-mitigation axis
+        // is pinned at roughly the ship's HP no matter how tanky it is, so it carried almost no
+        // information about defence at all. Kept as an explicit demonstration rather than prose.
+        expect(d0.breakdown.gross).toBe(120_000);
+        expect(d5k.breakdown.gross).toBe(124_970);
+        expect(d20k.breakdown.gross).toBe(106_716);
+    });
+
+    // ── THE SURVIVOR PLATEAU ──────────────────────────────────────────────────────────────────
+    //
+    // ⚠️ DELETE ME, DO NOT LOOSEN ME. This asserts an EQUALITY where a reader arriving from the
+    // direction test above will expect an inequality, and that is DELIBERATE: over a fixed window a
+    // survivor is hit the same number of times whatever its defence, and raw damage thrown is a
+    // property of the ATTACKERS, not of the defender. The figure is a LOWER BOUND on durability,
+    // not a death threshold — which is why the UI renders survivors distinctly.
+    //
+    // If the engine ever makes this non-flat, this test goes red BY DESIGN. That is a signal to
+    // DELETE it along with the assumption it encodes — never to relax it into a `>=`, which would
+    // silently re-admit the inversion this whole addendum removed.
+    it('SURVIVOR PLATEAU: over a fixed window the figure is defence-INDEPENDENT (deliberate)', () => {
+        const SURVIVOR = { rounds: 3, attack: 20_000 };
+        const runs = [0, 5_000, 20_000].map((defence) => sweep({ ...SURVIVOR, defence }));
+
+        // LIVENESS: nobody died, and defence really is doing something — the post-mitigation axis
+        // falls hard across the same sweep. Without this the equality below would also hold for a
+        // fixture where defence was inert, proving nothing.
+        for (const r of runs) expect(r.survived).toBe(true);
+        expect(runs[2].breakdown.gross).toBeLessThan(runs[0].breakdown.gross);
+
+        // 3 rounds × 20,000 thrown, whatever the defender's defence.
+        for (const r of runs) expect(r.measuredEHP).toBe(60_000);
+    });
+
+    // ── THE ROUND QUANTUM ─────────────────────────────────────────────────────────────────────
+    //
+    // Also DELETE-ME-DON'T-LOOSEN-ME. The metric only moves when the round of DEATH moves, so its
+    // resolution is one round of enemy throughput. Two genuinely different ships that die on the
+    // same round report the SAME headline. That is inherent to a round-based simulation, not a
+    // defect — and it is why the owner's ruling pairs the figure with rounds survived in the
+    // results block. Pinned so nobody later reads two equal numbers as a bug.
+    it('ROUND QUANTUM: two defenders that die on the same round report the SAME figure', () => {
+        const CASUALTY = { rounds: 30, attack: 60_000 };
+        const plain = sweep({ ...CASUALTY, defence: 5_000 });
+        const tankier = sweep({
+            ...CASUALTY,
+            defence: 5_000,
+            abilities: [
+                ab({
+                    type: 'buff',
+                    target: 'self',
+                    config: {
+                        type: 'buff',
+                        buffName: 'Defense Up II',
+                        parsedEffects: { defense: 30 },
+                        stacks: 1,
+                        isStackable: false,
+                        duration: 'recurring',
+                    },
+                }),
+            ],
+        });
+
+        // The buff IS live — it visibly reduces what got through — and yet both die on round 5.
+        expect(tankier.breakdown.gross).toBeLessThan(plain.breakdown.gross);
+        expect(tankier.destroyedRound).toBe(plain.destroyedRound);
+        expect(tankier.measuredEHP).toBe(plain.measuredEHP);
+    });
+
+    // ── RAW >= POST, WITH THE EXACT EQUALITY CASE (spec B3, mandatory) ────────────────────────
+    it('RAW >= POST always, with EXACT equality at zero effective defence', () => {
+        // Strictly greater wherever defence bites…
+        for (const defence of [1_000, 5_000, 20_000]) {
+            const r = sweep({ rounds: 3, attack: 20_000, defence });
+            expect(r.measuredEHP).toBeGreaterThan(r.breakdown.gross);
+        }
+        // …and EXACTLY equal at zero effective defence. Not `toBeCloseTo`: with nothing folded, the
+        // funnel books the identical value on both axes.
+        const undefended = sweep({ rounds: 3, attack: 20_000, defence: 0 });
+        expect(undefended.breakdown.gross).toBeGreaterThan(0);
+        expect(undefended.measuredEHP).toBe(undefended.breakdown.gross);
+    });
+
+    // ── THE BREAKDOWN STAYS ON THE POST-MITIGATION AXIS (spec B3) ─────────────────────────────
+    it('the breakdown still partitions POST-mitigation intake, not the raw headline', () => {
+        const r = sweep({ rounds: 3, attack: 20_000, defence: 5_000 });
+        // The four terms close over `gross`, NOT over `measuredEHP` — the identity that would break
+        // if a well-meaning change re-based the breakdown on the raw axis to make the card "add up".
+        expect(
+            r.breakdown.toHp +
+                r.breakdown.toShield +
+                r.breakdown.toBarrier +
+                r.breakdown.toConversion
+        ).toBeCloseTo(r.breakdown.gross, 6);
+        // And the headline is on the OTHER axis — deliberately not equal to that sum.
+        expect(r.measuredEHP).toBeGreaterThan(r.breakdown.gross);
     });
 });

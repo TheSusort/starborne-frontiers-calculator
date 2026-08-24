@@ -133,6 +133,28 @@ export function victimHitDamage(
     roleScale: number,
     equipReductionPct = 0
 ): number {
+    return victimHitDamageParts(s, v, didCrit, roleScale, equipReductionPct).damage;
+}
+
+/** #358 ADDENDUM 2: the same hit WITHOUT the victim's defence-mitigation term — the raw amount
+ *  thrown at the victim, which is what "measured EHP" must count. */
+export function victimHitDamagePreMitigation(
+    s: AttackerDamageScalars,
+    v: VictimDefenseProfile,
+    didCrit: boolean,
+    roleScale: number,
+    equipReductionPct = 0
+): number {
+    return victimHitDamageParts(s, v, didCrit, roleScale, equipReductionPct).preMitigation;
+}
+
+export function victimHitDamageParts(
+    s: AttackerDamageScalars,
+    v: VictimDefenseProfile,
+    didCrit: boolean,
+    roleScale: number,
+    equipReductionPct = 0
+): { damage: number; preMitigation: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
     const perHitShare = s.hits > 0 ? preCritDamage / s.hits : 0;
@@ -166,8 +188,16 @@ export function victimHitDamage(
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const nonCritFactor =
         defenceMitigation * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
+    // #358 ADDENDUM 2: the identical product with the defence term replaced by an exact 1, so the
+    // `damage` expression below is BYTE-IDENTICAL to the pre-change one (no re-association) while
+    // the pre-defence figure is computed at source rather than reconstructed by division.
+    const nonCritFactorPreDefence =
+        1 * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
 
     const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
 
-    return perHitShare * hitCritMultiplier * nonCritFactor * roleScale;
+    return {
+        damage: perHitShare * hitCritMultiplier * nonCritFactor * roleScale,
+        preMitigation: perHitShare * hitCritMultiplier * nonCritFactorPreDefence * roleScale,
+    };
 }

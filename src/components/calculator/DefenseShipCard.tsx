@@ -147,17 +147,30 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
 
                 {result && (
                     <div className="mt-4 pt-4 border-t border-dark-border">
+                        {/* #358 addendum 2: the headline is RAW damage thrown at the ship, so more
+                            defence raises it. Rounds sit BESIDE it because the figure only moves
+                            when the round of death moves — two ships that die on the same round
+                            report the same number, and the rounds are what separate them. */}
                         <div className="flex justify-between items-baseline">
-                            <span className="text-theme-text-secondary">Measured EHP:</span>
-                            <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
-                                {Math.round(result.measuredEHP).toLocaleString()}
+                            <span className="text-theme-text-secondary">
+                                Measured EHP:
+                                <span className="block text-xs">raw damage withstood</span>
+                            </span>
+                            <span className="text-right">
+                                <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
+                                    {Math.round(result.measuredEHP).toLocaleString()}
+                                </span>
+                                <span className="block text-xs text-theme-text-secondary">
+                                    over {result.elapsedRounds}{' '}
+                                    {result.elapsedRounds === 1 ? 'round' : 'rounds'}
+                                </span>
                             </span>
                         </div>
                         <div className="text-xs mt-1">
                             {result.survived ? (
                                 <span className="text-green-400">
-                                    Survived all {result.elapsedRounds} rounds — absorbed at least
-                                    this much
+                                    Survived all {result.elapsedRounds} rounds — a lower bound, not
+                                    a limit
                                 </span>
                             ) : (
                                 <span className="text-red-500">
@@ -165,7 +178,17 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                 </span>
                             )}
                         </div>
-                        <div className="mt-2 text-xs text-theme-text-secondary space-y-1">
+                        {/* DIFFERENT AXIS. The four terms below partition what actually ARRIVED
+                            (post defence mitigation); the headline above is what was THROWN. They
+                            do not sum, so the sub-total is labelled and shown explicitly rather
+                            than left for the reader to infer. */}
+                        <div className="mt-3 text-xs text-theme-text-secondary space-y-1">
+                            <div className="flex justify-between border-b border-dark-border pb-1">
+                                <span className="uppercase tracking-wide">
+                                    Reached the ship (after defence)
+                                </span>
+                                <span>{Math.round(result.breakdown.gross).toLocaleString()}</span>
+                            </div>
                             <div className="flex justify-between">
                                 <span>To hull</span>
                                 <span>{result.breakdown.toHp.toLocaleString()}</span>
