@@ -95,8 +95,7 @@ export function activeSquadLeaderEffects(
  *  - 'enemies' : ALL opposing units, but only while `gateMet` (>=1 leader-faction
  *                ship on the leader's own team) — gate unmet means inactive by game rule. */
 export type SquadLeaderEffectTargeting<T> =
-    | { scope: 'allies'; recipients: T[] }
-    | { scope: 'enemies'; gateMet: boolean };
+    { scope: 'allies'; recipients: T[] } | { scope: 'enemies'; gateMet: boolean };
 
 export function squadLeaderEffectTargeting<T extends { faction: FactionName }>(
     effect: SquadLeaderEffect,

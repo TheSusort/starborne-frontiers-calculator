@@ -56,12 +56,7 @@ const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => 
 });
 
 type HealBucket =
-    | 'directHeal'
-    | 'hotHeal'
-    | 'shield'
-    | 'cleanseCount'
-    | 'effectiveHeal'
-    | 'overheal';
+    'directHeal' | 'hotHeal' | 'shield' | 'cleanseCount' | 'effectiveHeal' | 'overheal';
 
 /** Sum a healing bucket over every round for `actorId` (defaults to the focus actor). */
 const sumHeal = (

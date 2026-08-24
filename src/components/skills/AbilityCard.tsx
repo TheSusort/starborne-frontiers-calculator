@@ -850,9 +850,7 @@ export const AbilityCard: React.FC<Props> = ({
                                     updateConfig({
                                         ...config,
                                         valueKind: value as
-                                            | 'flat'
-                                            | 'percent-of-own'
-                                            | 'percent-of-donor',
+                                            'flat' | 'percent-of-own' | 'percent-of-donor',
                                     })
                                 }
                             />

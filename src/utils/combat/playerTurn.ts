@@ -166,8 +166,7 @@ export interface PlayerRoundCtx {
  * two silent failures with green tests in #294/#296. Do not weaken this back into a flag.
  */
 export type HealApplyResult =
-    | { reversed: false; consumed: number; overheal: number }
-    | { reversed: true };
+    { reversed: false; consumed: number; overheal: number } | { reversed: true };
 
 /** Healing-mode context threaded into player turns (and later the executor). The ENGINE
  *  owns all mutation (applyHealToTarget/grantShieldToTarget close over the live target). */

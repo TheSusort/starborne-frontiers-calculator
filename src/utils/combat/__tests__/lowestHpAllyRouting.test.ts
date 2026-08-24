@@ -165,8 +165,7 @@ const selfBuffTurns = (statusEngine: StatusEngine, ownerId: string): number | un
     statusEngine
         .timedAbilityStatuses('self', ownerId)
         .find((s) => s.payload.buffName === 'Attack Up')?.active.turnsRemaining as
-        | number
-        | undefined;
+        number | undefined;
 
 describe("SP-4e 'lowest-hp-ally' on the on-cast buff-extend path", () => {
     it('extends ONLY the lowest-HP living ally, not the whole roster', () => {

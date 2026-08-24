@@ -35,9 +35,8 @@ describe('buildTraceShip', () => {
             vi.doMock('../../../../scripts/lib/shipDataSnapshot', () => ({
                 loadShipDataByName: () => new Map(),
             }));
-            const { buildTraceShip: buildTraceShipIsolated } = await import(
-                '../../../../scripts/lib/traceShipFactory'
-            );
+            const { buildTraceShip: buildTraceShipIsolated } =
+                await import('../../../../scripts/lib/traceShipFactory');
             const ship = buildTraceShipIsolated('Centurion');
             expect(ship).not.toBeNull();
             expect(ship!.name).toBe('Centurion');

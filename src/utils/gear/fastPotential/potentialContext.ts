@@ -71,8 +71,7 @@ export interface BuildPotentialContextInput {
     readonly ship: Ship | undefined;
     readonly getGearPiece: ((id: string) => GearPiece | undefined) | undefined;
     readonly getEngineeringStatsForShipType:
-        | ((shipType: ShipTypeName) => EngineeringStat | undefined)
-        | undefined;
+        ((shipType: ShipTypeName) => EngineeringStat | undefined) | undefined;
 }
 
 // Module-local: the slow path's ROLE_BASE_STATS is not exported; the spec

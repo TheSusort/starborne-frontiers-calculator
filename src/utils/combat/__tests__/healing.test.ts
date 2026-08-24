@@ -49,12 +49,7 @@ const healSkills = (abilities: Ability[]): ShipSkills => ({
 });
 
 type HealBucket =
-    | 'directHeal'
-    | 'hotHeal'
-    | 'shield'
-    | 'cleanseCount'
-    | 'effectiveHeal'
-    | 'overheal';
+    'directHeal' | 'hotHeal' | 'shield' | 'cleanseCount' | 'effectiveHeal' | 'overheal';
 
 /** Sum a bucket over every round's healing entry for `actorId` (defaults to the focus actor). */
 const sumHeal = (
