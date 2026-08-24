@@ -824,8 +824,11 @@ import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs'
 import { asFactionKey } from '../../constants/factions';
 ```
 
-(Confirm `asFactionKey`'s exact export path by grepping — `HealingCalculatorPage.tsx` imports it and
-is the reference.)
+(`asFactionKey`'s path is verified: `src/constants/factions`, imported as
+`import { asFactionKey, type FactionKey } from '../../constants/factions';`.)
+
+`defenderFieldsFromShip` deliberately mirrors `healerStatsFromShip` in `HealingCalculatorPage.tsx:166`
+— that helper exists for the same reason, and its fallback choices are the reference.
 
 Extract a shared helper above the component so the three construction sites cannot drift:
 
@@ -845,8 +848,12 @@ const defenderFieldsFromShip = (
     attack: Math.round(final.attack ?? 0),
     crit: Math.round(final.crit ?? 0),
     critDamage: Math.round(final.critDamage ?? 0),
-    speed: Math.round(final.speed ?? 0),
-    hacking: Math.round(final.hacking ?? 0),
+    // NOT `?? 0` for these two. A speed-0 defender never takes a turn, so its self-shields and
+    // self-buffs never fire and its measured EHP is silently understated; hacking 0 would also
+    // misreport its own outbound landing. These fallbacks match `healerStatsFromShip` in
+    // HealingCalculatorPage.tsx:173-174, which is the reference implementation.
+    speed: Math.round(final.speed ?? 100),
+    hacking: Math.round(final.hacking ?? 200),
     healModifier: Math.round(final.healModifier ?? 0),
     chargeCount: ship.chargeSkillCharge ?? 0,
     startCharged: false,
@@ -865,11 +872,15 @@ Blank configs (`addConfig`, and the no-`shipId` fallback in `getInitialConfig`) 
             crit: 0,
             critDamage: 0,
             speed: 100,
-            hacking: 0,
+            hacking: 200,
             healModifier: 0,
             chargeCount: 0,
             startCharged: false,
 ```
+
+`speed: 100` / `hacking: 200` are the engine-neutral defaults, matching `defaultConfig` in
+`HealingCalculatorPage.tsx:186-188`. `attack: 0` is deliberate for a blank config — a manual
+defender with no picked ship should not be silently credited with offence it never had.
 
 `selectShipForConfig` spreads `defenderFieldsFromShip(...)` into the updated config, keeping its
 existing `damageReduction` / `effectiveHP` / `buffs: mergeAutoFill(...)` lines unchanged. **Leave

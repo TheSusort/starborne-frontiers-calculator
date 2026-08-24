@@ -303,3 +303,26 @@ agree on Defense Up instead of contradicting each other.
   missing applied-guard on the pin being deleted).
 - `modifier` + `channel: 'incomingDamage'` stays inert and stays pinned — out of scope, separate
   defect, no user ruling on it.
+
+## A5. Overload ruling (user, 2026-08-24)
+
+Phase 1 measurement found that the fix's largest real-kit consequence is **not** `Defense Up` — it is
+`Overload`: `'+10% Outgoing Direct Damage, -10% Defense, Stackable up to 10 times'`, a SELF-buff on
+Butcher, Mangler, Ravager, Asphyxiator and Ruiner, plus Refine's `Supercharged III` (`-60% Defense`).
+297 probe reads at `-100%`, with a full `-10…-90` ladder.
+
+**Ruling: apply BOTH halves.** Today the app grants Overload's damage bonus and ignores its defence
+cost, which makes those 6 ships strictly better than their card text. A capped Butcher's defence term
+collapsing to zero is the correct reading, and applying only the upside would be the very asymmetry
+this addendum exists to remove.
+
+Consequences:
+- **No name-special-casing.** The new term is sign-agnostic: it carries positive self-sourced defence
+  (Defense Up) and negative (Overload, Supercharged III) alike.
+- Overload is a SELF-buff, so it lives in the victim's own self-buff store, NOT the enemy-debuff
+  store that `enemy.enemyDefenseModifier` reads. **There is therefore no double count** — verified
+  before ruling.
+- `victimDamage.ts:114` already guards non-positive effective defence, so the `-100%` case floors at
+  zero damage reduction rather than inverting into a damage bonus. No new clamp needed — but a test
+  must pin that floor, because an unclamped implementation would look identical on every fixture
+  that never reaches -100%.

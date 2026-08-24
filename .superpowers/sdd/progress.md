@@ -91,8 +91,38 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
          loosening — cause was NOT the ability model (see the finding below). Test 10 keeps its exact
          shape with the buff swapped to `parsedEffects.incomingDamage` (`Inc. Damage Down II`):
          **ungated 17_496 vs gated 24_993, strictly greater. The gate proof STANDS.**
-- [ ] Task 3: `DefenseShipConfig` gains `shipSkills` + engine stats
+- [x] Task 3: **complete** (commit `58d7b085`; review pending). Suite 580/6460 — UNCHANGED, as a
+      type-only task should be. `as unknown as` grep found no casts touching `DefenseShipConfig`.
+- [ ] Task 8: engine fix — **Phase 1 DONE**, Phase 2 authorised (see below)
 - [ ] Task 4: `SkillSlotList` in the defense card
+
+## Task 8 Phase 1 findings (measured, not asserted)
+- **Blast radius: 2 test files, 2 assertions. ZERO golden snapshots move.**
+- **The zero churn is EXPLAINED, and reachability was PROVEN separately** — this is the
+  "a zero is not a measurement until you know the rate" rule applied correctly. Per-file probe of
+  `victimIncomingModifiers`: `simGolden` 0 non-zero self-defence reads, `dpsGoldenParity` 0,
+  `healingGoldenParity` 0 (all three are synthetic fixtures with no self-side defence buff), but
+  `realKitFingerprints` **2534**. The term reaches the damage path; the numeric goldens simply have
+  nothing to say about it. **Corollary: the goldens do NOT gate this change — a sign error or a
+  double count would produce the same clean run.** Phase 2 must pin direction itself.
+- Both moving assertions are pins ON THE DEFECT: Task 2's FINDING A tripwire (24993 → 21192, exactly
+  the `5000 × 1.30` its own comment predicted) and a premise line in
+  `protectionTransfer.integration.test.ts:953` whose stated premise IS the defect (its core
+  assertion still passes).
+- **Team symmetry: YES** on the timed + aura ability channels, evidenced at four sites. Inherits one
+  PRE-EXISTING player-only gap on the scheduled channel (`selfBuffLookup` empty for enemy/walked
+  runtimes) — identical in kind to the already-shipped `selfIncoming` twin. Real ships grant Defense
+  Up via abilities, so it is symmetric where it matters. **Phase 2's symmetry test must use the
+  ABILITY channel or it will be vacuous on the enemy side.**
+- **My A2 justification was slightly WRONG; the conclusion was right for better reasons.** The
+  `engine.ts:5548-5556` comment documents the Protection *fallback*, and `targetMitigation` is
+  derived from the profile, so changing the `defence` field would also stay self-consistent. The
+  real reasons to use the percentage channel: (1) `effectiveStatsOf` folds only 2 of the 3 self-buff
+  channels, so it would silently DROP aura-granted defence buffs; (2) leaving `defence` alone keeps
+  Meatshield substitution semantics untouched.
+- **Stronger "oversight, not design" evidence than my `selfIncoming` parallel:** every OTHER
+  direct-damage site (counter, reactive, Protection fallback) ALREADY uses buff-folded defence. The
+  positional applied path was the sole hold-out.
 - [ ] Task 5: page wires the survivability sim
 - [ ] Task 6: measured-EHP results block
 - [ ] Task 7: documentation + changelog
