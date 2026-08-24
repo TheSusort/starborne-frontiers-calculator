@@ -74,43 +74,42 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // An enemy attacker that hits the heal target. `selfBuff` controls whether it grants ITSELF
 // an Attack Up before its hit (used to prove the enemy self-buff stays on the enemy side).
-const enemyHitter = (id: string, speed: number, selfBuff: boolean): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ...(selfBuff
-                            ? [
-                                  ab({
+const enemyHitter = (id: string, speed: number, selfBuff: boolean): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ...(selfBuff
+                        ? [
+                              ab({
+                                  type: 'buff',
+                                  target: 'self',
+                                  config: {
                                       type: 'buff',
-                                      target: 'self',
-                                      config: {
-                                          type: 'buff',
-                                          buffName: 'Enemy Attack Up',
-                                          parsedEffects: { attack: 100 },
-                                          stacks: 1,
-                                          isStackable: false,
-                                          duration: 99,
-                                      },
-                                  }),
-                              ]
-                            : []),
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                                      buffName: 'Enemy Attack Up',
+                                      parsedEffects: { attack: 100 },
+                                      stacks: 1,
+                                      isStackable: false,
+                                      duration: 99,
+                                  },
+                              }),
+                          ]
+                        : []),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // Healing-mode base: a DAMAGING focus attacker (so the player credit path is exercised),
 // a heal target with a huge HP pool (survives, incoming damage observable), and room for

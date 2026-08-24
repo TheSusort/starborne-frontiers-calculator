@@ -30,7 +30,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -88,7 +88,7 @@ const repairingEnemy = (
                 ],
             },
         ],
-    } as ShipSkills,
+    },
 });
 
 // ─── Engine input (Zosimos = focus) ─────────────────────────────────────────────────
@@ -231,7 +231,7 @@ describe('repair-driven enemy charge removal — every-2nd-repair (Zosimos-style
                         ],
                     },
                 ],
-            } as ShipSkills,
+            },
         };
 
         const actors = runAndTap(buildZosimosInput([enemyA, enemyB], 2));

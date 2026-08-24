@@ -71,14 +71,17 @@ const noSkills = (): ShipSkills => ({ slots: [] });
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** An enemy attacker that lands a single-hit basic attack (synthesized 100% active) on the focus. */
-const basicEnemy = (id: string, attack: number, opts: Partial<EnemyAttacker> = {}): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        ...opts,
-    }) as EnemyAttacker;
+const basicEnemy = (
+    id: string,
+    attack: number,
+    opts: Partial<EnemyAttacker> = {}
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    ...opts,
+});
 
 /** Healing-mode base: the FOCUS ('attacker') is the heal target and carries `skills`; one enemy
  *  attacker hits it each round. owner crit 0 → no crit → deterministic counter magnitude. */

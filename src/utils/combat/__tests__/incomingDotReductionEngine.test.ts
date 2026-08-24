@@ -37,7 +37,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 function makePiece(over: Partial<GearPiece>): GearPiece {
     return {
@@ -50,7 +50,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 function makeGetGearPiece(map: Record<string, GearPiece>): (id: string) => GearPiece | undefined {
     return (id) => map[id];
@@ -120,7 +120,7 @@ const infernoEnemy = (): EnemyAttacker => ({
                 ],
             },
         ],
-    } as ShipSkills,
+    },
 });
 
 /** An enemy that applies a 1-stack corrosion (tier 1) each turn (attack 5000, speed 50).
@@ -152,7 +152,7 @@ const corrosionEnemy = (): EnemyAttacker => ({
                 ],
             },
         ],
-    } as ShipSkills,
+    },
 });
 
 /** Run 2 rounds. Collect all dot-ticked events from R2 onward (R1 has no ticks yet).

@@ -55,7 +55,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { resetRateGateRng } from '../../calculators/rateAccumulator';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -194,34 +194,33 @@ const teamVictim = (
     position: Position,
     slots: ShipSkills['slots'],
     speed: number
-): TeamActor =>
-    ({
-        id,
-        speed,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** The ENEMY-side mirror of the focus attacker: fires an N-hit cast at the player front AND wears
  *  the same Bloodthirst passive. */

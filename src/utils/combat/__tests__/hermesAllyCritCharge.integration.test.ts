@@ -63,15 +63,46 @@ describe('Hermes charge ability — extracted shape (mutation guard)', () => {
 });
 
 /** A dummy enemy target: fat HP, does nothing meaningful. */
-const dummyEnemy = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
+const dummyEnemy = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'noop',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 0 },
+                    },
+                ],
+            },
+        ],
+    },
+});
+
+/** Hermes observer (team actor): its ONLY ability is the on-ally-crit charge passive. It has a
+ *  chargeCount headroom of 6 and acts last (speed 1) so the ally crit precedes it. */
+const hermesObserver = (position: Position): TeamActorEngineInput => ({
+    id: 'hermes',
+    speed: 1,
+    chargeCount: 6,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
         shipSkills: {
             slots: [
                 {
@@ -87,59 +118,26 @@ const dummyEnemy = (id: string, position: Position): EnemyAttacker =>
                         },
                     ],
                 },
+                { slot: 'passive', abilities: [hermesChargeAbility()] },
             ],
         },
-    }) as EnemyAttacker;
-
-/** Hermes observer (team actor): its ONLY ability is the on-ally-crit charge passive. It has a
- *  chargeCount headroom of 6 and acts last (speed 1) so the ally crit precedes it. */
-const hermesObserver = (position: Position): TeamActorEngineInput =>
-    ({
-        id: 'hermes',
-        speed: 1,
-        chargeCount: 6,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            {
-                                id: 'noop',
-                                type: 'damage',
-                                target: 'enemy',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: { type: 'damage', multiplier: 0 },
-                            },
-                        ],
-                    },
-                    { slot: 'passive', abilities: [hermesChargeAbility()] },
-                ],
-            },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 20_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 20_000,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** The focus ally crits, and Hermes counts the ATTACKS. Two shapes are driven through the same
  *  input: `hits: 3` on one enemy (three consecutive full-walk attacks → three charges) and a
@@ -230,7 +228,7 @@ describe('Hermes on-ally-crit charge — one charge per attack that crits, not p
     it('a single-hit AoE critting TWO victims still grants exactly one charge', () => {
         const { totalGained, perf } = runHermes({
             hits: 1,
-            pattern: { raw: 'all', shape: 'all', range: 'all', modifiers: {} } as ParsedPattern,
+            pattern: { raw: 'all', shape: 'all', range: 'all', modifiers: {} },
             enemies: [dummyEnemy('enemy-a', 'M4'), dummyEnemy('enemy-b', 'M3')],
         });
         // Fixture self-check: ONE attack, TWO critting (hit, victim) pairs — the axis under test.

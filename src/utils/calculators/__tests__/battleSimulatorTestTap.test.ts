@@ -48,8 +48,8 @@ const placement = (s: Ship, position: Position): BattlePlacement => ({
 });
 
 const input = (tap?: (actors: CombatActor[]) => void, rounds = 1) => ({
-    playerTeam: [placement(ship('p1'), 'M4' as Position)],
-    enemyTeam: [placement(ship('e1'), 'M1' as Position)],
+    playerTeam: [placement(ship('p1'), 'M4')],
+    enemyTeam: [placement(ship('e1'), 'M1')],
     rounds,
     ...(tap ? { __testTapActors: tap } : {}),
 });

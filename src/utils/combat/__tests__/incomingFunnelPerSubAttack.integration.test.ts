@@ -69,7 +69,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { setKeyedRng, resetRateGateRng, mulberry32 } from '../../calculators/rateAccumulator';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -173,48 +173,46 @@ const teamVictim = (
     hp: number = HP,
     speed: number = 1,
     attack: number = 0
-): TeamActor =>
-    ({
-        id,
-        speed,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots },
-            stats: {
-                attack,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots },
+        stats: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** An enemy that fires an N-hit cast at the player front. */
-const offensiveEnemy = (id: string, position: Position, hits: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 100, critDamage: 100, defence: 0, hp: HP, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity: 'antimatter',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [attackSkill(hits)] },
-    }) as EnemyAttacker;
+const offensiveEnemy = (id: string, position: Position, hits: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 100, critDamage: 100, defence: 0, hp: HP, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [attackSkill(hits)] },
+});
 
 const noopActive: ShipSkills['slots'][number] = {
     slot: 'active',
@@ -271,12 +269,11 @@ const enemyWithShieldPool = (
     position: Position,
     hp: number,
     pool: number
-): EnemyAttacker =>
-    ({
-        ...enemyAt(id, position, []),
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: (pool / hp) * 100 },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    ...enemyAt(id, position, []),
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: (pool / hp) * 100 },
+});
 
 describe('PR6 Tier 2 — shield absorption resolves per sub-attack', () => {
     afterEach(() => resetRateGateRng());
@@ -338,7 +335,7 @@ const protectionAura = (stacks: number): ShipSkills['slots'][number] => ({
                 stacks,
                 isStackable: true,
             },
-        } as Ability,
+        },
     ],
 });
 

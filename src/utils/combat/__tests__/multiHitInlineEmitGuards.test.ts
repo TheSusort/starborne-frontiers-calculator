@@ -213,16 +213,15 @@ type EnemyAttackerInput = NonNullable<CombatEngineInput['enemyAttackers']>[numbe
  *  below observes the emit shape and not a mid-run death. It was originally introduced to satisfy
  *  the engine's roster-emptiness discriminator so the focus's bound target would be the VESTIGIAL
  *  SINK; SP-4c-2d deleted both, and the bound target is now this actor. */
-const inertEnemyAt = (id: string, position: Position): EnemyAttackerInput =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 10_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity: 'antimatter',
-        shipSkills: { slots: [] },
-    }) as EnemyAttackerInput;
+const inertEnemyAt = (id: string, position: Position): EnemyAttackerInput => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 10_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    shipSkills: { slots: [] },
+});
 
 /**
  * A NON-POSITIONAL focus (no `position`, no `mode: 'battle'`) firing `hits` sub-attacks per
@@ -247,7 +246,7 @@ const nonPositionalFocus = (hits: number, numRounds: number): CombatEngineInput 
                         trigger: 'on-cast',
                         conditions: [],
                         config: { type: 'damage', multiplier: 100, ...(hits > 1 ? { hits } : {}) },
-                    } as Ability,
+                    },
                 ],
             },
         ],

@@ -201,10 +201,15 @@ const compareKeyProperties = (
                 const newUnitName = equipment2[prop]
                     ? unitNameMap2.get(equipment2[prop]) || equipment2[prop]
                     : 'None';
-                const equipmentName =
-                    `${equipment1.Rank} ★ ${equipment1.Name}` ||
-                    `${equipment2.Rank} ★ ${equipment2.Name}` ||
-                    'Unknown Equipment';
+                // Branch on `Name`, not on the formatted string: this used to be an `||` chain
+                // over three template literals, and a literal containing `★` is never falsy, so
+                // the two fallbacks were unreachable and a nameless `equipment1` rendered as
+                // "undefined ★ undefined".
+                const equipmentName = equipment1.Name
+                    ? `${equipment1.Rank} ★ ${equipment1.Name}`
+                    : equipment2.Name
+                      ? `${equipment2.Rank} ★ ${equipment2.Name}`
+                      : 'Unknown Equipment';
                 description = `${equipmentName} equipped from ${oldUnitName} → ${newUnitName}`;
 
                 // Move this change to the unit group instead of equipment group

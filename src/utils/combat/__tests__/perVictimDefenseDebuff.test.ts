@@ -126,17 +126,16 @@ const damageWithTwoDebuffsSlot = (): ShipSkills['slots'][number] => ({
 });
 
 // Passive enemy with no offensive abilities — its turns do not muddy debuff stores.
-const passiveEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 500, hp: 100_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const passiveEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 500, hp: 100_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [] },
+});
 
 // ---------------------------------------------------------------------------
 // Pre-compute the expected damage from victimHitDamage's formula so the test

@@ -2,49 +2,47 @@ import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
-import type { Position } from '../../../types/encounters';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-const debuffEnemy = (id: string, debuffs = 1): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 10,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: Array.from({ length: debuffs }, (_, i) => ({
-                        id: `enemy-debuff-${i}`,
+const debuffEnemy = (id: string, debuffs = 1): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 10,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: Array.from({ length: debuffs }, (_, i) => ({
+                    id: `enemy-debuff-${i}`,
+                    type: 'debuff' as const,
+                    target: 'enemy' as const,
+                    trigger: 'on-cast' as const,
+                    conditions: [],
+                    config: {
                         type: 'debuff' as const,
-                        target: 'enemy' as const,
-                        trigger: 'on-cast' as const,
-                        conditions: [],
-                        config: {
-                            type: 'debuff' as const,
-                            buffName: `Def Down ${i}`,
-                            parsedEffects: {},
-                            stacks: 1,
-                            isStackable: false,
-                            application: 'inflict' as const,
-                            duration: 1,
-                        },
-                    })),
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                        buffName: `Def Down ${i}`,
+                        parsedEffects: {},
+                        stacks: 1,
+                        isStackable: false,
+                        application: 'inflict' as const,
+                        duration: 1,
+                    },
+                })),
+            },
+        ],
+    },
+});
 
 // Vindicator's on-resist HP proc, injected directly (the builder path is covered by Task 2).
 const onResistPassive = (pct = 30): ShipSkills['slots'][number] => ({
@@ -254,7 +252,7 @@ describe('Vindicator on-resist HP damage — team symmetry (enemy-owned)', () =>
             healTargetId: 'attacker',
             mode: 'healing',
             hacking: 0,
-            position: 'M4' as Position,
+            position: 'M4',
             target: parsedTarget('front'),
             pattern: basePattern(),
             enemyAttackers: [
@@ -270,9 +268,9 @@ describe('Vindicator on-resist HP damage — team symmetry (enemy-owned)', () =>
                     },
                     chargeCount: 0,
                     startCharged: false,
-                    position: 'M4' as Position,
+                    position: 'M4',
                     shipSkills: { slots: [noopActive, onResistPassive(30)] },
-                } as EnemyAttacker,
+                },
             ],
         };
         // This fixture positions BOTH sides (it must, to route the player's debuff at the real

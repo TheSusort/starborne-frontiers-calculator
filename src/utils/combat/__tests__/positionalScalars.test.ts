@@ -20,7 +20,7 @@ import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { ShipSkills } from '../../../types/abilities';
 import { victimHitDamage, VictimDefenseProfile } from '../victimDamage';
 import { AffinityName } from '../../../types/ship';
 
@@ -126,7 +126,7 @@ function makeArgs(runtime: PlayerActorRuntime): PlayerTurnArgs {
         enemyType: undefined,
         bus: createEventBus(),
         round: 1,
-    } as PlayerTurnArgs;
+    };
 }
 
 describe('PlayerTurnResult.positionalScalars — integration-boundary parity', () => {
@@ -143,7 +143,7 @@ describe('PlayerTurnResult.positionalScalars — integration-boundary parity', (
                             trigger: 'on-cast',
                             conditions: [],
                             config: { type: 'damage', multiplier: 80, hits: 4 },
-                        } as Ability,
+                        },
                     ],
                 },
             ],

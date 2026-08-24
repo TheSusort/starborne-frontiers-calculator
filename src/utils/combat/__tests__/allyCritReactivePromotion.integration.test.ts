@@ -114,111 +114,108 @@ const noopActive = (): Ability => ({
     config: { type: 'damage', multiplier: 0 },
 });
 
-const howlerObserver = (position: Position): TeamActorEngineInput =>
-    ({
-        id: 'howler',
-        speed: 1, // acts last — the crit + debuffs must already have happened
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: {
-                slots: [
-                    { slot: 'active', abilities: [noopActive()] },
-                    { slot: 'passive', abilities: [howlerCleanse(), howlerBlastGrant()] },
-                ],
-            },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 20_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const howlerObserver = (position: Position): TeamActorEngineInput => ({
+    id: 'howler',
+    speed: 1, // acts last — the crit + debuffs must already have happened
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [noopActive()] },
+                { slot: 'passive', abilities: [howlerCleanse(), howlerBlastGrant()] },
+            ],
         },
-    }) as TeamActorEngineInput;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 20_000,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** A same-side ally that crits (or not) an enemy on its own turn. */
-const critAlly = (id: string, position: Position, critPct: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 300,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
-            stats: {
-                attack: 1000,
-                crit: critPct,
-                critDamage: 100,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 20_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const critAlly = (id: string, position: Position, critPct: number): TeamActorEngineInput => ({
+    id,
+    speed: 300,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+        stats: {
+            attack: 1000,
+            crit: critPct,
+            critDamage: 100,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 20_000,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** An opposing AoE debuffer: an 'all-enemies'-target Def Down that lands on EVERY same-side
  *  actor on the other team (the focus + every positioned team actor). */
-const debuffAoE = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: allPattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'aoe-debuff',
+const debuffAoE = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: allPattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'aoe-debuff',
+                        type: 'debuff',
+                        target: 'all-enemies',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'all-enemies',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Def Down',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'apply',
-                                duration: 5,
-                            },
+                            buffName: 'Def Down',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 5,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 function runAndCollect(input: CombatEngineInput) {
     const bus = createEventBus();
@@ -322,7 +319,7 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
                     { slot: 'passive', abilities: [howlerCleanse(), howlerBlastGrant()] },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         const enemyCritAlly: EnemyAttacker = {
             id: 'enemy-critter',
@@ -340,7 +337,7 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
             target: parsedTarget('front'),
             pattern: basePattern(),
             shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
-        } as EnemyAttacker;
+        };
 
         // A player-side AoE debuffer whose 'all-enemies' target reaches every enemy-side actor
         // (the mirror of debuffAoE above, cast from the other direction).
@@ -398,7 +395,7 @@ describe('Howler (enemy-side) — team symmetry: an enemy Howler reacts to its O
                 affinityCritPenalty: 0,
                 hasChargedSkill: false,
             },
-        } as TeamActorEngineInput;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,
@@ -501,41 +498,40 @@ describe('Sentinel ally-crit abilities — extracted shape (mutation guard)', ()
 
 /** A Sentinel observer (team actor): R2 passive (heal + damage), real attack/HP so its reactive
  *  damage credits and its 5%-Max-HP repair is non-zero. Acts LAST so ally crits precede it. */
-const sentinelObserver = (position: Position): TeamActorEngineInput =>
-    ({
-        id: 'sentinel',
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: {
-                slots: [
-                    { slot: 'active', abilities: [noopActive()] },
-                    { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
-                ],
-            },
-            stats: {
-                attack: 1000,
-                crit: 0,
-                critDamage: 100,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 20_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const sentinelObserver = (position: Position): TeamActorEngineInput => ({
+    id: 'sentinel',
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [noopActive()] },
+                { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
+            ],
         },
-    }) as TeamActorEngineInput;
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 100,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 20_000,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 function runSentinel(input: CombatEngineInput) {
     const bus = createEventBus();
@@ -666,7 +662,7 @@ describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to i
                     { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         const enemyCritAlly: EnemyAttacker = {
             id: 'enemy-critter',
@@ -684,7 +680,7 @@ describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to i
             target: parsedTarget('front'),
             pattern: basePattern(),
             shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,

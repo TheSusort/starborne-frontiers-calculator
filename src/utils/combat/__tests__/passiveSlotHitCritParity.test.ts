@@ -76,15 +76,14 @@ const frontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selectio
 const singleCell = (): ParsedPattern => ({ raw: 'single', shape: 'base', range: 0, modifiers: {} });
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
-const enemyAt = (id: string, position: 'M4' | 'M3'): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] },
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: 'M4' | 'M3'): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     attack: ATTACK,

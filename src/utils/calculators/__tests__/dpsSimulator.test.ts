@@ -1871,8 +1871,8 @@ describe('simulateDPS', () => {
                         duration: 3,
                     },
                 ],
-                selfBuffs: [makeAlwaysBuff('atkBuff', { attack: 25 } as ParsedBuffEffects)],
-                enemyDebuffs: [makeAlwaysBuff('defDown', { defense: -30 } as ParsedBuffEffects)],
+                selfBuffs: [makeAlwaysBuff('atkBuff', { attack: 25 })],
+                enemyDebuffs: [makeAlwaysBuff('defDown', { defense: -30 })],
             };
 
             // NOTE: `setRateGateRng(mulberry32(seed))` alone is dead for keyed gates under
@@ -1926,7 +1926,7 @@ describe('simulateDPS', () => {
             const simB = simulateDPS({
                 ...baseInput,
                 shipSkills: activeSkills([damageAbility('d', 100)]),
-                selfBuffs: [makeAlwaysBuff('x', { outgoingDamage: 40 } as ParsedBuffEffects)],
+                selfBuffs: [makeAlwaysBuff('x', { outgoingDamage: 40 })],
             });
             expect(simA.rounds[0].directDamage).toBe(simB.rounds[0].directDamage);
         });
@@ -1942,7 +1942,7 @@ describe('simulateDPS', () => {
             const simB = simulateDPS({
                 ...baseInput,
                 shipSkills: activeSkills([damageAbility('d', 100)]),
-                selfBuffs: [makeAlwaysBuff('x', { attack: 50 } as ParsedBuffEffects)],
+                selfBuffs: [makeAlwaysBuff('x', { attack: 50 })],
             });
             expect(simA.rounds[0].directDamage).toBe(simB.rounds[0].directDamage);
         });

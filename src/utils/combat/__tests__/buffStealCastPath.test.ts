@@ -281,7 +281,7 @@ describe('PR10: cast-path buff steal — grantAdjacentAllies grants the SAME sto
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        position: 'M3' as Position,
+        position: 'M3',
         target: parsedTarget('front'),
         pattern: basePattern(),
         walk: {

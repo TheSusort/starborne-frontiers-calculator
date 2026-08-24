@@ -168,7 +168,7 @@ function applyStat(stat: Stat, target: Float64Array, percentRef: BaseStats, scal
     if (isPercentOnly) {
         target[idx] += value;
     } else if (stat.type === 'percentage') {
-        const ref = percentRef[stat.name as keyof BaseStats] ?? 0;
+        const ref = percentRef[stat.name] ?? 0;
         target[idx] += ref * (value / 100);
     } else {
         target[idx] += value;

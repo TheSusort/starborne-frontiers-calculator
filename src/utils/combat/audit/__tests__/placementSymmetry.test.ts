@@ -373,7 +373,7 @@ describe('diffAllPlacements', () => {
         // focus->enemy and team->enemy lose `shield`; the reverse directions are clean.
         expect(diffs).toHaveLength(2);
         expect(diffs.every((d) => d.to === 'enemy')).toBe(true);
-        expect(diffs.every((d) => d.missing.includes('shield' as CombatLogEntryKind))).toBe(true);
+        expect(diffs.every((d) => d.missing.includes('shield'))).toBe(true);
     });
 
     it('reports an `extra`-style asymmetry as the reverse direction', () => {

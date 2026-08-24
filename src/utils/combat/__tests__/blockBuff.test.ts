@@ -154,35 +154,34 @@ const attackUpSelfSkills = (): ShipSkills => ({
 /** An enemy attacker (speed 10 — acts AFTER the speed-100 focus actor each round) that inflicts
  *  a `Block Buff` named debuff on the heal target (the focus actor). `hacking` omitted → defaults
  *  to 200 → 100% landing, so the Block Buff reliably lands. */
-const blockBuffEnemy = (): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        enemyAb({
+const blockBuffEnemy = (): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    enemyAb({
+                        type: 'debuff',
+                        config: {
                             type: 'debuff',
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Block Buff',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 5,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Block Buff',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 5,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 /** buff-applied events for the focus actor's `Attack Up II` self-buff, by round. */
 const focusAttackUpRounds = (events: CombatEvent[]): number[] =>

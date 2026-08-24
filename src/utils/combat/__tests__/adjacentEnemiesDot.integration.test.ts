@@ -37,23 +37,22 @@ const SPLASH_INFERNO_TEXT =
 const PLAIN_INFERNO_TEXT =
     'This Unit deals <unit-damage>1% damage</unit-damage> and inflicts <unit-skill>Inferno III</unit-skill> for 3 turns.';
 
-const ship = (id: string, over: Partial<Ship>): Ship =>
-    ({
-        id,
-        name: id,
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE',
-        type: 'Attacker',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activePattern: 'Pattern-Base',
-        activeTarget: 'front',
-        chargeSkillCharge: 0,
-        ...over,
-    }) as Ship;
+const ship = (id: string, over: Partial<Ship>): Ship => ({
+    id,
+    name: id,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'Attacker',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activePattern: 'Pattern-Base',
+    activeTarget: 'front',
+    chargeSkillCharge: 0,
+    ...over,
+});
 
 interface Placement {
     ship: Ship;

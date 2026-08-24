@@ -131,40 +131,39 @@ const offensiveEnemy = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 5000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: `${id}-hit`,
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 100 },
-                        },
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 5000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: `${id}-hit`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 // ── Engine input factory ───────────────────────────────────────────────────────
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
@@ -282,11 +281,11 @@ const playerAttackerBase = (speed: number): Partial<CombatEngineInput> => ({
                 ],
             },
         ],
-    } as ShipSkills,
+    },
     speed,
-    position: 'M4' as Position,
-    target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
-    pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} } as ParsedPattern,
+    position: 'M4',
+    target: { raw: 'front', side: 'enemy', selection: 'front' },
+    pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
     hp: 1_000_000_000, // immortal — damage direction is player→enemy for this case
     defence: 0,
     selfBuffs: [],
@@ -315,43 +314,42 @@ const selfBuffingEnemy = (
     position: Position,
     hp: number,
     speed: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1, // negligible against immortal focus
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp,
-            speed,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
-        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} } as ParsedPattern,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        // Self-buff fires first on this actor's own turn.
-                        incDamageDownSelfBuff(`${id}-inc-dmg-down`),
-                        // Trivial damage at the player (does not kill immortal focus).
-                        {
-                            id: `${id}-dmg`,
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 1 },
-                        },
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1, // negligible against immortal focus
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp,
+        speed,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: { raw: 'front', side: 'enemy', selection: 'front' },
+    pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    // Self-buff fires first on this actor's own turn.
+                    incDamageDownSelfBuff(`${id}-inc-dmg-down`),
+                    // Trivial damage at the player (does not kill immortal focus).
+                    {
+                        id: `${id}-dmg`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 1 },
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 // ── Case B helpers ────────────────────────────────────────────────────────────
 
@@ -366,7 +364,7 @@ function makeShipForVoidshade(id: string): Ship {
         equipment: {},
         implants: { implant_major: 'voidshade-piece' },
         refits: [],
-    } as Ship;
+    };
 }
 
 function makeVoidshadePiece(): GearPiece {
@@ -379,7 +377,7 @@ function makeVoidshadePiece(): GearPiece {
         mainStat: null,
         subStats: [],
         setBonus: 'VOIDSHADE',
-    } as GearPiece;
+    };
 }
 
 /** legendary Voidshade passive slot: -20% incoming direct damage while stealthed. */
@@ -473,7 +471,7 @@ const caseB_victim = (
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        position: 'M4' as Position,
+        position: 'M4',
         walk: {
             shipSkills: { slots: [activeSlot, ...(passive ? [passive] : [])] },
             stats: {

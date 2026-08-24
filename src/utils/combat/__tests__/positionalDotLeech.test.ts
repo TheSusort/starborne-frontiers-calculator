@@ -106,15 +106,14 @@ const enemyAt = (
     position: Position,
     hp: number,
     slots: ShipSkills['slots'] = []
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots },
+});
 
 /** A pre-seeded corrosion stack (HP-basis, so it is independent of the applier's attack). */
 const corrosion = (
@@ -152,29 +151,28 @@ const teamStats = (hp: number): CombatStatBlock => ({
 });
 
 /** A positioned walked-team ally. speed 100 → it acts before the speed-1 enemies. */
-const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [basicSlot()] },
-            stats: teamStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [basicSlot()] },
+        stats: teamStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 /**
  * Positional healing-mode BASE. The focus 'attacker' sits at M4, is the heal target (which is

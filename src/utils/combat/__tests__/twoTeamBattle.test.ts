@@ -156,17 +156,16 @@ const offensiveEnemyAt = (
     selection: ParsedTarget['selection'],
     attack: number,
     hp: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // 2v2 base: focus 'attacker' at M4 fires `front` (an enemy), plus one walked team attacker;
 // two offensive enemies fire `front` (a player). healTargetId unlocks the enemy roster.
@@ -230,7 +229,7 @@ const run = (input: CombatEngineInput) => {
         'heal-performed',
     ];
     for (const t of ALL_TYPES) {
-        bus.on(t, (e) => events.push(e as CombatEvent));
+        bus.on(t, (e) => events.push(e));
     }
     const result = runCombat({ ...input, bus });
     return { events, result };
@@ -366,7 +365,7 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
                         hp: 5000,
                         speed: 200,
                     },
-                } as EnemyAttacker,
+                },
                 offensiveEnemyAt('enemy-back', 'M1', 'back', 5000, 5000),
             ],
         };
@@ -1247,25 +1246,24 @@ const enemyWithSecurityAt = (
     position: Position,
     selection: ParsedTarget['selection'],
     security: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 describe('Two-team battle — per-target debuff landing resolves against the ACTUAL target (holistic review #2)', () => {
     afterEach(() => resetRateGateRng());

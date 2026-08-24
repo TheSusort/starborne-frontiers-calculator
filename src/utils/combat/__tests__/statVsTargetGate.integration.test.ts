@@ -40,8 +40,9 @@ const cobaltActiveAbilities = (): Ability[] => {
     return active.abilities;
 };
 
-const cobaltShipSkills = (): ShipSkills =>
-    ({ slots: [{ slot: 'active', abilities: cobaltActiveAbilities() }] }) as ShipSkills;
+const cobaltShipSkills = (): ShipSkills => ({
+    slots: [{ slot: 'active', abilities: cobaltActiveAbilities() }],
+});
 
 describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () => {
     it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the opponent maxHp', () => {
@@ -105,7 +106,7 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
                     ],
                 },
             ],
-        } as ShipSkills;
+        };
 
         const makeInput = (cobaltHp: number, playerHp: number): CombatEngineInput => ({
             attack: 1000,
@@ -192,8 +193,9 @@ const bayahChargedAbilities = (): Ability[] => {
     return charged.abilities;
 };
 
-const bayahShipSkills = (): ShipSkills =>
-    ({ slots: [{ slot: 'charged', abilities: bayahChargedAbilities() }] }) as ShipSkills;
+const bayahShipSkills = (): ShipSkills => ({
+    slots: [{ slot: 'charged', abilities: bayahChargedAbilities() }],
+});
 
 describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis inflict', () => {
     it('the ACTUAL Stasis timed-debuff application (not just the control-applied reaction) is gated on crit power', () => {
@@ -267,8 +269,9 @@ const chakaraActiveAbilities = (): Ability[] => {
     return active.abilities;
 };
 
-const chakaraShipSkills = (): ShipSkills =>
-    ({ slots: [{ slot: 'active', abilities: chakaraActiveAbilities() }] }) as ShipSkills;
+const chakaraShipSkills = (): ShipSkills => ({
+    slots: [{ slot: 'active', abilities: chakaraActiveAbilities() }],
+});
 
 describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', () => {
     it('the charge gain lands only when the opponent is faster than Chakara', () => {

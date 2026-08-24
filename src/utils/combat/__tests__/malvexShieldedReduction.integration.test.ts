@@ -143,17 +143,16 @@ const offensiveEnemy = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: basicAttack.abilities }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: basicAttack.abilities }] },
+});
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
@@ -206,18 +205,17 @@ describe('Malvex self-shielded incoming-reduction — PLAYER side (enemy→playe
 /** A positioned ENEMY Malvex carrying the injected incoming-reduction passive, with a starting
  *  shield pool of `shieldPctOfHp`% of its max HP (0 = no shield). Attack 0 — pure victim, huge
  *  HP so it never dies. */
-const enemyMalvex = (id: string, shieldPctOfHp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [malvexPassive] },
-        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: shieldPctOfHp },
-    }) as EnemyAttacker;
+const enemyMalvex = (id: string, shieldPctOfHp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [malvexPassive] },
+    preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: shieldPctOfHp },
+});
 
 const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],

@@ -47,7 +47,7 @@ export const EngineeringPreviewTab: React.FC = () => {
     // Get current engineering stats for the base role
     const currentEngineeringStats = useMemo(() => {
         if (!baseRole) return undefined;
-        return getEngineeringStatsForShipType(baseRole as ShipTypeName);
+        return getEngineeringStatsForShipType(baseRole);
     }, [baseRole, getEngineeringStatsForShipType]);
 
     // Helper to get current level of a stat
@@ -91,7 +91,7 @@ export const EngineeringPreviewTab: React.FC = () => {
         }
 
         return {
-            shipType: baseRole as ShipTypeName,
+            shipType: baseRole,
             stats: newStats,
         };
     }, [baseRole, selectedStat, currentEngineeringStats]);
@@ -360,7 +360,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                             const savedConfig = getConfig(ship.id);
                             if (savedConfig?.shipRole) {
                                 const configRole = savedConfig.shipRole;
-                                setSelectedRole(getBaseRole(configRole) as ShipTypeName);
+                                setSelectedRole(getBaseRole(configRole));
                                 setScoringRole(configRole);
                             }
                         }}

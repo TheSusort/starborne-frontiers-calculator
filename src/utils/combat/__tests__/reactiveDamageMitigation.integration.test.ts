@@ -60,31 +60,29 @@ const basicDamage = (multiplier: number, id: string): Ability => ({
 /** A basic enemy that ALWAYS fires its CHARGED skill on turn 1 (startCharged, chargeCount 1),
  *  with a configurable defence — the victim of a PLAYER-owned reactive. Both active/charged
  *  slots carry a real (non-reactive, on-cast) damage ability so `hasChargedSkill` is true. */
-const chargedCastEnemy = (id: string, defence: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 100, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 40 },
-        chargeCount: 1,
-        startCharged: true,
-        shipSkills: {
-            slots: [
-                { slot: 'active', abilities: [basicDamage(50, `${id}-a`)] },
-                { slot: 'charged', abilities: [basicDamage(150, `${id}-c`)] },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const chargedCastEnemy = (id: string, defence: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 100, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 40 },
+    chargeCount: 1,
+    startCharged: true,
+    shipSkills: {
+        slots: [
+            { slot: 'active', abilities: [basicDamage(50, `${id}-a`)] },
+            { slot: 'charged', abilities: [basicDamage(150, `${id}-c`)] },
+        ],
+    },
+});
 
 /** A control enemy that never charges — the on-enemy-charged-cast reaction never fires. */
-const nonChargingEnemy = (id: string, defence: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 100, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 40 },
-        chargeCount: 99,
-        startCharged: false,
-        shipSkills: {
-            slots: [{ slot: 'active', abilities: [basicDamage(50, `${id}-a`)] }],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const nonChargingEnemy = (id: string, defence: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 100, crit: 0, critDamage: 0, defence, hp: 1_000_000_000, speed: 40 },
+    chargeCount: 99,
+    startCharged: false,
+    shipSkills: {
+        slots: [{ slot: 'active', abilities: [basicDamage(50, `${id}-a`)] }],
+    },
+});
 
 /** Player-focus input: the focus OWNS the reactive `damage` ability (passive slot) and reacts to
  *  its opposing enemy's charged cast. Focus HP is huge so it never dies; its own active hit is
@@ -302,7 +300,7 @@ describe('PR4b: reactive damage executor — team-symmetric mitigation (enemy-ow
                 chargeCount: 0,
                 startCharged: false,
                 shipSkills: opts.reactionAbilities,
-            } as EnemyAttacker,
+            },
         ],
     });
 

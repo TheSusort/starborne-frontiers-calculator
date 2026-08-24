@@ -21,7 +21,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
-import { ShipSkills, Ability } from '../../../types/abilities';
+import { ShipSkills } from '../../../types/abilities';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -42,7 +42,7 @@ const critReductionPassive = (pct: number): ShipSkills['slots'][number] => ({
                 pct,
                 critFamily: true,
             },
-        } as Ability,
+        },
     ],
 });
 
@@ -64,37 +64,36 @@ const noopActive: ShipSkills['slots'][number] = {
 const nonPositionalEnemy = (
     id: string,
     opts: { crit: number; critDamage: number }
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 5000,
-            crit: opts.crit,
-            critDamage: opts.critDamage,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: `${id}-hit`,
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 100 },
-                        },
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 5000,
+        crit: opts.crit,
+        critDamage: opts.critDamage,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: `${id}-hit`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 /** Build a one-round healing-mode run: focus actor 'attacker' IS the bound tank/healTarget. */
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({

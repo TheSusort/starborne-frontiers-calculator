@@ -135,7 +135,7 @@ function makeArgs(
         round: 1,
         targetId: enemy.id,
         ...overrides,
-    } as PlayerTurnArgs;
+    };
 }
 
 /** Seeds a 'Defense Down' timed debuff on `victimId`'s enemyMaps entry. */

@@ -36,7 +36,6 @@ import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import { SelectedGameBuff } from '../../../types/calculator';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
-import type { Position } from '../../../types/encounters';
 import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // ---------------------------------------------------------------------------
@@ -123,7 +122,7 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['buff-applied', 'buff-expired', 'debuff-applied'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     runCombat({ ...input, bus });
     return events;
 };
@@ -326,24 +325,22 @@ describe('Case 3 — heal-target self-buff + enemy debuff both expire attributed
      */
 
     /** Enemy attacker with only damage skills (used for the self-buff non-vacuous check). */
-    const ea1Damage = (): EnemyAttacker =>
-        ({
-            id: 'ea1',
-            stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: damageSkills(),
-        }) as EnemyAttacker;
+    const ea1Damage = (): EnemyAttacker => ({
+        id: 'ea1',
+        stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: damageSkills(),
+    });
 
     /** Enemy attacker that also inflicts a 1-turn 'Def Down' debuff. */
-    const ea1Debuff = (): EnemyAttacker =>
-        ({
-            id: 'ea1',
-            stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: debuffEnemySkills('Def Down', 1),
-        }) as EnemyAttacker;
+    const ea1Debuff = (): EnemyAttacker => ({
+        id: 'ea1',
+        stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: debuffEnemySkills('Def Down', 1),
+    });
 
     it('NON-VACUOUS: self-buff is applied in round 1 (buff-applied fires on "attacker")', () => {
         const events = collect(
@@ -472,14 +469,13 @@ describe('Case 4 — invariant: non-heal-target actors have empty debuff stores 
     });
 
     /** Enemy attacker that inflicts a 1-turn 'Def Down' debuff. */
-    const ea1 = (): EnemyAttacker =>
-        ({
-            id: 'ea1',
-            stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
-            chargeCount: 0,
-            startCharged: false,
-            shipSkills: debuffEnemySkills('Def Down', 1),
-        }) as EnemyAttacker;
+    const ea1 = (): EnemyAttacker => ({
+        id: 'ea1',
+        stats: { attack: 500, crit: 0, critDamage: 0, speed: 10 },
+        chargeCount: 0,
+        startCharged: false,
+        shipSkills: debuffEnemySkills('Def Down', 1),
+    });
 
     it('NON-VACUOUS: the enemy debuff is inflicted and expires on the heal target ("attacker"), not on "t1"', () => {
         // duration: 1 so the debuff expires every round (re-applied by ea1 each round after the
@@ -594,18 +590,17 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
     });
 
     /** Enemy that inflicts a 1-turn 'Def Down' debuff, positioned at M4, targets 'front'. */
-    const eaDebuffer = (): EnemyAttacker =>
-        ({
-            id: 'ea-debuffer',
-            // Very low attack: player-victim (500 000 HP) survives many rounds.
-            stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4' as Position,
-            target: parsedTarget('front'),
-            pattern: basePattern(),
-            shipSkills: debuffEnemySkills('Def Down', 1),
-        }) as EnemyAttacker;
+    const eaDebuffer = (): EnemyAttacker => ({
+        id: 'ea-debuffer',
+        // Very low attack: player-victim (500 000 HP) survives many rounds.
+        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 200 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: debuffEnemySkills('Def Down', 1),
+    });
 
     /** Non-heal-target walked team actor at M4 (front) — the debuff victim. */
     const playerVictim = (): TeamActorEngineInput => ({
@@ -615,7 +610,7 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        position: 'M4' as Position,
+        position: 'M4',
         walk: {
             shipSkills: damageSkills(),
             stats: {
@@ -662,7 +657,7 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
         healTargetId: 'attacker',
         mode: 'healing',
         // Heal target sits at M3; victim at M4 is closer to the enemy 'front'.
-        position: 'M3' as Position,
+        position: 'M3',
         target: parsedTarget('front'),
         pattern: basePattern(),
         teamActors: [playerVictim()],

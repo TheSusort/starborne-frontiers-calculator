@@ -70,17 +70,16 @@ const enemyAt = (
     attack: number,
     hp: number,
     speed: number
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills,
+});
 
 // Player FOCUS at M4 fires `front` (anchors the enemy) with a 100% damage active, acts FIRST
 // (speed 200), immortal so enemy counters never kill it (counters read via perTargetDamage).

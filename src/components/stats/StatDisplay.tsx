@@ -1,5 +1,5 @@
 import React from 'react';
-import { Stat, StatName } from '../../types/stats';
+import { Stat } from '../../types/stats';
 import { STATS } from '../../constants';
 
 interface Props {
@@ -43,9 +43,7 @@ export const StatDisplay: React.FC<Props> = ({
                         {stat.value !== 0 && (
                             <>
                                 <span>
-                                    {compact
-                                        ? STATS[stat.name as StatName].shortLabel
-                                        : STATS[stat.name as StatName].label}
+                                    {compact ? STATS[stat.name].shortLabel : STATS[stat.name].label}
                                 </span>
                                 <span>
                                     {stat.min && stat.max ? `${stat.min}-${stat.max}` : stat.value}

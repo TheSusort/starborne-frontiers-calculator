@@ -110,7 +110,7 @@ export const ShipForm: React.FC<Props> = ({ onSubmit, editingShip }) => {
             setFaction(data.faction);
             setType(data.type);
             setRarity(data.rarity);
-            setAffinity(data.affinity as AffinityName);
+            setAffinity(data.affinity);
             addNotification('success', 'Ship data fetched successfully');
         } catch (err) {
             setError(

@@ -592,9 +592,9 @@ describe('Fuying Stealth DR aura (#363) — the per-hit gate', () => {
     });
 
     it('does NOT reduce an unstealthed victim', () => {
-        expect(
-            incomingReductionForHit([aura as never], { ...base, victimStealthed: false } as never)
-        ).toBe(0);
+        expect(incomingReductionForHit([aura as never], { ...base, victimStealthed: false })).toBe(
+            0
+        );
     });
 });
 

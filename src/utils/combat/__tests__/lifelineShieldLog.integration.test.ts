@@ -16,7 +16,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { CombatEvent } from '../events';
 import { createEventBus } from '../events';
@@ -68,7 +68,7 @@ const lifelineEnemy = (hp = 10_000) =>
         position: 'M4',
         shipSkills: {
             slots: [{ slot: 'passive', abilities: [lifeline(5_000)] }],
-        } as ShipSkills,
+        },
     }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 const INPUT = (): CombatEngineInput => ({
@@ -180,8 +180,8 @@ const COUNTER_INPUT = (): CombatEngineInput => ({
             chargeCount: 0,
             startCharged: false,
             position: 'M4',
-            shipSkills: { slots: [{ slot: 'passive', abilities: [counter(300)] }] } as ShipSkills,
-        } as NonNullable<CombatEngineInput['enemyAttackers']>[number],
+            shipSkills: { slots: [{ slot: 'passive', abilities: [counter(300)] }] },
+        },
     ],
 });
 

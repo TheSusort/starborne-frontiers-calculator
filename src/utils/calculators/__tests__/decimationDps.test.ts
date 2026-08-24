@@ -46,7 +46,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 /** Minimal GearPiece stub. */
@@ -61,7 +61,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** getGearPiece factory backed by an id→GearPiece map. */
@@ -103,7 +103,7 @@ function skillsWithRegistry(pieces: GearPiece[]): {
         equipment[p.slot] = p.id;
         map[p.id] = p;
     }
-    const ship = makeShip({ equipment: equipment as Ship['equipment'] });
+    const ship = makeShip({ equipment: equipment });
     const built = buildShipAbilitiesWithEquipment(ship, makeGetGearPiece(map));
     const passive = built.slots.find((s) => s.slot === 'passive');
     return {

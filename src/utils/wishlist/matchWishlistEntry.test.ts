@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { GearPiece } from '../../types/gear';
-import { GearSetName } from '../../constants/gearSets';
 import { WishlistEntry } from '../../types/wishlist';
 import { matchesWishlistEntry } from './matchWishlistEntry';
 
@@ -9,7 +8,7 @@ const baseGear: GearPiece = {
     slot: 'weapon',
     stars: 5,
     rarity: 'epic',
-    setBonus: 'Fortitude' as GearSetName,
+    setBonus: 'Fortitude',
     mainStat: { name: 'attack', value: 100, type: 'flat' },
     subStats: [
         { name: 'crit', value: 10, type: 'percentage' },
@@ -17,7 +16,7 @@ const baseGear: GearPiece = {
     ],
     shipId: undefined,
     level: 16,
-} as GearPiece;
+};
 
 describe('matchesWishlistEntry', () => {
     it('matches when no filters are set', () => {
@@ -105,7 +104,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Fortitude' as GearSetName] },
+            filters: { setBonus: ['Fortitude'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
@@ -114,7 +113,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Fortitude' as GearSetName, 'Oblivion' as GearSetName] },
+            filters: { setBonus: ['Fortitude', 'Oblivion'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
@@ -123,7 +122,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Oblivion' as GearSetName] },
+            filters: { setBonus: ['Oblivion'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
     });

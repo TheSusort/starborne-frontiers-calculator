@@ -8,7 +8,6 @@ import type { CombatActor } from '../state';
 import type { PlayerActorRuntime } from '../playerTurn';
 import type { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
-import type { Position } from '../../../types/encounters';
 
 const timed = (buffName: string, duration: number) => ({
     payload: { buffName, stacks: 1, parsedEffects: {} },
@@ -115,7 +114,7 @@ describe('Barrier Recharging: real 3-turn cooldown (re-arm gate)', () => {
             // FIX 3: now required — this suite has no live-HP view, so "nobody" is the honest
             // answer, supplied explicitly rather than by omission.
             lowestHpAllyIdFor: () => undefined,
-        } as IntentExecContext;
+        };
     };
 
     it('does not refresh an ally already holding the lockout', () => {
@@ -244,78 +243,76 @@ describe('Barrier Recharging: the CAST-path gate (a charge-slot Barrier grant vs
     /** Fast (acts first every round, so its own-turn grants land before the enemy's hit),
      *  chargeCount 1 → banks a charge on round 1's ACTIVE cast and fires the CHARGE slot on
      *  round 2. */
-    const holder = (): TeamActor =>
-        ({
-            id: 'holder',
-            speed: 1000,
-            chargeCount: 1,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            position: 'M4' as Position,
-            walk: {
-                shipSkills: {
-                    slots: [
-                        {
-                            slot: 'active',
-                            abilities: [
-                                selfChargeGain(),
-                                grantBarrierRechargingSelf(),
-                                noopDamage('active-dmg'),
-                            ],
-                        },
-                        {
-                            slot: 'charged',
-                            abilities: [barrierSelfBuff(), noopDamage('charge-dmg')],
-                        },
-                    ],
-                },
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 0,
-                    defence: 0,
-                    hp: HP,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: true,
-            },
-        }) as TeamActor;
-
-    /** Slower than the holder, so its hit always lands after the holder's turn resolves. */
-    const offensiveEnemy = (): EnemyAttacker =>
-        ({
-            id: 'enemy-1',
-            stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M1' as Position,
-            target: parsedTarget('front'),
-            pattern: basePattern(),
+    const holder = (): TeamActor => ({
+        id: 'holder',
+        speed: 1000,
+        chargeCount: 1,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: 'M4',
+        walk: {
             shipSkills: {
                 slots: [
                     {
                         slot: 'active',
                         abilities: [
-                            {
-                                id: 'enemy-atk',
-                                type: 'damage',
-                                target: 'enemy',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: { type: 'damage', multiplier: 100, hits: 1 },
-                            } as Ability,
+                            selfChargeGain(),
+                            grantBarrierRechargingSelf(),
+                            noopDamage('active-dmg'),
                         ],
+                    },
+                    {
+                        slot: 'charged',
+                        abilities: [barrierSelfBuff(), noopDamage('charge-dmg')],
                     },
                 ],
             },
-        }) as EnemyAttacker;
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: true,
+        },
+    });
+
+    /** Slower than the holder, so its hit always lands after the holder's turn resolves. */
+    const offensiveEnemy = (): EnemyAttacker => ({
+        id: 'enemy-1',
+        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M1',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'enemy-atk',
+                            type: 'damage',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                        },
+                    ],
+                },
+            ],
+        },
+    });
 
     const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
         enemyAttackers: [],

@@ -20,7 +20,7 @@ export const listProfiles = async (authUserId: string): Promise<ProfileRow[]> =>
         )
         .or(`id.eq.${authUserId},owner_auth_user_id.eq.${authUserId}`);
     if (error) throw error;
-    return (data ?? []) as ProfileRow[];
+    return data ?? [];
 };
 
 export const createAlt = async (authUserId: string, username: string): Promise<ProfileRow> => {

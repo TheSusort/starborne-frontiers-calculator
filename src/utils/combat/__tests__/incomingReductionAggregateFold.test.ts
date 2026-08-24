@@ -39,7 +39,7 @@ function damageTakenBuff(pct: number): SelectedGameBuff {
         application: 'apply', // affinity-based → lands unless affinity-disadvantaged (it isn't)
         skillSource: 'passive1', // always-active → snapshots as 'recurring'
         parsedEffects: { incomingDamage: pct },
-    } as SelectedGameBuff;
+    };
 }
 
 function makeRuntime(

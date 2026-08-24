@@ -24,7 +24,7 @@ interface Props {
 export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [slot, setSlot] = useState<GearSlotName>(editingPiece?.slot || 'weapon');
     const [mainStat, setMainStat] = useState<Stat>(
-        editingPiece?.mainStat || ({ name: 'attack', value: 0, type: 'flat' } as Stat)
+        editingPiece?.mainStat || { name: 'attack', value: 0, type: 'flat' }
     );
     const [subStats, setSubStats] = useState<Stat[]>(editingPiece?.subStats || []);
     const [rarity, setRarity] = useState<RarityName>(editingPiece?.rarity || 'rare');
@@ -37,9 +37,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         if (editingPiece) {
             setShowAllFields(false);
             setSlot(editingPiece.slot);
-            setMainStat(
-                editingPiece.mainStat || ({ name: 'attack', value: 0, type: 'flat' } as Stat)
-            );
+            setMainStat(editingPiece.mainStat || { name: 'attack', value: 0, type: 'flat' });
             setSubStats(editingPiece.subStats);
             setRarity(editingPiece.rarity);
             setStars(editingPiece.stars);
@@ -48,7 +46,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         } else {
             setShowAllFields(false);
             setSlot('weapon');
-            setMainStat({ name: 'attack', value: 0, type: 'flat' } as Stat);
+            setMainStat({ name: 'attack', value: 0, type: 'flat' });
             setSubStats([]);
             setRarity('rare');
             setStars(1);
@@ -138,7 +136,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             if (subStat.name === mainStat.name) {
                 return {
                     ...subStat,
-                    type: (mainStat.type === 'flat' ? 'percentage' : 'flat') as StatType,
+                    type: mainStat.type === 'flat' ? 'percentage' : 'flat',
                 };
             }
 
@@ -176,7 +174,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         setStars(1);
         setLevel(0);
         setSlot('weapon');
-        setMainStat({ name: 'attack', value: 0, type: 'flat' } as Stat);
+        setMainStat({ name: 'attack', value: 0, type: 'flat' });
         setRarity('rare');
         setSetBonus('FORTITUDE');
     };

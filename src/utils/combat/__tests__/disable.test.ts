@@ -92,26 +92,25 @@ const offensiveEnemyAt = (
     selection: ParsedTarget['selection'],
     skills: ShipSkills['slots'][number],
     speedOverride = 1
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 2000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: speedOverride,
-            security: 0,
-            hacking: 200,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [skills] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 2000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: speedOverride,
+        security: 0,
+        hacking: 200,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [skills] },
+});
 
 /** A walked team actor. attackOverride defaults to 0 (no offense). */
 const teamAttackerAt = (
@@ -164,26 +163,25 @@ const POS_ENEMY_BACK: Position = 'M1';
  * changes nothing else: 0 attack and no skills make it RNG-stream-inert, and speed 1 puts it last
  * in every turn order.
  */
-const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [] },
-    }) as EnemyAttacker;
+const bystanderEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [] },
+});
 
 // ── Run helper (collects all relevant events) ─────────────────────────────────────────────
 
@@ -202,7 +200,7 @@ const run = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     for (const t of INTERESTING_TYPES) {
-        bus.on(t, (e) => events.push(e as CombatEvent));
+        bus.on(t, (e) => events.push(e));
     }
     const result = runCombat({ ...input, bus });
     return { events, result };
@@ -354,7 +352,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (ii) Disable(2) decrements on ski
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [disableInflictAttack(2)] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -438,7 +436,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (iii) Disable does NOT break on a
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [disableInflictAttack(3)] },
-                } as EnemyAttacker,
+                },
                 // breaker: plain direct hit at the focus every round (would break Stasis).
                 offensiveEnemyAt('breaker', POS_ENEMY_BACK, 'front', basicAttack(), 150),
             ],
@@ -596,7 +594,7 @@ describe('D-PR13 Task 3 — reactive suppression: (iv) on-attacked self-buff sup
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [disableInflictAttack(4)] },
-                } as EnemyAttacker,
+                },
                 // attack-enemy: bare attacker that triggers the on-attacked listener each round.
                 {
                     id: 'attack-enemy',
@@ -616,7 +614,7 @@ describe('D-PR13 Task 3 — reactive suppression: (iv) on-attacked self-buff sup
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [basicAttack()] },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -723,7 +721,7 @@ describe('D-PR13 Task 3 — reactive suppression: (v) incoming DoT still ticks o
                             },
                         ],
                     },
-                } as EnemyAttacker,
+                },
             ],
         });
 
@@ -875,7 +873,7 @@ describe('D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the focu
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [disableInflictAttack(5)] },
-                } as EnemyAttacker,
+                },
             ],
         });
 

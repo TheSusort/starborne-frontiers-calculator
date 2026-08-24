@@ -18,7 +18,7 @@
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -158,7 +158,7 @@ const playerVictim = (includeRemoval: boolean, hp: number): TeamActor => ({
     startCharged: false,
     selfBuffs: [],
     enemyDebuffs: [],
-    position: 'M4' as Position,
+    position: 'M4',
     walk: {
         shipSkills: {
             slots: [
@@ -170,7 +170,7 @@ const playerVictim = (includeRemoval: boolean, hp: number): TeamActor => ({
                         : [incomingReductionAbility],
                 },
             ],
-        } as ShipSkills,
+        },
         stats: {
             attack: 0,
             crit: 0,
@@ -214,7 +214,7 @@ const flatOffensiveEnemy = (id: string, position: Position, speed: number): Enem
                 ],
             },
         ],
-    } as ShipSkills,
+    },
 });
 
 const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({

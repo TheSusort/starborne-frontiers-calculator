@@ -23,7 +23,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
-import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
@@ -70,17 +70,16 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** A passive (0-attack) enemy — present only because the engine needs a target to resolve the
  *  turn against; this test never inspects damage. */
-const passiveEnemy = (id: string, position: Position, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage()] }] } as ShipSkills,
-    }) as EnemyAttacker;
+const passiveEnemy = (id: string, position: Position, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [noopDamage()] }] },
+});
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
@@ -170,8 +169,8 @@ describe('self-shield-full gate (cast path) — team symmetry (enemy-side caster
                         slots: [
                             { slot: 'active', abilities: [gatedFullShieldBuff(), noopDamage()] },
                         ],
-                    } as ShipSkills,
-                } as EnemyAttacker,
+                    },
+                },
             ],
             ...overrides,
         });

@@ -41,115 +41,115 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
 
 // A SUPPORTER whose active slot casts an all-allies Attack Up (timed, 99 turns) AND a basic
 // hit. The buff is on-cast → folds at this enemy's turn onto every enemy recipient.
-const supporterEnemy = (id: string, speed: number, buffTarget: Ability['target']): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const supporterEnemy = (
+    id: string,
+    speed: number,
+    buffTarget: Ability['target']
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: buffTarget,
+                        config: {
                             type: 'buff',
-                            target: buffTarget,
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            },
-                        }),
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // A PURE supporter: only an all-allies Attack Up on its active slot, NO damage ability.
-const pureSupporterEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const pureSupporterEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'all-allies',
+                        config: {
                             type: 'buff',
-                            target: 'all-allies',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 99,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 99,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // An aura supporter: all-allies Attack Up with NO duration (aura → folds each round via
 // activeAbilityStatuses), plus a basic hit.
-const auraSupporterEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
+const auraSupporterEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'all-allies',
+                        config: {
                             type: 'buff',
-                            target: 'all-allies',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Attack Up',
-                                parsedEffects: { attack: 100 },
-                                stacks: 1,
-                                isStackable: false,
-                                // No duration → aura (recurring fold).
-                            },
-                        }),
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Attack Up',
+                            parsedEffects: { attack: 100 },
+                            stacks: 1,
+                            isStackable: false,
+                            // No duration → aura (recurring fold).
+                        },
+                    }),
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 // A plain enemy with NO buff at all, at a given speed/id.
-const plainEnemy = (id: string, speed: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5000, crit: 0, critDamage: 0, speed },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: { slots: [basicAttack()] } as ShipSkills,
-    }) as EnemyAttacker;
+const plainEnemy = (id: string, speed: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 5000, crit: 0, critDamage: 0, speed },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const BASE_MULTI = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => ({
     ...BASE(enemyAttackers[0]),

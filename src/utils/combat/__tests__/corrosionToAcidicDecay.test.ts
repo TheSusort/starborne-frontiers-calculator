@@ -103,33 +103,32 @@ const corrosionAbility = (): Ability => ({
 });
 
 describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into an unremovable Acidic Decay of the same tier', () => {
-    const corrosionAlly = (): TeamActor =>
-        ({
-            id: 'ally-corrosion',
-            speed: 130,
-            chargeCount: 0,
-            startCharged: false,
-            selfBuffs: [],
-            enemyDebuffs: [],
-            walk: {
-                shipSkills: { slots: [{ slot: 'active', abilities: [corrosionAbility()] }] },
-                stats: {
-                    attack: 100,
-                    crit: 0,
-                    critDamage: 0,
-                    defensePenetration: 0,
-                    hacking: 200,
-                    defence: 0,
-                    hp: 10_000,
-                },
-                selfDotModifier: 0,
-                defensePenetrationBuff: 0,
-                affinityDamageModifier: 0,
-                affinityCritCap: 100,
-                affinityCritPenalty: 0,
-                hasChargedSkill: false,
+    const corrosionAlly = (): TeamActor => ({
+        id: 'ally-corrosion',
+        speed: 130,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        walk: {
+            shipSkills: { slots: [{ slot: 'active', abilities: [corrosionAbility()] }] },
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 200,
+                defence: 0,
+                hp: 10_000,
             },
-        }) as TeamActor;
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
         // SP-4b-2b: a real opponent for the ally-inflicted Corrosion to land on. The DEFAULT
@@ -235,7 +234,7 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'passive', abilities: [belladonnaConvertDot()] }] },
-        } as EnemyAttacker;
+        };
 
         const enemyCorrosionAlly: EnemyAttacker = {
             id: 'enemy-corrosion-ally',
@@ -250,7 +249,7 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
             chargeCount: 0,
             startCharged: false,
             shipSkills: { slots: [{ slot: 'active', abilities: [corrosionAbility()] }] },
-        } as EnemyAttacker;
+        };
 
         const input: CombatEngineInput = {
             attack: 0,

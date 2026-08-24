@@ -19,7 +19,7 @@ import { createActor } from '../state';
 import { createStatusEngine, RegisteredAbilityStatus, StatusEngine } from '../statusEngine';
 import { createEventBus, CombatEvent } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
-import { ShipSkills, AbilityTarget } from '../../../types/abilities';
+import { ShipSkills } from '../../../types/abilities';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -104,7 +104,7 @@ function makeRuntime(opts: RuntimeOpts = {}): PlayerActorRuntime {
                     {
                         id: 'dmg1',
                         type: 'damage',
-                        target: 'enemy' as AbilityTarget,
+                        target: 'enemy',
                         trigger: 'on-cast',
                         conditions: [],
                         config: { type: 'damage', multiplier: 100 },

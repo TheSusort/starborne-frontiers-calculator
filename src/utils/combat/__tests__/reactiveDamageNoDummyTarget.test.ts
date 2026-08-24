@@ -10,9 +10,9 @@
  * (no positioned roster) the dummy IS the intended sink and must be preserved.
  */
 import { describe, it, expect } from 'vitest';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { Ability, ShipSkills } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -48,93 +48,91 @@ const basicAttack = (): Ability => ({
     config: { type: 'damage', multiplier: 100 },
 });
 
-const nukeActor = (id: string): TeamActor =>
-    ({
-        id,
-        speed: 500,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position: 'M2',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: {
-                slots: [
-                    { slot: 'active', abilities: [basicAttack()] },
-                    { slot: 'passive', abilities: [startOfRoundNuke] },
-                ],
-            } as ShipSkills,
-            stats: {
-                attack: 10_000,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const nukeActor = (id: string): TeamActor => ({
+    id,
+    speed: 500,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position: 'M2',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [basicAttack()] },
+                { slot: 'passive', abilities: [startOfRoundNuke] },
+            ],
         },
-    }) as TeamActorEngineInput;
+        stats: {
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** An ally-targeting healer — the exact condition under which the phantom "enemy" leaked in the
  *  user's battle. It USED to keep the dummy in the turn order by falsifying the second conjunct of
  *  the `dummyEnemyIsVestigial` gate; that gate was deleted in SP-4c-2c and the dummy now takes no
  *  turn on any run, so the healer is retained here purely as the fixture shape that reproduced the
  *  original bug, not as a live condition. */
-const healerActor = (id: string): TeamActor =>
-    ({
-        id,
-        speed: 400,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position: 'M3',
-        target: { raw: 'team', side: 'ally', selection: 'team' } as ParsedTarget,
-        pattern: basePattern(),
-        walk: {
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            {
-                                id: 'heal',
-                                type: 'heal',
-                                target: 'ally',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: { type: 'heal', pct: 10, basis: 'hp' },
-                            },
-                        ],
-                    },
-                ],
-            } as ShipSkills,
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const healerActor = (id: string): TeamActor => ({
+    id,
+    speed: 400,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position: 'M3',
+    target: { raw: 'team', side: 'ally', selection: 'team' },
+    pattern: basePattern(),
+    walk: {
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        {
+                            id: 'heal',
+                            type: 'heal',
+                            target: 'ally',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'heal', pct: 10, basis: 'hp' },
+                        },
+                    ],
+                },
+            ],
         },
-    }) as TeamActorEngineInput;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 const enemyShip = (
     id: string,

@@ -240,7 +240,7 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
                     ],
                 },
             ],
-        } as ShipSkills,
+        },
     });
 
     // A plain enemy with NO Stealth (gate stays OFF). Same stats so the focus survives.
@@ -265,7 +265,7 @@ describe('player-side Graphite gate + single-grant-per-round', () => {
                     ],
                 },
             ],
-        } as ShipSkills,
+        },
     });
 
     // runCombat input: focus attacker with partial charges + the Graphite teammate + one enemy.
@@ -484,7 +484,7 @@ describe('enemy-side Hayyan ally-charge acceleration', () => {
                 { slot: 'active', abilities: [enemyDamage(50, 'eh-a')] },
                 { slot: 'charged', abilities: [enemyDamage(50, 'eh-c'), grant] },
             ],
-        } as ShipSkills,
+        },
     });
 
     // A plain enemy attacker with a CHARGED damage skill: chargeCount 3, +1/round natural; an
@@ -499,7 +499,7 @@ describe('enemy-side Hayyan ally-charge acceleration', () => {
                 { slot: 'active', abilities: [enemyDamage(50, 'ea-a')] },
                 { slot: 'charged', abilities: [enemyDamage(400, 'ea-c')] },
             ],
-        } as ShipSkills,
+        },
     });
 
     const BASE = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => ({
@@ -606,7 +606,7 @@ describe('enemy-side Graphite (dormant — no player Stealth)', () => {
                 { slot: 'active', abilities: [enemyDamage(50, 'eg-a')] },
                 { slot: 'passive', abilities: [grant] },
             ],
-        } as ShipSkills,
+        },
     });
 
     const chargedAttackerEnemy = (): EnemyAttacker => ({
@@ -619,7 +619,7 @@ describe('enemy-side Graphite (dormant — no player Stealth)', () => {
                 { slot: 'active', abilities: [enemyDamage(50, 'ea-a')] },
                 { slot: 'charged', abilities: [enemyDamage(400, 'ea-c')] },
             ],
-        } as ShipSkills,
+        },
     });
 
     const BASE = (enemyAttackers: EnemyAttacker[]): CombatEngineInput => ({

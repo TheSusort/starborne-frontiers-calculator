@@ -99,7 +99,7 @@ const collectEvents = (input: CombatEngineInput) => {
         'hp-changed',
         'ship-destroyed',
     ];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -2914,7 +2914,7 @@ describe('on-attacked engine integration (Task 8)', () => {
                         stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
                         chargeCount: 0,
                         startCharged: false,
-                    } as EnemyAttacker,
+                    },
                 ],
             })
         );

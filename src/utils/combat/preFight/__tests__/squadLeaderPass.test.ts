@@ -150,7 +150,7 @@ describe('squadLeaderPass — lookup (trust boundary)', () => {
         const enemy = [makeUnit('e1', 'enemy', 'MPL')];
         expect(() =>
             runPass(player, enemy, {
-                player: { faction: 'NOT_A_FACTION' as FactionName, name: 'Midas', stage: 1 },
+                player: { faction: 'NOT_A_FACTION', name: 'Midas', stage: 1 },
             })
         ).toThrow('unknown squad leader');
     });

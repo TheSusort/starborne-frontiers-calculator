@@ -105,7 +105,7 @@ export const migratePlayerData = (): MigrationResult => {
         for (const slot of Object.keys(updatedEquipment)) {
             const gearId = updatedEquipment[slot];
             if (gearId && gearIdMap.has(gearId)) {
-                updatedEquipment[slot] = gearIdMap.get(gearId) as string;
+                updatedEquipment[slot] = gearIdMap.get(gearId);
             }
         }
 

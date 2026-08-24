@@ -98,15 +98,14 @@ const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0
 
 // A positioned enemy victim with configurable attack (drives the Giant Slayer higher-attack gate)
 // and HUGE HP so it never dies → perTargetDamage records the actual landed damage unclamped.
-const enemyVictim = (id: string, position: Position, attack = 0): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyVictim = (id: string, position: Position, attack = 0): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // Focus attacker at M4 with a basic attack + optional outgoing-amplification passive, targeting
 // `front` (origin-only) → anchors the front-most enemy at M4. Healing mode builds the enemy roster.

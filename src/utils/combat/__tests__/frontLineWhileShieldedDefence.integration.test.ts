@@ -157,17 +157,16 @@ const offensiveEnemy = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: ATTACK, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: basicAttack.abilities }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: ATTACK, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: basicAttack.abilities }] },
+});
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],
@@ -222,18 +221,17 @@ describe('FrontLine while-Shielded +2500 Defense — PLAYER side (enemy→player
 
 /** A positioned ENEMY FrontLine carrying the injected conditional-stat passive, with a starting
  *  shield pool of `shieldPctOfHp`% of its max HP (0 = no shield). Attack 0 — pure victim. */
-const enemyFrontLine = (id: string, shieldPctOfHp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [frontLinePassive] },
-        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: shieldPctOfHp },
-    }) as EnemyAttacker;
+const enemyFrontLine = (id: string, shieldPctOfHp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [frontLinePassive] },
+    preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: shieldPctOfHp },
+});
 
 const BASE_ENEMY_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],

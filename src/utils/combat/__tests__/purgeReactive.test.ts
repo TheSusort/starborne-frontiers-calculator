@@ -36,7 +36,7 @@ function makeIntent(
 
 /** Minimal IntentExecContext stub sufficient for reactiveRecipients */
 function makeCtx(playerIds = ['p1', 'p2', 'p3']): Pick<IntentExecContext, 'playerIds'> {
-    return { playerIds } as IntentExecContext;
+    return { playerIds };
 }
 
 describe('C2b-1 T2: reactiveRecipients helper', () => {

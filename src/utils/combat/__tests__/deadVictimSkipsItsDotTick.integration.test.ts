@@ -47,12 +47,10 @@ import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import type { ActiveDoTStack, CombatActor } from '../state';
-import type { ShipSkills, Ability } from '../../../types/abilities';
+import type { ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 
 const HUGE_HP = 1_000_000_000;
-
-type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 const frontTarget = (): ParsedTarget => ({ raw: 'front', side: 'enemy', selection: 'front' });
 /** The anchor cell alone (range MUST be 0 — see DEFAULT_BASE_PATTERN). */
@@ -78,7 +76,7 @@ const damageKit = (multiplier: number, id: string): ShipSkills => ({
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'damage', multiplier },
-                } as Ability,
+                },
             ],
         },
     ],
@@ -111,7 +109,7 @@ const run = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     for (const t of ['dot-ticked', 'ship-destroyed'] as CombatEvent['type'][]) {
-        bus.on(t, (e) => events.push(e as CombatEvent));
+        bus.on(t, (e) => events.push(e));
     }
     const result = runCombat({ ...input, bus, pattern: singleCell() });
     const ticks = events.filter((e) => e.type === 'dot-ticked');
@@ -140,14 +138,14 @@ const runEnemySide = (e1Hp: number) =>
                 chargeCount: 0,
                 startCharged: false,
                 position: 'M4',
-            } as EnemyAttacker,
+            },
             {
                 id: 'e2',
                 stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 50 },
                 chargeCount: 0,
                 startCharged: false,
                 position: 'M3',
-            } as EnemyAttacker,
+            },
         ],
         __testTapActors: (actors: CombatActor[]) => {
             for (const a of actors) {
@@ -211,7 +209,7 @@ const runPlayerSide = (focusHp: number) =>
                 startCharged: false,
                 position: 'M4',
                 shipSkills: damageKit(100, 'pk1'),
-            } as EnemyAttacker,
+            },
         ],
         __testTapActors: (actors: CombatActor[]) => {
             for (const a of actors) {

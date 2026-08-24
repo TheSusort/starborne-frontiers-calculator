@@ -82,15 +82,14 @@ const TEAM_ATTACK = 100; // tiny firing hit — marks victims hit without killin
 
 // A positioned, zero-offense, finite-HP enemy victim (a stationary, damageable target).
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // The detonating WALKED-TEAM ally: a positioned, offensive player team actor (kind 'team') whose
 // active slot is a basic attack + the requested detonate abilities. target/pattern on the team-actor
@@ -105,29 +104,28 @@ const teamStats = (): CombatStatBlock => ({
     hacking: 0,
 });
 
-const teamDetonator = (id: string, position: Position, dets: Ability[]): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100, // acts each round
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [detonateSlot(...dets)] },
-            stats: teamStats(),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamDetonator = (id: string, position: Position, dets: Ability[]): TeamActorEngineInput => ({
+    id,
+    speed: 100, // acts each round
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [detonateSlot(...dets)] },
+        stats: teamStats(),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // A pre-seeded bomb with all multipliers neutral (bomb payout = stacks × damagePerStack × powerPct).
 const bomb = (damagePerStack: number, stacks: number, sourceId = 'team-det'): PendingBomb => ({
@@ -193,7 +191,7 @@ const collect = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['bomb-detonated', 'dot-detonated', 'ship-destroyed'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -368,7 +366,7 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
                             hasChargedSkill: false,
                             healModifier: 0,
                         },
-                    } as TeamActorEngineInput,
+                    },
                 ],
                 __testTapActors: (actors: CombatActor[]) => {
                     // The floored enemy is real now — tap ITS id, not the legacy dummy.

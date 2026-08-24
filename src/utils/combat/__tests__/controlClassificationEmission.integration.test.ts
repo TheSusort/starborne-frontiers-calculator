@@ -66,24 +66,23 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
  *  actor's recurring Block Debuff self-buff is live before this enemy casts) whose kit
  *  is a basic attack + the supplied control/debuff abilities. `hacking` omitted →
  *  defaults to 200 → 100% landing (so the ONLY thing that can resist is Block Debuff). */
-const attackerWith = (...abilities: Ability[]): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        ...abilities,
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const attackerWith = (...abilities: Ability[]): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ...abilities,
+                ],
+            },
+        ],
+    },
+});
 
 /** Like attackerWith but with a custom `hacking` stat. `liveDebuffLandingChance`
  *  (effectiveStats.ts) clamps `(hacking - security) / 100` to >= 0 — hacking <= the focus
@@ -91,24 +90,23 @@ const attackerWith = (...abilities: Ability[]): EnemyAttacker =>
  *  'inflict' named status is GUARANTEED resisted by the landing roll on round 1 (NOT
  *  Block-Debuff), independent of the RNG stream (SP-0: gates now draw from keyed per-actor
  *  sub-streams, so a mid-range rate is no longer safe to pin a single-draw outcome on). */
-const attackerWithHacking = (hacking: number, ...abilities: Ability[]): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        ...abilities,
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+const attackerWithHacking = (hacking: number, ...abilities: Ability[]): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    ...abilities,
+                ],
+            },
+        ],
+    },
+});
 
 /** Focus actor (heal target) shipSkills granting a recurring `Block Debuff` self-buff. */
 const blockDebuffSelfSkills = (): ShipSkills => ({
@@ -337,8 +335,8 @@ describe('control-classification emission — inherited condition gate is honore
                         ],
                     },
                 ],
-            } as ShipSkills,
-        } as EnemyAttacker;
+            },
+        };
 
         run({ slots: [] }, bus, attackerWithOwnAura);
 

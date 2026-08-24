@@ -60,7 +60,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 /** Minimal GearPiece stub. */
@@ -75,7 +75,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** getGearPiece factory backed by an id→GearPiece map. */
@@ -3015,7 +3015,7 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
                 crit: 0,
                 critDamage: 0,
                 speed: 100,
-            } as Ship['baseStats'],
+            },
             equipment: {},
             implants: opts.withFont ? { implant_major: 'font-legendary' } : {},
             refits: [],
@@ -3025,7 +3025,7 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
             // Bare/ally/all-allies repairs target the ally side; damage targets the front enemy.
             activeTarget: repair === 'damage' ? 'front' : 'allies',
             activePattern: 'Pattern-Base',
-        } as Partial<Ship>);
+        });
     }
 
     const place = (
@@ -3349,7 +3349,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
                 crit: 0,
                 critDamage: 0,
                 speed: 100,
-            } as Ship['baseStats'],
+            },
             equipment: {},
             implants: opts.withSpearhead ? { implant_major: 'spearhead-legendary' } : {},
             refits: [],
@@ -3365,7 +3365,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
                 : { chargeSkillCharge: 0 }),
             activeTarget: 'front',
             activePattern: 'Pattern-Base',
-        } as Partial<Ship>);
+        });
     }
 
     const place = (
@@ -4407,17 +4407,16 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
         selection: ParsedTarget['selection'],
         pattern: ParsedPattern,
         attack = 5000
-    ): EnemyAttacker =>
-        ({
-            id,
-            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-            chargeCount: 0,
-            startCharged: false,
-            position,
-            target: parsedTarget(selection),
-            pattern,
-            shipSkills: { slots: [basicAttack()] },
-        }) as EnemyAttacker;
+    ): EnemyAttacker => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+        chargeCount: 0,
+        startCharged: false,
+        position,
+        target: parsedTarget(selection),
+        pattern,
+        shipSkills: { slots: [basicAttack()] },
+    });
 
     /** Base healing-mode input: focus 'attacker' positioned, plenty of HP, multi-round. */
     const CLOAK_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
@@ -4567,7 +4566,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
                         { slot: enemyPassive!.slot, abilities: enemyPassive!.abilities },
                     ],
                 },
-            } as EnemyAttacker;
+            };
             const plainEnemy: EnemyAttacker = {
                 id: 'enemy-plain',
                 stats: {
@@ -4582,7 +4581,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
                 startCharged: false,
                 position: 'M3',
                 shipSkills: { slots: [] },
-            } as EnemyAttacker;
+            };
 
             const input = CLOAK_BASE({
                 // Focus fires `base front` at the enemy roster (positional).
@@ -6197,7 +6196,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
                 crit: 0,
                 critDamage: 0,
                 speed: 100,
-            } as Ship['baseStats'],
+            },
             equipment: {},
             implants: withImplant ? { implant_major: IMPLANT_ID } : {},
             refits: [],
@@ -6209,7 +6208,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
             chargeSkillCharge: 0,
             activeTarget: 'all',
             activePattern: 'Pattern-All',
-        } as Partial<Ship>);
+        });
     }
 
     /** Inert enemy: no active damage, high HP so nothing dies mid-test. `security` decides
@@ -6228,7 +6227,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
                 crit: 0,
                 critDamage: 0,
                 speed: 1,
-            } as Ship['baseStats'],
+            },
             equipment: {},
             implants: {},
             refits: [],
@@ -6237,7 +6236,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
             chargeSkillCharge: 0,
             activeTarget: 'front',
             activePattern: 'Pattern-Base',
-        } as Partial<Ship>);
+        });
     }
 
     const place = (ship: Ship, position: Position, security: number): BattlePlacement => ({

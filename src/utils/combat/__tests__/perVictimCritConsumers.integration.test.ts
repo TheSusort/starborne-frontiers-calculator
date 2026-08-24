@@ -80,7 +80,7 @@ function passiveEnemy(
         position,
         affinity,
         shipSkills: { slots: [] },
-    } as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    };
 }
 
 /** Base CombatEngineInput for the focus attacker (chemical, crit 100, attack 5000). */
@@ -417,7 +417,7 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
                 ampPct: 45, // legendary Menace
                 procChance: 1.0, // deterministic: always fires when condition (didCrit) is met
             },
-        } as Ability;
+        };
 
         const enemies = [
             passiveEnemy('anchor', 'M4', 'antimatter'), // crits at rng=0.9
@@ -487,7 +487,7 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
                 ampPct: 45,
                 procChance: 1.0,
             },
-        } as Ability;
+        };
 
         const enemies = [
             passiveEnemy('anchor', 'M4', 'antimatter'), // crits (rate 1.0)

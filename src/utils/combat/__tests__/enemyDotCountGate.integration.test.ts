@@ -66,13 +66,12 @@ const seedDot = (dotType: SeedDotType): Ability => ({
     config: { type: 'dot', dotType, tier: 15, stacks: 1, duration: 2 },
 });
 
-const anemoneShipSkills = (seedDots: SeedDotType[]): ShipSkills =>
-    ({
-        slots: [
-            { slot: 'active', abilities: seedDots.map(seedDot) },
-            { slot: 'charged', abilities: anemoneChargedAbilities() },
-        ],
-    }) as ShipSkills;
+const anemoneShipSkills = (seedDots: SeedDotType[]): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: seedDots.map(seedDot) },
+        { slot: 'charged', abilities: anemoneChargedAbilities() },
+    ],
+});
 
 describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player side)', () => {
     const tauntGranted = (seedDots: SeedDotType[]): boolean => {
@@ -136,7 +135,7 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (enemy sid
             critDamage: 0,
             defensePenetration: 0,
             chargeCount: 0,
-            shipSkills: { slots: [{ slot: 'active', abilities: [] }] } as ShipSkills,
+            shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
             enemyDefense: 0,
             enemyHp: 1_000_000_000,
             numRounds: 2,
@@ -214,13 +213,12 @@ const belladonnaChargedAbilities = (): Ability[] => {
     return charged.abilities;
 };
 
-const belladonnaShipSkills = (seedDots: SeedDotType[]): ShipSkills =>
-    ({
-        slots: [
-            { slot: 'active', abilities: seedDots.map(seedDot) },
-            { slot: 'charged', abilities: belladonnaChargedAbilities() },
-        ],
-    }) as ShipSkills;
+const belladonnaShipSkills = (seedDots: SeedDotType[]): ShipSkills => ({
+    slots: [
+        { slot: 'active', abilities: seedDots.map(seedDot) },
+        { slot: 'charged', abilities: belladonnaChargedAbilities() },
+    ],
+});
 
 describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runtime-inert until SP-E)', () => {
     it('even with 3 pre-existing generic DoT entries, Stasis does NOT land (Acidic Decay family count is 0 today)', () => {

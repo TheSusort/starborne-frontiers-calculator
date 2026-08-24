@@ -213,15 +213,14 @@ function markedIn(input: CombatEngineInput, round: number): string[] {
 // Module reader
 // ---------------------------------------------------------------------------
 
-const seedBuff = (buffName: string): SelectedGameBuff =>
-    ({
-        id: buffName,
-        buffName,
-        stacks: 1,
-        parsedEffects: {},
-        isStackable: false,
-        skillDuration: null,
-    }) as SelectedGameBuff;
+const seedBuff = (buffName: string): SelectedGameBuff => ({
+    id: buffName,
+    buffName,
+    stacks: 1,
+    parsedEffects: {},
+    isStackable: false,
+    skillDuration: null,
+});
 
 describe('holdsRoguesLiberty', () => {
     it('is true when the actor carries the buff', () => {
@@ -251,17 +250,16 @@ const enemyWith = (
     position: Position,
     abilities: Ability[],
     attack = 0
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [...abilities, noopDamage()] }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [...abilities, noopDamage()] }] },
+});
 
 /** Focus attacker at M4, `front` selection, slowest on the board so every other actor's on-cast
  *  self-buff is already up when it picks its target. */
@@ -348,34 +346,33 @@ describe("Rogue's Liberty lets the holder ignore Taunt — player side", () => {
 // ---------------------------------------------------------------------------
 
 /** A positioned player team actor that self-casts the given abilities and deals no damage. */
-const teamActorWith = (id: string, position: Position, abilities: Ability[]): TeamActor =>
-    ({
-        id,
-        speed: 1000, // acts before the enemy attacker, so its Taunt is up first
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities: [...abilities, noopDamage()] }] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const teamActorWith = (id: string, position: Position, abilities: Ability[]): TeamActor => ({
+    id,
+    speed: 1000, // acts before the enemy attacker, so its Taunt is up first
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities: [...abilities, noopDamage()] }] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** The mirror setup: an ENEMY attacker at M4 with `front` selection against two positioned team
  *  actors; the taunter sits at the back (M1). The focus attacker is left POSITIONLESS so it stays
@@ -399,7 +396,7 @@ const MIRROR = (enemyAbilities: Ability[]): CombatEngineInput =>
                 shipSkills: {
                     slots: [{ slot: 'active', abilities: [...enemyAbilities, basicAttack()] }],
                 },
-            } as EnemyAttacker,
+            },
         ],
     });
 

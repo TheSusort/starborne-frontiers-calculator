@@ -101,17 +101,16 @@ const enemyAt = (
     attack: number,
     speed: number,
     shipSkills: ShipSkills
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
-        shipSkills,
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills,
+});
 
 /** Valkyrie as the player focus: 1000 attack, one 100% cast, her real R1 passive. */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({

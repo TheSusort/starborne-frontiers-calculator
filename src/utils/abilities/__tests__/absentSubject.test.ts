@@ -24,8 +24,11 @@ import { conditionMet, conditionsMet, evaluateCondition, scaledBonus } from '../
 import type { Ability, Condition } from '../../../types/abilities';
 import { makeConditionContext } from './conditionContextFixture';
 
-const cond = (over: Partial<Condition>): Condition =>
-    ({ subject: 'always', derivable: true, ...over }) as Condition;
+const cond = (over: Partial<Condition>): Condition => ({
+    subject: 'always',
+    derivable: true,
+    ...over,
+});
 
 describe('SP-4d: an absent subject does not resolve', () => {
     it('an enemy hp-threshold ABOVE gate does not fire with no enemy (was: TRUE against nobody)', () => {

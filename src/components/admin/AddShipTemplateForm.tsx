@@ -184,7 +184,7 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                         </label>
                         <Select
                             value={formData.affinity}
-                            onChange={(value) => updateField('affinity', value as AffinityName)}
+                            onChange={(value) => updateField('affinity', value)}
                             options={AFFINITY_OPTIONS}
                         />
                     </div>

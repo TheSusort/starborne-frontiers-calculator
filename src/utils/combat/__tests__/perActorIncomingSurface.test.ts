@@ -69,40 +69,42 @@ const victimStats = (hp: number): CombatStatBlock => ({
 
 // A positioned, zero-offense PLAYER team victim (walked so it has real stats/position). Empty active
 // slot → it deals nothing; it is purely a damageable target.
-const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [] } as ShipSkills,
-            stats: victimStats(hp),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const playerVictim = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [] },
+        stats: victimStats(hp),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // A positioned ENEMY attacker that fires `front` with the supplied pattern + a 100% damage active.
-const enemyAttackerAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 100 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyAttackerAt = (
+    id: string,
+    position: Position,
+    pattern: ParsedPattern
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 5_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 100 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // A positional battle where a POSITIONED ENEMY ('enemy-aoe') fires at the player roster. The focus
 // player ('attacker') is parked OUT of the footprint (M1, zero offense, empty slot) so the only

@@ -6,46 +6,45 @@ import { ShipSkills } from '../../../types/abilities';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // An enemy that casts a timed Def Down at the player carrier each round; hacking 0 → resisted.
-const debuffEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 10,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-debuff',
+const debuffEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 10,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Def Down',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 1,
-                            },
+                            buffName: 'Def Down',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 1,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 const noopActive: ShipSkills['slots'][number] = {
     slot: 'active',

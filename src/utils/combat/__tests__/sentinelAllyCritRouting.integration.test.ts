@@ -76,64 +76,17 @@ const SENTINEL_MAX_HP = 20_000;
 
 /** Sentinel as a team actor: carries only its real passive; acts last (speed 1) so the ally's
  *  crit precedes its own turn, and deals no damage of its own. */
-const sentinel = (position: Position): TeamActorEngineInput =>
-    ({
-        id: 'sentinel',
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
-        walk: {
-            shipSkills: {
-                slots: [
-                    {
-                        slot: 'active',
-                        abilities: [
-                            {
-                                id: 'noop',
-                                type: 'damage',
-                                target: 'enemy',
-                                trigger: 'on-cast',
-                                conditions: [],
-                                config: { type: 'damage', multiplier: 0 },
-                            },
-                        ],
-                    },
-                    { slot: 'passive', abilities: sentinelPassiveAbilities() },
-                ],
-            },
-            stats: {
-                attack: 1000,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: SENTINEL_MAX_HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-        },
-    }) as TeamActorEngineInput;
-
-const dummyEnemy = (id: string, position: Position, affinity: AffinityName): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity,
-        target: parseTarget('front'),
-        pattern: parsePattern('Pattern-Base'),
+const sentinel = (position: Position): TeamActorEngineInput => ({
+    id: 'sentinel',
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    walk: {
         shipSkills: {
             slots: [
                 {
@@ -149,9 +102,54 @@ const dummyEnemy = (id: string, position: Position, affinity: AffinityName): Ene
                         },
                     ],
                 },
+                { slot: 'passive', abilities: sentinelPassiveAbilities() },
             ],
         },
-    }) as EnemyAttacker;
+        stats: {
+            attack: 1000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: SENTINEL_MAX_HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+const dummyEnemy = (id: string, position: Position, affinity: AffinityName): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity,
+    target: parseTarget('front'),
+    pattern: parsePattern('Pattern-Base'),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'noop',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 0 },
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 /**
  * The focus ally fires a single-hit AoE (Pattern-Line-Range-1) at 'front'. The anchor is

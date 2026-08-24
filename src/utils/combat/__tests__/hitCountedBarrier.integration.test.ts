@@ -355,34 +355,33 @@ const holderTeamActor = (
     position: Position,
     abilities: Ability[],
     extraSlots: ShipSkills['slots'] = []
-): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+    },
+});
 
 /** Slower than every holder above, so its hit always lands after the Barrier is armed. */
 const offensiveEnemy = (
@@ -390,17 +389,16 @@ const offensiveEnemy = (
     position: Position,
     abilities: Ability[] = [basicAttack()],
     speed = 1
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities }] },
+});
 
 /** Bursts for damagePerStack once `countdown` reaches 0 on the holder's own turn. */
 const timedBomb = (damagePerStack: number, countdown: number): PendingBomb => ({
@@ -587,21 +585,20 @@ describe('hit-counted Barrier — engine level (positional)', () => {
         // fixture with the holder on the ENEMY side and the player focus as the attacker. No
         // amount is compared ACROSS sides (RNG is keyed by ownerId) — each side is checked against
         // its own DIRECT_HIT.
-        const enemyHolder = (): EnemyAttacker =>
-            ({
-                id: 'holder',
-                stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
-                chargeCount: 0,
-                startCharged: false,
-                position: 'M4' as Position,
-                target: parsedTarget('front'),
-                pattern: basePattern(),
-                shipSkills: {
-                    slots: [
-                        { slot: 'active', abilities: [barrierSelfBuff({ hits: 1 }), noopDamage()] },
-                    ],
-                },
-            }) as EnemyAttacker;
+        const enemyHolder = (): EnemyAttacker => ({
+            id: 'holder',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [barrierSelfBuff({ hits: 1 }), noopDamage()] },
+                ],
+            },
+        });
 
         const input = BASE_PLAYER_SIDE({
             numRounds: 1,

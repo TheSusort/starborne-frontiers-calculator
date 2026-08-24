@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { ShipSkills, Ability } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task R3: capture resisted enemy→tank DoTs into EnemyRoundEffects.
@@ -52,42 +52,41 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 // The DoT lands/misses on the live hacking-vs-security landing roll (shared dotsLanded draw):
 // the enemy's `stats.hacking` vs the heal target's default security 100. `hacking` omitted →
 // defaults to 200 → 100% landing.
-const dotEnemy = (hacking?: number): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: {
-            attack: 1000,
-            crit: 0,
-            critDamage: 0,
-            speed: 10,
-            ...(hacking === undefined ? {} : { hacking }),
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({
-                            type: 'damage',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                        enemyAb({
+const dotEnemy = (hacking?: number): EnemyAttacker => ({
+    id: 'e1',
+    stats: {
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        speed: 10,
+        ...(hacking === undefined ? {} : { hacking }),
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({
+                        type: 'damage',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                    enemyAb({
+                        type: 'dot',
+                        config: {
                             type: 'dot',
-                            config: {
-                                type: 'dot',
-                                dotType: 'corrosion',
-                                tier: 6,
-                                stacks: 3,
-                                duration: 3,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            dotType: 'corrosion',
+                            tier: 6,
+                            stacks: 3,
+                            duration: 3,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 const runWithEnemy = (hacking?: number) =>
     runCombat(

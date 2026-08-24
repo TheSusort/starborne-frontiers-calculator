@@ -17,7 +17,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 /** Build a minimal GearPiece for test purposes. */
@@ -32,7 +32,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** Factory that returns a getGearPiece function backed by the given id→GearPiece map. */

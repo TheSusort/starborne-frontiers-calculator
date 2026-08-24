@@ -52,13 +52,12 @@ const STALWART_P2 =
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 /** An enemy attacker that lands a single-hit basic attack (synthesized 100% active) on the focus. */
-const basicEnemy = (id: string, attack: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-    }) as EnemyAttacker;
+const basicEnemy = (id: string, attack: number): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+});
 
 /** Healing-mode base: the FOCUS ('attacker') is the heal target and carries `skills` (parsed from
  *  the real registry); one enemy attacker hits it each round. owner crit 0 → deterministic counter. */
@@ -459,17 +458,16 @@ const basicAttackSlot = (): ShipSkills['slots'][number] => ({
 });
 
 /** A positioned enemy that fires `front` with an AoE footprint covering two player cells. */
-const aoeEnemyAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 3_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: { slots: [basicAttackSlot()] },
-    }) as EnemyAttacker;
+const aoeEnemyAt = (id: string, position: Position, pattern: ParsedPattern): EnemyAttacker => ({
+    id,
+    stats: { attack: 3_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: { slots: [basicAttackSlot()] },
+});
 
 describe('R4 — one incoming attack draws ONE Centurion retaliation, not one per ability', () => {
     it('AoE covering Centurion AND an adjacent ally retaliates ONCE per sub-attack', () => {

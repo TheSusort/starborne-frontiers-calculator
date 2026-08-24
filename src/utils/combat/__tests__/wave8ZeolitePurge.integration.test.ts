@@ -29,7 +29,6 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
-import type { Position } from '../../../types/encounters';
 import type { Ship } from '../../../types/ship';
 import type { StatusEngine } from '../statusEngine';
 
@@ -112,18 +111,17 @@ const selfBuffNames = (engine: StatusEngine, id: string): string[] =>
 describe('Wave 8 Task 12: Zeolite purges a buff when damaging a Defender (engine integration)', () => {
     // A self-buffing enemy at speed 150 (> the focus's 100) so it grants itself Attack Up
     // BEFORE Zeolite's turn every round — giving the reactive purge something to remove.
-    const buffingEnemy = (role: EnemyAttacker['role']): EnemyAttacker =>
-        ({
-            id: 'enemy-front',
-            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 150 },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4' as Position,
-            target: parsedTarget('front'),
-            pattern: basePattern(),
-            role,
-            shipSkills: { slots: [{ slot: 'active', abilities: [selfBuff(), hit(0)] }] },
-        }) as EnemyAttacker;
+    const buffingEnemy = (role: EnemyAttacker['role']): EnemyAttacker => ({
+        id: 'enemy-front',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 150 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        role,
+        shipSkills: { slots: [{ slot: 'active', abilities: [selfBuff(), hit(0)] }] },
+    });
 
     const focusInput = (): CombatEngineInput => ({
         enemyAttackers: [],
@@ -178,24 +176,23 @@ describe('Wave 8 Task 12: team symmetry — an enemy-side Zeolite purges a playe
         slots: [{ slot: 'active', abilities: [selfBuff(), hit(0)] }],
     });
 
-    const enemyZeolite = (): EnemyAttacker =>
-        ({
-            id: 'zeolite-enemy',
-            stats: {
-                attack: 10_000,
-                crit: 0,
-                critDamage: 0,
-                defence: 0,
-                hp: 1_000_000,
-                speed: 100,
-            },
-            chargeCount: 0,
-            startCharged: false,
-            position: 'M4' as Position,
-            target: parsedTarget('front'),
-            pattern: basePattern(),
-            shipSkills: zeoliteSkills(),
-        }) as EnemyAttacker;
+    const enemyZeolite = (): EnemyAttacker => ({
+        id: 'zeolite-enemy',
+        stats: {
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: 1_000_000,
+            speed: 100,
+        },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'M4',
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: zeoliteSkills(),
+    });
 
     const teamSymFocusInput = (
         role: NonNullable<TeamActor['role']> | undefined

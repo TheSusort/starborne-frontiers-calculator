@@ -52,7 +52,7 @@ function makeShip(over: Partial<Ship>): Ship {
         implants: {},
         refits: [],
         ...over,
-    } as Ship;
+    };
 }
 
 function makePiece(over: Partial<GearPiece>): GearPiece {
@@ -66,7 +66,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -80,46 +80,45 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
  * speed 10 → acts AFTER the speed-100 carrier so the carrier's recurring self-buffs (Block
  * Debuff in the synergy case) are already live when this enemy casts.
  */
-const debuffEnemy = (id: string, hacking: number): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 10,
-            hacking,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-debuff',
+const debuffEnemy = (id: string, hacking: number): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 10,
+        hacking,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy', // enemy's "enemy" = the player carrier
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy', // enemy's "enemy" = the player carrier
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Def Down',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 1,
-                            },
+                            buffName: 'Def Down',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 1,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 /** No-op active so the focus takes a turn without ending the combat early. */
 const noopActive: ShipSkills['slots'][number] = {

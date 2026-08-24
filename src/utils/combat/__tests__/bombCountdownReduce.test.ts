@@ -53,7 +53,7 @@ const LINGSHE_CHARGED_SKILL: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'bomb-countdown-reduce', turns: 1 },
-                } as Ability,
+                },
                 {
                     id: 'bomb-iii',
                     type: 'dot',
@@ -61,7 +61,7 @@ const LINGSHE_CHARGED_SKILL: ShipSkills = {
                     trigger: 'on-cast',
                     conditions: [],
                     config: { type: 'dot', dotType: 'bomb', tier: 100, stacks: 1, duration: 3 },
-                } as Ability,
+                },
             ],
         },
     ],
@@ -199,7 +199,7 @@ function makeArgs(
         targetId: anchor.id,
         aoeVictimIds: [anchor.id, ...otherVictims.map((v) => v.id)],
         opposingVictimById,
-    } as PlayerTurnArgs;
+    };
 }
 
 describe('Lingshe bomb-countdown reduction (SP-F F3)', () => {
@@ -347,17 +347,20 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 // A single positioned enemy victim at 'front' (M4). security 0 (well below the caster's default
 // 200 hacking) so the countdown-reduce's hacking-gated 'inflict' landing roll is unconditional —
 // clamp((200-0)/100) = 1.0. Optional `buffSlot` grants a Barrier/Cheat-Death passive.
-const victimAt = (id: string, hp: number, buffSlot?: ShipSkills['slots'][number]): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1, security: 0 },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M4',
-        shipSkills: {
-            slots: [{ slot: 'active', abilities: [] }, ...(buffSlot ? [buffSlot] : [])],
-        },
-    }) as EnemyAttacker;
+const victimAt = (
+    id: string,
+    hp: number,
+    buffSlot?: ShipSkills['slots'][number]
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1, security: 0 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    shipSkills: {
+        slots: [{ slot: 'active', abilities: [] }, ...(buffSlot ? [buffSlot] : [])],
+    },
+});
 
 const bomb = (
     damagePerStack: number,
@@ -412,7 +415,7 @@ const runRegression = (input: CombatEngineInput) => {
         'ship-destroyed',
         'cheat-death-activated',
     ];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };

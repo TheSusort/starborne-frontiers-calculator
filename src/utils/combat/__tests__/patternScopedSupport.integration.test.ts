@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import { runCombat, type CombatEngineInput } from '../engine';
-import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { Ability } from '../../../types/abilities';
 import { createEventBus, type CombatEvent } from '../events';
 
 const supportPattern = () => parsePattern('Pattern-Line-Support-Range-1');
@@ -88,7 +88,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
                     walk: {
                         shipSkills: {
                             slots: [{ slot: 'active', abilities: [allAlliesBuff()] }],
-                        } as ShipSkills,
+                        },
                         stats: {
                             attack: 0,
                             crit: 0,
@@ -226,7 +226,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
                         walk: {
                             shipSkills: {
                                 slots: [{ slot: 'active', abilities: [allAlliesShield()] }],
-                            } as ShipSkills,
+                            },
                             stats: {
                                 attack: 0,
                                 crit: 0,
@@ -375,7 +375,7 @@ describe('pattern-scoped support (on-cast buffs)', () => {
                         walk: {
                             shipSkills: {
                                 slots: [{ slot: 'passive', abilities: [chargeGrant()] }],
-                            } as ShipSkills,
+                            },
                             stats: {
                                 attack: 0,
                                 crit: 0,

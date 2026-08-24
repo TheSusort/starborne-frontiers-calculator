@@ -104,34 +104,33 @@ const holderTeamActor = (
     },
     attack = 0,
     hp = HP
-): TeamActor =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: charge.chargeCount,
-        startCharged: charge.startCharged,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
-            stats: {
-                attack,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+): TeamActor => ({
+    id,
+    speed: 1000,
+    chargeCount: charge.chargeCount,
+    startCharged: charge.startCharged,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots: [{ slot: 'active', abilities }, ...extraSlots] },
+        stats: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: extraSlots.some((s) => s.slot === 'charged'),
+    },
+});
 
 /** `speed` stays 1 (slower than every holder above) for every fixture except the ally-granted
  *  ones, where a faster granter/applier has to act first. */
@@ -140,17 +139,16 @@ const offensiveEnemy = (
     position: Position,
     abilities: Ability[] = [basicAttack()],
     speed = 1
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities }] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: DIRECT_HIT, crit: 0, critDamage: 0, defence: 0, hp: HP, speed },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities }] },
+});
 
 const BASE_PLAYER_SIDE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     enemyAttackers: [],

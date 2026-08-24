@@ -76,7 +76,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { resetRateGateRng } from '../../calculators/rateAccumulator';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -219,34 +219,33 @@ const teamVictim = (
     position: Position,
     slots: ShipSkills['slots'],
     speed: number
-): TeamActor =>
-    ({
-        id,
-        speed,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        walk: {
-            shipSkills: { slots },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: { slots },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** The ENEMY-side mirror of the focus attacker: fires an N-hit cast at the player front AND wears
  *  the same Burner rider. `hacking` matches `focusCast`'s for the same landing-draw reason. */
@@ -449,51 +448,49 @@ describe('PR6 — on-deal-damage riders gate on DELIVERED damage — ENEMY side 
 /** The standard victim, re-cut with a finite HP pool and a starting shield.
  *  60% of 50,000 = 30,000 — exactly the three 10,000 slices, so all three are absorbed IN FULL and
  *  no sub-attack spills to HP (a partial spill would muddy which basis the rider read). */
-const shieldedEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        ...enemyAt(id, position, []),
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 50_000, speed: 1 },
-        preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: 60 },
-    }) as EnemyAttacker;
+const shieldedEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    ...enemyAt(id, position, []),
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 50_000, speed: 1 },
+    preFight: { ...emptyPreFightModifiers(), startingShieldPctOfHp: 60 },
+});
 
 /** A victim that grants ITSELF a plain multi-turn Barrier before the focus ever acts.
  *  `speed: 5000` beats the focus attacker's default 100 so the grant is up for round 1's cast, and
  *  `startCharged` fires the charged slot on that first turn. The Barrier carries no hit limit, so
  *  it is not consumed and nullifies all three sub-attacks (barrierBuffs.ts). Its own attack is 0,
  *  so its turn contributes nothing but the grant. */
-const barrierEnemyAt = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 5000 },
-        chargeCount: 1,
-        startCharged: true,
-        position,
-        affinity: 'antimatter',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'charged',
-                    abilities: [
-                        ab({
+const barrierEnemyAt = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 5000 },
+    chargeCount: 1,
+    startCharged: true,
+    position,
+    affinity: 'antimatter',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'charged',
+                abilities: [
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'on-cast',
+                        config: {
                             type: 'buff',
-                            target: 'self',
-                            trigger: 'on-cast',
-                            config: {
-                                type: 'buff',
-                                buffName: 'Barrier',
-                                parsedEffects: {},
-                                stacks: 1,
-                                isStackable: false,
-                                duration: 5,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                            buffName: 'Barrier',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 5,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 describe('PR6 — the funnel legs that COUNT as delivered still fire the rider', () => {
     afterEach(() => resetRateGateRng());
@@ -560,36 +557,35 @@ describe('PR6 — the funnel legs that COUNT as delivered still fire the rider',
 // The absent `subAttackIndex` is what identifies this as the cast-wide fallback rather than the
 // per-sub-attack emit, so it is asserted directly rather than inferred from the row count.
 /** A FAST player ally that one-shots the front enemy before the (slow) focus acts. */
-const killerAlly = (id: string, position: Position, attack: number): TeamActor =>
-    ({
-        id,
-        speed: 500,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: [attackSkill(1)] },
-            stats: {
-                attack,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const killerAlly = (id: string, position: Position, attack: number): TeamActor => ({
+    id,
+    speed: 500,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [attackSkill(1)] },
+        stats: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** A positional enemy frail enough for `killerAlly` to one-shot. */
 const frailEnemyAt = (id: string, position: Position, hp: number) =>

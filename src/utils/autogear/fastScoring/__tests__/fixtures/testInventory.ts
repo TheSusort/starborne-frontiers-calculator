@@ -47,7 +47,7 @@ export function makeTestShip(overrides: Partial<Ship> = {}): Ship {
         equipment: {},
         implants: {},
         ...overrides,
-    } as Ship;
+    };
 }
 
 export function makeTestEngineering(): EngineeringStat {
@@ -93,7 +93,7 @@ export function generateTestInventory(seed = 1, count = 18): GearPiece[] {
                 { name: 'hp', value: 1000 + Math.floor(rnd() * 500), type: 'flat' },
                 { name: 'crit', value: 3 + Math.floor(rnd() * 5), type: 'percentage' },
             ],
-        } as GearPiece);
+        });
     }
     return pieces;
 }

@@ -34,9 +34,7 @@ describe('buffDurationExtensionTurns', () => {
 
     it('returns 0 when no buff-duration-extension config is present', () => {
         expect(
-            buffDurationExtensionTurns(
-                skillsWithPassiveConfigs([{ type: 'damage-reflection' } as never])
-            )
+            buffDurationExtensionTurns(skillsWithPassiveConfigs([{ type: 'damage-reflection' }]))
         ).toBe(0);
     });
 
@@ -67,7 +65,7 @@ describe('buildBuffDurationExtensionByOwner', () => {
             },
             {
                 id: 'ally-1',
-                shipSkills: skillsWithPassiveConfigs([{ type: 'damage-reflection' } as never]),
+                shipSkills: skillsWithPassiveConfigs([{ type: 'damage-reflection' }]),
             },
         ]);
         expect(map.get('attacker')).toBe(1);

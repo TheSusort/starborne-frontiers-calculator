@@ -41,39 +41,38 @@ const basicEnemyAt = (
     position: Position,
     selection: ParsedTarget['selection'],
     opts: { security?: number; affinity?: AffinityName } = {}
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 10_000_000,
-            speed: 1,
-            security: opts.security,
-        },
-        affinity: opts.affinity,
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: lineRange3Pattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 10_000_000,
+        speed: 1,
+        security: opts.security,
+    },
+    affinity: opts.affinity,
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: lineRange3Pattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 const runPositionalRound = (shipSkills: ShipSkills, enemyAttackers: EnemyAttacker[]) => {
     const bus = createEventBus();

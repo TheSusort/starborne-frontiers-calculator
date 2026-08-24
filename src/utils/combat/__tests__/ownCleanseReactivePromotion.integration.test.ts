@@ -140,38 +140,37 @@ const selfCleanseActive = (count: number): ShipSkills['slots'][number] => ({
 
 /** A FASTER enemy whose active applies ONE removable debuff to the heal target (mirrors
  *  cleanseCastPath.test.ts's debuffEnemy). */
-const debuffEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-debuff',
+const debuffEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Attack Down',
-                                parsedEffects: { attack: -30 },
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'apply',
-                                duration: 5,
-                            },
+                            buffName: 'Attack Down',
+                            parsedEffects: { attack: -30 },
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 5,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+                    },
+                ],
+            },
+        ],
+    },
+});
 
 const MORAO_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: bareEnemy(),
@@ -272,17 +271,16 @@ const damageThenDebuff = (): ShipSkills['slots'][number] => ({
 // shared generic enemy-attacker factory (also used by the Cultivator team-symmetry test below),
 // so its HP is its own fixture value. FOE_HP names it for the self-heal-basis math below.
 const FOE_HP = 40_000;
-const enemyAt = (id: string, position: Position, shipSkills: ShipSkills): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: FOE_HP, speed: 50 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, shipSkills: ShipSkills): EnemyAttacker => ({
+    id,
+    stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: FOE_HP, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills,
+});
 
 describe('Morao (enemy-side) — team symmetry: an enemy Morao self-cleanses and reacts', () => {
     it('the player-applied debuff, once self-cleansed, fires the reactive repair + Defense Up II on the enemy', () => {
@@ -383,109 +381,106 @@ const allAlliesCleanseActive = (count: number): ShipSkills['slots'][number] => (
 
 /** A FASTER enemy that both damages AND debuffs 'attacker' (so it is BELOW max HP — giving the
  *  reactive repair real room to register `effectiveHeal` — AND carries a removable debuff). */
-const damageAndDebuffEnemy = (id: string): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 500, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        {
-                            id: 'enemy-dmg',
-                            type: 'damage',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: { type: 'damage', multiplier: 100 },
-                        },
-                        {
-                            id: 'enemy-debuff',
+const damageAndDebuffEnemy = (id: string): EnemyAttacker => ({
+    id,
+    stats: { attack: 500, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'enemy-dmg',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                    {
+                        id: 'enemy-debuff',
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
                             type: 'debuff',
-                            target: 'enemy',
-                            trigger: 'on-cast',
-                            conditions: [],
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Attack Down',
-                                parsedEffects: { attack: -30 },
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'apply',
-                                duration: 5,
-                            },
+                            buffName: 'Attack Down',
+                            parsedEffects: { attack: -30 },
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'apply',
+                            duration: 5,
                         },
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
-
-const cultivatorTeamActor = (): TeamActor =>
-    ({
-        id: 'cultivator',
-        speed: 10, // slowest — acts after both the enemy AND the other actors
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        walk: {
-            shipSkills: {
-                slots: [
-                    allAlliesCleanseActive(1),
-                    { slot: 'passive', abilities: [cultivatorReactiveHeal()] },
+                    },
                 ],
             },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 100,
-                defence: 0,
-                hp: CULTIVATOR_HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+        ],
+    },
+});
+
+const cultivatorTeamActor = (): TeamActor => ({
+    id: 'cultivator',
+    speed: 10, // slowest — acts after both the enemy AND the other actors
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: {
+            slots: [
+                allAlliesCleanseActive(1),
+                { slot: 'passive', abilities: [cultivatorReactiveHeal()] },
+            ],
         },
-    }) as TeamActor;
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 100,
+            defence: 0,
+            hp: CULTIVATOR_HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** A second ally with NO debuff — included in the all-allies cleanse's target SET but contributes
  *  zero real removal, so it must never appear in eventCtx.cleansedAllyIds. */
-const allyBTeamActor = (): TeamActor =>
-    ({
-        id: 'ally-b',
-        speed: 30,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        walk: {
-            shipSkills: { slots: [noopActiveSlot()] },
-            stats: {
-                attack: 0,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 10_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+const allyBTeamActor = (): TeamActor => ({
+    id: 'ally-b',
+    speed: 30,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: { slots: [noopActiveSlot()] },
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 10_000,
         },
-    }) as TeamActor;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 const CULTIVATOR_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     enemyAttackers: bareEnemy(),
@@ -732,7 +727,7 @@ describe('Cultivator (enemy-side) — team symmetry: an enemy Cultivator repairs
                     { slot: 'passive', abilities: [cultivatorReactiveHeal()] },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         // The OTHER enemy ally: positionally anchored at M4/front, no skills of its own (never
         // acts meaningfully) — only exists to receive the player's debuff and be Cultivator's

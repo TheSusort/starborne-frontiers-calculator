@@ -21,23 +21,22 @@ import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 const FRONTLINE_R2_TEXT =
     'This ship has 20% Shield Penetration.<br />While Shielded, it gains 2500 additional Defense.<br />This Unit gains <unit-damage>Shield equal to 25%</unit-damage> of its Max HP at the start of combat.<br /><br />When an enemy uses their Charged skill, it deals <unit-damage>80%</unit-damage> and gains a Shield equal to <unit-damage>30%</unit-damage> of the damage dealt, once per round.';
 
-export const ship = (id: string, over: Partial<Ship>): Ship =>
-    ({
-        id,
-        name: id,
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE',
-        type: 'Attacker',
-        baseStats: {} as Ship['baseStats'],
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activePattern: 'Pattern-Base',
-        activeTarget: 'front',
-        chargeSkillCharge: 0,
-        ...over,
-    }) as Ship;
+export const ship = (id: string, over: Partial<Ship>): Ship => ({
+    id,
+    name: id,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'Attacker',
+    baseStats: {} as Ship['baseStats'],
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activePattern: 'Pattern-Base',
+    activeTarget: 'front',
+    chargeSkillCharge: 0,
+    ...over,
+});
 
 export const place = (
     s: Ship,

@@ -92,26 +92,25 @@ const offensiveEnemyAt = (
     position: Position,
     selection: ParsedTarget['selection'],
     skills: ShipSkills['slots'][number]
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 1000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            // security:0 → the player's Stasis inflict always lands on this enemy.
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: { slots: [skills] },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        // security:0 → the player's Stasis inflict always lands on this enemy.
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [skills] },
+});
 
 // A walked team actor with no offense (attack:0) and huge HP.
 const passiveTeamActorAt = (id: string, position: Position): TeamActor => ({
@@ -250,11 +249,11 @@ describe('B2 Task 2 — isStasised: engine-local per-actor Stasis reader (tap on
                     },
                     chargeCount: 0,
                     startCharged: false,
-                    position: 'M4' as Position,
+                    position: 'M4',
                     target: parsedTarget('front'),
                     pattern: basePattern(),
                     shipSkills: { slots: [stasisInflictAttack(2)] },
-                } as EnemyAttacker,
+                },
             ],
             __testTapIsStasised: (fn) => {
                 capturedIsStasised = fn;

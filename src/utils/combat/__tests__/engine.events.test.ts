@@ -109,7 +109,7 @@ const collect = (input: CombatEngineInput) => {
         'ship-destroyed',
         'charge-changed',
     ];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };
@@ -2161,13 +2161,12 @@ describe('reactive stamp — reactive emissions carry duringTurnOf', () => {
     const basicEnemy = (
         id: string,
         attack: number
-    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
-        ({
-            id,
-            stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
-            chargeCount: 0,
-            startCharged: false,
-        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] => ({
+        id,
+        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+    });
 
     it('B counterattack buff grant carries reactive:true and duringTurnOf === attacker turn', () => {
         const skills = buildShipAbilities(stalwartShip());
@@ -2261,13 +2260,12 @@ describe('start-of-round reactive stamp — duringTurnOf is undefined (turn-less
     const basicEnemy = (
         id: string,
         speed: number
-    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] =>
-        ({
-            id,
-            stats: { attack: 100, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
-            chargeCount: 0,
-            startCharged: false,
-        }) as NonNullable<CombatEngineInput['enemyAttackers']>[number];
+    ): NonNullable<CombatEngineInput['enemyAttackers']>[number] => ({
+        id,
+        stats: { attack: 100, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000, speed },
+        chargeCount: 0,
+        startCharged: false,
+    });
 
     it('start-of-round buff-applied in round 2+ carries duringTurnOf === undefined (not the prior round last actor)', () => {
         idCounter = 0;

@@ -672,7 +672,6 @@ describe('damage-taken procs — passive on the heal target', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () => {
     afterEach(() => resetRateGateRng());
-    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
     const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
         id: `pe${++idCounter}`,
         target: 'enemy',
@@ -727,7 +726,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                         stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
                         chargeCount: 0,
                         startCharged: false,
-                    } as EnemyAttacker,
+                    },
                 ],
                 shipSkills: {
                     slots: [{ slot: 'active', abilities: [damageAb(100)] }],
@@ -755,7 +754,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                         stats: { attack: 5000, crit: 0, critDamage: 0, speed: 10 },
                         chargeCount: 0,
                         startCharged: false,
-                    } as EnemyAttacker,
+                    },
                 ],
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
             })
@@ -794,7 +793,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                         stats: { attack: 1000, crit: 50, critDamage: 100, speed: 10 },
                         chargeCount: 0,
                         startCharged: false,
-                    } as EnemyAttacker,
+                    },
                 ],
                 // Focus self-heals a trivial amount so the target never dies (10000 hp default
                 // would be drained otherwise). hp huge; tiny heal keeps rounds running.
@@ -827,7 +826,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                         chargeCount: 3,
                         startCharged: false,
                         shipSkills: enemyDamageSkills(100, 400),
-                    } as EnemyAttacker,
+                    },
                 ],
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
             })
@@ -855,7 +854,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
                         chargeCount: 0,
                         startCharged: false,
                         shipSkills: enemyDamageSkills(100, undefined, 3),
-                    } as EnemyAttacker,
+                    },
                 ],
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
             })
@@ -871,7 +870,6 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
 // Verified through the event bus (the engine's external write-only tap).
 // ─────────────────────────────────────────────────────────────────────────────
 describe('enemy attacker kit application (runPlayerTurn walk)', () => {
-    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
     const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
         id: `ka${++idCounter}`,
         target: 'enemy',
@@ -924,8 +922,8 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
                                     ],
                                 },
                             ],
-                        } as ShipSkills,
-                    } as EnemyAttacker,
+                        },
+                    },
                 ],
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
             })
@@ -981,8 +979,8 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
                                     ],
                                 },
                             ],
-                        } as ShipSkills,
-                    } as EnemyAttacker,
+                        },
+                    },
                 ],
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
             })
@@ -1002,7 +1000,6 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
 // target, but NO application/events reach it.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
-    type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
     const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Ability => ({
         id: `t7${++idCounter}`,
         target: 'enemy',
@@ -1084,7 +1081,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                         chargeCount: 0,
                         startCharged: false,
                         shipSkills: enemyWithSelfBuff,
-                    } as EnemyAttacker,
+                    },
                 ],
             })
         );
@@ -1149,7 +1146,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                         chargeCount: 0,
                         startCharged: false,
                         shipSkills: enemyWithSelfBuff,
-                    } as EnemyAttacker,
+                    },
                 ],
             })
         );
@@ -1240,8 +1237,8 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                                     ],
                                 },
                             ],
-                        } as ShipSkills,
-                    } as EnemyAttacker,
+                        },
+                    },
                 ],
             })
         );
@@ -1346,8 +1343,8 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                                     ],
                                 },
                             ],
-                        } as ShipSkills,
-                    } as EnemyAttacker,
+                        },
+                    },
                 ],
             })
         );

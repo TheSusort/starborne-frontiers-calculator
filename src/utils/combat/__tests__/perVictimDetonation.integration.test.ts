@@ -73,15 +73,14 @@ const lineRange1Pattern = (): ParsedPattern => ({
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // A positioned, zero-offense, finite-HP enemy victim (a stationary, damageable target).
-const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        shipSkills: { slots: [] } as ShipSkills,
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, hp: number): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    shipSkills: { slots: [] },
+});
 
 // A pre-seeded bomb with all multipliers neutral (bomb payout = stacks × damagePerStack × powerPct).
 const bomb = (damagePerStack: number, stacks: number, sourceId = 'attacker'): PendingBomb => ({
@@ -143,7 +142,7 @@ const collect = (input: CombatEngineInput) => {
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const types: CombatEvent['type'][] = ['bomb-detonated', 'dot-detonated', 'ship-destroyed'];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };

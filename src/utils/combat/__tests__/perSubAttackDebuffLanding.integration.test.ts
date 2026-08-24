@@ -69,7 +69,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { resetRateGateRng, setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { runPlayerTurn } from '../playerTurn';
-import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
+import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -198,16 +198,15 @@ const enemyAt = (
     position: Position,
     slots: ShipSkills['slots'] = [],
     hp: number = HP
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity: 'antimatter',
-        shipSkills: { slots },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    shipSkills: { slots },
+});
 
 /** An ENEMY attacker that fires `slots` at the player front. Speed 1,000 outruns the focus's 500
  *  so it casts first. `hacking` is explicit and LOAD-BEARING: `liveDebuffLandingChance` is
@@ -217,26 +216,25 @@ const offensiveEnemy = (
     id: string,
     position: Position,
     slots: ShipSkills['slots']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 5000,
-            crit: 100,
-            critDamage: 100,
-            defence: 0,
-            hp: HP,
-            speed: 1000,
-            hacking: 100_000,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        affinity: 'antimatter',
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 5000,
+        crit: 100,
+        critDamage: 100,
+        defence: 0,
+        hp: HP,
+        speed: 1000,
+        hacking: 100_000,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots },
+});
 
 /** A WALKED player team actor at `position` firing `slots` at the enemy front. Speed defaults to
  *  1 so it acts AFTER the focus (whose speed is 500) — load-bearing for the residual probe, which
@@ -249,36 +247,35 @@ const teamActor = (
     slots: ShipSkills['slots'],
     attack: number = 0,
     hacking: number = 0
-): TeamActor =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: slots },
-            stats: {
-                attack,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking,
-                defence: 0,
-                hp: HP,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
+): TeamActor => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: slots },
+        stats: {
+            attack,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking,
+            defence: 0,
+            hp: HP,
         },
-    }) as TeamActorEngineInput;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
 
 /** The residual-stack probe (see DEVIATION 3): one PLAIN hit at the enemy front, no debuff clause,
  *  crit 0 so its slice is a flat 5,000 and its delivered damage reads `5,000 x (1 + stacks)`. */

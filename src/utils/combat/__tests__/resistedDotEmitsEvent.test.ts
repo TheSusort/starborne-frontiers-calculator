@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { ShipSkills, Ability } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bug: a DoT that fails its hacking-vs-security landing roll (a RESIST) produces
@@ -49,33 +49,32 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 
 /** Enemy whose kit carries an attack + an Inferno-III DoT infliction. hacking 0 → guaranteed
  *  resist on the shared landing roll. */
-const infernoEnemy = (): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking: 0 },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
-                        enemyAb({
+const infernoEnemy = (): EnemyAttacker => ({
+    id: 'e1',
+    stats: { attack: 1000, crit: 0, critDamage: 0, speed: 10, hacking: 0 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                    enemyAb({
+                        type: 'dot',
+                        config: {
                             type: 'dot',
-                            config: {
-                                type: 'dot',
-                                dotType: 'inferno',
-                                tier: 45, // Inferno III (magnitude 45)
-                                stacks: 1,
-                                duration: 3,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            dotType: 'inferno',
+                            tier: 45, // Inferno III (magnitude 45)
+                            stacks: 1,
+                            duration: 3,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 function runAndCaptureResists() {
     const bus = createEventBus();

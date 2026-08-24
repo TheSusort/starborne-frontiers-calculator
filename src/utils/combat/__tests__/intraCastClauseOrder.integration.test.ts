@@ -39,7 +39,7 @@ import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
-import type { Ability, ShipSkills } from '../../../types/abilities';
+import type { Ability } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
 
 const HITS = 2;
@@ -105,7 +105,7 @@ function focusCast(
         critDamage: 150,
         defensePenetration: 0,
         chargeCount: 0,
-        shipSkills: { slots: [{ slot: 'active', abilities }] } as ShipSkills,
+        shipSkills: { slots: [{ slot: 'active', abilities }] },
         numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -157,7 +157,7 @@ function enemyCast(abilities: Ability[]): number {
         critDamage: 150,
         defensePenetration: 0,
         chargeCount: 0,
-        shipSkills: { slots: [{ slot: 'active', abilities: [noopAttack()] }] } as ShipSkills,
+        shipSkills: { slots: [{ slot: 'active', abilities: [noopAttack()] }] },
         numRounds: 1,
         selfBuffs: [],
         enemyDebuffs: [],

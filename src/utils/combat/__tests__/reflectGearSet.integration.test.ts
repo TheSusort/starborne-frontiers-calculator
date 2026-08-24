@@ -43,7 +43,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** REFLECT pieces equipping the wearer with `minPieces` of the set across distinct slots. */
@@ -86,7 +86,7 @@ function makeAttacker(
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'ATTACKER',
         baseStats: {} as Ship['baseStats'],
-        equipment: equipment as Ship['equipment'],
+        equipment: equipment,
         implants: {},
         refits: [],
         affinity,
@@ -117,7 +117,7 @@ function makeTank(
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'DEFENDER',
         baseStats: {} as Ship['baseStats'],
-        equipment: equipment as Ship['equipment'],
+        equipment: equipment,
         implants: {},
         refits: [],
         affinity,
@@ -144,7 +144,7 @@ const place = (
         defence: 0,
         hp: 1_000_000,
         ...overrides,
-    } as BattlePlacement['statOverrides'],
+    },
 });
 
 /** End-of-battle HP% for an actor (last round it appears). */
@@ -597,7 +597,7 @@ function makeCounterShip(id: string, name: string, affinity: AffinityName): Ship
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'DEFENDER',
         baseStats: {} as Ship['baseStats'],
-        equipment: {} as Ship['equipment'],
+        equipment: {},
         implants: {},
         refits: [{}, {}, {}, {}],
         affinity,
@@ -692,7 +692,7 @@ function makeAoeAttacker(id: string, name: string, affinity: AffinityName): Ship
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'ATTACKER',
         baseStats: {} as Ship['baseStats'],
-        equipment: {} as Ship['equipment'],
+        equipment: {},
         implants: {},
         refits: [],
         affinity,
@@ -712,7 +712,7 @@ function makeDummyEnemy(id: string, name: string, affinity: AffinityName): Ship 
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'DEFENDER',
         baseStats: {} as Ship['baseStats'],
-        equipment: {} as Ship['equipment'],
+        equipment: {},
         implants: {},
         refits: [],
         affinity,
@@ -805,7 +805,7 @@ function makeReflectNosorog(id: string, name: string, affinity: AffinityName): S
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'DEFENDER',
         baseStats: {} as Ship['baseStats'],
-        equipment: {} as Ship['equipment'],
+        equipment: {},
         implants: {},
         refits: [],
         affinity,

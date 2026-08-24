@@ -44,7 +44,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
         subStats: [],
         setBonus: null,
         ...over,
-    } as GearPiece;
+    };
 }
 
 /** BOOST pieces equipping the wearer with `minPieces` (4) of the set across distinct slots. */
@@ -91,7 +91,7 @@ function makeShip(
         faction: 'AURELIAN_SOVEREIGNTY',
         type: 'ATTACKER',
         baseStats: {} as Ship['baseStats'],
-        equipment: equipment as Ship['equipment'],
+        equipment: equipment,
         implants: {},
         refits: [],
         affinity,
@@ -119,7 +119,7 @@ const place = (
         defence: 0,
         hp: 1_000_000,
         ...overrides,
-    } as BattlePlacement['statOverrides'],
+    },
 });
 
 const PLAIN_HIT = 'This Unit deals <unit-damage>100% damage</unit-damage>.';

@@ -200,7 +200,7 @@ if (typeof window !== 'undefined') {
         if (disablePerf === 'true') {
             performanceTracker.disable();
         }
-    } catch (e) {
+    } catch {
         // Ignore localStorage errors (e.g., in private browsing)
     }
 }

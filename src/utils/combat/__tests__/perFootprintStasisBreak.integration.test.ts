@@ -140,82 +140,79 @@ const ROUNDS = 4;
 // WITHOUT doesntBreakStasis it hits BOTH enemies every round and breaks them.
 
 // A PLAYER stasis-bot (team actor): fast, hp 1 (culler one-shots it), hacking 200.
-const playerStasisBot = (id: string, position: Position, sel: Selection): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1000,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget(sel),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: [stasisInflictAttack(STASIS_LONG)] },
-            stats: {
-                attack: 1,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 200,
-                defence: 0,
-                hp: 1,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
-
-// A high-HP enemy victim with a basicAttack so it CAN emit ability-performed once freed.
-const enemyVictim = (id: string, position: Position): EnemyAttacker =>
-    ({
-        id,
+const playerStasisBot = (id: string, position: Position, sel: Selection): TeamActorEngineInput => ({
+    id,
+    speed: 1000,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget(sel),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [stasisInflictAttack(STASIS_LONG)] },
         stats: {
             attack: 1,
             crit: 0,
             critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
             defence: 0,
-            hp: 1_000_000_000,
-            speed: 1,
-            security: 0,
-            hacking: 0,
+            hp: 1,
         },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
+
+// A high-HP enemy victim with a basicAttack so it CAN emit ability-performed once freed.
+const enemyVictim = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 1,
+        security: 0,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 // An enemy culler (T-row): scans the player M-row first, AoE-kills both player stasis-bots in round 1.
 // Speed 500 — acts AFTER the bots (so Stasis lands) but before the breaker.
-const enemyCuller = (): EnemyAttacker =>
-    ({
-        id: 'culler',
-        stats: {
-            attack: 1_000_000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 500,
-            security: 0,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'T1',
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyCuller = (): EnemyAttacker => ({
+    id: 'culler',
+    stats: {
+        attack: 1_000_000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 500,
+        security: 0,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'T1',
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const PLAYER_BASE = (pattern: ParsedPattern, doesntBreakStasis: boolean): CombatEngineInput => ({
     attack: 5_000,
@@ -300,117 +297,113 @@ describe('PR7 Task 5 — per-footprint Stasis-break: doesntBreakStasis control',
 // kills both enemy bots that round → Stasis applied once. An enemy AoE breaker (B-row, WITHOUT
 // doesntBreakStasis) fires `front` Line-Range-1 → hits both players every round and breaks them.
 
-const playerVictim = (id: string, position: Position): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 1,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        walk: {
-            shipSkills: { slots: [basicAttack()] },
-            stats: {
-                attack: 1,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 1_000_000_000,
-                security: 0,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
-
-// A player culler (team actor, T-row): scans the enemy M-row first, AoE-kills both enemy stasis-bots
-// in round 1. Speed 500 — after the bots, before the breaker.
-const playerCuller = (): TeamActorEngineInput =>
-    ({
-        id: 'culler',
-        speed: 500,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        position: 'T1',
-        target: parsedTarget('front'),
-        pattern: lineRange1Pattern(),
-        walk: {
-            shipSkills: { slots: [basicAttack()] },
-            stats: {
-                attack: 1_000_000,
-                crit: 0,
-                critDamage: 0,
-                defensePenetration: 0,
-                hacking: 0,
-                defence: 0,
-                hp: 1_000_000_000,
-            },
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
-
-// An enemy stasis-bot (M-row): fast, hp 1 (culler one-shots it), hacking 200, targets the player M-row.
-const enemyStasisBot = (id: string, position: Position, sel: Selection): EnemyAttacker =>
-    ({
-        id,
+const playerVictim = (id: string, position: Position): TeamActorEngineInput => ({
+    id,
+    speed: 1,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [basicAttack()] },
         stats: {
             attack: 1,
             crit: 0,
             critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
             defence: 0,
-            hp: 1,
-            speed: 1000,
+            hp: 1_000_000_000,
             security: 0,
-            hacking: 200,
         },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(sel),
-        pattern: basePattern(),
-        shipSkills: { slots: [stasisInflictAttack(STASIS_LONG)] },
-    }) as EnemyAttacker;
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
+
+// A player culler (team actor, T-row): scans the enemy M-row first, AoE-kills both enemy stasis-bots
+// in round 1. Speed 500 — after the bots, before the breaker.
+const playerCuller = (): TeamActorEngineInput => ({
+    id: 'culler',
+    speed: 500,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position: 'T1',
+    target: parsedTarget('front'),
+    pattern: lineRange1Pattern(),
+    walk: {
+        shipSkills: { slots: [basicAttack()] },
+        stats: {
+            attack: 1_000_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
+
+// An enemy stasis-bot (M-row): fast, hp 1 (culler one-shots it), hacking 200, targets the player M-row.
+const enemyStasisBot = (id: string, position: Position, sel: Selection): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1,
+        speed: 1000,
+        security: 0,
+        hacking: 200,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(sel),
+    pattern: basePattern(),
+    shipSkills: { slots: [stasisInflictAttack(STASIS_LONG)] },
+});
 
 // The enemy AoE breaker: sits at the enemy M-row REAR column (M1) so its row-scan reaches the player
 // M-row first (anchor M4, covered M3) while the culler's front-anchored AoE never reaches it.
-const enemyBreaker = (pattern: ParsedPattern): EnemyAttacker =>
-    ({
-        id: 'enemy-breaker',
-        stats: {
-            attack: 5_000,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 100,
-            security: 0,
-            hacking: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position: 'M1',
-        target: parsedTarget('front'),
-        pattern,
-        shipSkills: { slots: [basicAttack()] },
-    }) as EnemyAttacker;
+const enemyBreaker = (pattern: ParsedPattern): EnemyAttacker => ({
+    id: 'enemy-breaker',
+    stats: {
+        attack: 5_000,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 100,
+        security: 0,
+        hacking: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M1',
+    target: parsedTarget('front'),
+    pattern,
+    shipSkills: { slots: [basicAttack()] },
+});
 
 const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
     attack: 0,

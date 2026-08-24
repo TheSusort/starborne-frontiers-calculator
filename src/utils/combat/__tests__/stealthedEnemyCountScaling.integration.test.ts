@@ -66,25 +66,24 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // Fast (speed 100) enemy attacker so it acts BEFORE the (slow, speed 1) focus attacker
 // within round 1. `abilities` is either empty (plain) or carries stealthSelfBuff (stealthed).
-const enemyAt = (id: string, position: Position, abilities: Ability[]): EnemyAttacker =>
-    ({
-        id,
-        stats: {
-            attack: 0,
-            crit: 0,
-            critDamage: 0,
-            defence: 0,
-            hp: 1_000_000_000,
-            speed: 100,
-            security: 0,
-        },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities }] },
-    }) as EnemyAttacker;
+const enemyAt = (id: string, position: Position, abilities: Ability[]): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 0,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: 1_000_000_000,
+        speed: 100,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities }] },
+});
 
 // Selenite-shape passive: self-scoped outgoing-damage modifier scaling 10% per stealthed
 // enemy, uncapped (the CSV text states no maximum).

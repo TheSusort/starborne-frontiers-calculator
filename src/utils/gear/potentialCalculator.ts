@@ -191,7 +191,7 @@ export function simulateUpgrade(
                             name: randomStat.name as FlexibleStats,
                             type: randomType,
                             value: 0,
-                        } as Stat,
+                        },
                         piece.rarity
                     );
                     newSubStats.push({

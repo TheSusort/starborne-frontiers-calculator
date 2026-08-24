@@ -706,7 +706,7 @@ describe('Protection transfer — enemy-side symmetry (protector + victim on the
                 trigger: 'on-cast',
                 conditions: [],
                 config: { type: 'damage', multiplier: 100 },
-            } as Ability,
+            },
         ],
     });
     const parsedTargetFront: ParsedTarget = { raw: 'front', side: 'enemy', selection: 'front' };
@@ -1369,7 +1369,7 @@ const activeSelfBuffSlot = (buffName: string): ShipSkills['slots'][number] => ({
                 isStackable: false,
                 duration: 99, // never lapses inside the run
             },
-        } as Ability,
+        },
         {
             id: `noop-${buffName}`,
             type: 'damage',
@@ -1377,7 +1377,7 @@ const activeSelfBuffSlot = (buffName: string): ShipSkills['slots'][number] => ({
             trigger: 'on-cast',
             conditions: [],
             config: { type: 'damage', multiplier: 0 },
-        } as Ability,
+        },
     ],
 });
 
@@ -1400,7 +1400,7 @@ const fullBlockAuraPassive = (): ShipSkills['slots'][number] => ({
                 blockPct: 1.0,
                 oncePerRound: false,
             },
-        } as Ability,
+        },
     ],
 });
 
@@ -1560,8 +1560,8 @@ describe('Protection transfer — the PASSIVE-SLOT instance divides by its own m
         healTargetId: 'attacker',
         mode: 'healing',
         position: 'M4',
-        target: { raw: 'front', side: 'enemy', selection: 'front' } as ParsedTarget,
-        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} } as ParsedPattern,
+        target: { raw: 'front', side: 'enemy', selection: 'front' },
+        pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
         enemyAttackers: [
             {
                 id: 'enemy-front',

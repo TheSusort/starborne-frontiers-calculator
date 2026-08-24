@@ -115,10 +115,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         });
 
         // Process each slot individually with yields - show top 6 sorted by current score
-        const slotResults: Record<GearSlotName, CalibrationResult[]> = {} as Record<
-            GearSlotName,
-            CalibrationResult[]
-        >;
+        const slotResults: Record<GearSlotName, CalibrationResult[]> = {};
         for (const [slotName] of slotEntries) {
             await new Promise((resolve) => setTimeout(resolve, 0));
             const slotInventory = eligibleInventory.filter((p) => p.slot === slotName);

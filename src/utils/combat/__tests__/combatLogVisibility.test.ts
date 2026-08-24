@@ -187,17 +187,16 @@ describe('combat-log visibility — reactive cleanse', () => {
 
 describe('combat-log visibility — start-of-turn shield grant placement', () => {
     const SHIELD_SET_PIECES: GearPiece[] = ['Weapon', 'Hull', 'Generator', 'Sensor'].map(
-        (slot, i) =>
-            ({
-                id: `sh-${i}`,
-                slot,
-                level: 20,
-                stars: 6,
-                rarity: 'legendary',
-                mainStat: { name: 'hp', value: 100, type: 'flat' },
-                subStats: [],
-                setBonus: 'SHIELD',
-            }) as GearPiece
+        (slot, i) => ({
+            id: `sh-${i}`,
+            slot,
+            level: 20,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'hp', value: 100, type: 'flat' },
+            subStats: [],
+            setBonus: 'SHIELD',
+        })
     );
     const getGearPiece = (id: string): GearPiece | undefined =>
         SHIELD_SET_PIECES.find((p) => p.id === id);

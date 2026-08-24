@@ -107,7 +107,7 @@ const chargedBurster = (opts: {
             { slot: 'active', abilities: [enemyDamage(50, 'eb-a')] },
             { slot: 'charged', abilities: [enemyDamage(400, 'eb-c')] },
         ],
-    } as ShipSkills,
+    },
 });
 
 // ─── Player / engine input ────────────────────────────────────────────────────────
@@ -287,7 +287,7 @@ const chargeHolder = (opts: {
         // active-only: a tiny basic attack. No charged slot → hasChargedSkill false → cadence
         // never advances the holder's charges.
         slots: [{ slot: 'active', abilities: [enemyDamage(1, 'eh-a')] }],
-    } as ShipSkills,
+    },
 });
 
 describe('enemy charge removal — direct post-event charges (on-cast, Opal-style)', () => {
@@ -465,7 +465,7 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
                         ],
                     },
                 ],
-            } as ShipSkills,
+            },
         };
         const input: CombatEngineInput = {
             attack: 1,
@@ -517,7 +517,7 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
                         ],
                     },
                 ],
-            } as ShipSkills,
+            },
         };
         const baseInput: CombatEngineInput = {
             attack: 1,

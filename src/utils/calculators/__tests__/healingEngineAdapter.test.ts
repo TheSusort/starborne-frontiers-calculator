@@ -873,8 +873,7 @@ describe('Task 6: role threading for role-filtered on-ally-attacked reactions', 
         const bus = createEventBus();
         const plating: Array<{ actorId: string }> = [];
         bus.on('buff-applied', (e) => {
-            if ((e as { buffName?: string }).buffName === 'Reactive Plating')
-                plating.push(e as unknown as { actorId: string });
+            if ((e as { buffName?: string }).buffName === 'Reactive Plating') plating.push(e);
         });
         return { bus, plating };
     };

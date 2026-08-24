@@ -22,7 +22,7 @@ export function makeMinimalPiece(
         stars: 6,
         mainStat: { name: 'attack', value: 100, type: 'flat' },
         subStats: [],
-    } as GearPiece;
+    };
 }
 
 export function makeShip(overrides: Partial<Ship> = {}): Ship {
@@ -51,5 +51,5 @@ export function makeShip(overrides: Partial<Ship> = {}): Ship {
         equipment: {},
         implants: {},
         ...overrides,
-    } as Ship;
+    };
 }

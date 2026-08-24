@@ -87,7 +87,7 @@ const collect = (input: CombatEngineInput) => {
         'hp-changed',
         'ship-destroyed',
     ];
-    for (const t of types) bus.on(t, (e) => events.push(e as CombatEvent));
+    for (const t of types) bus.on(t, (e) => events.push(e));
     const result = runCombat({ ...input, bus });
     return { events, result };
 };

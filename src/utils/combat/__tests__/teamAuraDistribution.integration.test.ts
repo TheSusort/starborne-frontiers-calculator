@@ -130,26 +130,25 @@ const teamStats = (attack: number): CombatStatBlock => ({
 
 // A walked, non-positional team ally with the given active slot and NO passive (never itself
 // an aura source). speed 100 so it acts every round like the focus.
-const teamAlly = (id: string, attack: number, skills: ShipSkills): TeamActorEngineInput =>
-    ({
-        id,
-        speed: 100,
-        chargeCount: 0,
-        startCharged: false,
-        selfBuffs: [],
-        enemyDebuffs: [],
-        walk: {
-            shipSkills: skills,
-            stats: teamStats(attack),
-            selfDotModifier: 0,
-            defensePenetrationBuff: 0,
-            affinityDamageModifier: 0,
-            affinityCritCap: 100,
-            affinityCritPenalty: 0,
-            hasChargedSkill: false,
-            healModifier: 0,
-        },
-    }) as TeamActorEngineInput;
+const teamAlly = (id: string, attack: number, skills: ShipSkills): TeamActorEngineInput => ({
+    id,
+    speed: 100,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    walk: {
+        shipSkills: skills,
+        stats: teamStats(attack),
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+        healModifier: 0,
+    },
+});
 
 // The aura-source team ally: passive-only (never fires a damage ability itself), so its own
 // contribution to any measured damage total is always 0 — isolates the DISTRIBUTED bonus on
@@ -289,7 +288,7 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
                 chargeCount: 0,
                 startCharged: false,
                 shipSkills: passiveOnly(panguanAura()),
-            } as EnemyAttacker;
+            };
             const allyEnemy: EnemyAttacker = {
                 id: 'e-ally',
                 stats: {
@@ -313,7 +312,7 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
                         },
                     ],
                 },
-            } as EnemyAttacker;
+            };
             const { events } = collect(
                 baseEngineInput({
                     hp: 1_000_000_000, // huge focus HP so the enemy's hits never destroy it
@@ -328,23 +327,22 @@ describe('team-aura distribution for outgoing-damage modifiers (sub-project I, P
     describe('Lodolite-shape (enemy-debuff Concentrate Fire gate, composes with I1/I2)', () => {
         // A single positioned, passive (attack:0) enemy target — security:0 so the CF inflict
         // always lands (mirrors enemyDebuffNameSpecificGate.integration.test.ts).
-        const passiveEnemyAt = (position: Position): EnemyAttacker =>
-            ({
-                id: 'enemy-front',
-                stats: {
-                    attack: 0,
-                    crit: 0,
-                    critDamage: 0,
-                    defence: 0,
-                    hp: 1_000_000_000,
-                    speed: 1,
-                    security: 0,
-                },
-                chargeCount: 0,
-                startCharged: false,
-                position,
-                shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
-            }) as EnemyAttacker;
+        const passiveEnemyAt = (position: Position): EnemyAttacker => ({
+            id: 'enemy-front',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 1,
+                security: 0,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            position,
+            shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+        });
 
         it('an ally that is NOT the aura source gets the bonus against a Concentrate-Fire enemy (I1 name-specific gate, per-turn)', () => {
             idc = 0;

@@ -27,33 +27,32 @@ const ENFORCER_TEXT =
     'At the start of combat this Unit gains +15% crit rate and +10% hacking if adjacent to a supporter.';
 const FULLY_CHARGED_TEXT = 'This Unit starts combat fully charged.';
 
-const makeShip = (id: string, name: string, over: Partial<Ship> = {}): Ship =>
-    ({
-        id,
-        name,
-        rarity: 'legendary',
-        faction: 'TERRAN_COMBINE' as FactionName,
-        type: 'ATTACKER',
-        baseStats: {
-            hp: 0,
-            attack: 0,
-            defence: 0,
-            hacking: 200,
-            security: 100,
-            crit: 0,
-            critDamage: 0,
-            speed: 100,
-        },
-        equipment: {},
-        implants: {},
-        refits: [],
-        affinity: 'antimatter',
-        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
-        chargeSkillCharge: 0,
-        activeTarget: 'front',
-        activePattern: 'Pattern-Base',
-        ...over,
-    }) as Ship;
+const makeShip = (id: string, name: string, over: Partial<Ship> = {}): Ship => ({
+    id,
+    name,
+    rarity: 'legendary',
+    faction: 'TERRAN_COMBINE',
+    type: 'ATTACKER',
+    baseStats: {
+        hp: 0,
+        attack: 0,
+        defence: 0,
+        hacking: 200,
+        security: 100,
+        crit: 0,
+        critDamage: 0,
+        speed: 100,
+    },
+    equipment: {},
+    implants: {},
+    refits: [],
+    affinity: 'antimatter',
+    activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
+    chargeSkillCharge: 0,
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    ...over,
+});
 
 const placement = (
     ship: Ship,

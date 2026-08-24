@@ -71,30 +71,29 @@ const basicEnemyAt = (
     id: string,
     position: Position,
     selection: ParsedTarget['selection']
-): EnemyAttacker =>
-    ({
-        id,
-        stats: { attack: 1000, crit: 0, critDamage: 0, defence: 0, hp: 10_000_000, speed: 1 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget(selection),
-        pattern: basePattern(),
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        ab({
-                            type: 'damage',
-                            target: 'enemy',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                    ],
-                },
-            ],
-        },
-    }) as EnemyAttacker;
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 1000, crit: 0, critDamage: 0, defence: 0, hp: 10_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRouting)', () => {
     it('ability Defense Down routes to front enemy only (not leaked to back enemy)', () => {

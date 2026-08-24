@@ -7,7 +7,6 @@ import {
     ATTACKER_SLOT_OPTIONS,
     DEFAULT_ATTACKER_SLOT,
 } from '../../utils/calculators/dpsEnemyPlacement';
-import type { Position } from '../../types/encounters';
 import { DPSShipConfig, DPSShipConfigUpdateableField } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { DPSSimulationResult } from '../../utils/calculators/dpsSimulator';
@@ -193,9 +192,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                         <Section title="Affinity" aside={affinityBadge}>
                             <Select
                                 value={config.affinity ?? 'antimatter'}
-                                onChange={(v) =>
-                                    onUpdate('affinity', v === '' ? undefined : (v as AffinityName))
-                                }
+                                onChange={(v) => onUpdate('affinity', v === '' ? undefined : v)}
                                 options={AFFINITY_OPTIONS}
                                 className="w-full"
                                 // `aria-label`, not `label`: the enclosing Section already renders
@@ -210,7 +207,7 @@ export const ShipConfigCard: React.FC<ShipConfigCardProps> = ({
                             <Select
                                 label="Fights from"
                                 value={config.slot ?? DEFAULT_ATTACKER_SLOT}
-                                onChange={(v) => onUpdate('slot', v as Position)}
+                                onChange={(v) => onUpdate('slot', v)}
                                 options={ATTACKER_SLOT_OPTIONS.map((p) => ({
                                     value: p,
                                     label: p,

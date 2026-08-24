@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
-import { ShipSkills, Ability } from '../../../types/abilities';
+import { Ability } from '../../../types/abilities';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Task R1: capture resisted enemy→tank TIMED debuffs into EnemyRoundEffects.
@@ -52,44 +52,43 @@ const enemyAb = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): 
 // debuff infliction (application: 'inflict' → drawn against the live hacking-vs-security
 // landing roll: the enemy's `stats.hacking` vs the heal target's default security 100).
 // `hacking` omitted → defaults to 200 → 100% landing.
-const debuffEnemy = (hacking?: number): EnemyAttacker =>
-    ({
-        id: 'e1',
-        stats: {
-            attack: 1000,
-            crit: 0,
-            critDamage: 0,
-            speed: 10,
-            ...(hacking === undefined ? {} : { hacking }),
-        },
-        chargeCount: 0,
-        startCharged: false,
-        shipSkills: {
-            slots: [
-                {
-                    slot: 'active',
-                    abilities: [
-                        enemyAb({
-                            type: 'damage',
-                            config: { type: 'damage', multiplier: 100 },
-                        }),
-                        enemyAb({
+const debuffEnemy = (hacking?: number): EnemyAttacker => ({
+    id: 'e1',
+    stats: {
+        attack: 1000,
+        crit: 0,
+        critDamage: 0,
+        speed: 10,
+        ...(hacking === undefined ? {} : { hacking }),
+    },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    enemyAb({
+                        type: 'damage',
+                        config: { type: 'damage', multiplier: 100 },
+                    }),
+                    enemyAb({
+                        type: 'debuff',
+                        config: {
                             type: 'debuff',
-                            config: {
-                                type: 'debuff',
-                                buffName: 'Defense Down',
-                                parsedEffects: { defense: -50 },
-                                stacks: 1,
-                                isStackable: false,
-                                application: 'inflict',
-                                duration: 3,
-                            },
-                        }),
-                    ],
-                },
-            ],
-        } as ShipSkills,
-    }) as EnemyAttacker;
+                            buffName: 'Defense Down',
+                            parsedEffects: { defense: -50 },
+                            stacks: 1,
+                            isStackable: false,
+                            application: 'inflict',
+                            duration: 3,
+                        },
+                    }),
+                ],
+            },
+        ],
+    },
+});
 
 const runWithEnemy = (hacking?: number) =>
     runCombat(

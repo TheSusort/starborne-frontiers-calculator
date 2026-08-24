@@ -50,7 +50,7 @@ function buildHarness({ base, selfBuffs }: BuildHarnessOptions) {
         id: `test-buff-${i}`,
         buffName: `Test Buff ${b.stat} ${i}`,
         stacks: 1,
-        parsedEffects: { [b.stat]: b.value } as SelectedGameBuff['parsedEffects'],
+        parsedEffects: { [b.stat]: b.value },
         isStackable: false,
     }));
 

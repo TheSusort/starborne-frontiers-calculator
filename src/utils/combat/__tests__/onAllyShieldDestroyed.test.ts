@@ -232,29 +232,27 @@ const shieldedAlly = (opts: { withShield: boolean }): CombatEngineInput => ({
 /** enemyDebuffer inflicts Defense Down II (0 damage, guaranteed landing) BEFORE enemyBreaker
  *  deals its shield-depleting hit — speed-ordered so the debuff is present when the shield
  *  destruction fires. `breakerAttack` controls whether the hit fully drains the pool. */
-const enemyDebuffer = (position: Position): EnemyAttacker =>
-    ({
-        id: 'enemy-debuffer',
-        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [applyDebuff()] }] },
-    }) as EnemyAttacker;
+const enemyDebuffer = (position: Position): EnemyAttacker => ({
+    id: 'enemy-debuffer',
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [applyDebuff()] }] },
+});
 
-const enemyBreaker = (position: Position, attack: number): EnemyAttacker =>
-    ({
-        id: 'enemy-breaker',
-        stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
-        chargeCount: 0,
-        startCharged: false,
-        position,
-        target: parsedTarget('front'),
-        pattern: basePattern(),
-        shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
-    }) as EnemyAttacker;
+const enemyBreaker = (position: Position, attack: number): EnemyAttacker => ({
+    id: 'enemy-breaker',
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 500 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [hit()] }] },
+});
 
 function runAndCollect(input: CombatEngineInput) {
     const bus = createEventBus();
@@ -378,7 +376,7 @@ describe('AEGIS (enemy-side) — team symmetry: an enemy AEGIS reacts to its own
                     { slot: 'passive', abilities: aegisReactiveAbilities() },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         const enemyAlly: EnemyAttacker = {
             id: 'enemy-ally',
@@ -401,7 +399,7 @@ describe('AEGIS (enemy-side) — team symmetry: an enemy AEGIS reacts to its own
                     { slot: 'passive', abilities: [preCombatShield()] },
                 ],
             },
-        } as EnemyAttacker;
+        };
 
         // Player-side: the top-level focus inflicts the debuff (0 damage); a teamActor deals the
         // shield-depleting hit. Both target 'front' — the enemy roster's front-most living ship
@@ -460,7 +458,7 @@ describe('AEGIS (enemy-side) — team symmetry: an enemy AEGIS reacts to its own
                         affinityCritPenalty: 0,
                         hasChargedSkill: false,
                     },
-                } as TeamActorEngineInput,
+                },
             ],
             enemyAttackers: [enemyAegis, enemyAlly],
         };
