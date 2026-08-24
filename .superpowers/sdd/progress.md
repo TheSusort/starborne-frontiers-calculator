@@ -91,10 +91,30 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
          loosening — cause was NOT the ability model (see the finding below). Test 10 keeps its exact
          shape with the buff swapped to `parsedEffects.incomingDamage` (`Inc. Damage Down II`):
          **ungated 17_496 vs gated 24_993, strictly greater. The gate proof STANDS.**
-- [x] Task 3: **complete** (commit `58d7b085`; review pending). Suite 580/6460 — UNCHANGED, as a
+- [x] Task 3: **complete** (commit `58d7b085`, review PASS — 0 Critical, 0 Important, 2 Minor). Suite 580/6460 — UNCHANGED, as a
       type-only task should be. `as unknown as` grep found no casts touching `DefenseShipConfig`.
 - [ ] Task 8: engine fix — **Phase 1 DONE**, Phase 2 authorised (see below)
 - [ ] Task 4: `SkillSlotList` in the defense card
+
+## ⛔ PROCESS RULE ADDED (incident, 2026-08-24) — DO NOT run a reviewer concurrently with an
+## implementer in the SAME working tree.
+The Task 3 reviewer ran `git stash` to get a clean read while Task 8 Phase 2 was mid-edit. That
+pulled BOTH the implementer's uncommitted source edits AND my own uncommitted docs work out of the
+tree in one go. Recovered in full (`86b299fb`), stash dropped after confirming its source half was a
+STALE snapshot — restoring it would have rolled Task 8 backwards.
+**Two things I lost that I did not realise were uncommitted:** the A5 Overload ruling in the spec,
+and the `?? 100`/`?? 200` fallback fix in the PLAN (the brief had already been regenerated from the
+fixed plan, so Task 3 still shipped the correct code — the plan file alone had silently reverted to
+contradicting the shipped code).
+**Rules going forward:**
+1. Reviewers are NOT read-only in practice. A reviewer that runs git commands mutates shared state.
+   Either wait for the implementer to finish, or require the reviewer to work in its own
+   `git worktree` and forbid `git stash` outright.
+2. **Commit my own docs/ledger edits immediately**, not at the next convenient batch. Uncommitted
+   coordinator work is the easiest thing to lose and the least likely to be noticed missing.
+3. The Task 3 reviewer's own instinct was right and worth copying: when the shared tree gave
+   moving-target failures, it verified the commit in an ISOLATED worktree. That is the correct
+   method; the `git stash` that preceded it was the error.
 
 ## Task 8 Phase 1 findings (measured, not asserted)
 - **Blast radius: 2 test files, 2 assertions. ZERO golden snapshots move.**
