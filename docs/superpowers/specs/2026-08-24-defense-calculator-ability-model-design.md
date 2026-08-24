@@ -326,3 +326,43 @@ Consequences:
   zero damage reduction rather than inverting into a damage bonus. No new clamp needed — but a test
   must pin that floor, because an unclamped implementation would look identical on every fixture
   that never reaches -100%.
+
+### A5.1 CORRECTION (2026-08-24): the floor guard prevents NaN, not a damage bonus
+
+A5 above says the `-100%` case "floors at zero reduction rather than inverting into a damage bonus."
+**The second half is wrong, and it was my error.** Measured:
+
+```
+calculateDamageReduction(d) = 88.3505 * exp(-((4.5552 - log10(d)) / 1.3292)^2)   [priorityScore.ts:7]
+  d =  5000  ->  25.67
+  d =     0  ->   0        (log10(0) = -Inf, exp(-Inf) = 0)
+  d = -2500  ->  NaN       (log10 of a negative)
+```
+
+The function is bounded in `[0, 88.3505]` and **can never return a negative**, so a damage *bonus*
+is impossible by construction. What the `effectiveDefense > 0` guard actually prevents is **NaN
+propagation** when effective defence overshoots below zero (self-shred beyond `-100%`).
+
+Two consequences that matter for testing:
+
+1. **At exactly `-100%` the guard is a NO-OP** — `calculateDamageReduction(0)` is already `0`. Only an
+   *overshoot* arm (e.g. `-150%`) exercises the guard at all. A floor test built only on a capped
+   10-stack Overload pins nothing.
+2. **An assertion of the form `expect(x).not.toBeGreaterThan(cap)` is NaN-BLIND** — `NaN > cap` is
+   `false`, so it passes on the very failure it is meant to catch. The real failure mode must be
+   asserted positively (`toBeCloseTo`), not as a negated inequality.
+
+Every place that repeats the "damage bonus" framing must be corrected: the engine justification
+comment, the `dpsBuffHelpers` jsdoc, the new test file's header and in-test comment, and the
+changelog entry.
+
+### A5.2 The `* s.stacks` factor must be pinned
+
+The whole A5 ruling rests on a 10-stack Overload reaching `-100%`, which is `* s.stacks` doing the
+work. Deleting that multiplier leaves the entire repository green (measured: 518 files / 5991 tests),
+because every test arm uses `stacks: 1`. Without it a 10-stack Overload applies `-10%`, not `-100%`,
+and the changelog's headline Butcher figures are fiction.
+
+**A multi-stack arm is required**, e.g. `stacks: 5, defense: -10` asserting mitigation at half
+defence. Semantics are already correct — `addPersistentStack` merges an accumulating buff into one
+entry carrying the capped accumulated count — so this is a coverage gap, not a code defect.
