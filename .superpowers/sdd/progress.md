@@ -93,7 +93,26 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
          **ungated 17_496 vs gated 24_993, strictly greater. The gate proof STANDS.**
 - [x] Task 3: **complete** (commit `58d7b085`, review PASS — 0 Critical, 0 Important, 2 Minor). Suite 580/6460 — UNCHANGED, as a
       type-only task should be. `as unknown as` grep found no casts touching `DefenseShipConfig`.
-- [ ] Task 8: engine fix — **Phase 1 DONE**, Phase 2 authorised (see below)
+- [x] Task 8: **complete** (commit `79372d56`; review pending). Suite **581 / 6467** — +1 file,
+      +7 tests, all its own; reconciles exactly. ZERO snapshot movement, as Phase 1 predicted.
+      The change is ONE term: `enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense`,
+      plus a `toSelfDefenseModifier` helper twinning `toSelfIncomingDamageModifier`.
+      **Mutation-proved:** neutralise the fix → 7/7 red; invert the sign → 6/7 red; delete the floor
+      guard → exactly the 2 floor arms red.
+      **THE VACUITY IT CAUGHT IN ITSELF (worth remembering):** under the neutralise probe the
+      cross-side SYMMETRY test initially stayed GREEN — because *an engine where the term reaches
+      NEITHER side is still symmetric*. Two identical wrongs read as agreement. It hardened the test
+      with a per-buff "moves away from its own control" loop to get 7/7. **A symmetry assertion is
+      not a reachability assertion; it needs its own non-vacuity arm.**
+      **SECOND TREE MUTATION, which I had not found:** a `git reset` at 19:25:40 (reflog) silently
+      discarded the same four source edits, separately from the reviewer's `git stash`. It noticed
+      only because an assertion returned the PRE-fix number moments after the same code returned the
+      post-fix one. **Its rule, which I am adopting: an unexplained REVERSAL of a number you just
+      measured is a tree-state event, not a flaky test.**
+      Changelog: exactly ONE entry added — **Task 7 must not duplicate it.**
+      ⚠️ `selfDefenceBuffMitigation.test.ts` is now the SOLE regression gate for this behaviour; the
+      goldens are blind to it by construction. If that file is ever deleted or weakened the engine
+      loses its only guard on the sign and the floor.
 - [ ] Task 4: `SkillSlotList` in the defense card
 
 ## ⛔ PROCESS RULE ADDED (incident, 2026-08-24) — DO NOT run a reviewer concurrently with an
