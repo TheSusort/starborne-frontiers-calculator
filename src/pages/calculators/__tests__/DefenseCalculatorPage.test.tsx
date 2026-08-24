@@ -62,4 +62,11 @@ describe('DefenseCalculatorPage', () => {
         expect(screen.getByText('Active')).toBeInTheDocument();
         expect(screen.getByText('Charged')).toBeInTheDocument();
     });
+
+    it('reports a measured EHP once an attacker applies pressure', async () => {
+        renderDefenseCalculatorPage();
+        fireEvent.click(screen.getByText(/Combat Settings/i));
+        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+        expect(await screen.findByText(/Measured EHP/i)).toBeInTheDocument();
+    });
 });

@@ -3,6 +3,7 @@ import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
+import { DefenseSurvivabilityResult } from '../../utils/calculators/defenseSurvivabilitySim';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
@@ -10,6 +11,7 @@ import { Input } from '../ui/Input';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { useShips } from '../../contexts/ShipsContext';
+import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
 import { GameBuffPicker } from './GameBuffPicker';
 
@@ -19,6 +21,10 @@ interface DefenseShipCardProps {
     isComparing: boolean;
     bestEffectiveHP?: number;
     buffTotals?: DefenseBuffTotals;
+    /** The engine-measured survivability figure (Task 2's boundary). A LOWER BOUND when
+     *  `survived` is true — see the render below for why survivors and casualties must never
+     *  read as the same kind of number. */
+    result?: DefenseSurvivabilityResult;
     onRemove: () => void;
     onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
@@ -32,6 +38,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     isComparing,
     bestEffectiveHP,
     buffTotals,
+    result,
     onRemove,
     onUpdate,
     onSelectShip,
@@ -41,6 +48,12 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
+    // Show the Passive slot whenever the ship has passive skill text to read/edit — not only
+    // when the parser auto-filled abilities. Defensive/repair passives (e.g. Anemone) parse to
+    // nothing but still need the Edit button so users can read and add abilities manually.
+    const hasPassive =
+        config.shipSkills.slots.some((s) => s.slot === 'passive') ||
+        (selectedShip ? !!getSkillRowForSlot(selectedShip, 'passive') : false);
 
     const hasBuffs =
         (buffTotals?.defenseBuff ?? 0) !== 0 ||
@@ -114,7 +127,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     </div>
                     <SkillSlotList
                         shipSkills={config.shipSkills}
-                        hasPassive={!!selectedShip}
+                        hasPassive={hasPassive}
                         ship={selectedShip}
                         onChange={onShipSkillsChange}
                     />
@@ -132,6 +145,53 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     />
                 </CollapsibleForm>
 
+                {result && (
+                    <div className="mt-4 pt-4 border-t border-dark-border">
+                        <div className="flex justify-between items-baseline">
+                            <span className="text-theme-text-secondary">Measured EHP:</span>
+                            <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
+                                {Math.round(result.measuredEHP).toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="text-xs mt-1">
+                            {result.survived ? (
+                                <span className="text-green-400">
+                                    Survived all {result.elapsedRounds} rounds — absorbed at least
+                                    this much
+                                </span>
+                            ) : (
+                                <span className="text-red-500">
+                                    Destroyed round {result.destroyedRound}
+                                </span>
+                            )}
+                        </div>
+                        <div className="mt-2 text-xs text-theme-text-secondary space-y-1">
+                            <div className="flex justify-between">
+                                <span>To hull</span>
+                                <span>{result.breakdown.toHp.toLocaleString()}</span>
+                            </div>
+                            {result.breakdown.toShield > 0 && (
+                                <div className="flex justify-between">
+                                    <span>Absorbed by shield</span>
+                                    <span>{result.breakdown.toShield.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {result.breakdown.toBarrier > 0 && (
+                                <div className="flex justify-between">
+                                    <span>Blocked by Barrier</span>
+                                    <span>{result.breakdown.toBarrier.toLocaleString()}</span>
+                                </div>
+                            )}
+                            {result.breakdown.toConversion > 0 && (
+                                <div className="flex justify-between">
+                                    <span>Converted to shield</span>
+                                    <span>{result.breakdown.toConversion.toLocaleString()}</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 <div className="mt-4 pt-4 border-t border-dark-border">
                     <div className="flex justify-between mb-2">
                         <span className="text-theme-text-secondary">Damage Reduction:</span>
@@ -144,10 +204,14 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         </div>
                     )}
                     <div className="flex justify-between">
-                        <span className="text-theme-text-secondary">Effective HP:</span>
+                        <span className="text-theme-text-secondary">Formula EHP:</span>
                         <span className={isBest ? 'text-primary font-bold' : ''}>
                             {Math.round(effectiveHP).toLocaleString()}
                         </span>
+                    </div>
+                    <div className="text-xs text-theme-text-secondary -mt-1 mb-1">
+                        Static formula — ignores shields, Barrier, and conditional gating. Prefer
+                        the engine-measured figure above when one is available.
                     </div>
                     <div className="flex justify-between mt-2">
                         <span className="text-theme-text-secondary">HP Multiplier:</span>

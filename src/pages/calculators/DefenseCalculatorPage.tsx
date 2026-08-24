@@ -50,7 +50,7 @@ import {
 } from '../../utils/calculators/healingDefaultEnemy';
 import type { Position } from '../../types/encounters';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import { parseShipTargeting, type ShipTargeting } from '../../utils/targetingParser';
+import { targetingOf } from '../../utils/calculators/shipTargeting';
 
 /** The stat block a manually-added enemy starts from, placed at the Nth default enemy cell.
  *  Copied verbatim from `HealingCalculatorPage.tsx` — see that module for why none of these may be
@@ -75,18 +75,6 @@ const firstFreeSlot = (wanted: Position, taken: ReadonlyArray<Position | undefin
     const used = new Set(taken.filter((p): p is Position => !!p));
     if (!used.has(wanted)) return wanted;
     return ENEMY_SLOT_OPTIONS.find((p) => !used.has(p)) ?? wanted;
-};
-
-/** A ship's parsed ACTIVE targeting. Copied verbatim from `HealingCalculatorPage.tsx` — see that
- *  module for why the try/catch is load-bearing (an unparseable kit must degrade, not crash the
- *  render). */
-const targetingOf = (ship?: Ship): ShipTargeting | undefined => {
-    if (!ship) return undefined;
-    try {
-        return parseShipTargeting(ship);
-    } catch {
-        return undefined;
-    }
 };
 
 const detectShipCharged = (ship: Ship): boolean =>
@@ -520,6 +508,11 @@ const DefenseCalculatorPage: React.FC = () => {
                     role: config.role,
                     faction: config.faction,
                     position: config.position,
+                    // The defender's REAL parsed targeting — without this the cast falls back to
+                    // the adapter's synthetic single-target-front pattern, understating an AoE
+                    // defender's own offence and (since it takes its own turns) overstating how
+                    // long incoming pressure stays high.
+                    targeting: targetingOf(config.shipId ? getShipById(config.shipId) : undefined),
                     teamActors,
                     enemies: enemyInputs,
                     rounds,
@@ -527,7 +520,7 @@ const DefenseCalculatorPage: React.FC = () => {
             );
         });
         return map;
-    }, [configs, globalBuffs, teamActors, enemyInputs, rounds]);
+    }, [configs, globalBuffs, teamActors, enemyInputs, rounds, getShipById]);
 
     const globalBuffTotals = useMemo(
         () => ({
@@ -667,6 +660,7 @@ const DefenseCalculatorPage: React.FC = () => {
                                 isComparing={configs.length > 1}
                                 bestEffectiveHP={bestEffectiveHP}
                                 buffTotals={mergedBuffTotals.get(config.id)}
+                                result={simResults.get(config.id)}
                                 onRemove={() => removeConfig(config.id)}
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
