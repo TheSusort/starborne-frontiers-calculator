@@ -435,6 +435,43 @@ describe('simulateDefenseSurvivability', () => {
         expect(warded.breakdown.gross).toBeLessThan(plain.breakdown.gross);
     });
 
+    // ── toConversion IS NOT INERT ────────────────────────────────────────────
+    // Measured on Task 1: all 194 `convertedToShield` values in the healing golden suite are 0 —
+    // NO scenario anywhere exercises Shield Converter. So without this test the breakdown's fourth
+    // term would ship having never been observed non-zero, which is the same vacuity class as the
+    // double-count tripwire above. `Shield Converter` is NAME-KEYED (utils/combat/shieldConverter.ts,
+    // `SHIELD_CONVERTER = 'Shield Converter'`), granted by Quixilver's charged skill; it nullifies
+    // the next DIRECT hit and turns it into Shield. See
+    // src/utils/combat/__tests__/shieldConverter.integration.test.ts for a working grant fixture and
+    // copy its shape.
+    it('Shield Converter damage lands in toConversion, not toShield or toHp', () => {
+        idCounter = 0;
+        const result = simulateDefenseSurvivability(
+            BASE({
+                rounds: 3,
+                enemies: [attacker(5_000)],
+                shipSkills: skills([
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        config: {
+                            type: 'buff',
+                            buffName: 'Shield Converter',
+                            parsedEffects: {},
+                            stacks: 1,
+                            isStackable: false,
+                            duration: 'recurring',
+                        },
+                    }),
+                ]),
+            })
+        );
+        // The whole point: this term must be provably reachable.
+        expect(result.breakdown.toConversion).toBeGreaterThan(0);
+        // It is netted against gross exactly as Barrier is — gross still counts the nullified hit.
+        expect(result.breakdown.gross).toBeGreaterThanOrEqual(result.breakdown.toConversion);
+    });
+
     // ── THE NON-VACUOUS PROOF THE ABILITY MODEL CHANGED THE ANSWER ───────────
     // This is the test that closes #358. Under the old flat `buildSkillBuffAutoFill` path both runs
     // below were IDENTICAL — that path cannot express a gate, so it applied every parsed buff
@@ -679,7 +716,7 @@ export function simulateDefenseSurvivability(
 
 Run: `npx vitest run src/utils/calculators/__tests__/defenseSurvivabilitySim.test.ts`
 
-Expected: PASS, 9 tests.
+Expected: PASS, 10 tests.
 
 If the `destroyedRound`/`hpPct` numbers in the fixtures disagree with the engine, do **not** relax
 the assertion to `toBeGreaterThan`. Read the actual round rows, confirm the engine's behaviour is
@@ -1298,6 +1335,7 @@ git commit -m "docs: engine-backed defense calculator (#358)"
 | §6.2 survived/destroyed both ways | 2 |
 | §6.2 Barrier non-zero | 2 |
 | §6.2 `modifier` ability affects EHP | 2 |
+| `toConversion` provably non-zero (found in Task 1: inert in all 194 goldens) | 2 |
 | §6.3 golden gate | Global Constraints + 1 Step 8 |
 | §7 PR sequence | Tasks map 1:1 (PR3 = Tasks 3-4, PR4 = Tasks 5-6) |
 
