@@ -366,3 +366,64 @@ and the changelog's headline Butcher figures are fiction.
 **A multi-stack arm is required**, e.g. `stacks: 5, defense: -10` asserting mitigation at half
 defence. Semantics are already correct — `addPersistentStack` merges an accumulating buff into one
 entry carrying the capped accumulated count — so this is a coverage gap, not a code defect.
+
+---
+
+# ADDENDUM 2 (2026-08-24): Measured EHP must count RAW damage withstood
+
+**Status:** approved by the user. This corrects a design error in §3 of the original spec — mine.
+
+## B1. The error
+
+§3 specified `Measured EHP = Σ incomingDamage`. I verified that field is gross with respect to the
+**shield / Barrier / conversion pools** and stopped there. It is **not** gross with respect to
+**defence**. `engine.ts:5423` documents the parameter as *"The DEFENCE mitigation factor the CALLER
+already folded into `rawDamage`"*, and `engine.ts:5726`'s comment confirms the recorded intake is
+*"post incoming-block, post Protection redirect"*.
+
+So `incomingDamage` is **post-defence-mitigation**. Measured EHP therefore counted *damage that got
+through*, not *damage thrown*.
+
+### B1.1 Why that breaks the metric in both regimes
+
+- **A ship that dies** absorbs post-mitigation damage ≈ its HP (plus pool absorption) *regardless of
+  its defence*. Defence changes only how many ROUNDS that takes. The page's central stat barely
+  moves its headline number.
+- **A ship that survives** shows the damage that leaked through, so **a tankier ship reports a LOWER
+  number** — while `isBest` ranks highest-first. The ranking inverts.
+
+Measured live on Isha: Measured EHP 1,408 (survived 4 rounds) against Formula EHP 543,950. That is
+not two estimates disagreeing; it is two different quantities.
+
+This also contradicts what the user was told when choosing the metric — that it would capture
+incoming-damage reduction and conditionally-gated defence buffs the static formula cannot see. Under
+the shipped implementation those *reduce* the number.
+
+## B2. The fix (user ruling: "Both — raw EHP headline, rounds beside it")
+
+1. **Thread the PRE-mitigation figure through the engine** into the per-victim intake bucket, as a
+   new additive field alongside `incoming`. This is the same shape as Task 1's `convertedToShield`,
+   which landed cleanly: `ActorIntake` → `HealingRoundEngine` → `HealingRoundData` → the boundary.
+2. **`measuredEHP` reads the RAW figure.** "How much raw damage was thrown at this ship before it
+   died" — the conventional meaning of effective HP, and the quantity the static formula estimates,
+   so the two finally measure the same thing and their disagreement becomes informative.
+3. **Report rounds survived beside it** in the results block, with the survived/destroyed state.
+
+## B3. Binding constraints
+
+- **Direction test, mandatory.** More defence must RAISE measured EHP. That is the exact property
+  that was inverted; a magnitude-only assertion cannot catch a re-inversion.
+- **The relationship to the existing terms must be pinned.** Raw ≥ post-mitigation `incomingDamage`
+  always, with equality only at zero effective defence. Assert both the inequality and one exact
+  equality case.
+- **Do NOT reconstruct raw by dividing post by the mitigation factor.** It is lossy and undefined at
+  a factor of 0 (100% reduction). Record the pre-fold value at its source.
+- **The goldens do not gate this** — same measurement as A3: the numeric golden suites carry no
+  self-side defence buffs. Every property needs its own test.
+- Team-symmetric, as always.
+- **Task 2's constants and Task 8's `selfDefenceBuffMitigation` figures will move** where they assert
+  on `measuredEHP` / `breakdown.gross`. Re-measure them; do not loosen them.
+- The intake **breakdown** (`toHp` / `toShield` / `toBarrier` / `toConversion`) stays on the
+  POST-mitigation axis — those four terms partition what actually arrived, and re-basing them on raw
+  would break the identity. The card must not present a raw headline and post-mitigation breakdown
+  as if they summed; label the axis.
