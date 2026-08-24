@@ -4,6 +4,7 @@ import {
     toEnemyModifiers,
     toDotAndPenModifiers,
     toEnemyDotModifier,
+    toSelfDefenseModifier,
 } from '../dpsBuffHelpers';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { calculateBuffTotals } from '../../combat/buffTotals';
@@ -82,6 +83,48 @@ describe('toEnemyModifiers', () => {
             makeBuff({ incomingDamage: 10 }, 2),
         ]);
         expect(result.incomingDamageModifier).toBe(40);
+    });
+});
+
+describe('toSelfDefenseModifier', () => {
+    it('returns 0 for no buffs', () => {
+        expect(toSelfDefenseModifier([])).toBe(0);
+    });
+
+    it('sums defense across buffs', () => {
+        expect(toSelfDefenseModifier([makeBuff({ defense: 30 }), makeBuff({ defense: -10 })])).toBe(
+            20
+        );
+    });
+
+    // FINDING 1 (#358 review): the `* s.stacks` factor is the entire basis of the Overload
+    // ruling (A5) — a 10-stack Overload ('-10% Defense' per stack) must reach -100%, not -10%.
+    // Deleting `* s.stacks` from the reducer left the WHOLE repository green (518 files / 5991
+    // tests) because every other arm anywhere in the suite uses `stacks: 1`. This arm is the
+    // only thing that pins it.
+    //
+    // Mutation-verified: with `* s.stacks` deleted from `toSelfDefenseModifier`, this arm goes
+    // RED (-10 !== -50, and effectiveDefence 4500 !== the expected half-defence 2500). Restored,
+    // it is green again.
+    it('applies stacks to the defense modifier — pins the *s.stacks factor (finding 1, #358)', () => {
+        const pct = toSelfDefenseModifier([makeBuff({ defense: -10 }, 5)]);
+        expect(pct).toBe(-50);
+
+        // Stated in the term the finding used: "mitigation computed at half defence". A -50%
+        // channel folds as `defence * (1 + pct/100)`, so 5000 base defence must become exactly
+        // half (2500), not 4500 (the wrong, unmultiplied answer a missing `* stacks` would give).
+        const baseDefence = 5_000;
+        const effectiveDefence = baseDefence * (1 + pct / 100);
+        expect(effectiveDefence).toBeCloseTo(baseDefence / 2, 6);
+    });
+
+    it('preserves sign (Defense Up = positive, Overload/Supercharged = negative)', () => {
+        expect(toSelfDefenseModifier([makeBuff({ defense: 30 })])).toBe(30);
+        expect(toSelfDefenseModifier([makeBuff({ defense: -30 })])).toBe(-30);
+    });
+
+    it('ignores buffs without a defense effect', () => {
+        expect(toSelfDefenseModifier([makeBuff({ attack: 15 })])).toBe(0);
     });
 });
 

@@ -107,9 +107,18 @@ export function toSelfIncomingDamageModifier(selected: SelectedGameBuff[]): numb
  *  SIGN-AGNOSTIC BY RULING (addendum A5): this carries the NEGATIVE self-sourced entries too —
  *  Overload ('-10% Defense', stacking to 10 -> -100%) and Supercharged I/III. Those are self-buffs
  *  with a stated defensive cost; before this term the app granted their damage upside and ignored
- *  the cost. Do NOT filter to positives, and do NOT special-case by buff name. The -100% floor is
- *  handled downstream by victimDefenceMitigation's `effectiveDefense > 0` guard (pinned by a test),
- *  not by clamping here — a clamp here would also silently swallow an over-shred. */
+ *  the cost. Do NOT filter to positives, and do NOT special-case by buff name. An overshoot below
+ *  -100% (this channel plus enemy Defense Shred) is handled downstream by
+ *  victimDefenceMitigation's `effectiveDefense > 0` guard (pinned by a test), not by clamping
+ *  here — a clamp here would also silently swallow an over-shred.
+ *
+ *  CORRECTION (addendum A5.1): that downstream guard does NOT prevent a "damage bonus" —
+ *  `calculateDamageReduction` is bounded in [0, 88.3505] and can never return a negative, so a
+ *  bonus is impossible by construction regardless of the guard. What the guard actually prevents
+ *  is NaN propagation: `log10` of a non-positive effective defence is `-Infinity`/`NaN`, which an
+ *  overshoot past -100% produces. At exactly -100% the guard is a no-op (effective defence is
+ *  already exactly 0, and `calculateDamageReduction(0)` is already 0) — only an overshoot below
+ *  -100% exercises it at all. */
 export function toSelfDefenseModifier(selected: SelectedGameBuff[]): number {
     return selected.reduce((sum, s) => sum + (s.parsedEffects.defense ?? 0) * s.stacks, 0);
 }

@@ -5551,12 +5551,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // The positional apply path (every cast in the sim) therefore hands its own
                     // factor down as `cause.targetMitigation`, computed by the same
                     // `victimDefenceMitigation` that produced the hit. Re-deriving it here instead
-                    // dropped two terms the caller had folded in and read a third from the wrong
-                    // place: the attacker's defence PENETRATION (a 50%-pen hit inflated the chunk
-                    // by ~7%), the victim's `defenceModifierPct` (Defense Shred), and
-                    // `effectiveStatsOf(...).defence` — the BUFF-FOLDED stat — where the caller's
-                    // `victimDefenseProfileOf` reads the raw `victim.stats.defence` (a +100%
-                    // Defense buff inflated the chunk by ~13%).
+                    // drops the attacker's defence PENETRATION (a 50%-pen hit inflated the chunk by
+                    // ~7%) — always missing from the re-derivation below, pen or no pen — and,
+                    // post-ADDENDUM A2/A5 (#358), can still diverge on an AURA-granted self-defence
+                    // buff: `victimDefenseProfileOf`'s `defenceModifierPct` folds all THREE of
+                    // `victimSelfBuffs`' self-buff channels (scheduled + timed + aura) for both a
+                    // victim's own `Defense Up`/`Overload` and an enemy's `Defense Shred`, while
+                    // `effectiveStatsOf(...).defence` below folds only the first two. A SCHEDULED or
+                    // TIMED self-defence buff therefore no longer diverges between the two reads (a
+                    // +100% Defense buff used to inflate the chunk by ~13% before A2; it no longer
+                    // does) — only penetration and an aura-only defence buff can still skew a
+                    // re-derived `P` here.
                     //
                     // The fallback below still serves the non-positional direct-damage callers
                     // (bomb/detonation applies, reactive procs), which do not compute a per-victim
@@ -7132,8 +7137,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             // — Overload ('-10% Defense', stacking to 10 -> -100%) and Refine's Supercharged. Those
             // buffs' damage upside was already applied while their stated defensive cost was not.
             // No name-special-casing, no positive-only filter. At -100% the effective defence
-            // reaches 0 and victimDefenceMitigation's `effectiveDefense > 0` guard floors the
-            // reduction at 0 rather than inverting it into a damage bonus.
+            // reaches exactly 0 and victimDefenceMitigation's `effectiveDefense > 0` guard is a
+            // NO-OP there (`calculateDamageReduction(0)` is already 0). CORRECTION (addendum
+            // A5.1): the guard does not prevent a "damage bonus" — `calculateDamageReduction` is
+            // bounded in [0, 88.3505] and can never return a negative, so a bonus is impossible by
+            // construction. What the guard prevents is NaN propagation from `log10` of a
+            // non-positive effective defence, which only an OVERSHOOT below -100% (this channel
+            // stacked with enemy Defense Shred) can produce.
             //
             // NO DOUBLE COUNT: `enemy.enemyDefenseModifier` reads the victim's ENEMY-debuff store
             // only; `defence` above is the RAW base stat; and pre-fight (squad-leader) defence is a

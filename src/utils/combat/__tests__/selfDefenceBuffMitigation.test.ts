@@ -27,12 +27,14 @@
  *     Fold the term in with the wrong sign and `Defense Up` becomes a debuff — while every
  *     magnitude-only assertion still passes, because the number still MOVED. Asserted as an
  *     inequality, not inferred from a constant.
- *  2. THE -100% FLOOR. `Overload` is a self-buff at '-10% Defense' stacking to 10, so a real ship
- *     reaches exactly -100%: effective defence 0. `victimDefenceMitigation` guards this with
- *     `effectiveDefense > 0 ? ... : 0`, so the reduction floors at zero instead of inverting into a
- *     damage BONUS. An unclamped implementation is indistinguishable from a clamped one on every
- *     fixture that never reaches -100%, so the floor gets its own arm — including an OVER-shot
- *     (-150%) arm, since "floors" and "happens to be 0 at exactly -100" are different claims.
+ *  2. THE OVERSHOOT GUARD. `Overload` is a self-buff at '-10% Defense' stacking to 10, so a real
+ *     ship reaches exactly -100%: effective defence 0. At EXACTLY -100% `victimDefenceMitigation`'s
+ *     `effectiveDefense > 0 ? ... : 0` guard is a NO-OP — `calculateDamageReduction(0)` is already
+ *     0, since the curve is bounded in [0, 88.3505] and can never go negative, so a damage "bonus"
+ *     was never reachable in the first place. What the guard actually prevents is NaN: overshoot
+ *     BELOW -100% (this channel stacked with enemy Defense Shred) makes the effective defence
+ *     negative, and `log10` of a non-positive number is `-Infinity`/`NaN`. Only an OVER-shot
+ *     (-150%) arm exercises the guard at all — a -100% arm alone pins nothing about it.
  *  3. TEAM SYMMETRY. Engine changes in this project must be team-symmetric. Every arm runs TWICE
  *     from one builder, once per side.
  *
@@ -305,7 +307,7 @@ describe('A5 — a self-inflicted defence COST applies too, and floors at zero m
             expect(overloaded).toBeCloseTo(ATTACK * mit(DEFENCE * 0.5), 4);
         });
 
-        it(`${defenderSide}-side defender: -100% zeroes defence and does NOT invert into a bonus`, () => {
+        it(`${defenderSide}-side defender: -100% zeroes defence; only an OVERSHOOT below it exercises the guard`, () => {
             // Overload at its 10-stack cap — a value real ships reach, not a synthetic extreme.
             const capped = intake({ defenderSide, buffPct: -100 });
             // The oracle is an actual undefended ship, not a formula: at -100% the defender must
@@ -314,16 +316,25 @@ describe('A5 — a self-inflicted defence COST applies too, and floors at zero m
 
             expect(capped).toBeCloseTo(undefended, 4);
             expect(capped).toBeCloseTo(ATTACK, 4);
+            // NOTE: at EXACTLY -100% the `effectiveDefense > 0` guard is a NO-OP —
+            // `calculateDamageReduction(0)` is already 0 with no guard involved at all. The two
+            // assertions above therefore pin the -100% VALUE, not the guard itself.
 
-            // THE FLOOR, as distinct from "0 happens to fall out at exactly -100". Overshooting
-            // makes `effectiveDefense` NEGATIVE, and `victimDefenceMitigation`'s
-            // `effectiveDefense > 0` guard must clamp the reduction to 0 rather than let a
-            // negative defence turn into a damage BONUS. Without the guard this arm exceeds
-            // `capped`; an unclamped build is indistinguishable from a clamped one on every
-            // fixture that stops short of -100%.
+            // THE GUARD, exercised only by an OVERSHOOT below -100% (this channel stacked with
+            // enemy Defense Shred, or a synthetic extreme like this fixture's -150%).
+            // `effectiveDefense` goes NEGATIVE there, and `calculateDamageReduction` computes
+            // `log10` of it — a non-positive input, giving `-Infinity`/NaN, NOT a negative
+            // reduction (the curve is bounded in [0, 88.3505] and can never go below 0, so a
+            // damage "bonus" was never reachable regardless of this guard). Without the
+            // `effectiveDefense > 0` guard, `overshot` comes out NaN, not merely "greater than
+            // capped" — an `expect(x).not.toBeGreaterThan(capped)` assertion would be NaN-BLIND
+            // (`NaN > capped` is `false`, so it would pass on the very failure it is meant to
+            // catch). `toBeCloseTo` below already fails correctly on NaN; `not.toBeNaN()` states
+            // the real failure mode positively rather than relying on that as an implicit side
+            // effect.
             const overshot = intake({ defenderSide, buffPct: -150 });
+            expect(overshot).not.toBeNaN();
             expect(overshot).toBeCloseTo(capped, 4);
-            expect(overshot).not.toBeGreaterThan(capped);
         });
     }
 });
