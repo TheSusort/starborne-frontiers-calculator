@@ -283,7 +283,35 @@ User ruling: **raw EHP headline + rounds beside it** (spec ADDENDUM 2 / B1-B3, `
       `null` seed, so NO card gets the marker — it discriminates. Docs section had been partly
       written by `99e85a0a`; it added only the missing pieces and verified no changelog overlap.
 
-## ALL 9 TASKS IMPLEMENTED. Remaining: Task 6/7/9 reviews, then the whole-branch review.
+## ⛔ TASK 9 REVIEW: 2 CRITICAL, MERGE-BLOCKING. The metric is STILL INVERTED on two channels.
+Mechanical work is excellent (6 fold sites each mutation-proven one-at-a-time, byte-identical
+mitigated expressions, 0 golden deletions, direction test genuinely catches re-inversion, both
+known-behaviour pins carry delete-me framing). The DEFINITION is wrong.
+- **C2/§A — the axis is pre-DEFENCE, not pre-MITIGATION.** `victimDamage.ts:194`:
+  `nonCritFactorPreDefence = 1 * (1+outgoingPct/100) * (1+incoming/100) * affinityMult` — the
+  `incoming` term SURVIVES. MEASURED, casualty regime: plain 300,000 (dies r5) vs
+  `Inc. Damage Down II` 252,000 (dies r6). **The warded ship survives LONGER and reports LOWER.**
+  Exactly the inversion B1 exists to remove, on a channel B1 NAMES.
+  **And the channel is MIXED:** `incomingDamageModifierPct` combines enemy-sourced amplification
+  (Out. Damage Up, Exposed — legitimately part of "what was thrown") with victim-side protection
+  (`selfIncoming`, `preFightIncoming`). A correct fix must SPLIT it, not strip it.
+  Also falsifies the shipped jsdoc claim that measured EHP is "the same quantity the static formula
+  estimates" — `calculateEffectiveHP` RISES with reduction, measured EHP FALLS.
+- **C1 — the DoT-transform seam is NOT corpus-inert; it is a 4x collapse on the live page.**
+  Voron/Orel `transform-incoming-to-dot` defender, 5k defence: plain 100,000 vs Voron **24,993**
+  (raw collapses onto the post axis, because the re-booking ticks are `byDirectDamage:false` and
+  supply no pre-mitigation). A purely DEFENSIVE ability drops the headline 75% and re-inverts.
+  Reachable from this page today. I had accepted the implementer's "corpus-inert" filing; the
+  reviewer built the fixture and disproved it.
+- **I3 — two funnel scalings covered by NOTHING.** Deleting either leaves 406 files / 3950 tests
+  GREEN: `damageRaw *= (1 - blocked)` and `damageRaw *= cascade.targetRetainedFraction`. The second
+  is what stops a PROTECTED victim's raw from double-counting the slice its protector absorbed.
+- I4 dominant path now computes the hit TWICE (`positionalApply.ts:426/433`) on the 182,548-call
+  hot path. I5 `reflectedDamagePreDefenceForHit` duplicates a body with nothing tying the copies.
+  M6 `ProtectionChunk.totalPreMitigation` is DEAD. M9 "raw" now means two things in one file.
+**THE PATTERN: three iterations on this metric, each revealing another mitigation channel. That is
+a signal about the METRIC, not just the implementation. Escalated to the user rather than starting
+a fourth.**
 - [ ] Task 7: documentation + changelog
 
 ## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
