@@ -221,7 +221,54 @@ contradicting the shipped code).
       Implementer's ONE deliberate deviation was correct: seeded the enemy/team id refs at 1, not the
       healing page's 2, because this page's rosters start EMPTY rather than pre-seeded — copying
       verbatim would have made the first added enemy display as "Enemy 2".
-- [ ] Task 6: measured-EHP results block
+- [x] Task 6: **complete** (commit `085ae607`; review pending). Suite **583 / 6480**. Both carried
+      fixes done; NO healing test moved during the `targetingOf` extraction (10/10 before and after).
+      Caught a fixture defect in MY brief: `toHp`/`gross`/`measuredEHP` all `30_000` made
+      `getByText('30,000')` AMBIGUOUS (2 DOM matches). Rewrote to 25_000/5_000/30_000, which also
+      exercises the shield-row branch.
+      **ITS END-TO-END CHECK IS WHAT EXPOSED THE METRIC BUG** — Isha: Measured 1,408 (survived 4
+      rounds) vs Formula 543,950. A 386x gap is not two estimates disagreeing; it is two different
+      quantities. That check existed only because I asked for a number READ OFF THE RUNNING APP
+      rather than computed.
+
+## ⚠️ DESIGN ERROR IN MY OWN SPEC — found Task 6, ruled by user, fixed in Task 9
+**`incomingDamage` is gross w.r.t. the shield/Barrier/conversion POOLS but NOT w.r.t. DEFENCE.**
+`engine.ts:5423` — "The DEFENCE mitigation factor the CALLER already folded into `rawDamage`".
+So Measured EHP counted damage that got THROUGH defence, not damage thrown.
+- Ship that DIES: absorbs ~its HP regardless of defence. The page's central stat barely moves it.
+- Ship that SURVIVES: tankier ship shows a LOWER number, and `isBest` ranks highest-first →
+  **the ranking inverted.**
+- It also contradicted what I told the user when they chose the metric (that it would capture
+  incoming-damage reduction and gated defence buffs — those REDUCE it as shipped).
+**THE GENERALISABLE FAILURE: I verified "gross" along the ONE axis I was worried about (pools),
+then used the word unqualified. The double-count tripwire I built made the blind spot HARDER to see,
+because it made the grossness question feel closed. Every test compared post-mitigation to
+post-mitigation, so they all passed and always would have.**
+User ruling: **raw EHP headline + rounds beside it** (spec ADDENDUM 2 / B1-B3, `66bda507`).
+
+## Task 9 Phase 1 findings (measured over 406 files with a stack-frame probe)
+- **14 paths reach the intake bucket; 7 FOLD the defence factor.** A naive fix on the obvious one
+  (182,548 of 184,776 folding applications) **MISSES 6**: positional passive-slot hit, counter-attack,
+  reactive proc, reflect/thorns, **Protection-transfer chunk** (most important here — a tank would get
+  no credit for raw damage an ally redirected onto it), and the legacy non-positional aggregate.
+  The other 7 fold nothing (raw === post) and need no change.
+- **MY SPEC'S B3 WAS WRONG, and how it was wrong IS the finding:** I predicted Task 2/8 constants
+  would move. They move ZERO — every `measuredEHP` assertion sits on a defence-0 fixture. **The
+  property being fixed was never gated by any test.** Reachability proven SEPARATELY: casualty
+  regime 120k -> 300k -> 720k as defence rises.
+- Blast radius: 2 files, 54 snapshot assertions, **413 added lines / 0 changed** (ANSI-stripped).
+- Team symmetry measured byte-identical on all four arms.
+- **Survivor regime is defence-INDEPENDENT** (flat 60,000 across defence 0->20k) — raw thrown at a
+  survivor is a property of the ENEMIES. Direction test must live in the CASUALTY regime.
+- **Casualty regime is a STEP FUNCTION of the death round** — defence 5k and 5k+DefUp30 both report
+  exactly 300,000 (both die round 5). Quantum = one round of enemy throughput. Inherent to a
+  round-based sim; the continuous counterpart is the static formula shown beside it. **This makes
+  "rounds beside it" load-bearing, not decorative.**
+- MY RULINGS: pin the survivor flatness explicitly (delete-don't-loosen); accept the quantum and
+  document it; ADD the raw axis to `RoundData.perActorIncoming` (turns 194 zero-information golden
+  rows into 219 real `raw > post` pins); no division; **PARK path 3 (corpus-unreachable) per the
+  established #357 stance** — add it to that issue.
+- [ ] Task 9: raw-EHP engine work — Phase 1 DONE, Phase 2 authorised
 - [ ] Task 7: documentation + changelog
 
 ## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
