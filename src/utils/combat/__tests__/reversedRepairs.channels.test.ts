@@ -629,8 +629,22 @@ describe('R2 channel 2 — a HoT tick reverses', () => {
         // HP assertions above are what stop it from passing vacuously.
         for (const run of [control, reversed]) {
             expect([...run.result.healing!.rounds[0].perActor.keys()]).toEqual([]);
-            expect([...run.result.healing!.rounds[0].perRecipient.keys()]).toEqual([]);
         }
+
+        // ⚠️ THE RECIPIENT AXIS was asserted empty here too until #375, and that was wrong: it
+        // records where HP LANDED and is deliberately side-agnostic (the healing report filters it
+        // by side downstream). What it DOES still show is R10′, and this fixture reads it cleanly
+        // because the `ally` HoT fans to both enemies while only the victim carries the debuff:
+        //   - control  → the medic's own tick AND the victim's both land, so both are credited.
+        //   - reversed → only the medic's; the victim's tick restored nothing, so it books nothing
+        //                at all, gross bucket included.
+        const controlRecipients = control.result.healing!.rounds[0].perRecipient;
+        expect(controlRecipients.get(MEDIC_ID)!.hotHeal).toBe(RAW);
+        expect(controlRecipients.get(VICTIM_ID)!.hotHeal).toBe(RAW);
+
+        const reversedRecipients = reversed.result.healing!.rounds[0].perRecipient;
+        expect(reversedRecipients.get(MEDIC_ID)!.hotHeal).toBe(RAW);
+        expect(reversedRecipients.get(VICTIM_ID)).toBeUndefined();
     });
 });
 

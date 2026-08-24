@@ -11,7 +11,9 @@
  *     deliberate patch, not an oversight: it existed so an enemy holder could not credit the
  *     PLAYER healing map under its own id. #369 keeps that invariant and drops the side
  *     restriction, by gating the CREDIT instead of the APPLICATION (the split the enemy cast-heal
- *     arm has used since E5 §4.1).
+ *     arm has used since E5 §4.1). #375 then split "the credit" in two: the SOURCE axis stays
+ *     gated (it really is the player healing map), while the RECIPIENT axis — which records where
+ *     HP landed and has no side to it — moved above the gate. See the assertion in section 1.
  *  2. ANCHOR. `tickHot` returned early for any holder that was not `healing.targetId`, after
  *     crediting the gross bucket. Since the anchor is always player-side that blocked the enemy
  *     half above — but it ALSO meant an off-anchor PLAYER ally was credited for a tick it never
@@ -315,10 +317,17 @@ describe('#369 — an enemy-side HoT holder ticks', () => {
         // Precondition, so a green bucket assertion can never be the vacuous kind: the tick that
         // must not be credited actually HAPPENED.
         expect(run.holderHpAfter - START).toBe(EXPECTED_TICK);
-        // …and it credited nothing on EITHER axis. This is the invariant the old whole-block gate
-        // was really protecting — an enemy holder must not appear in the player healing map.
+        // SOURCE axis only. This is the invariant the old whole-block gate was really protecting —
+        // an enemy holder must not appear in the PLAYER healing map (E5 §4.1).
         expect([...healingRound(run).perActor.keys()]).toEqual([]);
-        expect([...healingRound(run).perRecipient.keys()]).toEqual([]);
+        // ⚠️ THE RECIPIENT AXIS USED TO BE ASSERTED EMPTY HERE TOO, and that was wrong — #375. It
+        // is not a player healing map: it records where HP LANDED, which has no side to it, and
+        // `healingEngineAdapter` filters it through `playerRecipientIds` before the healing report
+        // ever sees it (an enemy's own leech has always landed on it). Leaving the enemy arms out
+        // made the axis unusable as the Simulator's "Healing received" source, which is the whole
+        // reason it exists. The enemy holder is now credited its own tick, by the HOLDER's id —
+        // team symmetry is pinned in `recipientAxisTeamSymmetry.test.ts`.
+        expect(healingRound(run).perRecipient.get(HOLDER_ID)!.hotHeal).toBe(EXPECTED_TICK);
         // R2: a HoT tick is not a "performed repair" — it fires no on-repaired trigger, so the
         // block emits no `heal-performed` on either side.
         expect(healPerformed(run)).toHaveLength(0);

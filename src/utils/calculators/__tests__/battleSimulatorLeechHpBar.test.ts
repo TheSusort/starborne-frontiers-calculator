@@ -17,8 +17,8 @@
  * runs reported 25% — the leech's 800 HP per round was entirely invisible.
  *
  * SCOPE: the HP bar is fixed by reporting the engine's real `currentHp` (a round-tail `hp-snapshot`,
- * team-symmetric over every actor). "Healing received" is the same defect on a second axis and is
- * NOT fixed — the second test pins that gap and says why.
+ * team-symmetric over every actor). "Healing received" was the same defect on a second axis, closed
+ * separately by #375 — the second test below was its pinned tripwire and is now its claim.
  *
  * Real production surface: verbatim skill text through `skillTextParser`/`buildShipAbilities` into
  * `simulateBattle`, not a hand-injected ability (the pattern from
@@ -67,7 +67,9 @@ const leecherShip = (leech: boolean): Ship => ({
     ...(leech ? { firstPassiveSkillText: MAGNOLIA_P1 } : {}),
 });
 
-const enemyShip = (): Ship => ({
+/** `attack: 0` makes the enemy harmless, which leaves the leecher at full HP all fight — the
+ *  pure-overheal arm the GROSS assertion needs. */
+const enemyShip = (attack = 2500): Ship => ({
     id: 'enemy',
     name: 'Enemy',
     rarity: 'legendary',
@@ -75,7 +77,7 @@ const enemyShip = (): Ship => ({
     type: 'ATTACKER',
     baseStats: {
         hp: 1_000_000, // survives the whole fight, so the leech basis never shrinks
-        attack: 2500,
+        attack,
         defence: 0,
         hacking: 200,
         security: 100,
@@ -108,15 +110,21 @@ const placement = (ship: Ship, position: Position): BattlePlacement => ({
     },
 });
 
-const input = (leech: boolean): BattleSimulationInput => ({
+const input = (leech: boolean, enemyAttack = 2500): BattleSimulationInput => ({
     playerTeam: [placement(leecherShip(leech), 'M4')],
-    enemyTeam: [placement(enemyShip(), 'T1')],
+    enemyTeam: [placement(enemyShip(enemyAttack), 'T1')],
     rounds: 3,
 });
 
-type Row = { hpPct: number; damageDealt: number; incomingDamage: number; healingReceived: number };
-const lastRow = (leech: boolean): Row => {
-    const result = simulateBattle(input(leech));
+type Row = {
+    hpPct: number;
+    damageDealt: number;
+    incomingDamage: number;
+    healingReceived: number;
+    healingDone: number;
+};
+const lastRow = (leech: boolean, enemyAttack?: number): Row => {
+    const result = simulateBattle(input(leech, enemyAttack));
     const round = result.rounds[result.rounds.length - 1];
     const row = round.ships.find((s) => s.actorId === 'attacker');
     if (!row) throw new Error('no focus row');
@@ -141,21 +149,59 @@ describe('#372 the HP bar reports real HP, not a derived figure', () => {
         expect(leeching.hpPct).toBeGreaterThan(control.hpPct);
     });
 
-    // ── KNOWN GAP, pinned deliberately ───────────────────────────────────────────────────────
-    // "Healing received" is the SECOND surface of the same defect and is NOT fixed here. The
-    // `hp-snapshot` could not carry it: the natural source, the round's per-recipient healing axis,
-    // is PLAYER-SIDE ONLY — measured empty for every actor on the enemy-side arm of
-    // `reversedRepairs.engine.test.ts` even where an enemy medic really repaired an enemy victim
-    // for 10 000, so substituting it regressed the enemy side from correct to 0.
+    // ── THE SECOND AXIS, closed by #375 ──────────────────────────────────────────────────────
+    // "Healing received" was the SECOND surface of the same defect: the row accumulated it from
+    // `heal-performed` + `hot-ticked`, and a leech emits neither, so a ship repairing itself all
+    // fight reported 0. The `hp-snapshot` now carries the round's GROSS repair, read off the
+    // engine's per-recipient healing axis — which needed its two enemy-side credit arms lifted
+    // first (`recipientAxisTeamSymmetry.test.ts`).
     //
-    // This assertion pins the gap as it stands rather than describing it in a comment. When the
-    // recipient axis becomes team-symmetric and this row starts reporting the leech, this goes RED
-    // — which is the point: it is a reminder, not a claim that 0 is correct.
-    it('does NOT yet report the leech as healing received (recipient axis is player-side only)', () => {
+    // This assertion was the pinned gap (`toBe(0)`, a deliberate tripwire). It is now the claim.
+    it('reports the leech as healing received', () => {
         const leeching = lastRow(true);
-        // Liveness: the bar DID move, so the repair really happened — the 0 below is a reporting
-        // gap on a different axis, not an absent repair.
-        expect(leeching.hpPct).toBeGreaterThan(lastRow(false).hpPct);
-        expect(leeching.healingReceived).toBe(0);
+        const control = lastRow(false);
+
+        // Liveness: the bar moved, so the repair really happened.
+        expect(leeching.hpPct).toBeGreaterThan(control.hpPct);
+        // NOMINAL, not directional. Magnolia repairs 20% of the damage she deals; the enemy has 0
+        // defence and nothing crits, so each round's attack lands 4000 and the leech pays 800.
+        expect(leeching.healingReceived).toBe(800);
+        // The inert control reports 0 — so the 800 above is the leech and not some other channel
+        // this fixture happens to run.
+        expect(control.healingReceived).toBe(0);
+    });
+
+    // GROSS, not effective — the contract this axis has always been held to, now asserted at the
+    // REPORTED surface rather than only on the engine's axis. With a harmless enemy the leecher
+    // never leaves full HP, so every round's 800 is entirely wasted: `consumed` is 0 and only the
+    // gross bucket is non-zero. A fix that reported `effectiveHeal` reads 0 here and passes every
+    // other test in this file.
+    it('reports a wholly-wasted leech at its GROSS value, with the bar untouched', () => {
+        const HARMLESS = 0;
+        const leeching = lastRow(true, HARMLESS);
+
+        // Liveness/existence: the leech had a basis (real damage dealt), and the ship really is at
+        // full HP — so the repair below genuinely landed on nothing.
+        expect(leeching.damageDealt).toBeGreaterThan(0);
+        expect(leeching.incomingDamage).toBe(0);
+        expect(leeching.hpPct).toBe(100);
+
+        expect(leeching.healingReceived).toBe(800);
+        // …and the control still reports nothing, so 800 is the leech.
+        expect(lastRow(false, HARMLESS).healingReceived).toBe(0);
+    });
+
+    // ── STILL OPEN, on the OTHER axis ────────────────────────────────────────────────────────
+    // "Healing done" has the identical hole and #375 does NOT close it: `healDone` accumulates
+    // from `heal-performed.casterId`, which a leech never emits, so this leecher reports 0 done
+    // while reporting 800 received. It cannot be fixed the same way — the engine's SOURCE axis
+    // (`perActor`) is player-only BY DESIGN (E5 §4.1, an enemy heal must not enter the player
+    // healing buckets), so there is no team-symmetric total to read. Pinned rather than described,
+    // so whoever takes it on finds a red test instead of a comment.
+    it('does NOT yet report the leech as healing DONE (source axis is player-only by design)', () => {
+        const leeching = lastRow(true);
+        // Liveness: the repair happened and IS reported on the received axis.
+        expect(leeching.healingReceived).toBe(800);
+        expect(leeching.healingDone).toBe(0);
     });
 });

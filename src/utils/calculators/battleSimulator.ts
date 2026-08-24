@@ -130,6 +130,11 @@ export interface ShipRoundState {
      */
     healingDone: number;
     /**
+     * The GROSS repair that landed on this actor this round, READ from `hp-snapshot.repairReceived`
+     * (#375) — the engine's own per-recipient healing axis, which every repair channel credits on
+     * both sides. That is the primary and, on every real run, the only source.
+     *
+     * ── THE FALLBACK ARM, for hand-built event streams that carry no snapshot ─────────────────
      * SP-F F2: per-recipient raw heal amount actually applied to this actor, sourced from
      * `heal-performed.perTarget` (the engine's real per-recipient breakdown — see that event's
      * doc in events.ts). An even split of `amount` across `targets` is only a FALLBACK for
@@ -141,26 +146,27 @@ export interface ShipRoundState {
      * `heal-performed` cast — R2 — but it does restore HP. Unlike the `heal-performed` half, a
      * `hot-ticked` amount is already the HP that LANDED (post-overheal).
      *
-     * ⚠️ STILL INCOMPLETE — this is **#375**, and it is a known follow-up rather than an oversight.
-     * Every other repair channel that emits no `heal-performed` is missing here: reactive heals
-     * (`reactive-heal-performed`, which this assembler does not read) and leech self-repairs (which
-     * emit nothing at all). So a ship kept alive all fight by Magnolia's or Valerian's passive
-     * reports 0 healing received. `hot-ticked` closed the HoT channel only because #369 made it the
-     * one affecting every holder on both sides.
+     * ⚠️ #375 REPLACED THAT ACCUMULATION AS THE PRIMARY SOURCE. It is now READ from
+     * `hp-snapshot.repairReceived` — the engine's per-recipient healing axis, which EVERY repair
+     * channel credits (cast, HoT tick, both per-victim leeches, reactive) on BOTH sides. The
+     * accumulation described above survives only as the fallback for hand-built event streams and
+     * legacy runs with per-recipient accounting off, which carry no `repairReceived`.
      *
-     * It is NOT fixable by reading the engine's per-recipient healing axis, which is the obvious
-     * move and was tried: that axis is PLAYER-SIDE ONLY (measured empty for every actor on the
-     * enemy-side arm of `reversedRepairs.engine.test.ts`, even where an enemy medic really repaired
-     * an enemy victim for 10 000), so substituting it regressed the enemy side from correct to 0.
-     * That axis has to become team-symmetric first.
+     * What that fixed: the derived form reached only the channels that emit an event, so a ship
+     * kept alive all fight by Magnolia's or Valerian's leech — or by a reactive repair, whose
+     * `reactive-heal-performed` is absent from `ASSEMBLED_EVENT_TYPES` and so never reaches this
+     * fold at all — reported 0 healing received.
+     * `hot-ticked` had closed the HoT channel alone, and only because #369 made it fire on both
+     * sides. Reading the axis was blocked until #375 lifted its two missing enemy-side credit arms
+     * (the `healEventOnly` cast heal and `tickHot`'s early return, both in playerTurn.ts).
      *
-     * ⚠️ THE TWO HALVES USE DIFFERENT BASES. The `heal-performed` half books `perTarget[].amount`,
-     * which is GROSS — `playerTurn` sets it to the pre-clamp `raw` and carries the clipped portion
-     * separately as `pt.overheal`, which this fold does NOT subtract. The `hot-ticked` half books
-     * the HP that LANDED. GROSS is the contract this axis is held to (`reversedRepairs.engine.test.ts`
-     * pins a full-HP ally repaired for 10k as reporting 10k received), so the `hot-ticked` half is
-     * the deviation. This no longer touches the bar: since #372 `hpPct` reads `hp-snapshot`, so a
-     * wasted repair can no longer push it above the ship's real HP.
+     * BOTH SOURCES ARE GROSS, which is the contract this axis is held to
+     * (`reversedRepairs.engine.test.ts` pins a full-HP ally repaired for 10k as reporting 10k
+     * received). The axis books `directHeal + hotHeal`, pre-overheal-clipping, exactly as the
+     * `heal-performed` half books the pre-clamp `raw`. The old `hot-ticked` half was the ONE
+     * deviation — it booked the HP that landed — so a HoT holder's figure rises to gross on the
+     * primary path. None of this touches the bar: since #372 `hpPct` reads `hp-snapshot.currentHp`,
+     * so a wasted repair cannot push it above the ship's real HP.
      */
     healingReceived: number;
     /** Shield absorption this round (damage intercepted by the shield pool before reaching HP). */
@@ -257,13 +263,16 @@ export const ASSEMBLED_EVENT_TYPES = [
     'ability-performed',
     'heal-performed',
     // A `Repair Over Time` tick's landed HP. Added when `hpPct` was still derived, to stop every
-    // HoT holder's bar under-reporting by each tick. Since #372 the bar reads `hp-snapshot`, so this
-    // no longer feeds it — it still feeds `healingReceived`, which is the axis #375 tracks. A tick
-    // emits no `heal-performed` (R2 — it is not a "performed repair"), so nothing else reports it.
+    // HoT holder's bar under-reporting by each tick. FALLBACK-ONLY NOW: since #372 the bar reads
+    // `hp-snapshot`, and since #375 so does `healingReceived` — so this feeds neither on a real
+    // run, only the event-derived arm a hand-built stream falls back to. Still listed because that
+    // arm is still reachable, and because a tick emits no `heal-performed` (R2 — it is not a
+    // "performed repair"), so nothing else would report it there.
     'hot-ticked',
-    // #372: the engine's own end-of-round HP read. AUTHORITATIVE for the actors it names — the
-    // row's `hpPct` prefers it over the derived accumulation, which survives only as a fallback for
-    // hand-built streams that emit no snapshot. Carries no repair figure; see #375.
+    // #372/#375: the engine's own end-of-round HP read, plus (#375) the round's gross repair onto
+    // each actor. AUTHORITATIVE for the actors it names — the row's `hpPct` and `healingReceived`
+    // both prefer it over the derived accumulation, which survives only as a fallback for
+    // hand-built streams that emit no snapshot.
     'hp-snapshot',
     'ship-destroyed',
     'buff-applied',
@@ -469,10 +478,21 @@ export function assembleBattleResult(args: {
         // above and the same authoritative-for-the-actors-it-names contract. Every real run
         // populates this for every actor; only hand-built event streams leave it empty, and those
         // fall back to the derived arithmetic below.
-        const hpSnapshots = new Map<string, { currentHp: number; maxHp: number }>();
+        // `repairReceived` (#375) rides the same snapshot: the round's GROSS repair onto this
+        // actor, read off the engine's per-recipient healing axis. Kept OPTIONAL all the way
+        // through, because absent and 0 mean different things here — see the field's doc in
+        // events.ts and the `healingReceived` read below.
+        const hpSnapshots = new Map<
+            string,
+            { currentHp: number; maxHp: number; repairReceived?: number }
+        >();
         for (const e of roundEvents) {
             if (e.type !== 'hp-snapshot') continue;
-            hpSnapshots.set(e.actorId, { currentHp: e.currentHp, maxHp: e.maxHp });
+            hpSnapshots.set(e.actorId, {
+                currentHp: e.currentHp,
+                maxHp: e.maxHp,
+                ...(e.repairReceived !== undefined ? { repairReceived: e.repairReceived } : {}),
+            });
         }
 
         // SP-F F1: damage dealt per attacker this round, re-derived from `perRoundPerDealt`
@@ -577,12 +597,13 @@ export function assembleBattleResult(args: {
                 damageDealt: dealt.get(entry.actorId) ?? 0,
                 damageTaken: taken,
                 healingDone: healDone.get(entry.actorId) ?? 0,
-                // STILL EVENT-DERIVED, and still wrong for a leech (reads 0 for a ship repairing
-                // itself all fight). The `hp-snapshot` above cannot fix it — see the note at its
-                // emit site in engine.ts: the round's per-recipient healing axis is player-side
-                // only, so substituting it here regressed the enemy side from correct to 0. Pinned
-                // as a known gap in `battleSimulatorLeechHpBar.test.ts`.
-                healingReceived: healedThisRound,
+                // #375: REPORTED from the engine's per-recipient healing axis when it told us, and
+                // event-derived only when it did not. The derived form reaches only the channels
+                // that emit an event — `heal-performed` (cast-only) and `hot-ticked` — so a ship
+                // kept alive all fight by Magnolia's or Valerian's leech, or by a reactive repair,
+                // reported 0. `??`, not `||`: a measured 0 is a real answer and must not fall
+                // through to the accumulation.
+                healingReceived: snapshot?.repairReceived ?? healedThisRound,
                 shieldsAbsorbed: shield?.absorbed ?? 0,
                 shieldGranted: shield?.granted ?? 0,
                 currentShieldPool: shield?.pool ?? 0,
