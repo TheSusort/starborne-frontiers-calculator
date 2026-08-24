@@ -73,26 +73,20 @@ function ghsaOf(advisory) {
     return undefined;
 }
 
-const ALLOWLIST = [
-    {
-        package: 'react-router',
-        ghsa: 'GHSA-QWWW-VCR4-C8H2',
-        reason:
-            'RSC Mode CSRF Bypass — requires React Router RSC mode, which this app does not use. ' +
-            'It is a client-only Vite SPA: BrowserRouter only, no server request handler, no SSR, ' +
-            'and no react-router/rsc, matchRSCServerRequest, unstable_RSC or createStaticHandler ' +
-            'anywhere in src, so the residual risk here is zero. Only 8.3.0 is patched; there is ' +
-            'no 7.x backport and react-router-dom publishes no 8.x. BLOCKED ON REACT 19, not on ' +
-            'the router: react-router@8 declares `react >=19.2.7` and means it — lib/components.js ' +
-            '(where MemoryRouter/Routes/Route live) statically imports `useOptimistic`, so on ' +
-            'React 18 it throws at import time even in declarative mode. It also declares ' +
-            '`engines: node >=22.22.0` (CI and dev are on 20). The import swap itself is free: ' +
-            'react-router-dom@7 is just `export * from "react-router"` plus three DOM names we do ' +
-            'not use, and all nine APIs we import typecheck unchanged against 8.3.0. ' +
-            'DROP THIS ENTRY once the React 18 -> 19 upgrade lands and react-router-dom is ' +
-            'replaced by react-router@^8.3.0.',
-    },
-];
+/**
+ * Accepted-risk advisories: vulnerabilities we knowingly ship, each with the reasoning for why.
+ * Add `{ package, ghsa, reason }` entries here only when a fix genuinely is not available —
+ * and state what would let the entry be dropped, so it can be retired instead of ossifying.
+ *
+ * Currently empty. The last entry was react-router GHSA-QWWW-VCR4-C8H2 (RSC Mode CSRF Bypass),
+ * held open on the belief that only 8.x was patched and so the fix was blocked behind the
+ * React 18 -> 19 upgrade. That turned out not to hold: the advisory was later backported to the
+ * 7.x line (vulnerable range `>= 7.12.0, < 7.18.2`, first patched 7.18.2), so the plain
+ * react-router-dom 7.18.1 -> 7.18.2 patch bump resolved it with no React upgrade involved.
+ * Worth remembering when writing a future entry: re-check the advisory's own version ranges
+ * before renewing an exception, because "no backport exists" can quietly stop being true.
+ */
+const ALLOWLIST = [];
 
 const args = process.argv.slice(2);
 const levelArg = args.find((a) => a.startsWith('--audit-level='))?.split('=')[1] ?? 'high';
