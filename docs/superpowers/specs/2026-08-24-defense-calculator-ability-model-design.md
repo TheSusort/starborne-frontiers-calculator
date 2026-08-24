@@ -224,3 +224,82 @@ Each PR is independently green and mergeable.
 - Escalating-pressure or uncapped run-until-death modes (§2 decided the window + flag).
 - Autogear integration. Measured EHP is a page-level metric here; `Effective HP` as an autogear
   limit stat is unchanged.
+
+---
+
+# ADDENDUM (2026-08-24): self-sourced defence buffs reduce damage taken
+
+**Status:** approved by the user, IN SCOPE for this epic. Task 2 surfaced the defect; the user ruled
+the behaviour is wrong and chose to fix it here rather than in a separate spec. I recommended a
+separate spec (the blast radius is engine-wide, not calculator-local); the user's decision stands.
+
+## A1. The defect
+
+A defender's own `Defense Up` (`parsedEffects.defense`) does **not** reduce the damage it takes on
+the positional per-victim damage path. Verified at three sites:
+
+1. `victimDefenseProfileOf` (`engine.ts:7229`) sets `defence: substitutedDefenceFor(v, v.stats.defence)`
+   — the **base** stat. The buff-folded `effectiveStatsOf(...).defence` is deliberately not used here
+   (see the note at `engine.ts:5548-5556`, which matched this raw read to fix a *different* consumer).
+2. The modifier return (`engine.ts:7110-7112`) is **asymmetric**:
+   - `enemyDefenseModifier: enemy.enemyDefenseModifier` — enemy-sourced debuffs ONLY, no self term.
+   - `incomingDamageModifier: enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed`
+     — carries a self term.
+3. Consequence: enemy-sourced **Defense Shred works**; the victim's own **Defense Up does not**. Two
+   independent places a self-defence term could enter, and it enters neither.
+
+The `selfIncoming` term on the twin channel is D-PR12's work. That exact parallel is the strongest
+evidence this is an oversight rather than a design choice: the job was done for one channel and never
+for the other.
+
+**Pre-existing** — identical through the older `selfBuffs` route. Not introduced by this epic.
+
+## A2. The fix
+
+Add a self-sourced defence term to the percentage channel that already exists, mirroring
+`selfIncoming`:
+
+```
+enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense
+```
+
+`defenceModifierPct` is already consumed as a signed percentage multiplier on defence
+(`victimDamage.ts:113`: `v.defence * (1 + v.defenceModifierPct / 100) * (1 - pen/100)`), with
+negative meaning less defence. A `Defense Up II` of `+30` therefore rides it as `+30` with no new
+plumbing.
+
+**Why this site and not `victimDefenseProfileOf`'s `defence` read:** leaving `defence` as the base
+stat keeps faith with the reversed-repairs caller documented at `engine.ts:5548-5556`, which
+deliberately matches this raw read. Routing the buff through the percentage channel changes one term
+instead of changing the meaning of a field two other callers depend on.
+
+**Bonus:** this is the same arithmetic the static formula uses
+(`computeBuffedStats`: `defense * (1 + defenseBuff / 100)`), so measured and formula EHP will finally
+agree on Defense Up instead of contradicting each other.
+
+## A3. Binding constraints
+
+- **TEAM-SYMMETRIC.** Both sides' defenders must benefit. A player-only fix is a defect, per this
+  project's standing engine rule.
+- **Sign convention:** negative = less defence. Defense Up is positive. Get this wrong and the buff
+  becomes a debuff — a test must pin the direction, not just the magnitude.
+- **The golden suites are the regression gate.** This fix WILL move numbers in the combat-sim and DPS
+  suites. Every moved number must be individually audited and explained as a legitimate consequence
+  of a defender's Defense Up now applying. Re-bless is delete-and-rerun, **never `vitest -u`**.
+- **A zero-churn result is a RED FLAG, not a success.** If no golden moves, the term is not reaching
+  the damage path and the fix is inert — exactly the defect being fixed. Prove reachability before
+  believing a clean run.
+
+## A4. Consequences for already-merged Task 2
+
+- Test 8's `defenceUp` inert-channel pin **goes red by design → DELETE it**, and replace it with an
+  assertion that the buff now DOES reduce measured intake. Do not loosen it.
+- Test 10 (the conditional-gate proof) **reverts to `Defense Up II`**, its originally intended and
+  strictly stronger form: it then proves a gated *defence* buff is suppressed, not merely that some
+  channel is. Its two exact constants will change; re-measure them.
+- The module jsdoc's "WHICH DEFENSIVE CHANNELS MOVE THE MEASURED NUMBER" list must move
+  `parsedEffects.defense` from the DOES-NOT list to the DOES list.
+- This also resolves both Important findings from Task 2's review (a test-10 comment gap and a
+  missing applied-guard on the pin being deleted).
+- `modifier` + `channel: 'incomingDamage'` stays inert and stays pinned — out of scope, separate
+  defect, no user ruling on it.

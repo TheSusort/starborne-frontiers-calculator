@@ -35,12 +35,25 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
   with their own Step-1 test still red. Husky runs the full suite on commit, so those commits were
   impossible. Type/wiring tasks now gate on `tsc` + green suite; the UI assertions moved to the
   tasks that can satisfy them (4 and 6).
+- **PLAN DEFECT 1 (mine, caught by pre-verifying Task 3's field names before dispatch):** I wrote
+  `speed: Math.round(final.speed ?? 0)` and `hacking: … ?? 0`. The reference implementation
+  (`healerStatsFromShip`, `HealingCalculatorPage.tsx:173-174`) uses `?? 100` and `?? 200`.
+  **A speed-0 defender never takes a turn**, so its self-shields/self-buffs never fire and its
+  measured EHP is silently understated — the exact failure class this epic exists to remove.
+  Fixed in the plan + brief before Task 3 was dispatched.
+  Lesson: every `??` fallback I author is a guess until checked against the sibling implementation.
+- Verified pre-dispatch (do not re-derive): `final.{hp,attack,defence,crit,critDamage,healModifier,
+  speed,hacking,security}` all exist; `asFactionKey` is at `src/constants/factions`;
+  `healerStatsFromShip` (HealingCalculatorPage.tsx:166) is the reference for `defenderFieldsFromShip`.
 - The load-bearing measurement rule: **measured EHP = Σ gross `incomingDamage`, nothing added.**
   `hpLost = incoming − shieldAbsorbed − barrierAbsorbed − convertedToShield` (`engine.ts:1672`,
   confirmed `:5087`). Adding the mitigation terms double-counts, silently, worst for tanky builds.
 
 ## Tasks
-- [ ] Task 1: `convertedToShield` on the healing round row — implementer BLOCKED on golden churn
+- [x] Task 1: **complete** (commit `ae17341a`, review clean — spec PASS, quality Approved,
+      0 Critical/Important, 1 Minor already covered by the Task 2 addition below).
+      Suite 579 files / 6450 tests (baseline +1 test, reconciles exactly).
+      Implementer BLOCKED on golden churn
       (correctly); I adjudicated. **The instrument that settled it: `git diff --numstat` on the
       `.snap` = 194 insertions, 0 DELETIONS.** Zero deletions is the proof no existing value moved;
       one deletion would have meant a real behaviour change. All 194 added lines are
@@ -54,12 +67,80 @@ a standing condition. Any 3-skipped delta later is that, not a new break.)
       shipped never observed non-zero. Added a 10th Task 2 test using the name-keyed
       `'Shield Converter'` buff (`utils/combat/shieldConverter.ts`; working grant fixture in
       `utils/combat/__tests__/shieldConverter.integration.test.ts`).
-- [ ] Task 2: `defenseSurvivabilitySim` boundary + 9 tests
+- [x] Task 2: **complete** (commit `0f9e852c`, review: spec PASS, 0 Critical, 2 Important,
+      3 Minor). Reviewer MUTATION-TESTED the module (reintroduced the double-count, hardcoded
+      `survived`, removed the `toHp` clamp, broke the `hpPct` mapping) — each mutation caught by
+      exactly ONE test. That is the strongest evidence the tripwires are load-bearing.
+      **Both Important findings are SUPERSEDED by the engine fix (see USER RULING) — not discarded:**
+      (I1) test 10's comment should warn its pass doesn't mean "gated Defense Up works" → moot once
+      test 10 reverts to Defense Up. (I2) the `defenceUp` pin doesn't first assert the buff was
+      APPLIED, so it could go green for the wrong reason → that pin gets DELETED by the fix.
+      Fixing them now would be work the next task throws away; both are folded into the fix task's
+      requirements instead.
+      Suite 580 files / 6460 tests (baseline +1 file / +10 tests, reconciles exactly).
+      Both tripwires INTACT and strict; two of my inequalities became EXACT constants.
+      Every numeric constant I authored was right first try. **Three FIXTURES were wrong:**
+      1. Shield Converter needs a NUMERIC `duration`, not `'recurring'` — `holdsShieldConverter`
+         reads `timedAbilityStatuses` only (an aura grant would be unspendable). 99 → 8331/round;
+         `'recurring'` → 0. My plan said `'recurring'`.
+      2. `modifier` + `channel:'incomingDamage'` CANNOT reduce damage taken, by design —
+         `applyAbilities.ts:92` "no DPS bucket — ignore", and `modifier` folds attacker-side only.
+         My §6.2 modifier test was built on a channel that cannot work. Test 8 now measures which
+         defensive channels actually reach the number and PINS the two inert ones as tripwires.
+      3. The gate proof's two runs came back EQUAL (24993). Implementer diagnosed instead of
+         loosening — cause was NOT the ability model (see the finding below). Test 10 keeps its exact
+         shape with the buff swapped to `parsedEffects.incomingDamage` (`Inc. Damage Down II`):
+         **ungated 17_496 vs gated 24_993, strictly greater. The gate proof STANDS.**
 - [ ] Task 3: `DefenseShipConfig` gains `shipSkills` + engine stats
 - [ ] Task 4: `SkillSlotList` in the defense card
 - [ ] Task 5: page wires the survivability sim
 - [ ] Task 6: measured-EHP results block
 - [ ] Task 7: documentation + changelog
 
+## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
+## IN SCOPE for this epic. I recommended a separate spec; the user chose in-epic. Proceeding.
+## Consequences accepted by that choice: golden/snapshot numbers WILL move across the combat-sim
+## and DPS suites (the regression gate), and every move must be individually audited + explained.
+## Also: the fix must be TEAM-SYMMETRIC (both sides' defenders), per the standing engine rule.
+## Two silver linings: test 10 can REVERT to its intended, stronger form (proving a gated DEFENCE
+## buff, not just any channel), and test 8's inert-channel pin gets deleted rather than loosened.
+
+## THE FINDING (verified independently at three sites)
+**A defender's own `Defense Up` does NOT reduce the damage it takes, on the positional per-victim
+path.** Found by Task 2, verified independently by me at three sites:
+- `victimDefenseProfileOf` (engine.ts:7229) reads `substitutedDefenceFor(v, v.stats.defence)` — the
+  BASE stat. The buff-folded `effectiveStatsOf().defence` is deliberately NOT used here.
+- The modifier return (engine.ts:7110-7112) is ASYMMETRIC:
+  `enemyDefenseModifier: enemy.enemyDefenseModifier` (enemy debuffs ONLY, no self term)
+  vs `incomingDamageModifier: enemy.… + selfIncoming + preFightIncoming + exposed` (HAS a self term).
+- So enemy-sourced **Defense Shred works**, victim's own **Defense Up does not**. Two independent
+  places a self-defence term could enter; it enters neither.
+- The `selfIncoming` term on the OTHER channel is D-PR12's work. That exact parallel is the
+  strongest evidence this is an OVERSIGHT, not a design choice — the job was done for one channel
+  and never for its twin.
+- **Pre-existing, identical through the old `selfBuffs` route. NOT an epic regression.**
+- Product consequence: a Defense-Up ship will show measured EHP BELOW formula EHP (the static
+  formula does apply it: `defense * (1 + defenseBuff/100)`), and users will read that as the new
+  page being broken.
+- What DOES move measured EHP: shield grants, name-keyed statuses (Barrier, Shield Converter with a
+  numeric duration), and the `Inc. Damage Down` family.
+- Pinned by Task 2's test 8. **If the engine is fixed, that pin goes RED by design — delete it,
+  never loosen it.**
+
 ## Minor findings roll-up (for the final whole-branch review to triage)
-_(none yet)_
+- Task 1: the two new scalar pass-throughs are only tested at ZERO. Reviewer checked precedent:
+  `barrierAbsorbed` (the direct sibling) also has zero adapter-level and zero non-zero golden
+  coverage, so this is existing pattern, not regression. The underlying computation IS covered with
+  real non-zero values in `shieldConverter.integration.test.ts`. **Addressed** by the 10th Task 2
+  test. Nothing to fix at merge.
+
+## Reviewer-confirmed facts worth not re-deriving
+- `convertedToShield` already existed on `ActorIntake`, in `intakeFor`'s init, in the
+  `perActorIncoming` Record type and its mapping loop — from earlier unrelated work. Task 1 touched
+  ONLY the interface declaration + the single assembly site.
+- There is exactly ONE production construction site each for `HealingRoundEngine` (the
+  `healingRounds.push` in engine.ts) and `HealingRoundData` (the `.map` in the adapter).
+- The 4 UI fixture files are the ONLY literal construction sites outside the adapter. No
+  `as unknown as` cast sites exist for these types.
+- `battleSimulator.ts` / `battleAssemble.test.ts` references to `convertedToShield` are the
+  pre-existing Battle Simulator feature (`e3f7fadf`), unrelated to this epic.
