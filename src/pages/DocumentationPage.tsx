@@ -2758,6 +2758,23 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
+                                            One limit worth knowing:
+                                        </span>{' '}
+                                        this reaches the ordinary attacks an enemy makes on its
+                                        turn, which is the overwhelming majority of what it throws.
+                                        It does <span className="font-semibold">not</span> yet reach{' '}
+                                        <span className="font-semibold">counter-attacks</span> or{' '}
+                                        <span className="font-semibold">reactive procs</span>{' '}
+                                        &mdash; those take a different route through the engine and
+                                        still ignore a suppressed attacker. So a debuffed enemy that
+                                        counters, or that fires a &ldquo;when this happens&rdquo;
+                                        passive, hits at full strength for now. Other kinds of buff
+                                        and debuff you apply to an enemy are also still added rather
+                                        than tier-shadowed across the two sides. Both are tracked as
+                                        follow-up work.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
                                             Two of the same debuff do not add up.
                                         </span>{' '}
                                         If the enemy is already under an Attack Down and you land
