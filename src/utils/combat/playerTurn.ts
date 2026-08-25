@@ -1049,10 +1049,17 @@ function chargeGainFromSkill(args: {
         // 'own' sums everything that is neither ally- nor enemy-targeted; the other filters
         // sum only their matching target class.
         //
-        // #399: `isEnemy` reads the shared classifier, so the three selector targets
-        // ('enemy-most-buffs' / 'enemy-highest-attack' / 'enemy-highest-speed') now count as
-        // enemy here instead of falling into 'own'. The parser emits no selector target for
-        // type:'charge' today, so nothing corpus-reachable moves.
+        // #399: `isEnemy` reads the shared classifier, so FIVE targets now count as enemy here
+        // instead of falling into 'own': the three selectors ('enemy-most-buffs' /
+        // 'enemy-highest-attack' / 'enemy-highest-speed') plus 'adjacent-enemies' and
+        // 'target-and-adjacent-enemies' (the pre-#399 code here was a bare
+        // `ability.target === 'enemy' || ability.target === 'all-enemies'` check, which caught
+        // neither the adjacent-scoped enemy targets nor the selectors). This widening is
+        // corpus-dead: every `type: 'charge'` ability the codebase can emit — swept across
+        // `buildShipAbilities.ts`, `buildEquipmentAbilities.ts` and `flatInputToAbilities.ts` —
+        // hardcodes `target: 'self' | 'enemy' | 'all-allies'`; none of the five widened targets is
+        // ever attached to a charge ability, pinned by the inventory gate in
+        // `chargeTargetSideWidening.test.ts`.
         //
         // KNOWN GAP, deliberately not fixed here: `isAlly` above omits 'adjacent-allies', so that
         // target still lands in 'own'. That is a question on the ALLY axis with its own separate
