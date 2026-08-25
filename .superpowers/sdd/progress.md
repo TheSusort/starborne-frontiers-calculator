@@ -524,3 +524,49 @@ path.** Found by Task 2, verified independently by me at three sites:
   `as unknown as` cast sites exist for these types.
 - `battleSimulator.ts` / `battleAssemble.test.ts` references to `convertedToShield` are the
   pre-existing Battle Simulator feature (`e3f7fadf`), unrelated to this epic.
+
+
+## ═══ FINAL STATE (2026-08-25) ═══
+Branch `feat/defense-calculator-ability-model`, head `61c11c08`, from main @ `0ec6b3a1`.
+Suite **585 files / 6543 tests, 0 failures, 0 skipped.** tsc 0, lint 0 (`--max-warnings 0`),
+audit:skills 0, prettier clean. Snapshot deletions ZERO throughout; `vitest -u` never run.
+13 tasks, 13 reviews, 4 fix waves. All blockers closed and verified by me directly.
+
+### THE ONE LESSON THAT WOULD HAVE SAVED THE MOST TIME
+**I asserted mechanisms from adjacent evidence instead of measuring them — three times.**
+1. "Gross" — verified against the shield POOLS, asserted for DEFENCE. Inverted the whole metric.
+2. `?? 0` fallbacks — written from memory, contradicted the sibling implementation
+   (`?? 100`/`?? 200`). Would have silently understated every tank (speed-0 never takes a turn).
+3. Attacker suppression — verified the SHIPS have the passives (`docs/ship-skills.csv`), asserted
+   the ENGINE honours them. It does not. Shipped into the jsdoc that DEFINES the metric.
+Each time the surrounding tests passed, because they compared the half I had checked against itself.
+Every one was caught by review, never by me. **The upstream fix is: read the sibling implementation
+before writing the code, and measure the engine before writing the claim.**
+
+### AND A FOURTH INSTANCE, MINE, INSIDE THE FIX FOR THE THIRD
+Task 13 found that **my BLOCKER-1 measurement table was VACUOUS**: `duration: 'recurring'` makes a
+defender-applied enemy debuff INERT (`statusEngine` gates the timed enemy write on a NUMERIC
+duration), so all 12 swept shapes reported "no movement" for a debuff that had never landed. The
+conclusion survived a broken instrument. Re-measured on a landing-proven shape; the trap is now
+itself a mutation check.
+
+### FOLLOW-UP ISSUES TO FILE
+1. **PROBABLE GAME BUG, needs a ruling:** a defender-applied `Attack Down` / `Out. Damage Down` does
+   NOT reduce what its attacker throws (measured: 40,000 unmoved at -50% and -90%, while the SAME
+   -50% self-applied by the enemy gives 20,000). Opal's and Warden's passives exist to do exactly
+   this. Pinned as behaviour with a delete-me-if-the-ruling-flips note.
+2. **Corpus vacuity sweep:** other tests using `duration: 'recurring'` for an ENEMY debuff are
+   silently inert. Unknown blast radius.
+3. `buildSkillBuffAutoFill` drops a conditional gate, so Theoretical EHP shows Redeemer's below-60%
+   `Defense Up II` as always-on. Pre-existing inaccuracy in the STATIC baseline.
+4. Extract a shared `useEnemyTeamRoster` hook (~230 lines duplicated healing/defense, deliberate).
+5. Page tests mock `ShipsContext` with a fresh `getShipById` per call → the memo-stability guarantee
+   (the thing most likely to regress into N-sims-per-keystroke) has no guard. Pre-existing.
+6. **#357:** add the legacy non-positional enemy fold path (corpus-unreachable).
+
+### FOR THE PR BODY — the honest coverage caveat
+`realKitFingerprints` records event-KIND lists with NO magnitudes, so it is **structurally incapable**
+of observing either engine change. Both are proven REACHABLE on real kits (2534 self-defence reads)
+and proven CORRECT only on synthetic ones. `selfDefenceBuffMitigation.test.ts` and
+`rawIntakeAxis.test.ts` are the SOLE regression gates for behaviour the golden suites cannot see —
+if either is deleted or weakened, the engine loses its only guard on the sign and the floor.
