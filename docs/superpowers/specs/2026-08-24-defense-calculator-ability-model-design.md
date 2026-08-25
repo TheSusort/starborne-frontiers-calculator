@@ -427,3 +427,74 @@ the shipped implementation those *reduce* the number.
   POST-mitigation axis — those four terms partition what actually arrived, and re-basing them on raw
   would break the identity. The card must not present a raw headline and post-mitigation breakdown
   as if they summed; label the axis.
+
+---
+
+# ADDENDUM 3 (2026-08-25): the headline is ROUNDS SURVIVED + DAMAGE ABSORBED
+
+**Status:** user-defined, 2026-08-25. This supersedes ADDENDUM 2's "Measured EHP" framing. It is the
+THIRD iteration on this metric; the previous two each fixed one mitigation channel and left others,
+because the definition was never stated in full. This addendum states it in full.
+
+## C1. The three headline numbers
+
+1. **Rounds survived** — how long the ship lasted, plus the survived/destroyed state.
+2. **Damage absorbed** — everything thrown at the ship, summed across channels, measured BEFORE the
+   defender reduces it.
+3. **Theoretical EHP** (the old `computeBuffedStats` figure) — relabelled to say what it is: a
+   hangar-stats estimate, not a measurement.
+
+"Measured EHP" as a name is RETIRED. It caused a shipped changelog entry to contradict its own
+neighbour, because "EHP" invited the old post-mitigation reading.
+
+## C2. The exact definition of Damage absorbed
+
+**IN — the attack as thrown:**
+- attacker-side modifiers: outgoing-damage buffs, crit, affinity matchup
+- enemy-APPLIED amplification: `Out. Damage Up`, `Exposed`. These amplify what lands rather than
+  reduce it, so they are part of "the attacker's attack with modifiers".
+- every channel: direct hits, DoT ticks, bombs, detonations, reflect. Those channels fold no defence
+  today, so they enter at face value — but they must be PRESENT in the total, not silently zero.
+
+**OUT — every victim-side reduction:**
+- defence mitigation (`victimDefenceMitigation`) — already stripped by ADDENDUM 2
+- the victim's OWN `Inc. Damage Down` family (`selfIncoming`)
+- `preFightIncoming` (squad-leader incoming protections)
+- `equipReductionPct` (D-PR3 gear-sourced incoming reduction)
+- the funnel's incoming-block proc (`damageRaw *= (1 - blocked)`)
+
+**STILL COUNTS (not reductions):** shield pool and Barrier absorption. Those eat damage that
+ARRIVED; they do not reduce what was thrown.
+
+## C3. Why the previous attempt was wrong
+
+`victimDamage.ts:194` computes
+`nonCritFactorPreDefence = 1 * (1 + outgoingPct/100) * (1 + incoming/100) * affinityMult` —
+it replaced only the defence term. `incoming` survives, and **that channel is MIXED**:
+`incomingDamageModifierPct` = `enemy.incomingDamageModifier` (Out. Damage Up — KEEP)
++ `selfIncoming` (Inc. Damage Down — STRIP) + `preFightIncoming` (STRIP) + `exposed` (KEEP).
+
+So the term cannot simply be dropped; the split must be threaded to the damage site. Measured
+consequence of not doing so: a defender with `Inc. Damage Down II` survived an EXTRA round and
+reported a LOWER figure (252,000 over 6 rounds vs 300,000 over 5) — the inversion this whole line of
+work exists to remove, still live.
+
+## C4. The DoT-transform collapse (was mis-filed "corpus-inert")
+
+`convertHitToSelfDot` (Voron/Orel) reverses both axes in lockstep, but the ticks that re-book the
+deferred slice run `byDirectDamage: false` and supply no pre-mitigation figure — so the slice
+migrates permanently onto the post axis. Measured on a real fixture: a Voron defender at 5,000
+defence reports **24,993** where a plain defender reports **100,000**. A purely DEFENSIVE ability
+quarters the headline and re-inverts the ranking. Reachable from this page today. The re-booking
+must carry the pre-mitigation figure.
+
+## C5. Binding constraints
+
+- **A direction test PER CHANNEL.** The previous direction test swept only defence, which is exactly
+  why the incoming-reduction inversion survived it. Every victim-side reduction listed in C2 needs
+  its own arm proving MORE reduction → MORE damage absorbed (or at minimum, never less).
+- **A presence test per channel.** DoT, bomb and detonation damage must be shown non-zero in the
+  total, or "mix the channels" is unverified.
+- The two untested funnel scalings (`(1 - blocked)` and `cascade.targetRetainedFraction`) must get
+  tests — deleting either currently leaves 3,950 tests green.
+- Goldens: delete-and-rerun, never `vitest -u`; verify DELETIONS are zero.
