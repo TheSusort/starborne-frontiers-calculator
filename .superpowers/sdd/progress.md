@@ -325,7 +325,29 @@ just corrections to whatever was most recently broken.
 Theoretical EHP** fixed the contradictory changelog entry for free — that entry went wrong precisely
 because "EHP" kept inviting the old post-mitigation reading.
 
-- [x] Task 10: **complete** (commit `62d194ee`; review pending). Suite **584 / 6520** (+22 arms).
+- [x] Task 10: **complete** (commit `62d194ee`, review: substantially compliant, **1 Critical**,
+      5 Important, 5 Minor → Task 11 fix wave). Reviewer verified 8 mutations, reproduced both
+      previously-broken arms independently (`60,000 x 6` identity holds exactly), audited the rename
+      (no numeric moved), and confirmed the ranking blind spot CLOSED (both wrong reduces now red).
+      **THE CRITICAL IS ONE I PERSONALLY WAVED THROUGH.** Task 10 told me
+      `attackerIncomingReductionPct` "belongs to the empirical duel-fit model" and I recorded that as
+      a defensible separate decision. **It was wrong and I did not check it.** The term is
+      `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)` — the bounce-back RECIPIENT's
+      own abilities, i.e. OUR DEFENDER's. The duel fit governs `damage`; `preMitigation` already
+      departs from the fit by replacing defence with a literal 1, so stripping touches no empirical
+      constant. Measured: **200,000 -> 140,000 -> 80,000** at 0/30/60% of the defender's OWN
+      reduction, identical round counts. A defensive ability quartering its owner's headline —
+      the FOURTH channel of the same inversion. **Lesson: I accepted a justification instead of
+      testing it, on a point the implementer itself had flagged as "arguably victim-side by C2".**
+      **AND THE OVER-STRIP RISK I FLAGGED IS REAL (item 3):** mutating the engine to drop `Exposed`
+      from the KEEP side leaves **ALL 6,520 tests GREEN**. Every arm proves reductions RAISE the
+      figure; NONE proves amplifications still COUNT. Half the split is unfenced.
+      Plus: `equipReductionPct` is ITSELF a mixed channel stripped wholesale (contains the ATTACKER's
+      squad-leader crit penalty, which must stay IN) — the same atomic-treatment defect, on the
+      SECOND mixed channel, while fixing the first. A third untested funnel write introduced. Docs
+      traded a structural error for a naming error (two card names that exist nowhere in the app).
+      **Four comments now assert the OPPOSITE of shipped behaviour.**
+- [ ] Task 11: fix wave for the above (BASE `62d194ee`) Suite **584 / 6520** (+22 arms).
       **ZERO golden/snapshot files touched** — no re-bless needed. 185 test-file deletions are all
       the `measuredEHP`→`damageAbsorbed` rename (identical values on the added side) + a fixture
       reorder. No numeric value moved.
