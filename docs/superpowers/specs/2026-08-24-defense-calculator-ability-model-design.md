@@ -498,3 +498,49 @@ must carry the pre-mitigation figure.
 - The two untested funnel scalings (`(1 - blocked)` and `cascade.targetRetainedFraction`) must get
   tests — deleting either currently leaves 3,950 tests green.
 - Goldens: delete-and-rerun, never `vitest -u`; verify DELETIONS are zero.
+
+---
+
+# ADDENDUM 4 (2026-08-25): the Protection redirect is a REASSIGNMENT, not a reduction — LOCKED
+
+**User ruling, 2026-08-25.** Damage that an ally's Protection redirects away from a ship does **NOT**
+count toward that ship's *Damage absorbed*. Current behaviour is correct; no change.
+
+## D1. Why this is not the inversion we spent four rounds removing
+
+It looks identical on the surface. Measured on a fixed 4-round survivor window:
+
+```
+no ally                40,000
+ally, 0 Protection     40,000     ← the zero-stack control
+ally, 3 Protection     28,000
+ally, 5 Protection     20,000
+```
+
+Same rounds, same survival, a defensive interaction halving the headline — the exact shape of the
+defence / `Inc. Damage Down` / `equipReduction` / incoming-block / reflect inversions.
+
+**The difference is where the damage goes.** Those five were *reductions*: the slice was discounted
+and disappeared. This is a *reassignment*: the redirected slice is booked IN FULL on the protector's
+own raw axis. Nothing is lost — it moves to the ship that actually took it.
+
+## D2. The reasoning behind the ruling
+
+- **"Absorbed" means this ship took it.** The protector took it, so it is the protector's number.
+- **Counting it on both sides breaks team arithmetic** — the ships' figures would sum to more than the
+  damage actually dealt.
+- **In the discriminating regime the effect reverses anyway.** These figures come from a fixed
+  survivor window, where rounds are pinned by construction. In a casualty comparison Protection
+  extends survival, so MORE rounds of damage get thrown at the protected ship.
+
+## D3. Consequences
+
+- **Do not "fix" this channel.** It is pinned in `defenseSurvivabilitySim.test.ts` with the exact
+  figures above plus the zero-stack control, and both readings are written into the test header. A
+  future reader finding a defensive interaction that lowers the number will be tempted; the pin and
+  this addendum are the answer.
+- The docs and changelog claim is correspondingly narrowed to "a defensive ability **on the ship
+  itself** never lowers this number", with the Protection carve-out stated. Leaving it absolute would
+  have been a new user-facing inaccuracy.
+- This also closes ADDENDUM 3's second untested funnel scaling
+  (`damageRaw *= cascade.targetRetainedFraction`), which now has coverage.
