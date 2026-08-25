@@ -3496,6 +3496,42 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // charges, and every on-ally-crit rider — see PER_HIT_REACTIVE_TRIGGERS).
         const chargeGuardKey = oncePerAttackGuardKey(intent);
         if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
+        // #399: the three SELECTOR targets each name exactly ONE opposing actor, resolved at drain
+        // time. Routing them through `removeEnemyCharges` would strip charges off every enemy the
+        // clause never named; letting them fall through (the pre-#399 behaviour) landed on the
+        // owner-only GAIN arm below, so the caster gained a charge and no enemy lost one.
+        // Resolved through the SAME ctx delegates the reactive damage and debuff branches use
+        // (see the `enemy-most-buffs` / `enemy-highest-speed` resolution below and the
+        // `enemy-highest-attack` one in the debuff branch), so all three routes agree on WHICH
+        // enemy a selector names.
+        //
+        // `everyNthEvent` is deliberately NOT handled here: it is keyed to `eventCtx.repairerId`
+        // ("every second repair, decrease THAT enemy's charge" — Zosimos), and a selector target
+        // names its own victim rather than inheriting one from the event. The two are mutually
+        // exclusive by construction.
+        //
+        // HAND-AUTHORED ONLY: `parseChargeRemoval` hardcodes target:'enemy', so no corpus skill
+        // text reaches this branch today.
+        const chargeSelector = intent.ability.target;
+        if (
+            chargeSelector === 'enemy-most-buffs' ||
+            chargeSelector === 'enemy-highest-attack' ||
+            chargeSelector === 'enemy-highest-speed'
+        ) {
+            const selectedId =
+                chargeSelector === 'enemy-most-buffs'
+                    ? ctx.enemyWithMostBuffs?.(intent.ownerId)
+                    : chargeSelector === 'enemy-highest-attack'
+                      ? ctx.enemyWithHighestAttack?.(intent.ownerId)
+                      : ctx.enemyWithHighestSpeed?.(intent.ownerId);
+            // Unresolved (no living candidate, or the delegate is absent) → NO-OP, matching the
+            // SP-4c-2d precedent the purge branch sets. It must NEVER fall through to the
+            // owner-gain arm below: that would turn "remove a charge from one enemy" into "give
+            // the caster a charge".
+            if (selectedId === undefined) return;
+            ctx.removeChargesFrom(selectedId, cfg.amount, owner.attackerAffinity, ctx.bus);
+            return;
+        }
         if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
             // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
             // repairer); only act on the Nth event. Requires a repairer id and the counter map.
@@ -3510,9 +3546,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 return;
             }
             // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
-            // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
-            // here and fall through to the owner-only gain below. Unreachable for parsed charge
-            // abilities today.
+            // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack'/
+            // 'enemy-highest-speed') are matched ABOVE this branch — see the #399 block.
             ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
             return;
         }
