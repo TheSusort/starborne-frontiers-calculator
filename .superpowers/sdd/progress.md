@@ -312,6 +312,42 @@ known-behaviour pins carry delete-me framing). The DEFINITION is wrong.
 **THE PATTERN: three iterations on this metric, each revealing another mitigation channel. That is
 a signal about the METRIC, not just the implementation. Escalated to the user rather than starting
 a fourth.**
+
+## ✅ RESOLVED by the user's own definition (2026-08-25) → spec ADDENDUM 3 (`59cf6d17`), Task 10
+**The root cause was MINE and it was not a coding error: I never wrote the definition down in full.**
+I said "gross" (meaning: not double-counting shield pools), then "raw" (meaning: before defence).
+Each implementation faithfully delivered the narrow thing I said while the metric stayed wrong on
+channels I had not considered. The user's one-sentence definition — "the full attacker's attack with
+modifiers, before it's mitigated by the defender, plus other sources like DoTs or bombs; a mix of the
+channels" — is a COMPLETE specification. My two previous statements were not specifications at all,
+just corrections to whatever was most recently broken.
+**Naming was load-bearing too:** retiring "Measured EHP" for **Damage absorbed / Rounds survived /
+Theoretical EHP** fixed the contradictory changelog entry for free — that entry went wrong precisely
+because "EHP" kept inviting the old post-mitigation reading.
+
+- [x] Task 10: **complete** (commit `62d194ee`; review pending). Suite **584 / 6520** (+22 arms).
+      **ZERO golden/snapshot files touched** — no re-bless needed. 185 test-file deletions are all
+      the `measuredEHP`→`damageAbsorbed` rename (identical values on the added side) + a fixture
+      reorder. No numeric value moved.
+      **Per-channel direction, all rise or stay flat, no inversions:** defence 120k→300k→720k ·
+      own `Inc. Damage Down` **252k/5rds → 360k/6rds** (= 60k x 6, arithmetic checks) ·
+      `equipReductionPct` 300k→360k · incoming-block 300k→540k · Vortex Veil flat ·
+      **Voron DoT transform 24,993 → 100,000** (the 4x collapse gone). 11 mutations, all caught.
+      Presence pinned: DoT 81k · bomb 80k · detonation differential · reflect 200k thrown / 83,312
+      arrived. The mixed channel is split (`incomingAsThrown`; `engine.ts:7210`) — verified myself.
+      **MY SPEC'S C4 MECHANISM WAS WRONG AND IT SUBSTITUTED A BETTER ONE.** I prescribed "carry the
+      pre-mitigation figure through the re-book"; measured, that gave 60,000 vs a plain 100,000,
+      because the deferral runs past the window edge and those ticks never fire — **a window edge
+      would have decided whether a hit had been thrown.** It shipped book-at-throw-time instead.
+      ACCEPTED: damage thrown is thrown regardless of when/whether the deferred slice lands, and a
+      metric that moves with the window boundary is indefensible.
+      Also ACCEPTED: it stripped Vortex Veil's `incomingDotReductionPct` though C2's OUT list omitted
+      it — C2 says "every victim-side reduction", the list was illustrative, and this is the same
+      class. Correct call.
+      OPEN (documented, not blocking): `preFightIncoming` has no sim-level arm (no passthrough on
+      `DefenseSimulationInput`); fenced in two halves instead. `attackerIncomingReductionPct` is
+      still folded into both reflect axes — arguably victim-side by C2 but part of the empirical
+      duel-fit model, so stripping it is a separate decision.
 - [ ] Task 7: documentation + changelog
 
 ## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
