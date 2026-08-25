@@ -28,7 +28,6 @@ export interface ProtectionChunk {
     /** #358 ADDENDUM 2: this chunk BEFORE the protector's own defence term (`mit`), i.e. the raw
      *  amount thrown at the protector. Read straight off the P-space inflow — no division. */
     perStackPreMitigation: number;
-    totalPreMitigation: number;
 }
 
 export interface CascadeResult {
@@ -65,7 +64,6 @@ export function protectionCascade(
             perStack: kept / protectors[i].stacks,
             total: kept,
             perStackPreMitigation: keptPreMit / protectors[i].stacks,
-            totalPreMitigation: keptPreMit,
         });
         flow = nextFrac * flow; // pass the remainder to the next protector
     }

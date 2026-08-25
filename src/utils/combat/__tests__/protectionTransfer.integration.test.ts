@@ -179,6 +179,15 @@ const totalIncoming = (input: CombatEngineInput, id: string): number => {
     return sum;
 };
 
+/** #358 ADDENDUM 3: the same total on the RAW ("damage absorbed") axis — what was THROWN at the
+ *  actor, before its own defence mitigated any of it. */
+const totalIncomingRaw = (input: CombatEngineInput, id: string): number => {
+    const res = runCombat(input);
+    let sum = 0;
+    for (const rd of res.rounds) sum += rd.perActorIncoming?.[id]?.incomingRaw ?? 0;
+    return sum;
+};
+
 /** The focus's ACTIVE self-buff names, read from the same status engine the run uses. Proves a
  *  fixture's self-buff actually landed — a buff that silently fails to apply makes a "buffed vs
  *  unbuffed" comparison vacuous, since the two arms become the same board. (Scheduled `selfBuffs`
@@ -273,6 +282,53 @@ describe('Protection damage transfer (integration)', () => {
         // One reactive-damage-performed per redirected SUB-HIT (3 stacks → 3 rows), matching what
         // the game shows the player. See the dedicated per-stack test below for the amounts.
         expect(reactiveEventsTargeting(withProtector(true), 'attacker')).toBe(3);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // #358 ADDENDUM 3 (carried finding 7) — THE RAW AXIS'S RETENTION SCALING HAD NO TEST ANYWHERE
+    //
+    // `damageRaw = damageRaw * cascade.targetRetainedFraction` (applyVictimDamage) is what stops a
+    // PROTECTED victim's "damage absorbed" figure from counting the slice its protector took.
+    // MEASURED before this test existed: deleting that line left the entire repository green
+    // (406 files / 3,950 tests). It is the twin of the incoming-block scaling one branch above,
+    // which this addendum DELETED on purpose — so the two lines now differ, and only a test can
+    // say which of them is meant to be there.
+    //
+    // The assertion is a CONSERVATION IDENTITY rather than a per-actor magnitude: whatever the
+    // cascade does with the hit, the two actors' raw intakes must sum to exactly what was thrown.
+    // A magnitude assertion on the victim alone would also pass if the protector's own raw booking
+    // were wrong; this cannot.
+    it('#358 ADDENDUM 3: the redirected slice moves on the RAW axis too — victim + protector sum to exactly what was thrown', () => {
+        // Victim defence 400 (NOT 0, unlike the arms above): with defence 0 the raw and post axes
+        // coincide and this test could not tell them apart.
+        const VICTIM_DEFENCE = 400;
+        const withProtector = (withProt: boolean): CombatEngineInput =>
+            BASE_INPUT({
+                selfBuffs: withProt ? [protectionAccum(3)] : [],
+                teamActors: [teamActor('ally-1', VICTIM_DEFENCE)],
+                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            });
+
+        // CONTROL: with no protector the victim absorbs the whole thrown hit, and the raw axis is
+        // strictly above the post axis (so the fixture really does separate them).
+        const victimRawWithout = totalIncomingRaw(withProtector(false), 'ally-1');
+        expect(victimRawWithout).toBeCloseTo(ENEMY_ATTACK, 6);
+        expect(victimRawWithout).toBeGreaterThan(totalIncoming(withProtector(false), 'ally-1'));
+
+        const victimRawWith = totalIncomingRaw(withProtector(true), 'ally-1');
+        const protectorRawWith = totalIncomingRaw(withProtector(true), 'attacker');
+
+        // The victim keeps exactly the retained fraction on the raw axis — 3 stacks → 70%.
+        expect(victimRawWith).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+        // …the protector's own raw intake is the redirected 30%, at its PRE-defence size (read off
+        // the cascade's P-space inflow, never recovered by dividing the mitigated chunk)…
+        expect(protectorRawWith).toBeCloseTo(0.3 * ENEMY_ATTACK, 6);
+        // …and NOTHING is lost or double-counted. Delete the retention scaling and this reads
+        // 1.3 × ENEMY_ATTACK: the victim would report absorbing damage its protector took.
+        expect(victimRawWith + protectorRawWith).toBeCloseTo(ENEMY_ATTACK, 6);
+        // The protector really is re-mitigating on its own defence, so the two axes are distinct
+        // for it as well — the raw booking is not just a copy of the mitigated chunk.
+        expect(protectorRawWith).toBeGreaterThan(totalIncoming(withProtector(true), 'attacker'));
     });
 
     it('a 3-stack protector logs THREE reactive-damage rows (one per redirected sub-hit), each carrying that sub-hit’s own booked intake', () => {

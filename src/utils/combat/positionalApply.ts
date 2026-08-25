@@ -3,9 +3,8 @@ import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import { resolvePositionalTarget, type ActorTargetingStatus } from './positionalBinding';
 import {
-    victimHitDamage,
+    victimHitDamageParts,
     victimDefenceMitigation,
-    victimHitDamagePreMitigation,
     type AttackerDamageScalars,
     type VictimDefenseProfile,
 } from './victimDamage';
@@ -263,7 +262,7 @@ export function applyPositionalDamage(args: {
         /**
          * #358 ADDENDUM 2: the PRE-defence-mitigation amount this hit threw at the victim — the
          * same computation as `damage` with the defence term removed. Recorded by the funnel as
-         * the victim's RAW intake so "measured EHP" counts damage thrown, not damage that got
+         * the victim's RAW intake so "damage absorbed" counts damage thrown, not damage that got
          * through. Trailing and optional so existing stub callers compile unchanged.
          */
         preMitigation?: number
@@ -423,14 +422,13 @@ export function applyPositionalDamage(args: {
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const defenseProfile = defenseProfileOf(victim);
-            const dmgBase = victimHitDamage(
-                scalars,
-                defenseProfile,
-                didCrit,
-                roleScale,
-                equipReductionPct
-            );
-            const rawBase = victimHitDamagePreMitigation(
+            // ONE call, both figures. This ran `victimHitDamageParts` TWICE (once through
+            // `victimHitDamage`, once through `victimHitDamagePreMitigation`) — the same
+            // assembly, the same profile read, the same affinity resolve, on a path measured at
+            // 182,548 calls. The three engine call sites already destructure the parts helper;
+            // this one now matches them, and the two figures are provably the same evaluation
+            // rather than two that merely ought to agree.
+            const { damage: dmgBase, preMitigation: rawBase } = victimHitDamageParts(
                 scalars,
                 defenseProfile,
                 didCrit,

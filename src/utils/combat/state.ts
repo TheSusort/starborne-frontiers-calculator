@@ -67,6 +67,23 @@ export interface ActiveDoTStack {
     /** SP-E generic DoT (Voron/Orel damage-transform): absolute damage per tick, independent
      *  of stats/HP. Set only on 'generic'-type entries; corrosion/inferno compute from stats. */
     perTickAmount?: number;
+    /**
+     * #358 ADDENDUM 3 (C4): the PRE-mitigation twin of `perTickAmount`, carried so a re-booked
+     * transform slice lands on the "damage absorbed" axis at the size it was THROWN.
+     *
+     * THE COLLAPSE THIS FIXES. `convertHitToSelfDot` (Voron/Orel, Hit Mitigation) reverses BOTH
+     * intake axes in lockstep when it defers a hit — `-damage` off `.incoming` and `-damageRaw`
+     * off `.incomingRaw`. The ticks that re-book the deferred slice then ran `byDirectDamage:
+     * false` with no pre-mitigation figure, so the funnel booked the POST-mitigation
+     * `perTickAmount` on BOTH axes. Net effect: the slice migrated permanently onto the post axis
+     * and the raw axis lost the difference — a Voron defender at 5,000 defence reported 24,993
+     * where a plain defender reported 100,000. A purely DEFENSIVE ability quartered the headline
+     * and re-inverted the ranking.
+     *
+     * Absent on corrosion/inferno entries and on any generic DoT that folded no defence — those
+     * tick identically on both axes, which is what `?? perTickAmount` downstream means.
+     */
+    perTickPreMitigation?: number;
     /** SP-E: named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
     family?: string;
     /** SP-E: survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */

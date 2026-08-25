@@ -111,6 +111,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
                   incomingDamageModifier: number;
+                  victimSideIncomingModifier: number;
               })
             | undefined;
         runCombat(
@@ -126,16 +127,23 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
         expect(captured!('attacker')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: -5,
+            // #358 ADDENDUM 3 (C2): `preFightIncoming` is a VICTIM-SIDE reduction, so it must
+            // appear in BOTH the mixed sum above and the victim-side split — the split is what
+            // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
+            // protection that failed to register here would silently shrink its own ship's headline.
+            victimSideIncomingModifier: -5,
         });
         // …and does NOT bleed onto other actors: neither the vestigial dummy sink nor the real
         // positioned opponent has any preFight of its own.
         expect(captured!('enemy')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
         expect(captured!(BARE_ENEMY_ID)).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
     });
 
@@ -150,6 +158,7 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
                   incomingDamageModifier: number;
+                  victimSideIncomingModifier: number;
               })
             | undefined;
         runCombat(
@@ -164,12 +173,18 @@ describe('F3 — victim-side incomingDamage rides the per-victim modifier channe
         expect(captured!(BARE_ENEMY_ID)).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: -9,
+            // #358 ADDENDUM 3 (C2): `preFightIncoming` is a VICTIM-SIDE reduction, so it must
+            // appear in BOTH the mixed sum above and the victim-side split — the split is what
+            // `victimHitDamageParts` subtracts back off the "damage absorbed" axis. A squad-leader
+            // protection that failed to register here would silently shrink its own ship's headline.
+            victimSideIncomingModifier: -9,
         });
         // …and the focus, which supplied no preFight of its own this time, still reads zeros — so
         // the -9 is scoped to the roster entry rather than being a fight-wide fold.
         expect(captured!('attacker')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
     });
 });

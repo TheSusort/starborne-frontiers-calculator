@@ -100,7 +100,7 @@ export interface DefenseSurvivabilityResult {
      *    display is REQUIRED, not decorative. The continuous counterpart is the static formula
      *    already shown beside it.
      */
-    measuredEHP: number;
+    damageAbsorbed: number;
     survived: boolean;
     destroyedRound?: number;
     elapsedRounds: number;
@@ -118,7 +118,7 @@ export interface DefenseSurvivabilityResult {
  *
  * ACCEPTED CONSEQUENCE: the focus actor takes its own turns, so the defender casts at the attackers.
  * Its self-shields and self-buffs therefore fire on its own turn (correct), and a defender that
- * kills attackers reduces its own incoming pressure (real game behaviour). Measured EHP is
+ * kills attackers reduces its own incoming pressure (real game behaviour). Damage absorbed is
  * consequently not a pure-defence number.
  *
  * WHICH DEFENSIVE CHANNELS MOVE THE MEASURED NUMBER (measured, not assumed — see the channel test
@@ -197,7 +197,7 @@ export function simulateDefenseSurvivability(
     const destroyedRound = healingResult.summary.destroyedRound;
 
     return {
-        measuredEHP: grossRaw,
+        damageAbsorbed: grossRaw,
         survived: destroyedRound === undefined,
         ...(destroyedRound !== undefined ? { destroyedRound } : {}),
         elapsedRounds: rounds.length,

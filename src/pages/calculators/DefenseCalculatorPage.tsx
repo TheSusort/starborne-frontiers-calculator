@@ -102,7 +102,7 @@ const defenderFieldsFromShip = (
     crit: Math.round(final.crit ?? 0),
     critDamage: Math.round(final.critDamage ?? 0),
     // NOT `?? 0` for these two. A speed-0 defender never takes a turn, so its self-shields and
-    // self-buffs never fire and its measured EHP is silently understated; hacking 0 would also
+    // self-buffs never fire and its damage absorbed is silently understated; hacking 0 would also
     // misreport its own outbound landing. These fallbacks match `healerStatsFromShip` in
     // HealingCalculatorPage.tsx:173-174, which is the reference implementation.
     speed: Math.round(final.speed ?? 100),
@@ -574,8 +574,8 @@ const DefenseCalculatorPage: React.FC = () => {
     // the whole point of this epic is that the measured number is the one that should decide
     // "best", since it reflects real shields/self-buffs/enemy pressure the static formula ignores.
     const bestShip = configs.reduce<DefenseShipConfig | null>((best, current) => {
-        const currentEHP = simResults.get(current.id)?.measuredEHP ?? 0;
-        const bestEHP = best ? (simResults.get(best.id)?.measuredEHP ?? 0) : 0;
+        const currentEHP = simResults.get(current.id)?.damageAbsorbed ?? 0;
+        const bestEHP = best ? (simResults.get(best.id)?.damageAbsorbed ?? 0) : 0;
         return currentEHP > bestEHP ? current : best;
     }, null);
 

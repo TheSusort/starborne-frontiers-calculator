@@ -77,7 +77,7 @@ import {
     addIncomingAbilityDeduped,
     withLiveAllyScopedOwners,
 } from './incomingEffects';
-import { reflectedDamageForHit, reflectedDamagePreDefenceForHit } from './damageReflection';
+import { reflectedDamageParts } from './damageReflection';
 import { splashDamageForBomb } from './bombSplash';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { outgoingAmplificationForHit } from './outgoingEffects';
@@ -1121,7 +1121,22 @@ export function tickDoTs(args: {
      *  resolvable applier ctx are counted for corrosion/inferno; generic counts all). `tier` = the
      *  group's tier MAGNITUDE (corrosion 3/6/9, inferno 15/30/45; 0 for generic). */
     emitTicked: (dotType: TickableDoTType, damage: number, stacks: number, tier: number) => void;
-    credit: (sourceId: string, dotType: TickableDoTType, damage: number) => void;
+    /**
+     * @param damage        the tick's damage as the victim TAKES it — post `incomingDotReductionPct`.
+     * @param preMitigation #358 ADDENDUM 3 (C2/C4): the same tick as THROWN. Two victim-side
+     *        reductions are absent from it: this carrier's `incomingDotReductionPct` (Vortex Veil),
+     *        and — for a generic DoT re-booking a `convertHitToSelfDot` deferral — the defence
+     *        mitigation the original direct hit folded, recovered from the entry's
+     *        `perTickPreMitigation`. Equal to `damage` for every tick that had neither.
+     *        Callers that book a DAMAGE number must use `damage`; only the victim's
+     *        "damage absorbed" (raw intake) axis reads this.
+     */
+    credit: (
+        sourceId: string,
+        dotType: TickableDoTType,
+        damage: number,
+        preMitigation: number
+    ) => void;
     /** D-PR3 (Vortex Veil): % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0 → byte-identical. */
     incomingDotReductionPct?: (dotType: TickableDoTType) => number;
@@ -1174,7 +1189,9 @@ export function tickDoTs(args: {
         if (total <= 0) return;
         const reductionPct = args.incomingDotReductionPct?.(dotType) ?? 0;
         const factor = 1 - reductionPct / 100;
-        for (const { sourceId, d } of creditOrder) args.credit(sourceId, dotType, d * factor);
+        // #358 ADDENDUM 3: `d` (pre-`factor`) is the tick as THROWN; `d * factor` is what the
+        // carrier takes after its own DoT-reduction ability. Both are handed over — see `credit`.
+        for (const { sourceId, d } of creditOrder) args.credit(sourceId, dotType, d * factor, d);
         for (const tier of [...byTier.keys()].sort((a, b) => a - b)) {
             const g = byTier.get(tier)!;
             if (g.sum <= 0) continue;
@@ -1203,17 +1220,23 @@ export function tickDoTs(args: {
     // or affinity, so it ticks even before the applier's first turn this run).
     let genericSum = 0;
     let genericStacks = 0;
-    const genericCredits: Array<{ sourceId: string; d: number }> = [];
+    const genericCredits: Array<{ sourceId: string; d: number; pre: number }> = [];
     for (const e of args.genericDoTEntries) {
         const d = (e.perTickAmount ?? 0) * e.stacks;
-        genericCredits.push({ sourceId: e.sourceId, d });
+        // #358 ADDENDUM 3 (C4): a generic entry created by `convertHitToSelfDot` carries the
+        // PRE-mitigation slice of the direct hit it deferred. `?? e.perTickAmount` covers every
+        // other generic DoT (Acidic Decay and friends), which folds no defence and so ticks the
+        // same amount on both axes.
+        const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks;
+        genericCredits.push({ sourceId: e.sourceId, d, pre });
         genericSum += d;
         genericStacks += e.stacks;
     }
     if (genericSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
         const factor = 1 - reductionPct / 100;
-        for (const { sourceId, d } of genericCredits) args.credit(sourceId, 'generic', d * factor);
+        for (const { sourceId, d, pre } of genericCredits)
+            args.credit(sourceId, 'generic', d * factor, pre);
         // Generic DoTs are untiered (absolute per-tick) → single tier-0 group.
         args.emitTicked('generic', genericSum * factor, genericStacks, 0);
     }
@@ -1549,7 +1572,12 @@ export interface CombatEngineInput {
      *  for a single-round test. NOTE: the tap reads LIVE statusEngine state at call time, which
      *  is fine for single-round tests (the state is fully settled after runCombat returns). */
     __testTapVictimEnemyModifiers?: (
-        fn: (victimId: string) => { enemyDefenseModifier: number; incomingDamageModifier: number }
+        fn: (victimId: string) => {
+            enemyDefenseModifier: number;
+            incomingDamageModifier: number;
+            /** #358 ADDENDUM 3: the victim-side half of `incomingDamageModifier`. */
+            victimSideIncomingModifier: number;
+        }
     ) => void;
     /** TEST TAP (inert in production): exposes the engine-local isStasised(actorId) reader so a
      *  test can assert per-victim Stasis detection for both directions. Mirrors
@@ -1809,6 +1837,7 @@ interface DamageAccountingSink {
  *  - reversing the `.incoming` the funnel already recorded is what makes the battle sim's HP
  *    derivation (incoming − shield − barrier) net to zero real HP loss for this hit — the damage
  *    instead lands over time, each tick recording its own `.incoming`;
+ *  - the RAW axis (`.incomingRaw`, "damage absorbed") is DELIBERATELY NOT reversed — see below;
  *  - the returned amount is what the caller reports as `transformedToDot`, and that is what drops
  *    the hit from the per-victim damage-taken credit AND suppresses its `attacked` signal.
  * Unlike the Barrier path this hit is DEFERRED, not nullified, so it is deliberately NOT booked as
@@ -1826,6 +1855,32 @@ interface DamageAccountingSink {
  * `DamageAccountingSink` (an engine-internal accounting seam) from outside would mean exporting
  * that interface purely to relocate these three statements.
  *
+ * #358 ADDENDUM 3 (C4) — WHY ONLY ONE OF THE TWO AXES IS REVERSED.
+ *
+ * The two axes answer different questions, so a deferral moves them differently:
+ *  • `.incoming` is what ARRIVED. Nothing arrived from this hit, so it is reversed and each tick
+ *    books its own share as it lands. Unchanged.
+ *  • `.incomingRaw` is what was THROWN ("damage absorbed", C2). The attack was thrown in full, at
+ *    full size, at the instant this helper runs. A transform is a purely DEFENSIVE ability; it
+ *    changes WHEN the damage lands, not whether it was thrown. So the raw booking the funnel made
+ *    a few lines above STANDS, and the entry below carries `perTickPreMitigation: 0` so the ticks
+ *    that re-book the slice do not count it a second time.
+ *
+ * TWO WRONG SHAPES THIS REPLACES, both measured on a Voron defender (5,000 defence, 20,000-attack
+ * attacker, 5-round window) against a plain defender's 100,000:
+ *  1. Reverse the raw axis and let the ticks re-book WITHOUT a pre-mitigation figure (the shipped
+ *     addendum-2 behaviour): the slice migrated onto the post axis and the figure collapsed to
+ *     **24,993** — a defensive ability quartering its own owner's headline.
+ *  2. Reverse the raw axis and re-book WITH the pre-mitigation figure in lockstep: better, but the
+ *     deferral runs past the end of the window, so the ticks scheduled for rounds 6-8 never fire
+ *     and the figure lands at **60,000**. Still lower than the plain defender's, still an
+ *     inversion — just a quieter one. A window edge must not decide whether a hit was thrown.
+ * Booking at THROW time is edge-free by construction: **100,000**, exactly the plain defender's.
+ *
+ * `perTickPreMitigation: 0` is LOAD-BEARING and must stay an explicit 0, never omitted: the tick
+ * reader is `e.perTickPreMitigation ?? e.perTickAmount`, and `??` does not fall through on 0. Drop
+ * the field and every transformed hit is counted twice on the raw axis.
+ *
  * GUARD: `rounds` traces back to a parsed skill row (the ability's `turns`) or a hand-coded
  * constant (Hit Mitigation's fixed 3) — the former is untrusted input. `detectTransformToDot`
  * already rejects a non-positive parse at the source, but this is the single shared choke point
@@ -1839,11 +1894,7 @@ function convertHitToSelfDot(
     victim: CombatActor,
     sink: DamageAccountingSink,
     damage: number,
-    rounds: number,
-    /** #358 ADDENDUM 2: the pre-defence twin of `damage`, reversed off `.incomingRaw` in lockstep
-     *  so the raw axis nets to zero for a deferred hit exactly as `.incoming` does. Defaults to
-     *  `damage` for a caller on a path that folds no defence. */
-    damageRaw = damage
+    rounds: number
 ): number {
     if (rounds <= 0) return 0;
     victim.genericDoTEntries.push({
@@ -1852,9 +1903,13 @@ function convertHitToSelfDot(
         remainingRounds: rounds,
         sourceId: victim.id,
         perTickAmount: damage / rounds,
+        // #358 ADDENDUM 3 (C4): this slice's raw contribution was ALREADY booked, at full size, by
+        // the funnel's `addIncomingRaw` a few lines above the call site — see the block comment.
+        // An explicit 0 (never omitted: the reader is `?? perTickAmount`) stops the re-booking
+        // ticks from counting it a second time.
+        perTickPreMitigation: 0,
     });
     sink.addIncoming(-damage, victim.id);
-    sink.addIncomingRaw(-damageRaw, victim.id);
     return damage;
 }
 /**
@@ -5543,7 +5598,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }
                     );
                     damage = damage * (1 - blocked);
-                    damageRaw = damageRaw * (1 - blocked);
+                    // #358 ADDENDUM 3 (C2): `damageRaw` is DELIBERATELY NOT scaled here. An
+                    // incoming-block proc is a VICTIM-SIDE reduction — the attack was thrown in
+                    // full and the defender's ability ate part of it — so it must not shrink the
+                    // "damage absorbed" axis. It used to be scaled in lockstep with `damage`,
+                    // which made the block ability lower its own owner's headline figure: the same
+                    // inversion the defence term and the `Inc. Damage Down` term were each fixed
+                    // for, on a third channel. Pinned by the per-channel direction test in
+                    // `defenseSurvivabilitySim.test.ts`.
                 }
             }
             // Protection damage transfer. A living ally holding Protection stacks intercepts a
@@ -5845,8 +5907,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             victim,
                             sink,
                             damage,
-                            transform.config.turns,
-                            damageRaw
+                            transform.config.turns
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
                         // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
@@ -5939,8 +6000,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     victim,
                     sink,
                     damage,
-                    HIT_MITIGATION_DOT_ROUNDS,
-                    damageRaw
+                    HIT_MITIGATION_DOT_ROUNDS
                 );
                 damage = 0;
                 consumeHitMitigation(statusEngine, victim.id);
@@ -6435,14 +6495,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 attackerTauntedOrProvoked: false,
                             }
                         );
-                        const reflected = reflectedDamageForHit({
-                            reflectPct,
-                            // Direct slice only — the bomb portion of a mixed hit never reflects.
-                            netHpDamage: reflectBasis,
-                            affinityDamageModifier,
-                            attackerDefenceReductionPct,
-                            attackerIncomingReductionPct,
-                        });
+                        // ONE evaluation, both axes (#358 addendum 3, carried finding 9) — the
+                        // pre-defence twin used to be a hand-copied second function.
+                        const { damage: reflected, preMitigation: reflectedPreMit } =
+                            reflectedDamageParts({
+                                reflectPct,
+                                // Direct slice only — the bomb portion of a mixed hit never reflects.
+                                netHpDamage: reflectBasis,
+                                affinityDamageModifier,
+                                attackerDefenceReductionPct,
+                                attackerIncomingReductionPct,
+                            });
                         if (reflected > 0) {
                             // `sink` accumulates the attacker's incoming into the unified
                             // perActorIncoming/intakeFor map under its own id (ids are globally
@@ -6455,12 +6518,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 bombPortion: 0,
                                 // #358 ADDENDUM 2: the same reflected hit without the reflect
                                 // victim's (the original attacker's) defence term.
-                                preMitigationDamage: reflectedDamagePreDefenceForHit({
-                                    reflectPct,
-                                    netHpDamage: reflectBasis,
-                                    affinityDamageModifier,
-                                    attackerIncomingReductionPct,
-                                }),
+                                preMitigationDamage: reflectedPreMit,
                             });
                             perActorReflected.set(
                                 attacker.id,
@@ -7145,7 +7203,14 @@ export function runCombat(rawInput: CombatEngineInput): {
              *  "landed". Optional: the test tap and any future non-positional caller pass nothing
              *  and keep the raw read, so nothing off the positional path moves. */
             scheduledEffects?: SelectedGameBuff[]
-        ): { enemyDefenseModifier: number; incomingDamageModifier: number } => {
+        ): {
+            enemyDefenseModifier: number;
+            incomingDamageModifier: number;
+            /** #358 ADDENDUM 3 (C2): the VICTIM-SIDE contributions to `incomingDamageModifier`
+             *  (`selfIncoming + preFightIncoming`), split out so the pre-mitigation damage axis can
+             *  strip them while keeping the attacker-applied amplification. */
+            victimSideIncomingModifier: number;
+        } => {
             const victimDebuffs = victimEnemyBuffs(
                 statusEngine,
                 victimId,
@@ -7233,6 +7298,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense,
                 incomingDamageModifier:
                     enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed,
+                // #358 ADDENDUM 3 (C2/C3): the VICTIM-SIDE half of the sum above, published
+                // separately because the sum is a MIXED channel and nothing downstream can
+                // un-mix it. `enemy.incomingDamageModifier` and `exposed` are amplification the
+                // ATTACKER's side applied — part of the attack as thrown; `selfIncoming` and
+                // `preFightIncoming` are the DEFENDER reducing what it takes. "Damage absorbed"
+                // strips only the latter pair, so only the latter pair travels here.
+                // See `VictimDefenseProfile.victimSideIncomingPct` for the failure this fixes.
+                victimSideIncomingModifier: selfIncoming + preFightIncoming,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term,
@@ -7362,6 +7435,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // enemy-debuff (Out. Damage Up) AND victim's own self-buffs (Inc. Damage
                 // Down/Up). Attacker-sourced scalars (outgoing buff, pen) stay attacker-fixed.
                 incomingDamageModifierPct: m.incomingDamageModifier,
+                // #358 ADDENDUM 3 (C2): the victim-side half of that same sum, so
+                // `victimHitDamageParts` can strip it from the PRE-mitigation axis only. `damage`
+                // still folds the whole mixed channel — this field never touches it.
+                victimSideIncomingPct: m.victimSideIncomingModifier,
                 affinity: v.affinity ?? 'antimatter',
                 // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
                 // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
@@ -10145,6 +10222,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                         })),
                     };
                     let tankDotDamage = 0;
+                    // #358 ADDENDUM 3 (C2/C4): the same batch as THROWN — no Vortex Veil
+                    // DoT-reduction, and a re-booked `convertHitToSelfDot` slice at its
+                    // pre-defence size. Feeds the funnel's raw ("damage absorbed") axis only.
+                    let tankDotDamagePreMit = 0;
                     tickDoTs({
                         corrosionEntries: healTarget.corrosionEntries,
                         infernoEntries: healTarget.infernoEntries,
@@ -10164,8 +10245,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }),
                         // Sum the ticked damage across all appliers; route it as INCOMING to the tank
                         // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
-                        credit: (sourceId, dotType, damage) => {
+                        credit: (sourceId, dotType, damage, preMitigation) => {
                             tankDotDamage += damage;
+                            tankDotDamagePreMit += preMitigation;
                             // Site 3 of the leech-channel class (spec §3): the applier is no
                             // longer discarded, so its standing damage-dealt leech pays out on
                             // a tick against the heal target — the same proc the sibling
@@ -10233,6 +10315,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // DoT kill as a direct hit (Faust, Task 6, distinguishes them).
                         applyIncomingToTarget(tankDotDamage, healTarget, {
                             byDirectDamage: false,
+                            // #358 ADDENDUM 3: without this the funnel defaults the raw axis to
+                            // `tankDotDamage` (the post-reduction figure) and a deferred
+                            // transform slice migrates permanently off the raw axis — see
+                            // `ActiveDoTStack.perTickPreMitigation`.
+                            preMitigationDamage: tankDotDamagePreMit,
                         });
                     }
                     // Dead-is-dead: if the turn-start DoT tick was LETHAL the tank just died
@@ -10264,6 +10351,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // the `!sideIsPlayer`-gated `perActorDot` DPS map below, which stays
                         // exactly as it was.
                         const tickDealtBySource = new Map<string, number>();
+                        // #358 ADDENDUM 3 (C2/C4): the raw twin of `total`. See the heal-target
+                        // branch above — same reason, same axis.
+                        let totalPreMit = 0;
                         tickDoTs({
                             corrosionEntries: actor.corrosionEntries,
                             infernoEntries: actor.infernoEntries,
@@ -10281,8 +10371,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     stacks,
                                     tier,
                                 }),
-                            credit: (sourceId, dotType, damage) => {
+                            credit: (sourceId, dotType, damage, preMitigation) => {
                                 total += damage;
+                                totalPreMit += preMitigation;
                                 tickDealtBySource.set(
                                     sourceId,
                                     (tickDealtBySource.get(sourceId) ?? 0) + damage
@@ -10344,7 +10435,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // DoT batch: bypass shield (byDirectDamage:false), aggregate of
                             // appliers with no single killer. Mirrors the heal-target route
                             // (applyIncomingToTarget == applyVictimDamage + sink + pen 0).
-                            applyVictimDamage(total, actor, sink, { byDirectDamage: false });
+                            applyVictimDamage(total, actor, sink, {
+                                byDirectDamage: false,
+                                // #358 ADDENDUM 3 — see the heal-target branch's twin.
+                                preMitigationDamage: totalPreMit,
+                            });
                             roundPerTargetDamage.set(
                                 actor.id,
                                 (roundPerTargetDamage.get(actor.id) ?? 0) + total

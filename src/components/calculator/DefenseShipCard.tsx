@@ -147,18 +147,45 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
 
                 {result && (
                     <div className="mt-4 pt-4 border-t border-dark-border">
-                        {/* #358 addendum 2: the headline is RAW damage thrown at the ship, so more
-                            defence raises it. Rounds sit BESIDE it because the figure only moves
-                            when the round of death moves — two ships that die on the same round
-                            report the same number, and the rounds are what separate them. */}
+                        {/* #358 ADDENDUM 3 (C1): the three headline numbers, in the owner's order —
+                            ROUNDS SURVIVED first, DAMAGE ABSORBED second, and the static estimate
+                            third (rendered just below this block, labelled "Theoretical EHP").
+                            Rounds lead because the absorbed figure only moves when the round of
+                            DEATH moves: two ships that die on the same round report the same
+                            number, and the rounds are what separate them. */}
                         <div className="flex justify-between items-baseline">
                             <span className="text-theme-text-secondary">
-                                Measured EHP:
-                                <span className="block text-xs">raw damage withstood</span>
+                                Rounds survived:
+                                <span className="block text-xs">how long the ship lasted</span>
                             </span>
                             <span className="text-right">
                                 <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
-                                    {Math.round(result.measuredEHP).toLocaleString()}
+                                    {result.elapsedRounds}
+                                </span>
+                                <span className="block text-xs">
+                                    {result.survived ? (
+                                        <span className="text-green-400">
+                                            Survived all {result.elapsedRounds} rounds — a lower
+                                            bound, not a limit
+                                        </span>
+                                    ) : (
+                                        <span className="text-red-500">
+                                            Destroyed round {result.destroyedRound}
+                                        </span>
+                                    )}
+                                </span>
+                            </span>
+                        </div>
+                        <div className="flex justify-between items-baseline mt-2">
+                            <span className="text-theme-text-secondary">
+                                Damage absorbed:
+                                <span className="block text-xs">
+                                    everything thrown at it, before its own reductions
+                                </span>
+                            </span>
+                            <span className="text-right">
+                                <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
+                                    {Math.round(result.damageAbsorbed).toLocaleString()}
                                 </span>
                                 <span className="block text-xs text-theme-text-secondary">
                                     over {result.elapsedRounds}{' '}
@@ -166,18 +193,12 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                 </span>
                             </span>
                         </div>
-                        <div className="text-xs mt-1">
-                            {result.survived ? (
-                                <span className="text-green-400">
-                                    Survived all {result.elapsedRounds} rounds — a lower bound, not
-                                    a limit
-                                </span>
-                            ) : (
-                                <span className="text-red-500">
-                                    Destroyed round {result.destroyedRound}
-                                </span>
-                            )}
-                        </div>
+                        {result.survived && (
+                            <div className="text-xs mt-1 text-theme-text-secondary">
+                                On a survivor this is a property of the ATTACKERS, not the ship —
+                                raise enemy attack or rounds until ships die before comparing.
+                            </div>
+                        )}
                         {/* DIFFERENT AXIS. The four terms below partition what actually ARRIVED
                             (post defence mitigation); the headline above is what was THROWN. They
                             do not sum, so the sub-total is labelled and shown explicitly rather
@@ -189,26 +210,36 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                 </span>
                                 <span>{Math.round(result.breakdown.gross).toLocaleString()}</span>
                             </div>
+                            {/* #358 ADDENDUM 3 (Part B, finding 6): Math.round, like the headline
+                                above and the `gross` sub-total. These are engine floats; raw
+                                `.toLocaleString()` printed "To hull 24,999.667" under a clean
+                                "30,000" on any fixture where defence bit. */}
                             <div className="flex justify-between">
                                 <span>To hull</span>
-                                <span>{result.breakdown.toHp.toLocaleString()}</span>
+                                <span>{Math.round(result.breakdown.toHp).toLocaleString()}</span>
                             </div>
                             {result.breakdown.toShield > 0 && (
                                 <div className="flex justify-between">
                                     <span>Absorbed by shield</span>
-                                    <span>{result.breakdown.toShield.toLocaleString()}</span>
+                                    <span>
+                                        {Math.round(result.breakdown.toShield).toLocaleString()}
+                                    </span>
                                 </div>
                             )}
                             {result.breakdown.toBarrier > 0 && (
                                 <div className="flex justify-between">
                                     <span>Blocked by Barrier</span>
-                                    <span>{result.breakdown.toBarrier.toLocaleString()}</span>
+                                    <span>
+                                        {Math.round(result.breakdown.toBarrier).toLocaleString()}
+                                    </span>
                                 </div>
                             )}
                             {result.breakdown.toConversion > 0 && (
                                 <div className="flex justify-between">
                                     <span>Converted to shield</span>
-                                    <span>{result.breakdown.toConversion.toLocaleString()}</span>
+                                    <span>
+                                        {Math.round(result.breakdown.toConversion).toLocaleString()}
+                                    </span>
                                 </div>
                             )}
                         </div>
@@ -216,6 +247,22 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                 )}
 
                 <div className="mt-4 pt-4 border-t border-dark-border">
+                    {/* #358 ADDENDUM 3 (C1 §3): the THIRD headline number, and the name says what it
+                        is. "Formula EHP" read like a peer of the measured figures; it is not — it is
+                        a hangar-stats ESTIMATE that never sees a shield, a Barrier, a conditional
+                        gate or an enemy. Sits directly under Rounds survived / Damage absorbed so
+                        the three read in the owner's order. */}
+                    <div className="flex justify-between">
+                        <span className="text-theme-text-secondary">Theoretical EHP:</span>
+                        <span className={isBest ? 'text-primary font-bold' : ''}>
+                            {Math.round(effectiveHP).toLocaleString()}
+                        </span>
+                    </div>
+                    <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
+                        An estimate from hangar stats, not a measurement — HP and Defense only. It
+                        ignores shields, Barrier, self-repair and conditional gating, and no enemy
+                        ever fires at it. Prefer the measured figures above when one is available.
+                    </div>
                     <div className="flex justify-between mb-2">
                         <span className="text-theme-text-secondary">Damage Reduction:</span>
                         <span>{damageReduction.toFixed(2)}%</span>
@@ -226,16 +273,6 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                             <span>{Math.round(buffedDefense).toLocaleString()}</span>
                         </div>
                     )}
-                    <div className="flex justify-between">
-                        <span className="text-theme-text-secondary">Formula EHP:</span>
-                        <span className={isBest ? 'text-primary font-bold' : ''}>
-                            {Math.round(effectiveHP).toLocaleString()}
-                        </span>
-                    </div>
-                    <div className="text-xs text-theme-text-secondary -mt-1 mb-1">
-                        Static formula — ignores shields, Barrier, and conditional gating. Prefer
-                        the engine-measured figure above when one is available.
-                    </div>
                     <div className="flex justify-between mt-2">
                         <span className="text-theme-text-secondary">HP Multiplier:</span>
                         <span>{(effectiveHP / config.hp).toFixed(2)}x</span>

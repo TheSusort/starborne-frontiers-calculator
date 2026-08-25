@@ -63,11 +63,11 @@ describe('DefenseCalculatorPage', () => {
         expect(screen.getByText('Charged')).toBeInTheDocument();
     });
 
-    it('reports a measured EHP once an attacker applies pressure', async () => {
+    it('reports a damage-absorbed figure once an attacker applies pressure', async () => {
         renderDefenseCalculatorPage();
         fireEvent.click(screen.getByText(/Combat Settings/i));
         fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
-        expect(await screen.findByText(/Measured EHP/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Damage absorbed/i)).toBeInTheDocument();
     });
 
     // Carried from Task 9: `bestShip` (the reduce behind the `isBest` highlight) had NO test. Before
@@ -75,9 +75,19 @@ describe('DefenseCalculatorPage', () => {
     // SMALLER measured figure and lost the "Best ship configuration" marker to the weaker one. This
     // test gives two configs deliberately lopsided defence (0 vs 20,000, plus HP as a safety margin
     // against exact-formula assumptions) under identical enemy pressure, so one dies on round 1 and
-    // the other survives the whole window — driving their measured EHP figures far enough apart that
+    // the other survives the whole window — driving their damage absorbed figures far enough apart that
     // the comparison can't tie. It asserts the SURVIVOR (the one that withstood more raw damage)
     // carries the marker, not the casualty.
+    //
+    // ⚠️ THE SURVIVOR IS DELIBERATELY THE **FIRST** CONFIG, AND ORDER IS THE WHOLE TEST.
+    // #358 ADDENDUM 3 (carried finding 11): this fixture used to add the tanky survivor LAST, and
+    // that made it BLIND. Measured: replacing the whole reduce body with `return current` — which
+    // ranks by nothing at all and simply marks the last config — left all four tests in this file
+    // GREEN, because with the survivor last "the last one" and "the best one" are the same card.
+    // With the survivor FIRST the two wrong reduces both go red for their own reason:
+    //   • `return current` marks the fragile casualty (assertion 1 fails);
+    //   • `return best`    never leaves the `null` seed, so NO card is marked (also assertion 1).
+    // Re-verified against both mutations. If you reorder these configs, this test stops testing.
     it('gives the best-ship marker to the config that withstands more raw damage, not less', async () => {
         renderDefenseCalculatorPage();
 
@@ -90,12 +100,13 @@ describe('DefenseCalculatorPage', () => {
         expect(hpInputs).toHaveLength(2);
         expect(defenseInputs).toHaveLength(2);
 
-        // Config 1 ("Ship 1"): fragile — dies to the first hit.
-        fireEvent.change(hpInputs[0], { target: { value: '50' } });
-        fireEvent.change(defenseInputs[0], { target: { value: '0' } });
-        // Config 2 ("Ship 2"): effectively unkillable — outlasts the whole round window.
-        fireEvent.change(hpInputs[1], { target: { value: '999999999' } });
-        fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+        // Config 1 ("Ship 1"): effectively unkillable — outlasts the whole round window. FIRST, so
+        // "marks the last config" and "marks the best config" cannot be the same answer.
+        fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
+        fireEvent.change(defenseInputs[0], { target: { value: '20000' } });
+        // Config 2 ("Ship 2"): fragile — dies to the first hit.
+        fireEvent.change(hpInputs[1], { target: { value: '50' } });
+        fireEvent.change(defenseInputs[1], { target: { value: '0' } });
 
         // Add one enemy attacker so there is pressure to measure at all.
         fireEvent.click(screen.getByText(/Combat Settings/i));

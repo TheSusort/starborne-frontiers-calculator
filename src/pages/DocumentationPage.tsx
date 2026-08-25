@@ -2680,33 +2680,69 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Enemy Attackers, Allies &amp; Rounds:
                                         </span>{' '}
-                                        Under Combat Settings, build the enemy team bombarding the
-                                        ship &mdash; real ships (their parsed skills fire for real)
-                                        or quick manual attack/defense lines &mdash; and optionally
-                                        add supporting allies (healers, protectors) on the
-                                        ship&apos;s own side. Both rosters and the length of the
-                                        fight (1&ndash;50 rounds) are shared across every ship
-                                        configuration you are comparing, so swapping in a different
+                                        The page has three separate collapsible cards.{' '}
+                                        <span className="font-semibold">Enemy Attackers</span> is
+                                        where you build the team bombarding the ship &mdash; real
+                                        ships (their parsed skills fire for real) or quick manual
+                                        attack/defense lines.{' '}
+                                        <span className="font-semibold">Supporting Allies</span> is
+                                        its own card, for healers and protectors on the ship&apos;s
+                                        own side.{' '}
+                                        <span className="font-semibold">Combat Settings</span> holds
+                                        only the length of the fight (1&ndash;50 rounds) and the
+                                        buffs shared by every configuration. All three apply to
+                                        every ship you are comparing, so swapping in a different
                                         build tests it against the exact same pressure.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">Measured EHP:</span> the raw
-                                        damage thrown at the ship across the simulated window,
-                                        before its Defense reduced any of it. This is the same
-                                        quantity the Effective HP formula estimates, so more Defense
-                                        raises it and the two can be compared directly — where they
-                                        disagree, the measured figure is the one that saw the real
-                                        shields, self-buffs and enemy pressure.
+                                        <span className="text-primary">Rounds survived</span> is the
+                                        first headline number: how long the ship lasted, and whether
+                                        it was destroyed or was still standing when the window ran
+                                        out.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">Rounds survived</span> sits
-                                        beside it, and is part of reading the number rather than
-                                        extra detail. Measured EHP only grows when the ship lives
-                                        another round, so it moves in whole rounds: two ships that
-                                        die on the same round show the same figure even if one is
-                                        slightly tankier. For a ship that survives the whole window
-                                        the figure is a lower bound, not a limit — it is everything
-                                        that was thrown, so it stops rising once the window ends.
+                                        <span className="text-primary">Damage absorbed:</span>{' '}
+                                        everything thrown at the ship across the window, summed
+                                        across every channel &mdash; direct hits, damage over time,
+                                        bombs, detonations and reflected damage &mdash; measured
+                                        BEFORE the ship reduced any of it. Every reduction the ship
+                                        itself applies is deliberately left out: Defense mitigation,
+                                        its own Inc. Damage Down, squad-leader incoming protections,
+                                        gear-sourced damage reduction and block procs. Shields and
+                                        Barrier still count, because those pools eat damage that
+                                        arrived rather than reducing what was thrown. So a defensive
+                                        ability never lowers this number &mdash; it raises it, by
+                                        keeping the ship alive for more rounds of incoming fire.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        Damage absorbed only grows when the ship lives another
+                                        round, so it moves in whole rounds: two ships that die on
+                                        the same round show the same figure even if one is slightly
+                                        tankier. That is why rounds survived sits above it &mdash;
+                                        it is part of reading the number, not extra detail.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            On a ship that SURVIVES, this number describes the
+                                            attackers, not the ship.
+                                        </span>{' '}
+                                        Nothing killed it, so the figure is simply everything the
+                                        enemy team managed to throw in the window &mdash; and two
+                                        survivors under the same enemies report the same total
+                                        however differently tanky they are. Read as a comparison,
+                                        that tie means nothing. The fix is to raise enemy attack,
+                                        add attackers, or extend the rounds until the ships actually
+                                        die; only then does the figure measure the ship. For a
+                                        survivor it is a lower bound on durability, never a limit.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Theoretical EHP</span> is the
+                                        third figure, and the old static one: an estimate computed
+                                        from hangar stats (HP and Defense only), not a measurement.
+                                        No enemy ever fires at it, and it cannot see shields,
+                                        Barrier, self-repair or conditionally-gated buffs. It is
+                                        shown so you can compare, but where the two disagree the
+                                        measured pair is the one that saw the real fight.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> beneath

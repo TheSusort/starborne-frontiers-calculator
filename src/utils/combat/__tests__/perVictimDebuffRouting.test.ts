@@ -102,6 +102,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
                   incomingDamageModifier: number;
+                  victimSideIncomingModifier: number;
               })
             | undefined;
 
@@ -151,6 +152,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
         expect(captured!('enemy-front')).toEqual({
             enemyDefenseModifier: -50,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
 
         // enemy-back was NOT targeted → its per-victim ability store is empty.
@@ -158,6 +160,7 @@ describe('B1 Task 3 — per-victim ability-debuff routing (perVictimDebuffRoutin
         expect(captured!('enemy-back')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
     });
 });

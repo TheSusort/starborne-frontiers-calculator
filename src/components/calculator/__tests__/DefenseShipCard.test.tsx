@@ -81,7 +81,7 @@ describe('DefenseShipCard', () => {
         mockGetShipById.mockReturnValue(undefined);
     });
 
-    // #358 ADDENDUM 2 — TWO AXES ON ONE CARD. `measuredEHP` is RAW damage THROWN at the ship;
+    // #358 ADDENDUM 2 — TWO AXES ON ONE CARD. `damageAbsorbed` is RAW damage THROWN at the ship;
     // `breakdown.gross` and its four terms are what ARRIVED, after defence mitigated it. They do
     // NOT sum, so every fixture below keeps them DISTINCT (raw strictly above gross). A fixture
     // where the two are equal — as this one used to be — cannot tell the axes apart and would
@@ -89,7 +89,7 @@ describe('DefenseShipCard', () => {
     it('marks a survivor distinctly and shows the raw figure with its rounds beside it', () => {
         renderCard({
             result: {
-                measuredEHP: 80_000, // THROWN
+                damageAbsorbed: 80_000, // THROWN
                 survived: true,
                 elapsedRounds: 3,
                 // Every number distinct so `getByText` proves the row it claims to: raw 80,000 vs
@@ -104,20 +104,20 @@ describe('DefenseShipCard', () => {
                 rounds: [],
             },
         });
-        expect(screen.getByText(/Measured EHP/i)).toBeInTheDocument();
+        expect(screen.getByText(/Damage absorbed/i)).toBeInTheDocument();
         expect(screen.getByText('80,000')).toBeInTheDocument();
         // ROUNDS BESIDE THE FIGURE (owner ruling). Required, not decorative: the metric only moves
         // when the round of death moves, so the rounds are what separate two equal headlines.
         expect(screen.getByText(/over 3 rounds/i)).toBeInTheDocument();
         // A survivor's number is a lower bound, never a death threshold.
-        expect(screen.getByText(/Survived/i)).toBeInTheDocument();
+        expect(screen.getByText(/Survived all 3 rounds/i)).toBeInTheDocument();
         expect(screen.getByText(/lower bound, not a limit/i)).toBeInTheDocument();
     });
 
     it('labels the breakdown axis so the raw headline is not read as its total', () => {
         renderCard({
             result: {
-                measuredEHP: 80_000,
+                damageAbsorbed: 80_000,
                 survived: true,
                 elapsedRounds: 3,
                 breakdown: {
@@ -134,13 +134,78 @@ describe('DefenseShipCard', () => {
         // without it a reader sums 25,000 + 5,000 against an 80,000 headline and calls it a bug.
         expect(screen.getByText(/Reached the ship \(after defence\)/i)).toBeInTheDocument();
         expect(screen.getByText('30,000')).toBeInTheDocument();
-        expect(screen.getByText(/raw damage withstood/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(/everything thrown at it, before its own reductions/i)
+        ).toBeInTheDocument();
+    });
+
+    // #358 ADDENDUM 3 (C1) — THE HEADLINE ORDER. Rounds survived first, damage absorbed second,
+    // the static estimate third and named for what it is. Asserted on DOCUMENT ORDER, not mere
+    // presence: three labels that all exist somewhere on the card is exactly the state this
+    // requirement was written to change.
+    it('renders the three headline numbers in order: rounds, damage absorbed, theoretical EHP', () => {
+        const { container } = renderCard({
+            result: {
+                damageAbsorbed: 80_000,
+                survived: true,
+                elapsedRounds: 3,
+                breakdown: {
+                    toHp: 25_000,
+                    toShield: 5_000,
+                    toBarrier: 0,
+                    toConversion: 0,
+                    gross: 30_000,
+                },
+                rounds: [],
+            },
+        });
+        const text = container.textContent ?? '';
+        const rounds = text.indexOf('Rounds survived');
+        const absorbed = text.indexOf('Damage absorbed');
+        const theoretical = text.indexOf('Theoretical EHP');
+        expect(rounds).toBeGreaterThanOrEqual(0);
+        expect(absorbed).toBeGreaterThan(rounds);
+        expect(theoretical).toBeGreaterThan(absorbed);
+        // "Measured EHP" is RETIRED — the name is what invited the post-mitigation reading.
+        expect(text).not.toContain('Measured EHP');
+        // …and the static figure says it is an estimate, not a measurement.
+        expect(
+            screen.getByText(/An estimate from hangar stats, not a measurement/i)
+        ).toBeInTheDocument();
+    });
+
+    // #358 ADDENDUM 3 (Part B, finding 6) — THE BREAKDOWN ROWS ARE ROUNDED. They rendered through a
+    // bare `.toLocaleString()` while the headline was `Math.round`-ed, so a real fight printed
+    // "To hull 24,999.667" directly under a clean "30,000". Fractional fixture values, because an
+    // integer one cannot tell a rounded render from an unrounded one.
+    it('rounds every breakdown row, not just the headline', () => {
+        renderCard({
+            result: {
+                damageAbsorbed: 80_000.4,
+                survived: true,
+                elapsedRounds: 3,
+                breakdown: {
+                    toHp: 24_999.667,
+                    toShield: 5_000.333,
+                    toBarrier: 1_200.5,
+                    toConversion: 800.25,
+                    gross: 32_000.75,
+                },
+                rounds: [],
+            },
+        });
+        for (const shown of ['25,000', '5,000', '1,201', '800', '32,001', '80,000']) {
+            expect(screen.getByText(shown)).toBeInTheDocument();
+        }
+        // The explicit negative: no row may still print its fraction.
+        expect(screen.queryByText(/24,999\.667/)).not.toBeInTheDocument();
+        expect(screen.queryByText(/5,000\.333/)).not.toBeInTheDocument();
     });
 
     it('names the round a casualty died in', () => {
         renderCard({
             result: {
-                measuredEHP: 300_000, // THROWN
+                damageAbsorbed: 300_000, // THROWN
                 survived: false,
                 destroyedRound: 2,
                 elapsedRounds: 2,
@@ -157,9 +222,9 @@ describe('DefenseShipCard', () => {
         expect(screen.getByText(/Destroyed round 2/i)).toBeInTheDocument();
     });
 
-    it('does not render the measured-EHP block when no result is provided', () => {
+    it('does not render the damage-absorbed block when no result is provided', () => {
         renderCard();
-        expect(screen.queryByText(/Measured EHP/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/Damage absorbed/i)).not.toBeInTheDocument();
     });
 
     it('does not show a Passive row for a ship with no passive skill text', () => {

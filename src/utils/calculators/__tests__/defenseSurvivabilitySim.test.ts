@@ -55,13 +55,13 @@ describe('simulateDefenseSurvivability', () => {
     // A SHIELDED fixture is mandatory here. On an unshielded run shieldAbsorbed is 0, so the
     // correct formula and the double-counting one agree and the bug ships green.
     //
-    // #358 ADDENDUM 2 — WHY `measuredEHP === gross` STILL HOLDS HERE. `measuredEHP` now reads the
+    // #358 ADDENDUM 2 — WHY `damageAbsorbed === gross` STILL HOLDS HERE. `damageAbsorbed` now reads the
     // RAW (pre-defence) axis while `gross` stays post-mitigation, so the two coincide only at zero
     // effective defence — which `DEFENDER.defence: 0` guarantees for this fixture. The equality is
     // therefore still the right assertion for the double-count trap it was written for, but it is
     // NOT a statement that the two axes are the same thing. See the addendum-2 block at the bottom
     // of this file for the axis separation; add defence here and this line must change.
-    it('measured EHP is GROSS intake — it does NOT add shield/barrier absorption on top', () => {
+    it('damage absorbed is GROSS intake — it does NOT add shield/barrier absorption on top', () => {
         idCounter = 0;
         const result = simulateDefenseSurvivability(
             BASE({
@@ -87,9 +87,9 @@ describe('simulateDefenseSurvivability', () => {
         // The fixture must actually exercise the trap, or this test proves nothing.
         expect(absorbed).toBeGreaterThan(0);
 
-        expect(result.measuredEHP).toBe(gross);
+        expect(result.damageAbsorbed).toBe(gross);
         // The explicit negative: the inflated formula must NOT be what we report.
-        expect(result.measuredEHP).not.toBe(gross + absorbed);
+        expect(result.damageAbsorbed).not.toBe(gross + absorbed);
     });
 
     // ── SURVIVED VS DESTROYED, BOTH WAYS ─────────────────────────────────────
@@ -103,7 +103,7 @@ describe('simulateDefenseSurvivability', () => {
         expect(result.destroyedRound).toBeUndefined();
         // 3 rounds x 1,000 THROWN. Unchanged by addendum 2 only because this fixture's defence is
         // 0 — with defence the raw figure would stay 3,000 while the post-mitigation one fell.
-        expect(result.measuredEHP).toBe(3_000);
+        expect(result.damageAbsorbed).toBe(3_000);
         expect(result.elapsedRounds).toBe(3);
     });
 
@@ -117,7 +117,7 @@ describe('simulateDefenseSurvivability', () => {
         expect(result.destroyedRound).toBe(2);
         // EHP counts only the rounds that actually elapsed, not the configured window.
         // 2 rounds x 60,000 THROWN (addendum 2's raw axis; identical here at defence 0).
-        expect(result.measuredEHP).toBe(120_000);
+        expect(result.damageAbsorbed).toBe(120_000);
     });
 
     // ── BREAKDOWN RECONCILED AGAINST AN INDEPENDENT SIGNAL ───────────────────
@@ -165,7 +165,7 @@ describe('simulateDefenseSurvivability', () => {
     it('no enemies: zero pressure, survived, EHP 0', () => {
         idCounter = 0;
         const result = simulateDefenseSurvivability(BASE({ rounds: 3, enemies: [] }));
-        expect(result.measuredEHP).toBe(0);
+        expect(result.damageAbsorbed).toBe(0);
         expect(result.survived).toBe(true);
         expect(result.breakdown.gross).toBe(0);
     });
@@ -434,16 +434,16 @@ describe('simulateDefenseSurvivability', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// #358 ADDENDUM 2 — `measuredEHP` counts RAW damage withstood
+// #358 ADDENDUM 2 — `damageAbsorbed` counts RAW damage withstood
 //
-// THE DESIGN ERROR THIS BLOCK EXISTS TO FENCE. `measuredEHP` used to be Σ `incomingDamage`, which
+// THE DESIGN ERROR THIS BLOCK EXISTS TO FENCE. `damageAbsorbed` used to be Σ `incomingDamage`, which
 // the engine records POST defence mitigation (the funnel's own doc: "the DEFENCE mitigation factor
 // the CALLER already folded into `rawDamage`"). So it counted damage that got THROUGH, and a
 // tankier ship reported a SMALLER number — while the page ranks highest-first. The ranking was
 // inverted. Measured live on Isha: 1,408 against a static-formula 543,950.
 //
 // WHY EVERY PROPERTY BELOW IS PINNED HERE. Before this block, NOTHING in the repo gated the
-// direction. Measured, not assumed: every pre-existing `measuredEHP` assertion in this file sits on
+// direction. Measured, not assumed: every pre-existing `damageAbsorbed` assertion in this file sits on
 // a `defence: 0` fixture (where raw and post coincide exactly), and the two fixtures that DO carry
 // defence assert on `breakdown.gross`, which stays on the post-mitigation axis by design. Applying
 // the whole fix moved ZERO assertions in this file and ZERO in
@@ -454,7 +454,7 @@ describe('simulateDefenseSurvivability', () => {
 // break that identity, so the headline and the breakdown are on DIFFERENT axes and must never be
 // presented as if they summed.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
+describe('damageAbsorbed is RAW damage withstood (#358 addendum 2)', () => {
     /** A defence sweep on one fixture shape. `rounds`/`attack` decide which regime we are in. */
     const sweep = (opts: {
         rounds: number;
@@ -481,7 +481,7 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
     //
     // A magnitude-only assertion cannot catch a re-inversion — the number still MOVES when the sign
     // flips. This is an ordered chain of strict inequalities, so only the direction satisfies it.
-    it('DIRECTION: more defence RAISES measured EHP (casualty regime)', () => {
+    it('DIRECTION (channel 1/5 — defence mitigation): more defence RAISES damage absorbed', () => {
         const CASUALTY = { rounds: 30, attack: 60_000 };
         const d0 = sweep({ ...CASUALTY, defence: 0 });
         const d5k = sweep({ ...CASUALTY, defence: 5_000 });
@@ -494,15 +494,15 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
         expect(d20k.survived).toBe(false);
 
         // More defence → more rounds survived → more raw damage withstood.
-        expect(d5k.measuredEHP).toBeGreaterThan(d0.measuredEHP);
-        expect(d20k.measuredEHP).toBeGreaterThan(d5k.measuredEHP);
+        expect(d5k.damageAbsorbed).toBeGreaterThan(d0.damageAbsorbed);
+        expect(d20k.damageAbsorbed).toBeGreaterThan(d5k.damageAbsorbed);
         expect(d5k.elapsedRounds).toBeGreaterThan(d0.elapsedRounds);
         expect(d20k.elapsedRounds).toBeGreaterThan(d5k.elapsedRounds);
 
         // Re-measured, not loosened. 60,000 thrown per round × rounds survived.
-        expect(d0.measuredEHP).toBe(120_000); // 2 rounds
-        expect(d5k.measuredEHP).toBe(300_000); // 5 rounds
-        expect(d20k.measuredEHP).toBe(720_000); // 12 rounds
+        expect(d0.damageAbsorbed).toBe(120_000); // 2 rounds
+        expect(d5k.damageAbsorbed).toBe(300_000); // 5 rounds
+        expect(d20k.damageAbsorbed).toBe(720_000); // 12 rounds
 
         // THE OLD METRIC, FOR CONTRAST — and the reason this fix exists. The post-mitigation axis
         // is pinned at roughly the ship's HP no matter how tanky it is, so it carried almost no
@@ -534,7 +534,7 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
         expect(runs[2].breakdown.gross).toBeLessThan(runs[0].breakdown.gross);
 
         // 3 rounds × 20,000 thrown, whatever the defender's defence.
-        for (const r of runs) expect(r.measuredEHP).toBe(60_000);
+        for (const r of runs) expect(r.damageAbsorbed).toBe(60_000);
     });
 
     // ── THE ROUND QUANTUM ─────────────────────────────────────────────────────────────────────
@@ -569,7 +569,7 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
         // The buff IS live — it visibly reduces what got through — and yet both die on round 5.
         expect(tankier.breakdown.gross).toBeLessThan(plain.breakdown.gross);
         expect(tankier.destroyedRound).toBe(plain.destroyedRound);
-        expect(tankier.measuredEHP).toBe(plain.measuredEHP);
+        expect(tankier.damageAbsorbed).toBe(plain.damageAbsorbed);
     });
 
     // ── RAW >= POST, WITH THE EXACT EQUALITY CASE (spec B3, mandatory) ────────────────────────
@@ -577,19 +577,19 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
         // Strictly greater wherever defence bites…
         for (const defence of [1_000, 5_000, 20_000]) {
             const r = sweep({ rounds: 3, attack: 20_000, defence });
-            expect(r.measuredEHP).toBeGreaterThan(r.breakdown.gross);
+            expect(r.damageAbsorbed).toBeGreaterThan(r.breakdown.gross);
         }
         // …and EXACTLY equal at zero effective defence. Not `toBeCloseTo`: with nothing folded, the
         // funnel books the identical value on both axes.
         const undefended = sweep({ rounds: 3, attack: 20_000, defence: 0 });
         expect(undefended.breakdown.gross).toBeGreaterThan(0);
-        expect(undefended.measuredEHP).toBe(undefended.breakdown.gross);
+        expect(undefended.damageAbsorbed).toBe(undefended.breakdown.gross);
     });
 
     // ── THE BREAKDOWN STAYS ON THE POST-MITIGATION AXIS (spec B3) ─────────────────────────────
     it('the breakdown still partitions POST-mitigation intake, not the raw headline', () => {
         const r = sweep({ rounds: 3, attack: 20_000, defence: 5_000 });
-        // The four terms close over `gross`, NOT over `measuredEHP` — the identity that would break
+        // The four terms close over `gross`, NOT over `damageAbsorbed` — the identity that would break
         // if a well-meaning change re-based the breakdown on the raw axis to make the card "add up".
         expect(
             r.breakdown.toHp +
@@ -598,6 +598,404 @@ describe('measuredEHP is RAW damage withstood (#358 addendum 2)', () => {
                 r.breakdown.toConversion
         ).toBeCloseTo(r.breakdown.gross, 6);
         // And the headline is on the OTHER axis — deliberately not equal to that sum.
-        expect(r.measuredEHP).toBeGreaterThan(r.breakdown.gross);
+        expect(r.damageAbsorbed).toBeGreaterThan(r.breakdown.gross);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// #358 ADDENDUM 3 (C2/C5) — DAMAGE ABSORBED, DEFINED IN FULL
+//
+// WHY THIS BLOCK EXISTS AND THE ADDENDUM-2 BLOCK ABOVE WAS NOT ENOUGH. This is the THIRD iteration
+// on this metric. Each of the previous two fixed exactly ONE mitigation channel and left the
+// others, because nobody had written the definition down in full. The addendum-2 direction test
+// swept only DEFENCE — so when the fix left the victim's own `Inc. Damage Down` folded into the
+// pre-mitigation figure, a defender carrying it survived an EXTRA round and reported a LOWER
+// number (252,000 over 6 rounds against a plain defender's 300,000 over 5). That inversion passed
+// a full review and a green suite.
+//
+// C5's answer, and the shape of this block: **a direction arm PER VICTIM-SIDE CHANNEL**, each one
+// proving that MORE reduction never yields LESS damage absorbed, plus **a presence arm per damage
+// channel** proving DoT / bomb / detonation / reflect are actually IN the total rather than
+// silently zero. A channel with no arm here is a channel that can invert again unnoticed.
+//
+// C2, for reference:
+//   IN  — the attack as thrown: attacker outgoing buffs, crit, affinity, and enemy-APPLIED
+//         amplification ('Out. Damage Up', 'Exposed'). Shield and Barrier absorption still count:
+//         those pools eat damage that ARRIVED, they do not reduce what was thrown.
+//   OUT — every victim-side reduction: defence mitigation, the ship's own `Inc. Damage Down`
+//         family, `preFightIncoming`, `equipReductionPct`, and the incoming-block proc.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('damage absorbed — per-channel direction and presence (#358 addendum 3, C5)', () => {
+    /** A passive slot: the incoming-* families are collected from PASSIVE slots only
+     *  (`incomingAbilitiesById` in engine.ts filters `slot.slot !== 'passive'`). An arm that puts
+     *  one of these in the active slot measures NOTHING — every figure comes back equal to the
+     *  plain run and the test passes for the wrong reason. */
+    const passives = (abilities: Ability[]): ShipSkills => ({
+        slots: [{ slot: 'passive', abilities }],
+    });
+
+    const run = (opts: {
+        rounds: number;
+        attack: number;
+        defence: number;
+        shipSkills?: ShipSkills;
+        enemyAbilities?: Ability[];
+        defenderOverrides?: Partial<DefenderStats>;
+    }) => {
+        idCounter = 0;
+        const enemy = {
+            ...attacker(opts.attack),
+            ...(opts.enemyAbilities
+                ? {
+                      shipSkills: {
+                          slots: [{ slot: 'active' as const, abilities: opts.enemyAbilities }],
+                      },
+                  }
+                : {}),
+        };
+        return simulateDefenseSurvivability(
+            BASE({
+                rounds: opts.rounds,
+                defender: { ...DEFENDER, defence: opts.defence, ...opts.defenderOverrides },
+                enemies: [enemy],
+                shipSkills: opts.shipSkills ?? { slots: [] },
+            })
+        );
+    };
+
+    // The CASUALTY regime, where a victim-side reduction can show up at all: it buys ROUNDS, and
+    // rounds are what raise the figure. 100,000 HP, 60,000/round, defence 5,000 → dies on round 5
+    // and absorbs 300,000. Every direction arm below sweeps against exactly this baseline.
+    const CASUALTY = { rounds: 30, attack: 60_000, defence: 5_000 };
+    const PLAIN_ABSORBED = 300_000;
+    const PLAIN_ROUNDS = 5;
+
+    it('BASELINE: the unprotected casualty every direction arm below is measured against', () => {
+        const plain = run(CASUALTY);
+        expect(plain.survived).toBe(false);
+        expect(plain.elapsedRounds).toBe(PLAIN_ROUNDS);
+        expect(plain.damageAbsorbed).toBe(PLAIN_ABSORBED);
+    });
+
+    // ── CHANNEL 2/5: the victim's OWN `Inc. Damage Down` family (`selfIncoming`) ───────────────
+    //
+    // THE EXACT DEFECT C3 NAMES. Before the mixed-channel split, this arm read 252,000 over 6
+    // rounds against the plain 300,000 over 5 — MORE protection, MORE rounds, LESS reported. The
+    // `elapsedRounds` assertion is what makes the arm honest: it proves the buff is live and
+    // really is buying survival, so a figure that fell could not be excused as "the buff did
+    // nothing".
+    it('DIRECTION (channel 2/5 — the ship’s own Inc. Damage Down): more protection, MORE absorbed', () => {
+        const warded = run({
+            ...CASUALTY,
+            shipSkills: passives([
+                ab({
+                    type: 'buff',
+                    target: 'self',
+                    config: {
+                        type: 'buff',
+                        buffName: 'Inc. Damage Down II',
+                        parsedEffects: { incomingDamage: -30 },
+                        stacks: 1,
+                        isStackable: false,
+                        duration: 'recurring',
+                    },
+                }),
+            ]),
+        });
+        // LIVENESS: the buff bought a round and visibly cut what got through.
+        expect(warded.elapsedRounds).toBeGreaterThan(PLAIN_ROUNDS);
+        expect(warded.breakdown.gross).toBeLessThan(run(CASUALTY).breakdown.gross);
+        // DIRECTION, and the pinned figure: 6 rounds × 60,000 thrown.
+        expect(warded.damageAbsorbed).toBeGreaterThan(PLAIN_ABSORBED);
+        expect(warded.damageAbsorbed).toBe(360_000);
+    });
+
+    // ── CHANNEL 3/5: `preFightIncoming` (squad-leader incoming protections) ────────────────────
+    //
+    // NOT REACHABLE FROM THIS BOUNDARY — `DefenseSimulationInput` exposes no pre-fight block — so
+    // it is fenced where it IS reachable, and the two halves together are the arm:
+    //   • `preFightModifiersEngine.test.ts` proves the engine puts `preFight.incomingDamage` into
+    //     `victimSideIncomingModifier`, the field the split travels on;
+    //   • `victimDamage.test.ts`'s split block proves a value in that field lowers `damage` and
+    //     leaves `preMitigation` alone.
+    // `selfIncoming` and `preFightIncoming` are summed into that ONE field by
+    // `victimIncomingModifiers`, so channel 2's engine-level arm above covers the summed term's
+    // behaviour end to end and only the SOURCING differs. Kept as a comment rather than a skipped
+    // test: a `.skip` reads as coverage in the count while proving nothing.
+
+    // ── CHANNEL 4/5: `equipReductionPct` (D-PR3 gear-sourced incoming reduction) ───────────────
+    it('DIRECTION (channel 4/5 — equipReductionPct): a flat incoming reduction RAISES absorbed', () => {
+        const geared = run({
+            ...CASUALTY,
+            shipSkills: passives([
+                ab({
+                    type: 'incoming-reduction',
+                    target: 'self',
+                    config: {
+                        type: 'incoming-reduction',
+                        scope: 'direct',
+                        condition: 'always',
+                        pct: 30,
+                        critFamily: false,
+                    },
+                }),
+            ]),
+        });
+        expect(geared.elapsedRounds).toBeGreaterThan(PLAIN_ROUNDS);
+        expect(geared.breakdown.gross).toBeLessThan(run(CASUALTY).breakdown.gross);
+        expect(geared.damageAbsorbed).toBeGreaterThan(PLAIN_ABSORBED);
+        expect(geared.damageAbsorbed).toBe(360_000);
+    });
+
+    // ── CHANNEL 5/5: the incoming-BLOCK proc (`damageRaw *= (1 - blocked)`) ────────────────────
+    //
+    // This channel had NO test anywhere (carried finding 7): deleting the raw-axis scaling left the
+    // whole suite green. It is now DELETED BY DESIGN — a blocked hit was still thrown — and this
+    // arm is what says so. `procChance: 1` + `blockPct: 0.5` makes the block deterministic, so the
+    // pinned figure is not at the mercy of the rate gate.
+    it('DIRECTION (channel 5/5 — the incoming-block proc): a blocked hit still counts as thrown', () => {
+        const blocking = run({
+            ...CASUALTY,
+            shipSkills: passives([
+                ab({
+                    type: 'incoming-block',
+                    target: 'self',
+                    config: {
+                        type: 'incoming-block',
+                        condition: 'always',
+                        procChance: 1,
+                        blockPct: 0.5,
+                        oncePerRound: false,
+                    },
+                }),
+            ]),
+        });
+        expect(blocking.elapsedRounds).toBeGreaterThan(PLAIN_ROUNDS);
+        expect(blocking.breakdown.gross).toBeGreaterThan(0);
+        expect(blocking.damageAbsorbed).toBeGreaterThan(PLAIN_ABSORBED);
+        // 9 rounds × 60,000 thrown in full. Restore `damageRaw *= (1 - blocked)` and this halves.
+        expect(blocking.damageAbsorbed).toBe(540_000);
+    });
+
+    // ── CHANNEL 6: the DoT-reduction channel (Vortex Veil) ─────────────────────────────────────
+    //
+    // ⚠️ NOT IN C2'S EXPLICIT "OUT" LIST — a deliberate extension, flagged rather than smuggled.
+    // C2's list names `equipReductionPct` (the DIRECT-damage half of D-PR3) but not
+    // `incomingDotReductionPct` (its DoT half). Both are the defender reducing what it takes, and
+    // C2's governing sentence is "measured BEFORE the defender reduces it", so leaving this one in
+    // would have re-created the exact shape this addendum exists to end: a defensive ability
+    // lowering its own owner's headline, on the one channel nobody had listed. Stripped, and
+    // fenced here so the decision is visible instead of implicit.
+    it('DIRECTION (channel 6 — Vortex Veil DoT reduction, an extension beyond C2’s list)', () => {
+        const dotEnemy = [
+            ab({
+                type: 'dot',
+                target: 'enemy',
+                config: { type: 'dot', dotType: 'inferno', tier: 45, stacks: 3, duration: 5 },
+            }),
+        ];
+        const opts = {
+            rounds: 4,
+            attack: 10_000,
+            defence: 5_000,
+            enemyAbilities: dotEnemy,
+            defenderOverrides: { security: 0 },
+        };
+        const plain = run(opts);
+        const veiled = run({
+            ...opts,
+            shipSkills: passives([
+                ab({
+                    type: 'incoming-reduction',
+                    target: 'self',
+                    config: {
+                        type: 'incoming-reduction',
+                        scope: 'dot',
+                        condition: 'always',
+                        pct: 50,
+                        critFamily: false,
+                    },
+                }),
+            ]),
+        });
+        // LIVENESS: the veil really halves what ARRIVES…
+        expect(plain.breakdown.gross).toBe(81_000);
+        expect(veiled.breakdown.gross).toBe(40_500);
+        // …and is invisible on the thrown axis. Equality, not `>=`: over a fixed survivor window
+        // the same DoT is applied either way, so the thrown total is identical.
+        expect(veiled.damageAbsorbed).toBe(plain.damageAbsorbed);
+        expect(veiled.damageAbsorbed).toBe(81_000);
+    });
+
+    // ── CHANNEL 7: the DoT-TRANSFORM deferral (C4 — Voron/Orel, Hit Mitigation) ────────────────
+    //
+    // Was mis-filed "corpus-inert". It is reachable from the live page, and it was the single
+    // largest distortion of the metric: MEASURED, a Voron defender at 5,000 defence reported
+    // 24,993 where a plain defender reported 100,000 — a purely DEFENSIVE ability quartering its
+    // owner's headline. See `convertHitToSelfDot` for the two wrong fixes and why the raw axis is
+    // now booked at THROW time.
+    //
+    // The gross assertions are the liveness proof, and they must stay: they are the only thing in
+    // this arm that can tell "the transform fired and was accounted for" from "the transform never
+    // fired at all" — both of which leave `damageAbsorbed` at 100,000.
+    it('CHANNEL 7 — a Voron-style DoT transform does not shrink the figure (C4)', () => {
+        const opts = { rounds: 5, attack: 20_000, defence: 5_000 };
+        const plain = run(opts);
+        const voron = run({
+            ...opts,
+            shipSkills: passives([
+                ab({
+                    type: 'transform-incoming-to-dot',
+                    target: 'self',
+                    trigger: 'on-attacked',
+                    config: { type: 'transform-incoming-to-dot', turns: 3, condition: 'always' },
+                }),
+            ]),
+        });
+        // LIVENESS: the transform fired — it deferred damage past the end of the window, so far
+        // less ARRIVED (24,993 against the plain run's 41,655).
+        expect(plain.breakdown.gross).toBe(41_655);
+        expect(voron.breakdown.gross).toBe(24_993);
+        // DIRECTION: 5 rounds × 20,000 were thrown at both ships, and both report it.
+        expect(voron.damageAbsorbed).toBe(plain.damageAbsorbed);
+        expect(voron.damageAbsorbed).toBe(100_000);
+    });
+
+    // ── PRESENCE: MIX THE CHANNELS (C5) ───────────────────────────────────────────────────────
+    //
+    // "Those channels fold no defence today, so they enter at face value — but they must be
+    // PRESENT in the total, not silently zero." Each arm ISOLATES one channel (an enemy that deals
+    // no direct damage at all), so a non-zero total can only have come from that channel.
+    it('PRESENCE: DoT ticks are in the total', () => {
+        const r = run({
+            rounds: 4,
+            attack: 10_000,
+            defence: 5_000,
+            defenderOverrides: { security: 0 },
+            enemyAbilities: [
+                ab({
+                    type: 'dot',
+                    target: 'enemy',
+                    config: { type: 'dot', dotType: 'inferno', tier: 45, stacks: 3, duration: 5 },
+                }),
+            ],
+        });
+        expect(r.damageAbsorbed).toBe(81_000);
+        // A DoT folds no defence, so it books the identical amount on both axes. Asserted rather
+        // than assumed: if a DoT ever started folding defence, this arm must be revisited, not the
+        // headline.
+        expect(r.damageAbsorbed).toBe(r.breakdown.gross);
+    });
+
+    it('PRESENCE: bomb detonations are in the total', () => {
+        const r = run({
+            rounds: 6,
+            attack: 10_000,
+            defence: 5_000,
+            defenderOverrides: { security: 0 },
+            enemyAbilities: [
+                ab({
+                    type: 'dot',
+                    target: 'enemy',
+                    config: { type: 'dot', dotType: 'bomb', tier: 100, stacks: 2, duration: 2 },
+                }),
+            ],
+        });
+        expect(r.damageAbsorbed).toBe(80_000);
+        expect(r.damageAbsorbed).toBe(r.breakdown.gross);
+    });
+
+    it('PRESENCE: skill detonation adds to the total', () => {
+        const basic = () =>
+            ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
+        const dot = () =>
+            ab({
+                type: 'dot',
+                target: 'enemy',
+                config: { type: 'dot', dotType: 'inferno', tier: 45, stacks: 3, duration: 5 },
+            });
+        const opts = {
+            rounds: 6,
+            attack: 10_000,
+            defence: 5_000,
+            defenderOverrides: { security: 0 },
+        };
+        // A DIFFERENTIAL, not a bare non-zero: an inferno DoT is already in both runs, so only the
+        // detonation slice can explain the gap. A `> 0` assertion on the second run alone would
+        // have been satisfied by the DoT and proved nothing about detonation.
+        const noDetonate = run({ ...opts, enemyAbilities: [basic(), dot()] });
+        const detonating = run({
+            ...opts,
+            enemyAbilities: [
+                basic(),
+                dot(),
+                ab({
+                    type: 'detonate-dot',
+                    target: 'enemy',
+                    config: { type: 'detonate-dot', dotType: 'inferno', powerPct: 300 },
+                }),
+            ],
+        });
+        expect(detonating.damageAbsorbed).toBeGreaterThan(noDetonate.damageAbsorbed);
+        expect(noDetonate.damageAbsorbed).toBe(175_000);
+        expect(detonating.damageAbsorbed).toBe(195_500);
+    });
+
+    it('PRESENCE: reflected thorns land on the thrown axis PRE-defence', () => {
+        idCounter = 0;
+        const r = simulateDefenseSurvivability(
+            BASE({
+                rounds: 4,
+                // The defender must actually SWING for thorns to come back, so unlike every other
+                // fixture in this file it carries attack and an offensive active skill.
+                defender: { ...DEFENDER, defence: 5_000, attack: 50_000 },
+                shipSkills: skills([
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 200, hits: 1 },
+                    }),
+                ]),
+                enemies: [
+                    {
+                        // attack 0: the enemy never swings, so every point below is reflect.
+                        id: 'e1',
+                        stats: {
+                            attack: 0,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 50,
+                            hp: 100_000_000,
+                            defence: 0,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'passive',
+                                    abilities: [
+                                        ab({
+                                            // Top-level type is a placeholder; the engine keys on
+                                            // config.type (see buildEquipmentAbilities REFLECT).
+                                            type: 'modifier',
+                                            target: 'self',
+                                            config: { type: 'damage-reflection', pct: 50 },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
+            })
+        );
+        // 50,000 reflected per round × 4 rounds, thrown; 20,828/round after the defender's own
+        // 5,000 defence mitigated it. The two axes being DIFFERENT is the point — reflect is one
+        // of the channels that DOES fold the recipient's defence, so booking it post-mitigation
+        // would have been invisible on a defence-0 fixture.
+        expect(r.damageAbsorbed).toBe(200_000);
+        expect(r.breakdown.gross).toBeLessThan(r.damageAbsorbed);
+        expect(r.breakdown.gross).toBe(83_312);
     });
 });

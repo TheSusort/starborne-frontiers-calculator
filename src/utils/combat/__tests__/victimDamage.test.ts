@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { victimHitDamage, AttackerDamageScalars, VictimDefenseProfile } from '../victimDamage';
+import {
+    victimHitDamage,
+    victimHitDamageParts,
+    AttackerDamageScalars,
+    VictimDefenseProfile,
+} from '../victimDamage';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { computeAffinityModifiers } from '../../calculators/affinityUtils';
 
@@ -204,5 +209,127 @@ describe('victimHitDamage', () => {
         expect(disadvantage).toBeLessThan(neutral);
         expect(advantage).toBeCloseTo(neutral * 1.25, 10);
         expect(disadvantage).toBeCloseTo(neutral * 0.75, 10);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// #358 ADDENDUM 3 (C2/C3) — THE MIXED INCOMING CHANNEL, AT THE DAMAGE SITE
+//
+// `incomingDamageModifierPct` is a SUM of four things and only two of them are victim-side. The
+// previous iteration treated it as ATOMIC and left the whole term on the pre-mitigation axis, so a
+// defender's own 'Inc. Damage Down II' shrank its own "damage absorbed" headline — the inversion
+// this addendum exists to remove. Dropping the term wholesale would have been just as wrong: it
+// would have stripped the attacker's 'Out. Damage Up' / 'Exposed' amplification too.
+//
+// These arms fence the SPLIT itself, at the one place it is applied. They cover BOTH engine
+// contributors to `victimSideIncomingPct` at once — `selfIncoming` and `preFightIncoming` are
+// summed into the single field by `victimIncomingModifiers`, so a value here stands for either.
+// (That the engine actually PUTS `preFightIncoming` in that field is pinned separately, in
+// `preFightModifiersEngine.test.ts`.)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('victimHitDamageParts — the victim-side / attacker-side incoming split (#358 addendum 3)', () => {
+    const scalars = (over: Partial<AttackerDamageScalars> = {}): AttackerDamageScalars => ({
+        effectiveAttack: 1000,
+        multiplierPct: 100,
+        secondaryStatValue: 0,
+        hits: 1,
+        effectiveCritDamage: 0,
+        outgoingDamageBuffPct: 0,
+        incomingDamageModifierPct: 0,
+        defensePenetrationPct: 0,
+        attackerAffinity: 'antimatter',
+        ...over,
+    });
+    // Non-zero defence throughout: with defence 0 the two axes coincide and every arm below would
+    // pass on a `preMitigation` that had simply copied `damage`.
+    const victim = (over: Partial<VictimDefenseProfile> = {}): VictimDefenseProfile => ({
+        defence: 2000,
+        defenceModifierPct: 0,
+        affinity: 'thermal',
+        ...over,
+    });
+
+    it('a VICTIM-SIDE reduction lowers `damage` but leaves `preMitigation` untouched', () => {
+        const bare = victimHitDamageParts(scalars(), victim(), false, 1);
+        // −30% of the mixed channel, ALL of it victim-side (the ship's own Inc. Damage Down, or a
+        // squad leader's pre-fight protection — the engine sums them into one field).
+        const warded = victimHitDamageParts(
+            scalars(),
+            victim({ incomingDamageModifierPct: -30, victimSideIncomingPct: -30 }),
+            false,
+            1
+        );
+        // It really is a reduction on the axis that measures what ARRIVED…
+        expect(warded.damage).toBeCloseTo(bare.damage * 0.7, 10);
+        // …and it is invisible on the axis that measures what was THROWN.
+        expect(warded.preMitigation).toBeCloseTo(bare.preMitigation, 10);
+        // The fixture is live on both counts: the axes are genuinely distinct here.
+        expect(bare.preMitigation).toBeGreaterThan(bare.damage);
+    });
+
+    it('ATTACKER-APPLIED amplification raises BOTH axes — it is part of the attack as thrown', () => {
+        const bare = victimHitDamageParts(scalars(), victim(), false, 1);
+        // +40% from 'Out. Damage Up' / 'Exposed': the enemy side applied it, so `victimSideIncomingPct`
+        // stays 0 and the whole term survives onto the pre-mitigation axis.
+        const amped = victimHitDamageParts(
+            scalars(),
+            victim({ incomingDamageModifierPct: 40, victimSideIncomingPct: 0 }),
+            false,
+            1
+        );
+        expect(amped.damage).toBeCloseTo(bare.damage * 1.4, 10);
+        expect(amped.preMitigation).toBeCloseTo(bare.preMitigation * 1.4, 10);
+    });
+
+    it('a MIXED channel splits: only the victim-side half comes off the thrown axis', () => {
+        // The case that defeats every simpler implementation. +40 attacker amplification and −30
+        // victim-side protection ride the SAME summed field (+10 net).
+        //   • drop the term wholesale → preMitigation loses the +40 too (too low),
+        //   • keep the term wholesale → preMitigation keeps the −30 (too high on `damage`'s axis,
+        //     and the shipped bug),
+        //   • split it → preMitigation carries exactly +40.
+        const bare = victimHitDamageParts(scalars(), victim(), false, 1);
+        const mixed = victimHitDamageParts(
+            scalars(),
+            victim({ incomingDamageModifierPct: 10, victimSideIncomingPct: -30 }),
+            false,
+            1
+        );
+        expect(mixed.damage).toBeCloseTo(bare.damage * 1.1, 10);
+        expect(mixed.preMitigation).toBeCloseTo(bare.preMitigation * 1.4, 10);
+        // Explicit negatives for the two wrong implementations, so neither can pass this arm.
+        expect(mixed.preMitigation).not.toBeCloseTo(bare.preMitigation * 1.1, 6); // term kept whole
+        expect(mixed.preMitigation).not.toBeCloseTo(bare.preMitigation, 6); // term dropped whole
+    });
+
+    it('`equipReductionPct` is a victim-side reduction: `damage` only, never `preMitigation`', () => {
+        const bare = victimHitDamageParts(scalars(), victim(), false, 1);
+        const geared = victimHitDamageParts(scalars(), victim(), false, 1, 25);
+        expect(geared.damage).toBeCloseTo(bare.damage * 0.75, 10);
+        expect(geared.preMitigation).toBeCloseTo(bare.preMitigation, 10);
+    });
+
+    it('an absent `victimSideIncomingPct` behaves exactly as 0 (pre-addendum-3 default)', () => {
+        const args = [scalars({ effectiveCritDamage: 50 }), null, true, 0.5, 10] as const;
+        const absent = victimHitDamageParts(
+            args[0],
+            victim({ incomingDamageModifierPct: -30 }),
+            args[2],
+            args[3],
+            args[4]
+        );
+        const explicitZero = victimHitDamageParts(
+            args[0],
+            victim({ incomingDamageModifierPct: -30, victimSideIncomingPct: 0 }),
+            args[2],
+            args[3],
+            args[4]
+        );
+        // Byte-identical (toBe, not toBeCloseTo): the two must reduce to the same expression, so a
+        // fixture that omits the field cannot drift from one that sets it to zero.
+        expect(absent.damage).toBe(explicitZero.damage);
+        expect(absent.preMitigation).toBe(explicitZero.preMitigation);
+        // Liveness: the fixture is not trivially zero on either axis.
+        expect(absent.preMitigation).toBeGreaterThan(absent.damage);
     });
 });
