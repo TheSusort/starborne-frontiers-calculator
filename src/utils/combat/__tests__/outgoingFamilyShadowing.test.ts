@@ -110,10 +110,10 @@ describe('outgoingFamiliesOf', () => {
         // B1, at its root. Magnitude-only comparison (what shipped) reported -60 here; the rule is
         // tier first, so the III instance is the family's strength and the I is shadowed.
         const m = outgoingFamiliesOf([AD('I', 4), AD('III')]);
-        expect(m.get('Attack Down')?.attack.pct).toBe(-45);
-        expect(m.get('Attack Down')?.attack.tier).toBe(3);
+        expect(m.get('Attack Down')?.attack?.pct).toBe(-45);
+        expect(m.get('Attack Down')?.attack?.tier).toBe(3);
         // ...and the sum still reports what an additive fold of the same list would contain.
-        expect(m.get('Attack Down')?.attack.sum).toBe(-105);
+        expect(m.get('Attack Down')?.attack?.sum).toBe(-105);
     });
 
     it('is order-independent', () => {
@@ -146,8 +146,12 @@ describe('outgoingFamiliesOf', () => {
     it('does not let a family lend its tier to a channel it never touched', () => {
         // A zero contribution is not an instance. Were it one, this `Attack Down III` would stand
         // at tier 3 on the outgoing-damage channel and shadow a real instance there.
+        // #396 made `FamilyEntry` sparse, so "no instance" is now an ABSENT key rather than a
+        // zeroed one; `shadowedDelta` reads it through `?? NO_CONTRIBUTION`, so both encodings mean
+        // the same thing to the consumer. The entry must still EXIST (the attack channel is real).
         const m = outgoingFamiliesOf([AD('III')]);
-        expect(m.get('Attack Down')?.outgoingDamage).toEqual({ pct: 0, tier: 0, sum: 0 });
+        expect(m.get('Attack Down')?.attack).toEqual({ pct: -45, tier: 3, sum: -45 });
+        expect(m.get('Attack Down')?.outgoingDamage).toBeUndefined();
     });
 
     it('tracks the two channels of one family independently', () => {

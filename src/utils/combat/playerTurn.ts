@@ -49,8 +49,8 @@ import {
     buildActorConditionContext,
     selfBuffNamesForOwners,
     LIVE_TRIGGERS,
+    TURN_SHADOW_CHANNELS,
     type ReactiveAbility,
-    type EnemyAppliedHealModifiers,
 } from './triggers';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
@@ -88,8 +88,8 @@ import {
     expandEnemyDebuffs,
     incomingHealFactor,
     payloadToSelectedBuff,
-    shadowedOutgoingDelta,
-    type OutgoingFamilyMap,
+    shadowedDelta,
+    type FamilyMap,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
@@ -742,23 +742,23 @@ export interface PlayerTurnArgs {
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
      *  damage sites. Absent → byte-identical. */
     preFight?: PreFightCombatModifiers;
-    /** #367: enemy-APPLIED heal-channel modifiers carried by THIS acting actor in its own
-     *  per-victim enemy store (`triggers.ts`'s `victimOwnEnemyHealModifiers`), in additive
-     *  percentage points. Folded into the scheduled self-buff totals right beside `preFight`
-     *  below, which is what makes ONE fold reach all five incoming-heal readers: the self arm of
-     *  `incomingPctFor`, the HoT `holderIncomingFactor`, the two cast-heal factors, and — via the
-     *  `turnCtx` this function publishes into the engine's `lastTurnCtxByActor` — the engine's
-     *  `recipientIncomingHealPct` for every OTHER recipient. Absent → byte-identical. */
-    enemyAppliedHeal?: EnemyAppliedHealModifiers;
-    /** #389: the named `Attack Down` / `Out. Damage Down` families THIS acting actor carries in its
-     *  own per-victim ENEMY store (`triggers.ts`'s `victimOwnEnemyOutgoingFamilies`), strongest
-     *  instance per family.
+
+    /** #389/#396: the named families THIS acting actor carries in its own per-victim ENEMY store
+     *  (`triggers.ts`'s `victimOwnEnemyFamilies`), strongest instance per family, over
+     *  `TURN_SHADOW_CHANNELS` — the two outgoing-damage channels (`Attack Down`,
+     *  `Out. Damage Down`) and the two heal channels (`Inc. Repair Down`, `Out. Repair Down`).
      *
-     *  A FAMILY MAP rather than a summed percentage, because the owner ruling (spec §5) is
-     *  "highest tier wins" ACROSS the self/enemy boundary: the fold below must compare each applied
-     *  family against this actor's OWN instance of the same family and keep the stronger, which a
-     *  pre-summed scalar makes impossible. Absent → byte-identical. */
-    enemyAppliedOutgoing?: OutgoingFamilyMap;
+     *  A FAMILY MAP rather than summed percentages, because the owner ruling is "highest tier wins"
+     *  ACROSS the self/enemy boundary: the fold below must compare each applied family against this
+     *  actor's OWN instance of the same family and keep the stronger, which a pre-summed scalar
+     *  makes impossible.
+     *
+     *  #367 originally folded the two HEAL channels as a plain SUM at a much earlier site (beside
+     *  `preFight`). That site cannot do the comparison — the self side needs `abilitySelfEffects`,
+     *  which is not resolved until ~700 lines later — so #396 moved them to join the outgoing pair
+     *  at the late fold. Verified before moving: nothing between the two sites reads
+     *  `incomingHealBuff` or `outgoingHealBuff`. Absent → byte-identical. */
+    enemyAppliedFamilies?: FamilyMap;
     /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -1836,17 +1836,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
         scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
     }
-    // #367: the enemy-APPLIED half of the same two heal channels, folded into the same layer-1
-    // totals as `preFight` above and for the same reason — every downstream heal consumer reads
-    // these totals, so folding here is what makes the fix reach all of them at once instead of
-    // patching each call site one by one. Additive percentage points; a plain sum, because R1's
-    // tier shadowing (`Inc. Repair Down I` is absent from the store whenever a `II` is live)
-    // already happened inside the status engine's `applyTimedAbilityStatus` before this read.
-    // Absent → byte-identical.
-    if (args.enemyAppliedHeal) {
-        scheduledTotals.incomingHealBuff += args.enemyAppliedHeal.incomingHealPct;
-        scheduledTotals.outgoingHealBuff += args.enemyAppliedHeal.outgoingHealPct;
-    }
+    // #367's enemy-APPLIED heal fold USED to sit here, beside `preFight`, as a plain sum. #396
+    // moved it to the late shadowing block (~700 lines down, search `enemyAppliedFamilies`): the
+    // locked rule is highest-tier-wins ACROSS the self/enemy boundary, and the comparison needs
+    // this actor's own named statuses from BOTH the scheduled list and `abilitySelfEffects` — and
+    // `abilitySelfEffects` does not exist yet at this point in the turn. Nothing between here and
+    // there reads `incomingHealBuff` or `outgoingHealBuff`, which is what makes the move safe.
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
     let critBuffForGates = scheduledTotals.critBuff;
@@ -2661,41 +2656,60 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // this cast. Pushing it into the standing stat instead would leak +20% pen into every later hit
     // AND into the DPS-mode aggregate scalars and the buff-display UI, which is exactly what
     // name-keying exists to avoid.
-    // #389: fold this actor's enemy-APPLIED `Attack Down` / `Out. Damage Down` into layer 1, with
-    // the owner's cross-store tier shadowing applied (spec §5: highest tier wins per named family,
-    // regardless of which side applied it).
+    /** #396: the EFFECTIVE (post-shadowing) enemy-applied heal contribution this turn's fold
+     *  actually added, captured at the fold and republished on `turnCtx` below. */
+    let enemyAppliedHealDelta:
+        { enemyAppliedIncomingHealPct: number; enemyAppliedOutgoingHealPct: number } | undefined;
+    // #389/#396: fold this actor's enemy-APPLIED families into layer 1, with the owner's
+    // cross-store tier shadowing applied (highest tier wins per named family, regardless of which
+    // side applied it). Four channels: `Attack Down` / `Out. Damage Down` (#389) and
+    // `Inc. Repair Down` / `Out. Repair Down` (#367's channels, shadowed here by #396).
     //
-    // WHY IT SITS HERE, and not beside the `enemyAppliedHeal` fold 800 lines up. The shadowing
-    // comparison needs this actor's OWN named statuses on the same two channels, and those live in
-    // TWO lists: the scheduled self-buffs (layer 1) and `abilitySelfEffects` (layers 2+3, resolved
-    // at ~:2516). The second does not exist yet at the heal fold's site. So the delta is applied at
-    // the last moment before `scheduledTotals` is consumed — which is safe and checked: nothing
-    // between the two sites reads `attackBuff` or `outgoingDamageBuff` (the only other readers of
-    // either channel are inside `effectiveDamageStatsOf` itself, immediately below).
+    // WHY ALL FOUR SIT HERE. The shadowing comparison needs this actor's OWN named statuses on the
+    // same channels, and those live in TWO lists: the scheduled self-buffs (layer 1) and
+    // `abilitySelfEffects` (layers 2+3, resolved at ~:2516). The second does not exist yet at the
+    // early `preFight` fold where #367 originally summed the heal pair — which is exactly why #396
+    // moved them down here rather than shadowing them in place. The delta is applied at the last
+    // moment before `scheduledTotals` is consumed, which is safe and checked: nothing between the
+    // early site and here reads `attackBuff`, `outgoingDamageBuff`, `incomingHealBuff` or
+    // `outgoingHealBuff` (the only other readers of any of them are inside
+    // `effectiveDamageStatsOf` itself, immediately below).
     //
-    // THE SELF LIST MUST MATCH WHAT THE FOLD CONSUMES, or the subtraction inside
-    // `shadowedOutgoingDelta` removes a contribution the totals never contained. Both halves below
-    // are therefore taken from the exact same sources the fold uses: `entry.activeSelfBuffs` +
-    // `selfBuffLookup` is literally what `resolveSelfBuffTotals` expanded into
-    // `scheduledTotals`, and `abilitySelfEffects` is passed straight through to the accessor.
+    // THE SELF LIST MUST MATCH WHAT THE FOLD CONSUMES, or the subtraction inside `shadowedDelta`
+    // removes a contribution the totals never contained. Both halves below are therefore taken
+    // from the exact same sources the fold uses: `entry.activeSelfBuffs` + `selfBuffLookup` is
+    // literally what `resolveSelfBuffTotals` expanded into `scheduledTotals`, and
+    // `abilitySelfEffects` is passed straight through to the accessor.
     //
     // TWO LAYERS ARE DELIBERATELY EXCLUDED, because neither is a NAMED family and so neither can
     // participate in family shadowing: layer 4 `modifierAbilities` (un-named ability modifier
-    // channels like "+30% damage to Stasis enemies") and the squad-leader `preFight.outgoingDamage`
-    // baseline. Both keep contributing to the totals as before; they are simply invisible to the
-    // shadowing comparison.
+    // channels like "+30% damage to Stasis enemies") and the squad-leader `preFight` baseline —
+    // which now covers `preFight.outgoingHeal` / `preFight.incomingHeal` too, still folded at the
+    // early site and still outside the comparison. All keep contributing to the totals as before;
+    // they are simply invisible to the shadowing comparison.
     //
-    // Absent/empty map → `{0, 0}` → byte-identical, and the self side is not even read.
-    if (args.enemyAppliedOutgoing) {
-        const ownNamedOutgoing = [
+    // Absent/empty map → empty deltas → byte-identical, and the self side is not even read.
+    if (args.enemyAppliedFamilies) {
+        const ownNamed = [
             ...entry.activeSelfBuffs.flatMap((abf) =>
                 expandBuffEntry(abf, selfBuffLookup.get(abf.buffName) ?? [])
             ),
             ...abilitySelfEffects,
         ];
-        const delta = shadowedOutgoingDelta(args.enemyAppliedOutgoing, ownNamedOutgoing);
-        scheduledTotals.attackBuff += delta.attackPct;
-        scheduledTotals.outgoingDamageBuff += delta.outgoingDamagePct;
+        const { delta } = shadowedDelta(args.enemyAppliedFamilies, ownNamed, TURN_SHADOW_CHANNELS);
+        scheduledTotals.attackBuff += delta.attack ?? 0;
+        scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
+        scheduledTotals.incomingHealBuff += delta.incomingHeal ?? 0;
+        scheduledTotals.outgoingHealBuff += delta.outgoingHeal ?? 0;
+        // The EFFECTIVE enemy-applied contribution, published below so a cross-actor reader can
+        // subtract exactly what this ctx contains (`liveHealChannelPct`, #367's staleness fence).
+        // It is the DELTA, not the raw applied value: under shadowing those differ whenever the
+        // actor carries its own instance of the same family, and subtracting the raw value would
+        // remove a term the total never held.
+        enemyAppliedHealDelta = {
+            enemyAppliedIncomingHealPct: delta.incomingHeal ?? 0,
+            enemyAppliedOutgoingHealPct: delta.outgoingHeal ?? 0,
+        };
     }
     const dmgStats = effectiveDamageStatsOf({
         base: {
@@ -4862,16 +4876,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         outgoingHealPct: dmgStats.totals.outgoingHealBuff,
         incomingHealPct: dmgStats.totals.incomingHealBuff,
         // #367: republish the enemy-applied portion of the two totals above, taken from the SAME
-        // `args.enemyAppliedHeal` the fold consumed — never recomputed from the live store here.
-        // That is the whole point: a cross-actor reader subtracts this number back out, so it must
-        // be BY CONSTRUCTION the number that went in, or the subtraction would not cancel.
+        // value the fold consumed — never recomputed from the live store here. That is the whole
+        // point: a cross-actor reader subtracts this number back out, so it must be BY
+        // CONSTRUCTION the number that went in, or the subtraction would not cancel.
+        //
+        // #396: what "the portion that went in" MEANS changed. The fold no longer adds the raw
+        // enemy-applied sum — it adds the SHADOWED delta, which differs from the raw sum whenever
+        // this actor carries its own instance of the same family (and is 0 when the actor's own
+        // instance wins outright). `enemyAppliedHealDelta` is captured at the fold itself for
+        // exactly that reason; publishing the raw value here would make the reader subtract a
+        // term the total never held.
         // Spread-guarded so a clean actor's ctx is byte-identical to the pre-#367 shape.
-        ...(args.enemyAppliedHeal
-            ? {
-                  enemyAppliedIncomingHealPct: args.enemyAppliedHeal.incomingHealPct,
-                  enemyAppliedOutgoingHealPct: args.enemyAppliedHeal.outgoingHealPct,
-              }
-            : {}),
+        ...(enemyAppliedHealDelta ?? {}),
         // PR I4b/I4c: only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
         // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →

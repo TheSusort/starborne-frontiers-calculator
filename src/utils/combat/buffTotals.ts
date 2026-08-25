@@ -156,19 +156,23 @@ export function incomingHealFactor(pct: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// #389 — cross-store tier shadowing for the two OUTGOING-damage channels.
+// CROSS-STORE TIER SHADOWING — #389 (the two outgoing channels) generalised to every
+// channel with a cross-store meeting point by #396.
 //
-// OWNER RULING (spec §5): the strongest single instance of a named family applies, and weaker
-// instances are shadowed, REGARDLESS OF WHICH SIDE APPLIED IT. An enemy carrying a self-inflicted
-// `Attack Down I` (-15%) that your Curator hits with `Attack Down III` (-45%) throws at -45%:
-// not -15%, and NOT the -60% sum.
+// OWNER RULING (LOCKED, and general — #396 spec §1; #389 spec §5 stated the same rule while
+// scoping the code to two channels): the strongest single instance of a named family applies and
+// weaker instances are shadowed, REGARDLESS OF WHICH SIDE APPLIED IT. An enemy carrying a
+// self-inflicted `Attack Down I` (-15%) that your Curator hits with `Attack Down III` (-45%)
+// throws at -45%: not -15%, and NOT the -60% sum. The ONLY exceptions are DoTs (`Corrosion`,
+// `Inferno`) and bombs, which stack — and `deriveFamilyKey` already keeps them out by giving each
+// tier its own family key, so nothing here needs to name them.
 //
 // WHY THIS NEEDED WRITING. Tier shadowing (`familyApplicationWins` in statusEngine.ts) is
 // PER-STORE: it keys a family map inside one side's store, so it cannot see across the self/enemy
-// boundary. Simply switching on the dead enemy-side `attack`/`outgoingDamage` channels would make
-// the two instances ADD — which the ruling explicitly rules out, both because it makes two
-// instances of one debuff worth more than one (contradicting the family's behaviour inside a
-// single store) and because it puts -100% within accidental reach.
+// boundary. Simply switching on a dead enemy-side channel would make the two instances ADD — which
+// the ruling explicitly rules out, both because it makes two instances of one debuff worth more
+// than one (contradicting the family's behaviour inside a single store) and because it puts -100%
+// within accidental reach.
 //
 // ONE RULE, NOT TWO (spec §6, and #389's review). The comparison below is
 // `statusEngine.familyChallengerWins` — the SAME predicate the engine's own within-store upsert
@@ -177,30 +181,65 @@ export function incomingHealFactor(pct: number): number {
 // for it. Comparing magnitude ALONE (which is what shipped first) is a genuinely different rule
 // and diverges wherever stacks or duplicates invert the tier order — self `Attack Down I` at four
 // stacks (-60) against an applied `Attack Down III` (-45) resolved to -60 under magnitude-only,
-// which is both weaker-tier-wins AND the additive shape §5.1 rules out.
+// which is both weaker-tier-wins AND the additive shape the ruling forbids.
 //
-// SCOPE — PER NAMED FAMILY, and no wider (spec §5.2; §6 restates it as the general rule rather
-// than a carve-out invented here). `Attack Down` and `Out. Damage Down` are DIFFERENT families and
-// still combine exactly as they always have; only same-family instances shadow. Collapsing across
-// families would be a new defect, which is why the fold below is keyed by `deriveFamilyKey` and
-// the two channels are carried independently inside each entry.
+// SCOPE — PER NAMED FAMILY, and no wider. `Attack Down` and `Out. Damage Down` are DIFFERENT
+// families and still combine exactly as they always have; only same-family instances shadow.
+// Collapsing across families would be a new defect, which is why the fold below is keyed by
+// `deriveFamilyKey` and every channel is carried independently inside each entry.
 //
-// ⚠️ AND NO WIDER THAN THESE TWO CHANNELS, YET. Within one store, family shadowing is already
-// general. ACROSS the self/enemy boundary it applied nowhere at all until #389 and now applies only
-// to `attack`/`outgoingDamage`; every other channel that can carry one family from both stores —
-// #367's heal channels being the known instance — is still additive, which spec §6.2 says is the
-// wrong arithmetic regardless of whether the corpus reaches it today. The audit-plus-mechanical-
-// application is #396. DoTs and bombs are excluded there too; `deriveFamilyKey` already keeps them
-// out by giving each tier its own key.
+// THE CHANNEL LIST IS THE AUDIT RESULT, not a guess (#396 spec §1.1). A channel belongs here iff
+// an ENEMY-store read is combined with a SELF-store read of the SAME `parsedEffects` key:
+//   • `attack` / `outgoingDamage` — `victimOwnEnemyOutgoingFamilies` vs the actor's own named
+//     self statuses, combined in playerTurn's late fold (#389).
+//   • `defense` / `incomingDamage` — `toEnemyModifiers(victimEnemyBuffs)` vs
+//     `toSelfDefenseModifier`/`toSelfIncomingDamageModifier(victimSelfBuffs)`, combined in
+//     engine.ts's `victimIncomingModifiers`.
+//   • `incomingHeal` / `outgoingHeal` — `victimOwnEnemyHealModifiers` vs the same named self
+//     statuses, combined in playerTurn's late fold (#367 folded them additively; #396 does not).
+// Every OTHER channel was checked and has NO meeting point: `incomingDotDamage` is read from the
+// enemy list only (`toDotAndPenModifiers`' `enemy` argument) and never from a self list;
+// `dotDamage`, `detonationDamage`, `defensePenetration` and `hotPct` are read from the
+// self/attacker list only; and `crit`, `critDamage`, `speed`, `hacking`, `security`, `hp` fold
+// exclusively through `foldActorBuffTotals`, whose sources are the SELF store and the scheduled
+// `selfBuffLookup` — the enemy store is not among them, so those enemy-side channels are dead
+// rather than additive. Adding a channel here without a meeting point is inert; adding one when a
+// new meeting point appears is required.
+//
+// REACHABILITY — it comes from the PICKERS, not from ship kits (#396 spec §1.3). A probe over all
+// 149 corpus ships (335 buff/debuff-typed abilities) found ZERO families granted from both a
+// self-targeted and an enemy-targeted ability, on every channel including the two #389 fixed. The
+// straddle is user-reachable instead: `GameBuffPicker` excludes only `type: 'effect'`, so both
+// buff- and debuff-typed entries are offered in the self-side AND enemy-side pickers, and its
+// `toggleBuff` family-collapse is per-picker. So a FIXTURE for this rule must be built from buff
+// LISTS; building one from ship kits produces no straddle and a vacuously green test.
 // ---------------------------------------------------------------------------
 
+/** The channels with a cross-store meeting point. See the audit note above — this list is a
+ *  measurement of where an enemy-store read meets a self-store read, not a wish list. */
+export const SHADOW_CHANNELS = [
+    'attack',
+    'outgoingDamage',
+    'defense',
+    'incomingDamage',
+    'incomingHeal',
+    'outgoingHeal',
+] as const;
+export type ShadowChannel = (typeof SHADOW_CHANNELS)[number];
+
+/** #389's original pair, kept named so its call site and unit suite read unchanged. */
+export const OUTGOING_CHANNELS = [
+    'attack',
+    'outgoingDamage',
+] as const satisfies readonly ShadowChannel[];
+
 /**
- * One named family's grip on ONE outgoing channel. Three numbers because the two sides of the
- * boundary need different ones (see `outgoingFamiliesOf`): the shadowing comparison reads
+ * One named family's grip on ONE channel. Three numbers because the two sides of the
+ * boundary need different ones (see `familiesOf`): the shadowing comparison reads
  * `pct`/`tier`, and the self side additionally needs `sum` to know what its own additive fold
  * already contains.
  */
-export interface OutgoingChannelContribution {
+export interface ChannelContribution {
     /** The STRONGEST instance's post-stacks percentage points. 0 when the family, as read from
      *  this list, does not touch the channel at all. */
     pct: number;
@@ -213,25 +252,31 @@ export interface OutgoingChannelContribution {
     sum: number;
 }
 
-/** One named family's contribution to the two outgoing channels, in additive percentage points. */
-export interface OutgoingFamilyEntry {
-    /** `Attack Down`/`Up` — `parsedEffects.attack`, folded into `attackBuff`. */
-    attack: OutgoingChannelContribution;
-    /** `Out. Damage Down`/`Up` — `parsedEffects.outgoingDamage`, folded into `outgoingDamageBuff`. */
-    outgoingDamage: OutgoingChannelContribution;
-}
+/** One named family's contribution, per channel, in additive percentage points. Sparse: a channel
+ *  the family does not touch is simply absent. */
+export type FamilyEntry = Partial<Record<ShadowChannel, ChannelContribution>>;
 
 /** familyKey (`deriveFamilyKey`) → that family's per-channel MAXIMUM (plus its sum). Not a total:
- *  see `outgoingFamiliesOf` for why the distinction is load-bearing on the self side. */
-export type OutgoingFamilyMap = Map<string, OutgoingFamilyEntry>;
+ *  see `familiesOf` for why the distinction is load-bearing on the self side. */
+export type FamilyMap = Map<string, FamilyEntry>;
 
-/** The two percentage-point deltas `shadowedOutgoingDelta` hands back to the turn loop. */
-export interface OutgoingDelta {
-    attackPct: number;
-    outgoingDamagePct: number;
+/** Per-channel percentage-point figures handed back by `shadowedDelta`. Sparse in the same way
+ *  `FamilyEntry` is; read with `?? 0`. */
+export type ChannelDeltas = Partial<Record<ShadowChannel, number>>;
+
+export interface ShadowedDelta {
+    /** ADD to the already-folded SELF-sourced total for that channel. For a family present only on
+     *  the enemy side this is the whole enemy contribution (`own.sum` is 0), so the caller adds
+     *  this INSTEAD OF the raw enemy sum, never as well as it. */
+    delta: ChannelDeltas;
+    /** The SELF-sourced contribution that the enemy side shadowed away, per channel. Needed only
+     *  by a caller that publishes a victim-side/attacker-side SPLIT of one mixed channel
+     *  (engine.ts's `victimSideIncomingModifier`, #358 addendum 3): shadowing can move a term from
+     *  one half of that split to the other, and nothing downstream can un-mix it afterwards. */
+    ownSuppressed: ChannelDeltas;
 }
 
-const NO_CONTRIBUTION: OutgoingChannelContribution = { pct: 0, tier: 0, sum: 0 };
+const NO_CONTRIBUTION: ChannelContribution = { pct: 0, tier: 0, sum: 0 };
 
 /** Fold one more instance into a channel's running contribution.
  *
@@ -242,11 +287,7 @@ const NO_CONTRIBUTION: OutgoingChannelContribution = { pct: 0, tier: 0, sum: 0 }
  *  Magnitude, not a signed comparison, as the tie-break: a family is sign-homogeneous by
  *  construction — `Attack Up` and `Attack Down` derive DIFFERENT family keys, so one family never
  *  mixes a buff and a debuff whose signs would fight. */
-function foldChannel(
-    prev: OutgoingChannelContribution,
-    pct: number,
-    tier: number
-): OutgoingChannelContribution {
+function foldChannel(prev: ChannelContribution, pct: number, tier: number): ChannelContribution {
     if (pct === 0) return prev;
     const sum = prev.sum + pct;
     if (prev.pct === 0) return { pct, tier, sum };
@@ -256,60 +297,70 @@ function foldChannel(
 }
 
 /**
- * Reduce a buff list to the STRONGEST instance per named family on the two outgoing channels,
- * carrying each family's additive sum alongside it.
+ * Reduce a buff list to the STRONGEST instance per named family, per requested channel, carrying
+ * each family's additive sum alongside it.
  *
  * ⚠️ THE MAP IS A PER-FAMILY MAXIMUM, NOT A TOTAL — and it is called with two different meanings,
- * which is exactly why `sum` rides along. On the ENEMY side (`victimOwnEnemyOutgoingFamilies`) the
- * maximum IS the answer: the ruling says the strongest applied instance is what lands, so a
- * pre-summed enemy value would re-introduce the additive shape §5.1 forbids. On the SELF side the
- * maximum answers "which of my instances is the one to compare against", but the caller's totals
- * hold the SUM of all of them — so a delta that subtracted the maximum instead of the sum would
- * leave the difference behind and push the total PAST the applied value (measured before the fix:
- * two self `Attack Down I` (-30 in the totals) plus an applied `Attack Down III` (-45) resolved to
- * -60, the sum). `shadowedOutgoingDelta` therefore compares on `pct`/`tier` and subtracts `sum`.
+ * which is exactly why `sum` rides along. On the ENEMY side the maximum IS the answer: the ruling
+ * says the strongest applied instance is what lands, so a pre-summed enemy value would re-introduce
+ * the additive shape the ruling forbids. On the SELF side the maximum answers "which of my
+ * instances is the one to compare against", but the caller's totals hold the SUM of all of them —
+ * so a delta that subtracted the maximum instead of the sum would leave the difference behind and
+ * push the total PAST the applied value (measured before #389: two self `Attack Down I` (-30 in the
+ * totals) plus an applied `Attack Down III` (-45) resolved to -60, the sum). `shadowedDelta`
+ * therefore compares on `pct`/`tier` and subtracts `sum`.
  *
  * Effects are taken post-stacks (`value * stacks`), the same basis every other fold in this file
  * uses — so a stacking debuff's strength is its accumulated magnitude, not its per-stack value.
- * Entries touching neither channel are skipped entirely, which is what keeps the returned map
- * empty (and therefore the whole #389 delta a no-op) for the overwhelming majority of actors.
+ * Entries touching none of the requested channels are skipped entirely, which is what keeps the
+ * returned map empty (and therefore the whole delta a no-op) for the overwhelming majority of
+ * actors.
  */
-export function outgoingFamiliesOf(buffs: SelectedGameBuff[]): OutgoingFamilyMap {
-    const out: OutgoingFamilyMap = new Map();
+export function familiesOf(
+    buffs: SelectedGameBuff[],
+    channels: readonly ShadowChannel[]
+): FamilyMap {
+    const out: FamilyMap = new Map();
     for (const b of buffs) {
-        const attackPct = (b.parsedEffects.attack ?? 0) * b.stacks;
-        const outgoingDamagePct = (b.parsedEffects.outgoingDamage ?? 0) * b.stacks;
-        if (attackPct === 0 && outgoingDamagePct === 0) continue;
+        let touched = false;
+        for (const c of channels) {
+            if ((b.parsedEffects[c] ?? 0) * b.stacks !== 0) {
+                touched = true;
+                break;
+            }
+        }
+        if (!touched) continue;
         const { familyKey, tier } = deriveFamilyKey(b.buffName);
         const prev = out.get(familyKey);
-        out.set(familyKey, {
-            attack: foldChannel(prev?.attack ?? NO_CONTRIBUTION, attackPct, tier),
-            outgoingDamage: foldChannel(
-                prev?.outgoingDamage ?? NO_CONTRIBUTION,
-                outgoingDamagePct,
-                tier
-            ),
-        });
+        const entry: FamilyEntry = { ...prev };
+        for (const c of channels) {
+            const pct = (b.parsedEffects[c] ?? 0) * b.stacks;
+            const folded = foldChannel(prev?.[c] ?? NO_CONTRIBUTION, pct, tier);
+            if (folded.pct !== 0 || folded.sum !== 0) entry[c] = folded;
+        }
+        out.set(familyKey, entry);
     }
     return out;
 }
 
-/** One channel's delta: raise the total to exactly the applied value when the applied instance
- *  wins the family, and leave it alone when the actor's own instance does. */
+/** One channel's pair of figures: raise the total to exactly the applied value when the applied
+ *  instance wins the family, and leave it alone when the actor's own instance does. */
 function channelDelta(
-    own: OutgoingChannelContribution,
-    applied: OutgoingChannelContribution
-): number {
-    if (applied.pct === 0) return 0;
+    own: ChannelContribution,
+    applied: ChannelContribution
+): { delta: number; ownSuppressed: number } {
+    if (applied.pct === 0) return { delta: 0, ownSuppressed: 0 };
     const appliedWins =
         own.pct === 0 ||
         familyChallengerWins(own.tier, Math.abs(own.pct), applied.tier, Math.abs(applied.pct));
-    return appliedWins ? applied.pct - own.sum : 0;
+    return appliedWins
+        ? { delta: applied.pct - own.sum, ownSuppressed: own.sum }
+        : { delta: 0, ownSuppressed: 0 };
 }
 
 /**
- * The DELTA to add to an actor's already-folded self-sourced `attackBuff` / `outgoingDamageBuff`
- * so that the result is `Σ over families of the strongest instance, either side`.
+ * The DELTA to add to an actor's already-folded SELF-sourced total on each channel so that the
+ * result is `Σ over families of the strongest instance, either side`.
  *
  * THE ARITHMETIC, and why it is a delta rather than a recomputation. The caller's totals already
  * contain the full self-sourced sum, and this function is deliberately not allowed to rebuild that
@@ -321,8 +372,8 @@ function channelDelta(
  *
  * i.e. it moves the total to exactly the winning applied instance, or leaves it untouched when the
  * actor's own instance is the winner. Families present only on the self side are never visited, so
- * they pass through unchanged; the no-enemy-debuff case returns `{0, 0}` without even reading the
- * self side. Both directions of the ruling fall out of the one expression.
+ * they pass through unchanged; the no-enemy-debuff case returns empty figures without even reading
+ * the self side. Both directions of the ruling fall out of the one expression.
  *
  * SUBTRACTING THE SUM (not the strongest own instance) is what makes the delta structurally unable
  * to push the total past the applied value. Duplicate self-side instances of one family are
@@ -332,23 +383,56 @@ function channelDelta(
  * strongest subtracted instead, each duplicate left its own value behind in the total.
  *
  * `selfBuffs` MUST be the same named-status lists the caller's own fold consumed, or the
- * subtraction removes something the total never contained. See the call site in playerTurn.ts.
+ * subtraction removes something the total never contained. See the call sites in playerTurn.ts and
+ * engine.ts.
  */
+export function shadowedDelta(
+    enemyFamilies: FamilyMap,
+    selfBuffs: SelectedGameBuff[],
+    channels: readonly ShadowChannel[]
+): ShadowedDelta {
+    const delta: ChannelDeltas = {};
+    const ownSuppressed: ChannelDeltas = {};
+    if (enemyFamilies.size === 0) return { delta, ownSuppressed };
+    const selfFamilies = familiesOf(selfBuffs, channels);
+    for (const [familyKey, applied] of enemyFamilies) {
+        const own = selfFamilies.get(familyKey);
+        for (const c of channels) {
+            const a = applied[c];
+            if (a === undefined) continue;
+            const r = channelDelta(own?.[c] ?? NO_CONTRIBUTION, a);
+            if (r.delta !== 0) delta[c] = (delta[c] ?? 0) + r.delta;
+            if (r.ownSuppressed !== 0) ownSuppressed[c] = (ownSuppressed[c] ?? 0) + r.ownSuppressed;
+        }
+    }
+    return { delta, ownSuppressed };
+}
+
+// --- #389 compatibility surface -------------------------------------------------------------
+// The two outgoing channels keep their own named types and entry points. They are the ONLY
+// consumer that wants a fixed-shape (non-sparse) result, because playerTurn's late fold adds both
+// unconditionally.
+
+export type OutgoingChannelContribution = ChannelContribution;
+export type OutgoingFamilyEntry = FamilyEntry;
+export type OutgoingFamilyMap = FamilyMap;
+
+/** The two percentage-point deltas `shadowedOutgoingDelta` hands back to the turn loop. */
+export interface OutgoingDelta {
+    attackPct: number;
+    outgoingDamagePct: number;
+}
+
+/** `familiesOf` over `OUTGOING_CHANNELS`. */
+export function outgoingFamiliesOf(buffs: SelectedGameBuff[]): OutgoingFamilyMap {
+    return familiesOf(buffs, OUTGOING_CHANNELS);
+}
+
+/** `shadowedDelta` over `OUTGOING_CHANNELS`, flattened to the turn loop's two named fields. */
 export function shadowedOutgoingDelta(
     enemyFamilies: OutgoingFamilyMap,
     selfBuffs: SelectedGameBuff[]
 ): OutgoingDelta {
-    if (enemyFamilies.size === 0) return { attackPct: 0, outgoingDamagePct: 0 };
-    const selfFamilies = outgoingFamiliesOf(selfBuffs);
-    let attackPct = 0;
-    let outgoingDamagePct = 0;
-    for (const [familyKey, applied] of enemyFamilies) {
-        const own = selfFamilies.get(familyKey);
-        attackPct += channelDelta(own?.attack ?? NO_CONTRIBUTION, applied.attack);
-        outgoingDamagePct += channelDelta(
-            own?.outgoingDamage ?? NO_CONTRIBUTION,
-            applied.outgoingDamage
-        );
-    }
-    return { attackPct, outgoingDamagePct };
+    const { delta } = shadowedDelta(enemyFamilies, selfBuffs, OUTGOING_CHANNELS);
+    return { attackPct: delta.attack ?? 0, outgoingDamagePct: delta.outgoingDamage ?? 0 };
 }
