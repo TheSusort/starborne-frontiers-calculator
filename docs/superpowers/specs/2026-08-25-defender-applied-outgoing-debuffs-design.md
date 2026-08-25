@@ -98,3 +98,44 @@ same-family instances shadow. A fix that collapses across families is a new defe
   combine. This is the guard against over-collapsing.
 - **The reverse direction:** self tier HIGHER than applied tier ⇒ the self tier wins. Otherwise
   "highest wins" is untested in the direction where the player's debuff is the weaker one.
+
+---
+
+## 6. CORRECTION (2026-08-25): §5 stated a GENERAL rule as if it were a narrow one
+
+The owner's clarification: **highest tier wins for ALL buffs and debuffs. The only exceptions are
+DoTs (`Corrosion`, `Inferno`) and bombs, which stack.** This is a long-standing rule, not a new
+ruling created by this issue.
+
+§5 and §5.2 above are therefore **correctly implemented but wrongly framed**. They present
+highest-tier-wins as a decision about `attack` / `outgoingDamage`, and §5.2's "shadowing is per named
+family" as a scope limit invented here. In fact:
+
+- **Per-family shadowing is the general rule**, not a carve-out for this fix.
+- **Nothing about it is specific to the outgoing channels.** This fix is one channel pair catching up
+  with a rule that already governs everything.
+- **DoTs and bombs are the exception set** and must keep stacking. Do not apply shadowing to them.
+
+### 6.1 What this means for the shipped fix
+
+The fix itself stands: the three §5.3 arms test exactly the right behaviour, and the implementation
+(cross-store shadowing via the shared `deriveFamilyKey`) is the correct mechanism. Nothing needs
+reverting.
+
+### 6.2 The real gap this exposes
+
+**Cross-store shadowing applies NOWHERE ELSE.** Within a single store, family tier-shadowing is
+already general. Across the self/enemy boundary it applied nowhere at all until this fix, and now
+applies only to `attack` / `outgoingDamage`. Every other channel where both stores can carry the same
+family is still **additive**, which the rule says is wrong.
+
+The known instance: **#367's heal channels combine additively across the boundary**, justified in
+their jsdoc because "only one `Inc. Repair Down` can stand today". Under the real rule that
+justification is beside the point — additive is the wrong arithmetic there regardless of whether the
+corpus currently reaches it.
+
+Tracked as its own issue. It is an audit ("which channels can carry the same family from both
+stores?") plus a mechanical application of the existing `deriveFamilyKey` shadowing, with DoTs and
+bombs excluded.
+
+**Recorded in durable memory as a locked game rule** so it is not re-derived narrowly a third time.
