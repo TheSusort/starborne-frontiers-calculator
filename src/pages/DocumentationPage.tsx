@@ -2678,16 +2678,15 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
-                                            Enemy Attackers, Allies &amp; Rounds:
+                                            Enemy Team, Team &amp; Rounds:
                                         </span>{' '}
                                         The page has three separate collapsible cards.{' '}
-                                        <span className="font-semibold">Enemy Attackers</span> is
-                                        where you build the team bombarding the ship &mdash; real
-                                        ships (their parsed skills fire for real) or quick manual
+                                        <span className="font-semibold">Enemy Team</span> is where
+                                        you build the group bombarding the ship &mdash; real ships
+                                        (their parsed skills fire for real) or quick manual
                                         attack/defense lines.{' '}
-                                        <span className="font-semibold">Supporting Allies</span> is
-                                        its own card, for healers and protectors on the ship&apos;s
-                                        own side.{' '}
+                                        <span className="font-semibold">Team</span> is its own card,
+                                        for healers and protectors on the ship&apos;s own side.{' '}
                                         <span className="font-semibold">Combat Settings</span> holds
                                         only the length of the fight (1&ndash;50 rounds) and the
                                         buffs shared by every configuration. All three apply to
@@ -2711,8 +2710,20 @@ const DocumentationPage: React.FC = () => {
                                         gear-sourced damage reduction and block procs. Shields and
                                         Barrier still count, because those pools eat damage that
                                         arrived rather than reducing what was thrown. So a defensive
-                                        ability never lowers this number &mdash; it raises it, by
-                                        keeping the ship alive for more rounds of incoming fire.
+                                        ability on the ship itself never lowers this number &mdash;
+                                        it raises it, by keeping the ship alive for more rounds of
+                                        incoming fire.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        One exception, on the ALLY side rather than the ship&apos;s
+                                        own: damage an ally soaks through{' '}
+                                        <span className="font-semibold">Protection</span> is counted
+                                        against that ALLY, not against this ship, so adding a
+                                        protector lowers the figure shown here (a 30% redirect over
+                                        the same four rounds takes 40,000 down to 28,000). The slice
+                                        is not lost &mdash; it is simply booked on the ship that
+                                        actually ate it, which is only visible on that ship&apos;s
+                                        own card.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         Damage absorbed only grows when the ship lives another

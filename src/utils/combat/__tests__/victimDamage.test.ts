@@ -309,21 +309,57 @@ describe('victimHitDamageParts — the victim-side / attacker-side incoming spli
         expect(geared.preMitigation).toBeCloseTo(bare.preMitigation, 10);
     });
 
+    // ── THE SECOND MIXED CHANNEL (#358 addendum 3, carried finding 2) ──────────────────────────
+    //
+    // `equipReductionPct` used to arrive as ONE fused number carrying three terms, and the third
+    // — the ATTACKER's own squad-leader `outgoingCritDamage` penalty — is not victim-side at all:
+    // it makes the attacker's crits land smaller, i.e. it shrinks the attack AS THROWN. Stripping
+    // it from the thrown axis as collateral would over-report "damage absorbed" by exactly that
+    // attacker penalty. Same atomic-treatment-of-a-mixed-channel defect as C3, one layer down.
+    it('`attackerSideReductionPct` shrinks the attack as THROWN: it lowers BOTH axes', () => {
+        const bare = victimHitDamageParts(scalars(), victim(), false, 1);
+        const nerfedAttacker = victimHitDamageParts(scalars(), victim(), false, 1, 0, 25);
+        expect(nerfedAttacker.damage).toBeCloseTo(bare.damage * 0.75, 10);
+        // THE POINT OF THE ARM: the pre-mitigation axis falls too. Contrast the arm directly
+        // above, where the same 25 points on the victim-side parameter left it flat.
+        expect(nerfedAttacker.preMitigation).toBeCloseTo(bare.preMitigation * 0.75, 10);
+        // The explicit negative for the pre-split behaviour (attacker term folded into
+        // `equipReductionPct`, hence off the thrown axis): the axes are distinct here, so this
+        // cannot pass by coincidence.
+        expect(nerfedAttacker.preMitigation).not.toBeCloseTo(bare.preMitigation, 6);
+    });
+
+    it('the two halves of the split are INDEPENDENT: same total, different thrown axis', () => {
+        // 25 points of reduction, sliced two ways. `damage` is identical either way — the halves
+        // are re-summed before the subtraction — while the thrown axis separates them. That is the
+        // whole reason the split has to be threaded instead of derived from the total.
+        const asVictim = victimHitDamageParts(scalars(), victim(), false, 1, 25, 0);
+        const asAttacker = victimHitDamageParts(scalars(), victim(), false, 1, 0, 25);
+        const half = victimHitDamageParts(scalars(), victim(), false, 1, 10, 15);
+        expect(asAttacker.damage).toBe(asVictim.damage);
+        expect(half.damage).toBe(asVictim.damage);
+        expect(asAttacker.preMitigation).toBeLessThan(asVictim.preMitigation);
+        expect(half.preMitigation).toBeLessThan(asVictim.preMitigation);
+        expect(half.preMitigation).toBeGreaterThan(asAttacker.preMitigation);
+    });
+
     it('an absent `victimSideIncomingPct` behaves exactly as 0 (pre-addendum-3 default)', () => {
-        const args = [scalars({ effectiveCritDamage: 50 }), null, true, 0.5, 10] as const;
+        // A crit at half role-scale with a live equip reduction — the busiest shape in the
+        // function, so the equality below is not a degenerate one.
+        const CRIT_SCALARS = scalars({ effectiveCritDamage: 50 });
         const absent = victimHitDamageParts(
-            args[0],
+            CRIT_SCALARS,
             victim({ incomingDamageModifierPct: -30 }),
-            args[2],
-            args[3],
-            args[4]
+            true,
+            0.5,
+            10
         );
         const explicitZero = victimHitDamageParts(
-            args[0],
+            CRIT_SCALARS,
             victim({ incomingDamageModifierPct: -30, victimSideIncomingPct: 0 }),
-            args[2],
-            args[3],
-            args[4]
+            true,
+            0.5,
+            10
         );
         // Byte-identical (toBe, not toBeCloseTo): the two must reduce to the same expression, so a
         // fixture that omits the field cannot drift from one that sets it to zero.

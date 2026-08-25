@@ -1,13 +1,26 @@
 /**
- * #358 ADDENDUM 2 — the RAW intake axis (`ActorIntake.incomingRaw`).
+ * #358 ADDENDUM 2/3 — the RAW intake axis (`ActorIntake.incomingRaw`).
  *
  * ── WHAT THIS AXIS IS ─────────────────────────────────────────────────────────────────────────
  * `ActorIntake.incoming` is recorded AFTER the caller folded the victim's defence-mitigation
  * factor into the hit (`engine.ts`'s funnel documents the parameter as "the DEFENCE mitigation
  * factor the CALLER already folded into `rawDamage`"). It therefore counts damage that GOT
  * THROUGH, not damage that was THROWN. `incomingRaw` is the same intake with the defence term
- * removed, recorded at the same instant and scaled by the same incoming-block / Protection
- * factors — never reconstructed by dividing (lossy, and undefined at a factor of 0).
+ * removed, recorded at the same instant — never reconstructed by dividing (lossy, and undefined
+ * at a factor of 0).
+ *
+ * ADDENDUM 3 WIDENED IT past defence: EVERY victim-side reduction now comes off this axis (the
+ * victim's own `Inc. Damage Down` family and pre-fight incoming baseline, `equipReductionPct`,
+ * `incomingDotReductionPct`, the reflect channel's incoming-reduction), while attacker-side
+ * modifiers and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`) stay in.
+ *
+ * ⚠️ SCALING — READ THIS BEFORE TRUSTING AN OLDER COMMENT. This axis is scaled by the Protection
+ * retention fraction but NOT by the incoming-block proc. Addendum 3 DELETED the
+ * `damageRaw *= (1 - blocked)` line: a blocked hit was thrown in full, so scaling the thrown axis
+ * by the block made a defensive proc lower its own owner's headline. Comments (here and in
+ * `engine.ts`) that said "scaled by the same incoming-block / Protection factors" outlived that
+ * deletion by a full review cycle; they are corrected, and the per-channel direction arm in
+ * `defenseSurvivabilitySim.test.ts` (channel 5/5) is what holds the line now.
  *
  * ── WHY THIS FILE EXISTS AT ALL ───────────────────────────────────────────────────────────────
  * MEASURED, not assumed: in `healingGoldenParity` 194 of 194 focus rows have
@@ -22,28 +35,43 @@
  * 14 paths into the intake bucket, SEVEN of which fold the defence factor. Six are covered here,
  * one per test:
  *
- *   1. positional firing hit   `victimHitDamage` via `drivePositionalApply`   (182,548 corpus calls)
+ *   1. positional firing hit   `victimHitDamageParts` via `drivePositionalApply` (182,548 corpus calls)
  *   2. positional passive-slot hit `stagePassiveSlotHit`                       (121)
  *   4. counter-attack          `applyCounterAttack`                            (624)
  *   5. reactive damage proc    `applyReactiveDamage` (attack-basis branch)     (775)
- *   6. reflect / thorns        `reflectedDamageForHit`                         (231)
+ *   6. reflect / thorns        `reflectedDamageParts`                          (231)
  *   7. Protection transfer     `protectionCascade` chunk                       (477)
+ *
+ * (Paths 1 and 6 are named for the PARTS helpers they call today. Both used to be a `…ForHit`
+ * single-axis function plus a hand-copied pre-defence twin; the twins are gone and each path now
+ * gets both axes from ONE evaluation, so a comment naming the old single-axis entry point sends
+ * the next reader to a function the positional path no longer calls.)
  *
  * The seventh, the LEGACY NON-POSITIONAL aggregate apply, is deliberately NOT fixed and so is
  * deliberately not tested — the probe recorded ZERO calls through it in the whole corpus (every
  * enemy attack takes the positional branch), so a fix there could not be exercised by any test.
  * It is parked with the corpus-unreachable group (#357) and carries a comment at its call site.
  *
- * The remaining seven paths (bomb splash, bomb/accumulator burst, forced detonation, DoT-detonation
- * bypass, DoT tick batch, tank DoT) fold NO defence, so raw === post there by construction — the
- * `?? rawDamage` default in the funnel, and the suite-health test at the bottom.
+ * ADDENDUM 3 ADDED AN EIGHTH, from the widened definition rather than from a new call site:
+ *
+ *   8. per-victim DoT tick batch  `tickDoTs` → `applyVictimDamage`  (the ALLY branch)
+ *
+ * The remaining paths (bomb splash, bomb/accumulator burst, forced detonation, DoT-detonation
+ * bypass) fold no defence and meet no other victim-side reduction, so raw === post there by
+ * construction — the `?? rawDamage` default in the funnel, and the suite-health test at the bottom.
+ * The DoT tick batch was in that group under addendum 2 and is NOT any more: `incomingDotReductionPct`
+ * (Vortex Veil) is a victim-side reduction, so a tick on a veil carrier has two distinct axes. Both
+ * tick sites carry a `preMitigationDamage` write; only the heal-target one had a test.
  *
  * ── FIXTURE SHAPE ─────────────────────────────────────────────────────────────────────────────
  *   FOCUS     an inert player actor at M1 (back). Never an attacker, never a victim; it exists
  *             because the engine needs a focus. Huge HP keeps it irrelevant.
  *   ATTACKER / DEFENDER  at M4 (the FRONT column — a `front` selection binds there, not to M1).
- * NO RNG anywhere: crit 0 on every actor and `noCrit` on every hit, so no rate gate has a live
- * stream and every figure below is exact arithmetic rather than a seeded draw.
+ * NO LIVE RNG anywhere: crit 0 on every actor and `noCrit` on every hit, so no rate gate has a
+ * live stream and every figure below is exact arithmetic rather than a seeded draw. Path 8 passes
+ * through the debuff-landing gate, but at a chance of exactly 1 (hacking 200 vs the walked ally's
+ * default security 100) — certain, not drawn. Lower the attacker's hacking there and the DoT stops
+ * landing entirely rather than landing sometimes.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
@@ -75,6 +103,11 @@ interface RoleShape {
     attack: number;
     defence: number;
     slots: ShipSkills['slots'];
+    /** Base hacking. Omitted → 0, the value every pre-existing fixture here used. Supplied only
+     *  by path 8, whose DoT must LAND: `liveDebuffLandingChance` defaults a missing base to 200
+     *  and a missing security to 100, so hacking 0 against the walked ally's default security
+     *  produces a landing chance of ZERO and the DoT silently never applies. */
+    hacking?: number;
 }
 
 const activeSlot = (abilities: Ability[]): ShipSkills['slots'][number] => ({
@@ -140,7 +173,7 @@ const enemyShip = (a: RoleShape): EnemyAttackerInput => ({
         defence: a.defence,
         hp: a.hp,
         speed: a.speed,
-        hacking: 0,
+        hacking: a.hacking ?? 0,
     },
     chargeCount: 0,
     startCharged: false,
@@ -603,6 +636,101 @@ describe('#358 A2 — path 7: the Protection transfer chunk', () => {
         // that factor — the proof it came off the cascade's pre-defence inflow.
         expect(chunk.raw).toBeGreaterThan(chunk.post);
         expect(chunk.post / chunk.raw).toBeCloseTo(mit(DEFENCE), 6);
+    });
+});
+
+// ══ Path 8: the per-victim DoT tick batch (#358 ADDENDUM 3) ═══════════════════════════════════
+//
+// WHY THIS PATH IS HERE AT ALL, when the file header lists the DoT tick batch among the paths that
+// "fold NO defence, so raw === post there by construction". That was true under addendum 2, whose
+// only victim-side term was DEFENCE. Addendum 3 widened "damage absorbed" to exclude EVERY
+// victim-side reduction, and a DoT tick has one: `incomingDotReductionPct` (Vortex Veil, the DoT
+// half of D-PR3). So the batch grew a genuine second axis, and the engine grew two writes to carry
+// it — `preMitigationDamage: tankDotDamagePreMit` on the heal-target branch and
+// `preMitigationDamage: totalPreMit` on the per-victim twin.
+//
+// ONLY THE FIRST WAS REACHED BY ANY TEST. MEASURED: deleting `preMitigationDamage: totalPreMit`
+// left all 584 files / 6520 tests green, because the defense simulator's focus ship IS the heal
+// target and so always takes the other branch. The twin needs a victim that is NOT the focus —
+// i.e. an ALLY — which is exactly what this file's walked-team harness provides.
+describe('#358 A3 — path 8: the per-victim DoT tick batch on an ALLY', () => {
+    it("an ally's ticks book the pre-REDUCTION figure on the raw axis", () => {
+        const VEIL_PCT = 50;
+        // Vortex Veil: the DoT half of D-PR3. PASSIVE slot is mandatory — `incomingAbilitiesById`
+        // filters `slot.slot !== 'passive'`, so an active-slot copy reduces nothing and every
+        // figure below would come back equal, passing for the wrong reason.
+        const vortexVeil: Ability = {
+            id: 'ab-veil',
+            type: 'incoming-reduction',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'incoming-reduction',
+                scope: 'dot',
+                condition: 'always',
+                pct: VEIL_PCT,
+                critFamily: false,
+            },
+        };
+        const infernoOnAlly: Ability = {
+            id: 'ab-dot',
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'dot', dotType: 'inferno', tier: 45, stacks: 3, duration: 6 },
+        };
+        // The ALLY, not the focus: `inertFocus` sets `healTargetId: 'attacker'`, so the focus takes
+        // the heal-target branch and this actor is the one that reaches the per-victim twin.
+        const ally: RoleShape = {
+            id: 'ally',
+            position: 'M4',
+            speed: 500, // slower than the DoT applier, so a tick has been armed by its turn
+            hp: BIG_HP,
+            attack: 0,
+            defence: DEFENCE, // irrelevant to a DoT tick — asserted below, not assumed
+            slots: [activeSlot([])],
+        };
+        const dotter: RoleShape = {
+            id: 'dotter',
+            position: 'M4',
+            speed: 900,
+            hp: BIG_HP,
+            attack: ATTACK,
+            defence: 0,
+            // hacking 200 vs the ally's default security 100 → a landing chance of exactly 1, so
+            // the DoT lands deterministically and no rate gate has a live stream. At the file's
+            // usual hacking 0 the chance is ZERO and the DoT never applies at all: MEASURED, that
+            // build reported intake 0 on both axes and every assertion below passed vacuously.
+            hacking: 200,
+            slots: [activeSlot([infernoOnAlly])],
+        };
+        const axes = (allySlots: ShipSkills['slots']) =>
+            axisFor(
+                run(`path8/${allySlots.length > 1 ? 'veiled' : 'bare'}`, {
+                    ...inertFocus(1),
+                    teamActors: [walkedAlly({ ...ally, slots: allySlots })],
+                    enemyAttackers: [enemyShip(dotter)],
+                }),
+                'ally'
+            );
+        const bare = axes([activeSlot([])]);
+        const veiled = axes([activeSlot([]), passiveSlot([vortexVeil])]);
+
+        // NON-VACUITY: ticks actually landed, and a DoT folds no DEFENCE — the bare ally's two
+        // axes coincide despite its 5,000 defence. That is the control the veiled run moves off.
+        expect(bare.post).toBeGreaterThan(0);
+        expect(bare.raw).toBe(bare.post);
+
+        // The veil really halves what ARRIVES…
+        expect(veiled.post).toBeCloseTo(bare.post * (1 - VEIL_PCT / 100), 6);
+        // …and is INVISIBLE on the thrown axis: the same DoT was applied either way, so the raw
+        // total is the bare run's, to the last decimal. Delete `preMitigationDamage: totalPreMit`
+        // from the per-victim branch and the funnel's `?? rawDamage` default books the reduced
+        // amount here instead, collapsing this to `veiled.post`.
+        expect(veiled.raw).toBeCloseTo(bare.raw, 6);
+        expect(veiled.raw).toBeGreaterThan(veiled.post);
     });
 });
 

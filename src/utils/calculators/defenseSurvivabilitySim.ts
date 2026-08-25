@@ -50,15 +50,22 @@ export interface DefenseIntakeBreakdown {
     toShield: number;
     toBarrier: number;
     toConversion: number;
-    /** Σ incomingDamage. GROSS — already contains the three mitigation terms above. This is the
-     *  measured-EHP figure; adding the others to it double-counts every point of mitigation. */
+    /** Σ incomingDamage. GROSS — already contains the three mitigation terms above; adding the
+     *  others to it double-counts every point of mitigation.
+     *  NOT THE HEADLINE. This is the POST-mitigation axis: what actually got through. The
+     *  "Damage absorbed" headline is `damageAbsorbed`, which reads the RAW axis instead (#358
+     *  addendum 3). This doc used to call `gross` "the measured-EHP figure", which was true for
+     *  exactly one revision and is the reading addendum 3 retired the name over. `gross` earns its
+     *  keep as the partition base for the four breakdown terms and as the LIVENESS probe in tests
+     *  ("the reduction really applied") — never as the headline. */
     gross: number;
 }
 
 export interface DefenseSurvivabilityRound {
     round: number;
     incomingDamage: number;
-    /** #358 ADDENDUM 2: raw damage THROWN at the defender this round (pre defence mitigation). */
+    /** #358 ADDENDUM 2/3: raw damage THROWN at the defender this round — before defence mitigation
+     *  AND before every other victim-side reduction (see `ActorIntake.incomingRaw` for the list). */
     incomingDamageRaw: number;
     shieldAbsorbed: number;
     barrierAbsorbed: number;
@@ -187,8 +194,9 @@ export function simulateDefenseSurvivability(
 
     // GROSS. Not gross + absorbed — `incomingDamage` already contains the mitigation terms.
     const gross = rounds.reduce((sum, r) => sum + r.incomingDamage, 0);
-    // #358 ADDENDUM 2: the RAW (pre-defence-mitigation) axis. Deliberately NOT `gross` — the
-    // breakdown's four terms partition `gross`, and re-basing them on raw would break that.
+    // #358 ADDENDUM 2/3: the RAW axis — pre defence mitigation and pre every other victim-side
+    // reduction. Deliberately NOT `gross` — the breakdown's four terms partition `gross`, and
+    // re-basing them on raw would break that.
     const grossRaw = rounds.reduce((sum, r) => sum + r.incomingDamageRaw, 0);
     const toShield = rounds.reduce((sum, r) => sum + r.shieldAbsorbed, 0);
     const toBarrier = rounds.reduce((sum, r) => sum + r.barrierAbsorbed, 0);

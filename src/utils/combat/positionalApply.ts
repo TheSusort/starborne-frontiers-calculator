@@ -287,16 +287,23 @@ export function applyPositionalDamage(args: {
         subAttackIndex?: number
     ) => void;
     /**
-     * OPTIONAL per-sub-hit victim-side incoming %-reduction hook (D-PR3). Invoked per footprint
-     * victim with that victim's per-hit crit outcome; the returned percentage points are folded
-     * additively into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical
-     * (inert for victims without an incoming-reduction ability).
+     * OPTIONAL per-sub-hit incoming %-reduction hook (D-PR3). Invoked per footprint victim with
+     * that victim's per-hit crit outcome; the returned percentage points are folded additively
+     * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical (inert
+     * for victims without an incoming-reduction ability).
+     *
+     * #358 ADDENDUM 3: the channel is MIXED, so the hook may return the SPLIT instead of a single
+     * number. A bare `number` keeps its original meaning — entirely VICTIM-side, which is what
+     * every non-crit hit and every direct-call test supplies. The object form separates out the
+     * ATTACKER-side half (`attackerSidePct`, today the attacker's own squad-leader
+     * `outgoingCritDamage` penalty), which shrinks the attack AS THROWN and must therefore stay on
+     * BOTH damage axes rather than being stripped from the pre-mitigation one as collateral.
      */
     incomingReductionFor?: (
         victim: CombatActor,
         didCrit: boolean,
         subAttackIndex?: number
-    ) => number;
+    ) => number | { victimSidePct: number; attackerSidePct: number };
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (D-PR4 — Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
@@ -418,7 +425,13 @@ export function applyPositionalDamage(args: {
                 subDidCrit = true;
                 subCritVictimIds.push(victim.id);
             }
-            const equipReductionPct = incomingReductionFor?.(victim, didCrit, h) ?? 0;
+            // #358 ADDENDUM 3: unpack the (possibly split) reduction. A bare number is 100%
+            // victim-side — the pre-split contract, preserved for every direct-call site.
+            const reductionParts = incomingReductionFor?.(victim, didCrit, h) ?? 0;
+            const equipReductionPct =
+                typeof reductionParts === 'number' ? reductionParts : reductionParts.victimSidePct;
+            const attackerSideReductionPct =
+                typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const defenseProfile = defenseProfileOf(victim);
@@ -433,7 +446,8 @@ export function applyPositionalDamage(args: {
                 defenseProfile,
                 didCrit,
                 roleScale,
-                equipReductionPct
+                equipReductionPct,
+                attackerSideReductionPct
             );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;

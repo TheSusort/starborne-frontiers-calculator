@@ -63,6 +63,20 @@ describe('DefenseCalculatorPage', () => {
         expect(screen.getByText('Charged')).toBeInTheDocument();
     });
 
+    // The in-app docs name these three cards verbatim (`DocumentationPage.tsx`, the Defense
+    // Calculator entry: "Enemy Team is where you build the group bombarding the ship… Team is its
+    // own card… Combat Settings holds only the length of the fight"). Task 10 shipped that
+    // paragraph naming "Enemy Attackers" and "Supporting Allies", neither of which the UI has ever
+    // rendered — a user-facing inaccuracy nothing could catch. This arm is the tripwire on the side
+    // that actually moves: rename a heading here and it goes red, which is the prompt to update
+    // the docs paragraph in the same commit.
+    it('renders the three collapsible cards the in-app docs name', () => {
+        renderDefenseCalculatorPage();
+        expect(screen.getByText(/Enemy Team \(\d+\)/)).toBeInTheDocument();
+        expect(screen.getByText('Team')).toBeInTheDocument();
+        expect(screen.getByText('Combat Settings')).toBeInTheDocument();
+    });
+
     it('reports a damage-absorbed figure once an attacker applies pressure', async () => {
         renderDefenseCalculatorPage();
         fireEvent.click(screen.getByText(/Combat Settings/i));

@@ -1703,13 +1703,26 @@ interface ReactiveSideCtx {
  *  heal-target scalars; no reader until PR5b flips them). Keyed by victim actor id. */
 interface ActorIntake {
     incoming: number;
-    /** #358 ADDENDUM 2: the same intake BEFORE the victim's defence-mitigation factor — the raw
-     *  damage THROWN at this victim. `incoming` is post-defence (every direct-damage caller folds
-     *  the factor before the funnel sees it), which made a tankier ship report a SMALLER measured
-     *  EHP. Recorded at the same instant and scaled by the same incoming-block / Protection
-     *  factors, so `incomingRaw >= incoming` always, with equality at zero effective defence.
-     *  A path that applies no defence mitigation at all (DoT ticks, bomb/detonation bursts) books
-     *  the identical amount on both. */
+    /** #358 ADDENDUM 2, WIDENED BY ADDENDUM 3: the same intake with EVERY victim-side reduction
+     *  taken back out — the raw damage THROWN at this victim. `incoming` is what got THROUGH, so it
+     *  FALLS as a ship gets tankier, which made a tankier ship report a smaller headline (the whole
+     *  reason this axis exists; "measured EHP" as a NAME is retired — addendum 3 C1).
+     *
+     *  WHAT COMES OUT, as of addendum 3: the defence-mitigation factor (every direct-damage caller
+     *  folds it before the funnel sees it), the victim's own `Inc. Damage Down` family and its
+     *  pre-fight incoming baseline, `equipReductionPct`, `incomingDotReductionPct` (Vortex Veil),
+     *  and the reflect channel's incoming-reduction. WHAT STAYS IN: attacker-side modifiers and
+     *  enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`), plus shield/Barrier absorption —
+     *  those pools eat damage that ARRIVED.
+     *
+     *  SCALING, precisely: recorded at the same instant as `incoming` and scaled by the Protection
+     *  retention fraction, but NOT by the incoming-block proc — a blocked hit was thrown in full
+     *  (see the funnel's `damageRaw` comment for why that scaling was deliberately removed).
+     *  `incomingRaw >= incoming` always, with equality when the victim applies no reduction at all.
+     *  A path that folds no defence AND meets no other victim-side reduction (a plain DoT tick, a
+     *  bomb/detonation burst) books the identical amount on both — but a DoT tick on a Vortex Veil
+     *  carrier does NOT, which is why the two axes are pinned separately per path in
+     *  `rawIntakeAxis.test.ts`. */
     incomingRaw: number;
     shieldAbsorbed: number;
     barrierAbsorbed: number;
@@ -5500,13 +5513,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  pre-defence amount. Absent → the block falls back to re-deriving one from the
                  *  victim's live defence (see the fallback's note for what that misses). */
                 targetMitigation?: number;
-                /** #358 ADDENDUM 2: the PRE-defence-mitigation amount the caller folded
-                 *  `targetMitigation` into to produce `rawDamage` for this victim. Recorded on the
-                 *  victim's `.incomingRaw` axis alongside `.incoming`, scaled by the same
-                 *  incoming-block / Protection-retention factors. ABSENT means "this path applies
-                 *  no defence mitigation" (DoT ticks, bomb/detonation bursts, the flat-basis
-                 *  reactive) and the funnel books `rawDamage` on both axes. Never reconstructed by
-                 *  dividing by `targetMitigation` — that is lossy and undefined at a factor of 0. */
+                /** #358 ADDENDUM 2/3: the amount the caller reduced to produce `rawDamage` for this
+                 *  victim — pre-defence-mitigation, and (addendum 3) pre EVERY other victim-side
+                 *  reduction the caller applied: the `Inc. Damage Down` family, `equipReductionPct`,
+                 *  `incomingDotReductionPct`, the reflect channel's incoming-reduction. Recorded on
+                 *  the victim's `.incomingRaw` axis alongside `.incoming`, scaled by the Protection
+                 *  retention fraction but deliberately NOT by the incoming-block proc (see the
+                 *  `damageRaw` block below — a blocked hit was still thrown in full).
+                 *  ABSENT means "this path applies NO victim-side reduction whatsoever" (a plain
+                 *  DoT tick, a bomb/detonation burst, the flat-basis reactive) and the funnel books
+                 *  `rawDamage` on both axes. A DoT tick on a Vortex Veil carrier is NOT such a path
+                 *  and must supply this — both tick sites do, and both are pinned (the heal-target
+                 *  branch by `defenseSurvivabilitySim.test.ts` channel 6, the per-victim twin by
+                 *  `rawIntakeAxis.test.ts` path 8, which went green when it was deleted).
+                 *  Never reconstructed by dividing by `targetMitigation` — that is lossy and
+                 *  undefined at a factor of 0. */
                 preMitigationDamage?: number;
                 /** Epic PR12 (A): true when this victim IS the attacker's resolved anchor/primary
                  *  target (Nosorog's `requirePrimaryTarget` reflect gate). Undefined/true for every
@@ -6744,7 +6765,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  victim, supplied by the positional apply. See applyVictimDamage's
                  *  `cause.targetMitigation`. */
                 targetMitigation?: number;
-                /** #358 ADDENDUM 2 — see applyVictimDamage's `cause.preMitigationDamage`. */
+                /** #358 ADDENDUM 2/3 — see applyVictimDamage's `cause.preMitigationDamage`. */
                 preMitigationDamage?: number;
             } = {
                 killerId: actingActorId,
@@ -6785,8 +6806,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             // A2: the defence mitigation factor already folded into `damage` for this victim,
             // supplied by the positional apply. See applyVictimDamage's `cause.targetMitigation`.
             targetMitigation?: number,
-            /** #358 ADDENDUM 2 — the pre-defence twin of `damage`, supplied by the positional
-             *  apply. See applyVictimDamage's `cause.preMitigationDamage`. */
+            /** #358 ADDENDUM 2/3 — the pre-REDUCTION twin of `damage` (pre-defence and pre every
+             *  other victim-side reduction), supplied by the positional apply. See
+             *  applyVictimDamage's `cause.preMitigationDamage`. */
             preMitigationDamage?: number
         ): VictimDamageOutcome =>
             // C2b-2 T5: a player→enemy hit is always DIRECT damage from the acting attacker.
@@ -7651,10 +7673,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                     onSubAttackEnd: args.onSubAttackEnd,
                     // Per-victim crit: forward the firing turn's per-victim crit resolver.
                     rollVictimCrit: args.rollVictimCrit,
-                    // D-PR3: victim-side incoming %-reduction, per footprint victim per sub-hit. Shared
-                    // across all three sites (focus / walked-team / enemy) since drivePositionalApply
-                    // makes ONE applyPositionalDamage call. incomingReductionForHit returns 0 for actors
-                    // with no incoming-reduction ability → byte-identical when no such equipment exists.
+                    // D-PR3: per-victim, per-sub-hit incoming %-reduction. Shared across all three
+                    // sites (focus / walked-team / enemy) since drivePositionalApply makes ONE
+                    // applyPositionalDamage call. incomingReductionForHit returns 0 for actors with
+                    // no incoming-reduction ability → byte-identical when no such equipment exists.
+                    //
+                    // #358 ADDENDUM 3 — NOT A PURELY VICTIM-SIDE CHANNEL. On a CRIT this used to
+                    // return ONE fused number covering three terms, two of which belong to the
+                    // victim and one of which belongs to the ATTACKER (its squad-leader
+                    // `outgoingCritDamage` penalty). "Damage absorbed" strips victim-side
+                    // reductions only, and a fused number cannot be un-mixed downstream — the
+                    // atomic-mixed-channel trap that C3 was written about, one layer deeper. The
+                    // attacker's own penalty makes the attack smaller AS THROWN, so it must reach
+                    // the pre-mitigation axis intact. Hence the SPLIT return on the crit path.
+                    // (It is unreachable from `DefenseSimulationInput` today, which is precisely
+                    // why it needed writing down rather than leaving to the next reader.)
                     incomingReductionFor: (victim, didCrit) => {
                         const equip = incomingReductionForHit(incomingAbilitiesOf(victim.id), {
                             didCrit,
@@ -7668,6 +7701,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             selfHpPct: selfHpPctOf(victim.id),
                             attackerTauntedOrProvoked: attackerTauntedOrProvoked(args.actingId),
                         });
+                        // A non-crit hit reads no crit-family term at all, so the whole reduction
+                        // is victim-side and the bare-number form says exactly that.
                         if (!didCrit) return equip;
                         // F3 crit-conditional pre-fight damage modifiers, gated per sub-hit on
                         // didCrit — the SAME crit-family mechanism as the equip reduction above
@@ -7682,7 +7717,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         const attackerCritTerm = -(
                             allActorsById.get(args.actingId)?.preFight?.outgoingCritDamage ?? 0
                         );
-                        return equip + victimCritTerm + attackerCritTerm;
+                        // WHICH SIDE OWNS WHICH TERM: `victimCritTerm` is the VICTIM taking
+                        // smaller crits (a reduction it owns → comes off "damage absorbed");
+                        // `attackerCritTerm` is the ATTACKER's crits landing smaller (the attack
+                        // as thrown → stays on both axes). `victimHitDamageParts` re-sums the two
+                        // halves in this same left-to-right order before subtracting, so `damage`
+                        // is byte-identical to the pre-split fused number.
+                        return {
+                            victimSidePct: equip + victimCritTerm,
+                            attackerSidePct: attackerCritTerm,
+                        };
                     },
                     // D-PR4: attacker-side outgoing amplification (Menace/Giant Slayer), per footprint
                     // victim per sub-hit. outgoingAmplificationForHit returns 0 for attackers with no
