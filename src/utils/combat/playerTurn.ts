@@ -122,15 +122,27 @@ export interface PlayerRoundCtx {
     incomingHealPct: number;
     /** #367: the ENEMY-APPLIED portion that is ALREADY INCLUDED in `incomingHealPct` /
      *  `outgoingHealPct` above, published separately so a CROSS-ACTOR reader can subtract this
-     *  stale value back out and re-add a live `victimOwnEnemyHealModifiers` read — see
-     *  `triggers.ts`'s `liveHealChannelPct`, which is the only thing that should consume these.
-     *  This matters because `lastTurnCtxByActor` is written only at an actor's OWN turn, so a
-     *  debuff applied by a SLOWER enemy lands after the victim published its ctx and would
-     *  otherwise be invisible to every repair in the rest of that round.
+     *  stale value back out and re-add a live read — see `triggers.ts`'s `liveHealChannelPct`,
+     *  which is the only thing that should consume these. This matters because
+     *  `lastTurnCtxByActor` is written only at an actor's OWN turn, so a debuff applied by a
+     *  SLOWER enemy lands after the victim published its ctx and would otherwise be invisible to
+     *  every repair in the rest of that round.
      *
-     *  OPTIONAL DELIBERATELY: a ctx that folded no enemy term omits these, and a reader that
-     *  subtracts `?? 0` then subtracts nothing — which is the correct answer, not a degraded one.
-     *  It also keeps every existing test double that builds a `PlayerRoundCtx` by hand valid. */
+     *  #396: the value is the SHADOWED DELTA the fold actually added, not the raw enemy-applied
+     *  sum. The two differ whenever the actor carries its own instance of the same family — and
+     *  the delta is 0 when the actor's own instance wins outright. The consumer's `live` term is
+     *  computed the same way, so the two halves stay the same quantity and still cancel for a
+     *  fast applier.
+     *
+     *  OPTIONAL, BUT ABSENT AND 0 MEAN THE SAME THING — do not read presence as a signal. The
+     *  sole consumer subtracts `stale ?? 0`, so the two are arithmetically indistinguishable, and
+     *  nothing anywhere tests for the key. Optionality exists to keep the hand-built
+     *  `PlayerRoundCtx` test doubles valid, not to encode "no enemy term".
+     *
+     *  #396 also widened WHEN they are published. Pre-#396 they rode a spread guarded on a
+     *  non-zero enemy heal term; now they are published whenever `enemyAppliedFamilies` is
+     *  present, so an actor carrying only an `Attack Down` publishes an explicit 0 here where it
+     *  previously published nothing. Correct either way, by the paragraph above. */
     enemyAppliedIncomingHealPct?: number;
     enemyAppliedOutgoingHealPct?: number;
     /** Sub-project I, PR I4b/I4c — `dotDamage`-channel modifier abilities whose GATE is a
