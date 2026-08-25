@@ -1074,3 +1074,112 @@ export function reactiveDamagePositional(): BattleSimulationInput {
         rounds: 8,
     };
 }
+
+// ===========================================================================
+// outgoingSuppression (#389) — THE NUMERIC TRIPWIRE FOR DEFENDER-APPLIED OUTGOING DEBUFFS
+//
+// WHY THIS FIXTURE EXISTS, and it is a coverage finding rather than a feature. #389 fixed the
+// engine so a debuff applied BY the defender reduces what its attacker throws. Instrumented over
+// the whole suite, that new fold fires ~2,100 times across ~66 test files — yet the change moved
+// exactly ONE golden snapshot. The reason is that the numeric golden suites had NO coverage of this
+// mechanic at all:
+//   • `dpsGoldenParity` / `healingGoldenParity` contain ZERO occurrences of `Attack Down`,
+//     `Out. Damage Down`, or any negative `attack`/`outgoingDamage` parsed effect;
+//   • `realKitFingerprints` — the only real-ship golden — is deliberately STRUCTURAL, not numeric
+//     (see its header): it fingerprints WHICH clauses fired, so a changed damage magnitude is
+//     invisible to it by design;
+//   • and the ONE suppression debuff anywhere in the golden corpus was `healingModeEnemyTwo`'s
+//     `Attack Down II`, which is why exactly one snapshot moved.
+// So a blast radius of one was not evidence that #389 was narrow — it was evidence the regression
+// gate could not see the mechanic. This fixture closes that.
+//
+// BOTH DIRECTIONS ON ONE BOARD, because the engine rule is team-symmetric and a one-sided fixture
+// would pin only half of it:
+//   • PLAYER → ENEMY: `suppressionPlayerDebuffer` (M4) inflicts `Attack Down II` on the enemy front.
+//   • ENEMY → PLAYER: `suppressionEnemyDebuffer` (T4) inflicts `Out. Damage Down II` on the player
+//     front.
+// Both sides also carry a plain attacker whose damage is NOT suppressed, so the snapshot holds a
+// control on each side within the same run: if a future change zeroes the fold instead of moving it,
+// the suppressed and unsuppressed figures collapse together and that is visible in the diff.
+//
+// REAL CORPUS TIERS AND REAL SKILL TEXT. `Attack Down II` (-30% Attack) and `Out. Damage Down II`
+// (-30% Outgoing Direct Damage) are the actual tier-II magnitudes from `src/constants/buffs.ts`,
+// inflicted through real skill text so the parser is in the loop — the same route Opal's and
+// Warden's suppression passives take. Durations are NUMERIC ("for 3 turns"): a `recurring` enemy
+// debuff is INERT (the status engine gates the timed enemy write on a numeric duration) and would
+// make this fixture silently vacuous.
+// ===========================================================================
+
+/** Player front (M4): suppresses the ENEMY front's ATTACK stat. Real corpus tier: -30%. */
+const suppressionPlayerDebuffer = (): Ship => ({
+    ...shipBase('supp-player-debuffer', 'Interdictor', 'ATTACKER', {
+        hp: 300_000,
+        attack: 2_000,
+        defence: 400,
+        hacking: 300,
+        security: 200,
+        speed: 120,
+    }),
+    activeSkillText:
+        'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Attack Down II</unit-skill> for 3 turns.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+});
+
+/** Player back (M1): the CONTROL — never debuffed, so its damage must not move when the
+ *  suppression fold changes. */
+const suppressionPlayerControl = (): Ship =>
+    finalizeAttacker(
+        shipBase('supp-player-control', 'Bystander', 'ATTACKER', {
+            hp: 300_000,
+            attack: 2_000,
+            defence: 400,
+            hacking: 200,
+            security: 200,
+            speed: 110,
+        })
+    );
+
+/** Enemy front (T4): suppresses the PLAYER front's OUTGOING-DAMAGE channel — the other half of the
+ *  team-symmetry claim, and the other of the two channels #389 folds. */
+const suppressionEnemyDebuffer = (): Ship => ({
+    ...shipBase('supp-enemy-debuffer', 'Suppressor', 'ATTACKER', {
+        hp: 300_000,
+        attack: 2_000,
+        defence: 400,
+        hacking: 300,
+        security: 200,
+        speed: 100,
+    }),
+    activeSkillText:
+        'This Unit deals <unit-damage>100% damage</unit-damage> and inflicts <unit-skill>Out. Damage Down II</unit-skill> for 3 turns.',
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+});
+
+/** Enemy back (T1): the enemy-side CONTROL. */
+const suppressionEnemyControl = (): Ship =>
+    finalizeAttacker(
+        shipBase('supp-enemy-control', 'Onlooker', 'ATTACKER', {
+            hp: 300_000,
+            attack: 2_000,
+            defence: 400,
+            hacking: 200,
+            security: 200,
+            speed: 90,
+        })
+    );
+
+export function outgoingSuppression(): BattleSimulationInput {
+    return {
+        playerTeam: [
+            placement(suppressionPlayerDebuffer(), 'M4'),
+            placement(suppressionPlayerControl(), 'M1'),
+        ],
+        enemyTeam: [
+            placement(suppressionEnemyDebuffer(), 'T4'),
+            placement(suppressionEnemyControl(), 'T1'),
+        ],
+        rounds: 8,
+    };
+}

@@ -88,6 +88,8 @@ import {
     expandEnemyDebuffs,
     incomingHealFactor,
     payloadToSelectedBuff,
+    shadowedOutgoingDelta,
+    type OutgoingFamilyMap,
 } from './buffTotals';
 export { calculateBuffTotals, expandEnemyDebuffs, payloadToSelectedBuff };
 import { scaledStatusCount } from './statusCountScaling';
@@ -748,6 +750,15 @@ export interface PlayerTurnArgs {
      *  `turnCtx` this function publishes into the engine's `lastTurnCtxByActor` — the engine's
      *  `recipientIncomingHealPct` for every OTHER recipient. Absent → byte-identical. */
     enemyAppliedHeal?: EnemyAppliedHealModifiers;
+    /** #389: the named `Attack Down` / `Out. Damage Down` families THIS acting actor carries in its
+     *  own per-victim ENEMY store (`triggers.ts`'s `victimOwnEnemyOutgoingFamilies`), strongest
+     *  instance per family.
+     *
+     *  A FAMILY MAP rather than a summed percentage, because the owner ruling (spec §5) is
+     *  "highest tier wins" ACROSS the self/enemy boundary: the fold below must compare each applied
+     *  family against this actor's OWN instance of the same family and keep the stronger, which a
+     *  pre-summed scalar makes impossible. Absent → byte-identical. */
+    enemyAppliedOutgoing?: OutgoingFamilyMap;
     /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
@@ -2650,6 +2661,42 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // this cast. Pushing it into the standing stat instead would leak +20% pen into every later hit
     // AND into the DPS-mode aggregate scalars and the buff-display UI, which is exactly what
     // name-keying exists to avoid.
+    // #389: fold this actor's enemy-APPLIED `Attack Down` / `Out. Damage Down` into layer 1, with
+    // the owner's cross-store tier shadowing applied (spec §5: highest tier wins per named family,
+    // regardless of which side applied it).
+    //
+    // WHY IT SITS HERE, and not beside the `enemyAppliedHeal` fold 800 lines up. The shadowing
+    // comparison needs this actor's OWN named statuses on the same two channels, and those live in
+    // TWO lists: the scheduled self-buffs (layer 1) and `abilitySelfEffects` (layers 2+3, resolved
+    // at ~:2516). The second does not exist yet at the heal fold's site. So the delta is applied at
+    // the last moment before `scheduledTotals` is consumed — which is safe and checked: nothing
+    // between the two sites reads `attackBuff` or `outgoingDamageBuff` (the only other readers of
+    // either channel are inside `effectiveDamageStatsOf` itself, immediately below).
+    //
+    // THE SELF LIST MUST MATCH WHAT THE FOLD CONSUMES, or the subtraction inside
+    // `shadowedOutgoingDelta` removes a contribution the totals never contained. Both halves below
+    // are therefore taken from the exact same sources the fold uses: `entry.activeSelfBuffs` +
+    // `selfBuffLookup` is literally what `resolveSelfBuffTotals` expanded into
+    // `scheduledTotals`, and `abilitySelfEffects` is passed straight through to the accessor.
+    //
+    // TWO LAYERS ARE DELIBERATELY EXCLUDED, because neither is a NAMED family and so neither can
+    // participate in family shadowing: layer 4 `modifierAbilities` (un-named ability modifier
+    // channels like "+30% damage to Stasis enemies") and the squad-leader `preFight.outgoingDamage`
+    // baseline. Both keep contributing to the totals as before; they are simply invisible to the
+    // shadowing comparison.
+    //
+    // Absent/empty map → `{0, 0}` → byte-identical, and the self side is not even read.
+    if (args.enemyAppliedOutgoing) {
+        const ownNamedOutgoing = [
+            ...entry.activeSelfBuffs.flatMap((abf) =>
+                expandBuffEntry(abf, selfBuffLookup.get(abf.buffName) ?? [])
+            ),
+            ...abilitySelfEffects,
+        ];
+        const delta = shadowedOutgoingDelta(args.enemyAppliedOutgoing, ownNamedOutgoing);
+        scheduledTotals.attackBuff += delta.attackPct;
+        scheduledTotals.outgoingDamageBuff += delta.outgoingDamagePct;
+    }
     const dmgStats = effectiveDamageStatsOf({
         base: {
             attack,

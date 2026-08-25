@@ -128,6 +128,7 @@ import {
     selfBuffStacksForOwner,
     victimEnemyBuffs,
     victimOwnEnemyHealModifiers,
+    victimOwnEnemyOutgoingFamilies,
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
@@ -6873,6 +6874,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                     secondaryStatValue: 0,
                     hits: 1,
                     effectiveCritDamage: ownerStats.critDamage,
+                    // #389 RESIDUAL, DELIBERATELY NOT WIDENED — tracked as #395. This site does not
+                    // honour an enemy-APPLIED `Attack Down` / `Out. Damage Down` on the owner:
+                    // `ownerStats` comes from `effectiveStatsOf`, which folds only the two SELF-side
+                    // layers, and the outgoing channel is the hardcoded 0 below (which already drops
+                    // the owner's OWN `Out. Damage Up` — a pre-existing approximation, not a #389
+                    // regression). MEASURED over the whole suite before leaving it, with a
+                    // console.error probe at this line reporting every counter whose owner carries
+                    // an enemy-applied instance of either family: NOT ONE of the counters the suite
+                    // fires qualifies, and the probe was validated by removing its guard so it
+                    // reported every counter instead (re-run it rather than trusting a raw count
+                    // here, which goes stale as the suite grows). So the gap is corpus-unreachable
+                    // and widening it would be untestable — but it IS reachable in a real fight
+                    // (Opal debuffs an attacker; that attacker counters), so it is a filed
+                    // follow-up, not a closed question.
                     outgoingDamageBuffPct: 0,
                     // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
                     // incomingReductionForHit): the counter does NOT apply the attacker's
@@ -7089,6 +7104,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         secondaryStatValue: 0,
                         hits: 1,
                         effectiveCritDamage: ownerStats.critDamage,
+                        // #389 RESIDUAL, DELIBERATELY NOT WIDENED — twin of the counter-attack
+                        // site's note, tracked in the same issue, #395. The reactive proc reads
+                        // `effectiveStatsOf` (self-side layers only) and hardcodes the outgoing
+                        // channel to 0, so an enemy-APPLIED suppression debuff on the owner is not
+                        // honoured here. MEASURED with the same validated console.error probe as
+                        // the counter site: every reactive proc the suite fires has an owner
+                        // carrying no such debuff. Corpus-unreachable, reachable in a real fight,
+                        // filed follow-up.
                         outgoingDamageBuffPct: 0,
                         incomingDamageModifierPct: 0,
                         defensePenetrationPct: ownerStats.defensePenetration,
@@ -8759,6 +8782,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                     return m.incomingHealPct !== 0 || m.outgoingHealPct !== 0
                         ? { enemyAppliedHeal: m }
                         : {};
+                })(),
+                // #389: the DAMAGE twin of the heal spread above — the named `Attack Down` /
+                // `Out. Damage Down` families this actor carries in its OWN per-victim enemy store,
+                // computed fresh per turn. Passed as a FAMILY MAP, not a sum: the owner ruling
+                // (spec §5) shadows same-family instances across the self/enemy boundary, so
+                // `runPlayerTurn` has to compare each applied family against the actor's own
+                // instance of it rather than just adding. Team-agnostic for the same reason as the
+                // heal twin — the enemy store is keyed by victim id regardless of side, and this
+                // runs for every acting actor on both sides. Spread-guarded so a clean actor omits
+                // the key entirely and every existing fixture stays byte-identical.
+                ...(() => {
+                    const fams = victimOwnEnemyOutgoingFamilies(statusEngine, a.id);
+                    return fams.size > 0 ? { enemyAppliedOutgoing: fams } : {};
                 })(),
                 // Sub-project I, PR I3 (Layer 1): team-aura distribution. Union THIS actor's
                 // LIVING same-side allies' `all-allies` passive modifier abilities, EXCLUDING

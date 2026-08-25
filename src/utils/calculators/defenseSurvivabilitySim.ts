@@ -169,18 +169,28 @@ export interface DefenseSurvivabilityResult {
  *         Pinned as "SAME ROUND, DIFFERENT FIGURE" in `defenseSurvivabilitySim.test.ts`.
  *       – ATTACKER-SIDE terms, because the attack is counted AS THROWN: `effectiveAttack`, outgoing
  *         modifiers, crit, affinity, and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`).
- *         READ THAT NARROWLY: it means terms the ATTACKER carries. MEASURED (4-round survivor
- *         window, defence 0, one 10,000-attack enemy — pinned in the sim test as "a
- *         DEFENDER-APPLIED outgoing debuff does NOT move the headline"):
+ *       – AND SINCE #389, SUPPRESSION THE DEFENDER APPLIES TO ITS ATTACKER, which lowers the
+ *         figure. A debuff reducing an actor's outgoing damage now folds into that actor's outgoing
+ *         damage regardless of WHO applied it, so a defender that suppresses its attacker really is
+ *         thrown less. MEASURED (4-round survivor window, defence 0, one 10,000-attack enemy —
+ *         pinned in the sim test's `#389` describe):
  *             plain ............................................. 40,000
- *             enemy SELF-applies `Out. Damage Down` −50% ......... 20,000  ← the fold is live
- *             DEFENDER applies `Out. Damage Down` −50% .......... 40,000  ← unmoved
- *             DEFENDER applies `Attack Down` −50% / −90% ........ 40,000  ← unmoved
- *         So a defender that suppresses its attacker does NOT lower its own headline. This header
- *         used to claim the opposite, citing Opal's `Attack Down II` and Warden's `Out. Damage Down
- *         II` — verified from `docs/ship-skills.csv` that those ships HAVE those passives, never
- *         measured whether the engine folds them into the attacker's outgoing damage. It does not.
- *         Whether it SHOULD is an open question and is not settled here.
+ *             enemy SELF-applies `Out. Damage Down` −50% ......... 20,000
+ *             DEFENDER applies `Out. Damage Down` −25/−50/−90% ... 30,000 / 20,000 / 4,000
+ *             DEFENDER applies `Attack Down` −25/−50/−90% ....... 30,000 / 20,000 / 4,000
+ *             DEFENDER applies `Out. Damage Up` +50% ............ 60,000  ← sign witness
+ *         ⚠️ THIS HEADER TOLD THE OPPOSITE STORY FOR ONE RELEASE, and the history is worth keeping
+ *         because it is a measurement lesson. It originally claimed suppression lowered the figure,
+ *         citing Opal's `Attack Down II` and Warden's `Out. Damage Down II` — real passives in
+ *         `docs/ship-skills.csv`, but nobody had measured whether the engine FOLDED them. #358
+ *         measured it, found it did not, and corrected the header to say so while pinning the
+ *         defect and flagging the ruling as open. #389 answered the ruling YES and fixed the
+ *         engine, so the original claim is true again — for the first time by measurement rather
+ *         than by assumption.
+ *         SAME-FAMILY INSTANCES SHADOW ACROSS THE BOUNDARY (#389 spec §5): highest tier wins, never
+ *         the sum. A self-inflicted `Attack Down I` on an attacker the defender hits with
+ *         `Attack Down III` throws at −45%, not −15% and not −60%. Different families
+ *         (`Attack Down` + `Out. Damage Down`) still combine.
  *       – NOT an ally's Protection redirect: the redirected slice is booked in FULL on the
  *         protector's own raw axis (addendum 4 — a REASSIGNMENT, not a reduction). It therefore
  *         lowers the protected ship's figure, and that ruling is LOCKED. Do not "fix" it.
