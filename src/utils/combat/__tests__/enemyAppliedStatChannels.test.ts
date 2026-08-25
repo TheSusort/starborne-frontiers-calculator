@@ -50,10 +50,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
+import { effectiveStatsOf } from '../effectiveStats';
 import { createEventBus, type CombatEvent } from '../events';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
-import type { ParsedBuffEffects } from '../../../types/calculator';
+import type { ParsedBuffEffects, SelectedGameBuff } from '../../../types/calculator';
+import type { CombatActor } from '../state';
 import type { StatusEngine } from '../statusEngine';
 import type { Position } from '../../../types/encounters';
 
@@ -720,5 +722,125 @@ describe('#398 security channel — the damage basis (ruling R3)', () => {
 
         expect(focusHpLoss('control')).toBeCloseTo(FULL_SECONDARY, 6);
         expect(focusHpLoss('enemy')).toBeCloseTo(DEBUFFED_SECONDARY, 6);
+    });
+});
+
+// ── 6. cross-store shadowing on the newly-live channels ──────────────────────────────────────
+
+/**
+ * Switching on a dead channel without shadowing would make a self-inflicted and an enemy-applied
+ * instance of ONE family ADD, which the locked ruling forbids: the strongest single instance of a
+ * named family applies and weaker instances are shadowed, REGARDLESS of which side applied it.
+ * Only DoTs and bombs stack, and `deriveFamilyKey` already excludes those by giving each tier its
+ * own family key.
+ *
+ * ⚠️ THE FIXTURE MUST BE BUILT FROM BUFF LISTS, NOT SHIP KITS. A probe over all 149 corpus ships
+ * found ZERO families granted from both a self-targeted and an enemy-targeted ability, on every
+ * channel — so a straddle assembled out of real kits does not exist and the test would be
+ * vacuously green. The straddle is user-reachable through the pickers instead.
+ *
+ * Read numerically off `effectiveStatsOf`, the production accessor the engine's own turn ordering
+ * uses, because turn order alone cannot separate all three outcomes (-50 shadowed, -70 summed and
+ * -20 own-only would need three different rival speeds to distinguish).
+ */
+describe('#398 — cross-store shadowing on the newly-live channels', () => {
+    const VICTIM_BASE_SPEED = 500;
+
+    /** Grants `own` on the victim's own passive slot and has the applier cast `applied` at it, then
+     *  reads the victim's live effective speed. `selfBuffLookup` is empty because the fixture has
+     *  no SCHEDULED buffs (`selfBuffs: []`) — the same input the engine's own fold would expand. */
+    const shadowedSpeed = (
+        own: { name: string; speed: number } | undefined,
+        applied: { name: string; speed: number }
+    ): number => {
+        let statusEngine: StatusEngine | undefined;
+        let victimActor: CombatActor | undefined;
+        runCombat({
+            numRounds: 2,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            defensePenetration: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            chargeCount: 0,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: BIG_HP,
+            speed: 400,
+            position: 'M1',
+            hacking: 100_000,
+            shipSkills: { slots: [] },
+            teamActors: [
+                asTeamActor({
+                    id: VICTIM_ID,
+                    position: 'M4',
+                    speed: VICTIM_BASE_SPEED,
+                    hp: BIG_HP,
+                    slots: own ? [passiveSlot([selfGrant(own.name, { speed: own.speed })])] : [],
+                }),
+            ],
+            enemyAttackers: [
+                asEnemy({
+                    id: APPLIER_ID,
+                    position: 'M1',
+                    speed: 950,
+                    hp: BIG_HP,
+                    hacking: 100_000,
+                    slots: [activeSlot([enemyCast(applied.name, { speed: applied.speed })])],
+                }),
+            ],
+            __testTapStatusEngine: (e) => {
+                statusEngine = e;
+            },
+            __testTapActors: (actors) => {
+                victimActor = actors.find((a) => a.id === VICTIM_ID);
+            },
+        });
+        return effectiveStatsOf(statusEngine!, new Map<string, SelectedGameBuff[]>(), victimActor!)
+            .speed;
+    };
+
+    it('a stronger APPLIED tier wins over the victim own weaker instance', () => {
+        // own `Speed Down I` (-20) vs applied `Speed Down II` (-50) → -50, NOT the -70 sum.
+        expect(
+            shadowedSpeed(
+                { name: 'Speed Down I', speed: -20 },
+                { name: 'Speed Down II', speed: -50 }
+            )
+        ).toBe(250);
+    });
+
+    it('the victim own STRONGER instance wins over a weaker applied one', () => {
+        // own -50 stands and the applied -20 is shadowed away → still -50, not -70 and not -20.
+        expect(
+            shadowedSpeed(
+                { name: 'Speed Down II', speed: -50 },
+                { name: 'Speed Down I', speed: -20 }
+            )
+        ).toBe(250);
+    });
+
+    it('an applied family the victim does not carry at all applies in full', () => {
+        expect(shadowedSpeed(undefined, { name: 'Speed Down II', speed: -50 })).toBe(250);
+    });
+
+    it('DIFFERENT families on one channel still combine additively', () => {
+        // Shadowing is per NAMED family, never per channel: -20 and -30 from two different families
+        // sum to -50. Collapsing them would leave 350 (only the stronger), which this rejects.
+        expect(
+            shadowedSpeed(
+                { name: 'Speed Down I', speed: -20 },
+                { name: 'Xcellence Drag I', speed: -30 }
+            )
+        ).toBe(250);
     });
 });
