@@ -5,7 +5,13 @@ import type { ConditionContext } from '../abilities/evaluateConditions';
 import { toSimBuffs, toDotAndPenModifiers } from '../calculators/dpsBuffHelpers';
 import { StatusEngine } from './statusEngine';
 import { CombatActor } from './state';
-import { calculateBuffTotals, payloadToSelectedBuff } from './buffTotals';
+import {
+    calculateBuffTotals,
+    payloadToSelectedBuff,
+    shadowedDelta,
+    FOLD_SHADOW_CHANNELS,
+} from './buffTotals';
+import { victimOwnEnemyFamilies } from './triggers';
 
 // ---------------------------------------------------------------------------
 // This module exposes TWO effective-stat accessors with deliberately different
@@ -68,19 +74,48 @@ export function foldActorBuffTotals(
         .map((s) => payloadToSelectedBuff(s.payload));
     const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
     const timed = calculateBuffTotals(toSimBuffs(timedEffects));
+    // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
+    // side applied TO it. Until this existed, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
+    // `Hacking Down` and `Security Down` (17 corpus ships) landed in that store, displayed, ticked
+    // down and changed NOTHING, because the only two sources here were self-sided.
+    //
+    // FIVE CHANNELS ONLY (`FOLD_SHADOW_CHANNELS`), and the narrowness is the whole safety
+    // argument: those five are the ones that had NO enemy-store reader anywhere. Every other
+    // channel already has one (`victimOwnEnemyFamilies` on the outgoing pair,
+    // `toEnemyModifiers` on defense/incomingDamage, `victimOwnEnemyHealModifiers` on the heal
+    // pair), so projecting any of them here would DOUBLE-COUNT — and
+    // `effectiveStatsOf(...).attack`/`.defence` alone are read at ~20 sites in engine.ts, where a
+    // silent doubling would be near-impossible to attribute.
+    //
+    // SHADOWED, NOT SUMMED. The locked rule is highest tier wins per named family REGARDLESS of
+    // which side applied it, so an enemy `Speed Down II` (-50) meeting the actor's own
+    // `Speed Down I` (-20) resolves to -50 — not -70, and not -20.
+    //
+    // THE SELF LIST MUST BE WHAT THIS FOLD CONSUMED, or `shadowedDelta`'s subtraction removes a
+    // contribution the totals never held. Both lists below are the exact ones summed above.
+    //
+    // Team-agnostic for free: the enemy store is keyed by victim id regardless of side, so this
+    // reads a player-inflicted debuff on an enemy ship identically. Both side arms are pinned in
+    // `enemyAppliedStatChannels.test.ts`.
+    const { delta: enemyDelta } = shadowedDelta(
+        victimOwnEnemyFamilies(statusEngine, actorId, FOLD_SHADOW_CHANNELS),
+        [...scheduledSelfBuffs, ...timedEffects],
+        FOLD_SHADOW_CHANNELS
+    );
     // Field-by-field sum is intentional: explicit enumeration preserves type-safety over a generic key reduce.
     return {
         attackBuff: scheduled.attackBuff + timed.attackBuff,
-        critBuff: scheduled.critBuff + timed.critBuff,
-        critDamageBuff: scheduled.critDamageBuff + timed.critDamageBuff,
+        critBuff: scheduled.critBuff + timed.critBuff + (enemyDelta.crit ?? 0),
+        critDamageBuff:
+            scheduled.critDamageBuff + timed.critDamageBuff + (enemyDelta.critDamage ?? 0),
         outgoingDamageBuff: scheduled.outgoingDamageBuff + timed.outgoingDamageBuff,
         defenceBuff: scheduled.defenceBuff + timed.defenceBuff,
         hpBuff: scheduled.hpBuff + timed.hpBuff,
         outgoingHealBuff: scheduled.outgoingHealBuff + timed.outgoingHealBuff,
         incomingHealBuff: scheduled.incomingHealBuff + timed.incomingHealBuff,
-        speedBuff: scheduled.speedBuff + timed.speedBuff,
-        hackingBuff: scheduled.hackingBuff + timed.hackingBuff,
-        securityBuff: scheduled.securityBuff + timed.securityBuff,
+        speedBuff: scheduled.speedBuff + timed.speedBuff + (enemyDelta.speed ?? 0),
+        hackingBuff: scheduled.hackingBuff + timed.hackingBuff + (enemyDelta.hacking ?? 0),
+        securityBuff: scheduled.securityBuff + timed.securityBuff + (enemyDelta.security ?? 0),
         attackFlatBuff: scheduled.attackFlatBuff + timed.attackFlatBuff,
     };
 }
