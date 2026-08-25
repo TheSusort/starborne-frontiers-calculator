@@ -1383,17 +1383,26 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// #358 TASK 13 — THE TWO ROUTES BY WHICH THE HEADLINE CAN FALL, AND THE ONE THAT DOES NOT
+// #389 — A DEFENDER-APPLIED OUTGOING DEBUFF DOES REDUCE WHAT ITS ATTACKER THROWS
 //
-// These two arms exist because a claim in this epic was INFERRED rather than measured. The module
-// header used to tell callers that "a defender that SUPPRESSES ITS ATTACKER lowers its own
-// headline", citing Opal's `Attack Down II` and Warden's `Out. Damage Down II` — both real
-// passives in `docs/ship-skills.csv`. What was never checked is whether the engine folds a
-// DEFENDER-APPLIED debuff into the attacker's outgoing damage. It does not. The claim shipped into
-// the changelog, the in-app docs, and the jsdoc that DEFINES the metric, where it instructed UI
-// callers to promise the opposite of what the engine does.
+// HISTORY, because it explains the shape of this block. #358 task 13 discovered that the engine
+// folded an attacker's OWN `Attack Down` / `Out. Damage Down` and silently ignored one applied by
+// the DEFENDER — a defender-applied -90% left a 10,000-attack enemy throwing a full 40,000 over
+// four rounds. That task did not settle whether it SHOULD, so it pinned the defective behaviour
+// with an explicit "delete me if the ruling flips" note and corrected the three text claims that
+// promised the opposite.
+//
+// THE RULING FLIPPED (#389): a debuff reducing an actor's outgoing damage folds into that actor's
+// outgoing damage regardless of who applied it. The pin has therefore been DELETED, not loosened,
+// and replaced by the direction arm below. The two liveness arms survive because they are still
+// exactly the instruments that keep this block honest.
+//
+// AND A SECOND RULING (#389 spec §5): same-family instances SHADOW across the self/enemy boundary
+// — highest tier wins, never the sum. That matters here more than anywhere, because additive is
+// precisely what the code does if the dead enemy-side channel is merely switched on. The three
+// `§5.3` arms at the bottom of this describe are the guards on that.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-describe('#358 task 13 — a DEFENDER-APPLIED outgoing debuff does NOT move the headline', () => {
+describe('#389 — a DEFENDER-APPLIED outgoing debuff reduces what its attacker throws', () => {
     /**
      * One attacker at 10,000/round and a defender that casts an enemy-side debuff before swinging.
      *
@@ -1541,44 +1550,251 @@ describe('#358 task 13 — a DEFENDER-APPLIED outgoing debuff does NOT move the 
         expect(plain.elapsedRounds).toBe(5);
         // …and in round 2 with the SAME instance's +200% incoming honoured. The debuff landed.
         expect(both.elapsedRounds).toBe(2);
-        // And the `outgoingDamage: -50` half of that landed instance still did nothing to what the
-        // enemy threw while it lived: round 1 is a full 10,000 in both runs.
+        // #389: the `outgoingDamage: -50` half of that same landed instance is now honoured too —
+        // round 1 falls from a full 10,000 to exactly half. Before #389 both figures read 10,000,
+        // and those two assertions were the second of the two pins this issue deleted: they were
+        // the sharpest statement of the defect (one instance, both halves landed, only one obeyed).
         expect(plain.rounds[0].incomingDamageRaw).toBe(10_000);
-        expect(both.rounds[0].incomingDamageRaw).toBe(10_000);
+        expect(both.rounds[0].incomingDamageRaw).toBe(5_000);
     });
 
-    // ── THE MEASURED FACT, PINNED ────────────────────────────────────────────────────────────
+    // ── THE DIRECTION ARM (replaces the #358 pin) ────────────────────────────────────────────
     //
-    // ⚠️ THIS IS NOT AN ENDORSEMENT. Whether the engine SHOULD honour a defender-applied
-    // `Attack Down` / `Out. Damage Down` on the attacker's outgoing fold is an OPEN GAME/ENGINE
-    // QUESTION and this task does not settle it — it only stops the app from claiming the opposite
-    // of what the engine does. If that question is answered YES later, this arm goes red BY
-    // DESIGN, and the right response is to DELETE it together with the three text claims it
-    // fences (`defenseSurvivabilitySim.ts` header, `DocumentationPage.tsx`, `changelog.ts`) —
-    // never to loosen it.
-    it('DIRECTION: a defender-applied Attack Down / Out. Damage Down leaves absorbed FLAT', () => {
+    // ⚠️ THIS ARM REPLACES A DELETED PIN. #358 task 13 asserted the OPPOSITE here — that the four
+    // figures below were all a flat 40,000 — and carried a note saying that if the open ruling ever
+    // came back YES this arm should be DELETED, together with the three text claims it fenced, and
+    // never loosened. That is what happened: the pin is gone, the sim's module header, the in-app
+    // docs and the changelog all moved with it, and this is the arm that took its place.
+    //
+    // DIRECTION, NOT MAGNITUDE. Every figure is asserted exactly AND the sequence is asserted
+    // strictly monotone, because a magnitude-only assertion passes with the sign inverted. The
+    // `+50%` row is the sign witness from the other side: the same channel, applied by the same
+    // defender, must make the attacker hit HARDER when the modifier is positive.
+    it('DIRECTION: more defender-applied suppression means strictly less damage thrown', () => {
         const plain = suppressRun({ ...PINNED, effects: null });
-        const outDown = suppressRun({ ...PINNED, effects: { outgoingDamage: -50 } });
-        const attackDown = suppressRun({ ...PINNED, effects: { attack: -50 } });
-        const crushed = suppressRun({ ...PINNED, effects: { attack: -90 } });
+        const out25 = suppressRun({ ...PINNED, effects: { outgoingDamage: -25 } });
+        const out50 = suppressRun({ ...PINNED, effects: { outgoingDamage: -50 } });
+        const out90 = suppressRun({ ...PINNED, effects: { outgoingDamage: -90 } });
+        const atk25 = suppressRun({ ...PINNED, effects: { attack: -25 } });
+        const atk50 = suppressRun({ ...PINNED, effects: { attack: -50 } });
+        const atk90 = suppressRun({ ...PINNED, effects: { attack: -90 } });
+        const amped = suppressRun({ ...PINNED, effects: { outgoingDamage: 50 } });
 
-        // The window really is pinned, so a flat headline cannot be a round-count artefact.
-        for (const r of [plain, outDown, attackDown, crushed]) {
+        // The window really is pinned at 4 rounds in every run, so none of the movement below can
+        // be a round-count artefact (the enemy is unkillable and the defender's attack is 0).
+        for (const r of [plain, out25, out50, out90, atk25, atk50, atk90, amped]) {
             expect(r.survived).toBe(true);
             expect(r.elapsedRounds).toBe(4);
         }
 
+        // `Out. Damage Down`: the outgoing-multiplier channel.
         expect(plain.damageAbsorbed).toBe(40_000);
-        expect(outDown.damageAbsorbed).toBe(40_000);
-        expect(attackDown.damageAbsorbed).toBe(40_000);
-        // −90% is here to rule out a small-magnitude explanation: nine tenths of the attacker's
-        // attack removed, and not one point comes off the total.
-        expect(crushed.damageAbsorbed).toBe(40_000);
+        expect(out25.damageAbsorbed).toBe(30_000);
+        expect(out50.damageAbsorbed).toBe(20_000);
+        expect(out90.damageAbsorbed).toBe(4_000);
+        // `Attack Down`: the attack-stat channel. Equal to the outgoing figures here only because
+        // this fixture's damage is linear in attack with no flat term — not a general identity.
+        expect(atk25.damageAbsorbed).toBe(30_000);
+        expect(atk50.damageAbsorbed).toBe(20_000);
+        expect(atk90.damageAbsorbed).toBe(4_000);
 
-        // The POST-mitigation axis is flat too — this is not a raw-axis-only exclusion. Whatever
-        // the defender put on its attacker, the attacker threw and landed the same hit.
-        expect(outDown.breakdown.gross).toBe(plain.breakdown.gross);
-        expect(attackDown.breakdown.gross).toBe(plain.breakdown.gross);
+        // STRICTLY MONOTONE in suppression, both channels. This is the assertion that a
+        // sign-inverted implementation cannot satisfy.
+        const outSeries = [plain, out25, out50, out90].map((r) => r.damageAbsorbed);
+        const atkSeries = [plain, atk25, atk50, atk90].map((r) => r.damageAbsorbed);
+        for (const series of [outSeries, atkSeries]) {
+            for (let i = 1; i < series.length; i++) expect(series[i]).toBeLessThan(series[i - 1]);
+        }
+
+        // SIGN WITNESS: the same defender-applied channel with a POSITIVE value raises the figure.
+        expect(amped.damageAbsorbed).toBe(60_000);
+
+        // The POST-mitigation axis moves too — this is not a raw-axis-only effect.
+        expect(out50.breakdown.gross).toBeLessThan(plain.breakdown.gross);
+        expect(atk50.breakdown.gross).toBeLessThan(plain.breakdown.gross);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // #389 SPEC §5.3 — HIGHEST TIER WINS ACROSS THE SELF/ENEMY BOUNDARY
+    //
+    // Tier shadowing (`familyApplicationWins`, statusEngine.ts) is PER-STORE: it keys a family map
+    // inside ONE side's store and cannot see across the self/enemy boundary. So merely switching on
+    // the dead enemy-side channel makes two instances of one named debuff ADD — which the owner
+    // ruling rules out. These three arms are the guards on the shadowing layer that prevents it.
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+
+    /**
+     * A defender that applies named debuffs to an attacker which may ALSO be self-inflicting named
+     * debuffs of its own. Distinct from `suppressRun` above in the one way these arms need: the
+     * enemy gets its own skill list, so the SELF side of the boundary can be populated.
+     *
+     * ⚠️ EVERY DURATION IS NUMERIC, AND THAT IS LOAD-BEARING — see `suppressRun`'s note. A
+     * `duration: 'recurring'` enemy-side debuff is INERT (the status engine gates the timed enemy
+     * write on a numeric duration), and a whole 12-shape sweep during #358 was run that way and
+     * reported "no movement" for debuffs that had never landed.
+     *
+     * Buff NAMES are load-bearing too: `deriveFamilyKey` strips the Roman suffix, so
+     * `Attack Down I` and `Attack Down III` are ONE family while `Attack Down III` and
+     * `Out. Damage Down III` are TWO. An arm that renamed these would stop testing what it says.
+     */
+    const boundaryRun = (
+        applied: { buffName: string; effects: ParsedBuffEffects }[],
+        enemySelf: { buffName: string; effects: ParsedBuffEffects }[]
+    ) => {
+        idCounter = 0;
+        const defenderAbilities = [
+            ...applied.map((a) =>
+                ab({
+                    type: 'debuff',
+                    target: 'all-enemies',
+                    config: {
+                        type: 'debuff',
+                        buffName: a.buffName,
+                        parsedEffects: a.effects,
+                        stacks: 1,
+                        isStackable: false,
+                        application: 'apply',
+                        duration: 99,
+                    },
+                })
+            ),
+            ab({
+                type: 'damage',
+                target: 'enemy',
+                config: { type: 'damage', multiplier: 200, hits: 1 },
+            }),
+        ];
+        const enemyAbilities = [
+            ...enemySelf.map((a) =>
+                ab({
+                    type: 'buff',
+                    target: 'self',
+                    config: {
+                        type: 'buff',
+                        buffName: a.buffName,
+                        parsedEffects: a.effects,
+                        stacks: 1,
+                        isStackable: false,
+                        duration: 99,
+                    },
+                })
+            ),
+            ab({
+                type: 'damage',
+                target: 'enemy',
+                config: { type: 'damage', multiplier: 100, hits: 1 },
+            }),
+        ];
+        return simulateDefenseSurvivability(
+            BASE({
+                rounds: 4,
+                defender: { ...DEFENDER, attack: 0 },
+                shipSkills: { slots: [{ slot: 'active', abilities: defenderAbilities }] },
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: {
+                            attack: 10_000,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 50,
+                            hp: 100_000_000,
+                            defence: 0,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: { slots: [{ slot: 'active', abilities: enemyAbilities }] },
+                    },
+                ],
+            })
+        );
+    };
+
+    /** Real corpus tiers (src/constants/buffs.ts): I = -15%, III = -45%. */
+    const AD1 = { buffName: 'Attack Down I', effects: { attack: -15 } as ParsedBuffEffects };
+    const AD3 = { buffName: 'Attack Down III', effects: { attack: -45 } as ParsedBuffEffects };
+    const OD3 = {
+        buffName: 'Out. Damage Down III',
+        effects: { outgoingDamage: -45 } as ParsedBuffEffects,
+    };
+    /** A DIFFERENT family on the SAME channel as `Attack Down` — the only shape that can detect a
+     *  collapse across families (see the cross-family arm for why `Out. Damage Down` cannot). */
+    const AU2 = { buffName: 'Attack Up II', effects: { attack: 30 } as ParsedBuffEffects };
+
+    it('§5.3 CROSS-STORE SHADOWING: self Attack Down I + applied III yields the III value', () => {
+        const plain = boundaryRun([], []);
+        const appliedI = boundaryRun([AD1], []);
+        const appliedIII = boundaryRun([AD3], []);
+        const both = boundaryRun([AD3], [AD1]);
+
+        // THE THREE CANDIDATE FIGURES ARE MUTUALLY DISTINGUISHABLE, asserted before the arm that
+        // discriminates between them — without this the arm could not tell shadowing from either
+        // alternative it exists to exclude. -15% -> 34,000; -45% -> 22,000; the -60% sum -> 16,000.
+        expect(plain.damageAbsorbed).toBe(40_000);
+        expect(appliedI.damageAbsorbed).toBe(34_000);
+        expect(appliedIII.damageAbsorbed).toBe(22_000);
+        const sumFigure = 16_000;
+        expect(new Set([34_000, 22_000, sumFigure]).size).toBe(3);
+
+        // THE RULING: the III value, and provably neither of the other two.
+        expect(both.damageAbsorbed).toBe(22_000);
+        expect(both.damageAbsorbed).not.toBe(34_000); // not the weaker instance
+        expect(both.damageAbsorbed).not.toBe(sumFigure); // and NOT additive
+
+        // The window is pinned in every run, so none of this is a round-count artefact.
+        for (const r of [plain, appliedI, appliedIII, both]) expect(r.elapsedRounds).toBe(4);
+    });
+
+    it('§5.3 CROSS-FAMILY ADDITIVITY: Attack Down and Out. Damage Down still combine', () => {
+        // The guard against over-collapsing. `deriveFamilyKey` gives these two DIFFERENT family
+        // keys, so shadowing must not touch them — they ride separate channels of the damage
+        // formula and compose multiplicatively: 40,000 x 0.55 x 0.55 = 12,100.
+        const attackOnly = boundaryRun([AD3], []);
+        const outgoingOnly = boundaryRun([OD3], []);
+        const bothFamilies = boundaryRun([AD3, OD3], []);
+
+        expect(attackOnly.damageAbsorbed).toBe(22_000);
+        expect(outgoingOnly.damageAbsorbed).toBe(22_000);
+        expect(bothFamilies.damageAbsorbed).toBe(12_100);
+
+        // Strictly stronger than either alone.
+        expect(bothFamilies.damageAbsorbed).toBeLessThan(attackOnly.damageAbsorbed);
+        expect(bothFamilies.damageAbsorbed).not.toBe(22_000);
+
+        // ⚠️ THE ASSERTIONS ABOVE ARE NOT ENOUGH ON THEIR OWN, and a mutation check is what
+        // proved it: replacing `deriveFamilyKey(b.buffName)` with a single constant key — i.e.
+        // collapsing EVERY family into one bucket, the exact defect §5.2 forbids — left all of
+        // them GREEN. The reason is structural: `OutgoingFamilyEntry` carries the two channels
+        // INDEPENDENTLY, so two families that touch DIFFERENT channels survive a collapse
+        // untouched (`strongerPct(-45, 0)` on one channel and `strongerPct(0, -45)` on the other
+        // both keep -45). `Attack Down` + `Out. Damage Down` is therefore blind to it.
+        //
+        // The discriminating case is two different families on the SAME channel, and the corpus
+        // has an obvious and realistic one: an `Attack Up` the enemy self-buffs against an
+        // `Attack Down` the defender lands. Different families, one channel, so BOTH apply and
+        // they net out: +30 - 45 = -15%, i.e. 34,000. Under a collapsed key the two would shadow
+        // each other and the stronger (-45) alone would stand, reporting 22,000.
+        const selfAmped = boundaryRun([], [AU2]);
+        const ampedThenSuppressed = boundaryRun([AD3], [AU2]);
+        expect(selfAmped.damageAbsorbed).toBe(52_000); // +30% alone
+        expect(ampedThenSuppressed.damageAbsorbed).toBe(34_000); // +30 then -45 => -15%
+        expect(ampedThenSuppressed.damageAbsorbed).not.toBe(22_000); // NOT shadowed to the -45
+    });
+
+    it('§5.3 REVERSE DIRECTION: a self tier HIGHER than the applied tier wins', () => {
+        // Without this arm "highest wins" is untested in the direction where the DEFENDER's debuff
+        // is the weaker one — an implementation that simply overwrote the self value with the
+        // applied value would pass the cross-store arm above and fail here.
+        const selfIIIOnly = boundaryRun([], [AD3]);
+        const reverse = boundaryRun([AD1], [AD3]); // self III (-45) vs applied I (-15)
+
+        expect(selfIIIOnly.damageAbsorbed).toBe(22_000);
+        expect(reverse.damageAbsorbed).toBe(22_000); // the SELF tier stands
+        expect(reverse.damageAbsorbed).not.toBe(34_000); // not overwritten by the weaker applied I
+        expect(reverse.damageAbsorbed).not.toBe(16_000); // and still not additive
+
+        // Equal tiers on both sides must also not double.
+        expect(boundaryRun([AD3], [AD3]).damageAbsorbed).toBe(22_000);
     });
 });
 

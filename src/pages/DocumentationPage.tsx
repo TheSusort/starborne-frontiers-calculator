@@ -2732,21 +2732,36 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
-                                            Debuffing the attacker does not lower it either:
+                                            Debuffing the attacker DOES lower it:
                                         </span>{' '}
                                         an <span className="font-semibold">Attack Down</span> or{' '}
                                         <span className="font-semibold">Out. Damage Down</span> your
-                                        ship puts on the enemy shooting at it does not shrink what
-                                        that enemy throws, so the figure does not move. Measured on
-                                        a four-round window against one 10,000-attack enemy: 40,000
-                                        absorbed with no debuff, and still exactly 40,000 with the
-                                        enemy carrying your Attack Down at &minus;50% or even
-                                        &minus;90%. The same &minus;50% coming from the enemy&apos;s
-                                        OWN kit does halve it, to 20,000 &mdash; so the
-                                        attacker&apos;s own outgoing modifiers count, and yours on
-                                        it do not. Whether the engine should honour those is an open
-                                        question; today it does not, and this page says so rather
-                                        than promising otherwise.
+                                        ship puts on the enemy shooting at it now shrinks what that
+                                        enemy throws, so less is thrown and the figure falls.
+                                        Measured on a four-round window against one 10,000-attack
+                                        enemy: 40,000 absorbed with no debuff, 30,000 with your
+                                        Attack Down at &minus;25%, 20,000 at &minus;50%, and 4,000
+                                        at &minus;90%. Out. Damage Down behaves the same way, and an
+                                        Out. Damage UP on the enemy pushes the figure the other way,
+                                        to 60,000. This is a change: for one release the engine
+                                        honoured only the attacker&apos;s OWN outgoing modifiers and
+                                        silently ignored yours, so every ship with a suppression
+                                        passive &mdash; Opal, Warden and the seventeen others that
+                                        carry one &mdash; read as less durable than it actually
+                                        plays.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Two of the same debuff do not add up.
+                                        </span>{' '}
+                                        If the enemy is already under an Attack Down and you land
+                                        another, the STRONGER one applies on its own &mdash; it does
+                                        not stack with the weaker. An enemy carrying a &minus;15%
+                                        Attack Down I that you hit with a &minus;45% Attack Down III
+                                        throws at &minus;45%, not &minus;60%, and that holds
+                                        whichever side applied the stronger one. Two DIFFERENT
+                                        debuffs still combine: an Attack Down and an Out. Damage
+                                        Down on the same enemy both apply.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         There is also an exception on the ALLY side rather than the

@@ -1,5 +1,6 @@
 import { Buff, SelectedGameBuff } from '../../types/calculator';
 import type { AbilityStatusPayload, ActiveBuff } from './statusEngine';
+import { deriveFamilyKey } from './statusEngine';
 
 // ---------------------------------------------------------------------------
 // Leaf helpers shared by the player turn (playerTurn.ts) and the effective-stat
@@ -152,4 +153,114 @@ export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGa
  */
 export function incomingHealFactor(pct: number): number {
     return Math.max(0, 1 + pct / 100);
+}
+
+// ---------------------------------------------------------------------------
+// #389 — cross-store tier shadowing for the two OUTGOING-damage channels.
+//
+// OWNER RULING (spec §5): the strongest single instance of a named family applies, and weaker
+// instances are shadowed, REGARDLESS OF WHICH SIDE APPLIED IT. An enemy carrying a self-inflicted
+// `Attack Down I` (-15%) that your Curator hits with `Attack Down III` (-45%) throws at -45%:
+// not -15%, and NOT the -60% sum.
+//
+// WHY THIS NEEDED WRITING. Tier shadowing (`familyApplicationWins` in statusEngine.ts) is
+// PER-STORE: it keys a family map inside one side's store, so it cannot see across the self/enemy
+// boundary. Simply switching on the dead enemy-side `attack`/`outgoingDamage` channels would make
+// the two instances ADD — which the ruling explicitly rules out, both because it makes two
+// instances of one debuff worth more than one (contradicting the family's behaviour inside a
+// single store) and because it puts -100% within accidental reach.
+//
+// SCOPE — PER NAMED FAMILY, and no wider (spec §5.2). `Attack Down` and `Out. Damage Down` are
+// DIFFERENT families and still combine exactly as they always have; only same-family instances
+// shadow. Collapsing across families would be a new defect, which is why the fold below is keyed
+// by `deriveFamilyKey` and the two channels are carried independently inside each entry.
+// ---------------------------------------------------------------------------
+
+/** One named family's contribution to the two outgoing channels, in additive percentage points. */
+export interface OutgoingFamilyEntry {
+    /** `Attack Down`/`Up` — `parsedEffects.attack`, folded into `attackBuff`. */
+    attackPct: number;
+    /** `Out. Damage Down`/`Up` — `parsedEffects.outgoingDamage`, folded into `outgoingDamageBuff`. */
+    outgoingDamagePct: number;
+}
+
+/** familyKey (`deriveFamilyKey`) → the strongest instance of that family on each channel. */
+export type OutgoingFamilyMap = Map<string, OutgoingFamilyEntry>;
+
+/** The STRONGER of two same-family same-channel contributions: larger magnitude wins.
+ *
+ *  Magnitude rather than a signed min/max because the ruling is about tier strength, and a family
+ *  is sign-homogeneous by construction — `Attack Up` and `Attack Down` derive DIFFERENT family
+ *  keys, so a single family never mixes a buff and a debuff whose signs would fight. Ties keep the
+ *  incumbent, which makes the fold order-independent for equal magnitudes. */
+function strongerPct(incumbent: number, challenger: number): number {
+    return Math.abs(challenger) > Math.abs(incumbent) ? challenger : incumbent;
+}
+
+/**
+ * Reduce a buff list to the STRONGEST instance per named family on the two outgoing channels.
+ *
+ * Effects are taken post-stacks (`value * stacks`), the same basis every other fold in this file
+ * uses — so a stacking debuff's strength is its accumulated magnitude, not its per-stack value.
+ * Entries touching neither channel are skipped entirely, which is what keeps the returned map
+ * empty (and therefore the whole #389 delta a no-op) for the overwhelming majority of actors.
+ */
+export function outgoingFamiliesOf(buffs: SelectedGameBuff[]): OutgoingFamilyMap {
+    const out: OutgoingFamilyMap = new Map();
+    for (const b of buffs) {
+        const attackPct = (b.parsedEffects.attack ?? 0) * b.stacks;
+        const outgoingDamagePct = (b.parsedEffects.outgoingDamage ?? 0) * b.stacks;
+        if (attackPct === 0 && outgoingDamagePct === 0) continue;
+        const { familyKey } = deriveFamilyKey(b.buffName);
+        const prev = out.get(familyKey);
+        out.set(
+            familyKey,
+            prev === undefined
+                ? { attackPct, outgoingDamagePct }
+                : {
+                      attackPct: strongerPct(prev.attackPct, attackPct),
+                      outgoingDamagePct: strongerPct(prev.outgoingDamagePct, outgoingDamagePct),
+                  }
+        );
+    }
+    return out;
+}
+
+/**
+ * The DELTA to add to an actor's already-folded self-sourced `attackBuff` / `outgoingDamageBuff`
+ * so that the result is `Σ over families of the strongest instance, either side`.
+ *
+ * THE ARITHMETIC, and why it is a delta rather than a recomputation. The caller's totals already
+ * contain the full self-sourced sum, and this function is deliberately not allowed to rebuild that
+ * (it would have to re-derive layers it cannot see — the un-named `modifierAbilities` channel and
+ * the squad-leader `preFight` baseline, neither of which is a named family and neither of which may
+ * participate in shadowing). So for each family the ENEMY side contributes, it adds
+ *
+ *     strongest(selfValue, enemyValue) - selfValue
+ *
+ * which is `enemyValue - selfValue` when the applied instance wins (raising the total to exactly
+ * the winner) and `0` when the self instance wins (leaving the total untouched). Families present
+ * only on the self side are never visited, so they pass through unchanged. Both directions of the
+ * ruling therefore fall out of one expression, and the no-enemy-debuff case returns `{0, 0}`
+ * without even reading the self side.
+ *
+ * `selfBuffs` MUST be the same named-status lists the caller's own fold consumed, or the
+ * subtraction removes something the total never contained. See the call site in playerTurn.ts.
+ */
+export function shadowedOutgoingDelta(
+    enemyFamilies: OutgoingFamilyMap,
+    selfBuffs: SelectedGameBuff[]
+): OutgoingFamilyEntry {
+    if (enemyFamilies.size === 0) return { attackPct: 0, outgoingDamagePct: 0 };
+    const selfFamilies = outgoingFamiliesOf(selfBuffs);
+    let attackPct = 0;
+    let outgoingDamagePct = 0;
+    for (const [familyKey, applied] of enemyFamilies) {
+        const own = selfFamilies.get(familyKey);
+        const ownAttack = own?.attackPct ?? 0;
+        const ownOutgoing = own?.outgoingDamagePct ?? 0;
+        attackPct += strongerPct(ownAttack, applied.attackPct) - ownAttack;
+        outgoingDamagePct += strongerPct(ownOutgoing, applied.outgoingDamagePct) - ownOutgoing;
+    }
+    return { attackPct, outgoingDamagePct };
 }

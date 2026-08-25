@@ -25,6 +25,8 @@ import {
     incomingHealFactor,
     payloadToSelectedBuff,
     expandBuffEntry,
+    outgoingFamiliesOf,
+    type OutgoingFamilyMap,
 } from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
@@ -2611,6 +2613,64 @@ export function victimOwnEnemyHealModifiers(
     ))
         fold(s);
     return { incomingHealPct, outgoingHealPct };
+}
+
+/** Enemy-APPLIED outgoing-damage statuses carried by `victimId` in its OWN per-victim enemy store,
+ *  reduced to the STRONGEST instance per named family (#389).
+ *
+ *  WHY IT EXISTS. The attacker's outgoing fold (`effectiveDamageStatsOf`) folds ONLY self-sourced
+ *  stores — scheduled self-buffs, timed/aura `'self'` ability statuses, and the actor's own
+ *  modifier abilities. An `Attack Down` the DEFENDER applied lands in the attacker's ENEMY-side
+ *  per-victim store, which that fold never reads, so the debuff landed and changed nothing:
+ *  `parsedEffects.attack` and `parsedEffects.outgoingDamage` were DEAD channels on the enemy store
+ *  (its only readers are `toEnemyModifiers`, which extracts `defense` + `incomingDamage`, and
+ *  `exposedIncomingPct`). Measured before the fix: a defender-applied `Attack Down` at -90% left a
+ *  10,000-attack enemy throwing a full 40,000 over four rounds.
+ *
+ *  RETURNS FAMILIES, NOT A SUM, and that is the whole point of the shape. The owner ruling
+ *  (spec §5) is that the strongest instance of a named family wins across the self/enemy boundary,
+ *  so the consumer needs the per-family breakdown to compare against the actor's own instances —
+ *  a pre-summed scalar could only ever be added, which is the outcome the ruling rules out.
+ *  `buffTotals.shadowedOutgoingDelta` does that comparison.
+ *
+ *  PAYLOAD CHANNELS ONLY, deliberately — the two per-victim ability stores (timed, where every
+ *  corpus applier lands, and aura/accumulating). The SCHEDULED channel is excluded for the SAME
+ *  reason spelled out at length on `victimOwnEnemyHealModifiers` above: `upsertBuff` is hardcoded
+ *  to the GLOBAL `__enemy__` key, and for a PLAYER actor that bucket holds the debuffs the PLAYER
+ *  side inflicted on ENEMIES — reading it here would make a player ship suppress its own attack
+ *  with its own team's inflicted `Attack Down`. Do NOT "unify" this with `victimEnemyBuffs`, which
+ *  reads that bucket deliberately for a per-VICTIM purpose where the global read is the accepted
+ *  approximation.
+ *
+ *  RESIDUAL GAP, inherited and identical to the heal twin's: an `Attack Down` ticked by hand in the
+ *  calculator's ENEMY-DEBUFF PICKER writes only that global bucket, so it still has no arithmetic
+ *  effect on an enemy's outgoing damage. Unchanged by #389.
+ *
+ *  Team-agnostic: the enemy store is keyed by targetId regardless of which side the victim is on,
+ *  and the caller (`buildTurnArgs`) runs for every acting actor on both sides — so an enemy-applied
+ *  `Attack Down` on a PLAYER attacker reads identically. Verified by an independent pre-existing
+ *  fixture: `simGolden`'s `healing` board has an ENEMY inflict `Attack Down II` on the player tank.
+ *
+ *  Carries the same NEUTRAL-ctx approximation as the heal twin on the aura/accumulating branch. It
+ *  does not bite: verified against `docs/ship-skills.csv` (2026-08-25), every corpus occurrence of
+ *  `Attack Down I/II/III` (17 clauses, 12 ships) and `Out. Damage Down I/II/III` (10 clauses,
+ *  9 ships) carries an explicit "for N turns", so all of them are TIMED — gated at application
+ *  time, before this read — and none falls into the approximated aura arm. */
+export function victimOwnEnemyOutgoingFamilies(
+    statusEngine: StatusEngine,
+    victimId: string
+): OutgoingFamilyMap {
+    const payloads: SelectedGameBuff[] = [];
+    for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, victimId))
+        payloads.push(payloadToSelectedBuff(s.payload));
+    for (const s of statusEngine.activeAbilityStatuses(
+        'enemy',
+        () => NEUTRAL_NAMES_CTX,
+        undefined,
+        victimId
+    ))
+        payloads.push(payloadToSelectedBuff(s.payload));
+    return outgoingFamiliesOf(payloads);
 }
 
 /**

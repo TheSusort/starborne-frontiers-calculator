@@ -12,6 +12,7 @@ import {
     healModifierScaling,
     perVictimAffinityAoe,
     reactiveDamagePositional,
+    outgoingSuppression,
 } from './__fixtures__/simGoldenFixtures';
 
 // High-level regression guard for the engine-unification epic. A diff = a real behavior change.
@@ -37,6 +38,11 @@ describe('sim goldens (BattleResult snapshots)', () => {
         // SP-M M1 (Task 9): dedicated positional reactive-damage-HP fixture (Frontline's
         // counterTargetId path + Judge/Incinerator's AoE path) — see the dedicated assertion below.
         ['reactiveDamagePositional', reactiveDamagePositional],
+        // #389: the numeric tripwire for defender-applied outgoing debuffs, both directions on one
+        // board. See the fixture's header for why it exists — the numeric golden suites had zero
+        // coverage of this mechanic, so a fold firing ~2,100 times across the suite moved exactly
+        // one snapshot.
+        ['outgoingSuppression', outgoingSuppression],
     ])('%s', (_n, build) => {
         // Snapshot the structured result (per-round per-ship totals + outcome), not the free-text log.
         const { rounds, outcome, roster } = simulateBattle(build());

@@ -348,7 +348,10 @@ const TIER_VALUES: Record<string, number> = { I: 1, II: 2, III: 3, IV: 4, V: 5 }
 // Each tier is its own entity, not a family where higher replaces lower.
 const DOT_PREFIXES = new Set(['Corrosion', 'Inferno', 'Bomb']);
 
-function deriveFamilyKey(name: string): { familyKey: string; tier: number } {
+/** EXPORTED for #389's cross-store tier shadowing (`buffTotals.outgoingFamiliesOf`), which must
+ *  key families by exactly the same rule this engine uses internally — a second copy of the
+ *  Roman-suffix/DoT-prefix logic would drift. */
+export function deriveFamilyKey(name: string): { familyKey: string; tier: number } {
     if (DOT_PREFIXES.has(name.split(' ')[0])) return { familyKey: name, tier: 0 };
     const m = ROMAN_SUFFIX.exec(name);
     if (!m) return { familyKey: name, tier: 0 };
