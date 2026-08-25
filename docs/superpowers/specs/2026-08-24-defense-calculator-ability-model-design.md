@@ -114,8 +114,15 @@ is consequently *not* a pure-defence number, and that is deliberate.
 > **What survives from §3 and is still live:** the double-count trap (§3.1) and the intake-breakdown
 > identity (§3.2) still govern `breakdown.gross` / `toHp` / `toShield` / `toBarrier` /
 > `toConversion`, which deliberately stayed on the POST-mitigation axis (ADDENDUM 2 §B3). The
-> survivors policy (§3.3) is live. Only the *headline formula* is retired. §3 is kept verbatim as
-> the record of the error, not as instructions.
+> survivors policy (§3.3) is live **except its last sentence** — see the inline note there; the
+> `survived` flag and the render-distinctly requirement stand, the *separation* claim does not.
+> Only the *headline formula* and that one sentence are retired. §3 is kept verbatim as the record
+> of the error, not as instructions.
+>
+> (That carve-out is itself a correction: this banner originally said "§3.3 is live" flat, which
+> asserted a whole section live when one sentence inside it had been retired by the axis change.
+> **A supersession banner needs its live-list checked sentence by sentence, not section by
+> section** — the same partial-staleness shape as the comment defects on this branch.)
 
 **Measured EHP = Σ `incomingDamage` over elapsed rounds. Nothing is added to it.**
 
@@ -158,7 +165,20 @@ independent signal instead.
 
 When the ship outlasts the window, `summary.destroyedRound` is absent. The result reports the
 absorbed total with `survived: true`, and the UI must render survivors distinctly so the figure is
-never read as a death threshold. Two survivors are still separated by how much they soaked.
+never read as a death threshold. ~~Two survivors are still separated by how much they soaked.~~
+
+> **THAT LAST SENTENCE IS SUPERSEDED BY ADDENDUM 2/3.** It was true on the POST-mitigation axis. On
+> the shipped RAW axis, for a fixed attacker set and round window, the survivor figure is **flat**
+> across defence — measured 60,000 at defence 0, 5,000, 5,000+30% and 20,000, because raw damage
+> *thrown* at a ship that lives is a property of the ATTACKERS, not the defender. It is pinned that
+> way in `defenseSurvivabilitySim.test.ts`.
+>
+> Two survivors DO differ when the defender changes the incoming pressure itself — killing an
+> attacker, or wiping the roster so the run ends early (measured 60,000 / 40,000 / 30,000, all
+> surviving 6 of 6 rounds). That is offence, not toughness.
+>
+> The page therefore breaks survivor ties on **Theoretical EHP**, which is rank key 2. See ADDENDUM
+> 3 §C1 for the shipped headline trio.
 
 ## 4. Modules
 
