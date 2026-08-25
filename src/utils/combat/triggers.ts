@@ -25,8 +25,10 @@ import {
     incomingHealFactor,
     payloadToSelectedBuff,
     expandBuffEntry,
-    outgoingFamiliesOf,
-    type OutgoingFamilyMap,
+    familiesOf,
+    shadowedDelta,
+    type FamilyMap,
+    type ShadowChannel,
 } from './buffTotals';
 // Call-time-safe cycle: debuffImmunity imports selfBuffNamesForOwners from this module and we
 // import targetCarriesBlockDebuff back. Both are used only inside function bodies (never at
@@ -1653,6 +1655,13 @@ export interface IntentExecContext {
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
     lastTurnCtxByActor: Map<string, PlayerRoundCtx>;
+    /** #396: an actor's OWN named self-sourced statuses (`victimSelfBuffs`), for the cross-store
+     *  family comparison `liveHealChannelPct` performs on the two heal channels. Engine-populated;
+     *  it cannot be derived here because this ctx carries no `selfBuffLookup`, and the scheduled
+     *  (manual-picker) list is exactly where a same-family straddle actually comes from. Absent
+     *  (unit fixtures, DPS mode) → the live enemy half is taken un-shadowed, which is
+     *  byte-identical to the pre-#396 behaviour. */
+    selfNamedBuffsFor?: (actorId: string) => SelectedGameBuff[];
     /** SP-G G3: last reactive-damage amount each owner dealt this drain cycle. A reactive shield
      *  on the same trigger with basis 'damage-dealt' but no eventCtx.triggerDamage (on-enemy-
      *  charged-cast stamps only counterTargetId) falls back to this owner-keyed amount. */
@@ -2582,12 +2591,13 @@ export interface EnemyAppliedHealModifiers {
  *  which is the locked game rule (spec R1: same-family statuses overwrite by highest tier, then
  *  survivors add).
  *
- *  ⚠️ THAT IS ONLY TRUE WITHIN ONE STORE. The sum below adds an enemy-applied instance to whatever
- *  the actor's own self store already contributes, and highest-tier-wins is the GENERAL rule across
- *  that boundary too (#389 spec §6). The standing justification — "only one `Inc. Repair Down` can
- *  stand today" — is about reachability, not arithmetic, so this fold is additive where the rule
- *  says shadowed. #389 fixed exactly two channels (`attack`/`outgoingDamage`, via
- *  `buffTotals.outgoingFamiliesOf`); applying the same shadowing to these is #396.
+ *  ⚠️ THIS SCALAR READER IS NO LONGER THE TURN LOOP'S SOURCE (#396). The plain sum below adds an
+ *  enemy-applied instance to whatever the actor's own self store contributes, and highest-tier-wins
+ *  is the GENERAL rule across that boundary too — the standing justification ("only one
+ *  `Inc. Repair Down` can stand today") is about reachability, not arithmetic. So `buildTurnArgs`
+ *  now passes `victimOwnEnemyFamilies` instead, and `runPlayerTurn` shadows the two heal channels
+ *  exactly as it shadows the two outgoing ones. What survives here is the RAW enemy-side total,
+ *  which `liveHealChannelPct` still needs as the un-shadowed input to its own comparison.
  *
  *  Team-agnostic: the enemy store is keyed by targetId regardless of which side the victim is on,
  *  so this reads a player-inflicted debuff on an enemy ship identically.
@@ -2622,8 +2632,22 @@ export function victimOwnEnemyHealModifiers(
     return { incomingHealPct, outgoingHealPct };
 }
 
-/** Enemy-APPLIED outgoing-damage statuses carried by `victimId` in its OWN per-victim enemy store,
- *  reduced to the STRONGEST instance per named family (#389).
+/** The channels the TURN LOOP shadows across the store boundary: #389's two outgoing-damage
+ *  channels plus #367's two heal channels (#396). The other two members of `SHADOW_CHANNELS`
+ *  (`defense`, `incomingDamage`) meet on the per-VICTIM path in engine.ts's
+ *  `victimIncomingModifiers`, not here — a victim's incoming-damage debuff is not something the
+ *  acting actor's own turn fold consumes. */
+export const TURN_SHADOW_CHANNELS = [
+    'attack',
+    'outgoingDamage',
+    'incomingHeal',
+    'outgoingHeal',
+] as const satisfies readonly ShadowChannel[];
+
+/** Enemy-APPLIED statuses carried by `victimId` in its OWN per-victim enemy store, reduced to the
+ *  STRONGEST instance per named family (#389 for the two outgoing-damage channels; #396 generalised
+ *  it to every channel with a cross-store meeting point, which for THIS reader's consumer — the
+ *  turn loop — adds the two heal channels #367 previously folded additively).
  *
  *  WHY IT EXISTS. The attacker's outgoing fold (`effectiveDamageStatsOf`) folds ONLY self-sourced
  *  stores — scheduled self-buffs, timed/aura `'self'` ability statuses, and the actor's own
@@ -2663,10 +2687,11 @@ export function victimOwnEnemyHealModifiers(
  *  `Attack Down I/II/III` (17 clauses, 12 ships) and `Out. Damage Down I/II/III` (10 clauses,
  *  9 ships) carries an explicit "for N turns", so all of them are TIMED — gated at application
  *  time, before this read — and none falls into the approximated aura arm. */
-export function victimOwnEnemyOutgoingFamilies(
+export function victimOwnEnemyFamilies(
     statusEngine: StatusEngine,
-    victimId: string
-): OutgoingFamilyMap {
+    victimId: string,
+    channels: readonly ShadowChannel[] = TURN_SHADOW_CHANNELS
+): FamilyMap {
     const payloads: SelectedGameBuff[] = [];
     for (const s of statusEngine.timedAbilityStatuses('enemy', undefined, victimId))
         payloads.push(payloadToSelectedBuff(s.payload));
@@ -2677,7 +2702,7 @@ export function victimOwnEnemyOutgoingFamilies(
         victimId
     ))
         payloads.push(payloadToSelectedBuff(s.payload));
-    return outgoingFamiliesOf(payloads);
+    return familiesOf(payloads, channels);
 }
 
 /**
@@ -2712,6 +2737,19 @@ export function victimOwnEnemyOutgoingFamilies(
  * `dmgStats.totals` and already correct; running them through here would subtract a term the
  * caller never added.
  *
+ * ⚠️ THE LIVE HALF IS SHADOWED TOO (#396). Both the ctx's `stale` term and the `live` term are
+ * post-shadowing DELTAS, not raw enemy sums: `runPlayerTurn` publishes the delta its fold actually
+ * added, and this function recomputes today's delta the same way. They cancel for a fast applier
+ * exactly as before. Doing the subtraction against a raw sum and the addition against a delta (or
+ * vice versa) would leave the difference behind — which is why the two halves are deliberately the
+ * same quantity.
+ *
+ * The comparison needs the actor's OWN named statuses, which this function cannot derive on its
+ * own — it has no `selfBuffLookup`. Callers that have one pass `ownNamedBuffs`
+ * (`victimSelfBuffs(...)`); callers that do not omit it, and the live half degrades to the raw
+ * enemy sum (every applied family wins uncontested). That degradation is byte-identical to the
+ * pre-#396 behaviour, so an un-threaded caller loses the shadowing rather than getting it wrong.
+ *
  * ⚠️ THE CHANNEL IS NOW ASYMMETRICALLY FRESH, and only the enemy half is live. The ctx's own
  * SELF-side contribution (`Inc. Repair Up`, a pre-fight baseline, any timed self-buff) is still
  * whatever was published at the holder's last turn — so a self-buff that expired since then is
@@ -2725,9 +2763,20 @@ export function liveHealChannelPct(
     /** The actor's PUBLISHED last-turn ctx, or undefined before its first turn. */
     ctx: PlayerRoundCtx | undefined,
     /** The pre-first-turn baseline for this channel (the actor's `preFight` value, or 0). */
-    preFightPct: number
+    preFightPct: number,
+    /** #396: the actor's OWN named self-sourced statuses, for the cross-store family comparison.
+     *  See the `⚠️ THE LIVE HALF IS SHADOWED TOO` note above for what omitting it costs. */
+    ownNamedBuffs?: SelectedGameBuff[]
 ): number {
-    const live = victimOwnEnemyHealModifiers(statusEngine, actorId)[channel];
+    const shadowChannel: ShadowChannel =
+        channel === 'incomingHealPct' ? 'incomingHeal' : 'outgoingHeal';
+    const applied = victimOwnEnemyFamilies(statusEngine, actorId, [shadowChannel]);
+    // The live half is the SHADOWED delta, matching what `runPlayerTurn`'s fold contributes and
+    // what the ctx therefore carries. With no `ownNamedBuffs` the self side is empty, every applied
+    // family wins uncontested, and the delta collapses to the raw enemy sum — i.e. exactly the
+    // pre-#396 value, which is what keeps an un-threaded caller byte-identical.
+    const live =
+        shadowedDelta(applied, ownNamedBuffs ?? [], [shadowChannel]).delta[shadowChannel] ?? 0;
     if (ctx === undefined) return preFightPct + live;
     const stale =
         channel === 'incomingHealPct'
@@ -4259,7 +4308,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             intent.ownerId,
             'outgoingHealPct',
             ownerCtx,
-            owner.actor.preFight?.outgoingHeal ?? 0
+            owner.actor.preFight?.outgoingHeal ?? 0,
+            ctx.selfNamedBuffsFor?.(intent.ownerId)
         );
         const incomingPctFor = (rid: string): number =>
             rid === intent.ownerId
@@ -4268,7 +4318,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       intent.ownerId,
                       'incomingHealPct',
                       ownerCtx,
-                      owner.actor.preFight?.incomingHeal ?? 0
+                      owner.actor.preFight?.incomingHeal ?? 0,
+                      ctx.selfNamedBuffsFor?.(intent.ownerId)
                   )
                 : healing.recipientIncomingHealPct(rid);
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the

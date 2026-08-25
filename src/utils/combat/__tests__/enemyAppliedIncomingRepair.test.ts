@@ -169,7 +169,10 @@ const selfRepair = (pct: number): Ability => ({
 /** A SELF-side incoming-repair buff, granted from the victim's own PASSIVE slot so it is standing
  *  from combat start (`seedPassiveTimedStatuses`) rather than from the victim's first cast — the
  *  distinction matters, because a buff applied during a turn is not in that turn's own fold. */
-const selfIncomingBuff = (buffName: string, incomingHeal: number): Ability => ({
+const selfHealChannelBuff = (
+    buffName: string,
+    parsedEffects: { incomingHeal?: number; outgoingHeal?: number }
+): Ability => ({
     id: `ab-self-${buffName}`,
     type: 'buff',
     target: 'self',
@@ -178,12 +181,14 @@ const selfIncomingBuff = (buffName: string, incomingHeal: number): Ability => ({
     config: {
         type: 'buff',
         buffName,
-        parsedEffects: { incomingHeal },
+        parsedEffects,
         stacks: 1,
         isStackable: false,
         duration: 5,
     },
 });
+const selfIncomingBuff = (buffName: string, incomingHeal: number): Ability =>
+    selfHealChannelBuff(buffName, { incomingHeal });
 
 /** A REACTIVE (passive-slot) ally repair, fired from the round tail. The only way to observe
  *  OUTGOING-channel staleness: a CAST repair recomputes the caster's own totals at its own turn, so
@@ -300,6 +305,9 @@ interface FixtureOpts {
     /** A self-side incoming-repair buff on the victim's own passive slot (section 2's R1 fixture uses
      *  `Inc. Repair Up II` here), standing from combat start. */
     victimSelfBuff?: { name: string; incomingHeal: number };
+    /** #396: the same idea on the MEDIC's own passive slot, for the OUTGOING channel — the only
+     *  way to put one named family in BOTH stores for the healer rather than the recipient. */
+    medicSelfBuff?: { name: string; outgoingHeal: number };
     /** The medic's own active-slot kit. Omitted → the medic does nothing (section 5, where the victim
      *  repairs itself). */
     medicAbilities?: Ability[];
@@ -338,6 +346,7 @@ interface FixtureRun {
     victimDebuffNames: string[];
     /** The buff names standing in the victim's own SELF store (section 2's `Inc. Repair Up II`). */
     victimSelfBuffNames: string[];
+    medicSelfBuffNames: string[];
     /** The buff names standing in the MEDIC's per-victim enemy store — the existence check for the
      *  OUTGOING-channel test, where the debuff is on the healer rather than on the recipient. */
     medicDebuffNames: string[];
@@ -383,9 +392,19 @@ function runFixture(opts: FixtureOpts): FixtureRun {
             )
         ),
     ];
+    const medicPassiveAbilities: Ability[] = [
+        ...(opts.medicReactiveAbilities ?? []),
+        ...(opts.medicSelfBuff
+            ? [
+                  selfHealChannelBuff(opts.medicSelfBuff.name, {
+                      outgoingHeal: opts.medicSelfBuff.outgoingHeal,
+                  }),
+              ]
+            : []),
+    ];
     const medicSlots: ShipSkills['slots'] = [
         activeSlot(opts.medicAbilities ?? []),
-        ...(opts.medicReactiveAbilities ? [passiveSlot(opts.medicReactiveAbilities)] : []),
+        ...(medicPassiveAbilities.length > 0 ? [passiveSlot(medicPassiveAbilities)] : []),
     ];
 
     // `front` binds to the FRONT-MOST cell (M4), so swapping the two positions is what decides
@@ -531,6 +550,9 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         healPerfs,
         victimSelfBuffNames: statusEngine!
             .timedAbilityStatuses('self', VICTIM_ID)
+            .map((s) => s.payload.buffName),
+        medicSelfBuffNames: statusEngine!
+            .timedAbilityStatuses('self', medicId)
             .map((s) => s.payload.buffName),
     };
 }
@@ -1061,6 +1083,160 @@ describe('#367 final review — the reactive-heal site floors the incoming facto
             // from the same `raw`, so an unclamped factor corrupts all three together.
             expect(row!.effectiveHeal).toBeGreaterThanOrEqual(0);
             expect(row!.overheal).toBeGreaterThanOrEqual(0);
+        });
+    }
+});
+
+// ══ #396 — THE HEAL CHANNELS SHADOW ACROSS THE STORE BOUNDARY ════════════════════════════════
+// #367 folded the enemy-applied half of these two channels as a plain SUM, justified in its jsdoc
+// on the grounds that only one `Inc. Repair Down` can stand today. That is a REACHABILITY claim,
+// and the locked rule is about ARITHMETIC: highest tier wins for all buffs and debuffs regardless
+// of which side applied it (DoTs and bombs excepted). So the sum was wrong wherever both stores
+// carry one family, whether or not the ship corpus gets there.
+//
+// AND IT IS REACHABLE — just not from ship kits. A probe over all 149 corpus ships found ZERO
+// families granted from both a self-targeted and an enemy-targeted ability. The straddle comes
+// from the manual pickers: `GameBuffPicker` excludes only `type: 'effect'`, so `Inc. Repair Down`
+// is offered in the self-side picker AND the enemy-side ones. The fixture below builds it the
+// equivalent way — a self-slot grant on the victim plus a real enemy cast — because a kit-driven
+// fixture cannot produce a straddle and would be vacuously green.
+//
+// THREE FIGURES, MUTUALLY DISTINGUISHABLE. own -30, applied -50, sum -80 → the repair lands at
+// 0.70 × RAW, 0.50 × RAW or 0.20 × RAW. No arm below can be satisfied by two rules at once.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('#396 — Inc. Repair Down shadows across the self/enemy store boundary', () => {
+    const OWN = -30;
+    const APPLIED = -50;
+
+    it('the three candidate outcomes are mutually distinguishable', () => {
+        expect(new Set([OWN, APPLIED, OWN + APPLIED]).size).toBe(3);
+    });
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: the STRONGER applied instance wins — not the sum`, () => {
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                // Same FAMILY on the victim's own self store, weaker tier.
+                victimSelfBuff: { name: 'Inc. Repair Down II', incomingHeal: OWN },
+                enemyStatuses: [{ name: 'Inc. Repair Down III', incomingHeal: APPLIED }],
+            });
+
+            // EXISTENCE on both sides of the boundary, or the numbers below would be measuring an
+            // absent status rather than a shadowed one.
+            expect(run.victimSelfBuffNames).toContain('Inc. Repair Down II');
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down III');
+
+            expect(run.healedAmount).toBeCloseTo(RAW * 0.5, 5); // the applied III
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.2, 5); // NOT the -80 sum
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.7, 5); // NOT the own II alone
+        });
+
+        it(`${victimSide}-side victim: the STRONGER own instance wins when the applied one is weaker`, () => {
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                victimSelfBuff: { name: 'Inc. Repair Down III', incomingHeal: APPLIED },
+                enemyStatuses: [{ name: 'Inc. Repair Down II', incomingHeal: OWN }],
+            });
+            expect(run.victimSelfBuffNames).toContain('Inc. Repair Down III');
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down II');
+            expect(run.healedAmount).toBeCloseTo(RAW * 0.5, 5);
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.2, 5);
+        });
+
+        it(`${victimSide}-side victim: DIFFERENT families still ADD — the over-collapse guard`, () => {
+            // `deriveFamilyKey` strips the Roman suffix, so `Inc. Repair Up` and `Inc. Repair Down`
+            // are different families and nothing shadows: +50 - 50 = 0 → a full repair. This is
+            // the arm that turns red if the family key is ever collapsed to a constant, and it is
+            // section 2's R1 case restated against the new code path.
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                victimSelfBuff: { name: 'Inc. Repair Up II', incomingHeal: 50 },
+                enemyStatuses: [{ name: 'Inc. Repair Down II', incomingHeal: -50 }],
+            });
+            expect(run.healedAmount).toBeCloseTo(RAW, 5);
+        });
+
+        it(`${victimSide}-side victim: a SLOWER applier is still shadowed, not double-counted`, () => {
+            // #367's staleness fence (`liveHealChannelPct`) under #396's arithmetic. The applier
+            // acts AFTER the victim publishes its ctx, so the cross-actor reader must subtract the
+            // stale enemy portion and add today's — and both halves are now post-shadowing DELTAS.
+            // Subtracting a raw sum while adding a delta (or the reverse) would leave the
+            // difference behind and land this somewhere other than 0.50 × RAW.
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                medicSpeed: 300,
+                applierSpeed: 400, // below the victim's 500 → the victim's ctx predates the debuff
+                victimSelfBuff: { name: 'Inc. Repair Down II', incomingHeal: OWN },
+                enemyStatuses: [{ name: 'Inc. Repair Down III', incomingHeal: APPLIED }],
+            });
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down III');
+            expect(run.healedAmount).toBeCloseTo(RAW * 0.5, 5);
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.2, 5);
+        });
+    }
+});
+
+// ══ #396 — THE SAME RULE ON THE FOLD PATH, NOT ONLY THE CROSS-ACTOR ONE ══════════════════════
+// MEASURED, and the reason this section exists: the six arms above are satisfied by
+// `liveHealChannelPct` ALONE. Reverting `runPlayerTurn`'s fold to a plain sum leaves all six
+// GREEN, because the cross-actor reader subtracts the (then-raw) stale portion and adds its own
+// shadowed live one, which lands on the right answer by a different route. That makes those arms
+// a real test of the cross-actor half and a VACUOUS test of the fold half.
+//
+// These two arms read the fold's own output instead:
+//   • a SELF-repair — the victim repairs itself on its own turn, off `dmgStats.totals` computed
+//     fresh that turn, never through `lastTurnCtxByActor`;
+//   • the OUTGOING channel — a CAST repair recomputes the caster's totals at its own turn, which
+//     is exactly why #367's own outgoing-staleness note says only a reader of a PUBLISHED ctx can
+//     be stale.
+// Both turn red when the fold is reverted, and neither depends on `liveHealChannelPct`.
+// ═════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('#396 — the turn fold itself shadows, independently of the cross-actor reader', () => {
+    const OWN = -30;
+    const APPLIED = -50;
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side victim: a SELF-repair reads the shadowed incoming total`, () => {
+            const run = runFixture({
+                victimSide,
+                victimAbilities: [selfRepair(REPAIR_PCT)],
+                victimSelfBuff: { name: 'Inc. Repair Down II', incomingHeal: OWN },
+                enemyStatuses: [{ name: 'Inc. Repair Down III', incomingHeal: APPLIED }],
+            });
+            expect(run.victimSelfBuffNames).toContain('Inc. Repair Down II');
+            expect(run.victimDebuffNames).toContain('Inc. Repair Down III');
+
+            expect(run.healedAmount).toBeCloseTo(RAW * 0.5, 5); // the applied III
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.2, 5); // NOT the -80 sum
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.7, 5); // NOT the own II alone
+        });
+
+        it(`${victimSide}-side victim: a CAST repair reads the shadowed OUTGOING total`, () => {
+            // `Out. Repair Down` belongs to the ship PERFORMING the repair, so both instances sit
+            // on the medic: one in its own self store, one applied by Zosimos. `debuffTarget:
+            // 'medic'` is what puts the enemy cast on the healer rather than the recipient.
+            const run = runFixture({
+                victimSide,
+                medicAbilities: [allyRepair(REPAIR_PCT)],
+                debuffTarget: 'medic',
+                medicSelfBuff: { name: 'Out. Repair Down II', outgoingHeal: OWN },
+                enemyStatuses: [{ name: 'Out. Repair Down III', outgoingHeal: APPLIED }],
+            });
+            // EXISTENCE on both sides of the boundary, on the RIGHT actor — and the victim's own
+            // store stays empty, so nothing here can be the incoming channel leaking in.
+            expect(run.medicSelfBuffNames).toContain('Out. Repair Down II');
+            expect(run.medicDebuffNames).toContain('Out. Repair Down III');
+            expect(run.victimDebuffNames).toEqual([]);
+
+            expect(run.healedAmount).toBeCloseTo(RAW * 0.5, 5);
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.2, 5);
+            expect(run.healedAmount).not.toBeCloseTo(RAW * 0.7, 5);
         });
     }
 });

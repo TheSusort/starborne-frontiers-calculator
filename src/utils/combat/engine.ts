@@ -20,11 +20,7 @@ import type { ParsedTarget, ParsedPattern } from '../targetingParser';
 import { DEFAULT_BASE_PATTERN } from '../calculators/dpsEnemyPlacement';
 import { makeRateGate, rollRateGate } from '../calculators/rateAccumulator';
 import type { RoundData } from '../calculators/dpsSimulator';
-import {
-    toEnemyModifiers,
-    toSelfDefenseModifier,
-    toSelfIncomingDamageModifier,
-} from '../calculators/dpsBuffHelpers';
+import { toSelfDefenseModifier, toSelfIncomingDamageModifier } from '../calculators/dpsBuffHelpers';
 import { computeAffinityModifiers, getAffinityMatchup } from '../calculators/affinityUtils';
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import {
@@ -99,7 +95,7 @@ import { reversedRepairsOn } from './reversedRepairs';
 // incoming-repair channel shares ONE floored definition — read its doc for why a channel clamped
 // at some of its sites and not others is worse than one clamped nowhere. The two per-victim leech
 // procs below are its fifth and sixth call sites.
-import { incomingHealFactor } from './buffTotals';
+import { incomingHealFactor, familiesOf, shadowedDelta, ShadowChannel } from './buffTotals';
 import { normalizeTeamActorsToWalked } from './teamActorWalk';
 import { normalizeCombatRoster } from './normalizeRoster';
 import { buildBuffDurationExtensionByOwner } from './buffDurationExtension';
@@ -127,8 +123,7 @@ import {
     selfBuffNamesForOwners,
     selfBuffStacksForOwner,
     victimEnemyBuffs,
-    victimOwnEnemyHealModifiers,
-    victimOwnEnemyOutgoingFamilies,
+    victimOwnEnemyFamilies,
     victimSelfBuffs,
 } from './triggers';
 import { adjacentAllyIds } from './adjacency';
@@ -164,6 +159,13 @@ const MAX_EXTRA_TURNS_PER_ROUND = 8;
  *  Fenced in BOTH directions by `sentinelActorIdReservation.test.ts` — no actor may carry it,
  *  and no caller may claim it. */
 export const SENTINEL_ENEMY_ACTOR_ID = 'enemy';
+
+/** #396: the two channels `victimIncomingModifiers` combines across the self/enemy store boundary.
+ *  Module-level so the array is not rebuilt per victim per hit. */
+const VICTIM_INCOMING_CHANNELS = [
+    'defense',
+    'incomingDamage',
+] as const satisfies readonly ShadowChannel[];
 
 /**
  * Sum an actor's LIVE speed-buff percentage from the status engine (Task 2 authority for
@@ -3458,7 +3460,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             id,
             'incomingHealPct',
             freshCtx ?? lastTurnCtxByActor.get(id),
-            allActorsById.get(id)?.preFight?.incomingHeal ?? 0
+            allActorsById.get(id)?.preFight?.incomingHeal ?? 0,
+            // #396: the recipient's own named self statuses, so the live enemy half is SHADOWED
+            // against them rather than added to them. `victimSelfBuffs` is the same three-channel
+            // read `victimIncomingModifiers` uses for the damage-side comparison — scheduled
+            // (`selfBuffLookup`, i.e. the manual picker, which is where a straddle actually comes
+            // from) plus the timed and aura `'self'` ability statuses.
+            victimSelfBuffs(statusEngine, id, selfBuffLookup)
         );
 
     // #367 fix wave — THE ACTING TURN'S OWN CTX, for the window in which the map does not have it
@@ -7268,7 +7276,6 @@ export function runCombat(rawInput: CombatEngineInput): {
                 enemyDebuffLookup,
                 scheduledEffects
             );
-            const enemy = toEnemyModifiers(victimDebuffs);
             // 'Exposed' (Amartya/Nayra) is NAME-keyed, not a parsedEffects entry — each stack arms
             // ONE direct hit, which reads every stack the victim holds and spends one of them (see
             // exposedStatus.ts for why it cannot ride parsedEffects.incomingDamage). Folded into the
@@ -7345,10 +7352,37 @@ export function runCombat(rawInput: CombatEngineInput): {
             // (leader protections use negative values). Absent → 0 → byte-identical. Like
             // the buff channel, this is DIRECT damage only (DoTs/bombs never read it).
             const preFightIncoming = allActorsById.get(victimId)?.preFight?.incomingDamage ?? 0;
+            // #396: the two channels above are a CROSS-STORE meeting point — `enemy.*` reads the
+            // victim's ENEMY store and `self*` reads its SELF store, on the same `parsedEffects`
+            // key. Under the locked rule (highest tier wins for all buffs/debuffs regardless of
+            // which side applied it) those must SHADOW per named family, not add: a self
+            // `Defense Down II` (-30) under an enemy `Defense Down III` (-45) leaves the victim at
+            // -45, never -75. The delta carries the whole enemy contribution for any family the
+            // self side does not have (`own.sum` is 0 there), which is why it REPLACES
+            // `enemy.enemyDefenseModifier` / `enemy.incomingDamageModifier` rather than joining
+            // them — adding both would double-count every enemy debuff.
+            //
+            // The comparison list is `victimSelf`, which is exactly what `selfDefense` and
+            // `selfIncoming` were folded from — the invariant `shadowedDelta` requires, or the
+            // subtraction removes a contribution the totals never contained.
+            //
+            // `preFightIncoming` and `exposed` stay OUTSIDE the comparison and keep adding: the
+            // squad-leader baseline is not a named family, and `Exposed` is a name-keyed one-shot
+            // that deliberately does not ride `parsedEffects` (see exposedStatus.ts). Same
+            // exclusion #389 made for `modifierAbilities` and `preFight.outgoingDamage`.
+            //
+            // This also collapses same-family duplicates WITHIN the enemy list, which the previous
+            // plain `reduce` did not. That is the same rule, not a new one: two instances of one
+            // family never add, whichever store they came from.
+            const shadow = shadowedDelta(
+                familiesOf(victimDebuffs, VICTIM_INCOMING_CHANNELS),
+                victimSelf,
+                VICTIM_INCOMING_CHANNELS
+            );
             return {
-                enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense,
+                enemyDefenseModifier: selfDefense + (shadow.delta.defense ?? 0),
                 incomingDamageModifier:
-                    enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed,
+                    selfIncoming + (shadow.delta.incomingDamage ?? 0) + preFightIncoming + exposed,
                 // #358 ADDENDUM 3 (C2/C3): the VICTIM-SIDE half of the sum above, published
                 // separately because the sum is a MIXED channel and nothing downstream can
                 // un-mix it. `enemy.incomingDamageModifier` and `exposed` are amplification the
@@ -7356,7 +7390,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `preFightIncoming` are the DEFENDER reducing what it takes. "Damage absorbed"
                 // strips only the latter pair, so only the latter pair travels here.
                 // See `VictimDefenseProfile.victimSideIncomingPct` for the failure this fixes.
-                victimSideIncomingModifier: selfIncoming + preFightIncoming,
+                // #396: a self-sourced instance the enemy side SHADOWED is no longer in the
+                // channel at all, so it must not be reported as a victim-side reduction either —
+                // otherwise "damage absorbed" would strip a term the mixed total no longer holds.
+                victimSideIncomingModifier:
+                    selfIncoming - (shadow.ownSuppressed.incomingDamage ?? 0) + preFightIncoming,
             };
         };
         // TEST-ONLY: expose victimIncomingModifiers (enemy-debuff + friendly self-buff term,
@@ -8777,24 +8815,25 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // helper is called for every acting actor on both sides. Spread-guarded like
                 // `preFight` so a clean actor omits the key entirely and every existing fixture
                 // stays byte-identical.
-                ...(() => {
-                    const m = victimOwnEnemyHealModifiers(statusEngine, a.id);
-                    return m.incomingHealPct !== 0 || m.outgoingHealPct !== 0
-                        ? { enemyAppliedHeal: m }
-                        : {};
-                })(),
-                // #389: the DAMAGE twin of the heal spread above — the named `Attack Down` /
-                // `Out. Damage Down` families this actor carries in its OWN per-victim enemy store,
-                // computed fresh per turn. Passed as a FAMILY MAP, not a sum: the owner ruling
-                // (spec §5) shadows same-family instances across the self/enemy boundary, so
+
+                // #389/#396: the named families this actor carries in its OWN per-victim enemy
+                // store, computed fresh per turn over `TURN_SHADOW_CHANNELS` — the two outgoing-
+                // damage channels (`Attack Down` / `Out. Damage Down`, #389) and the two heal
+                // channels (`Inc. Repair Down` / `Out. Repair Down`, #367's, shadowed by #396).
+                //
+                // ONE MAP, not a map plus a scalar. #367 originally passed the heal pair as summed
+                // percentages (`enemyAppliedHeal`), which is exactly the shape that cannot express
+                // the locked rule: highest tier wins ACROSS the self/enemy boundary, so
                 // `runPlayerTurn` has to compare each applied family against the actor's own
-                // instance of it rather than just adding. Team-agnostic for the same reason as the
-                // heal twin — the enemy store is keyed by victim id regardless of side, and this
-                // runs for every acting actor on both sides. Spread-guarded so a clean actor omits
-                // the key entirely and every existing fixture stays byte-identical.
+                // instance of it rather than just adding, and a pre-summed scalar makes that
+                // impossible. Both pairs now travel as families and are folded together.
+                //
+                // Team-agnostic: the enemy store is keyed by victim id regardless of side, and
+                // this runs for every acting actor on both sides. Spread-guarded so a clean actor
+                // omits the key entirely and every existing fixture stays byte-identical.
                 ...(() => {
-                    const fams = victimOwnEnemyOutgoingFamilies(statusEngine, a.id);
-                    return fams.size > 0 ? { enemyAppliedOutgoing: fams } : {};
+                    const fams = victimOwnEnemyFamilies(statusEngine, a.id);
+                    return fams.size > 0 ? { enemyAppliedFamilies: fams } : {};
                 })(),
                 // Sub-project I, PR I3 (Layer 1): team-aura distribution. Union THIS actor's
                 // LIVING same-side allies' `all-allies` passive modifier abilities, EXCLUDING
@@ -9595,6 +9634,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // undefined → assume-met fallback (byte-identical).
                         nameByActorId: nameByActorId.size > 0 ? nameByActorId : undefined,
                         lastTurnCtxByActor,
+                        // #396: the resolver `liveHealChannelPct` needs to shadow the live
+                        // enemy-applied heal half against the actor's own named statuses.
+                        selfNamedBuffsFor: (id) =>
+                            victimSelfBuffs(statusEngine, id, selfBuffLookup),
                         reactiveDealtByOwner,
                         enemyType,
                         // SP-4d: `enemyHp` (IntentExecContext) deleted — it fed only the
