@@ -2464,6 +2464,23 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
+                                            Enemy-Applied Stat Debuffs:
+                                        </span>{' '}
+                                        Debuffs that reduce crit rate, crit power, speed, hacking or
+                                        security now take effect when the{' '}
+                                        <span className="text-primary">opposing side</span> inflicts
+                                        them, not only when a ship debuffs itself. Previously these
+                                        five families landed and displayed correctly but changed
+                                        nothing at all. So an enemy Speed Down really does push your
+                                        ship later in the turn order, a Crit Rate Down really does
+                                        stop a ship critting, and Hacking/Security Down really do
+                                        move how often debuffs land. Where a ship carries its own
+                                        instance of the same debuff family, the{' '}
+                                        <span className="text-primary">stronger one wins</span> —
+                                        the two never add together.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
                                             Ability Execution Order:
                                         </span>{' '}
                                         Abilities within a skill are executed in the same order they
