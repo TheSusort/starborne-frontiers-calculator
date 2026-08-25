@@ -347,7 +347,33 @@ because "EHP" kept inviting the old post-mitigation reading.
       SECOND mixed channel, while fixing the first. A third untested funnel write introduced. Docs
       traded a structural error for a naming error (two card names that exist nowhere in the app).
       **Four comments now assert the OPPOSITE of shipped behaviour.**
-- [ ] Task 11: fix wave for the above (BASE `62d194ee`) Suite **584 / 6520** (+22 arms).
+- [x] Task 11: **complete** (commit `2293ade2`; review pending). Suite **584 / 6528** (+8 arms).
+      All 11 findings closed. Critical mutation-check: restoring the reflect fold →
+      `expected 140000 to be 200000` (exactly the 30% figure). Item-3 KEEP arms: dropping `exposed`
+      → `expected 40000 to be greater than 40000`; same for `enemy.incomingDamageModifier`. Snapshot
+      deletions ZERO (no golden file touched at all).
+      **IT FOUND A FIFTH CHANNEL AND CORRECTLY DID NOT FIX IT — needs a user ruling.** Protection
+      redirect (`damageRaw *= cascade.targetRetainedFraction`): fixed 4-round survivor window,
+      no ally 40,000 · ally 0 stacks 40,000 · 3 stacks **28,000** · 5 stacks **20,000**. Same rounds.
+      **But this is a REASSIGNMENT, not a reduction** — the slice is booked IN FULL on the
+      PROTECTOR's own raw axis. Whether damage an ally intercepted counts as "absorbed" by the ship
+      it was thrown AT is a product ruling, not inferable from the neighbouring channels. Pinned with
+      those exact numbers + a zero-stack control, both readings in the test header. Also closes C5's
+      second untested funnel scaling.
+      It softened the docs/changelog to "a defensive ability **on the ship itself** never lowers this
+      number" with the carve-out spelled out — leaving it absolute would have been a NEW user-facing
+      inaccuracy created by the finding. Correct.
+      **TWO FIXTURE TRAPS caught by MEASURING, both the vacuity class:** (1) a `SelectedGameBuff`
+      named `'Protection'` on a `TeamActorInput` never reaches `selfBuffStacksForOwner` — that build
+      read 40,000 at EVERY stack count and would have "proved" the channel inert; (2)
+      `rawIntakeAxis`'s usual `hacking: 0` gives landing chance ZERO, so the path-8 DoT never applied
+      and every assertion passed VACUOUSLY until hacking 200 (chance exactly 1 — certain, not drawn,
+      so the file's no-live-RNG property holds).
+      Also fixed 2 more stale comments in item 6's class that the brief did not name.
+      Note: `victimHitDamage`'s byte-identity is deliberately preserved by re-summing the split halves
+      in the engine's original left-to-right order — `a - (b + c)` and `a - b - c` are not the same
+      double.
+- [ ] Task 11 review, then the WHOLE-BRANCH review. Suite **584 / 6520** (+22 arms).
       **ZERO golden/snapshot files touched** — no re-bless needed. 185 test-file deletions are all
       the `measuredEHP`→`damageAbsorbed` rename (identical values on the added side) + a fixture
       reorder. No numeric value moved.
