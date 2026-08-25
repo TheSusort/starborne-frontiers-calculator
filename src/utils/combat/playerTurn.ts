@@ -1,6 +1,7 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
+import { isEnemyTarget } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
     DoTType,
@@ -1044,13 +1045,19 @@ function chargeGainFromSkill(args: {
             ability.target === 'ally' ||
             ability.target === 'all-allies' ||
             ability.target === 'lowest-hp-ally';
-        const isEnemy = ability.target === 'enemy' || ability.target === 'all-enemies';
+        const isEnemy = isEnemyTarget(ability.target);
         // 'own' sums everything that is neither ally- nor enemy-targeted; the other filters
         // sum only their matching target class.
-        // NOTE: only 'enemy'/'all-enemies' count as enemy here; the selector enemy-targets
-        // ('enemy-most-buffs'/'enemy-highest-attack') fall into 'own'. Harmless today — the
-        // skill parser never emits a selector target for type:'charge' — but if charge ever
-        // uses one, add it to the enemy match (and to the reactive branch in triggers.ts).
+        //
+        // #399: `isEnemy` reads the shared classifier, so the three selector targets
+        // ('enemy-most-buffs' / 'enemy-highest-attack' / 'enemy-highest-speed') now count as
+        // enemy here instead of falling into 'own'. The parser emits no selector target for
+        // type:'charge' today, so nothing corpus-reachable moves.
+        //
+        // KNOWN GAP, deliberately not fixed here: `isAlly` above omits 'adjacent-allies', so that
+        // target still lands in 'own'. That is a question on the ALLY axis with its own separate
+        // reachability, and widening the shared map to three values to answer it would change
+        // charge routing on a path #399 never measured.
         const matches =
             args.targetFilter === 'ally'
                 ? isAlly

@@ -29,6 +29,7 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
+import { isEnemyTarget } from '../abilities/abilityTargetSide';
 import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
     ActiveDoTStack,
@@ -279,17 +280,14 @@ function registerActorAbilityStatuses(
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
-            // Ship-kit W5 Task A3: the two enemy-adjacency scopes (Vindicator Provoke/Out. Damage
-            // Down I → 'adjacent-enemies'; Asphyxiator Stasis → 'target-and-adjacent-enemies')
-            // are enemy-side debuffs scoped to the resolved target's board neighbours, not self
-            // buffs — omitting them here silently misregisters the status on the CASTER.
-            const side: 'self' | 'enemy' =
-                ability.target === 'enemy' ||
-                ability.target === 'all-enemies' ||
-                ability.target === 'adjacent-enemies' ||
-                ability.target === 'target-and-adjacent-enemies'
-                    ? 'enemy'
-                    : 'self';
+            // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
+            // local list. The list this replaced omitted the three selector targets, so a
+            // buff/debuff with `target: 'enemy-highest-attack'` and a NON-live trigger was
+            // misregistered on the CASTER's self store — invisible to every enemy-store reader.
+            // Measured in `selectorTargetStoreSide.test.ts`; corpus-unreachable today (every
+            // shipped selector-targeted infliction carries a LIVE trigger and is partitioned to
+            // the reactive path before this loop), which is why nothing observable moves.
+            const side: 'self' | 'enemy' = isEnemyTarget(ability.target) ? 'enemy' : 'self';
             // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
             // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.
             // Only a buff config carries it — `hits` does not exist on the debuff arm.

@@ -24,6 +24,11 @@
  * The SELECTOR arm is only reachable by a HAND-AUTHORED ability: no corpus ship pairs a
  * buff/debuff config with a selector target and a non-live trigger, and AbilityCard.tsx's
  * TARGET_OPTIONS does not offer the selector targets to the editor either.
+ *
+ * Task 2 (#399) fixed the store-axis classification (`engine.ts` now reads the shared
+ * `isEnemyTarget` from `abilityTargetSide.ts`), so the SELECTOR arm below now asserts the FIXED
+ * behaviour instead of the broken one. The pre-fix reading above is left intact — it is the only
+ * record that the defect was real.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
@@ -124,10 +129,10 @@ describe('#399 reachability — selector targets and the status store side', () 
         expect(stores.casterSelfStore).not.toContain('Probe Mark');
     });
 
-    it('SELECTOR: target:enemy-highest-attack on-cast debuff misregisters on the CASTER self store', () => {
+    it('SELECTOR: target:enemy-highest-attack on-cast debuff lands in the VICTIM enemy store', () => {
         const stores = runProbe(skills([debuffAbility('enemy-highest-attack')]));
-        expect(stores.casterSelfStore).toContain('Probe Mark');
-        expect(stores.victimEnemyStore).not.toContain('Probe Mark');
+        expect(stores.victimEnemyStore).toContain('Probe Mark');
+        expect(stores.casterSelfStore).not.toContain('Probe Mark');
     });
 });
 
