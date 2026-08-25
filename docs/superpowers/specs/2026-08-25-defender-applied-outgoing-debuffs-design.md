@@ -60,3 +60,41 @@ of who applied it**. The existing self-sourced path is the reference: find where
 `Attack Down` / `Out. Damage Down` enters the outgoing fold, and make the opposing-side store feed
 the same term — mirroring how #358 fixed the *defence* channel by adding a self-sourced term to a
 channel that carried only enemy-sourced entries. This is the same shape, in the opposite direction.
+
+---
+
+## 5. ADDENDUM (owner ruling, 2026-08-25): HIGHEST TIER WINS across the self/enemy boundary
+
+**Question:** an enemy carries a self-inflicted `Attack Down I` (−15%) and your Curator lands
+`Attack Down III` (−45%) on it. −15%, −45% or −60%?
+
+**Ruling: −45%. The strongest single instance of a named family applies; weaker instances are
+shadowed, regardless of which side applied them.**
+
+This extends the rule that already governs a family *within* one store, rather than inventing a
+second rule for the cross-store case. Tier-shadowing today is per-store and **cannot** shadow across
+the self/enemy boundary without a deliberate change — so this is real work, not a switch.
+
+### 5.1 What this rules out
+
+**Additive combination is WRONG.** It is what the code would do if the dead channel were simply
+switched on, and it makes two instances of one named debuff worth more than one — which contradicts
+the family's own behaviour inside a single store. It also makes **−100% reachable**, at which point
+the attacker throws literally zero. (Overshoot is safe in itself: −150% clamps to 0 with no sign
+inversion. Reaching zero *by accident* is the objection.)
+
+### 5.2 Scope of the shadowing — do not over-apply it
+
+Shadowing is **per named family**. Two DIFFERENT families both apply:
+`Attack Down` and `Out. Damage Down` are separate debuffs and combine as they always have. Only
+same-family instances shadow. A fix that collapses across families is a new defect.
+
+### 5.3 Required tests
+
+- **Cross-store shadowing:** self `Attack Down I` + applied `Attack Down III` ⇒ exactly the III
+  value, not the sum, and not the I value. Assert all three candidate figures are distinguishable in
+  the fixture, or the arm cannot tell shadowing from either alternative.
+- **Cross-family additivity survives:** applied `Attack Down` + applied `Out. Damage Down` still
+  combine. This is the guard against over-collapsing.
+- **The reverse direction:** self tier HIGHER than applied tier ⇒ the self tier wins. Otherwise
+  "highest wins" is untested in the direction where the player's debuff is the weaker one.
