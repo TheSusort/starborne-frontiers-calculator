@@ -499,3 +499,226 @@ describe.each(SIDES)('#398 security channel — landing, victim on the %s side',
         expect(self.victimEnemyStore).not.toContain(PROBE_DEBUFF);
     });
 });
+
+// ── 4. crit + critDamage — the damage-path channels ───────────────────────────────────────────
+
+/** A damage-dealing victim pinned to the DETERMINISTIC ENDS of the crit gate: `crit: 100` crits
+ *  every hit and `crit: 0` never does, so neither arm needs an RNG seed. `critDamage: 200` makes a
+ *  crit deal 3x the base hit (1 + 200/100), which is what turns the assertions below into exact
+ *  numbers rather than inequalities. */
+const DEALER = { attack: 10_000, crit: 100, critDamage: 200 } as const;
+/** One base (non-crit) hit, three rounds: 10,000 × 100% × 3. */
+const THREE_PLAIN_HITS = 30_000;
+/** Three crits at critDamage 200 → 3x each. */
+const THREE_CRITS = 90_000;
+/** Three crits at critDamage 100 (i.e. 200 − 100) → 2x each. */
+const THREE_HALVED_CRITS = 60_000;
+
+const CRIT_SPEC: ChannelSpec = {
+    name: 'crit',
+    buffName: 'Crit Rate Down III',
+    payload: { crit: -100 },
+    victim: DEALER,
+    victimActive: [damageAbility(100)],
+};
+
+const CRIT_DAMAGE_SPEC: ChannelSpec = {
+    name: 'critDamage',
+    buffName: 'Crit Power Down III',
+    payload: { critDamage: -100 },
+    victim: DEALER,
+    victimActive: [damageAbility(100)],
+};
+
+describe.each(SIDES)('#398 crit channel — victim on the %s side', (side) => {
+    it('an enemy-applied Crit Rate Down III takes the victim off 100% crit', () => {
+        const control = run(CRIT_SPEC, 'control', side);
+        const enemy = run(CRIT_SPEC, 'enemy', side);
+        const self = run(CRIT_SPEC, 'self', side);
+
+        expect(enemy.victimEnemyStore).toContain('Crit Rate Down III');
+        expect(self.victimSelfStore).toContain('Crit Rate Down III');
+
+        expect(control.victimCrits).toBe(3);
+        expect(enemy.victimCrits).toBe(0);
+        expect(self.victimCrits).toBe(0);
+
+        // MAGNITUDE, not direction — the debuff is applied ONCE. A doubled fold still clamps crit
+        // to 0 here, which is why the crit-DAMAGE test below is the one that catches a doubling;
+        // this one pins that the crit channel reaches the roll at all.
+        expect(control.victimDamage).toBe(THREE_CRITS);
+        expect(enemy.victimDamage).toBe(THREE_PLAIN_HITS);
+        expect(enemy.victimDamage).toBe(self.victimDamage);
+    });
+});
+
+describe.each(SIDES)('#398 critDamage channel — victim on the %s side', (side) => {
+    it('an enemy-applied Crit Power Down III cuts crit damage by exactly its value', () => {
+        const control = run(CRIT_DAMAGE_SPEC, 'control', side);
+        const enemy = run(CRIT_DAMAGE_SPEC, 'enemy', side);
+        const self = run(CRIT_DAMAGE_SPEC, 'self', side);
+
+        expect(enemy.victimEnemyStore).toContain('Crit Power Down III');
+        expect(self.victimSelfStore).toContain('Crit Power Down III');
+
+        // The crit RATE is untouched — only the multiplier moves.
+        expect(control.victimCrits).toBe(3);
+        expect(enemy.victimCrits).toBe(3);
+
+        // THE DOUBLE-COUNT GUARD. critDamage 200 → 90,000; a correctly-applied −100 → 100 → 60,000.
+        // A fold applied TWICE would give 200 − 200 = 0 → 30,000, which this rejects outright.
+        expect(control.victimDamage).toBe(THREE_CRITS);
+        expect(enemy.victimDamage).toBe(THREE_HALVED_CRITS);
+        expect(enemy.victimDamage).toBe(self.victimDamage);
+    });
+});
+
+// ── 5. security — the DAMAGE BASIS (owner ruling R3) ──────────────────────────────────────────
+
+/**
+ * `Security Down` is ONE stat with TWO effects (owner ruling): it raises how easily debuffs land on
+ * the victim (section 3) AND cuts the victim's security-scaled damage. The in-corpus matchup is
+ * real: Tygr's active inflicts `Security Down II`, and Prophet's active deals "damage equal to 50x
+ * its security" (carried as `additional-damage` with `pct: 5000`, divided by 100 like every other
+ * basis → security × 50).
+ *
+ * This needs its own fixture rather than the shared harness above: the secondary-damage total is
+ * exposed as `rawTotals.totalSecondary`, which is FOCUS-ONLY, so the Prophet role has to BE the
+ * focus in the player-side direction. The enemy-side direction therefore reads the mirror instead —
+ * the HP the enemy Prophet strips off the player focus — which is the same quantity seen from the
+ * receiving end.
+ */
+const SECURITY_BASE = 1_000;
+const SECURITY_DEBUFF = -400;
+const SECURITY_MULTIPLE = 50; // Prophet's "50x", i.e. pct 5000 / 100
+const ROUNDS = 3;
+const FULL_SECONDARY = SECURITY_BASE * SECURITY_MULTIPLE * ROUNDS; // 150,000
+const DEBUFFED_SECONDARY = (SECURITY_BASE + SECURITY_DEBUFF) * SECURITY_MULTIPLE * ROUNDS; // 90,000
+
+/** Prophet's clause: pure stat-scaled damage, no percentage-of-attack component at all. */
+const securityBasisDamage = (): Ability => ({
+    id: 'ab-security-basis',
+    type: 'additional-damage',
+    target: 'enemy',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'additional-damage', stat: 'security', pct: SECURITY_MULTIPLE * 100 },
+});
+
+const securityDownCast = (arm: Arm): Ability =>
+    arm === 'enemy'
+        ? enemyCast('Security Down II', { security: SECURITY_DEBUFF })
+        : enemyCast(CONTROL_NAME);
+
+describe('#398 security channel — the damage basis (ruling R3)', () => {
+    /** Player-side Prophet: it is the focus, so its secondary total is `rawTotals.totalSecondary`. */
+    const playerSideSecondary = (arm: Arm): number => {
+        const prophetSlots: ShipSkills['slots'] = [
+            activeSlot([securityBasisDamage()]),
+            ...(arm === 'self'
+                ? [passiveSlot([selfGrant('Security Down II', { security: SECURITY_DEBUFF })])]
+                : []),
+        ];
+        const result = runCombat({
+            numRounds: ROUNDS,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            defensePenetration: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            chargeCount: 0,
+            target: parseTarget('front'),
+            pattern: parsePattern('Pattern-Base'),
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defence: 0,
+            hp: BIG_HP,
+            speed: 500,
+            position: 'M4',
+            hacking: 100_000,
+            security: SECURITY_BASE,
+            shipSkills: { slots: prophetSlots },
+            teamActors: [],
+            enemyAttackers: [
+                asEnemy({
+                    id: APPLIER_ID,
+                    position: 'M1',
+                    speed: 950, // acts first, so the debuff is standing before Prophet fires
+                    hp: BIG_HP,
+                    hacking: 100_000,
+                    slots: [activeSlot([securityDownCast(arm)])],
+                }),
+            ],
+        });
+        return result.rawTotals.totalSecondary;
+    };
+
+    it('an enemy-applied Security Down cuts security-scaled damage proportionally', () => {
+        // 1000 security × 50 × 3 rounds = 150,000; −400 → 600 × 50 × 3 = 90,000.
+        // A DOUBLED fold would give 200 × 50 × 3 = 30,000, which this rejects.
+        expect(playerSideSecondary('control')).toBeCloseTo(FULL_SECONDARY, 6);
+        expect(playerSideSecondary('enemy')).toBeCloseTo(DEBUFFED_SECONDARY, 6);
+        // INSTRUMENT VALIDATION: the self-applied twin moves the same number.
+        expect(playerSideSecondary('self')).toBeCloseTo(DEBUFFED_SECONDARY, 6);
+    });
+
+    it('holds with the Prophet role on the ENEMY side (team symmetry)', () => {
+        // Mirror: the enemy Prophet strips the same secondary damage off the PLAYER focus, so the
+        // HP the focus loses IS the quantity under test, seen from the receiving end. The focus is
+        // the applier here, so the Security Down still crosses the store boundary onto Prophet.
+        const focusHpLoss = (arm: Arm): number => {
+            let focus: { currentHp: number } | undefined;
+            runCombat({
+                numRounds: ROUNDS,
+                selfBuffs: [],
+                enemyDebuffs: [],
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                hasChargedSkill: false,
+                startCharged: false,
+                defensePenetration: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                chargeCount: 0,
+                target: parseTarget('front'),
+                pattern: parsePattern('Pattern-Base'),
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: BIG_HP,
+                speed: 950, // the applier acts first
+                position: 'M1',
+                hacking: 100_000,
+                security: 0,
+                shipSkills: { slots: [activeSlot([securityDownCast(arm)])] },
+                teamActors: [],
+                enemyAttackers: [
+                    asEnemy({
+                        id: VICTIM_ID,
+                        position: 'M4', // front-most, so the applier's `front` targeting binds here
+                        speed: 500,
+                        hp: BIG_HP,
+                        security: SECURITY_BASE,
+                        hacking: 100_000,
+                        slots: [activeSlot([securityBasisDamage()])],
+                    }),
+                ],
+                __testTapActors: (actors) => {
+                    focus = actors.find((a) => a.id === FOCUS_ID);
+                },
+            });
+            return BIG_HP - focus!.currentHp;
+        };
+
+        expect(focusHpLoss('control')).toBeCloseTo(FULL_SECONDARY, 6);
+        expect(focusHpLoss('enemy')).toBeCloseTo(DEBUFFED_SECONDARY, 6);
+    });
+});

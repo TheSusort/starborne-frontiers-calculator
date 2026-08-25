@@ -1008,8 +1008,6 @@ exports[`kit fingerprints > Guardian 1`] = `
   "plain": [
     "attack",
     "attack:charged",
-    "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "debuff",
@@ -1018,8 +1016,6 @@ exports[`kit fingerprints > Guardian 1`] = `
   "richEnemy": [
     "attack",
     "attack:charged",
-    "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "debuff",
@@ -1028,8 +1024,6 @@ exports[`kit fingerprints > Guardian 1`] = `
   "wounded": [
     "attack",
     "attack:charged",
-    "buff",
-    "buff-expired",
     "charge-changed",
     "control:active",
     "debuff",

@@ -2700,6 +2700,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // early site and still outside the comparison. All keep contributing to the totals as before;
     // they are simply invisible to the shadowing comparison.
     //
+    // ⚠️ #398 — THE CRIT CHANNELS *ARE* READ IN BETWEEN, and this fold is deliberately still here.
+    // The claim above ("nothing between the early site and here reads ...") holds for the four
+    // original channels but NOT for the two crit ones this change adds. Both staged gate estimates
+    // read them earlier:
+    //   • `critBuffForGates`   — init ~:1859, `+=` layers 2+3 ~:2539, consumed as
+    //                            `cappedCrit(critBuffForGates)` at ~:1987, ~:2445 and ~:2566;
+    //   • `critDamageForGates` — init ~:1866, consumed as `selfCritPower` at ~:2014, ~:2610, ~:2917.
+    // All six reads happen BEFORE this point, so those estimates do not see the enemy-applied term.
+    // That is the SAME documented approximation they already carry for layer 4 (`modifierAbilities`,
+    // excluded for self-referential-gate avoidance) — not a new class of inaccuracy. Folding earlier
+    // is not available: the shadowing comparison needs `abilitySelfEffects`, which does not exist at
+    // :1859, which is exactly why #396 moved the heal pair down here.
+    // The AUTHORITATIVE values are exact: `effectiveCrit` / `dmgStats.critDamage` drive the real
+    // crit rolls and damage, and the ctx at ~:2890 publishes `effectiveCritRate: effectiveCrit`,
+    // the final number. Do NOT "fix" this by adding the delta to the gate estimates — they are
+    // already consumed by the time control reaches here.
+    //
     // Absent/empty map → empty deltas → byte-identical, and the self side is not even read.
     if (args.enemyAppliedFamilies) {
         const ownNamed = [
@@ -2713,6 +2730,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         scheduledTotals.outgoingDamageBuff += delta.outgoingDamage ?? 0;
         scheduledTotals.incomingHealBuff += delta.incomingHeal ?? 0;
         scheduledTotals.outgoingHealBuff += delta.outgoingHeal ?? 0;
+        // #398: the three damage-path stat channels. `crit`/`critDamage` reach the per-hit crit
+        // roll and the crit multiplier through `dmgStats` immediately below; `security` reaches the
+        // security-scaled damage basis. `speed` and `hacking` are NOT folded here — they have no
+        // consumer on this path and are wired at `foldActorBuffTotals` instead (see
+        // TURN_SHADOW_CHANNELS' own doc for the split).
+        scheduledTotals.critBuff += delta.crit ?? 0;
+        scheduledTotals.critDamageBuff += delta.critDamage ?? 0;
+        scheduledTotals.securityBuff += delta.security ?? 0;
         // The EFFECTIVE enemy-applied contribution, published below so a cross-actor reader can
         // subtract exactly what this ctx contains (`liveHealChannelPct`, #367's staleness fence).
         // It is the DELTA, not the raw applied value: under shadowing those differ whenever the
