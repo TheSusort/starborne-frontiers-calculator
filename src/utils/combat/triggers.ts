@@ -2633,15 +2633,33 @@ export function victimOwnEnemyHealModifiers(
 }
 
 /** The channels the TURN LOOP shadows across the store boundary: #389's two outgoing-damage
- *  channels plus #367's two heal channels (#396). The other two members of `SHADOW_CHANNELS`
- *  (`defense`, `incomingDamage`) meet on the per-VICTIM path in engine.ts's
- *  `victimIncomingModifiers`, not here — a victim's incoming-damage debuff is not something the
- *  acting actor's own turn fold consumes. */
+ *  channels, #367's two heal channels (#396), and #398's three damage-path stat channels.
+ *
+ *  WHY `crit`/`critDamage`/`security` ARE HERE (#398). The DAMAGE fold consumes them:
+ *  `dmgStats.totals.critBuff` becomes `effectiveCrit` (the per-hit crit roll),
+ *  `dmgStats.critDamage` is the crit multiplier, and `dmgStats.security` is the basis for
+ *  security-scaled damage (Prophet's "damage equal to 50x its security" — the owner ruled that
+ *  Security Down is ONE stat with BOTH effects, so it must cut that damage as well as raising how
+ *  easily debuffs land). None of the three reaches the damage path via `foldActorBuffTotals`,
+ *  which `effectiveDamageStatsOf` never calls — so this is a genuinely SECOND fold site for them,
+ *  not a duplicate of the status-mode one.
+ *
+ *  WHY `speed` AND `hacking` ARE DELIBERATELY ABSENT. The turn fold never consumes speed (turn
+ *  order reads `effectiveSpeedOf` → `foldSpeedBuffPct` live), and debuff landing runs solely
+ *  through `liveDebuffLandingChance`. Both fold via `foldActorBuffTotals` instead
+ *  (`FOLD_SHADOW_CHANNELS`); adding them here would be inert at best and a double-count at worst.
+ *
+ *  The remaining two members of `SHADOW_CHANNELS` (`defense`, `incomingDamage`) meet on the
+ *  per-VICTIM path in engine.ts's `victimIncomingModifiers`, not here — a victim's incoming-damage
+ *  debuff is not something the acting actor's own turn fold consumes. */
 export const TURN_SHADOW_CHANNELS = [
     'attack',
     'outgoingDamage',
     'incomingHeal',
     'outgoingHeal',
+    'crit',
+    'critDamage',
+    'security',
 ] as const satisfies readonly ShadowChannel[];
 
 /** Enemy-APPLIED statuses carried by `victimId` in its OWN per-victim enemy store, reduced to the

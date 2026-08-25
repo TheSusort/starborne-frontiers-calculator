@@ -68,10 +68,16 @@ describe('toSimBuffs — speed channel', () => {
 const timedSpeedStatus = (
     buffName: string,
     speed: number,
-    duration = 5
+    duration = 5,
+    // #398: `side` was HARDCODED to 'self' here, so this file — the only speed-fold coverage in the
+    // repo — never once exercised the per-victim ENEMY store. That is one of the three reasons an
+    // entirely dead enemy-side speed channel stayed green for months: an enemy-applied
+    // `Speed Down II` landed, displayed, ticked down and reduced nothing at all. Parameterised
+    // with a default so every pre-existing call site is byte-identical.
+    side: 'self' | 'enemy' = 'self'
 ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
     payload: { buffName, stacks: 1, parsedEffects: { speed } },
-    side: 'self',
+    side,
     sourceSlot: 'active',
     duration,
     conditions: [],
@@ -109,6 +115,33 @@ describe('foldSpeedBuffPct — live two-source speed fold', () => {
         eng.applyTimedAbilityStatus(1, speedDown, OWNER);
         expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(15);
         // effectiveSpeedOf would be base × 1.15.
+    });
+
+    it('folds an ENEMY-APPLIED speed debuff from the per-victim enemy store (#398)', () => {
+        // The direction this file could not see before #398. An enemy-applied `Speed Down II`
+        // lands in the victim's per-victim ENEMY store, keyed by the victim's id — a store
+        // `foldActorBuffTotals` did not read, so the debuff changed nothing.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const speedDown = timedSpeedStatus('Speed Down II', -50, 5, 'enemy');
+        eng.registerAbilityStatuses([speedDown], OWNER);
+        eng.beginRound(1);
+        // Enemy-side writes are keyed by the ENEMY TARGET id (4th arg), not the recipient.
+        eng.applyTimedAbilityStatus(1, speedDown, undefined, OWNER);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(-50);
+        // effectiveSpeedOf would be base × 0.50.
+    });
+
+    it('shadows an enemy-applied instance against the victim own weaker one (#398)', () => {
+        // Highest tier wins ACROSS the store boundary: own `Speed Down I` (-20) plus an applied
+        // `Speed Down II` (-50) resolves to -50, never the -70 sum.
+        const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        const own = timedSpeedStatus('Speed Down I', -20);
+        const applied = timedSpeedStatus('Speed Down II', -50, 5, 'enemy');
+        eng.registerAbilityStatuses([own, applied], OWNER);
+        eng.beginRound(1);
+        eng.applyTimedAbilityStatus(1, own, OWNER);
+        eng.applyTimedAbilityStatus(1, applied, undefined, OWNER);
+        expect(foldSpeedBuffPct(eng, emptyLookup, OWNER)).toBe(-50);
     });
 
     it('folds a scheduled self-buff via the selfBuffLookup source', () => {

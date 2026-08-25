@@ -200,11 +200,18 @@ export function incomingHealFactor(pct: number): number {
 // Every OTHER channel was checked and has NO meeting point: `incomingDotDamage` is read from the
 // enemy list only (`toDotAndPenModifiers`' `enemy` argument) and never from a self list;
 // `dotDamage`, `detonationDamage`, `defensePenetration` and `hotPct` are read from the
-// self/attacker list only; and `crit`, `critDamage`, `speed`, `hacking`, `security`, `hp` fold
-// exclusively through `foldActorBuffTotals`, whose sources are the SELF store and the scheduled
-// `selfBuffLookup` — the enemy store is not among them, so those enemy-side channels are dead
-// rather than additive. Adding a channel here without a meeting point is inert; adding one when a
-// new meeting point appears is required.
+// self/attacker list only.
+//
+// #398 CLOSED THE LAST FIVE. `crit`, `critDamage`, `speed`, `hacking` and `security` USED to fold
+// exclusively through `foldActorBuffTotals`, whose sources were the SELF store and the scheduled
+// `selfBuffLookup` — the enemy store was not among them, so those enemy-side channels were DEAD
+// rather than additive. Measured (5 families, 17 corpus ships): they landed, displayed, ticked down
+// and changed nothing. They now read the enemy store via `FOLD_SHADOW_CHANNELS` at the status-mode
+// fold, and `crit`/`critDamage`/`security` additionally via `TURN_SHADOW_CHANNELS` at the
+// damage-mode fold. `hp` remains dead, with no corpus applier to switch on.
+//
+// Adding a channel here without a meeting point is inert; adding one when a new meeting point
+// appears is required — and `enemyStoreChannelCoverage.test.ts` is the tripwire that says so.
 //
 // REACHABILITY — it comes from the PICKERS, not from ship kits (#396 spec §1.3). A probe over all
 // 149 corpus ships (335 buff/debuff-typed abilities) found ZERO families granted from both a
@@ -224,8 +231,35 @@ export const SHADOW_CHANNELS = [
     'incomingDamage',
     'incomingHeal',
     'outgoingHeal',
+    // #398 — the five channels that were DEAD on the enemy store until this change. They had no
+    // enemy-store reader AT ALL (not an additive one), so switching them on is what CREATES the
+    // cross-store meeting point that obliges shadowing here. See the design spec's per-channel
+    // site table: `crit`/`critDamage`/`security` are folded at BOTH fold sites, `speed` and
+    // `hacking` at the status-mode fold only.
+    'crit',
+    'critDamage',
+    'speed',
+    'hacking',
+    'security',
 ] as const;
 export type ShadowChannel = (typeof SHADOW_CHANNELS)[number];
+
+/** #398: the channels `foldActorBuffTotals` (status mode) projects from the actor's OWN per-victim
+ *  ENEMY store. EXACTLY the five that previously had no enemy-store reader — every other channel
+ *  already has one (`victimOwnEnemyFamilies`, `toEnemyModifiers`, `victimOwnEnemyHealModifiers`),
+ *  so projecting one of those here would DOUBLE-COUNT; `effectiveStatsOf(...).attack` and
+ *  `.defence` alone are read at ~20 sites in engine.ts.
+ *
+ *  `hp` is deliberately absent. It is the sixth channel the #396 audit named dead, but no
+ *  `HP Down`/`Max HP Down` family exists anywhere in `docs/ship-skills.csv`, so there is no
+ *  applier to switch on — it stays dead, recorded on the tripwire's dead-list instead. */
+export const FOLD_SHADOW_CHANNELS = [
+    'crit',
+    'critDamage',
+    'speed',
+    'hacking',
+    'security',
+] as const satisfies readonly ShadowChannel[];
 
 /** #389's original pair, kept named so its call site and unit suite read unchanged. */
 export const OUTGOING_CHANNELS = [
@@ -240,20 +274,24 @@ export const OUTGOING_CHANNELS = [
  * already contains.
  */
 export interface ChannelContribution {
-    /** The STRONGEST instance's post-stacks percentage points. 0 when the family, as read from
-     *  this list, does not touch the channel at all. */
+    /** The STRONGEST instance's post-stacks magnitude — percentage points on every channel EXCEPT
+     *  `hacking`/`security`, which are FLAT additive stat units (#398). The shadowing comparison is
+     *  a pure magnitude comparison and so is unit-agnostic; one field serves both and the `pct`
+     *  name is historical. 0 when the family, as read from this list, does not touch the channel
+     *  at all. */
     pct: number;
     /** `deriveFamilyKey` tier of that strongest instance — 0 both for an un-suffixed name
      *  (`Overload`) and for an absent contribution, which is why `pct` decides the tie. */
     tier: number;
-    /** Σ of EVERY instance's post-stacks percentage points on this channel — i.e. exactly what an
+    /** Σ of EVERY instance's post-stacks magnitude on this channel (percentage points, or flat
+     *  units for `hacking`/`security` — see `pct`) — i.e. exactly what an
      *  additive fold of the same list (`calculateBuffTotals`) puts into the totals. Equals `pct`
      *  whenever the list holds a single instance of the family, which is every corpus case. */
     sum: number;
 }
 
-/** One named family's contribution, per channel, in additive percentage points. Sparse: a channel
- *  the family does not touch is simply absent. */
+/** One named family's contribution, per channel, in additive percentage points (flat units for
+ *  `hacking`/`security`). Sparse: a channel the family does not touch is simply absent. */
 export type FamilyEntry = Partial<Record<ShadowChannel, ChannelContribution>>;
 
 /** familyKey (`deriveFamilyKey`) → that family's per-channel MAXIMUM (plus its sum). Not a total:
