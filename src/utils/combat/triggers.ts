@@ -2582,6 +2582,13 @@ export interface EnemyAppliedHealModifiers {
  *  which is the locked game rule (spec R1: same-family statuses overwrite by highest tier, then
  *  survivors add).
  *
+ *  ⚠️ THAT IS ONLY TRUE WITHIN ONE STORE. The sum below adds an enemy-applied instance to whatever
+ *  the actor's own self store already contributes, and highest-tier-wins is the GENERAL rule across
+ *  that boundary too (#389 spec §6). The standing justification — "only one `Inc. Repair Down` can
+ *  stand today" — is about reachability, not arithmetic, so this fold is additive where the rule
+ *  says shadowed. #389 fixed exactly two channels (`attack`/`outgoingDamage`, via
+ *  `buffTotals.outgoingFamiliesOf`); applying the same shadowing to these is #396.
+ *
  *  Team-agnostic: the enemy store is keyed by targetId regardless of which side the victim is on,
  *  so this reads a player-inflicted debuff on an enemy ship identically.
  *

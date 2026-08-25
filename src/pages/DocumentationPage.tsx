@@ -2745,10 +2745,16 @@ const DocumentationPage: React.FC = () => {
                                         Out. Damage UP on the enemy pushes the figure the other way,
                                         to 60,000. This is a change: for one release the engine
                                         honoured only the attacker&apos;s OWN outgoing modifiers and
-                                        silently ignored yours, so every ship with a suppression
-                                        passive &mdash; Opal, Warden and the seventeen others that
-                                        carry one &mdash; read as less durable than it actually
-                                        plays.
+                                        silently ignored yours, so every ship that lands one of
+                                        these on its attacker read as less durable than it actually
+                                        plays. Seventeen ships inflict an Attack Down or an Out.
+                                        Damage Down somewhere in their kit, and five of them do it
+                                        from a passive rather than from a skill you fire &mdash;
+                                        Arum, Bayah, Opal, Shepherd and Warden. Only the
+                                        refit-active passive applies, so Opal, Shepherd and Arum
+                                        inflict theirs on either of their first two passives, while
+                                        Bayah&apos;s and Warden&apos;s need the second passive
+                                        active.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2759,9 +2765,13 @@ const DocumentationPage: React.FC = () => {
                                         not stack with the weaker. An enemy carrying a &minus;15%
                                         Attack Down I that you hit with a &minus;45% Attack Down III
                                         throws at &minus;45%, not &minus;60%, and that holds
-                                        whichever side applied the stronger one. Two DIFFERENT
-                                        debuffs still combine: an Attack Down and an Out. Damage
-                                        Down on the same enemy both apply.
+                                        whichever side applied the stronger one &mdash; if the
+                                        enemy&apos;s own is the stronger, yours is the one that is
+                                        shadowed. This is the general rule for buffs and debuffs,
+                                        not something specific to this page: only damage over time
+                                        and bombs stack. Two DIFFERENT debuffs still combine: an
+                                        Attack Down and an Out. Damage Down on the same enemy both
+                                        apply.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         There is also an exception on the ALLY side rather than the

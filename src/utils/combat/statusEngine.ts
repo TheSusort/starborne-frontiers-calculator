@@ -358,19 +358,42 @@ export function deriveFamilyKey(name: string): { familyKey: string; tier: number
     return { familyKey: name.slice(0, m.index), tier: TIER_VALUES[m[1]] };
 }
 
-/** Game rule (user-verified 2026-06-04): within a buff family, a new application wins only
- *  if its tier is higher, or the tier is equal and the new cast outlasts the remaining
- *  window. Otherwise the application is skipped — the stronger/longer buff stays. Note that
- *  same-source re-applications still refresh: after the post-turn decrement a 2-turn buff
- *  has 1 remaining, and 2 > 1 so the fresh 2-turn cast wins. */
+/**
+ * THE family-shadowing comparison. Higher TIER wins outright; on an equal tier the larger
+ * tie-break value wins, and an exact tie keeps the incumbent (which makes every fold over it
+ * order-independent).
+ *
+ * Game rule (user-verified 2026-06-04, restated as GENERAL by the owner 2026-08-25 and recorded
+ * in #389's spec §6): highest tier wins for ALL buffs and debuffs, with DoTs (`Corrosion`,
+ * `Inferno`) and bombs the only exceptions — and those never reach here, `deriveFamilyKey` gives
+ * each of them its own family key.
+ *
+ * EXPORTED because there must be exactly ONE such comparison. `familyApplicationWins` below
+ * supplies DURATION as the tie-break (a fresh cast that outlasts the remaining window wins);
+ * `buffTotals.outgoingFamiliesOf` supplies MAGNITUDE, because across the self/enemy store boundary
+ * there is no shared duration axis to compare on — see its own note. #389's review found those two
+ * had drifted into two different rules (magnitude-only vs tier-only); this is the shared one.
+ */
+export function familyChallengerWins(
+    incumbentTier: number,
+    incumbentTieBreak: number,
+    challengerTier: number,
+    challengerTieBreak: number
+): boolean {
+    if (incumbentTier !== challengerTier) return incumbentTier < challengerTier;
+    return challengerTieBreak > incumbentTieBreak;
+}
+
+/** `familyChallengerWins` against a live `BuffState`, with the cast's DURATION as the tie-break.
+ *  Note that same-source re-applications still refresh: after the post-turn decrement a 2-turn
+ *  buff has 1 remaining, and 2 > 1 so the fresh 2-turn cast wins. */
 function familyApplicationWins(
     existing: BuffState | undefined,
     tier: number,
     duration: number
 ): boolean {
     if (!existing) return true;
-    if (existing.tier !== tier) return existing.tier < tier;
-    return duration > existing.turnsRemaining;
+    return familyChallengerWins(existing.tier, existing.turnsRemaining, tier, duration);
 }
 
 function isAccumulating(buff: SelectedGameBuff): boolean {

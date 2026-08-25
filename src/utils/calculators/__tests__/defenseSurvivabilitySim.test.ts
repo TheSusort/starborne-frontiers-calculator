@@ -1720,21 +1720,35 @@ describe('#389 — a DEFENDER-APPLIED outgoing debuff reduces what its attacker 
     /** A DIFFERENT family on the SAME channel as `Attack Down` — the only shape that can detect a
      *  collapse across families (see the cross-family arm for why `Out. Damage Down` cannot). */
     const AU2 = { buffName: 'Attack Up II', effects: { attack: 30 } as ParsedBuffEffects };
+    /** NOT a game buff: a single instance carrying the -60% that `AD1` + `AD3` would sum to, so
+     *  the forbidden additive figure can be MEASURED instead of written down. Its own name is
+     *  deliberately outside every real family — it is only ever run alone. */
+    const AD_SUM_PROBE = {
+        buffName: 'Attack Down Sum Probe',
+        effects: { attack: -60 } as ParsedBuffEffects,
+    };
 
     it('§5.3 CROSS-STORE SHADOWING: self Attack Down I + applied III yields the III value', () => {
         const plain = boundaryRun([], []);
         const appliedI = boundaryRun([AD1], []);
         const appliedIII = boundaryRun([AD3], []);
         const both = boundaryRun([AD3], [AD1]);
+        // The ADDITIVE outcome, MEASURED rather than asserted: one instance carrying the -60% the
+        // I and the III would sum to. Its own family key is irrelevant (nothing stands beside it),
+        // so this reads the page's arithmetic at -60% and nothing else.
+        const sumFigure = boundaryRun([AD_SUM_PROBE], []).damageAbsorbed;
 
         // THE THREE CANDIDATE FIGURES ARE MUTUALLY DISTINGUISHABLE, asserted before the arm that
         // discriminates between them — without this the arm could not tell shadowing from either
         // alternative it exists to exclude. -15% -> 34,000; -45% -> 22,000; the -60% sum -> 16,000.
+        // ⚠️ THIS USED TO COMPARE THREE LITERALS and could not fail; all three are now measured.
         expect(plain.damageAbsorbed).toBe(40_000);
         expect(appliedI.damageAbsorbed).toBe(34_000);
         expect(appliedIII.damageAbsorbed).toBe(22_000);
-        const sumFigure = 16_000;
-        expect(new Set([34_000, 22_000, sumFigure]).size).toBe(3);
+        expect(sumFigure).toBe(16_000);
+        expect(new Set([appliedI.damageAbsorbed, appliedIII.damageAbsorbed, sumFigure]).size).toBe(
+            3
+        );
 
         // THE RULING: the III value, and provably neither of the other two.
         expect(both.damageAbsorbed).toBe(22_000);
