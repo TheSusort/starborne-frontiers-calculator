@@ -99,13 +99,22 @@ export interface DefenseSurvivabilityResult {
      *    distinctly for exactly this reason. Defence raises the number only by buying more ROUNDS,
      *    which is the casualty regime below.
      *
-     * 2. IT IS QUANTISED BY THE ROUND. The metric only moves when the round of DEATH moves, so its
-     *    quantum is one round of enemy throughput. Measured: defence 5,000 and defence 5,000 +30%
-     *    both report exactly 300,000 because both die on round 5, even though the second really is
-     *    tankier. That is inherent to a round-based simulation, not a defect, and it is why the
-     *    owner's ruling pairs this figure with ROUNDS SURVIVED in the results block — the rounds
-     *    display is REQUIRED, not decorative. The continuous counterpart is the static formula
-     *    already shown beside it.
+     * 2. IT IS QUANTISED BY THE HIT — not by the round. This block said "by the ROUND… the metric
+     *    only moves when the round of DEATH moves" until the `SAME ROUND, DIFFERENT FIGURE` arm in
+     *    `__tests__/defenseSurvivabilitySim.test.ts` measured otherwise, in the same commit that
+     *    added the arm. Both halves of that older claim are false.
+     *    MEASURED, two 40,000-attack attackers on distinct speeds, 100,000 HP / 5,000 defence:
+     *    plain dies round 4 having absorbed 280,000 (7 hits); the SAME ship with `Defense Up II`
+     *    dies on round 4 TOO and absorbs 320,000 (8 hits). The reduction carried it past attacker
+     *    one's hit into attacker two's, and the match ends with the turn that destroys it (#329), so
+     *    the plain ship's final round is TRUNCATED — attacker two never fires. Same death round,
+     *    exactly one raw hit apart.
+     *    With a SINGLE attacker one hit IS one round, which is why the older single-attacker fixture
+     *    (defence 5,000 vs 5,000 +30%, both 300,000, both dead on round 5) shows equality. That
+     *    equality is FIXTURE-SPECIFIC, not the rule — see `ROUND QUANTUM`'s own scoping note.
+     *    The coarseness is still real and still inherent to a turn-based simulation, which is why
+     *    the owner's ruling pairs this figure with ROUNDS SURVIVED — the rounds display is REQUIRED,
+     *    not decorative. The continuous counterpart is the static formula shown beside it.
      */
     damageAbsorbed: number;
     survived: boolean;
