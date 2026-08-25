@@ -380,7 +380,54 @@ because "EHP" kept inviting the old post-mitigation reading.
       genuinely discriminates. It also flagged honestly that ONE claim was inherited, not freshly
       measured (the parked #357 path's zero-corpus-calls) — good reviewer hygiene.
 
-## ✅ ALL 11 TASKS IMPLEMENTED AND REVIEWED. Whole-branch review is the last gate.
+## ✅ ALL 11 TASKS IMPLEMENTED AND REVIEWED.
+## WHOLE-BRANCH REVIEW: **MERGE-WITH-FIXES.** 4 blockers, 8 Important, 10 Minor → Task 12.
+Every gate independently re-verified at `ffd7fdea`: 584/6528 green, tsc 0, lint 0, prettier clean,
+only 2 `.snap` files touched (**219/0** and **388/0** — additive), and exactly ONE non-snap numeric
+move (the `protectionTransfer` premise, which is the documented defect-pin).
+**GOOD NEWS THAT NARROWS THE MERGE RISK: autogear is NOT affected** — nothing under
+`src/utils/autogear/` imports `runCombat`/`dpsSimulator`; it scores off the static
+`calculateDamageReduction`/`calculateEffectiveHP` path, untouched. Blast radius = combat simulator +
+DPS/Healing/Defense calculators only, and the changelog's scope line already says exactly that.
+
+### The four blockers
+- **C1 — A REAL REGRESSION VS MAIN, and MY GUARD COULD NOT CATCH IT.** Default roster is `enemies: []`
+  → `attack: 0` practice target → `damageAbsorbed === 0` for every config → `0 > 0` false forever →
+  `bestShip` stays `null`. No best badge, no "Compared to best" row, no chart highlight, on first
+  load. Main always produced a best. **My ranking test adds an enemy FIRST, so it proved the reduce
+  DISCRIMINATES and never that it ANSWERS.** The commit is literally titled "guard the isBest
+  ranking" and the shipped reduce carries no guard.
+- **C2 — the central user-facing claim is FALSE 3 ways**, and changelog entry 1 contradicts ITSELF
+  (asserts the raise, retracts it 900 words later). The third falsification is the review's answer to
+  my "sixth channel?" question and it is not a mis-classified reduction: **routes where a defensive
+  ability lowers the figure WITHOUT being a reduction** — Opal's `Attack Down II` on being damaged,
+  Warden's `Out. Damage Down II`, killing the attacker, roster-wipe termination. All CORRECT per C2.
+  **Its diagnosis, which is the durable lesson: the EXCLUSION side of the definition was traced
+  carefully and the INCLUSION side never was.**
+- **C3 — my changelog example misdescribes AEGIS.** It grants Defense Up II to ITSELF (on
+  ally-shield-destroyed), not to the front ship. Arithmetic right, attribution wrong — wrong in
+  exactly the way that makes a user try to reproduce it and conclude the fix is broken.
+- **C4 — the module jsdoc that IS the metric's definition still documents the RETIRED axis.** Every
+  item on its REACHES-IT list is now stripped from the headline; the list describes `breakdown.gross`.
+  Task 10/11 fixed this exact ambiguity 60 lines below and left the header standing.
+
+### The review disagreed with one of my calls, and it is right
+I filed the `attackerIncomingReductionPct` rename as "when next touched". **Upgraded to blocking-ish
+(Task 12 item 10).** New reason, created by this branch: it now sits one call from
+`attackerSideReductionPct`, where "attacker" is CAUSAL (the attacker's own squad-leader penalty)
+versus POSITIONAL (the reflect recipient = the victim). Two adjacent params, same prefix, opposite
+meaning. That inversion is the exact failure that let the Critical through.
+Also worth recording: it undersold nothing — it noted my mitigation is stronger than I claimed
+(channel 8 is a live 3-arm tripwire, not just a comment).
+
+### Two test-honesty findings to carry into the PR body
+- **I7 — engine change #1 is observed by ONE file.** `realKitFingerprints` records event-KIND lists
+  only, no magnitudes — **structurally incapable** of observing a damage change. So the honest claim
+  is: proven REACHABLE on real kits (2534 reads), proven CORRECT only on synthetic ones. For the six
+  ships whose damage-taken moves by up to 100% of their defence term, no fixture asserts a magnitude.
+- **I6 — the Overload chain is verified in two disconnected halves.** `* s.stacks` only at the
+  pure-reducer level; EVERY arm in the sole engine-level gate hardcodes `stacks: 1` — and one arm's
+  comment says "Overload at 5 stacks" about a `stacks: 1, defense: -50` fixture.
 
 ## FOLLOW-UPS for after merge (not blocking)
 - **RENAME `attackerIncomingReductionPct` / `attackerDefenceReductionPct`.** They are victim-side
@@ -418,7 +465,7 @@ because "EHP" kept inviting the old post-mitigation reading.
       `DefenseSimulationInput`); fenced in two halves instead. `attackerIncomingReductionPct` is
       still folded into both reflect axes — arguably victim-side by C2 but part of the empirical
       duel-fit model, so stripping it is a separate decision.
-- [ ] Task 7: documentation + changelog
+- [x] Task 7: documentation + changelog (see the Task 7 entry above — completed `3e33d4f7`)
 
 ## ✅ USER RULING (2026-08-24): Defense Up SHOULD reduce damage taken, and the engine fix is
 ## IN SCOPE for this epic. I recommended a separate spec; the user chose in-epic. Proceeding.
