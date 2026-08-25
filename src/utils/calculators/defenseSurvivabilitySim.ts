@@ -128,21 +128,51 @@ export interface DefenseSurvivabilityResult {
  * kills attackers reduces its own incoming pressure (real game behaviour). Damage absorbed is
  * consequently not a pure-defence number.
  *
- * WHICH DEFENSIVE CHANNELS MOVE THE MEASURED NUMBER (measured, not assumed — see the channel test
- * in `__tests__/defenseSurvivabilitySim.test.ts` for the pinned figures). A caller wiring UI onto
- * this result must not promise more than the engine delivers:
- *   • REACHES IT: shield grants, name-keyed statuses (Barrier, Shield Converter — the latter only
- *     with a NUMERIC duration, `holdsShieldConverter` reads the timed channel only), self-buffs
- *     carrying `parsedEffects.incomingDamage` ('Inc. Damage Down', the per-victim D-PR12 channel),
- *     and — since the addendum A2 fix — a defender's OWN `parsedEffects.defense` buff
- *     ('Defense Up'), which folds into the same per-victim `defenceModifierPct` channel as an
- *     enemy's Defense Shred. That channel is SIGN-AGNOSTIC (A5): a self-buff whose card text
- *     carries a defensive COST ('Overload', '-10% Defense' per stack) makes the measured number go
- *     UP, which is correct.
- *   • DOES NOT: a `modifier` ability on the 'incomingDamage' channel (no bucket in
- *     `modifierTotalsFromAbilities` — attacker-side folds only). Pre-existing engine behaviour,
- *     identical through the older `selfBuffs` route — not something this boundary introduced, and
- *     not something it can paper over.
+ * ── WHICH CHANNELS MOVE WHICH NUMBER ─────────────────────────────────────────────────────────
+ * (measured, not assumed — see the per-channel direction test in
+ * `__tests__/defenseSurvivabilitySim.test.ts` for the pinned figures.) A caller wiring UI onto this
+ * result must not promise more than the engine delivers — and there are now TWO axes to promise
+ * about, so this note says which list belongs to which. This header used to carry ONE list, headed
+ * "which defensive channels move the measured number", and every item on it was a victim-side
+ * REDUCTION: as of addendum 3 those are stripped from the headline by construction, so the list had
+ * silently become a description of `breakdown.gross` while still sitting above `damageAbsorbed`.
+ *
+ *   • `damageAbsorbed` (THE HEADLINE — the raw axis, "everything thrown at the ship"). A
+ *     victim-side reduction MOVES NOTHING HERE, by construction and by ruling: defence mitigation,
+ *     the defender's own `Inc. Damage Down` family, `preFightIncoming`, `equipReductionPct`,
+ *     `incomingDotReductionPct` (Vortex Veil), the incoming-block proc and the reflect channel's
+ *     own incoming-reduction are all excluded. What DOES move it:
+ *       – ROUNDS. The figure only grows when the ship lives another round, so any defensive channel
+ *         that buys a round raises it. That is the only route by which the ship's own toughness
+ *         reaches this number.
+ *       – ATTACKER-SIDE terms, because the attack is counted AS THROWN: `effectiveAttack`, outgoing
+ *         modifiers, crit, affinity, and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`).
+ *         CONSEQUENCE, and it surprises people: a defender that SUPPRESSES ITS ATTACKER lowers its
+ *         own headline. Opal's first passive inflicts `Attack Down II` when directly damaged;
+ *         Warden's second inflicts `Out. Damage Down II` — the mirror of the `Out. Damage Up` that
+ *         counts IN. Correct behaviour, not a bug: less really was thrown. Do not let a UI caller
+ *         promise "a defensive ability never lowers this".
+ *       – NOT an ally's Protection redirect: the redirected slice is booked in FULL on the
+ *         protector's own raw axis (addendum 4 — a REASSIGNMENT, not a reduction). It therefore
+ *         lowers the protected ship's figure, and that ruling is LOCKED. Do not "fix" it.
+ *
+ *   • `breakdown.gross` (the POST-mitigation axis — what actually arrived). This is the list that
+ *     used to head this module:
+ *       – REACHES IT: shield grants, name-keyed statuses (Barrier, Shield Converter — the latter
+ *         only with a NUMERIC duration, `holdsShieldConverter` reads the timed channel only),
+ *         self-buffs carrying `parsedEffects.incomingDamage` ('Inc. Damage Down', the per-victim
+ *         D-PR12 channel), and — since the addendum A2 fix — a defender's OWN
+ *         `parsedEffects.defense` buff ('Defense Up'), which folds into the same per-victim
+ *         `defenceModifierPct` channel as an enemy's Defense Shred. That channel is SIGN-AGNOSTIC
+ *         (A5): a self-buff whose card text carries a defensive COST ('Overload', '-10% Defense'
+ *         per stack) makes `gross` go UP, which is correct. NOTE ON DIRECTION — the header this
+ *         replaces claimed Overload made "the measured number" go up; on the HEADLINE the sign is
+ *         the OTHER way, because less defence means the ship dies SOONER, so FEWER rounds are
+ *         thrown at it and `damageAbsorbed` goes DOWN.
+ *       – DOES NOT: a `modifier` ability on the 'incomingDamage' channel (no bucket in
+ *         `modifierTotalsFromAbilities` — attacker-side folds only). Pre-existing engine behaviour,
+ *         identical through the older `selfBuffs` route — not something this boundary introduced,
+ *         and not something it can paper over.
  */
 export function simulateDefenseSurvivability(
     input: DefenseSimulationInput

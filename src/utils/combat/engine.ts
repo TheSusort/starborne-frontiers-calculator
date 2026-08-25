@@ -1718,7 +1718,13 @@ interface ActorIntake {
      *  SCALING, precisely: recorded at the same instant as `incoming` and scaled by the Protection
      *  retention fraction, but NOT by the incoming-block proc — a blocked hit was thrown in full
      *  (see the funnel's `damageRaw` comment for why that scaling was deliberately removed).
-     *  `incomingRaw >= incoming` always, with equality when the victim applies no reduction at all.
+     *  `incomingRaw >= incoming` OVER A WINDOW SUM, with equality when the victim applies no reduction
+     *  at all. NOT per round, and not per booking: the DoT transform books the full raw amount at
+     *  THROW time, and the ticks that re-book the deferred slice carry `perTickPreMitigation: 0` while
+     *  contributing real post damage — so an individual later round can legitimately read
+     *  `incomingRaw < incoming`. Any test asserting the inequality must sum the window, or scope itself
+     *  to paths with no transform (which is what `rawIntakeAxis.test.ts` does — see the scope note on
+     *  its suite-health arm).
      *  A path that folds no defence AND meets no other victim-side reduction (a plain DoT tick, a
      *  bomb/detonation burst) books the identical amount on both — but a DoT tick on a Vortex Veil
      *  carrier does NOT, which is why the two axes are pinned separately per path in
@@ -6496,7 +6502,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Attacker's incoming-reduction against the reflected (direct) hit. Minimal
                         // ctx: no crit/stealth, direct scope (dotType undefined). Returns 0 for an
                         // attacker with no incoming-reduction ability → matches the duel-fit default.
-                        const attackerIncomingReductionPct = incomingReductionForHit(
+                        const reflectVictimIncomingReductionPct = incomingReductionForHit(
                             incomingAbilitiesOf(attacker.id),
                             {
                                 didCrit: false,
@@ -6525,7 +6531,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 netHpDamage: reflectBasis,
                                 affinityDamageModifier,
                                 attackerDefenceReductionPct,
-                                attackerIncomingReductionPct,
+                                reflectVictimIncomingReductionPct,
                             });
                         if (reflected > 0) {
                             // `sink` accumulates the attacker's incoming into the unified
@@ -12624,15 +12630,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                     }
                 > = {};
                 for (const [id, v] of perActorIncoming) {
-                    // #358 ADDENDUM 2: `incomingRaw` is deliberately NOT a term of this emptiness
-                    // gate. Both axes are written by the SAME pair of calls at the single booking
-                    // site, and the raw axis is a non-negative scaling of the same amount, so a
-                    // bucket with `incoming === 0` from a real intake also has `incomingRaw === 0`
-                    // (and a DoT-transform reversal nets both to 0 together). Adding the term would
-                    // therefore change no row while making this gate diverge from the one
-                    // `perActorShield` above uses. Left out so it stays byte-identical.
+                    // #358 ADDENDUM 3: `incomingRaw` IS a term of this emptiness gate, and has to
+                    // be. It used to be left out, on the argument that `incoming === 0` implies
+                    // `incomingRaw === 0` because both axes are written by the same pair of calls
+                    // at the single booking site. BOTH HALVES OF THAT ARGUMENT ARE NOW FALSE:
+                    //   • Task 10 stopped scaling `damageRaw` by `(1 - blocked)` — a blocked hit
+                    //     was thrown in full. A 100% incoming-block (which is `abilityDefaults.ts`'s
+                    //     DEFAULT chance, and reachable straight from the defense calculator's own
+                    //     skill editor) therefore books `incoming: 0` with `incomingRaw > 0`.
+                    //   • Task 11 stopped reversing the raw axis on a DoT transform, so the two no
+                    //     longer net to 0 together either.
+                    // Without this term such a bucket is DROPPED from the emitted record, silently
+                    // losing raw damage that really was thrown. Pinned in `rawIntakeAxis.test.ts`
+                    // ("a fully blocked hit still reports on the raw axis").
                     if (
                         v.incoming === 0 &&
+                        v.incomingRaw === 0 &&
                         v.shieldAbsorbed === 0 &&
                         v.barrierAbsorbed === 0 &&
                         v.convertedToShield === 0

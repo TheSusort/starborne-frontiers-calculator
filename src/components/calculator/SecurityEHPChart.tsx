@@ -40,7 +40,7 @@ const CustomTooltip = ({ active, payload }: TooltipProps) => {
                 <p className="font-bold">{d.name}</p>
                 <p>Defense: {Math.round(d.x ?? 0).toLocaleString()}</p>
                 <p>Security: {Math.round(d.y ?? 0)}</p>
-                <p>EHP: {Math.round(d.z ?? 0).toLocaleString()}</p>
+                <p>Theoretical EHP: {Math.round(d.z ?? 0).toLocaleString()}</p>
             </div>
         );
     }
@@ -180,7 +180,7 @@ export const SecurityEHPChart: React.FC<SecurityEHPChartProps> = ({ configs, buf
         <div className="card">
             <h2 className="text-xl font-bold mb-2">Defense × Security Heatmap</h2>
             <p className="text-sm text-theme-text-secondary mb-4">
-                Color shows combined tank score (Effective HP × Security) across the defense and
+                Color shows combined tank score (Theoretical EHP × Security) across the defense and
                 security stat space, using your ship&apos;s HP as reference. Stars mark your ship
                 configurations — top-right is strongest on both dimensions.
             </p>

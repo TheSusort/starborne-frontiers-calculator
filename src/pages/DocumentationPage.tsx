@@ -2672,9 +2672,11 @@ const DocumentationPage: React.FC = () => {
                                     </h4>
                                     <p className="text-theme-text mb-2">
                                         Runs the real combat engine over each ship&apos;s own parsed
-                                        skills, rather than the older static formula alone, and
-                                        reports both figures side by side so you can see where they
-                                        agree and where they don&apos;t.
+                                        skills, rather than the older static formula alone. Each
+                                        card stacks three figures &mdash; rounds survived, damage
+                                        absorbed, and the old static estimate (now Theoretical EHP)
+                                        &mdash; so you can see where the measurement and the
+                                        estimate agree and where they don&apos;t.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2707,16 +2709,41 @@ const DocumentationPage: React.FC = () => {
                                         BEFORE the ship reduced any of it. Every reduction the ship
                                         itself applies is deliberately left out: Defense mitigation,
                                         its own Inc. Damage Down, squad-leader incoming protections,
-                                        gear-sourced damage reduction and block procs. Shields and
-                                        Barrier still count, because those pools eat damage that
-                                        arrived rather than reducing what was thrown. So a defensive
-                                        ability on the ship itself never lowers this number &mdash;
-                                        it raises it, by keeping the ship alive for more rounds of
-                                        incoming fire.
+                                        gear-sourced damage reduction, the Vortex Veil
+                                        damage-over-time reduction, block procs, and the reduction
+                                        the ship applies to reflected damage coming back at it.
+                                        Shields and Barrier still count, because those pools eat
+                                        damage that arrived rather than reducing what was thrown
+                                        &mdash; and so does Shield Converter, which turns a hit into
+                                        shield rather than shrinking it. So a defensive ability on
+                                        the ship itself never lowers this number{' '}
+                                        <em>through its own damage reduction</em>, and it raises the
+                                        number whenever it buys the ship another round.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        One exception, on the ALLY side rather than the ship&apos;s
-                                        own: damage an ally soaks through{' '}
+                                        <span className="text-primary">
+                                            Three things that ability will not do, though:
+                                        </span>{' '}
+                                        it will not raise the figure at all if the ship still dies
+                                        on the same round (the figure moves in whole rounds &mdash;
+                                        see below), nor if the ship already survived the whole
+                                        window (nothing was killing it either way). And an ability
+                                        that suppresses the ATTACKER really does lower it, because
+                                        the attack is counted as thrown and a weaker attacker throws
+                                        less: <span className="font-semibold">Opal</span>&apos;s
+                                        first passive inflicts{' '}
+                                        <span className="font-semibold">Attack Down II</span> on
+                                        whatever directly damaged it, and{' '}
+                                        <span className="font-semibold">Warden</span>&apos;s second
+                                        inflicts{' '}
+                                        <span className="font-semibold">Out. Damage Down II</span>{' '}
+                                        &mdash; the exact mirror of the Out. Damage Up counted IN
+                                        above. That is the metric working, not failing: less really
+                                        was thrown.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        There is also an exception on the ALLY side rather than the
+                                        ship&apos;s own: damage an ally soaks through{' '}
                                         <span className="font-semibold">Protection</span> is counted
                                         against that ALLY, not against this ship, so adding a
                                         protector lowers the figure shown here (a 30% redirect over
@@ -2739,12 +2766,18 @@ const DocumentationPage: React.FC = () => {
                                         </span>{' '}
                                         Nothing killed it, so the figure is simply everything the
                                         enemy team managed to throw in the window &mdash; and two
-                                        survivors under the same enemies report the same total
-                                        however differently tanky they are. Read as a comparison,
-                                        that tie means nothing. The fix is to raise enemy attack,
-                                        add attackers, or extend the rounds until the ships actually
-                                        die; only then does the figure measure the ship. For a
-                                        survivor it is a lower bound on durability, never a limit.
+                                        survivors that both last the FULL window under the same
+                                        enemies report the same total however differently tanky they
+                                        are. Read as a comparison, that tie means nothing. Two
+                                        survivors do <em>not</em> tie when one of them ends the
+                                        fight early: a hard-hitting ship can wipe the enemy team on
+                                        round 6 of a 20-round window, and the fight stops there, so
+                                        it is thrown less than a ship that stood under fire for all
+                                        20. The card says so explicitly when that happens. The fix
+                                        either way is to raise enemy attack, add attackers, or
+                                        extend the rounds until the ships actually die; only then
+                                        does the figure measure the ship. For a survivor it is a
+                                        lower bound on durability, never a limit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Theoretical EHP</span> is the
@@ -2756,12 +2789,58 @@ const DocumentationPage: React.FC = () => {
                                         measured pair is the one that saw the real fight.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        <span className="text-primary">The breakdown</span> beneath
-                                        it (to hull, absorbed by shield, blocked by Barrier,
-                                        converted to shield) describes what actually reached the
-                                        ship <em>after</em> Defense, and is labelled with its own
-                                        sub-total. Those rows are on a different axis from the
+                                        <span className="text-primary">The breakdown</span> (to
+                                        hull, absorbed by shield, blocked by Barrier, converted to
+                                        shield) sits directly under the two measured figures, above
+                                        Theoretical EHP, and describes what actually reached the
+                                        ship
+                                        <em>after</em> everything it does to shrink an incoming hit
+                                        &mdash; Defense, its own Inc. Damage Down, gear reduction
+                                        and block procs, not Defense alone. It is labelled with its
+                                        own sub-total. Those rows are on a different axis from the
                                         headline and are not meant to add up to it.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Editing a ship&apos;s skills:
+                                        </span>{' '}
+                                        each ship card has a <em>Show Advanced</em> section holding
+                                        the same skill editor the DPS and Healing calculators use,
+                                        so you can read the parsed abilities behind a ship&apos;s
+                                        active, charged and passive skills and add or change them by
+                                        hand. The Passive row appears whenever the ship <em>has</em>{' '}
+                                        passive skill text, even when the parser read no abilities
+                                        out of it &mdash; purely defensive and repair passives often
+                                        parse to nothing, and those are exactly the ones worth
+                                        entering manually on this page.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Which card gets highlighted:
+                                        </span>{' '}
+                                        the &ldquo;Best ship configuration&rdquo; badge now goes to
+                                        the highest{' '}
+                                        <span className="font-semibold">damage absorbed</span>, not
+                                        the highest Theoretical EHP &mdash; so for the same inputs a
+                                        different card can be marked best than before, and the
+                                        &ldquo;Compared to best&rdquo; percentage beside it is
+                                        measured on that same figure. When the measured figures tie
+                                        &mdash; which they do whenever there is no enemy pressure at
+                                        all, and whenever every configuration survives the whole
+                                        window &mdash; the badge falls back to rounds survived and
+                                        then to Theoretical EHP, so the zero-pressure page you first
+                                        land on still ranks the way it always did.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            A Defense buff does not move the headline:
+                                        </span>{' '}
+                                        Defense mitigation is excluded from damage absorbed by
+                                        design, so raising Defense changes{' '}
+                                        <span className="font-semibold">Rounds survived</span> and
+                                        the &ldquo;Reached the ship&rdquo; sub-total (and
+                                        Theoretical EHP), and only moves damage absorbed insofar as
+                                        the extra rounds bring more incoming fire with them.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">The ship fights back:</span>{' '}

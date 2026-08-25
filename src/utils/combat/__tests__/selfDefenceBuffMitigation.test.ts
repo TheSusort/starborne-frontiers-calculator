@@ -22,7 +22,7 @@
  * off-by-one on stacks or a missing floor would ALL have produced a completely green golden run.
  * Every property below is therefore pinned here, explicitly, or it is not pinned anywhere.
  *
- * ── THE THREE PROPERTIES ──────────────────────────────────────────────────────────────────────
+ * ── THE FOUR PROPERTIES ───────────────────────────────────────────────────────────────────────
  *  1. DIRECTION. `defenceModifierPct` is SIGNED and consumed as `v.defence * (1 + pct / 100)`.
  *     Fold the term in with the wrong sign and `Defense Up` becomes a debuff — while every
  *     magnitude-only assertion still passes, because the number still MOVED. Asserted as an
@@ -37,6 +37,13 @@
  *     (-150%) arm exercises the guard at all — a -100% arm alone pins nothing about it.
  *  3. TEAM SYMMETRY. Engine changes in this project must be team-symmetric. Every arm runs TWICE
  *     from one builder, once per side.
+ *  4. THE STACK MULTIPLIER, END TO END. `toSelfDefenseModifier` reads
+ *     `parsedEffects.defense * s.stacks`, and that factor was pinned ONLY at the pure-reducer level
+ *     (`dpsBuffHelpers.test.ts`). Every arm in this file used to hardcode `stacks: 1` — including
+ *     one whose comment claimed to be "Overload at 5 stacks" while its fixture was a single
+ *     -50% stack — so "real stacks -> accumulate -> mitigate" was verified nowhere as a chain.
+ *     Section 2b runs Overload as the game states it, '-10% Defense' PER STACK, at 5 and at its
+ *     10-stack cap.
  *
  * ── WHY THE ABILITY CHANNEL, NOT `selfBuffs` ──────────────────────────────────────────────────
  * `victimSelfBuffs` reads three channels: scheduled (`selfBuffLookup`), timed ability statuses and
@@ -101,8 +108,10 @@ const basicHit: Ability = {
 };
 
 /** A self-targeted defence buff on the ABILITY channel (see the header on why not `selfBuffs`).
- *  `pct` is signed: +30 is 'Defense Up II', -100 is 'Overload' at its 10-stack cap. */
-const selfDefenceBuff = (pct: number): Ability => ({
+ *  `pct` is signed and is the PER-STACK percentage: +30 is 'Defense Up II', -10 is one stack of
+ *  'Overload'. `stacks` defaults to 1; supplying it is what exercises the `* s.stacks` link in the
+ *  chain (see property 4 in the header). */
+const selfDefenceBuff = (pct: number, stacks = 1): Ability => ({
     id: 'ab-self-defence',
     type: 'buff',
     target: 'self',
@@ -112,8 +121,8 @@ const selfDefenceBuff = (pct: number): Ability => ({
         type: 'buff',
         buffName: 'Defense Up II',
         parsedEffects: { defense: pct },
-        stacks: 1,
-        isStackable: false,
+        stacks,
+        isStackable: stacks > 1,
         duration: 'recurring',
     },
 });
@@ -192,8 +201,11 @@ const enemyShip = (a: RoleShape): EnemyAttackerInput => ({
 interface FixtureOpts {
     /** Which side the DEFENDER stands on. The attacker always stands on the other one. */
     defenderSide: Side;
-    /** Signed self-defence percentage, or `undefined` for the no-buff control. */
+    /** Signed PER-STACK self-defence percentage, or `undefined` for the no-buff control. */
     buffPct?: number;
+    /** Stack count on that buff. Defaults to 1 — the value every arm here used before the
+     *  multi-stack arm was added, so every pre-existing figure is unchanged. */
+    stacks?: number;
     /** Defaults to DEFENCE. Set 0 for the "what does an undefended ship take" oracle. */
     defence?: number;
 }
@@ -209,7 +221,11 @@ function intake(opts: FixtureOpts): number {
         hp: DEFENDER_HP,
         attack: 0,
         defence: opts.defence ?? DEFENCE,
-        slots: [activeSlot(opts.buffPct === undefined ? [] : [selfDefenceBuff(opts.buffPct)])],
+        slots: [
+            activeSlot(
+                opts.buffPct === undefined ? [] : [selfDefenceBuff(opts.buffPct, opts.stacks ?? 1)]
+            ),
+        ],
     };
     const attackerShape: RoleShape = {
         id: ATTACKER_ID,
@@ -299,8 +315,11 @@ describe('A5 — a self-inflicted defence COST applies too, and floors at zero m
     for (const defenderSide of SIDES) {
         it(`${defenderSide}-side defender: a negative self-defence buff makes it take MORE`, () => {
             const plain = intake({ defenderSide });
-            // Overload at 5 stacks. Sign-agnostic by ruling: the app used to grant Overload's
-            // damage upside while ignoring the defensive cost printed on the same card.
+            // A -50% self-defence buff on ONE stack. NOT "Overload at 5 stacks", which is what
+            // this comment used to claim about this very fixture: `stacks` was hardcoded to 1
+            // everywhere in this file, so the arm never touched the stack multiplier at all. The
+            // real 5-stack construction is the arm below. Sign-agnostic by ruling: the app used to
+            // grant Overload's damage upside while ignoring the defensive cost on the same card.
             const overloaded = intake({ defenderSide, buffPct: -50 });
 
             expect(overloaded).toBeGreaterThan(plain);
@@ -335,6 +354,45 @@ describe('A5 — a self-inflicted defence COST applies too, and floors at zero m
             const overshot = intake({ defenderSide, buffPct: -150 });
             expect(overshot).not.toBeNaN();
             expect(overshot).toBeCloseTo(capped, 4);
+        });
+    }
+});
+
+// ══ 2b: the STACK multiplier, end to end ══════════════════════════════════════════════════════
+
+describe('A5 — real Overload STACKS accumulate through to zero mitigation', () => {
+    for (const defenderSide of SIDES) {
+        it(`${defenderSide}-side defender: 5 stacks of -10% mitigate as one -50%`, () => {
+            // THE MISSING LINK IN THE CHAIN. `* s.stacks` was pinned only at the pure-reducer
+            // level (`dpsBuffHelpers.test.ts`); EVERY arm in this file — the only engine-level gate
+            // on the self-defence term — hardcoded `stacks: 1`, so "real stacks → accumulate →
+            // mitigate" was verified nowhere end to end. Overload is '-10% Defense' PER STACK, so
+            // the shape below is the one real ships (Butcher, Mangler, Ravager, Asphyxiator,
+            // Ruiner) actually produce; the -50%/-100% arms above are its arithmetic result
+            // written by hand, which is not the same claim.
+            const oneStackOfFifty = intake({ defenderSide, buffPct: -50 });
+            const fiveStacksOfTen = intake({ defenderSide, buffPct: -10, stacks: 5 });
+
+            // LIVENESS: the stacked arm really moved off the unbuffed control, so the equality
+            // below cannot be two identical no-op reads.
+            expect(fiveStacksOfTen).toBeGreaterThan(intake({ defenderSide }));
+            // THE MULTIPLIER: 5 x -10% must land on the SAME effective defence as one -50%.
+            // Drop the `* s.stacks` factor and this reads mit(DEFENCE * 0.9) instead.
+            expect(fiveStacksOfTen).toBeCloseTo(oneStackOfFifty, 4);
+            expect(fiveStacksOfTen).toBeCloseTo(ATTACK * mit(DEFENCE * 0.5), 4);
+        });
+
+        it(`${defenderSide}-side defender: 10 stacks of -10% reach the floor — zero mitigation`, () => {
+            // Overload's real cap, expressed the way the game expresses it. The oracle is an
+            // actual undefended ship, not a formula: at the cap the defender must take exactly
+            // what a defence-0 ship takes. This is the whole chain in one assertion — real stacks,
+            // accumulated, hitting -100%, floored at zero mitigation.
+            const cappedByStacks = intake({ defenderSide, buffPct: -10, stacks: 10 });
+            const undefended = intake({ defenderSide, defence: 0 });
+
+            expect(cappedByStacks).not.toBeNaN();
+            expect(cappedByStacks).toBeCloseTo(undefended, 4);
+            expect(cappedByStacks).toBeCloseTo(ATTACK, 4);
         });
     }
 });

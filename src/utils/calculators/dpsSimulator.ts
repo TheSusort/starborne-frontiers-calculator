@@ -307,8 +307,11 @@ export interface RoundData {
      *  under-states what this axis excludes.) Attacker-side modifiers and enemy-APPLIED
      *  amplification (`Out. Damage Up`, `Exposed`) stay IN.
      *  `incoming` is what got THROUGH, so it FALLS as a ship gets tankier; `incomingRaw` is
-     *  therefore the axis the "Damage absorbed" headline reads, and is >= `incoming` always, equal
-     *  when the victim applies no reduction at all. It is NOT a term of the intake breakdown:
+     *  therefore the axis the "Damage absorbed" headline reads, and is `>= incoming` OVER A WINDOW
+     *  SUM — equal when the victim applies no reduction at all. NOT per round: the DoT transform
+     *  books the full raw amount at THROW time while the ticks that re-book the deferred slice carry
+     *  `perTickPreMitigation: 0` and contribute real post damage, so a single later round can read
+     *  lower on this axis than on `incoming`. It is NOT a term of the intake breakdown:
      *  `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` partition `incoming`, and mixing the
      *  two axes breaks that identity. */
     perActorIncoming?: Record<

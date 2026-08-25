@@ -234,7 +234,7 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
             netHpDamage,
             affinityDamageModifier,
             attackerDefenceReductionPct,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         // Sanity: the helper produces a positive, mitigated value (< raw 10% of net).
         expect(expected).toBeGreaterThan(0);
@@ -304,7 +304,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(wouldReflectIfNotGuarded).toBeGreaterThan(0);
         // Engine-level: a DoT-only enemy turn reflects nothing. Build an enemy whose only damage
@@ -349,7 +349,7 @@ describe('REFLECT gear set — DoT / bomb do not reflect', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(wouldReflectIfNotGuarded).toBeGreaterThan(0);
 

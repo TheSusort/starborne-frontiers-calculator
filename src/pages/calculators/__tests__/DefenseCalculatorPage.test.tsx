@@ -77,11 +77,78 @@ describe('DefenseCalculatorPage', () => {
         expect(screen.getByText('Combat Settings')).toBeInTheDocument();
     });
 
+    // NOTE: `Add Enemy` lives in the "Enemy Team" panel, and `CollapsibleForm` keeps its children
+    // mounted while collapsed — so it is queryable without opening anything. Two tests in this file
+    // used to click `/Combat Settings/i` first; that is a DIFFERENT panel and the click was a pure
+    // no-op that read as a required step.
     it('reports a damage-absorbed figure once an attacker applies pressure', async () => {
         renderDefenseCalculatorPage();
-        fireEvent.click(screen.getByText(/Combat Settings/i));
         fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
-        expect(await screen.findByText(/Damage absorbed/i)).toBeInTheDocument();
+        // Matched on the row's own CAPTION, not on "Damage absorbed" — the Theoretical EHP
+        // explanation card names that figure too (to say what it is NOT), so the looser pattern
+        // now matches two nodes.
+        expect(
+            await screen.findByText(/everything thrown at it, before its own reductions/i)
+        ).toBeInTheDocument();
+    });
+
+    // #358 finding C1 — THE REGRESSION THE OLD GUARD COULD NOT SEE. The reduce behind `isBest` was
+    // `currentEHP > bestEHP` seeded with `null`, and the page's DEFAULT state seeds `enemies: []`,
+    // which becomes the `attack: 0` practice target. Every config therefore reports
+    // `damageAbsorbed === 0`, `0 > 0` is false forever, the seed never leaves `null`, and the FIRST
+    // PAGE A USER EVER SEES had no `border-primary`, no badge, no "Compared to best" row and no
+    // highlighted chart series. On main the static ranking always produced a best.
+    //
+    // ⚠️ THE ARM BELOW IT (`gives the best-ship marker to…`) CANNOT CATCH THIS: it adds an enemy
+    // first, so it only ever proved the reduce DISCRIMINATES, never that it ANSWERS. This arm adds
+    // no enemy at all — the zero-pressure default, which is the state that regressed.
+    it('marks a best config on the zero-pressure default, with no enemy added at all', () => {
+        renderDefenseCalculatorPage();
+        // No Add Enemy. Deliberately.
+        expect(screen.getByText('Best ship configuration')).toBeInTheDocument();
+    });
+
+    // #358 finding C1, SECOND ORDER. When every config SURVIVES the window the headline is FLAT by
+    // construction (raw damage thrown is a property of the attackers — see the axis note in
+    // `defenseSurvivabilitySim.ts`), so a strict `>` never fires on the primary axis and the badge
+    // lands on whichever card was added first, unranked. The tie-break ladder is
+    // damageAbsorbed -> elapsedRounds -> Theoretical EHP.
+    //
+    // ⚠️ THE WEAKER CONFIG IS DELIBERATELY FIRST. With it second, "first wins" and "best wins"
+    // would be the same card and this arm would prove nothing.
+    it('breaks a flat-survivor tie on Theoretical EHP rather than insertion order', async () => {
+        renderDefenseCalculatorPage();
+        fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+
+        const hpInputs = screen.getAllByLabelText('HP');
+        const defenseInputs = screen.getAllByLabelText('Defense');
+        // Both effectively unkillable, so both survive the whole window and their damage-absorbed
+        // figures tie exactly. Only Defense separates them, i.e. only Theoretical EHP.
+        fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
+        fireEvent.change(defenseInputs[0], { target: { value: '1000' } }); // FIRST, and weaker
+        fireEvent.change(hpInputs[1], { target: { value: '999999999' } });
+        fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+
+        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+
+        const notes = await screen.findAllByText(/Survived all/i);
+        expect(notes).toHaveLength(2);
+        const cards = notes.map((n) => n.closest('.card') as HTMLElement);
+        expect(cards[0]).not.toBe(cards[1]);
+
+        // The tie is REAL and this arm depends on it: the non-best card's "Compared to best" delta
+        // is measured on `damageAbsorbed`, so a 0.00% there is direct evidence that the primary
+        // axis could not decide and the ladder did. (It also pins finding I3 — the delta is on the
+        // ranking axis, not on Theoretical EHP, where these two cards differ enormously.)
+        const bestCard = cards.find((c) => c.textContent?.includes('Best ship configuration'));
+        const otherCard = cards.find((c) => !c.textContent?.includes('Best ship configuration'));
+        expect(bestCard).toBeDefined();
+        expect(otherCard).toBeDefined();
+        expect(within(otherCard as HTMLElement).getByText('0.00%')).toBeInTheDocument();
+
+        // The badge is on the HIGHER-Defense card — the second one added, so this cannot be
+        // "whichever came first".
+        expect(within(bestCard as HTMLElement).getByDisplayValue('20000')).toBeInTheDocument();
     });
 
     // Carried from Task 9: `bestShip` (the reduce behind the `isBest` highlight) had NO test. Before
@@ -123,7 +190,6 @@ describe('DefenseCalculatorPage', () => {
         fireEvent.change(defenseInputs[1], { target: { value: '0' } });
 
         // Add one enemy attacker so there is pressure to measure at all.
-        fireEvent.click(screen.getByText(/Combat Settings/i));
         fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
 
         const survivorNote = await screen.findByText(/Survived all/i);

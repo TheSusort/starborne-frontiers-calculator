@@ -183,10 +183,15 @@ export interface HealingRoundData {
     /** Full-immunity blocked total this round; distinct from shieldAbsorbed — Barrier never
      *  touches the shield pool. */
     barrierAbsorbed: number;
-    /** #358 ADDENDUM 2: `incomingDamage` BEFORE the victim's defence-mitigation factor — the RAW
-     *  damage thrown at the focus this round. `incomingDamage` is post-defence, so it FALLS as a
-     *  ship gets tankier; this is the axis a measured effective-HP figure must read. Always
-     *  >= `incomingDamage`, equal at zero effective defence. NOT part of the intake breakdown —
+    /** #358 ADDENDUM 2/3: `incomingDamage` BEFORE EVERY victim-side reduction — the RAW damage
+     *  thrown at the focus this round. Not just defence: also its own `Inc. Damage Down` family,
+     *  its pre-fight incoming baseline, `equipReductionPct`, `incomingDotReductionPct` and the
+     *  reflect channel's incoming-reduction. `incomingDamage` is post-reduction, so it FALLS as a
+     *  ship gets tankier; this is the axis the "Damage absorbed" headline reads.
+     *  `>= incomingDamage` OVER A WINDOW SUM, equal when the victim applies no reduction at all —
+     *  NOT per round. A DoT transform books the full raw amount at throw time and the re-booking
+     *  ticks carry `perTickPreMitigation: 0` while contributing real post damage, so a single later
+     *  round can read lower on this axis than on `incomingDamage`. NOT part of the intake breakdown —
      *  `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` partition `incomingDamage`, and
      *  mixing the two axes breaks that identity. */
     incomingDamageRaw: number;

@@ -26,18 +26,22 @@ export function reflectedDamageForHit(args: {
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
     /**
-     * Incoming-reduction % on the RECIPIENT of the bounce-back (default 0).
+     * Incoming-reduction % on the RECIPIENT of the bounce-back (default 0) — i.e. the ship that
+     * threw the original hit and is now the VICTIM of the thorns. The D-PR3 channel, resolved at
+     * `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
      *
-     * ⚠️ THE NAME LIES ABOUT THE SIDE. "attacker" here is positional, not causal: it names the
-     * ship that threw the original hit, which is the ship the reflected hit lands ON. So this is
-     * the bounce-back VICTIM's own `incoming-reduction` family — the D-PR3 channel — resolved at
-     * `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`. It is a
-     * VICTIM-SIDE reduction in every sense that matters to #358, and reading the prefix as
-     * "attacker-side" is exactly how the reflect channel stayed inverted through a full review.
-     * Not renamed here only because `attackerDefenceReductionPct` next to it carries the same
-     * positional convention and splitting the two would be worse; the warning travels instead.
+     * ⚠️ IT WAS CALLED `attackerIncomingReductionPct`, and that misnomer let a Critical survive a
+     * full review: "attacker" was POSITIONAL (who threw the original hit) where every reader took
+     * it as CAUSAL (attacker-side, therefore not a victim-side reduction to strip). The rename is
+     * not cosmetic — this branch added `attackerSideReductionPct` in `victimDamage.ts`, ONE call
+     * away, where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
+     * adjacent parameters with the same prefix and opposite meanings is exactly the shape that
+     * produced the defect, so the positional one no longer carries the prefix.
+     * (`attackerDefenceReductionPct` below is positional in the same way and keeps its name only
+     * because it names a stat OF that ship rather than a side; read it as "the bounce-back
+     * recipient's own defence".)
      */
-    attackerIncomingReductionPct: number;
+    reflectVictimIncomingReductionPct: number;
 }): number {
     return reflectedDamageParts(args).damage;
 }
@@ -48,11 +52,11 @@ export function reflectedDamageForHit(args: {
  *  • `damage`       — what the recipient takes: the full empirical model above, every term intact.
  *  • `preMitigation` — the "damage absorbed" axis (C2): the same hit with EVERY reduction that
  *    belongs to the recipient removed. Two terms go, both replaced by an exact 1:
- *    `attackerDefenceReductionPct` (addendum 2) and `attackerIncomingReductionPct` (addendum 3).
+ *    `attackerDefenceReductionPct` (addendum 2) and `reflectVictimIncomingReductionPct` (addendum 3).
  *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, and
  *    the `netHpDamage` the reflector actually took.
  *
- * WHY `attackerIncomingReductionPct` COMES OUT (it used to be folded into both). The previous
+ * WHY `reflectVictimIncomingReductionPct` COMES OUT (it used to be folded into both). The previous
  * revision of this comment argued the opposite: that stripping it was "a separate, unmade decision
  * (this module's own duel-fit model owns it)". That argument is WRONG, and it is wrong in a way
  * worth spelling out, because a comment arguing against a fix is how the defect survived a review.
@@ -80,13 +84,13 @@ export function reflectedDamageParts(args: {
     /** calculateDamageReduction(attacker effective defence), range 0..~88 */
     attackerDefenceReductionPct: number;
     /** The bounce-back RECIPIENT's own incoming-reduction — victim-side. See the overload above. */
-    attackerIncomingReductionPct: number;
+    reflectVictimIncomingReductionPct: number;
 }): { damage: number; preMitigation: number } {
     if (args.reflectPct <= 0 || args.netHpDamage <= 0) return { damage: 0, preMitigation: 0 };
     const base = (args.reflectPct / 100) * args.netHpDamage;
     const affinity = 1 + args.affinityDamageModifier / 100;
     const defence = 1 - args.attackerDefenceReductionPct / 100;
-    const incoming = 1 - args.attackerIncomingReductionPct / 100;
+    const incoming = 1 - args.reflectVictimIncomingReductionPct / 100;
     return {
         damage: Math.max(0, base * affinity * defence * incoming),
         // The identical product with an exact 1 in BOTH victim-side slots (defence and incoming) —

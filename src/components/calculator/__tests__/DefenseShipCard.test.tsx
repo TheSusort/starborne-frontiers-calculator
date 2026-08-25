@@ -66,6 +66,7 @@ const renderCard = (overrides: Partial<Parameters<typeof DefenseShipCard>[0]> = 
             config={baseConfig}
             isBest={false}
             isComparing={false}
+            rounds={3}
             onRemove={noop}
             onUpdate={noop}
             onSelectShip={noop}
@@ -130,9 +131,12 @@ describe('DefenseShipCard', () => {
                 rounds: [],
             },
         });
-        // The breakdown carries its OWN sub-total, explicitly labelled as the post-defence axis —
+        // The breakdown carries its OWN sub-total, explicitly labelled as the post-reduction axis —
         // without it a reader sums 25,000 + 5,000 against an 80,000 headline and calls it a bug.
-        expect(screen.getByText(/Reached the ship \(after defence\)/i)).toBeInTheDocument();
+        // "(after its reductions)", not "(after defence)": the sub-total is also after the victim's
+        // own `Inc. Damage Down`, `equipReductionPct`, `preFightIncoming` and block procs, so the
+        // narrower label understated what it covers (finding M5).
+        expect(screen.getByText(/Reached the ship \(after its reductions\)/i)).toBeInTheDocument();
         expect(screen.getByText('30,000')).toBeInTheDocument();
         expect(
             screen.getByText(/everything thrown at it, before its own reductions/i)
@@ -200,6 +204,54 @@ describe('DefenseShipCard', () => {
         // The explicit negative: no row may still print its fraction.
         expect(screen.queryByText(/24,999\.667/)).not.toBeInTheDocument();
         expect(screen.queryByText(/5,000\.333/)).not.toBeInTheDocument();
+    });
+
+    // #358 finding I5 — ROSTER-WIPE TERMINATION falsifies "Survived all N rounds". A fight ends at
+    // the end of the round that wipes a side (#329), so a high-attack defender can finish on round
+    // 6 of a 20-round setting: `survived: true`, `elapsedRounds: 6`, and the card used to print
+    // "Survived all 6 rounds" against a window the user had set to 20. Two such survivors also
+    // absorb DIFFERENT totals, which is why the changelog's "two survivors tie" is now qualified.
+    it('says the enemy team was wiped when a survivor ends the fight early', () => {
+        renderCard({
+            rounds: 20,
+            result: {
+                damageAbsorbed: 80_000,
+                survived: true,
+                elapsedRounds: 6, // SHORTER than the configured window
+                breakdown: {
+                    toHp: 25_000,
+                    toShield: 0,
+                    toBarrier: 0,
+                    toConversion: 0,
+                    gross: 30_000,
+                },
+                rounds: [],
+            },
+        });
+        expect(screen.getByText(/the enemy team was wiped on round 6 of 20/i)).toBeInTheDocument();
+        // …and it must NOT claim the full window was survived.
+        expect(screen.queryByText(/Survived all/i)).not.toBeInTheDocument();
+    });
+
+    it('says the full window was survived when it really was', () => {
+        renderCard({
+            rounds: 6,
+            result: {
+                damageAbsorbed: 80_000,
+                survived: true,
+                elapsedRounds: 6, // EQUALS the configured window
+                breakdown: {
+                    toHp: 25_000,
+                    toShield: 0,
+                    toBarrier: 0,
+                    toConversion: 0,
+                    gross: 30_000,
+                },
+                rounds: [],
+            },
+        });
+        expect(screen.getByText(/Survived all 6 rounds/i)).toBeInTheDocument();
+        expect(screen.queryByText(/wiped on round/i)).not.toBeInTheDocument();
     });
 
     it('names the round a casualty died in', () => {

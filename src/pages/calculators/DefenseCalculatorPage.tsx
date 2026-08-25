@@ -573,27 +573,60 @@ const DefenseCalculatorPage: React.FC = () => {
     // Ranking now reads the MEASURED figure from the survivability sim, not the static formula —
     // the whole point of this epic is that the measured number is the one that should decide
     // "best", since it reflects real shields/self-buffs/enemy pressure the static formula ignores.
+    //
+    // ⚠️ TIES ON THE PRIMARY AXIS ARE NORMAL, NOT AN EDGE CASE — a plain `>` reduce seeded with
+    // `null` therefore FAILS TO ANSWER, and did:
+    //   • the page's DEFAULT state seeds `enemies: []`, which becomes the `attack: 0` practice
+    //     target, so every config reports `damageAbsorbed === 0`. `0 > 0` is false forever, the
+    //     seed stayed `null`, and the first page a user ever sees had no `border-primary`, no
+    //     "Best ship configuration" badge, no "Compared to best" row and no highlighted chart
+    //     series. On main the static ranking always produced a best; this was a REGRESSION.
+    //   • when every config SURVIVES the window the figure is flat by construction (it is a
+    //     property of the attackers — see the axis note in `defenseSurvivabilitySim.ts`), so the
+    //     badge landed on whichever card happened to be added first, unranked.
+    // The reduce below always answers (it is seeded with the first config, so a non-empty roster
+    // of configs always has a best) and breaks ties EXPLICITLY, on a documented ladder:
+    //   1. `damageAbsorbed` — the headline, and the axis "Compared to best" is measured on.
+    //   2. `elapsedRounds`  — more rounds survived for the same throughput is strictly better.
+    //   3. Theoretical EHP  — the static estimate. It is continuous, so it discriminates exactly
+    //      the two flat cases above, and it makes the zero-pressure default degrade GRACEFULLY to
+    //      main's old static ranking instead of to insertion order.
+    // Total ties (identical stats) fall through to FIRST-WINS, which is stable across renders.
+    const rankKeyOf = (config: DefenseShipConfig): readonly number[] => {
+        const result = simResults.get(config.id);
+        return [
+            result?.damageAbsorbed ?? 0,
+            result?.elapsedRounds ?? 0,
+            computeBuffedStats(
+                config.hp,
+                config.defense,
+                config.security,
+                mergedBuffTotals.get(config.id)
+            ).effectiveHP,
+        ];
+    };
+
     const bestShip = configs.reduce<DefenseShipConfig | null>((best, current) => {
-        const currentEHP = simResults.get(current.id)?.damageAbsorbed ?? 0;
-        const bestEHP = best ? (simResults.get(best.id)?.damageAbsorbed ?? 0) : 0;
-        return currentEHP > bestEHP ? current : best;
+        if (!best) return current;
+        const a = rankKeyOf(current);
+        const b = rankKeyOf(best);
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return a[i] > b[i] ? current : best;
+        }
+        return best;
     }, null);
 
-    const bestEffectiveHP = bestShip
-        ? computeBuffedStats(
-              bestShip.hp,
-              bestShip.defense,
-              bestShip.security,
-              mergedBuffTotals.get(bestShip.id)
-          ).effectiveHP
-        : undefined;
+    // The "Compared to best" delta is measured on the RANKING axis (finding I3): it used to read
+    // Theoretical EHP while `isBest` was decided on `damageAbsorbed`, so a not-best card could
+    // print a POSITIVE delta — "worse than best" in the same red as a negative one.
+    const bestDamageAbsorbed = bestShip ? simResults.get(bestShip.id)?.damageAbsorbed : undefined;
 
     return (
         <>
             <Seo {...SEO_CONFIG.defense} />
             <PageLayout
                 title="Defense Calculator"
-                description="Calculate effective HP and damage reduction based on HP and defense values"
+                description="Measure how long a ship lasts and how much damage is thrown at it, and compare that against the Theoretical EHP estimate from HP and Defense"
                 action={{
                     label: 'Add Ship',
                     onClick: addConfig,
@@ -649,6 +682,19 @@ const DefenseCalculatorPage: React.FC = () => {
                         onRoundsChange={setRounds}
                     />
 
+                    {/* #358 finding M9: the default roster is EMPTY, which the engine runs as an
+                        `attack: 0` practice target — so a first-time visitor sees "Damage absorbed:
+                        0" beside "Survived all 20 rounds" and nothing telling them why. */}
+                    {enemies.length === 0 && (
+                        <div className="card text-sm text-theme-text-secondary">
+                            No enemy attackers yet, so nothing is being thrown at these ships:{' '}
+                            <span className="font-semibold">Damage absorbed</span> reads 0 and every
+                            ship trivially survives the window. Add an attacker in{' '}
+                            <span className="font-semibold">Enemy Team</span> above to measure
+                            anything.
+                        </div>
+                    )}
+
                     <div
                         className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 ${configs.length >= 4 ? '2xl:w-[calc(100vw-256px-2rem)] 2xl:ml-[calc((-100vw/2)+768px+1rem)] 2xl:[grid-template-columns:repeat(auto-fit,minmax(370px,500px))] 2xl:justify-center' : ''}`}
                     >
@@ -658,7 +704,8 @@ const DefenseCalculatorPage: React.FC = () => {
                                 config={config}
                                 isBest={bestShip?.id === config.id}
                                 isComparing={configs.length > 1}
-                                bestEffectiveHP={bestEffectiveHP}
+                                bestDamageAbsorbed={bestDamageAbsorbed}
+                                rounds={rounds}
                                 buffTotals={mergedBuffTotals.get(config.id)}
                                 result={simResults.get(config.id)}
                                 onRemove={() => removeConfig(config.id)}
@@ -673,23 +720,28 @@ const DefenseCalculatorPage: React.FC = () => {
                     </div>
 
                     <div className="card">
-                        <h2 className="text-xl font-bold mb-4">Effective HP Explanation</h2>
+                        <h2 className="text-xl font-bold mb-4">Theoretical EHP Explanation</h2>
                         <p className="mb-2">
-                            Effective HP represents how much raw damage your ship can take before
-                            being destroyed, taking damage reduction into account.
+                            Theoretical EHP is an estimate from hangar stats alone: how much damage
+                            your ship could take before being destroyed if its damage reduction
+                            applied to every point of it. It is <em>not</em> the Damage absorbed
+                            figure above — that one is measured in a real fight and deliberately
+                            counts damage <em>before</em> any reduction the ship applies.
                         </p>
-                        <p className="mb-2">The formula for calculating Effective HP is:</p>
+                        <p className="mb-2">The formula for calculating Theoretical EHP is:</p>
                         <p className="mb-2 font-mono bg-dark-lighter p-2">
-                            Effective HP = HP / (1 - (Damage Reduction / 100))
+                            Theoretical EHP = HP / (1 - (Damage Reduction / 100))
                         </p>
                         <p className="mb-2">
                             Defense buffs multiply the base defense stat before calculating damage
                             reduction. Incoming damage buffs (e.g.{' '}
-                            <em>-30% Incoming Direct Damage</em>) further adjust effective HP.
+                            <em>-30% Incoming Direct Damage</em>) further adjust it. No enemy ever
+                            fires at it, and it cannot see shields, Barrier, self-repair or
+                            conditionally-gated buffs.
                         </p>
                         <p>
-                            Security does not affect Effective HP directly — it determines how well
-                            your ship resists debuffs from hackers. Higher security reduces the
+                            Security does not affect Theoretical EHP directly — it determines how
+                            well your ship resists debuffs from hackers. Higher security reduces the
                             chance that hacking attempts succeed.
                         </p>
                     </div>

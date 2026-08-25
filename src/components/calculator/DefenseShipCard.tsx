@@ -19,7 +19,13 @@ interface DefenseShipCardProps {
     config: DefenseShipConfig;
     isBest: boolean;
     isComparing: boolean;
-    bestEffectiveHP?: number;
+    /** The winning config's `damageAbsorbed` — the RANKING axis, so "Compared to best" measures the
+     *  same quantity that chose "best" (finding I3). Undefined when nothing was measured. */
+    bestDamageAbsorbed?: number;
+    /** The configured length of the fight. Needed because `result.elapsedRounds` can be SHORTER
+     *  than this on a survivor: a high-attack defender that wipes the enemy roster ends the fight
+     *  early (#329), so "Survived all N rounds" would misreport the window. */
+    rounds: number;
     buffTotals?: DefenseBuffTotals;
     /** The engine-measured survivability figure (Task 2's boundary). A LOWER BOUND when
      *  `survived` is true — see the render below for why survivors and casualties must never
@@ -36,7 +42,8 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     config,
     isBest,
     isComparing,
-    bestEffectiveHP,
+    bestDamageAbsorbed,
+    rounds,
     buffTotals,
     result,
     onRemove,
@@ -156,7 +163,14 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         <div className="flex justify-between items-baseline">
                             <span className="text-theme-text-secondary">
                                 Rounds survived:
-                                <span className="block text-xs">how long the ship lasted</span>
+                                {/* #358 finding M7: NOT "how long the ship lasted" — a
+                                    casualty's `elapsedRounds` IS the round it died in, so a ship
+                                    destroyed on round 5 reads "5" here and "Destroyed round 5"
+                                    below, having survived four. "Rounds in the fight" is true of
+                                    both a casualty and a survivor. */}
+                                <span className="block text-xs">
+                                    rounds the ship was in the fight
+                                </span>
                             </span>
                             <span className="text-right">
                                 <span className={isBest ? 'text-primary font-bold' : 'font-bold'}>
@@ -164,10 +178,26 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                 </span>
                                 <span className="block text-xs">
                                     {result.survived ? (
-                                        <span className="text-green-400">
-                                            Survived all {result.elapsedRounds} rounds — a lower
-                                            bound, not a limit
-                                        </span>
+                                        /* #358 finding I5: a survivor's `elapsedRounds` is NOT
+                                           always the configured window. Roster-wipe termination
+                                           (#329) ends the fight at the end of the round that wipes
+                                           a side, so a high-attack defender can finish on round 6
+                                           of a 20-round setting — "Survived all 6 rounds" against a
+                                           20-round window read as a bug. Two such survivors also
+                                           absorb DIFFERENT totals, so the "survivors tie" reading
+                                           holds only for the full-window case. */
+                                        result.elapsedRounds < rounds ? (
+                                            <span className="text-green-400">
+                                                Still standing — the enemy team was wiped on round{' '}
+                                                {result.elapsedRounds} of {rounds}, so the fight
+                                                ended early
+                                            </span>
+                                        ) : (
+                                            <span className="text-green-400">
+                                                Survived all {rounds} rounds — a lower bound, not a
+                                                limit
+                                            </span>
+                                        )
                                     ) : (
                                         <span className="text-red-500">
                                             Destroyed round {result.destroyedRound}
@@ -193,6 +223,40 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                 </span>
                             </span>
                         </div>
+                        {/* #358 finding I3: the delta is on the RANKING axis. It used to be
+                            computed on Theoretical EHP while `isBest` was decided on
+                            `damageAbsorbed`, so a not-best card could print a POSITIVE percentage
+                            in the same hardcoded red as a negative one. Rendered only when there
+                            is a non-zero best to compare against — with the default empty enemy
+                            roster every config absorbs 0 and the ratio would be 0/0. */}
+                        {isComparing &&
+                            !isBest &&
+                            bestDamageAbsorbed !== undefined &&
+                            bestDamageAbsorbed > 0 && (
+                                <div className="flex justify-between mt-2 text-sm">
+                                    <span className="text-theme-text-secondary">
+                                        Compared to best:
+                                    </span>
+                                    {(() => {
+                                        const deltaPct =
+                                            ((result.damageAbsorbed - bestDamageAbsorbed) /
+                                                bestDamageAbsorbed) *
+                                            100;
+                                        const tone =
+                                            deltaPct < 0
+                                                ? 'text-red-500'
+                                                : deltaPct > 0
+                                                  ? 'text-green-400'
+                                                  : 'text-theme-text-secondary';
+                                        return (
+                                            <span className={tone}>
+                                                {deltaPct > 0 ? '+' : ''}
+                                                {deltaPct.toFixed(2)}%
+                                            </span>
+                                        );
+                                    })()}
+                                </div>
+                            )}
                         {result.survived && (
                             <div className="text-xs mt-1 text-theme-text-secondary">
                                 On a survivor this is a property of the ATTACKERS, not the ship —
@@ -206,7 +270,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         <div className="mt-3 text-xs text-theme-text-secondary space-y-1">
                             <div className="flex justify-between border-b border-dark-border pb-1">
                                 <span className="uppercase tracking-wide">
-                                    Reached the ship (after defence)
+                                    Reached the ship (after its reductions)
                                 </span>
                                 <span>{Math.round(result.breakdown.gross).toLocaleString()}</span>
                             </div>
@@ -254,9 +318,11 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         the three read in the owner's order. */}
                     <div className="flex justify-between">
                         <span className="text-theme-text-secondary">Theoretical EHP:</span>
-                        <span className={isBest ? 'text-primary font-bold' : ''}>
-                            {Math.round(effectiveHP).toLocaleString()}
-                        </span>
+                        {/* #358 finding I3: NO `isBest` highlight here. `isBest` is decided on
+                            `damageAbsorbed`; painting this figure primary implied it was the best
+                            Theoretical EHP, which it need not be. The highlight lives on the two
+                            measured headline figures above, which are what the badge ranks. */}
+                        <span>{Math.round(effectiveHP).toLocaleString()}</span>
                     </div>
                     <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
                         An estimate from hangar stats, not a measurement — HP and Defense only. It
@@ -289,18 +355,6 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                             {Math.round(buffedSecurity).toLocaleString()}
                         </span>
                     </div>
-                    {isComparing && !isBest && bestEffectiveHP && (
-                        <div className="flex justify-between mt-2">
-                            <span className="text-theme-text-secondary">Compared to best:</span>
-                            <span className="text-red-500">
-                                {(
-                                    ((effectiveHP - bestEffectiveHP) / bestEffectiveHP) *
-                                    100
-                                ).toFixed(2)}
-                                %
-                            </span>
-                        </div>
-                    )}
                 </div>
 
                 {isBest && (

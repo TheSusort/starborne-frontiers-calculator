@@ -734,13 +734,95 @@ describe('#358 A3 — path 8: the per-victim DoT tick batch on an ALLY', () => {
     });
 });
 
+// ══ The emptiness gate: a FULLY blocked hit still has to report on the raw axis ═══════════════
+
+describe('#358 A3 — a 100% incoming-block still reports on the raw axis', () => {
+    /** `blockPct: 1` at `procChance: 1` on an unconditional trigger — 100% of the hit blocked,
+     *  every hit. Not a synthetic extreme: `abilityDefaults.ts` DEFAULTS an incoming-block to a
+     *  full block, and the defense calculator's own skill editor hands the user that default. */
+    const fullBlock: Ability = {
+        id: 'ab-full-block',
+        type: 'incoming-block',
+        target: 'self',
+        trigger: 'on-cast',
+        conditions: [],
+        config: {
+            type: 'incoming-block',
+            condition: 'always',
+            procChance: 1,
+            blockPct: 1,
+            oncePerRound: false,
+        },
+    };
+
+    for (const defenderSide of SIDES) {
+        it(`${defenderSide}-side defender: post is ZERO, raw is the full thrown hit`, () => {
+            const defender: RoleShape = {
+                id: 'defender',
+                position: 'M4',
+                speed: 900,
+                hp: BIG_HP,
+                attack: 0,
+                defence: DEFENCE,
+                slots: [activeSlot([]), passiveSlot([fullBlock])],
+            };
+            const striker: RoleShape = {
+                id: 'striker',
+                position: 'M4',
+                speed: 500,
+                hp: BIG_HP,
+                attack: ATTACK,
+                defence: 0,
+                slots: [activeSlot([basicHit])],
+            };
+            const input: CombatEngineInput =
+                defenderSide === 'player'
+                    ? {
+                          ...inertFocus(1),
+                          teamActors: [walkedAlly(defender)],
+                          enemyAttackers: [enemyShip(striker)],
+                      }
+                    : {
+                          ...inertFocus(1),
+                          teamActors: [walkedAlly(striker)],
+                          enemyAttackers: [enemyShip(defender)],
+                      };
+            const axis = axisFor(run(`fullblock/${defenderSide}`, input), 'defender');
+
+            // NOTHING GOT THROUGH — the whole hit was blocked.
+            expect(axis.post).toBe(0);
+            // …and the full attack was still THROWN, so the raw axis carries it. `damageRaw` is
+            // deliberately NOT scaled by `(1 - blocked)` (addendum 3 C2: an incoming-block is a
+            // victim-side reduction), and this arm is what proves the resulting bucket SURVIVES
+            // the emptiness gate in `engine.ts`. Drop `v.incomingRaw === 0` from that gate and the
+            // whole bucket is skipped, `perActorIncoming` has no 'defender' key, and `axisFor`
+            // returns 0/0 — so `axis.post` still passes and THIS assertion goes red.
+            //
+            // The oracle is the pre-defence hit, because the raw axis strips the defence factor
+            // too: 100% of 20,000 attack, undiminished by the defender's 5,000 defence.
+            expect(axis.raw).toBeCloseTo(ATTACK, 4);
+            // And the two axes really are apart here — this is not a fixture where they coincide.
+            expect(axis.raw).toBeGreaterThan(axis.post);
+        });
+    }
+});
+
 // ══ Suite health ══════════════════════════════════════════════════════════════════════════════
 
 describe('#358 A2 — the invariant', () => {
-    it('raw >= post for EVERY actor in EVERY run this file performs', () => {
+    it('raw >= post for every actor in every TRANSFORM-FREE run this file performs', () => {
         // Spec B3's global inequality, over the union of every fixture above rather than one of
         // them — so a future path that folds defence without recording raw shows up here even if
         // no dedicated test covers it yet.
+        //
+        // ⚠️ SCOPE, stated because the old name over-claimed it ("EVERY actor in EVERY run"). The
+        // inequality is a WINDOW-SUM invariant, not a per-round one, and the ONE construction that
+        // violates it per round is the DoT transform: it books the full raw amount at THROW time
+        // while the ticks that re-book the deferred slice carry `perTickPreMitigation: 0` and
+        // contribute real post damage. This file performs NO transform run, so the union below is
+        // transform-free and the assertion holds as written. A transform fixture added above would
+        // have to sum its window (or be excluded here) — it must NOT be dropped into `everyRun`
+        // and left to this arm.
         expect(everyRun.length).toBeGreaterThan(0);
         const violations: string[] = [];
         let strictlyGreater = 0;
