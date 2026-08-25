@@ -587,22 +587,33 @@ const DefenseCalculatorPage: React.FC = () => {
     // The reduce below always answers (it is seeded with the first config, so a non-empty roster
     // of configs always has a best) and breaks ties EXPLICITLY, on a documented ladder:
     //   1. `damageAbsorbed` — the headline, and the axis "Compared to best" is measured on.
-    //   2. `elapsedRounds`  — more rounds survived for the same throughput is strictly better.
-    //   3. Theoretical EHP  — the static estimate. It is continuous, so it discriminates exactly
-    //      the two flat cases above, and it makes the zero-pressure default degrade GRACEFULLY to
-    //      main's old static ranking instead of to insertion order.
+    //   2. Theoretical EHP  — the static estimate. Continuous, so it discriminates exactly the two
+    //      flat cases above, and it makes the zero-pressure default rank on the static estimate,
+    //      which is what the docs and changelog say this page does when the measured figures tie.
+    //   3. `elapsedRounds`  — last, deliberately. See below.
+    //
+    // ⚠️ KEYS 2 AND 3 WERE THE OTHER WAY ROUND AND THAT WAS INVERTED. `damageAbsorbed` ALREADY
+    // CONTAINS ROUNDS (more rounds thrown = more absorbed), so `elapsedRounds` only ever speaks
+    // when `damageAbsorbed` ties — and in the case where it speaks loudest it says the wrong thing.
+    // MEASURED, zero-pressure default at `rounds: 20`: the empty enemy roster becomes a KILLABLE
+    // practice target (40,000 HP / 5,000 defence, `healingEngineAdapter.ts`), the defender takes
+    // its own turns with its real `attack` from the ship sheet, and a wiped roster ends the run —
+    // defender attack 0 → 20 rounds, 4,000 → 13, 40,000 → 2, 400,000 → 1, with `damageAbsorbed` 0
+    // throughout. With `elapsedRounds` at key 2 the badge therefore went to the WEAKEST-ATTACKING
+    // ship on the very first page a user sees. Ranked last it is only a final nudge between configs
+    // that already tie on both the headline and the static estimate.
     // Total ties (identical stats) fall through to FIRST-WINS, which is stable across renders.
     const rankKeyOf = (config: DefenseShipConfig): readonly number[] => {
         const result = simResults.get(config.id);
         return [
             result?.damageAbsorbed ?? 0,
-            result?.elapsedRounds ?? 0,
             computeBuffedStats(
                 config.hp,
                 config.defense,
                 config.security,
                 mergedBuffTotals.get(config.id)
             ).effectiveHP,
+            result?.elapsedRounds ?? 0,
         ];
     };
 
@@ -688,10 +699,14 @@ const DefenseCalculatorPage: React.FC = () => {
                     {enemies.length === 0 && (
                         <div className="card text-sm text-theme-text-secondary">
                             No enemy attackers yet, so nothing is being thrown at these ships:{' '}
-                            <span className="font-semibold">Damage absorbed</span> reads 0 and every
-                            ship trivially survives the window. Add an attacker in{' '}
-                            <span className="font-semibold">Enemy Team</span> above to measure
-                            anything.
+                            <span className="font-semibold">Damage absorbed</span> reads 0 and no
+                            ship can be destroyed. The fight still runs, though, against a single
+                            inert practice target that never shoots back &mdash; and that target can
+                            be DESTROYED, which ends the run there. So a hard-hitting ship can show
+                            fewer <span className="font-semibold">Rounds survived</span> than the
+                            window you set, and that says nothing about how tough it is. Add an
+                            attacker in <span className="font-semibold">Enemy Team</span> above to
+                            measure anything.
                         </div>
                     )}
 
@@ -706,6 +721,7 @@ const DefenseCalculatorPage: React.FC = () => {
                                 isComparing={configs.length > 1}
                                 bestDamageAbsorbed={bestDamageAbsorbed}
                                 rounds={rounds}
+                                noEnemiesConfigured={enemies.length === 0}
                                 buffTotals={mergedBuffTotals.get(config.id)}
                                 result={simResults.get(config.id)}
                                 onRemove={() => removeConfig(config.id)}

@@ -738,8 +738,10 @@ describe('#358 A3 — path 8: the per-victim DoT tick batch on an ALLY', () => {
 
 describe('#358 A3 — a 100% incoming-block still reports on the raw axis', () => {
     /** `blockPct: 1` at `procChance: 1` on an unconditional trigger — 100% of the hit blocked,
-     *  every hit. Not a synthetic extreme: `abilityDefaults.ts` DEFAULTS an incoming-block to a
-     *  full block, and the defense calculator's own skill editor hands the user that default. */
+     *  every hit. The MAGNITUDE is not a synthetic extreme: `abilityDefaults.ts` defaults an
+     *  incoming-block to `blockPct: 1`, a full block, and the defense calculator's own skill editor
+     *  hands the user that. The `procChance: 1` here IS the fixture's own choice — the default
+     *  chance is 0, so the editor's out-of-the-box block never fires until the user sets one. */
     const fullBlock: Ability = {
         id: 'ab-full-block',
         type: 'incoming-block',

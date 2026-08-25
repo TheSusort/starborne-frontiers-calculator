@@ -2722,24 +2722,30 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
-                                            Three things that ability will not do, though:
+                                            Two things that ability will not do, though:
                                         </span>{' '}
                                         it will not raise the figure at all if the ship still dies
                                         on the same round (the figure moves in whole rounds &mdash;
                                         see below), nor if the ship already survived the whole
-                                        window (nothing was killing it either way). And an ability
-                                        that suppresses the ATTACKER really does lower it, because
-                                        the attack is counted as thrown and a weaker attacker throws
-                                        less: <span className="font-semibold">Opal</span>&apos;s
-                                        first passive inflicts{' '}
-                                        <span className="font-semibold">Attack Down II</span> on
-                                        whatever directly damaged it, and{' '}
-                                        <span className="font-semibold">Warden</span>&apos;s second
-                                        inflicts{' '}
-                                        <span className="font-semibold">Out. Damage Down II</span>{' '}
-                                        &mdash; the exact mirror of the Out. Damage Up counted IN
-                                        above. That is the metric working, not failing: less really
-                                        was thrown.
+                                        window (nothing was killing it either way).
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Debuffing the attacker does not lower it either:
+                                        </span>{' '}
+                                        an <span className="font-semibold">Attack Down</span> or{' '}
+                                        <span className="font-semibold">Out. Damage Down</span> your
+                                        ship puts on the enemy shooting at it does not shrink what
+                                        that enemy throws, so the figure does not move. Measured on
+                                        a four-round window against one 10,000-attack enemy: 40,000
+                                        absorbed with no debuff, and still exactly 40,000 with the
+                                        enemy carrying your Attack Down at &minus;50% or even
+                                        &minus;90%. The same &minus;50% coming from the enemy&apos;s
+                                        OWN kit does halve it, to 20,000 &mdash; so the
+                                        attacker&apos;s own outgoing modifiers count, and yours on
+                                        it do not. Whether the engine should honour those is an open
+                                        question; today it does not, and this page says so rather
+                                        than promising otherwise.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         There is also an exception on the ALLY side rather than the
@@ -2768,12 +2774,19 @@ const DocumentationPage: React.FC = () => {
                                         enemy team managed to throw in the window &mdash; and two
                                         survivors that both last the FULL window under the same
                                         enemies report the same total however differently tanky they
-                                        are. Read as a comparison, that tie means nothing. Two
-                                        survivors do <em>not</em> tie when one of them ends the
-                                        fight early: a hard-hitting ship can wipe the enemy team on
-                                        round 6 of a 20-round window, and the fight stops there, so
-                                        it is thrown less than a ship that stood under fire for all
-                                        20. The card says so explicitly when that happens. The fix
+                                        are, <em>provided neither of them kills an attacker</em>.
+                                        Read as a comparison, that tie means nothing. Its own
+                                        OFFENCE is the one thing that does separate two survivors,
+                                        and it separates them DOWNWARDS &mdash; the harder-hitting
+                                        ship is thrown less. That happens two ways. It can end the
+                                        fight: wipe the enemy team on round 6 of a 20-round window
+                                        and the run stops there, so 14 rounds of fire are never
+                                        thrown. Or it can just thin the volley while still standing
+                                        for the whole window: measured against two 5,000-attack
+                                        enemies over six rounds, a ship with no attack absorbed
+                                        60,000, one that killed a single attacker part-way through
+                                        absorbed 40,000, and one that killed it sooner absorbed
+                                        30,000 &mdash; all three survived all six rounds. The fix
                                         either way is to raise enemy attack, add attackers, or
                                         extend the rounds until the ships actually die; only then
                                         does the figure measure the ship. For a survivor it is a
@@ -2791,13 +2804,14 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> (to
                                         hull, absorbed by shield, blocked by Barrier, converted to
-                                        shield) sits directly under the two measured figures, above
-                                        Theoretical EHP, and describes what actually reached the
-                                        ship
-                                        <em>after</em> everything it does to shrink an incoming hit
-                                        &mdash; Defense, its own Inc. Damage Down, gear reduction
-                                        and block procs, not Defense alone. It is labelled with its
-                                        own sub-total. Those rows are on a different axis from the
+                                        shield) sits below the two measured figures &mdash; after
+                                        the &ldquo;Compared to best&rdquo; row and the survivor note
+                                        where those are shown &mdash; and above Theoretical EHP. It
+                                        describes what actually reached the ship <em>after</em>{' '}
+                                        everything it does to shrink an incoming hit &mdash;
+                                        Defense, its own Inc. Damage Down, gear reduction and block
+                                        procs, not Defense alone. It is labelled with its own
+                                        sub-total. Those rows are on a different axis from the
                                         headline and are not meant to add up to it.
                                     </p>
                                     <p className="text-theme-text mb-2">
@@ -2827,9 +2841,16 @@ const DocumentationPage: React.FC = () => {
                                         measured on that same figure. When the measured figures tie
                                         &mdash; which they do whenever there is no enemy pressure at
                                         all, and whenever every configuration survives the whole
-                                        window &mdash; the badge falls back to rounds survived and
-                                        then to Theoretical EHP, so the zero-pressure page you first
-                                        land on still ranks the way it always did.
+                                        window &mdash; the badge falls back to{' '}
+                                        <span className="font-semibold">Theoretical EHP</span>, so
+                                        the zero-pressure page you first land on still ranks on the
+                                        static estimate, the way it always did. Rounds survived is
+                                        the last resort after that, not the first: damage absorbed
+                                        already grows with rounds, so rounds only ever speak when it
+                                        ties &mdash; and with no enemy configured they speak
+                                        backwards, since the fight ends when a ship destroys the
+                                        practice target, which makes the hardest hitter show the
+                                        FEWEST rounds.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

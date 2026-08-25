@@ -12635,9 +12635,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // `incomingRaw === 0` because both axes are written by the same pair of calls
                     // at the single booking site. BOTH HALVES OF THAT ARGUMENT ARE NOW FALSE:
                     //   • Task 10 stopped scaling `damageRaw` by `(1 - blocked)` — a blocked hit
-                    //     was thrown in full. A 100% incoming-block (which is `abilityDefaults.ts`'s
-                    //     DEFAULT chance, and reachable straight from the defense calculator's own
-                    //     skill editor) therefore books `incoming: 0` with `incomingRaw > 0`.
+                    //     was thrown in full. A 100% incoming-block therefore books `incoming: 0`
+                    //     with `incomingRaw > 0`, and it is reachable straight from the defense
+                    //     calculator's own skill editor: `abilityDefaults.ts` defaults
+                    //     `blockPct: 1` (a FULL block) — its `procChance` default is 0, so the
+                    //     editor hands the user a full-magnitude block that fires only once they
+                    //     set a chance on it. The default MAGNITUDE is 100%, not the default
+                    //     CHANCE.
                     //   • Task 11 stopped reversing the raw axis on a DoT transform, so the two no
                     //     longer net to 0 together either.
                     // Without this term such a bucket is DROPPED from the emitted record, silently

@@ -26,6 +26,12 @@ interface DefenseShipCardProps {
      *  than this on a survivor: a high-attack defender that wipes the enemy roster ends the fight
      *  early (#329), so "Survived all N rounds" would misreport the window. */
     rounds: number;
+    /** True when the user has configured NO enemy attackers. The engine still runs the window
+     *  against one inert, KILLABLE practice target, so an early finish here was not "the enemy team
+     *  was wiped" — there was no enemy team. Without this the card named a roster the user never
+     *  created, directly contradicting the page's own "nothing is being thrown at these ships"
+     *  notice sitting above it. */
+    noEnemiesConfigured?: boolean;
     buffTotals?: DefenseBuffTotals;
     /** The engine-measured survivability figure (Task 2's boundary). A LOWER BOUND when
      *  `survived` is true — see the render below for why survivors and casualties must never
@@ -44,6 +50,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     isComparing,
     bestDamageAbsorbed,
     rounds,
+    noEnemiesConfigured = false,
     buffTotals,
     result,
     onRemove,
@@ -188,9 +195,12 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                            holds only for the full-window case. */
                                         result.elapsedRounds < rounds ? (
                                             <span className="text-green-400">
-                                                Still standing — the enemy team was wiped on round{' '}
-                                                {result.elapsedRounds} of {rounds}, so the fight
-                                                ended early
+                                                Still standing —{' '}
+                                                {noEnemiesConfigured
+                                                    ? 'this ship destroyed the inert practice target'
+                                                    : 'the enemy team was wiped'}{' '}
+                                                on round {result.elapsedRounds} of {rounds}, so the
+                                                fight ended early
                                             </span>
                                         ) : (
                                             <span className="text-green-400">
@@ -238,19 +248,24 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                                         Compared to best:
                                     </span>
                                     {(() => {
+                                        // `bestDamageAbsorbed` is the MAXIMUM on this axis by
+                                        // construction (it is the winning config's own figure, and
+                                        // key 1 of the ranking ladder is this same quantity), so
+                                        // the delta is never positive on a not-best card. Only two
+                                        // tones, therefore — a `> 0` green arm here would be dead
+                                        // code that read as a guard.
                                         const deltaPct =
                                             ((result.damageAbsorbed - bestDamageAbsorbed) /
                                                 bestDamageAbsorbed) *
                                             100;
-                                        const tone =
-                                            deltaPct < 0
-                                                ? 'text-red-500'
-                                                : deltaPct > 0
-                                                  ? 'text-green-400'
-                                                  : 'text-theme-text-secondary';
                                         return (
-                                            <span className={tone}>
-                                                {deltaPct > 0 ? '+' : ''}
+                                            <span
+                                                className={
+                                                    deltaPct < 0
+                                                        ? 'text-red-500'
+                                                        : 'text-theme-text-secondary'
+                                                }
+                                            >
                                                 {deltaPct.toFixed(2)}%
                                             </span>
                                         );

@@ -112,7 +112,7 @@ describe('DefenseCalculatorPage', () => {
     // construction (raw damage thrown is a property of the attackers — see the axis note in
     // `defenseSurvivabilitySim.ts`), so a strict `>` never fires on the primary axis and the badge
     // lands on whichever card was added first, unranked. The tie-break ladder is
-    // damageAbsorbed -> elapsedRounds -> Theoretical EHP.
+    // damageAbsorbed -> Theoretical EHP -> elapsedRounds.
     //
     // ⚠️ THE WEAKER CONFIG IS DELIBERATELY FIRST. With it second, "first wins" and "best wins"
     // would be the same card and this arm would prove nothing.

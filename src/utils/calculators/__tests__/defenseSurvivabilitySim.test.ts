@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Ability, ShipSkills } from '../../../types/abilities';
-import type { TeamActorInput } from '../../../types/calculator';
+import type { ParsedBuffEffects, TeamActorInput } from '../../../types/calculator';
 import {
     simulateDefenseSurvivability,
     DefenseSimulationInput,
@@ -1284,5 +1284,267 @@ describe('damage absorbed — per-channel direction and presence (#358 addendum 
         expect(plain.damageAbsorbed).toBe(200_000);
         expect(warded.damageAbsorbed).toBe(200_000);
         expect(bunker.damageAbsorbed).toBe(200_000);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// #358 TASK 13 — THE TWO ROUTES BY WHICH THE HEADLINE CAN FALL, AND THE ONE THAT DOES NOT
+//
+// These two arms exist because a claim in this epic was INFERRED rather than measured. The module
+// header used to tell callers that "a defender that SUPPRESSES ITS ATTACKER lowers its own
+// headline", citing Opal's `Attack Down II` and Warden's `Out. Damage Down II` — both real
+// passives in `docs/ship-skills.csv`. What was never checked is whether the engine folds a
+// DEFENDER-APPLIED debuff into the attacker's outgoing damage. It does not. The claim shipped into
+// the changelog, the in-app docs, and the jsdoc that DEFINES the metric, where it instructed UI
+// callers to promise the opposite of what the engine does.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('#358 task 13 — a DEFENDER-APPLIED outgoing debuff does NOT move the headline', () => {
+    /**
+     * One attacker at 10,000/round and a defender that casts an enemy-side debuff before swinging.
+     *
+     * ⚠️ THE `duration` IS LOAD-BEARING AND IT IS THE FIXTURE TRAP HERE. Measured: with
+     * `duration: 'recurring'` a defender-applied enemy debuff is INERT — the enemy dies on exactly
+     * the round it would have with no debuff at all, even when the debuff carries a +200%
+     * `incomingDamage` that ought to triple the defender's own damage. A NUMERIC duration lands.
+     * The whole sweep this arm replaces was run on `'recurring'` and reported "no movement" for a
+     * debuff that had never applied — a vacuous fixture that would have "proved" the same
+     * conclusion for the wrong reason. Every debuff below therefore carries a numeric duration
+     * covering the whole window, and the liveness arm proves that it lands.
+     */
+    const suppressRun = (opts: {
+        effects: ParsedBuffEffects | null;
+        enemyHp: number;
+        defAttack: number;
+        rounds: number;
+    }) => {
+        idCounter = 0;
+        const swing = ab({
+            type: 'damage',
+            target: 'enemy',
+            config: { type: 'damage', multiplier: 200, hits: 1 },
+        });
+        const abilities = opts.effects
+            ? [
+                  ab({
+                      type: 'debuff',
+                      target: 'all-enemies',
+                      config: {
+                          type: 'debuff',
+                          buffName: 'Suppression',
+                          parsedEffects: opts.effects,
+                          stacks: 1,
+                          isStackable: false,
+                          application: 'apply',
+                          duration: 99,
+                      },
+                  }),
+                  swing,
+              ]
+            : [swing];
+        return simulateDefenseSurvivability(
+            BASE({
+                rounds: opts.rounds,
+                defender: { ...DEFENDER, attack: opts.defAttack },
+                shipSkills: { slots: [{ slot: 'active', abilities }] },
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: {
+                            attack: 10_000,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 50,
+                            hp: opts.enemyHp,
+                            defence: 0,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                    },
+                ],
+            })
+        );
+    };
+
+    /** Unkillable enemy, defender attack 0 → the window is pinned at 4 rounds in every run, so
+     *  nothing below can move through the ROUNDS route and confound the reading. */
+    const PINNED = { enemyHp: 100_000_000, defAttack: 0, rounds: 4 };
+
+    // ── LIVENESS 1: the outgoing fold IS live, and it IS sign-sensitive ───────────────────────
+    //
+    // Without this the flat readings below would also hold on an engine that folded no outgoing
+    // modifier at all. Same magnitude, same sign, same window — the ONLY difference is who applied
+    // it. Note the shape: this one is a SELF-buff on the enemy, not a debuff from the defender.
+    it('LIVENESS: the SAME −50% outgoing modifier, self-applied by the enemy, HALVES the headline', () => {
+        idCounter = 0;
+        const plain = suppressRun({ ...PINNED, effects: null });
+        idCounter = 0;
+        const selfSuppressed = simulateDefenseSurvivability(
+            BASE({
+                rounds: 4,
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: {
+                            attack: 10_000,
+                            crit: 0,
+                            critDamage: 0,
+                            speed: 50,
+                            hp: 100_000_000,
+                            defence: 0,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: {
+                            slots: [
+                                {
+                                    slot: 'active',
+                                    abilities: [
+                                        ab({
+                                            type: 'buff',
+                                            target: 'self',
+                                            config: {
+                                                type: 'buff',
+                                                buffName: 'Out. Damage Down II',
+                                                parsedEffects: { outgoingDamage: -50 },
+                                                stacks: 1,
+                                                isStackable: false,
+                                                duration: 'recurring',
+                                            },
+                                        }),
+                                        ab({
+                                            type: 'damage',
+                                            target: 'enemy',
+                                            config: { type: 'damage', multiplier: 100, hits: 1 },
+                                        }),
+                                    ],
+                                },
+                            ],
+                        },
+                    },
+                ],
+            })
+        );
+        expect(plain.damageAbsorbed).toBe(40_000);
+        expect(selfSuppressed.damageAbsorbed).toBe(20_000);
+        expect(selfSuppressed.elapsedRounds).toBe(plain.elapsedRounds);
+    });
+
+    // ── LIVENESS 2: the defender's debuff INSTANCE really lands ──────────────────────────────
+    //
+    // The one assertion that separates "the engine ignores a defender-applied outgoing debuff"
+    // from "this fixture never applied a debuff at all". SAME ability shape, SAME application,
+    // SAME numeric duration as the direction arm — only the enemy is killable and the defender
+    // swings, so the `incomingDamage` half of the very same instance becomes observable.
+    it('LIVENESS: the same debuff instance DOES land — its Inc. Damage Up half is honoured', () => {
+        const LIVE = { enemyHp: 200_000, defAttack: 20_000, rounds: 6 };
+        const plain = suppressRun({ ...LIVE, effects: null });
+        const both = suppressRun({
+            ...LIVE,
+            effects: { outgoingDamage: -50, incomingDamage: 200 },
+        });
+        // 40,000/round into 200,000 HP → the enemy dies in round 5 with no debuff…
+        expect(plain.elapsedRounds).toBe(5);
+        // …and in round 2 with the SAME instance's +200% incoming honoured. The debuff landed.
+        expect(both.elapsedRounds).toBe(2);
+        // And the `outgoingDamage: -50` half of that landed instance still did nothing to what the
+        // enemy threw while it lived: round 1 is a full 10,000 in both runs.
+        expect(plain.rounds[0].incomingDamageRaw).toBe(10_000);
+        expect(both.rounds[0].incomingDamageRaw).toBe(10_000);
+    });
+
+    // ── THE MEASURED FACT, PINNED ────────────────────────────────────────────────────────────
+    //
+    // ⚠️ THIS IS NOT AN ENDORSEMENT. Whether the engine SHOULD honour a defender-applied
+    // `Attack Down` / `Out. Damage Down` on the attacker's outgoing fold is an OPEN GAME/ENGINE
+    // QUESTION and this task does not settle it — it only stops the app from claiming the opposite
+    // of what the engine does. If that question is answered YES later, this arm goes red BY
+    // DESIGN, and the right response is to DELETE it together with the three text claims it
+    // fences (`defenseSurvivabilitySim.ts` header, `DocumentationPage.tsx`, `changelog.ts`) —
+    // never to loosen it.
+    it('DIRECTION: a defender-applied Attack Down / Out. Damage Down leaves absorbed FLAT', () => {
+        const plain = suppressRun({ ...PINNED, effects: null });
+        const outDown = suppressRun({ ...PINNED, effects: { outgoingDamage: -50 } });
+        const attackDown = suppressRun({ ...PINNED, effects: { attack: -50 } });
+        const crushed = suppressRun({ ...PINNED, effects: { attack: -90 } });
+
+        // The window really is pinned, so a flat headline cannot be a round-count artefact.
+        for (const r of [plain, outDown, attackDown, crushed]) {
+            expect(r.survived).toBe(true);
+            expect(r.elapsedRounds).toBe(4);
+        }
+
+        expect(plain.damageAbsorbed).toBe(40_000);
+        expect(outDown.damageAbsorbed).toBe(40_000);
+        expect(attackDown.damageAbsorbed).toBe(40_000);
+        // −90% is here to rule out a small-magnitude explanation: nine tenths of the attacker's
+        // attack removed, and not one point comes off the total.
+        expect(crushed.damageAbsorbed).toBe(40_000);
+
+        // The POST-mitigation axis is flat too — this is not a raw-axis-only exclusion. Whatever
+        // the defender put on its attacker, the attacker threw and landed the same hit.
+        expect(outDown.breakdown.gross).toBe(plain.breakdown.gross);
+        expect(attackDown.breakdown.gross).toBe(plain.breakdown.gross);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// #358 TASK 13 — THE DEFENDER'S OWN OFFENCE IS A ROUTE BY WHICH THE HEADLINE FALLS
+//
+// The docs and changelog say "two survivors that both last the FULL window under the same enemies
+// tie no matter how differently tanky they are". Both texts already carve out the case where one
+// of them ENDS the fight (roster wipe, #329). They did not carve out ATTRITION: killing SOME of
+// the attackers thins the volley without ending anything, so two ships can both survive the whole
+// window and still report totals 2x apart. This file's own `DEFENDER` fixture has carried
+// `attack: 0` with the comment "so the defender cannot kill an enemy and shorten its own window"
+// since Task 2 — the behaviour was known and worked around, never asserted.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+describe('#358 task 13 — offence-driven attrition separates two FULL-window survivors', () => {
+    /** Two 5,000-attack enemies. `e1` is killable; `e2` is not, so the defender can never wipe the
+     *  roster and the run always uses the whole 6-round window — which is what makes this
+     *  ATTRITION rather than early termination. */
+    const attritionRun = (defAttack: number) => {
+        idCounter = 0;
+        const enemy = (id: string, hp: number) => ({
+            id,
+            stats: { attack: 5_000, crit: 0, critDamage: 0, speed: 50, hp, defence: 0 },
+            chargeCount: 0,
+            startCharged: false,
+        });
+        return simulateDefenseSurvivability(
+            BASE({
+                rounds: 6,
+                defender: { ...DEFENDER, attack: defAttack },
+                shipSkills: skills([
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 200, hits: 1 },
+                    }),
+                ]),
+                enemies: [enemy('e1', 100_000), enemy('e2', 100_000_000)],
+            })
+        );
+    };
+
+    it('a harder-hitting FULL-window survivor is thrown LESS, not more', () => {
+        const pacifist = attritionRun(0);
+        const middling = attritionRun(20_000);
+        const brutal = attritionRun(60_000);
+
+        // LIVENESS, and the whole point: all three survived the FULL window. Without this the
+        // chain below would just be re-measuring early termination, which the docs already cover.
+        for (const r of [pacifist, middling, brutal]) {
+            expect(r.survived).toBe(true);
+            expect(r.elapsedRounds).toBe(6);
+        }
+
+        // Strictly ordered, so only the DIRECTION satisfies it. 10,000/round while both attackers
+        // live, 5,000/round once `e1` is dead — the kill lands earlier the harder the ship hits.
+        expect(middling.damageAbsorbed).toBeLessThan(pacifist.damageAbsorbed);
+        expect(brutal.damageAbsorbed).toBeLessThan(middling.damageAbsorbed);
+
+        expect(pacifist.damageAbsorbed).toBe(60_000);
+        expect(middling.damageAbsorbed).toBe(40_000);
+        expect(brutal.damageAbsorbed).toBe(30_000);
     });
 });
