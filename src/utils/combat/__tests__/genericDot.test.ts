@@ -212,4 +212,94 @@ describe('generic DoT', () => {
         // Total credited is unchanged by the split.
         expect(credited).toBe(240);
     });
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // #358 ADDENDUM 3 (C2/C4) — THE PRE-MITIGATION ARGUMENT `credit` NOW CARRIES
+    //
+    // `tickDoTs` reports each tick TWICE: `damage` (what the victim takes) and `preMitigation`
+    // (what was thrown). The engine books the first on `.incoming` and the second on
+    // `.incomingRaw`, which is the "damage absorbed" headline.
+    //
+    // WHY THESE ARE UNIT TESTS AND NOT SIM FIXTURES. Measured: mutating the generic branch to fold
+    // the DoT-reduction factor into `preMitigation` left the WHOLE repository green, because the
+    // only production writer of `perTickAmount` today is `convertHitToSelfDot`, which sets
+    // `perTickPreMitigation: 0` — so `pre` is 0 on every reachable generic entry and `0 * factor`
+    // is indistinguishable from `0`. The `?? perTickAmount` fallback and the factor exclusion are
+    // real contracts with no corpus fixture behind them; these arms are that fixture.
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    const tick = (
+        entries: ActiveDoTStack[],
+        reductionPct = 0
+    ): Array<{ damage: number; preMitigation: number }> => {
+        const seen: Array<{ damage: number; preMitigation: number }> = [];
+        tickDoTs({
+            corrosionEntries: [],
+            infernoEntries: [],
+            genericDoTEntries: entries,
+            enemyHp: 1_000_000,
+            ctxFor: () => undefined,
+            emitTicked: () => {},
+            credit: (_sourceId, _dotType, damage, preMitigation) =>
+                seen.push({ damage, preMitigation }),
+            incomingDotReductionPct: () => reductionPct,
+        });
+        return seen;
+    };
+
+    it('an explicit perTickPreMitigation: 0 books NOTHING on the thrown axis (does not fall through)', () => {
+        // A `convertHitToSelfDot` deferral: the hit's raw contribution was already booked at THROW
+        // time, so the re-booking tick must add zero. `??` does not fall through on 0 — drop the
+        // field and the fallback below counts the slice a second time.
+        const [row] = tick([
+            {
+                stacks: 1,
+                tier: 0,
+                remainingRounds: 3,
+                sourceId: 'v',
+                perTickAmount: 300,
+                perTickPreMitigation: 0,
+            },
+        ]);
+        expect(row.damage).toBe(300);
+        expect(row.preMitigation).toBe(0);
+    });
+
+    it('an ABSENT perTickPreMitigation falls back to perTickAmount (a DoT that folded no defence)', () => {
+        const [row] = tick([
+            { stacks: 2, tier: 0, remainingRounds: 3, sourceId: 'v', perTickAmount: 300 },
+        ]);
+        expect(row.damage).toBe(600);
+        expect(row.preMitigation).toBe(600);
+    });
+
+    it('the DoT-reduction factor scales `damage` only — the thrown axis ignores it', () => {
+        const [row] = tick(
+            [{ stacks: 1, tier: 0, remainingRounds: 3, sourceId: 'v', perTickAmount: 400 }],
+            25
+        );
+        // The carrier's Vortex Veil really cuts what arrives…
+        expect(row.damage).toBe(300);
+        // …and is invisible on what was thrown. Fold the factor into both and this reads 300.
+        expect(row.preMitigation).toBe(400);
+    });
+
+    it('corrosion/inferno ticks report the same reduction split', () => {
+        const seen: Array<{ damage: number; preMitigation: number }> = [];
+        tickDoTs({
+            corrosionEntries: [{ stacks: 1, tier: 6, remainingRounds: 2, sourceId: 'a' }],
+            infernoEntries: [],
+            genericDoTEntries: [],
+            enemyHp: 100_000,
+            // A minimal applier ctx: corrosion scales off enemyHp, so dotMult/affinityMult of 1
+            // make the arithmetic readable (1 stack × 6% × 100,000 = 6,000).
+            ctxFor: () =>
+                ({ dotMult: 1, affinityMult: 1, effectiveAttack: 0 }) as unknown as ReturnType<
+                    NonNullable<Parameters<typeof tickDoTs>[0]['ctxFor']>
+                >,
+            emitTicked: () => {},
+            credit: (_s, _t, damage, preMitigation) => seen.push({ damage, preMitigation }),
+            incomingDotReductionPct: () => 50,
+        });
+        expect(seen).toEqual([{ damage: 3_000, preMitigation: 6_000 }]);
+    });
 });

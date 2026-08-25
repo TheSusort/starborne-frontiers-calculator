@@ -15,14 +15,11 @@ import {
 import { ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import { detectFullyCharged } from '../../utils/skillTextParser';
-import {
-    parseShipTargeting,
-    type ParsedPattern,
-    type ShipTargeting,
-} from '../../utils/targetingParser';
+import { type ParsedPattern } from '../../utils/targetingParser';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { targetingOf } from '../../utils/calculators/shipTargeting';
 import {
     simulateHealing,
     HealingSimulationResult,
@@ -100,34 +97,20 @@ const firstFreeSlot = (wanted: Position, taken: ReadonlyArray<Position | undefin
 };
 
 /**
- * A ship's parsed ACTIVE targeting. Load-bearing twice over: the healer's copy drives the offensive
- * cast AND — via its support footprint — which allies its heals reach; every player ship's copy is a
- * coverage source for the placement warning. A manual actor (no ship) has none, and the adapter's
- * synthetic single-target fallback then applies, which never filters ally recipients at all.
+ * A ship's ACTIVE pattern — the coverage source `uncoveredAllyIds` reads.
+ *
+ * Load-bearing twice over: the healer's own pattern drives the offensive cast AND — via its
+ * support footprint — which allies its heals reach; every player ship's pattern is a coverage
+ * source for the placement warning. A manual actor (no ship) has none, and the adapter's synthetic
+ * single-target fallback then applies, which never filters ally recipients at all. Built on
+ * `targetingOf` (shared, `utils/calculators/shipTargeting.ts`) — see that module for why the
+ * try/catch is load-bearing: an unparseable kit falls back to no targeting at all rather than
+ * crashing the render, which means no ally is ever reported "uncovered" for it. Same guard, same
+ * reason as `defaultHealTargetSlot`'s `resolveCells` try/catch.
  *
  * Module-level on purpose: called from inside `useMemo`, where a component-scoped function would be
  * a new dependency on every render.
- *
- * ⚠️ GUARDED, and not defensively-for-the-sake-of-it: BOTH axes of `parseShipTargeting` THROW on a
- * string they do not recognise — `parseTarget` on anything outside its 8-entry map
- * (targetingParser.ts:119) and `parsePattern`'s `detectShape` on an unknown shape token (:171).
- * This call sits on the RENDER path over whatever targeting strings a user's stored ship records
- * happen to carry, so one stale or hand-edited value would take the whole page down with a React
- * render crash instead of degrading. An unparseable kit tells us nothing about targeting, so it
- * falls back to no targeting at all — exactly as a manual config does, which means the adapter's
- * synthetic single-target fallback applies and no ally is ever reported "uncovered". Same guard, same
- * reason as `defaultHealTargetSlot`'s `resolveCells` try/catch.
  */
-const targetingOf = (ship?: Ship): ShipTargeting | undefined => {
-    if (!ship) return undefined;
-    try {
-        return parseShipTargeting(ship);
-    } catch {
-        return undefined;
-    }
-};
-
-/** A ship's ACTIVE pattern — the coverage source `uncoveredAllyIds` reads. */
 const activePatternOf = (ship?: Ship): ParsedPattern | undefined =>
     targetingOf(ship)?.active?.pattern;
 

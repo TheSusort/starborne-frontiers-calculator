@@ -143,6 +143,7 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
                   incomingDamageModifier: number;
+                  victimSideIncomingModifier: number;
               })
             | undefined;
 
@@ -162,14 +163,17 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
         expect(captured!('__enemy__')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
         expect(captured!('front-enemy')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
         expect(captured!('back-enemy')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
     });
 
@@ -184,6 +188,7 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
             | ((victimId: string) => {
                   enemyDefenseModifier: number;
                   incomingDamageModifier: number;
+                  victimSideIncomingModifier: number;
               })
             | undefined;
 
@@ -231,11 +236,13 @@ describe('B1 Task 3 — victimEnemyModifiers: scheduled channel is global, abili
         expect(captured!('front-id')).toEqual({
             enemyDefenseModifier: -30,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
         // back-id has no ability debuff applied → 0 (the debuff did NOT bleed across victims).
         expect(captured!('back-id')).toEqual({
             enemyDefenseModifier: 0,
             incomingDamageModifier: 0,
+            victimSideIncomingModifier: 0,
         });
     });
 });

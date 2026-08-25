@@ -1,0 +1,630 @@
+# Defense Calculator adopts the ability model — engine-backed survivability
+
+**Issue:** #358 · **Date:** 2026-08-24 · **Status:** approved, ready for planning
+
+---
+
+> ## ⚠️ READ THIS BEFORE §3 — THE FINAL CONTRACT IS IN ADDENDUM 3, NOT IN §3
+>
+> **The shipped metric is `damageAbsorbed` — "Damage absorbed": everything thrown at the ship,
+> summed across every channel, measured BEFORE the defender reduces any of it.** Reported beside
+> **Rounds survived** and **Theoretical EHP**. The exact definition, in full, is
+> [**ADDENDUM 3 §C2**](#c2-the-exact-definition-of-damage-absorbed), narrowed by
+> [**ADDENDUM 4**](#addendum-4-2026-08-25-the-protection-redirect-is-a-reassignment-not-a-reduction--locked)
+> for the Protection redirect.
+>
+> **§3 below is SUPERSEDED and its contract — `Measured EHP = Σ incomingDamage` — is RETIRED.**
+> The name "Measured EHP" is retired too (ADDENDUM 3 §C1). §3 is kept verbatim, *not* rewritten,
+> because the sequence of corrections is the record of how the definition evolved and of what each
+> intermediate version got wrong. Do not implement from it. Reading order:
+>
+> | Section | Status |
+> | --- | --- |
+> | §2 "Decisions taken" — the *Headline metric* row | **SUPERSEDED** by ADDENDUM 3 §C1 |
+> | §3, §3.1, §3.2, §3.3 "The measurement rule" | **SUPERSEDED** by ADDENDUM 2 §B2 → ADDENDUM 3 §C2 |
+> | ADDENDUM 1 (self-sourced defence buffs) | live |
+> | ADDENDUM 2 (raw axis) | axis correct, **name superseded** by ADDENDUM 3 |
+> | ADDENDUM 3 (Rounds survived + Damage absorbed + Theoretical EHP) | **LIVE — this is the contract** |
+> | ADDENDUM 4 (Protection redirect is a reassignment) | **LIVE — LOCKED** |
+>
+> One further correction, post-implementation and NOT in any addendum: §3's descendants in the docs
+> and changelog claimed *"two ships that die on the same round report the same figure"*. That is
+> true only when a round is ONE hit. See the plan's Finding-2 banner and the "SAME ROUND, DIFFERENT
+> FIGURE" arm in `defenseSurvivabilitySim.test.ts`.
+
+---
+
+## 1. Why this exists
+
+The Defense calculator is the last calculator that does not read a ship's parsed skills through
+the ability model. DPS and Healing both run the real combat engine off `shipSkills`; Defense is a
+22-line static formula (`src/utils/calculators/defenseCalculator.ts`) over three buff totals.
+
+### 1.1 What #358 got wrong — corrected premises
+
+The issue text is partly stale. Measured against `0ec6b3a1`:
+
+| #358 claim | Verified reality |
+| --- | --- |
+| `DefenseShipConfig` has no `shipSkills` | **True** (`src/types/calculator.ts:266`) |
+| The page renders no `SkillSlotList` | **True** |
+| "buffs are hand-picked only" | **FALSE.** `selectShipForConfig` already calls `buildSkillBuffAutoFill(ship)` + `mergeAutoFill` (`DefenseCalculatorPage.tsx:147`), and `DefenseShipCard` renders a read-only `ShipSkillList` "Skill Reference" |
+| Constraint (a): "do not call the ability→buff converter in render" | **MOOT.** `src/utils/abilities/buffAbilityConverters.ts` now exports only `selectedBuffToAbility`; the ability→buff direction (`abilityToSelectedBuff`, `buffAbilitiesToSelectedBuffs`) was deleted |
+| Constraint (c): scheduling fields dropped by the converters | **MOOT** for the same reason — there is no ability→buff converter left to drop them |
+
+Constraints (b) `modifier.isMultiplicative` is a no-op and the memoization requirement both still
+stand and are honoured below.
+
+So defensive buffs *do* auto-fill today, through the pre-ability-model flat `SkillEffect` path. The
+genuine gaps are narrower and different from the ones #358 names:
+
+1. **No condition gating.** An auto-filled conditional buff ("+30% Defense while HP below 50%")
+   counts as permanently active, overstating EHP. Silent — the number stays plausible.
+2. **No `modifier` abilities.** Passive stat auras are not `SkillEffect`s, so the flat path cannot
+   see them at all.
+3. **No editing.** Parsed skills are read-only reference text; DPS and Healing let you adjust them.
+4. **No shield / Barrier concept.** The static formula has no term for absorbed damage.
+5. **Not engine-backed.** No attacker side, so no interaction between defence, shields, reactive
+   repairs and real incoming pressure.
+
+## 2. Decisions taken
+
+> **⚠️ The *Headline metric* row below is SUPERSEDED BY ADDENDUM 3 §C1.** The shipped headline is
+> three numbers — **Rounds survived**, **Damage absorbed** (the raw axis), **Theoretical EHP** — and
+> the name "Measured EHP" is retired. Every other row in this table is still live.
+
+| Question | Decision |
+| --- | --- |
+| Scope | Engine-backed survivability calculator, not a skill-aware static formula |
+| Headline metric | ~~**Measured EHP** — damage absorbed before death (or across the window)~~ **SUPERSEDED → ADDENDUM 3 §C1** |
+| Ally support | **Optional shared team**, reusing the healing calculator's `TeamPanel` |
+| Ship survives the window | Report absorbed total + an explicit `survived` flag (honest lower bound) |
+| Architecture | Thin defense-named boundary over `simulateHealing` — no second engine adapter |
+
+### 2.1 Why a boundary and not a second adapter
+
+`healingEngineAdapter.ts` is 954 lines and already does what a survivability run needs:
+`healTargetId: 'healer'` makes the focus actor the bombarded ship, `teamActors` carries supporting
+allies, `enemies` supplies pressure, `rounds` sets the window. `HealingSimulationResult` already
+reports `incomingDamage`, `shieldAbsorbed`, `barrierAbsorbed`, `targetHpPct` per round and
+`summary.destroyedRound`.
+
+Duplicating that adapter would duplicate a dozen PRs' worth of absorbed corrections — the
+`defence ?? 10000` vs the engine's `?? 0` default, positional-apply gating, faction seeding,
+affinity matchup construction — and then drift from them. A thin boundary reuses all of it and
+gives the page a defense-named API with one place to change if the heal adapter is later
+generalised.
+
+**Accepted consequence:** the focus actor takes its own turns, so the defender casts at the enemies
+each round. Its self-shields and self-buffs therefore fire on its own turn (correct), and a
+defender that kills attackers reduces its own incoming pressure (real game behaviour). Measured EHP
+is consequently *not* a pure-defence number, and that is deliberate.
+
+## 3. The measurement rule
+
+> # ⚠️ SUPERSEDED BY ADDENDUM 2 §B2, THEN BY ADDENDUM 3 §C2 — DO NOT IMPLEMENT FROM §3
+>
+> **`Measured EHP = Σ incomingDamage` is the RETIRED contract, and the name "Measured EHP" is
+> retired with it.** `incomingDamage` is gross with respect to the shield / Barrier / conversion
+> pools but **POST-defence-mitigation** and post every other victim-side reduction, so this formula
+> measured *damage that got through* rather than *damage thrown* — which inverted the ranking for
+> surviving ships. ADDENDUM 2 moved the axis to raw; ADDENDUM 3 renamed the metric **Damage
+> absorbed** and stated the channel list in full; ADDENDUM 4 locked the Protection carve-out.
+>
+> **What survives from §3 and is still live:** the double-count trap (§3.1) and the intake-breakdown
+> identity (§3.2) still govern `breakdown.gross` / `toHp` / `toShield` / `toBarrier` /
+> `toConversion`, which deliberately stayed on the POST-mitigation axis (ADDENDUM 2 §B3). The
+> survivors policy (§3.3) is live **except its last sentence** — see the inline note there; the
+> `survived` flag and the render-distinctly requirement stand, the *separation* claim does not.
+> Only the *headline formula* and that one sentence are retired. §3 is kept verbatim as the record
+> of the error, not as instructions.
+>
+> (That carve-out is itself a correction: this banner originally said "§3.3 is live" flat, which
+> asserted a whole section live when one sentence inside it had been retired by the axis change.
+> **A supersession banner needs its live-list checked sentence by sentence, not section by
+> section** — the same partial-staleness shape as the comment defects on this branch.)
+
+**Measured EHP = Σ `incomingDamage` over elapsed rounds. Nothing is added to it.**
+
+The engine's intake identity (`ActorIntake`, `engine.ts:1672`, confirmed at `engine.ts:5087`) is:
+
+```
+hpLost = incoming − shieldAbsorbed − barrierAbsorbed − convertedToShield
+```
+
+`incomingDamage` is **gross**: it already contains everything the shield pool and Barrier soaked.
+`barrierAbsorbed` and `convertedToShield` are documented as "netted against `.incoming` for
+display".
+
+### 3.1 The double-count trap
+
+The intuitive formula `incoming + shieldAbsorbed + barrierAbsorbed` double-counts every point of
+mitigation. It fails *silently* and *worst for the tanky builds the page exists to find* — a
+shieldless ship reports identically under both formulas, so the bug is invisible on the fixture
+most likely to be written first.
+
+This is pinned by a dedicated tripwire test (§6.1), not merely by asserting the correct value.
+
+### 3.2 Intake breakdown
+
+The same identity yields a per-ship breakdown worth displaying: of everything thrown at this ship,
+how much landed on HP, how much the shield ate, how much Barrier blocked outright, how much was
+converted to shield.
+
+**Gap to close:** `convertedToShield` is tracked in `ActorIntake` but never surfaced on
+`HealingRoundData`. Without it the four terms do not close and a Shield Converter ship shows an
+unexplained residual. PR 1 surfaces it — additive field, no behaviour change.
+
+**The HP term is derived, not reported.** `HealingRoundData` carries no `hpLost`; the breakdown's HP
+figure is `incoming − shieldAbsorbed − barrierAbsorbed − convertedToShield`. This matters for the
+test plan: an "identity closes" assertion written against that derivation is **tautological** — it
+restates the definition and would pass with every term wrong. §6.2 cross-checks it against an
+independent signal instead.
+
+### 3.3 Survivors
+
+When the ship outlasts the window, `summary.destroyedRound` is absent. The result reports the
+absorbed total with `survived: true`, and the UI must render survivors distinctly so the figure is
+never read as a death threshold. ~~Two survivors are still separated by how much they soaked.~~
+
+> **THAT LAST SENTENCE IS SUPERSEDED BY ADDENDUM 2/3.** It was true on the POST-mitigation axis. On
+> the shipped RAW axis, for a fixed attacker set and round window, the survivor figure is **flat**
+> across defence — measured 60,000 at defence 0, 5,000, 5,000+30% and 20,000, because raw damage
+> *thrown* at a ship that lives is a property of the ATTACKERS, not the defender. It is pinned that
+> way in `defenseSurvivabilitySim.test.ts`.
+>
+> Two survivors DO differ when the defender changes the incoming pressure itself — killing an
+> attacker, or wiping the roster so the run ends early (measured 60,000 / 40,000 / 30,000, all
+> surviving 6 of 6 rounds). That is offence, not toughness.
+>
+> The page therefore breaks survivor ties on **Theoretical EHP**, which is rank key 2. See ADDENDUM
+> 3 §C1 for the shipped headline trio.
+
+## 4. Modules
+
+> **⚠️ NAMING SUPERSEDED BY ADDENDUM 3 §C1 — applies to §4, §5, §6 and §7 below.** Everywhere these
+> sections say `measuredEHP` / "measured EHP", the shipped field is **`damageAbsorbed`** ("Damage
+> absorbed"), reported alongside `elapsedRounds` / `survived` ("Rounds survived") and the static
+> `effectiveHP` ("Theoretical EHP"). The *module layout, data flow and test obligations in these
+> sections are still live* — only the metric's name and axis moved. Two consequences worth naming
+> because they are not mere renames:
+>
+> - §4's `DefenseSurvivabilityResult` gains `elapsedRounds` and the raw-axis `damageAbsorbed`;
+>   `breakdown.gross` keeps the old post-mitigation quantity (ADDENDUM 2 §B3).
+> - §6's test list is a FLOOR, not the final list. ADDENDUM 3 §C5 adds a per-channel direction test
+>   and a per-channel presence test; ADDENDUM 4 §D3 adds the Protection pin. See
+>   `defenseSurvivabilitySim.test.ts` for what actually shipped.
+
+- **`src/types/calculator.ts`** — `DefenseShipConfig` gains `shipSkills` plus the stats the engine
+  needs for the ship to take its own turns: `attack`, `crit`, `critDamage`, `speed`, `hacking`,
+  `chargeCount`, `startCharged`, `position`, and affinity / role / faction derived from the picked
+  ship.
+- **`src/utils/calculators/defenseSurvivabilitySim.ts`** (new) — the boundary. Maps
+  `DefenseSimulationInput → HealingSimulationInput` and reduces `HealingSimulationResult` to
+  `DefenseSurvivabilityResult`: `measuredEHP`, `survived`, `destroyedRound?`, the intake breakdown,
+  and the per-round rows. The EHP arithmetic and the survived-vs-died policy live here so both are
+  testable without a page.
+
+  Two `HealerStats` fields need a deliberate mapping rather than a default: `healModifier` takes the
+  defender's **real** value (a defender with self-repair must actually repair — zeroing it would
+  silently understate every sustain tank), and `defensePenetration` is `0` (the defender's own
+  offence is incidental here).
+- **`src/utils/calculators/defenseCalculator.ts`** — **untouched.** The static formula stays as the
+  displayed baseline.
+- **`src/components/calculator/DefenseShipCard.tsx`** — `SkillSlotList` in the Advanced section,
+  **replacing** the read-only "Skill Reference" (the editor modal already shows per-slot skill text
+  via its `ship` prop; keeping both is two views of one thing). Results block: measured EHP as
+  headline + survived / destroyed-round-N badge, static formula EHP beneath as baseline, intake
+  breakdown.
+- **`src/pages/calculators/DefenseCalculatorPage.tsx`** — `buildShipAbilitiesWithEquipment` at both
+  ship-select sites (`getInitialConfig` and `selectShipForConfig`); shared `EnemyAttackersPanel`,
+  `TeamPanel` and a rounds control folded into the existing `DefenseSettingsPanel`; `isBest` ranks
+  on measured EHP.
+- **Unchanged:** `DamageReductionChart`, `DamageReductionTable`, `SecurityEHPChart` — pure-formula
+  reference content, still correct.
+
+### 4.1 Performance
+
+The healing page already runs one engine sim per config synchronously in a `useMemo`
+(`HealingCalculatorPage.tsx:664`, 20-round default). The N-configs × engine pattern is established
+precedent; no worker. Memoize on configs + enemies + team actors + rounds, per constraint (b).
+
+## 5. Data flow
+
+```
+Ship (imported)
+  └─ buildShipAbilitiesWithEquipment(ship, getGearPiece) ──► DefenseShipConfig.shipSkills
+                                                                      │
+        SkillSlotList (user edits) ────────────────────────────────────┤
+                                                                      ▼
+  DefenseSimulationInput { defender stats + shipSkills, teamActors, enemies, rounds }
+                                                                      │
+                              defenseSurvivabilitySim.ts (boundary)   │
+                                                                      ▼
+                          simulateHealing({ healTargetId: 'healer', … })
+                                                                      │
+                                       HealingSimulationResult        │
+                                                                      ▼
+   DefenseSurvivabilityResult { measuredEHP, survived, destroyedRound?, breakdown, rounds }
+                                                                      │
+                                                                      ▼
+                        DefenseShipCard  ·  page-level ranking (isBest)
+```
+
+## 6. Testing
+
+### 6.1 The two tests that carry the weight
+
+**The double-count tripwire.** A *shielded* fixture asserting measured EHP equals gross intake
+**and** explicitly asserting it does not equal `incoming + shieldAbsorbed + barrierAbsorbed`. A
+test that only checks the correct value passes under both formulas on an unshielded fixture — which
+is exactly how this bug would survive review.
+
+**The non-vacuous proof the ability model changed the answer.** A ship whose defence buff is
+conditionally gated must measure *lower* than the static formula predicts. This test **must fail
+under today's flat `buildSkillBuffAutoFill` path**. If it passes both ways, the epic has
+demonstrated nothing and #358 is not closed.
+
+### 6.2 Supporting tests
+
+- **Intake breakdown reconciles against an independent signal.** Do NOT assert
+  `hpLost + shield + barrier + converted === incoming` — the HP term is *defined* by that
+  subtraction (§3.2), so the assertion is tautological. Instead, on a **solo run with no healing of
+  any kind**, assert the derived Σ HP loss reconciles with the target's own HP trajectory
+  (`targetHpPct` movement × max HP). Healing breaks the reconciliation by design, so the fixture
+  must have none — a team-supported fixture here would produce a mismatch and invite "fixing" a
+  correct calculation.
+- Survived-vs-destroyed policy asserted **both ways** — `destroyedRound` present and absent.
+- A Barrier ship reports non-zero `barrierAbsorbed`.
+- A `modifier`-ability ship (passive stat aura) affects measured EHP — invisible to the flat path.
+- Card and page render tests.
+
+### 6.3 Regression gate
+
+The golden suite stays **byte-identical**. PR 1 is the only engine-adjacent change and is purely
+additive. Any golden churn is a STOP — never `vitest -u`.
+
+## 7. PR sequence
+
+Each PR is independently green and mergeable.
+
+1. **`convertedToShield` on `HealingRoundData`** — additive field, no behaviour change. Goldens
+   byte-identical.
+2. **`defenseSurvivabilitySim.ts`** — the boundary + the EHP / survived / breakdown reducer, fully
+   unit-tested including both §6.1 tests at the reducer level. No UI.
+3. **Config + card** — `DefenseShipConfig` gains `shipSkills` and engine stats; `SkillSlotList` in
+   the card replacing the Skill Reference; `buildShipAbilitiesWithEquipment` at both ship-select
+   sites.
+4. **Page wiring** — shared enemy / team / rounds panels, measured EHP display, ranking switch,
+   memoization.
+5. **Docs** — `src/pages/DocumentationPage.tsx` + `UNRELEASED_CHANGES` in
+   `src/constants/changelog.ts`.
+
+## 8. Out of scope
+
+- Making the static formula ability-aware — superseded; it stays as the baseline.
+- Generalising `healingEngineAdapter` into a shared harness. The boundary is the seam that makes
+  that a later, mechanical refactor if it is ever wanted.
+- Escalating-pressure or uncapped run-until-death modes (§2 decided the window + flag).
+- Autogear integration. Measured EHP is a page-level metric here; `Effective HP` as an autogear
+  limit stat is unchanged.
+
+---
+
+# ADDENDUM (2026-08-24): self-sourced defence buffs reduce damage taken
+
+**Status:** approved by the user, IN SCOPE for this epic. Task 2 surfaced the defect; the user ruled
+the behaviour is wrong and chose to fix it here rather than in a separate spec. I recommended a
+separate spec (the blast radius is engine-wide, not calculator-local); the user's decision stands.
+
+## A1. The defect
+
+A defender's own `Defense Up` (`parsedEffects.defense`) does **not** reduce the damage it takes on
+the positional per-victim damage path. Verified at three sites:
+
+1. `victimDefenseProfileOf` (`engine.ts:7229`) sets `defence: substitutedDefenceFor(v, v.stats.defence)`
+   — the **base** stat. The buff-folded `effectiveStatsOf(...).defence` is deliberately not used here
+   (see the note at `engine.ts:5548-5556`, which matched this raw read to fix a *different* consumer).
+2. The modifier return (`engine.ts:7110-7112`) is **asymmetric**:
+   - `enemyDefenseModifier: enemy.enemyDefenseModifier` — enemy-sourced debuffs ONLY, no self term.
+   - `incomingDamageModifier: enemy.incomingDamageModifier + selfIncoming + preFightIncoming + exposed`
+     — carries a self term.
+3. Consequence: enemy-sourced **Defense Shred works**; the victim's own **Defense Up does not**. Two
+   independent places a self-defence term could enter, and it enters neither.
+
+The `selfIncoming` term on the twin channel is D-PR12's work. That exact parallel is the strongest
+evidence this is an oversight rather than a design choice: the job was done for one channel and never
+for the other.
+
+**Pre-existing** — identical through the older `selfBuffs` route. Not introduced by this epic.
+
+## A2. The fix
+
+Add a self-sourced defence term to the percentage channel that already exists, mirroring
+`selfIncoming`:
+
+```
+enemyDefenseModifier: enemy.enemyDefenseModifier + selfDefense
+```
+
+`defenceModifierPct` is already consumed as a signed percentage multiplier on defence
+(`victimDamage.ts:113`: `v.defence * (1 + v.defenceModifierPct / 100) * (1 - pen/100)`), with
+negative meaning less defence. A `Defense Up II` of `+30` therefore rides it as `+30` with no new
+plumbing.
+
+**Why this site and not `victimDefenseProfileOf`'s `defence` read:** leaving `defence` as the base
+stat keeps faith with the reversed-repairs caller documented at `engine.ts:5548-5556`, which
+deliberately matches this raw read. Routing the buff through the percentage channel changes one term
+instead of changing the meaning of a field two other callers depend on.
+
+**Bonus:** this is the same arithmetic the static formula uses
+(`computeBuffedStats`: `defense * (1 + defenseBuff / 100)`), so measured and formula EHP will finally
+agree on Defense Up instead of contradicting each other.
+
+## A3. Binding constraints
+
+- **TEAM-SYMMETRIC.** Both sides' defenders must benefit. A player-only fix is a defect, per this
+  project's standing engine rule.
+- **Sign convention:** negative = less defence. Defense Up is positive. Get this wrong and the buff
+  becomes a debuff — a test must pin the direction, not just the magnitude.
+- **The golden suites are the regression gate.** This fix WILL move numbers in the combat-sim and DPS
+  suites. Every moved number must be individually audited and explained as a legitimate consequence
+  of a defender's Defense Up now applying. Re-bless is delete-and-rerun, **never `vitest -u`**.
+- **A zero-churn result is a RED FLAG, not a success.** If no golden moves, the term is not reaching
+  the damage path and the fix is inert — exactly the defect being fixed. Prove reachability before
+  believing a clean run.
+
+## A4. Consequences for already-merged Task 2
+
+- Test 8's `defenceUp` inert-channel pin **goes red by design → DELETE it**, and replace it with an
+  assertion that the buff now DOES reduce measured intake. Do not loosen it.
+- Test 10 (the conditional-gate proof) **reverts to `Defense Up II`**, its originally intended and
+  strictly stronger form: it then proves a gated *defence* buff is suppressed, not merely that some
+  channel is. Its two exact constants will change; re-measure them.
+- The module jsdoc's "WHICH DEFENSIVE CHANNELS MOVE THE MEASURED NUMBER" list must move
+  `parsedEffects.defense` from the DOES-NOT list to the DOES list.
+- This also resolves both Important findings from Task 2's review (a test-10 comment gap and a
+  missing applied-guard on the pin being deleted).
+- `modifier` + `channel: 'incomingDamage'` stays inert and stays pinned — out of scope, separate
+  defect, no user ruling on it.
+
+## A5. Overload ruling (user, 2026-08-24)
+
+Phase 1 measurement found that the fix's largest real-kit consequence is **not** `Defense Up` — it is
+`Overload`: `'+10% Outgoing Direct Damage, -10% Defense, Stackable up to 10 times'`, a SELF-buff on
+Butcher, Mangler, Ravager, Asphyxiator and Ruiner, plus Refine's `Supercharged III` (`-60% Defense`).
+297 probe reads at `-100%`, with a full `-10…-90` ladder.
+
+**Ruling: apply BOTH halves.** Today the app grants Overload's damage bonus and ignores its defence
+cost, which makes those 6 ships strictly better than their card text. A capped Butcher's defence term
+collapsing to zero is the correct reading, and applying only the upside would be the very asymmetry
+this addendum exists to remove.
+
+Consequences:
+- **No name-special-casing.** The new term is sign-agnostic: it carries positive self-sourced defence
+  (Defense Up) and negative (Overload, Supercharged III) alike.
+- Overload is a SELF-buff, so it lives in the victim's own self-buff store, NOT the enemy-debuff
+  store that `enemy.enemyDefenseModifier` reads. **There is therefore no double count** — verified
+  before ruling.
+- `victimDamage.ts:114` already guards non-positive effective defence, so the `-100%` case floors at
+  zero damage reduction rather than inverting into a damage bonus. No new clamp needed — but a test
+  must pin that floor, because an unclamped implementation would look identical on every fixture
+  that never reaches -100%.
+
+### A5.1 CORRECTION (2026-08-24): the floor guard prevents NaN, not a damage bonus
+
+A5 above says the `-100%` case "floors at zero reduction rather than inverting into a damage bonus."
+**The second half is wrong, and it was my error.** Measured:
+
+```
+calculateDamageReduction(d) = 88.3505 * exp(-((4.5552 - log10(d)) / 1.3292)^2)   [priorityScore.ts:7]
+  d =  5000  ->  25.67
+  d =     0  ->   0        (log10(0) = -Inf, exp(-Inf) = 0)
+  d = -2500  ->  NaN       (log10 of a negative)
+```
+
+The function is bounded in `[0, 88.3505]` and **can never return a negative**, so a damage *bonus*
+is impossible by construction. What the `effectiveDefense > 0` guard actually prevents is **NaN
+propagation** when effective defence overshoots below zero (self-shred beyond `-100%`).
+
+Two consequences that matter for testing:
+
+1. **At exactly `-100%` the guard is a NO-OP** — `calculateDamageReduction(0)` is already `0`. Only an
+   *overshoot* arm (e.g. `-150%`) exercises the guard at all. A floor test built only on a capped
+   10-stack Overload pins nothing.
+2. **An assertion of the form `expect(x).not.toBeGreaterThan(cap)` is NaN-BLIND** — `NaN > cap` is
+   `false`, so it passes on the very failure it is meant to catch. The real failure mode must be
+   asserted positively (`toBeCloseTo`), not as a negated inequality.
+
+Every place that repeats the "damage bonus" framing must be corrected: the engine justification
+comment, the `dpsBuffHelpers` jsdoc, the new test file's header and in-test comment, and the
+changelog entry.
+
+### A5.2 The `* s.stacks` factor must be pinned
+
+The whole A5 ruling rests on a 10-stack Overload reaching `-100%`, which is `* s.stacks` doing the
+work. Deleting that multiplier leaves the entire repository green (measured: 518 files / 5991 tests),
+because every test arm uses `stacks: 1`. Without it a 10-stack Overload applies `-10%`, not `-100%`,
+and the changelog's headline Butcher figures are fiction.
+
+**A multi-stack arm is required**, e.g. `stacks: 5, defense: -10` asserting mitigation at half
+defence. Semantics are already correct — `addPersistentStack` merges an accumulating buff into one
+entry carrying the capped accumulated count — so this is a coverage gap, not a code defect.
+
+---
+
+# ADDENDUM 2 (2026-08-24): Measured EHP must count RAW damage withstood
+
+**Status:** approved by the user. This corrects a design error in §3 of the original spec — mine.
+
+## B1. The error
+
+§3 specified `Measured EHP = Σ incomingDamage`. I verified that field is gross with respect to the
+**shield / Barrier / conversion pools** and stopped there. It is **not** gross with respect to
+**defence**. `engine.ts:5423` documents the parameter as *"The DEFENCE mitigation factor the CALLER
+already folded into `rawDamage`"*, and `engine.ts:5726`'s comment confirms the recorded intake is
+*"post incoming-block, post Protection redirect"*.
+
+So `incomingDamage` is **post-defence-mitigation**. Measured EHP therefore counted *damage that got
+through*, not *damage thrown*.
+
+### B1.1 Why that breaks the metric in both regimes
+
+- **A ship that dies** absorbs post-mitigation damage ≈ its HP (plus pool absorption) *regardless of
+  its defence*. Defence changes only how many ROUNDS that takes. The page's central stat barely
+  moves its headline number.
+- **A ship that survives** shows the damage that leaked through, so **a tankier ship reports a LOWER
+  number** — while `isBest` ranks highest-first. The ranking inverts.
+
+Measured live on Isha: Measured EHP 1,408 (survived 4 rounds) against Formula EHP 543,950. That is
+not two estimates disagreeing; it is two different quantities.
+
+This also contradicts what the user was told when choosing the metric — that it would capture
+incoming-damage reduction and conditionally-gated defence buffs the static formula cannot see. Under
+the shipped implementation those *reduce* the number.
+
+## B2. The fix (user ruling: "Both — raw EHP headline, rounds beside it")
+
+1. **Thread the PRE-mitigation figure through the engine** into the per-victim intake bucket, as a
+   new additive field alongside `incoming`. This is the same shape as Task 1's `convertedToShield`,
+   which landed cleanly: `ActorIntake` → `HealingRoundEngine` → `HealingRoundData` → the boundary.
+2. **`measuredEHP` reads the RAW figure.** "How much raw damage was thrown at this ship before it
+   died" — the conventional meaning of effective HP, and the quantity the static formula estimates,
+   so the two finally measure the same thing and their disagreement becomes informative.
+3. **Report rounds survived beside it** in the results block, with the survived/destroyed state.
+
+## B3. Binding constraints
+
+- **Direction test, mandatory.** More defence must RAISE measured EHP. That is the exact property
+  that was inverted; a magnitude-only assertion cannot catch a re-inversion.
+- **The relationship to the existing terms must be pinned.** Raw ≥ post-mitigation `incomingDamage`
+  always, with equality only at zero effective defence. Assert both the inequality and one exact
+  equality case.
+- **Do NOT reconstruct raw by dividing post by the mitigation factor.** It is lossy and undefined at
+  a factor of 0 (100% reduction). Record the pre-fold value at its source.
+- **The goldens do not gate this** — same measurement as A3: the numeric golden suites carry no
+  self-side defence buffs. Every property needs its own test.
+- Team-symmetric, as always.
+- **Task 2's constants and Task 8's `selfDefenceBuffMitigation` figures will move** where they assert
+  on `measuredEHP` / `breakdown.gross`. Re-measure them; do not loosen them.
+- The intake **breakdown** (`toHp` / `toShield` / `toBarrier` / `toConversion`) stays on the
+  POST-mitigation axis — those four terms partition what actually arrived, and re-basing them on raw
+  would break the identity. The card must not present a raw headline and post-mitigation breakdown
+  as if they summed; label the axis.
+
+---
+
+# ADDENDUM 3 (2026-08-25): the headline is ROUNDS SURVIVED + DAMAGE ABSORBED
+
+**Status:** user-defined, 2026-08-25. This supersedes ADDENDUM 2's "Measured EHP" framing. It is the
+THIRD iteration on this metric; the previous two each fixed one mitigation channel and left others,
+because the definition was never stated in full. This addendum states it in full.
+
+## C1. The three headline numbers
+
+1. **Rounds survived** — how long the ship lasted, plus the survived/destroyed state.
+2. **Damage absorbed** — everything thrown at the ship, summed across channels, measured BEFORE the
+   defender reduces it.
+3. **Theoretical EHP** (the old `computeBuffedStats` figure) — relabelled to say what it is: a
+   hangar-stats estimate, not a measurement.
+
+"Measured EHP" as a name is RETIRED. It caused a shipped changelog entry to contradict its own
+neighbour, because "EHP" invited the old post-mitigation reading.
+
+## C2. The exact definition of Damage absorbed
+
+**IN — the attack as thrown:**
+- attacker-side modifiers: outgoing-damage buffs, crit, affinity matchup
+- enemy-APPLIED amplification: `Out. Damage Up`, `Exposed`. These amplify what lands rather than
+  reduce it, so they are part of "the attacker's attack with modifiers".
+- every channel: direct hits, DoT ticks, bombs, detonations, reflect. Those channels fold no defence
+  today, so they enter at face value — but they must be PRESENT in the total, not silently zero.
+
+**OUT — every victim-side reduction:**
+- defence mitigation (`victimDefenceMitigation`) — already stripped by ADDENDUM 2
+- the victim's OWN `Inc. Damage Down` family (`selfIncoming`)
+- `preFightIncoming` (squad-leader incoming protections)
+- `equipReductionPct` (D-PR3 gear-sourced incoming reduction)
+- the funnel's incoming-block proc (`damageRaw *= (1 - blocked)`)
+
+**STILL COUNTS (not reductions):** shield pool and Barrier absorption. Those eat damage that
+ARRIVED; they do not reduce what was thrown.
+
+## C3. Why the previous attempt was wrong
+
+`victimDamage.ts:194` computes
+`nonCritFactorPreDefence = 1 * (1 + outgoingPct/100) * (1 + incoming/100) * affinityMult` —
+it replaced only the defence term. `incoming` survives, and **that channel is MIXED**:
+`incomingDamageModifierPct` = `enemy.incomingDamageModifier` (Out. Damage Up — KEEP)
++ `selfIncoming` (Inc. Damage Down — STRIP) + `preFightIncoming` (STRIP) + `exposed` (KEEP).
+
+So the term cannot simply be dropped; the split must be threaded to the damage site. Measured
+consequence of not doing so: a defender with `Inc. Damage Down II` survived an EXTRA round and
+reported a LOWER figure (252,000 over 6 rounds vs 300,000 over 5) — the inversion this whole line of
+work exists to remove, still live.
+
+## C4. The DoT-transform collapse (was mis-filed "corpus-inert")
+
+`convertHitToSelfDot` (Voron/Orel) reverses both axes in lockstep, but the ticks that re-book the
+deferred slice run `byDirectDamage: false` and supply no pre-mitigation figure — so the slice
+migrates permanently onto the post axis. Measured on a real fixture: a Voron defender at 5,000
+defence reports **24,993** where a plain defender reports **100,000**. A purely DEFENSIVE ability
+quarters the headline and re-inverts the ranking. Reachable from this page today. The re-booking
+must carry the pre-mitigation figure.
+
+## C5. Binding constraints
+
+- **A direction test PER CHANNEL.** The previous direction test swept only defence, which is exactly
+  why the incoming-reduction inversion survived it. Every victim-side reduction listed in C2 needs
+  its own arm proving MORE reduction → MORE damage absorbed (or at minimum, never less).
+- **A presence test per channel.** DoT, bomb and detonation damage must be shown non-zero in the
+  total, or "mix the channels" is unverified.
+- The two untested funnel scalings (`(1 - blocked)` and `cascade.targetRetainedFraction`) must get
+  tests — deleting either currently leaves 3,950 tests green.
+- Goldens: delete-and-rerun, never `vitest -u`; verify DELETIONS are zero.
+
+---
+
+# ADDENDUM 4 (2026-08-25): the Protection redirect is a REASSIGNMENT, not a reduction — LOCKED
+
+**User ruling, 2026-08-25.** Damage that an ally's Protection redirects away from a ship does **NOT**
+count toward that ship's *Damage absorbed*. Current behaviour is correct; no change.
+
+## D1. Why this is not the inversion we spent four rounds removing
+
+It looks identical on the surface. Measured on a fixed 4-round survivor window:
+
+```
+no ally                40,000
+ally, 0 Protection     40,000     ← the zero-stack control
+ally, 3 Protection     28,000
+ally, 5 Protection     20,000
+```
+
+Same rounds, same survival, a defensive interaction halving the headline — the exact shape of the
+defence / `Inc. Damage Down` / `equipReduction` / incoming-block / reflect inversions.
+
+**The difference is where the damage goes.** Those five were *reductions*: the slice was discounted
+and disappeared. This is a *reassignment*: the redirected slice is booked IN FULL on the protector's
+own raw axis. Nothing is lost — it moves to the ship that actually took it.
+
+## D2. The reasoning behind the ruling
+
+- **"Absorbed" means this ship took it.** The protector took it, so it is the protector's number.
+- **Counting it on both sides breaks team arithmetic** — the ships' figures would sum to more than the
+  damage actually dealt.
+- **In the discriminating regime the effect reverses anyway.** These figures come from a fixed
+  survivor window, where rounds are pinned by construction. In a casualty comparison Protection
+  extends survival, so MORE rounds of damage get thrown at the protected ship.
+
+## D3. Consequences
+
+- **Do not "fix" this channel.** It is pinned in `defenseSurvivabilitySim.test.ts` with the exact
+  figures above plus the zero-stack control, and both readings are written into the test header. A
+  future reader finding a defensive interaction that lowers the number will be tempted; the pin and
+  this addendum are the answer.
+- The docs and changelog claim is correspondingly narrowed to "a defensive ability **on the ship
+  itself** never lowers this number", with the Protection carve-out stated. Leaving it absolute would
+  have been a new user-facing inaccuracy.
+- This also closes ADDENDUM 3's second untested funnel scaling
+  (`damageRaw *= cascade.targetRetainedFraction`), which now has coverage.

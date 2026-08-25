@@ -67,6 +67,35 @@ export interface VictimDefenseProfile {
     /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar — B1/PR7b */
     incomingDamageModifierPct?: number;
     /**
+     * #358 ADDENDUM 3 (C2/C3) — THE VICTIM-SIDE SLICE OF A MIXED CHANNEL.
+     *
+     * `incomingDamageModifierPct` is NOT one thing. The engine sums FOUR contributions into it
+     * (`victimIncomingModifiers`):
+     *   • `enemy.incomingDamageModifier` — 'Out. Damage Up' the ATTACKER's side applied. KEEP.
+     *   • `exposed` — 'Exposed' stacks the ATTACKER's side applied. KEEP.
+     *   • `selfIncoming` — the victim's OWN 'Inc. Damage Down/Up' self-buffs. STRIP.
+     *   • `preFightIncoming` — squad-leader incoming protections on the victim. STRIP.
+     *
+     * The first two AMPLIFY what lands (they are part of "the attacker's attack with modifiers");
+     * the last two are the DEFENDER reducing what it takes. "Damage absorbed" counts the attack as
+     * thrown, so only the victim-side pair comes off the pre-mitigation axis.
+     *
+     * THIS FIELD CARRIES THAT PAIR (`selfIncoming + preFightIncoming`), signed exactly as it rides
+     * the summed channel (negative = the victim takes less). `preMitigation` below subtracts it
+     * back out; `damage` is untouched by it.
+     *
+     * WHY IT MUST BE THREADED AND NOT DERIVED. The previous iteration (#358 addendum 2) treated
+     * `incomingDamageModifierPct` as ATOMIC and left the whole term on the pre-defence axis, so a
+     * defender with 'Inc. Damage Down II' survived an EXTRA round and reported a LOWER figure
+     * (252,000 over 6 rounds vs 300,000 over 5). Dropping the term wholesale instead would have
+     * stripped the attacker's own amplification, which is equally wrong. Nothing downstream can
+     * recover the split from the sum, so the split travels with the profile.
+     *
+     * Defaults to 0 → pre-ADDENDUM-3 behaviour, byte-identical for any victim with no self-sourced
+     * incoming modifier and no pre-fight incoming baseline.
+     */
+    victimSideIncomingPct?: number;
+    /**
      * Sub-project I, PR I2 (Layer 3) — this victim's outgoing-damage-modifier DELTA vs the
      * attacker-fixed `s.outgoingDamageBuffPct`. `s.outgoingDamageBuffPct` is folded ONCE per
      * turn against the primary (bound) target's enemy-status; an enemy-status-gated modifier
@@ -118,21 +147,50 @@ export function victimDefenceMitigation(
 /**
  * Damage dealt to a single victim by ONE hit of a multi-hit skill.
  *
+ * NO PRODUCTION CALLERS, DELIBERATELY KEPT. Its pre-mitigation sibling
+ * (`victimHitDamagePreMitigation`) was deleted for exactly that reason, so the asymmetry is worth
+ * stating: this one survives because it is the `.damage`-only façade a dozen unit tests are written
+ * against (`victimDamage.test.ts`, `positionalApply.test.ts`), and those tests are real users. It
+ * is a one-line delegation to `victimHitDamageParts`, so it cannot drift from the parts helper the
+ * way the hand-copied pre-mitigation twin did. Delete it only together with those tests.
+ *
  * @param s        attacker-side scalars (fixed across victims)
  * @param v        this victim's defensive profile
  * @param didCrit  the per-hit crit outcome (hitCrits[h])
  * @param roleScale 1 (origin) | 0.5 (covered) positional split factor
- * @param equipReductionPct  D-PR3 victim-side incoming %-reduction (percentage points),
+ * @param equipReductionPct  D-PR3 VICTIM-side incoming %-reduction (percentage points),
  *        folded ADDITIVELY into the incoming term. Default 0 → byte-identical to the
  *        pre-D-PR3 behavior (inert for victims without an incoming-reduction ability).
+ * @param attackerSideReductionPct  the ATTACKER-side half of the same channel — today the
+ *        attacker's own squad-leader `outgoingCritDamage` penalty. Same units and same sign
+ *        convention, but it belongs to the attack AS THROWN, so it rides BOTH axes. Default 0.
  */
 export function victimHitDamage(
     s: AttackerDamageScalars,
     v: VictimDefenseProfile,
     didCrit: boolean,
     roleScale: number,
-    equipReductionPct = 0
+    equipReductionPct = 0,
+    attackerSideReductionPct = 0
 ): number {
+    return victimHitDamageParts(
+        s,
+        v,
+        didCrit,
+        roleScale,
+        equipReductionPct,
+        attackerSideReductionPct
+    ).damage;
+}
+
+export function victimHitDamageParts(
+    s: AttackerDamageScalars,
+    v: VictimDefenseProfile,
+    didCrit: boolean,
+    roleScale: number,
+    equipReductionPct = 0,
+    attackerSideReductionPct = 0
+): { damage: number; preMitigation: number } {
     // preCritDamage assembled exactly as the engine, then split evenly per hit.
     const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
     const perHitShare = s.hits > 0 ? preCritDamage / s.hits : 0;
@@ -156,8 +214,27 @@ export function victimHitDamage(
     // Prefer the per-victim incoming-damage debuff when present; fall back to the
     // attacker-fixed scalar (B1/PR7b). The engine-wired path always passes an explicit
     // value; the `??` fallback serves direct-call callers (e.g. positionalApply unit tests).
-    const incoming =
-        (v.incomingDamageModifierPct ?? s.incomingDamageModifierPct) - equipReductionPct;
+    const incomingChannel = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
+    // BYTE-IDENTITY: the two halves are re-SUMMED before the subtraction, in the same
+    // left-to-right order the engine used when it handed over one fused number
+    // (`(equip + victimCritTerm) + attackerCritTerm`). `a - (b + c)` and `a - b - c` are not the
+    // same double, and splitting the channel must not move a single existing damage figure.
+    const incoming = incomingChannel - (equipReductionPct + attackerSideReductionPct);
+    // #358 ADDENDUM 3 (C2): the SAME channel with every victim-side reduction removed, and ONLY
+    // those. Three things come off / stay on:
+    //   • OFF — the victim's own `Inc. Damage Down` family and its pre-fight incoming baseline,
+    //     both carried in `victimSideIncomingPct`;
+    //   • OFF — `equipReductionPct`, the D-PR3 gear/kit incoming reduction, which is simply not
+    //     added to this axis;
+    //   • ON  — `attackerSideReductionPct`, subtracted here as well as above. It is the ATTACKER's
+    //     own squad-leader `outgoingCritDamage` penalty: it makes the attack smaller AS THROWN, so
+    //     excluding it would over-report. This term used to arrive fused into `equipReductionPct`
+    //     and came off the thrown axis as collateral — a MIXED channel treated as atomic, which is
+    //     the exact defect shape C3 exists to end, one layer further down.
+    // What survives is the attack as thrown, including attacker-APPLIED amplification
+    // (`Out. Damage Up`, `Exposed`). See `victimSideIncomingPct` for why the split is threaded.
+    const incomingAsThrown =
+        incomingChannel - (v.victimSideIncomingPct ?? 0) - attackerSideReductionPct;
 
     // PR I2: fold the per-victim enemy-status-gated delta additively into the same
     // percentage term as the attacker-fixed outgoing buff — both are additive-percentage
@@ -166,8 +243,18 @@ export function victimHitDamage(
     const outgoingPct = s.outgoingDamageBuffPct + (v.outgoingDamageDeltaPct ?? 0);
     const nonCritFactor =
         defenceMitigation * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
+    // #358 ADDENDUM 2/3: the same product with EVERY victim-side reduction removed — the defence
+    // term replaced by an exact 1 (addendum 2) and the incoming term re-based on `incomingAsThrown`
+    // (addendum 3). The `damage` expression below keeps its original operand order and its original
+    // `incoming` local, so it stays BYTE-IDENTICAL (no re-association), while the pre-mitigation
+    // figure is computed at source rather than reconstructed by division.
+    const nonCritFactorPreDefence =
+        1 * (1 + outgoingPct / 100) * (1 + incomingAsThrown / 100) * affinityMult;
 
     const hitCritMultiplier = 1 + (didCrit ? 1 : 0) * (s.effectiveCritDamage / 100);
 
-    return perHitShare * hitCritMultiplier * nonCritFactor * roleScale;
+    return {
+        damage: perHitShare * hitCritMultiplier * nonCritFactor * roleScale,
+        preMitigation: perHitShare * hitCritMultiplier * nonCritFactorPreDefence * roleScale,
+    };
 }

@@ -48,6 +48,56 @@ const manualEnemy = (id: string, attack: number, affinityDamageModifier = 0): En
     affinityDamageModifier,
 });
 
+/** Finding 4 (#358 review): `manualEnemy` plus an explicit basic-hit active slot (mirroring the
+ *  engine's own no-shipSkills synthesis, `buildEnemyPlayerActorRuntime`) and a PASSIVE aura
+ *  self-buff granting the attacker defence PENETRATION. Needed because a fixture with pen: 0 no
+ *  longer discriminates on the `cause.targetMitigation` threading below — post-A2 the funnel's
+ *  `effectiveStatsOf(...).defence` re-derivation fallback ALSO folds a scheduled/timed self-defence
+ *  buff, so it agrees with the caller even with the threading removed. Only defence penetration
+ *  (never folded by the re-derivation, threaded or not) still forces the two paths apart. */
+const manualEnemyWithPen = (id: string, attack: number, pen: number): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: `${id}-basic`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+            {
+                slot: 'passive',
+                abilities: [
+                    {
+                        id: `${id}-pen`,
+                        type: 'buff',
+                        target: 'self',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'buff',
+                            buffName: 'Defense Penetration',
+                            parsedEffects: { defensePenetration: pen },
+                            stacks: 1,
+                            isStackable: true,
+                        },
+                    },
+                ],
+            },
+        ],
+    },
+});
+
 /** A walked player team actor (a pure victim stat block, role ATTACKER so it is a valid victim).
  *  Optional `passive` slots carry an ability (e.g. an aura Protection grant) for the actor.
  *  Optional `speed` (default 100) lets multi-protector tests stage a deterministic fastest-first
@@ -126,6 +176,15 @@ const totalIncoming = (input: CombatEngineInput, id: string): number => {
     const res = runCombat(input);
     let sum = 0;
     for (const rd of res.rounds) sum += rd.perActorIncoming?.[id]?.incoming ?? 0;
+    return sum;
+};
+
+/** #358 ADDENDUM 3: the same total on the RAW ("damage absorbed") axis — what was THROWN at the
+ *  actor, before its own defence mitigated any of it. */
+const totalIncomingRaw = (input: CombatEngineInput, id: string): number => {
+    const res = runCombat(input);
+    let sum = 0;
+    for (const rd of res.rounds) sum += rd.perActorIncoming?.[id]?.incomingRaw ?? 0;
     return sum;
 };
 
@@ -223,6 +282,53 @@ describe('Protection damage transfer (integration)', () => {
         // One reactive-damage-performed per redirected SUB-HIT (3 stacks → 3 rows), matching what
         // the game shows the player. See the dedicated per-stack test below for the amounts.
         expect(reactiveEventsTargeting(withProtector(true), 'attacker')).toBe(3);
+    });
+
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    // #358 ADDENDUM 3 (carried finding 7) — THE RAW AXIS'S RETENTION SCALING HAD NO TEST ANYWHERE
+    //
+    // `damageRaw = damageRaw * cascade.targetRetainedFraction` (applyVictimDamage) is what stops a
+    // PROTECTED victim's "damage absorbed" figure from counting the slice its protector took.
+    // MEASURED before this test existed: deleting that line left the entire repository green
+    // (406 files / 3,950 tests). It is the twin of the incoming-block scaling one branch above,
+    // which this addendum DELETED on purpose — so the two lines now differ, and only a test can
+    // say which of them is meant to be there.
+    //
+    // The assertion is a CONSERVATION IDENTITY rather than a per-actor magnitude: whatever the
+    // cascade does with the hit, the two actors' raw intakes must sum to exactly what was thrown.
+    // A magnitude assertion on the victim alone would also pass if the protector's own raw booking
+    // were wrong; this cannot.
+    it('#358 ADDENDUM 3: the redirected slice moves on the RAW axis too — victim + protector sum to exactly what was thrown', () => {
+        // Victim defence 400 (NOT 0, unlike the arms above): with defence 0 the raw and post axes
+        // coincide and this test could not tell them apart.
+        const VICTIM_DEFENCE = 400;
+        const withProtector = (withProt: boolean): CombatEngineInput =>
+            BASE_INPUT({
+                selfBuffs: withProt ? [protectionAccum(3)] : [],
+                teamActors: [teamActor('ally-1', VICTIM_DEFENCE)],
+                enemyAttackers: [manualEnemy('enemy-1', ENEMY_ATTACK)],
+            });
+
+        // CONTROL: with no protector the victim absorbs the whole thrown hit, and the raw axis is
+        // strictly above the post axis (so the fixture really does separate them).
+        const victimRawWithout = totalIncomingRaw(withProtector(false), 'ally-1');
+        expect(victimRawWithout).toBeCloseTo(ENEMY_ATTACK, 6);
+        expect(victimRawWithout).toBeGreaterThan(totalIncoming(withProtector(false), 'ally-1'));
+
+        const victimRawWith = totalIncomingRaw(withProtector(true), 'ally-1');
+        const protectorRawWith = totalIncomingRaw(withProtector(true), 'attacker');
+
+        // The victim keeps exactly the retained fraction on the raw axis — 3 stacks → 70%.
+        expect(victimRawWith).toBeCloseTo(0.7 * ENEMY_ATTACK, 6);
+        // …the protector's own raw intake is the redirected 30%, at its PRE-defence size (read off
+        // the cascade's P-space inflow, never recovered by dividing the mitigated chunk)…
+        expect(protectorRawWith).toBeCloseTo(0.3 * ENEMY_ATTACK, 6);
+        // …and NOTHING is lost or double-counted. Delete the retention scaling and this reads
+        // 1.3 × ENEMY_ATTACK: the victim would report absorbing damage its protector took.
+        expect(victimRawWith + protectorRawWith).toBeCloseTo(ENEMY_ATTACK, 6);
+        // The protector really is re-mitigating on its own defence, so the two axes are distinct
+        // for it as well — the raw booking is not just a copy of the mitigated chunk.
+        expect(protectorRawWith).toBeGreaterThan(totalIncoming(withProtector(true), 'attacker'));
     });
 
     it('a 3-stack protector logs THREE reactive-damage rows (one per redirected sub-hit), each carrying that sub-hit’s own booked intake', () => {
@@ -903,6 +1009,13 @@ describe('Protection transfer — the cascade divides by the caller’s own miti
     });
 
     const VICTIM_DEFENCE = 500;
+    // Finding 4 (#358 review): non-zero, so this fixture still DISCRIMINATES on the
+    // `cause.targetMitigation` threading below. With pen: 0, post-A2 the funnel's
+    // `effectiveStatsOf(...).defence` re-derivation fallback also folds the victim's SCHEDULED
+    // 'Defense Up', so removing the threading would leave this test passing for the wrong reason
+    // (measured). Penetration is never folded by that re-derivation either way, so it alone still
+    // forces the caller's read and a re-derived read apart when the threading is removed.
+    const ENEMY_PEN = 50;
 
     /** The FOCUS is the victim here (it is the only actor in this harness that reliably carries a
      *  SCHEDULED self-buff — see the file header), sitting front-most in row M so the enemy's
@@ -919,13 +1032,17 @@ describe('Protection transfer — the cascade divides by the caller’s own miti
                     position: 'M1',
                 },
             ],
-            enemyAttackers: [{ ...manualEnemy('enemy-1', ENEMY_ATTACK), position: 'T1' }],
+            enemyAttackers: [
+                { ...manualEnemyWithPen('enemy-1', ENEMY_ATTACK, ENEMY_PEN), position: 'T1' },
+            ],
         });
 
     it('a defence-BUFFED victim does not inflate its protector’s chunk', () => {
         // `P` (pre-defence) is ENEMY_ATTACK by construction — no crit, no affinity, no
         // outgoing/incoming modifiers — so the protector's chunk is 0.3 × ENEMY_ATTACK × mit(D_p)
-        // regardless of what the victim's own mitigation turns out to be.
+        // regardless of what the victim's own mitigation (defence buff OR penetration) turns out
+        // to be — the cascade recovers pre-defence P and re-mitigates on the PROTECTOR's own
+        // defence only.
         const expectedChunk = 0.3 * ENEMY_ATTACK * mit(PROTECTOR_DEFENCE);
 
         // Control: unbuffed. Passes before and after the fix — it pins the oracle.
@@ -943,17 +1060,43 @@ describe('Protection transfer — the cascade divides by the caller’s own miti
             expect.objectContaining({ stat: 'defence', value: 100 })
         );
 
-        // The buff moves the victim's LIVE effective defence (what the funnel's old recompute
-        // read) while leaving the caller's damage read where it was. Both facts have to hold for
-        // this fixture to measure the divergence it claims — the first is pinned above, the
-        // second by the equality below.
+        // The buff moves the victim's own damage read, so this fixture's two arms really are two
+        // different mitigations — which is what makes the core assertion below a test of the
+        // cascade rather than a tautology.
+        //
+        // PREMISE UPDATED BY ADDENDUM A2. This line used to assert `buffedVictim` was CLOSE TO
+        // `unbuffedVictim`: pre-fix the buff moved the victim's LIVE effective defence (what the
+        // funnel's old recompute read) while leaving the caller's damage read on the BASE stat.
+        // That gap WAS the A2 defect, and the equality was pinning it. Now the victim's own
+        // 'Defense Up' folds into `defenceModifierPct`, so a +100% buff really does mitigate on
+        // 2x VICTIM_DEFENCE (further reduced by the enemy's own ENEMY_PEN penetration) and the
+        // victim takes strictly LESS. The core assertion below is unchanged and passed both
+        // before and after the fix — it is about the PROTECTOR's chunk, which must stay pinned to
+        // the protector's own defence no matter what the victim's mitigation turns out to be.
         const unbuffedVictim = totalIncoming(build(false), 'attacker');
         const buffedVictim = totalIncoming(build(true), 'attacker');
-        expect(unbuffedVictim).toBeCloseTo(0.7 * ENEMY_ATTACK * mit(VICTIM_DEFENCE), 4);
-        expect(buffedVictim).toBeCloseTo(unbuffedVictim, 6);
+        expect(unbuffedVictim).toBeCloseTo(
+            0.7 * ENEMY_ATTACK * mit(VICTIM_DEFENCE * (1 - ENEMY_PEN / 100)),
+            4
+        );
+        expect(buffedVictim).toBeCloseTo(
+            0.7 * ENEMY_ATTACK * mit(2 * VICTIM_DEFENCE * (1 - ENEMY_PEN / 100)),
+            4
+        );
+        // Direction, stated outright: more defence must mean less damage taken.
+        expect(buffedVictim).toBeLessThan(unbuffedVictim);
 
-        // THE CORE ASSERTION. Pre-fix the funnel divided by mit(1000) (the buffed live stat) while
-        // the caller had mitigated with mit(500), inflating the chunk by ≈12.8%.
+        // THE CORE ASSERTION, and the one FINDING 4 (#358 review) restored the discriminating
+        // power of. Pre-fix the funnel divided by mit(1000) (the buffed live stat, ignoring pen)
+        // while the caller had mitigated with mit(250) (500 halved by 50% pen), inflating the
+        // chunk. Post-A2, with pen: 0 the caller and the funnel's `effectiveStatsOf(...).defence`
+        // re-derivation fallback would agree on the DEFENCE-BUFF term too — measured: deleting the
+        // `cause.targetMitigation ??` threading and falling back to re-derivation left this
+        // fixture passing anyway, because the fallback also folds a SCHEDULED self-buff. The
+        // non-zero ENEMY_PEN above restores real discriminating power: the fallback never folds
+        // penetration, threaded or not, so removing the threading reliably diverges again. The
+        // assertion itself is unchanged — `cause.targetMitigation` is threaded down rather than
+        // re-derived, so the protector's chunk tracks the PROTECTOR's defence either way.
         expect(totalIncoming(build(true), 'prot-1')).toBeCloseTo(expectedChunk, 4);
     });
 });

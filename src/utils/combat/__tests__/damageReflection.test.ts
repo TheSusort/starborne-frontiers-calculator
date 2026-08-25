@@ -9,7 +9,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 5000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(r).toBe(0);
     });
@@ -20,7 +20,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 0,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(r).toBe(0);
     });
@@ -31,7 +31,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 28056,
             affinityDamageModifier: -25,
             attackerDefenceReductionPct: calculateDamageReduction(3001),
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(r).toBeGreaterThan(1100);
         expect(r).toBeLessThan(1180); // ≈1141
@@ -43,7 +43,7 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 48318,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: calculateDamageReduction(4093),
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(r).toBeGreaterThan(2200);
         expect(r).toBeLessThan(2300); // ≈2252
@@ -55,14 +55,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         const advantage = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 25,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(advantage).toBeGreaterThan(neutral);
     });
@@ -73,14 +73,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         const disadvantage = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: -25,
             attackerDefenceReductionPct: 40,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         expect(disadvantage).toBeLessThan(neutral);
     });
@@ -91,14 +91,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 50,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         const noDefence = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         // No defence reduction should yield more damage than with 50% DR
         expect(noDefence).toBeGreaterThan(withDefence);
@@ -112,14 +112,14 @@ describe('reflectedDamageForHit', () => {
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            attackerIncomingReductionPct: 0,
+            reflectVictimIncomingReductionPct: 0,
         });
         const halved = reflectedDamageForHit({
             reflectPct: 10,
             netHpDamage: 10000,
             affinityDamageModifier: 0,
             attackerDefenceReductionPct: 0,
-            attackerIncomingReductionPct: 50,
+            reflectVictimIncomingReductionPct: 50,
         });
         expect(halved).toBeCloseTo(base / 2, 5);
     });

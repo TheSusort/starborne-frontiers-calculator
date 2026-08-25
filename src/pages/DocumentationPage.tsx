@@ -2670,9 +2670,243 @@ const DocumentationPage: React.FC = () => {
                                     <h4 className="font-semibold text-primary mb-2">
                                         Defense Calculator
                                     </h4>
+                                    <p className="text-theme-text mb-2">
+                                        Runs the real combat engine over each ship&apos;s own parsed
+                                        skills, rather than the older static formula alone. Each
+                                        card stacks three figures &mdash; rounds survived, damage
+                                        absorbed, and the old static estimate (now Theoretical EHP)
+                                        &mdash; so you can see where the measurement and the
+                                        estimate agree and where they don&apos;t.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Enemy Team, Team &amp; Rounds:
+                                        </span>{' '}
+                                        The page has three separate collapsible cards.{' '}
+                                        <span className="font-semibold">Enemy Team</span> is where
+                                        you build the group bombarding the ship &mdash; real ships
+                                        (their parsed skills fire for real) or quick manual
+                                        attack/defense lines.{' '}
+                                        <span className="font-semibold">Team</span> is its own card,
+                                        for healers and protectors on the ship&apos;s own side.{' '}
+                                        <span className="font-semibold">Combat Settings</span> holds
+                                        only the length of the fight (1&ndash;50 rounds) and the
+                                        buffs shared by every configuration. All three apply to
+                                        every ship you are comparing, so swapping in a different
+                                        build tests it against the exact same pressure.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Rounds survived</span> is the
+                                        first headline number: how long the ship lasted, and whether
+                                        it was destroyed or was still standing when the window ran
+                                        out.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Damage absorbed:</span>{' '}
+                                        everything thrown at the ship across the window, summed
+                                        across every channel &mdash; direct hits, damage over time,
+                                        bombs, detonations and reflected damage &mdash; measured
+                                        BEFORE the ship reduced any of it. Every reduction the ship
+                                        itself applies is deliberately left out: Defense mitigation,
+                                        its own Inc. Damage Down, squad-leader incoming protections,
+                                        gear-sourced damage reduction, the Vortex Veil
+                                        damage-over-time reduction, block procs, and the reduction
+                                        the ship applies to reflected damage coming back at it.
+                                        Shields and Barrier still count, because those pools eat
+                                        damage that arrived rather than reducing what was thrown
+                                        &mdash; and so does Shield Converter, which turns a hit into
+                                        shield rather than shrinking it. So a defensive ability on
+                                        the ship itself never lowers this number{' '}
+                                        <em>through its own damage reduction</em>, and it raises the
+                                        number whenever it buys the ship another round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Two things that ability will not do, though:
+                                        </span>{' '}
+                                        it will not raise the figure if the ship already survived
+                                        the whole window (nothing was killing it either way), nor if
+                                        the ship still dies to the very same incoming hit as before.
+                                        The figure grows one whole hit at a time &mdash; see below
+                                        for why that is not the same as one whole round.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Debuffing the attacker does not lower it either:
+                                        </span>{' '}
+                                        an <span className="font-semibold">Attack Down</span> or{' '}
+                                        <span className="font-semibold">Out. Damage Down</span> your
+                                        ship puts on the enemy shooting at it does not shrink what
+                                        that enemy throws, so the figure does not move. Measured on
+                                        a four-round window against one 10,000-attack enemy: 40,000
+                                        absorbed with no debuff, and still exactly 40,000 with the
+                                        enemy carrying your Attack Down at &minus;50% or even
+                                        &minus;90%. The same &minus;50% coming from the enemy&apos;s
+                                        OWN kit does halve it, to 20,000 &mdash; so the
+                                        attacker&apos;s own outgoing modifiers count, and yours on
+                                        it do not. Whether the engine should honour those is an open
+                                        question; today it does not, and this page says so rather
+                                        than promising otherwise.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        There is also an exception on the ALLY side rather than the
+                                        ship&apos;s own: damage an ally soaks through{' '}
+                                        <span className="font-semibold">Protection</span> is counted
+                                        against that ALLY, not against this ship, so adding a
+                                        protector lowers the figure shown here (a 30% redirect over
+                                        the same four rounds takes 40,000 down to 28,000). The slice
+                                        is not lost &mdash; it is simply booked on the ship that
+                                        actually ate it, which is only visible on that ship&apos;s
+                                        own card.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            The figure moves in whole HITS, not whole rounds.
+                                        </span>{' '}
+                                        It only grows when the ship survives one more incoming hit,
+                                        never by the sliver a reduction shaves off each one.{' '}
+                                        <span className="font-semibold">
+                                            Against a single attacker that is the same thing as a
+                                            round
+                                        </span>{' '}
+                                        &mdash; the round is one hit &mdash; so two such ships that
+                                        die on the same round do show the same figure even if one is
+                                        tankier.{' '}
+                                        <span className="font-semibold">
+                                            Against several attackers it is finer than a round.
+                                        </span>{' '}
+                                        A round is several hits, and a reduction can carry the ship
+                                        past the first attacker&apos;s hit so that it also eats the
+                                        second before dying; the fight ends with the turn that
+                                        destroys the ship, so the frailer one never sees that second
+                                        hit at all. Measured on a 100,000 HP ship at 5,000 Defense
+                                        under two 40,000-attack enemies: it dies on round 4 having
+                                        absorbed 280,000, and with Defense Up II it still dies on
+                                        round 4 but absorbs 320,000 &mdash; one extra hit, same
+                                        round of death. Deliver that identical pressure with one
+                                        80,000-attack enemy instead and both read 320,000. That is
+                                        why rounds survived sits above it: the two together tell you
+                                        whether a change bought a whole round or just one more hit.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            On a ship that SURVIVES, this number describes the
+                                            attackers, not the ship.
+                                        </span>{' '}
+                                        Nothing killed it, so the figure is simply everything the
+                                        enemy team managed to throw in the window &mdash; and two
+                                        survivors that both last the FULL window under the same
+                                        enemies report the same total however differently tanky they
+                                        are, <em>provided neither of them kills an attacker</em>.
+                                        Read as a comparison, that tie means nothing. Its own
+                                        OFFENCE is the one thing that does separate two survivors,
+                                        and it separates them DOWNWARDS &mdash; the harder-hitting
+                                        ship is thrown less. That happens two ways. It can end the
+                                        fight: wipe the enemy team on round 6 of a 20-round window
+                                        and the run stops there, so 14 rounds of fire are never
+                                        thrown. Or it can just thin the volley while still standing
+                                        for the whole window: measured against two 5,000-attack
+                                        enemies over six rounds, a ship with no attack absorbed
+                                        60,000, one that killed a single attacker part-way through
+                                        absorbed 40,000, and one that killed it sooner absorbed
+                                        30,000 &mdash; all three survived all six rounds. The fix
+                                        either way is to raise enemy attack, add attackers, or
+                                        extend the rounds until the ships actually die; only then
+                                        does the figure measure the ship. For a survivor it is a
+                                        lower bound on durability, never a limit.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Theoretical EHP</span> is the
+                                        third figure, and the old static one: an estimate computed
+                                        from hangar stats (HP and Defense only), not a measurement.
+                                        No enemy ever fires at it, and it cannot see shields,
+                                        Barrier or self-repair. A conditionally-gated buff it{' '}
+                                        <em>does</em> see &mdash; but not the gate: the buff is read
+                                        out of the skill text and counted as permanently active, so
+                                        the estimate is overstated rather than blind. Redeemer is
+                                        the concrete case: its first passive grants Defense Up II
+                                        only once its own HP drops below 60%, and this figure
+                                        applies that +30% Defense from the first moment. On a
+                                        100,000 HP ship at 5,000 Defense that is the difference
+                                        between 240,062 and 283,125. Theoretical EHP is shown so you
+                                        can compare, but where the two disagree the measured pair is
+                                        the one that saw the real fight.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">The breakdown</span> (to
+                                        hull, absorbed by shield, blocked by Barrier, converted to
+                                        shield) sits below the two measured figures &mdash; after
+                                        the &ldquo;Compared to best&rdquo; row and the survivor note
+                                        where those are shown &mdash; and above Theoretical EHP. It
+                                        describes what actually reached the ship <em>after</em>{' '}
+                                        everything it does to shrink an incoming hit &mdash;
+                                        Defense, its own Inc. Damage Down, gear reduction and block
+                                        procs, not Defense alone. It is labelled with its own
+                                        sub-total. Those rows are on a different axis from the
+                                        headline and are not meant to add up to it.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Editing a ship&apos;s skills:
+                                        </span>{' '}
+                                        each ship card has a <em>Show Advanced</em> section holding
+                                        the same skill editor the DPS and Healing calculators use,
+                                        so you can read the parsed abilities behind a ship&apos;s
+                                        active, charged and passive skills and add or change them by
+                                        hand. The Passive row appears whenever the ship <em>has</em>{' '}
+                                        passive skill text, even when the parser read no abilities
+                                        out of it &mdash; purely defensive and repair passives often
+                                        parse to nothing, and those are exactly the ones worth
+                                        entering manually on this page.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Which card gets highlighted:
+                                        </span>{' '}
+                                        the &ldquo;Best ship configuration&rdquo; badge now goes to
+                                        the highest{' '}
+                                        <span className="font-semibold">damage absorbed</span>, not
+                                        the highest Theoretical EHP &mdash; so for the same inputs a
+                                        different card can be marked best than before, and the
+                                        &ldquo;Compared to best&rdquo; percentage beside it is
+                                        measured on that same figure. When the measured figures tie
+                                        &mdash; which they do whenever there is no enemy pressure at
+                                        all, and whenever every configuration survives the whole
+                                        window &mdash; the badge falls back to{' '}
+                                        <span className="font-semibold">Theoretical EHP</span>, so
+                                        the zero-pressure page you first land on still ranks on the
+                                        static estimate, the way it always did. Rounds survived is
+                                        the last resort after that, not the first: damage absorbed
+                                        already grows with rounds, so rounds only ever speak when it
+                                        ties &mdash; and with no enemy configured they speak
+                                        backwards, since the fight ends when a ship destroys the
+                                        practice target, which makes the hardest hitter show the
+                                        FEWEST rounds.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            A Defense buff does not move the headline:
+                                        </span>{' '}
+                                        Defense mitigation is excluded from damage absorbed by
+                                        design, so raising Defense changes{' '}
+                                        <span className="font-semibold">Rounds survived</span> and
+                                        the &ldquo;Reached the ship&rdquo; sub-total (and
+                                        Theoretical EHP), and only moves damage absorbed insofar as
+                                        the extra hits it survives &mdash; a whole extra round, or
+                                        just one more attacker&apos;s hit on the round it dies
+                                        &mdash; bring more incoming fire with them.
+                                    </p>
                                     <p className="text-theme-text">
-                                        Analyze defensive capabilities including effective HP,
-                                        damage reduction, and survivability metrics.
+                                        <span className="text-primary">The ship fights back:</span>{' '}
+                                        the defender takes its own turns rather than standing still,
+                                        so its self-buffs and self-repair fire for real, and a
+                                        high-attack build that kills an attacker partway through the
+                                        fight lowers its own incoming pressure for every round after
+                                        that. That means a ship can out-measure another with a
+                                        stronger defensive kit on paper simply by hitting back
+                                        harder &mdash; an accepted, real consequence of measuring
+                                        survivability with the actual engine instead of a static
+                                        formula.
                                     </p>
                                 </div>
 

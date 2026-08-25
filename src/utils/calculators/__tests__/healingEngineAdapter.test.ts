@@ -437,6 +437,29 @@ describe('simulateHealing adapter', () => {
         expect(perfs).toHaveLength(2);
         expect(perfs[0].amount).toBe(1000);
     });
+
+    it('surfaces convertedToShield on the round row (0 without a converter)', () => {
+        idCounter = 0;
+        // No Shield Converter anywhere → the field must be PRESENT and 0, not absent.
+        // Task 2's breakdown reads it unconditionally; an absent field would read as NaN.
+        const result = simulateHealing(
+            BASE({
+                rounds: 1,
+                healer: { ...HEALER, hp: 10000, defence: 0 },
+                enemies: [
+                    {
+                        id: 'e1',
+                        stats: { attack: 2000, crit: 0, critDamage: 0, speed: 50 },
+                        chargeCount: 0,
+                        startCharged: false,
+                    },
+                ],
+            })
+        );
+        expect('convertedToShield' in result.rounds[0]).toBe(true);
+        expect(result.rounds[0].convertedToShield).toBe(0);
+        expect(result.rounds[0].incomingDamage).toBe(2000);
+    });
 });
 
 // ── Task 9: affinity threading — enemy matchup vs heal target ─────────────────

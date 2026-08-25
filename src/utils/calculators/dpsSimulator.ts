@@ -297,11 +297,28 @@ export interface RoundData {
      *  `incoming` = total damage taken, `shieldAbsorbed` = shield drained, `barrierAbsorbed`
      *  = barrier-blocked, `convertedToShield` = nullified by `Shield Converter` and turned into
      *  Shield instead. Set ONLY when at least one actor has a nonzero entry — absent on
-     *  rounds without per-victim intake (legacy RoundData shape preserved, goldens byte-identical). */
+     *  rounds without per-victim intake (legacy RoundData shape preserved, goldens byte-identical).
+     *
+     *  #358 ADDENDUM 2/3: `incomingRaw` is `incoming` BEFORE **every victim-side reduction** — the
+     *  raw damage THROWN at it. Not just defence: also the victim's own `Inc. Damage Down` family,
+     *  its pre-fight incoming baseline, `equipReductionPct`, `incomingDotReductionPct` and the
+     *  reflect channel's incoming-reduction. (Addendum 2 stripped only the defence factor; addendum
+     *  3 widened it to the full list, so "before the victim's defence-mitigation factor" now
+     *  under-states what this axis excludes.) Attacker-side modifiers and enemy-APPLIED
+     *  amplification (`Out. Damage Up`, `Exposed`) stay IN.
+     *  `incoming` is what got THROUGH, so it FALLS as a ship gets tankier; `incomingRaw` is
+     *  therefore the axis the "Damage absorbed" headline reads, and is `>= incoming` OVER A WINDOW
+     *  SUM — equal when the victim applies no reduction at all. NOT per round: the DoT transform
+     *  books the full raw amount at THROW time while the ticks that re-book the deferred slice carry
+     *  `perTickPreMitigation: 0` and contribute real post damage, so a single later round can read
+     *  lower on this axis than on `incoming`. It is NOT a term of the intake breakdown:
+     *  `shieldAbsorbed`/`barrierAbsorbed`/`convertedToShield` partition `incoming`, and mixing the
+     *  two axes breaks that identity. */
     perActorIncoming?: Record<
         string,
         {
             incoming: number;
+            incomingRaw: number;
             shieldAbsorbed: number;
             barrierAbsorbed: number;
             convertedToShield: number;

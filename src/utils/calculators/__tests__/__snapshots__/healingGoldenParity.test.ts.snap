@@ -15,6 +15,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 3000,
       "didCrit": false,
       "directHeal": 3000,
@@ -28,6 +29,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       ],
       "hotHeal": 0,
       "incomingDamage": 12000,
+      "incomingDamageRaw": 12000,
       "overheal": 3000,
       "perRecipient": {
         "attacker": {
@@ -56,6 +58,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 3000,
@@ -64,6 +67,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -92,6 +96,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9000,
       "didCrit": false,
       "directHeal": 3000,
@@ -100,6 +105,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -128,6 +134,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 3000,
@@ -136,6 +143,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -164,6 +172,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 15000,
       "didCrit": false,
       "directHeal": 3000,
@@ -172,6 +181,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -200,6 +210,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 18000,
       "didCrit": false,
       "directHeal": 3000,
@@ -208,6 +219,7 @@ exports[`healingGoldenParity > Cheat Death tank survives an otherwise-lethal spi
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -262,6 +274,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -270,6 +283,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -290,6 +304,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -298,6 +313,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -318,6 +334,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -326,6 +343,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -346,6 +364,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -354,6 +373,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -374,6 +394,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -382,6 +403,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -402,6 +424,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -410,6 +433,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -430,6 +454,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -438,6 +463,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -458,6 +484,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -466,6 +493,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -486,6 +514,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -494,6 +523,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -514,6 +544,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "chargeCount": 1,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -522,6 +553,7 @@ exports[`healingGoldenParity > Defiant shape (shield-on-Stasis via control-appli
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -562,6 +594,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       "chargeCount": 99,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 12000,
@@ -575,6 +608,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       ],
       "hotHeal": 0,
       "incomingDamage": 7000,
+      "incomingDamageRaw": 7000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -610,6 +644,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       "chargeCount": 99,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 0,
@@ -623,6 +658,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       ],
       "hotHeal": 0,
       "incomingDamage": 7000,
+      "incomingDamageRaw": 7000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -644,6 +680,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       "chargeCount": 99,
       "charges": 2,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 0,
@@ -652,6 +689,7 @@ exports[`healingGoldenParity > Hermes-shape cast-path Cheat Death (gated grant r
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 7000,
+      "incomingDamageRaw": 7000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -709,6 +747,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 500,
@@ -722,6 +761,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -750,6 +790,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4000,
       "didCrit": false,
       "directHeal": 500,
@@ -763,6 +804,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -791,6 +833,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 500,
@@ -804,6 +847,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -832,6 +876,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8000,
       "didCrit": false,
       "directHeal": 500,
@@ -845,6 +890,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -873,6 +919,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 500,
@@ -886,6 +933,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -914,6 +962,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 500,
@@ -927,6 +976,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -955,6 +1005,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 14000,
       "didCrit": false,
       "directHeal": 500,
@@ -968,6 +1019,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -996,6 +1048,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 16000,
       "didCrit": false,
       "directHeal": 500,
@@ -1009,6 +1062,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -1037,6 +1091,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 18000,
       "didCrit": false,
       "directHeal": 500,
@@ -1050,6 +1105,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -1078,6 +1134,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 20000,
       "didCrit": false,
       "directHeal": 500,
@@ -1091,6 +1148,7 @@ exports[`healingGoldenParity > HoT (Repair Over Time II buff + small heal) 1`] =
       ],
       "hotHeal": 1500,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -1140,6 +1198,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1417,
       "didCrit": false,
       "directHeal": 1417,
@@ -1148,6 +1207,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1176,6 +1236,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2833,
       "didCrit": false,
       "directHeal": 1417,
@@ -1184,6 +1245,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1212,6 +1274,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4250,
       "didCrit": false,
       "directHeal": 1417,
@@ -1220,6 +1283,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1248,6 +1312,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5666,
       "didCrit": false,
       "directHeal": 1417,
@@ -1256,6 +1321,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1284,6 +1350,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 7083,
       "didCrit": false,
       "directHeal": 1417,
@@ -1292,6 +1359,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1320,6 +1388,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8499,
       "didCrit": false,
       "directHeal": 1417,
@@ -1328,6 +1397,7 @@ exports[`healingGoldenParity > Magnolia shape (standing damage-leech all-scope: 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1417,
       "perRecipient": {
         "attacker": {
@@ -1382,6 +1452,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -1390,6 +1461,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -1413,6 +1485,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -1421,6 +1494,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -1444,6 +1518,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -1452,6 +1527,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -1475,6 +1551,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -1483,6 +1560,7 @@ exports[`healingGoldenParity > Quixilver as heal target (shield rider + punch-th
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -1527,6 +1605,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 292,
       "didCrit": false,
       "directHeal": 292,
@@ -1535,6 +1614,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1570,6 +1650,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 583,
       "didCrit": false,
       "directHeal": 292,
@@ -1578,6 +1659,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1613,6 +1695,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 875,
       "didCrit": false,
       "directHeal": 292,
@@ -1621,6 +1704,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1656,6 +1740,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1166,
       "didCrit": false,
       "directHeal": 292,
@@ -1664,6 +1749,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1699,6 +1785,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1458,
       "didCrit": false,
       "directHeal": 292,
@@ -1707,6 +1794,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1742,6 +1830,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1750,
       "didCrit": false,
       "directHeal": 292,
@@ -1750,6 +1839,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1785,6 +1875,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2041,
       "didCrit": false,
       "directHeal": 292,
@@ -1793,6 +1884,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1828,6 +1920,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2333,
       "didCrit": false,
       "directHeal": 292,
@@ -1836,6 +1929,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1871,6 +1965,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2624,
       "didCrit": false,
       "directHeal": 292,
@@ -1879,6 +1974,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1914,6 +2010,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2916,
       "didCrit": false,
       "directHeal": 292,
@@ -1922,6 +2019,7 @@ exports[`healingGoldenParity > Tithonus/Pallas shape (all-allies noCrit cast rid
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 146,
       "perRecipient": {
         "attacker": {
@@ -1988,6 +2086,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -1996,6 +2095,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -2016,6 +2116,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2024,6 +2125,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -2044,6 +2146,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 208,
       "didCrit": false,
       "directHeal": 208,
@@ -2052,6 +2155,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 208,
       "perRecipient": {
         "attacker": {
@@ -2080,6 +2184,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 208,
       "didCrit": false,
       "directHeal": 0,
@@ -2088,6 +2193,7 @@ exports[`healingGoldenParity > Valkyrie shape (accumulate-detonate burst → det
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perTargetDealt": {
         "attacker": {
@@ -2134,6 +2240,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2142,6 +2249,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2162,6 +2270,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2170,6 +2279,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2190,6 +2300,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2198,6 +2309,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2218,6 +2330,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2226,6 +2339,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2246,6 +2360,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2254,6 +2369,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2274,6 +2390,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2282,6 +2399,7 @@ exports[`healingGoldenParity > affinity ADVANTAGE enemy damage (4000 × 1.25 = 5
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 5000,
+      "incomingDamageRaw": 5000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2322,6 +2440,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2330,6 +2449,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2350,6 +2470,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2358,6 +2479,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2378,6 +2500,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2386,6 +2509,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2406,6 +2530,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2414,6 +2539,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2434,6 +2560,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2442,6 +2569,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2462,6 +2590,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -2470,6 +2599,7 @@ exports[`healingGoldenParity > affinity NEUTRAL enemy damage (4000 baseline) 1`]
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -2510,6 +2640,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2400,
       "didCrit": false,
       "directHeal": 2400,
@@ -2518,6 +2649,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 800,
       "perRecipient": {
         "attacker": {
@@ -2559,6 +2691,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4800,
       "didCrit": false,
       "directHeal": 2400,
@@ -2567,6 +2700,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 800,
       "perRecipient": {
         "attacker": {
@@ -2608,6 +2742,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 7200,
       "didCrit": false,
       "directHeal": 2400,
@@ -2616,6 +2751,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 800,
       "perRecipient": {
         "attacker": {
@@ -2657,6 +2793,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9600,
       "didCrit": false,
       "directHeal": 2400,
@@ -2665,6 +2802,7 @@ exports[`healingGoldenParity > all-allies reactive heal: the wounded NON-ANCHOR 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 800,
       "perRecipient": {
         "attacker": {
@@ -2741,6 +2879,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1600,
       "didCrit": false,
       "directHeal": 1600,
@@ -2749,6 +2888,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2778,6 +2918,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 3200,
       "didCrit": false,
       "directHeal": 1600,
@@ -2786,6 +2927,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2815,6 +2957,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4800,
       "didCrit": false,
       "directHeal": 1600,
@@ -2823,6 +2966,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2852,6 +2996,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6400,
       "didCrit": false,
       "directHeal": 1600,
@@ -2860,6 +3005,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2889,6 +3035,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8000,
       "didCrit": false,
       "directHeal": 1600,
@@ -2897,6 +3044,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2926,6 +3074,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9600,
       "didCrit": false,
       "directHeal": 1600,
@@ -2934,6 +3083,7 @@ exports[`healingGoldenParity > ally-damage repair routes to the damaged tank (pe
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perRecipient": {
         "tank": {
@@ -2990,6 +3140,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1000,
       "didCrit": false,
       "directHeal": 1000,
@@ -2998,6 +3149,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3021,6 +3173,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3029,6 +3182,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3052,6 +3206,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5000,
       "didCrit": false,
       "directHeal": 3000,
@@ -3060,6 +3215,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 3000,
       "perRecipient": {
         "attacker": {
@@ -3083,6 +3239,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3091,6 +3248,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3114,6 +3272,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 7000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3122,6 +3281,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3145,6 +3305,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 3000,
@@ -3153,6 +3314,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 3000,
       "perRecipient": {
         "attacker": {
@@ -3176,6 +3338,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 11000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3184,6 +3347,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3207,6 +3371,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 2,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3215,6 +3380,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3238,6 +3404,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 15000,
       "didCrit": false,
       "directHeal": 3000,
@@ -3246,6 +3413,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 3000,
       "perRecipient": {
         "attacker": {
@@ -3269,6 +3437,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "chargeCount": 2,
       "charges": 1,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 16000,
       "didCrit": false,
       "directHeal": 1000,
@@ -3277,6 +3446,7 @@ exports[`healingGoldenParity > charged heal cadence (active 10% + charged 30%) 1
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -3326,6 +3496,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3334,6 +3505,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -3354,6 +3526,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3362,6 +3535,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -3382,6 +3556,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3390,6 +3565,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -3410,6 +3586,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3418,6 +3595,7 @@ exports[`healingGoldenParity > counter-debuff routed to the attacking enemy (War
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -3458,6 +3636,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3466,6 +3645,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "round": 1,
       "shield": 0,
@@ -3481,6 +3661,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3489,6 +3670,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "round": 2,
       "shield": 0,
@@ -3504,6 +3686,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3512,6 +3695,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "round": 3,
       "shield": 0,
@@ -3527,6 +3711,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3535,6 +3720,7 @@ exports[`healingGoldenParity > enemy cleanse reaction (player damage proc + self
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "round": 4,
       "shield": 0,
@@ -3570,6 +3756,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3603,6 +3790,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 5000,
       "perRecipient": {
         "attacker": {
@@ -3631,6 +3819,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3664,6 +3853,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 12000,
+      "incomingDamageRaw": 12000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -3692,6 +3882,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 15000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3725,6 +3916,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 18000,
+      "incomingDamageRaw": 18000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -3753,6 +3945,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 20000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3786,6 +3979,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 24000,
+      "incomingDamageRaw": 24000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -3814,6 +4008,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 25000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3847,6 +4042,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 24000,
+      "incomingDamageRaw": 24000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -3875,6 +4071,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 30000,
       "didCrit": false,
       "directHeal": 5000,
@@ -3908,6 +4105,7 @@ exports[`healingGoldenParity > enemy full-kit (debuff + DoT + self-buff bombard 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 24000,
+      "incomingDamageRaw": 24000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -3962,6 +4160,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -3984,6 +4183,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4004,6 +4204,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 10000,
@@ -4026,6 +4227,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 4000,
       "perRecipient": {
         "attacker": {
@@ -4054,6 +4256,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 20000,
       "didCrit": false,
       "directHeal": 10000,
@@ -4076,6 +4279,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 4000,
       "perRecipient": {
         "attacker": {
@@ -4104,6 +4308,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 30000,
       "didCrit": false,
       "directHeal": 10000,
@@ -4126,6 +4331,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 4000,
       "perRecipient": {
         "attacker": {
@@ -4154,6 +4360,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 40000,
       "didCrit": false,
       "directHeal": 10000,
@@ -4176,6 +4383,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 4000,
       "perRecipient": {
         "attacker": {
@@ -4204,6 +4412,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 50000,
       "didCrit": false,
       "directHeal": 10000,
@@ -4226,6 +4435,7 @@ exports[`healingGoldenParity > enemy-buff condition fires (player heal gated on 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6000,
+      "incomingDamageRaw": 6000,
       "overheal": 4000,
       "perRecipient": {
         "attacker": {
@@ -4280,6 +4490,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4288,6 +4499,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4308,6 +4520,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4316,6 +4529,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4336,6 +4550,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4344,6 +4559,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4364,6 +4580,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 2000,
@@ -4372,6 +4589,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -4400,6 +4618,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4000,
       "didCrit": false,
       "directHeal": 2000,
@@ -4408,6 +4627,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -4436,6 +4656,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 2000,
@@ -4444,6 +4665,7 @@ exports[`healingGoldenParity > gated on-attacked heal crosses the threshold (Mak
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 2000,
+      "incomingDamageRaw": 2000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -4498,6 +4720,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 500,
       "didCrit": false,
       "directHeal": 500,
@@ -4506,6 +4729,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 500,
       "perRecipient": {
         "attacker": {
@@ -4534,6 +4758,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1000,
       "didCrit": false,
       "directHeal": 500,
@@ -4542,6 +4767,7 @@ exports[`healingGoldenParity > lethal pressure (target dies mid-run, flatline + 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -4597,6 +4823,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4605,6 +4832,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perRecipient": {
         "bystander": {
@@ -4634,6 +4862,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4642,6 +4871,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perRecipient": {
         "bystander": {
@@ -4671,6 +4901,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4679,6 +4910,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perRecipient": {
         "bystander": {
@@ -4708,6 +4940,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4716,6 +4949,7 @@ exports[`healingGoldenParity > non-anchor actor's own self reactive repair actua
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 0,
       "perRecipient": {
         "bystander": {
@@ -4772,6 +5006,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4780,6 +5015,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4800,6 +5036,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4808,6 +5045,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4828,6 +5066,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4836,6 +5075,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4856,6 +5096,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4864,6 +5105,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4884,6 +5126,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4892,6 +5135,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4912,6 +5156,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -4920,6 +5165,7 @@ exports[`healingGoldenParity > on-attacked reactive shield fires when the enemy 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -4960,6 +5206,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4550,
       "didCrit": false,
       "directHeal": 4550,
@@ -4968,6 +5215,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 6500,
+      "incomingDamageRaw": 6500,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5001,6 +5249,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9100,
       "didCrit": false,
       "directHeal": 4550,
@@ -5014,6 +5263,7 @@ exports[`healingGoldenParity > once-per-battle crossing (Reinforced granted ONCE
       ],
       "hotHeal": 0,
       "incomingDamage": 6500,
+      "incomingDamageRaw": 6500,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5068,6 +5318,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 15000,
       "didCrit": false,
       "directHeal": 15000,
@@ -5076,6 +5327,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 20000,
+      "incomingDamageRaw": 20000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5104,6 +5356,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 27000,
       "didCrit": false,
       "directHeal": 12000,
@@ -5112,6 +5365,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 16000,
+      "incomingDamageRaw": 16000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5140,6 +5394,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 42000,
       "didCrit": false,
       "directHeal": 15000,
@@ -5148,6 +5403,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 20000,
+      "incomingDamageRaw": 20000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5176,6 +5432,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 54000,
       "didCrit": false,
       "directHeal": 12000,
@@ -5184,6 +5441,7 @@ exports[`healingGoldenParity > per-hit crit-filter pair (Isha shape: non-crit 3%
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 16000,
+      "incomingDamageRaw": 16000,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -5238,6 +5496,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5246,6 +5505,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5269,6 +5529,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5277,6 +5538,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5300,6 +5562,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 3000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5308,6 +5571,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5331,6 +5595,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5339,6 +5604,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5362,6 +5628,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5370,6 +5637,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5393,6 +5661,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5401,6 +5670,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5424,6 +5694,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 7000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5432,6 +5703,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5455,6 +5727,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5463,6 +5736,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5486,6 +5760,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5494,6 +5769,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5517,6 +5793,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 1000,
@@ -5525,6 +5802,7 @@ exports[`healingGoldenParity > plain heal cadence (self-heal, no enemies) 1`] = 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5574,6 +5852,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5582,6 +5861,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 5000,
       "perRecipient": {
         "attacker": {
@@ -5610,6 +5890,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5618,6 +5899,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5646,6 +5928,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 15000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5654,6 +5937,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5682,6 +5966,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 20000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5690,6 +5975,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5718,6 +6004,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 25000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5726,6 +6013,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5754,6 +6042,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 30000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5762,6 +6051,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5790,6 +6080,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 35000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5798,6 +6089,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5826,6 +6118,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 40000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5834,6 +6127,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5862,6 +6156,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 45000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5870,6 +6165,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5898,6 +6194,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 50000,
       "didCrit": false,
       "directHeal": 5000,
@@ -5906,6 +6203,7 @@ exports[`healingGoldenParity > pressure (declining HP, partial-deficit effective
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 4000,
+      "incomingDamageRaw": 4000,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5960,6 +6258,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": true,
       "directHeal": 2000,
@@ -5968,6 +6267,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -5998,6 +6298,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": true,
       "directHeal": 4000,
@@ -6006,6 +6307,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -6036,6 +6338,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8000,
       "didCrit": false,
       "directHeal": 2000,
@@ -6044,6 +6347,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -6074,6 +6378,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 12000,
       "didCrit": true,
       "directHeal": 4000,
@@ -6082,6 +6387,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -6112,6 +6418,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 16000,
       "didCrit": false,
       "directHeal": 4000,
@@ -6120,6 +6427,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -6150,6 +6458,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 18000,
       "didCrit": false,
       "directHeal": 2000,
@@ -6158,6 +6467,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -6188,6 +6498,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 20000,
       "didCrit": true,
       "directHeal": 2000,
@@ -6196,6 +6507,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -6226,6 +6538,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 22000,
       "didCrit": false,
       "directHeal": 2000,
@@ -6234,6 +6547,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -6264,6 +6578,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 26000,
       "didCrit": false,
       "directHeal": 4000,
@@ -6272,6 +6587,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 2000,
       "perRecipient": {
         "attacker": {
@@ -6302,6 +6618,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 28000,
       "didCrit": false,
       "directHeal": 2000,
@@ -6310,6 +6627,7 @@ exports[`healingGoldenParity > reactive cleanse on ally crit-repair (crit 50) 1`
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -6371,6 +6689,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6379,6 +6698,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6400,6 +6720,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6408,6 +6729,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6429,6 +6751,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6437,6 +6760,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6458,6 +6782,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6466,6 +6791,7 @@ exports[`healingGoldenParity > role-filtered RoT grant DORMANT (tank role DEFEND
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6508,6 +6834,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6516,6 +6843,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6537,6 +6865,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6550,6 +6879,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 1500,
       "perRecipient": {
         "tank": {
@@ -6579,6 +6909,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6592,6 +6923,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 1500,
       "perRecipient": {
         "tank": {
@@ -6621,6 +6953,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6634,6 +6967,7 @@ exports[`healingGoldenParity > role-filtered RoT grant LIVE (tank role ATTACKER 
       ],
       "hotHeal": 0,
       "incomingDamage": 1000,
+      "incomingDamageRaw": 1000,
       "overheal": 1500,
       "perRecipient": {
         "tank": {
@@ -6690,6 +7024,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6698,6 +7033,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6718,6 +7054,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6726,6 +7063,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6746,6 +7084,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6754,6 +7093,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6774,6 +7114,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6782,6 +7123,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6802,6 +7144,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6810,6 +7153,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6830,6 +7174,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1000,
       "didCrit": false,
       "directHeal": 1000,
@@ -6838,6 +7183,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -6866,6 +7212,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 1000,
@@ -6874,6 +7221,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -6902,6 +7250,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 3000,
       "didCrit": false,
       "directHeal": 1000,
@@ -6910,6 +7259,7 @@ exports[`healingGoldenParity > selfHpPct gate activates mid-fight (heal fires on
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 1500,
+      "incomingDamageRaw": 1500,
       "overheal": 0,
       "perRecipient": {
         "attacker": {
@@ -6964,6 +7314,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -6972,6 +7323,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -6992,6 +7344,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7000,6 +7353,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7020,6 +7374,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7028,6 +7383,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 12000,
+      "incomingDamageRaw": 12000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7048,6 +7404,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7056,6 +7413,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7076,6 +7434,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7084,6 +7443,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7104,6 +7464,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7112,6 +7473,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 12000,
+      "incomingDamageRaw": 12000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7132,6 +7494,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7140,6 +7503,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7160,6 +7524,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7168,6 +7533,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 3000,
+      "incomingDamageRaw": 3000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7188,6 +7554,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 0,
       "didCrit": false,
       "directHeal": 0,
@@ -7196,6 +7563,7 @@ exports[`healingGoldenParity > spike (charged-nuke enemy vs healer shield) 1`] =
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 12000,
+      "incomingDamageRaw": 12000,
       "overheal": 0,
       "perTargetDealt": {
         "e1": {
@@ -7236,6 +7604,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 1000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7244,6 +7613,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7274,6 +7644,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 2000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7282,6 +7653,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7312,6 +7684,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 3000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7320,6 +7693,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7350,6 +7724,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 4000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7358,6 +7733,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7388,6 +7764,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 5000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7396,6 +7773,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7426,6 +7804,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 6000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7434,6 +7813,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7464,6 +7844,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 7000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7472,6 +7853,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7502,6 +7884,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 8000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7510,6 +7893,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7540,6 +7924,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 9000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7548,6 +7933,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {
@@ -7578,6 +7964,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "chargeCount": 0,
       "charges": 0,
       "cleanseCount": 0,
+      "convertedToShield": 0,
       "cumulativeHealing": 10000,
       "didCrit": false,
       "directHeal": 1000,
@@ -7586,6 +7973,7 @@ exports[`healingGoldenParity > team healing (walked team self-healer) 1`] = `
       "healTargetBuffs": [],
       "hotHeal": 0,
       "incomingDamage": 0,
+      "incomingDamageRaw": 0,
       "overheal": 1000,
       "perRecipient": {
         "attacker": {

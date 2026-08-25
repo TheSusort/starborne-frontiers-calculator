@@ -3,7 +3,7 @@ import type { ParsedPattern, ParsedTarget } from '../targetingParser';
 import { resolveCells, type CellRole } from '../targeting/resolvePattern';
 import { resolvePositionalTarget, type ActorTargetingStatus } from './positionalBinding';
 import {
-    victimHitDamage,
+    victimHitDamageParts,
     victimDefenceMitigation,
     type AttackerDamageScalars,
     type VictimDefenseProfile,
@@ -258,7 +258,14 @@ export function applyPositionalDamage(args: {
          * reads a buff-folded defence the caller never used. Trailing and optional so existing
          * stub callers compile unchanged.
          */
-        targetMitigation?: number
+        targetMitigation?: number,
+        /**
+         * #358 ADDENDUM 2: the PRE-defence-mitigation amount this hit threw at the victim — the
+         * same computation as `damage` with the defence term removed. Recorded by the funnel as
+         * the victim's RAW intake so "damage absorbed" counts damage thrown, not damage that got
+         * through. Trailing and optional so existing stub callers compile unchanged.
+         */
+        preMitigation?: number
     ) => VictimDamageOutcome;
     emitHit?: (
         victim: CombatActor,
@@ -280,16 +287,23 @@ export function applyPositionalDamage(args: {
         subAttackIndex?: number
     ) => void;
     /**
-     * OPTIONAL per-sub-hit victim-side incoming %-reduction hook (D-PR3). Invoked per footprint
-     * victim with that victim's per-hit crit outcome; the returned percentage points are folded
-     * additively into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical
-     * (inert for victims without an incoming-reduction ability).
+     * OPTIONAL per-sub-hit incoming %-reduction hook (D-PR3). Invoked per footprint victim with
+     * that victim's per-hit crit outcome; the returned percentage points are folded additively
+     * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical (inert
+     * for victims without an incoming-reduction ability).
+     *
+     * #358 ADDENDUM 3: the channel is MIXED, so the hook may return the SPLIT instead of a single
+     * number. A bare `number` keeps its original meaning — entirely VICTIM-side, which is what
+     * every non-crit hit and every direct-call test supplies. The object form separates out the
+     * ATTACKER-side half (`attackerSidePct`, today the attacker's own squad-leader
+     * `outgoingCritDamage` penalty), which shrinks the attack AS THROWN and must therefore stay on
+     * BOTH damage axes rather than being stripped from the pre-mitigation one as collateral.
      */
     incomingReductionFor?: (
         victim: CombatActor,
         didCrit: boolean,
         subAttackIndex?: number
-    ) => number;
+    ) => number | { victimSidePct: number; attackerSidePct: number };
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (D-PR4 — Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
@@ -411,25 +425,40 @@ export function applyPositionalDamage(args: {
                 subDidCrit = true;
                 subCritVictimIds.push(victim.id);
             }
-            const equipReductionPct = incomingReductionFor?.(victim, didCrit, h) ?? 0;
+            // #358 ADDENDUM 3: unpack the (possibly split) reduction. A bare number is 100%
+            // victim-side — the pre-split contract, preserved for every direct-call site.
+            const reductionParts = incomingReductionFor?.(victim, didCrit, h) ?? 0;
+            const equipReductionPct =
+                typeof reductionParts === 'number' ? reductionParts : reductionParts.victimSidePct;
+            const attackerSideReductionPct =
+                typeof reductionParts === 'number' ? 0 : reductionParts.attackerSidePct;
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const defenseProfile = defenseProfileOf(victim);
-            const dmgBase = victimHitDamage(
+            // ONE call, both figures. This ran `victimHitDamageParts` TWICE (once through
+            // `victimHitDamage`, once through `victimHitDamagePreMitigation`) — the same
+            // assembly, the same profile read, the same affinity resolve, on a path measured at
+            // 182,548 calls. The three engine call sites already destructure the parts helper;
+            // this one now matches them, and the two figures are provably the same evaluation
+            // rather than two that merely ought to agree.
+            const { damage: dmgBase, preMitigation: rawBase } = victimHitDamageParts(
                 scalars,
                 defenseProfile,
                 didCrit,
                 roleScale,
-                equipReductionPct
+                equipReductionPct,
+                attackerSideReductionPct
             );
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
+            const rawDmg = ampPct !== 0 ? rawBase * (1 + ampPct / 100) : rawBase;
             const outcome = applyToVictim(
                 victim,
                 dmg,
                 isAnchor,
                 h,
-                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct)
+                victimDefenceMitigation(defenseProfile, scalars.defensePenetrationPct),
+                rawDmg
             );
             // Credit the victim the intake the funnel actually RECORDED for it, not the hit we
             // computed. The two differ whenever the funnel altered the hit before recording it: a

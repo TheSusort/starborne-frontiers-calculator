@@ -49,6 +49,8 @@ const makeResult = (
             incomingDamage: 0,
             shieldAbsorbed: 0,
             barrierAbsorbed: 0,
+            convertedToShield: 0,
+            incomingDamageRaw: 0,
             targetHpPct: 100,
             targetShieldPool: 0,
             totalRoundHealing: 5000,
