@@ -2,6 +2,38 @@
 
 **Issue:** #358 · **Date:** 2026-08-24 · **Status:** approved, ready for planning
 
+---
+
+> ## ⚠️ READ THIS BEFORE §3 — THE FINAL CONTRACT IS IN ADDENDUM 3, NOT IN §3
+>
+> **The shipped metric is `damageAbsorbed` — "Damage absorbed": everything thrown at the ship,
+> summed across every channel, measured BEFORE the defender reduces any of it.** Reported beside
+> **Rounds survived** and **Theoretical EHP**. The exact definition, in full, is
+> [**ADDENDUM 3 §C2**](#c2-the-exact-definition-of-damage-absorbed), narrowed by
+> [**ADDENDUM 4**](#addendum-4-2026-08-25-the-protection-redirect-is-a-reassignment-not-a-reduction--locked)
+> for the Protection redirect.
+>
+> **§3 below is SUPERSEDED and its contract — `Measured EHP = Σ incomingDamage` — is RETIRED.**
+> The name "Measured EHP" is retired too (ADDENDUM 3 §C1). §3 is kept verbatim, *not* rewritten,
+> because the sequence of corrections is the record of how the definition evolved and of what each
+> intermediate version got wrong. Do not implement from it. Reading order:
+>
+> | Section | Status |
+> | --- | --- |
+> | §2 "Decisions taken" — the *Headline metric* row | **SUPERSEDED** by ADDENDUM 3 §C1 |
+> | §3, §3.1, §3.2, §3.3 "The measurement rule" | **SUPERSEDED** by ADDENDUM 2 §B2 → ADDENDUM 3 §C2 |
+> | ADDENDUM 1 (self-sourced defence buffs) | live |
+> | ADDENDUM 2 (raw axis) | axis correct, **name superseded** by ADDENDUM 3 |
+> | ADDENDUM 3 (Rounds survived + Damage absorbed + Theoretical EHP) | **LIVE — this is the contract** |
+> | ADDENDUM 4 (Protection redirect is a reassignment) | **LIVE — LOCKED** |
+>
+> One further correction, post-implementation and NOT in any addendum: §3's descendants in the docs
+> and changelog claimed *"two ships that die on the same round report the same figure"*. That is
+> true only when a round is ONE hit. See the plan's Finding-2 banner and the "SAME ROUND, DIFFERENT
+> FIGURE" arm in `defenseSurvivabilitySim.test.ts`.
+
+---
+
 ## 1. Why this exists
 
 The Defense calculator is the last calculator that does not read a ship's parsed skills through
@@ -37,10 +69,14 @@ genuine gaps are narrower and different from the ones #358 names:
 
 ## 2. Decisions taken
 
+> **⚠️ The *Headline metric* row below is SUPERSEDED BY ADDENDUM 3 §C1.** The shipped headline is
+> three numbers — **Rounds survived**, **Damage absorbed** (the raw axis), **Theoretical EHP** — and
+> the name "Measured EHP" is retired. Every other row in this table is still live.
+
 | Question | Decision |
 | --- | --- |
 | Scope | Engine-backed survivability calculator, not a skill-aware static formula |
-| Headline metric | **Measured EHP** — damage absorbed before death (or across the window) |
+| Headline metric | ~~**Measured EHP** — damage absorbed before death (or across the window)~~ **SUPERSEDED → ADDENDUM 3 §C1** |
 | Ally support | **Optional shared team**, reusing the healing calculator's `TeamPanel` |
 | Ship survives the window | Report absorbed total + an explicit `survived` flag (honest lower bound) |
 | Architecture | Thin defense-named boundary over `simulateHealing` — no second engine adapter |
@@ -65,6 +101,21 @@ defender that kills attackers reduces its own incoming pressure (real game behav
 is consequently *not* a pure-defence number, and that is deliberate.
 
 ## 3. The measurement rule
+
+> # ⚠️ SUPERSEDED BY ADDENDUM 2 §B2, THEN BY ADDENDUM 3 §C2 — DO NOT IMPLEMENT FROM §3
+>
+> **`Measured EHP = Σ incomingDamage` is the RETIRED contract, and the name "Measured EHP" is
+> retired with it.** `incomingDamage` is gross with respect to the shield / Barrier / conversion
+> pools but **POST-defence-mitigation** and post every other victim-side reduction, so this formula
+> measured *damage that got through* rather than *damage thrown* — which inverted the ranking for
+> surviving ships. ADDENDUM 2 moved the axis to raw; ADDENDUM 3 renamed the metric **Damage
+> absorbed** and stated the channel list in full; ADDENDUM 4 locked the Protection carve-out.
+>
+> **What survives from §3 and is still live:** the double-count trap (§3.1) and the intake-breakdown
+> identity (§3.2) still govern `breakdown.gross` / `toHp` / `toShield` / `toBarrier` /
+> `toConversion`, which deliberately stayed on the POST-mitigation axis (ADDENDUM 2 §B3). The
+> survivors policy (§3.3) is live. Only the *headline formula* is retired. §3 is kept verbatim as
+> the record of the error, not as instructions.
 
 **Measured EHP = Σ `incomingDamage` over elapsed rounds. Nothing is added to it.**
 
@@ -110,6 +161,19 @@ absorbed total with `survived: true`, and the UI must render survivors distinctl
 never read as a death threshold. Two survivors are still separated by how much they soaked.
 
 ## 4. Modules
+
+> **⚠️ NAMING SUPERSEDED BY ADDENDUM 3 §C1 — applies to §4, §5, §6 and §7 below.** Everywhere these
+> sections say `measuredEHP` / "measured EHP", the shipped field is **`damageAbsorbed`** ("Damage
+> absorbed"), reported alongside `elapsedRounds` / `survived` ("Rounds survived") and the static
+> `effectiveHP` ("Theoretical EHP"). The *module layout, data flow and test obligations in these
+> sections are still live* — only the metric's name and axis moved. Two consequences worth naming
+> because they are not mere renames:
+>
+> - §4's `DefenseSurvivabilityResult` gains `elapsedRounds` and the raw-axis `damageAbsorbed`;
+>   `breakdown.gross` keeps the old post-mitigation quantity (ADDENDUM 2 §B3).
+> - §6's test list is a FLOOR, not the final list. ADDENDUM 3 §C5 adds a per-channel direction test
+>   and a per-channel presence test; ADDENDUM 4 §D3 adds the Protection pin. See
+>   `defenseSurvivabilitySim.test.ts` for what actually shipped.
 
 - **`src/types/calculator.ts`** — `DefenseShipConfig` gains `shipSkills` plus the stats the engine
   needs for the ship to take its own turns: `attack`, `crit`, `critDamage`, `speed`, `hacking`,

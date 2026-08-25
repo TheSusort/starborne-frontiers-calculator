@@ -2724,10 +2724,11 @@ const DocumentationPage: React.FC = () => {
                                         <span className="text-primary">
                                             Two things that ability will not do, though:
                                         </span>{' '}
-                                        it will not raise the figure at all if the ship still dies
-                                        on the same round (the figure moves in whole rounds &mdash;
-                                        see below), nor if the ship already survived the whole
-                                        window (nothing was killing it either way).
+                                        it will not raise the figure if the ship already survived
+                                        the whole window (nothing was killing it either way), nor if
+                                        the ship still dies to the very same incoming hit as before.
+                                        The figure grows one whole hit at a time &mdash; see below
+                                        for why that is not the same as one whole round.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2759,11 +2760,33 @@ const DocumentationPage: React.FC = () => {
                                         own card.
                                     </p>
                                     <p className="text-theme-text mb-2">
-                                        Damage absorbed only grows when the ship lives another
-                                        round, so it moves in whole rounds: two ships that die on
-                                        the same round show the same figure even if one is slightly
-                                        tankier. That is why rounds survived sits above it &mdash;
-                                        it is part of reading the number, not extra detail.
+                                        <span className="text-primary">
+                                            The figure moves in whole HITS, not whole rounds.
+                                        </span>{' '}
+                                        It only grows when the ship survives one more incoming hit,
+                                        never by the sliver a reduction shaves off each one.{' '}
+                                        <span className="font-semibold">
+                                            Against a single attacker that is the same thing as a
+                                            round
+                                        </span>{' '}
+                                        &mdash; the round is one hit &mdash; so two such ships that
+                                        die on the same round do show the same figure even if one is
+                                        tankier.{' '}
+                                        <span className="font-semibold">
+                                            Against several attackers it is finer than a round.
+                                        </span>{' '}
+                                        A round is several hits, and a reduction can carry the ship
+                                        past the first attacker&apos;s hit so that it also eats the
+                                        second before dying; the fight ends with the turn that
+                                        destroys the ship, so the frailer one never sees that second
+                                        hit at all. Measured on a 100,000 HP ship at 5,000 Defense
+                                        under two 40,000-attack enemies: it dies on round 4 having
+                                        absorbed 280,000, and with Defense Up II it still dies on
+                                        round 4 but absorbs 320,000 &mdash; one extra hit, same
+                                        round of death. Deliver that identical pressure with one
+                                        80,000-attack enemy instead and both read 320,000. That is
+                                        why rounds survived sits above it: the two together tell you
+                                        whether a change bought a whole round or just one more hit.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">
@@ -2797,9 +2820,17 @@ const DocumentationPage: React.FC = () => {
                                         third figure, and the old static one: an estimate computed
                                         from hangar stats (HP and Defense only), not a measurement.
                                         No enemy ever fires at it, and it cannot see shields,
-                                        Barrier, self-repair or conditionally-gated buffs. It is
-                                        shown so you can compare, but where the two disagree the
-                                        measured pair is the one that saw the real fight.
+                                        Barrier or self-repair. A conditionally-gated buff it{' '}
+                                        <em>does</em> see &mdash; but not the gate: the buff is read
+                                        out of the skill text and counted as permanently active, so
+                                        the estimate is overstated rather than blind. Redeemer is
+                                        the concrete case: its first passive grants Defense Up II
+                                        only once its own HP drops below 60%, and this figure
+                                        applies that +30% Defense from the first moment. On a
+                                        100,000 HP ship at 5,000 Defense that is the difference
+                                        between 240,062 and 283,125. Theoretical EHP is shown so you
+                                        can compare, but where the two disagree the measured pair is
+                                        the one that saw the real fight.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> (to
@@ -2861,7 +2892,9 @@ const DocumentationPage: React.FC = () => {
                                         <span className="font-semibold">Rounds survived</span> and
                                         the &ldquo;Reached the ship&rdquo; sub-total (and
                                         Theoretical EHP), and only moves damage absorbed insofar as
-                                        the extra rounds bring more incoming fire with them.
+                                        the extra hits it survives &mdash; a whole extra round, or
+                                        just one more attacker&apos;s hit on the round it dies
+                                        &mdash; bring more incoming fire with them.
                                     </p>
                                     <p className="text-theme-text">
                                         <span className="text-primary">The ship fights back:</span>{' '}

@@ -2,9 +2,62 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the Defense calculator's 22-line static formula with an engine-backed
+---
+
+> ## ⚠️ THIS PLAN'S METRIC IS RETIRED — READ THE FINAL CONTRACT FIRST
+>
+> **Status: IMPLEMENTED AND SUPERSEDED.** This plan was written against `Measured EHP = Σ
+> incomingDamage`. That contract was retired *during* implementation and this document was never
+> rewritten, deliberately: it is kept as the record of what was planned, so the corrections that
+> followed stay legible. **Do not read any section below as the current contract.**
+>
+> **What actually shipped** (authority: the spec's
+> `docs/superpowers/specs/2026-08-24-defense-calculator-ability-model-design.md`, **ADDENDUM 3 §C2**,
+> narrowed by **ADDENDUM 4** — the addenda supersede the spec's own §3):
+>
+> | Shipped | Meaning |
+> | --- | --- |
+> | **Rounds survived** (`elapsedRounds` + `survived`) | rounds the ship was in the fight |
+> | **Damage absorbed** (`damageAbsorbed`) | everything thrown at the ship, all channels, measured BEFORE the defender reduces any of it — the **raw** axis |
+> | **Theoretical EHP** (`effectiveHP`) | the old static `computeBuffedStats` estimate, relabelled |
+>
+> **The name "Measured EHP" is RETIRED** (ADDENDUM 3 §C1) and the field `measuredEHP` does not exist
+> in `src/`. `breakdown.gross` keeps the old post-mitigation quantity on purpose, so it is NOT the
+> headline (ADDENDUM 2 §B3).
+>
+> **Sections superseded, each also banner-marked in place:**
+>
+> | Section | What is stale |
+> | --- | --- |
+> | **Goal** (below) | names Measured EHP as the deliverable |
+> | **Global Constraints** bullet 1 | states the retired formula as a binding constraint |
+> | **File Structure** table, Task 2, Task 5 Step 6, Task 6 | `measuredEHP` field name, "Measured-EHP results block" |
+> | **Task 7** Steps 2–3 | the docs/changelog copy they specify was rewritten twice after |
+> | **Self-Review** → *Type consistency* | lists `measuredEHP` as a shipped field |
+>
+> **Two further corrections that are in NO addendum** — post-implementation review findings:
+>
+> 1. **FINDING 2 — "two ships that die on the same round report the same figure" is FALSE.** It holds
+>    only when a round is ONE hit. **Measured** (hp 100,000, defence 5,000, two 40,000-attack
+>    attackers at speeds 60/50 — the same 80,000 raw per round a single 80,000 attacker throws): the
+>    plain ship dies on round 4 having absorbed **280,000**; the same ship carrying `Defense Up II`
+>    still dies on round 4 and absorbs **320,000**. The reduction carried it past attacker 1's hit so
+>    it also ate attacker 2's, and the fight ends with the turn that destroys the ship (#329), so the
+>    plainer ship never saw that second hit. The figure's resolution is **one HIT, not one round**.
+>    Pinned as the "SAME ROUND, DIFFERENT FIGURE" arm in `defenseSurvivabilitySim.test.ts`.
+> 2. **FINDING 3 — Theoretical EHP does not "ignore" conditional buffs** (see the Task 6 / Task 7
+>    banners). It *feeds them in without their gate*. Tracked as **#391**.
+
+---
+
+**Goal:** ~~Replace the Defense calculator's 22-line static formula with an engine-backed
 survivability run that reports **Measured EHP** — the damage a ship actually absorbed before dying —
-driven by the ship's parsed skills through the ability model.
+driven by the ship's parsed skills through the ability model.~~
+
+> **SUPERSEDED BY ADDENDUM 3 §C1.** The engine-backed run and the ability-model wiring shipped as
+> planned; the *metric* did not. Substitute: "…reports **Rounds survived** and **Damage absorbed** —
+> everything thrown at the ship before the defender reduces it — beside the old static estimate,
+> relabelled **Theoretical EHP**."
 
 **Architecture:** A thin defense-named boundary (`defenseSurvivabilitySim.ts`) maps a defense input
 onto `simulateHealing` with `healTargetId: 'healer'`, so the engine's focus actor *is* the bombarded
@@ -18,9 +71,15 @@ policy, so both are unit-testable without rendering a page.
 
 ## Global Constraints
 
-- **Measured EHP = Σ `incomingDamage` over elapsed rounds. Nothing is added to it.**
-  `incomingDamage` is GROSS — it already contains everything the shield pool and Barrier soaked.
-  `incoming + shieldAbsorbed + barrierAbsorbed` double-counts every point of mitigation.
+- ~~**Measured EHP = Σ `incomingDamage` over elapsed rounds. Nothing is added to it.**~~
+  **SUPERSEDED BY ADDENDUM 2 §B2 → ADDENDUM 3 §C2.** `incomingDamage` is gross only with respect to
+  the shield / Barrier / conversion pools; it is POST defence mitigation and post every other
+  victim-side reduction, so this formula measured *damage that got through* and inverted the ranking
+  for survivors. **The headline is `damageAbsorbed`, on the RAW axis.** What is still binding from
+  this bullet, and applies to `breakdown.gross` rather than to the headline:
+  `incomingDamage` is GROSS with respect to the pools — it already contains everything the shield
+  pool and Barrier soaked, so `incoming + shieldAbsorbed + barrierAbsorbed` double-counts every
+  point of mitigation. The double-count tripwire test that guards this is still live and required.
 - **The golden suite stays byte-identical.** Any golden churn is a STOP — report it, never run
   `vitest -u` / `vitest --update`.
 - **Never assert the intake identity against its own derivation.** The HP term is *defined* as
@@ -188,6 +247,14 @@ git commit -m "feat(sim): surface convertedToShield on the healing round row (#3
 
 ### Task 2: The `defenseSurvivabilitySim` boundary
 
+> **⚠️ INTERFACE SUPERSEDED BY ADDENDUM 2 §B2 → ADDENDUM 3 §C1.** Everything about the boundary's
+> *shape* below shipped as planned; its **headline field did not**. `DefenseSurvivabilityResult` has
+> **no `measuredEHP`** — read `damageAbsorbed` (raw axis) instead, with `incomingDamageRaw` added to
+> `DefenseSurvivabilityRound`. `breakdown.gross` is the old post-mitigation quantity and is NOT the
+> headline. Every `expect(result.measuredEHP)` in the test listings below is a rename away from what
+> shipped, and several of the *values* moved too (the addendum-2 block in the real test file
+> re-measured them). The real source of truth is `src/utils/calculators/defenseSurvivabilitySim.ts`.
+
 **Files:**
 - Create: `src/utils/calculators/defenseSurvivabilitySim.ts`
 - Test: `src/utils/calculators/__tests__/defenseSurvivabilitySim.test.ts`
@@ -201,7 +268,8 @@ git commit -m "feat(sim): surface convertedToShield on the healing round row (#3
   - `interface DefenseSimulationInput` — `{ defender, shipSkills, selfBuffs, chargeCount, startCharged, affinity?, role?, faction?, position?, targeting?, teamActors?, enemies, rounds, bus? }`
   - `interface DefenseIntakeBreakdown` — `{ toHp, toShield, toBarrier, toConversion, gross }`
   - `interface DefenseSurvivabilityRound` — `{ round, incomingDamage, shieldAbsorbed, barrierAbsorbed, convertedToShield, hpPct, shieldPool }`
-  - `interface DefenseSurvivabilityResult` — `{ measuredEHP, survived, destroyedRound?, elapsedRounds, breakdown, rounds }`
+  - `interface DefenseSurvivabilityResult` — ~~`{ measuredEHP, … }`~~ **SHIPPED AS**
+    `{ damageAbsorbed, survived, destroyedRound?, elapsedRounds, breakdown, rounds }`
   - `function simulateDefenseSurvivability(input: DefenseSimulationInput): DefenseSurvivabilityResult`
 
 Task 5 and Task 6 consume `simulateDefenseSurvivability` and `DefenseSurvivabilityResult`.
@@ -1112,6 +1180,11 @@ own global buff picker) and `enemyAffinity` from the first enemy's affinity, def
 
 - [ ] **Step 6: Switch `isBest` to measured EHP**
 
+> **⚠️ SUPERSEDED.** Read `damageAbsorbed`, not `measuredEHP`. And the single-key reduce described
+> here is not what shipped: `isBest` became an ordered **ranking ladder** (damage absorbed →
+> Theoretical EHP → rounds survived) so that the zero-pressure default page still marks a best. See
+> `rankKeyOf` in `DefenseCalculatorPage.tsx`.
+
 Replace the `bestShip` / `bestEffectiveHP` reducers with ones reading
 `simResults.get(c.id)?.measuredEHP ?? 0`. Keep `mergedBuffTotals` and `computeBuffedStats` — Task 6
 still displays the static baseline, and `DamageReductionChart` / `SecurityEHPChart` still consume
@@ -1128,6 +1201,15 @@ git commit -m "feat(calculators): run the survivability sim on the defense page 
 ---
 
 ### Task 6: Measured-EHP results block
+
+> **⚠️ SUPERSEDED BY ADDENDUM 3 §C1 — the block that shipped renders THREE figures, not one.**
+> "Rounds survived", then "Damage absorbed" (`result.damageAbsorbed`), then the static estimate
+> labelled **"Theoretical EHP"**. No "Measured EHP" label exists in `src/`; the test assertions
+> below (`getByText(/Measured EHP/i)`) do not match the shipped card.
+>
+> **The Theoretical EHP caption below is also factually wrong in one respect** — see the Task 7
+> banner: the static estimate does not *ignore* conditional buffs, it applies them **without their
+> gate** (**#391**).
 
 **Files:**
 - Modify: `src/components/calculator/DefenseShipCard.tsx`
@@ -1341,6 +1423,13 @@ git commit -m "feat(calculators): report measured EHP with an intake breakdown (
 
 ### Task 7: Documentation and changelog
 
+> **⚠️ THE COPY SPECIFIED IN STEPS 2 AND 3 IS SUPERSEDED — do not restore it.** It names the retired
+> "Measured EHP" and predates ADDENDUM 3 (three headline numbers), ADDENDUM 4 (the Protection
+> carve-out) and both post-implementation corrections. The shipped copy lives in
+> `src/pages/DocumentationPage.tsx` and `UNRELEASED_CHANGES` in `src/constants/changelog.ts`; read
+> those, not this. Two specific claims specified here were **measured false** and are corrected
+> below in place, marked `CORRECTION`.
+
 **Files:**
 - Modify: `src/pages/DocumentationPage.tsx`
 - Modify: `src/constants/changelog.ts`
@@ -1369,6 +1458,21 @@ Formula EHP shown beside it is the old static estimate and ignores shields and c
 enemy attackers, ally support and the round window are shared across all configs; and — per the
 spec's accepted consequence — the defender takes its own turns, so a high-attack ship that kills
 attackers reduces its own incoming pressure and scores better than its defensive kit alone justifies.
+
+> **CORRECTION (2026-08-25), review Finding 3 — "ignores … conditional buffs" is WRONG.** The static
+> estimate does **not** ignore a conditional buff; it applies it **without its gate**, so the buff
+> reads as permanently active and the estimate is OVERSTATED rather than understated. Correct wording
+> is *"does not model conditional gating"*. Mechanism: `buildSkillBuffAutoFill` parses the buff out
+> of the skill text into a `SelectedGameBuff` that carries `parsedEffects` and **no gate field at
+> all** (`skillBuffAutoFill.ts`), and `DefenseCalculatorPage`'s `mergedBuffTotals` reduce sums those
+> `parsedEffects.defense` values unconditionally into `computeBuffedStats`.
+>
+> **MEASURED** on Redeemer's first passive (`docs/ship-skills.csv`: *"When HP drops below 60% it
+> gains Defense Up II for 4 turns"*): the auto-fill emits one `selfBuffs` entry, `Defense Up II`,
+> `parsedEffects: { defense: 30 }`, source `passive1` — the below-60% condition is nowhere in the
+> record. On a 100,000 HP / 5,000 Defense ship, Theoretical EHP goes **240,062 → 283,125**, i.e. the
+> gate never applies. Tracked as **#391**; the shipped card caption and the in-app docs both say
+> "conditional gating".
 
 No emojis. Match the surrounding section's component usage.
 
@@ -1433,7 +1537,8 @@ test" for the render harness rather than inventing a provider wrapper — that i
 instruction to follow the established pattern, not a missing detail. Every other code step is
 complete and literal. No "TBD", no "handle edge cases", no "similar to Task N".
 
-**Type consistency:** `DefenseSurvivabilityResult` fields (`measuredEHP`, `survived`,
+**Type consistency:** `DefenseSurvivabilityResult` fields (~~`measuredEHP`~~ **→ `damageAbsorbed`,
+SUPERSEDED BY ADDENDUM 3 §C1**, `survived`,
 `destroyedRound`, `elapsedRounds`, `breakdown`, `rounds`) are used identically in Tasks 2, 5 and 6.
 `DefenseIntakeBreakdown` fields (`toHp`, `toShield`, `toBarrier`, `toConversion`, `gross`) match
 across the boundary, the card and both test files. `convertedToShield` is spelled identically in

@@ -538,14 +538,19 @@ describe('damageAbsorbed is RAW damage withstood (#358 addendum 2)', () => {
         for (const r of runs) expect(r.damageAbsorbed).toBe(60_000);
     });
 
-    // ── THE ROUND QUANTUM ─────────────────────────────────────────────────────────────────────
+    // ── THE QUANTUM IS ONE *HIT* — AND WITH ONE ATTACKER A HIT IS A ROUND ────────────────────
     //
-    // Also DELETE-ME-DON'T-LOOSEN-ME. The metric only moves when the round of DEATH moves, so its
-    // resolution is one round of enemy throughput. Two genuinely different ships that die on the
-    // same round report the SAME headline. That is inherent to a round-based simulation, not a
-    // defect — and it is why the owner's ruling pairs the figure with rounds survived in the
-    // results block. Pinned so nobody later reads two equal numbers as a bug.
-    it('ROUND QUANTUM: two defenders that die on the same round report the SAME figure', () => {
+    // Also DELETE-ME-DON'T-LOOSEN-ME, but READ THE SCOPE LINE FIRST. The metric only moves when the
+    // ship survives one more INCOMING HIT; it never moves by the amount a reduction shaves off each
+    // hit. `sweep` throws ONE attacker's ONE hit per round, so on THIS FIXTURE surviving a hit and
+    // surviving a round are the same event and the equality below reads as a per-ROUND quantum.
+    //
+    // ⚠️ THAT EQUALITY IS FIXTURE-SPECIFIC AND DOES NOT GENERALISE. With more than one attacker a
+    // round is several hits and the resolution is finer than a round: a reduction can carry the ship
+    // past attacker 1's hit so that it also eats attacker 2's before dying, on the very same round.
+    // The next test measures exactly that, and the docs/changelog wording was corrected because it
+    // had generalised THIS arm's equality into a rule. Do not re-generalise it.
+    it('ROUND QUANTUM (one attacker, one hit/round): two defenders dying on the same round tie', () => {
         const CASUALTY = { rounds: 30, attack: 60_000 };
         const plain = sweep({ ...CASUALTY, defence: 5_000 });
         const tankier = sweep({
@@ -571,6 +576,96 @@ describe('damageAbsorbed is RAW damage withstood (#358 addendum 2)', () => {
         expect(tankier.breakdown.gross).toBeLessThan(plain.breakdown.gross);
         expect(tankier.destroyedRound).toBe(plain.destroyedRound);
         expect(tankier.damageAbsorbed).toBe(plain.damageAbsorbed);
+    });
+
+    // ── SAME ROUND OF DEATH, DIFFERENT FIGURE (the multi-hit correction) ──────────────────────
+    //
+    // WHY THIS ARM EXISTS. The docs and the changelog claimed "two ships that die on the same round
+    // report the same figure even if one is a little tankier". That was generalised from the ROUND
+    // QUANTUM arm above, whose fixture throws exactly one hit per round — the one shape where it is
+    // true. It is FALSE as a rule, and this arm is the measurement, not an inference:
+    //
+    //   Split the SAME per-round pressure across TWO attackers on different speeds. The fight ends
+    //   with the turn that destroys the defender (#329), so the frailer ship's last round stops
+    //   after attacker 1 and attacker 2 never fires at it. A reduction that carries the tankier ship
+    //   through attacker 1's hit therefore buys it attacker 2's hit as well — one extra hit of raw
+    //   intake, with the round of death UNCHANGED.
+    //
+    // MEASURED (hp 100,000, defence 5,000, two 40,000-attack attackers at speeds 60 and 50 — the
+    // same 80,000 raw per round that a single 80,000-attack enemy throws):
+    //     plain ................. destroyed round 4, absorbed 280,000   (7 hits)
+    //     + `Defense Up II` ..... destroyed round 4, absorbed 320,000   (8 hits)
+    // 40,000 apart: exactly one attacker's raw hit. Per-round raw for the plain run is
+    // 80,000/80,000/80,000/40,000 — the truncated final round is directly visible.
+    //
+    // THE SINGLE-ATTACKER CONTROL IS PART OF THE MEASUREMENT, not decoration: one 80,000-attack
+    // enemy over the same fixture gives BOTH ships 320,000, which is what makes this a statement
+    // about the number of attackers rather than about the buff.
+    it('SAME ROUND, DIFFERENT FIGURE: with two attackers a reduction buys a HIT, not a round', () => {
+        const defender: DefenderStats = { ...DEFENDER, defence: 5_000 };
+        const defUp = ab({
+            type: 'buff',
+            target: 'self',
+            config: {
+                type: 'buff',
+                buffName: 'Defense Up II',
+                parsedEffects: { defense: 30 },
+                stacks: 1,
+                isStackable: false,
+                duration: 'recurring',
+            },
+        });
+        const run = (tanky: boolean, enemies: DefenseSimulationInput['enemies']) => {
+            idCounter = 0;
+            return simulateDefenseSurvivability(
+                BASE({
+                    rounds: 30,
+                    defender,
+                    enemies,
+                    shipSkills: skills(tanky ? [defUp] : []),
+                })
+            );
+        };
+        // Distinct speeds so the two attackers act at distinct points inside the round — with equal
+        // speeds the ordering carries no information and the whole mechanism is unobservable.
+        const at = (id: string, speed: number) => ({
+            ...attacker(40_000),
+            id,
+            stats: { ...attacker(40_000).stats, speed },
+        });
+        const split = [at('e1', 60), at('e2', 50)];
+
+        const plain = run(false, split);
+        const tankier = run(true, split);
+
+        // The premise of the whole arm: SAME round of death. Without this the numbers below are just
+        // the ordinary "defence buys a round" direction test.
+        expect(plain.destroyedRound).toBe(4);
+        expect(tankier.destroyedRound).toBe(4);
+        expect(tankier.elapsedRounds).toBe(plain.elapsedRounds);
+
+        // …and yet the figures differ, by exactly one attacker's raw hit.
+        expect(plain.damageAbsorbed).toBe(280_000);
+        expect(tankier.damageAbsorbed).toBe(320_000);
+        expect(tankier.damageAbsorbed - plain.damageAbsorbed).toBe(40_000);
+
+        // The truncated final round, shown rather than asserted around: three full rounds of both
+        // attackers, then a round in which only the first one got to fire.
+        expect(plain.rounds.map((r) => r.incomingDamageRaw)).toEqual([
+            80_000, 80_000, 80_000, 40_000,
+        ]);
+        expect(tankier.rounds.map((r) => r.incomingDamageRaw)).toEqual([
+            80_000, 80_000, 80_000, 80_000,
+        ]);
+
+        // THE CONTROL. Identical total pressure delivered by ONE attacker → the tie the arm above
+        // pins. This is what localises the effect to the attacker COUNT.
+        const soloPlain = run(false, [attacker(80_000)]);
+        const soloTankier = run(true, [attacker(80_000)]);
+        expect(soloPlain.destroyedRound).toBe(4);
+        expect(soloTankier.destroyedRound).toBe(4);
+        expect(soloPlain.damageAbsorbed).toBe(320_000);
+        expect(soloTankier.damageAbsorbed).toBe(320_000);
     });
 
     // ── RAW >= POST, WITH THE EXACT EQUALITY CASE (spec B3, mandatory) ────────────────────────

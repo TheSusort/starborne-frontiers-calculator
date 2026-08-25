@@ -142,9 +142,22 @@ export interface DefenseSurvivabilityResult {
  *     the defender's own `Inc. Damage Down` family, `preFightIncoming`, `equipReductionPct`,
  *     `incomingDotReductionPct` (Vortex Veil), the incoming-block proc and the reflect channel's
  *     own incoming-reduction are all excluded. What DOES move it:
- *       – ROUNDS. The figure only grows when the ship lives another round, so any defensive channel
- *         that buys a round raises it. That is the only route by which the ship's own toughness
- *         reaches this number.
+ *       – SURVIVING ONE MORE INCOMING HIT. The figure grows one whole HIT at a time — never by the
+ *         amount a reduction shaves off each hit — so any defensive channel that buys a hit raises
+ *         it, and that is the only route by which the ship's own toughness reaches this number.
+ *         READ THE RESOLUTION AS A HIT, NOT A ROUND. With ONE attacker the two are the same event
+ *         (its round IS one hit), which is why every `sweep` fixture in the sim test reads as "buys
+ *         a round". With SEVERAL attackers a round is several hits and the resolution is finer: the
+ *         fight ends with the turn that destroys the ship (#329), so a reduction that carries the
+ *         ship through attacker 1's hit buys it attacker 2's hit as well, on the SAME round of
+ *         death. MEASURED (hp 100,000, defence 5,000, two 40,000-attack attackers at speeds 60/50
+ *         — the same 80,000 raw per round one 80,000-attack enemy throws):
+ *             plain ................. destroyed round 4, absorbed 280,000  (7 hits)
+ *             + `Defense Up II` ..... destroyed round 4, absorbed 320,000  (8 hits)
+ *         and the single-attacker control ties both at 320,000. This header, the card comment, the
+ *         in-app docs and the changelog all once claimed "two ships that die on the same round
+ *         report the same figure"; that was generalised from the one-attacker fixture and is FALSE.
+ *         Pinned as "SAME ROUND, DIFFERENT FIGURE" in `defenseSurvivabilitySim.test.ts`.
  *       – ATTACKER-SIDE terms, because the attack is counted AS THROWN: `effectiveAttack`, outgoing
  *         modifiers, crit, affinity, and enemy-APPLIED amplification (`Out. Damage Up`, `Exposed`).
  *         READ THAT NARROWLY: it means terms the ATTACKER carries. MEASURED (4-round survivor

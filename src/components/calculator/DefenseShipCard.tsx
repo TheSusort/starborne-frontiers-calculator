@@ -164,9 +164,17 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         {/* #358 ADDENDUM 3 (C1): the three headline numbers, in the owner's order —
                             ROUNDS SURVIVED first, DAMAGE ABSORBED second, and the static estimate
                             third (rendered just below this block, labelled "Theoretical EHP").
-                            Rounds lead because the absorbed figure only moves when the round of
-                            DEATH moves: two ships that die on the same round report the same
-                            number, and the rounds are what separate them. */}
+                            Rounds lead because the absorbed figure moves in whole HITS — never by
+                            the amount a reduction shaves off each one — so it needs the round count
+                            beside it to be read at all.
+                            NOT "two ships that die on the same round report the same number", which
+                            this comment used to claim: that holds only where a round IS one hit.
+                            Under TWO attackers a tankier ship can survive attacker 1's hit and eat
+                            attacker 2's before dying on the same round (the fight ends with the turn
+                            that destroys it, #329), absorbing one extra hit. MEASURED, hp 100,000 /
+                            defence 5,000 / two 40,000-attack enemies: 280,000 plain vs 320,000 with
+                            Defense Up II, both destroyed round 4 — pinned as "SAME ROUND, DIFFERENT
+                            FIGURE" in defenseSurvivabilitySim.test.ts. */}
                         <div className="flex justify-between items-baseline">
                             <span className="text-theme-text-secondary">
                                 Rounds survived:
