@@ -373,7 +373,29 @@ because "EHP" kept inviting the old post-mitigation reading.
       Note: `victimHitDamage`'s byte-identity is deliberately preserved by re-summing the split halves
       in the engine's original left-to-right order — `a - (b + c)` and `a - b - c` are not the same
       double.
-- [ ] Task 11 review, then the WHOLE-BRANCH review. Suite **584 / 6520** (+22 arms).
+- [x] Task 11 review: **all 11 closed, 0 Critical, 0 Important, 2 Minor.** Reviewer mutation-tested
+      the key claims itself: `damage` byte-identical on the reflect path; both KEEP-side arms kill
+      ONLY their own target; the Protection "reassignment not loss" claim PROVEN via path-7
+      (`chunk.raw > chunk.post`, mitigated only by the PROTECTOR's defence); the zero-stack control
+      genuinely discriminates. It also flagged honestly that ONE claim was inherited, not freshly
+      measured (the parked #357 path's zero-corpus-calls) — good reviewer hygiene.
+
+## ✅ ALL 11 TASKS IMPLEMENTED AND REVIEWED. Whole-branch review is the last gate.
+
+## FOLLOW-UPS for after merge (not blocking)
+- **RENAME `attackerIncomingReductionPct` / `attackerDefenceReductionPct`.** They are victim-side
+  despite the name, and **that misnomer is precisely what let a Critical survive a full review**
+  (Task 10 shipped it; I then accepted the implementer's justification for it without testing).
+  It is currently mitigated by a doc warning — *the same class of mitigation that already failed once
+  here*. Rename when this parameter is next touched.
+- `positionalApply.ts`'s `incomingReductionFor` returns an awkward `number | {victimSidePct,
+  attackerSidePct}` union — minimal-change choice, sound, but worth tidying.
+- Extract a shared `useEnemyTeamRoster` hook when a 4th calculator needs the enemy/team mapping
+  (~230 lines now duplicated between the healing and defense pages, deliberately, to avoid drift).
+- The page tests mock `ShipsContext` with a fresh `getShipById` per call, so the memo-stability
+  guarantee is exercised only by the real context — the thing most likely to regress into
+  N-sims-per-keystroke has no guard. Pre-existing; shared with the healing page test.
+- **#357:** add the legacy non-positional enemy fold path (corpus-unreachable) to that issue's group. Suite **584 / 6520** (+22 arms).
       **ZERO golden/snapshot files touched** — no re-bless needed. 185 test-file deletions are all
       the `measuredEHP`→`damageAbsorbed` rename (identical values on the added side) + a fixture
       reorder. No numeric value moved.
