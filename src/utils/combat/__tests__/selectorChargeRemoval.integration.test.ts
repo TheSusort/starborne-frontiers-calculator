@@ -205,6 +205,13 @@ describe('#399: selector-targeted charge removal', () => {
         // The caster must NOT have gained a charge: that is the exact pre-fix failure mode.
         expect(chargesOf(actors, 'attacker')).toBe(0);
         // The immune enemy must be untouched too (charge-loss-immune, not merely "not selected").
+        //
+        // #399 final-review Finding 6: this arm exercises `removeChargesFrom`'s OWN
+        // immunity skip (the selector resolves to a real, living candidate — `e-immune` — and
+        // `removeChargesFrom` then declines to touch it), NOT the separate
+        // `if (selectedId === undefined) return;` guard in `triggers.ts`'s selector branch, which
+        // covers "no living candidate at all" and has no direct coverage in this file. A future
+        // reader should not read this arm's green as proving that guard too.
         expect(chargesOf(actors, 'e-immune')).toBe(1);
     });
 });
