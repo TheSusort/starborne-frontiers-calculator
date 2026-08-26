@@ -248,6 +248,67 @@ describe('AbilityCard', () => {
         });
     });
 
+    describe('Target select for charge abilities (#399 Change 1a)', () => {
+        const chargeAt = (target: Ability['target']): Ability => ({
+            id: 'a-charge',
+            type: 'charge',
+            target,
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        });
+
+        it('offers only self, all-allies and enemy for a fresh charge ability', () => {
+            render(
+                <AbilityCard ability={chargeAt('self')} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            fireEvent.click(screen.getByLabelText('Target'));
+            const labels = within(screen.getByRole('listbox'))
+                .getAllByRole('option')
+                .map((o) => o.textContent);
+            expect(labels).toEqual(['Self', 'All allies', 'Enemy']);
+        });
+
+        it('keeps an already-saved legacy target visible, labelled, and selectable', () => {
+            // A charge ability saved before Change 1a (or hand-imported) may still carry a target
+            // the editor no longer offers for NEW charge abilities. It must stay visible — never a
+            // blank "Select" fallback — and stay editable.
+            render(
+                <AbilityCard
+                    ability={chargeAt('adjacent-enemies')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            // The selected label text is visible in the (closed) Target button.
+            expect(screen.getByText(/Adjacent enemies \(legacy/)).toBeInTheDocument();
+            fireEvent.click(screen.getByLabelText('Target'));
+            const labels = within(screen.getByRole('listbox'))
+                .getAllByRole('option')
+                .map((o) => o.textContent);
+            expect(labels).toEqual([
+                'Self',
+                'All allies',
+                'Enemy',
+                'Adjacent enemies (legacy — not offered for new Charge abilities)',
+            ]);
+        });
+
+        it('selecting a supported target drops the legacy option from the list', () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={chargeAt('adjacent-enemies')}
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Target'));
+            fireEvent.click(screen.getByText('Enemy'));
+            expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ target: 'enemy' }));
+        });
+    });
+
     describe('Trigger select', () => {
         const buffWithTrigger = (trigger: Ability['trigger']): Ability => ({
             ...buffAbility,

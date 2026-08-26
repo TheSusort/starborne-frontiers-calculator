@@ -1054,12 +1054,19 @@ function chargeGainFromSkill(args: {
         // 'enemy-highest-attack' / 'enemy-highest-speed') plus 'adjacent-enemies' and
         // 'target-and-adjacent-enemies' (the pre-#399 code here was a bare
         // `ability.target === 'enemy' || ability.target === 'all-enemies'` check, which caught
-        // neither the adjacent-scoped enemy targets nor the selectors). This widening is
-        // corpus-dead: every `type: 'charge'` ability the codebase can emit — swept across
+        // neither the adjacent-scoped enemy targets nor the selectors). The three DATA builders —
         // `buildShipAbilities.ts`, `buildEquipmentAbilities.ts` and `flatInputToAbilities.ts` —
-        // hardcodes `target: 'self' | 'enemy' | 'all-allies'`; none of the five widened targets is
-        // ever attached to a charge ability, pinned by the inventory gate in
-        // `chargeTargetSideWidening.test.ts`.
+        // hardcode `target: 'self' | 'enemy' | 'all-allies'` for every `type: 'charge'` ability
+        // they can emit, pinned by the inventory gate in `chargeTargetSideWidening.test.ts`, so
+        // none of the five widened targets is corpus-reachable through them.
+        //
+        // There IS a fourth producer: the ability editor (`AbilityCard.tsx`) lets a user
+        // hand-author a `charge`-typed ability, and its target dropdown used to offer
+        // 'adjacent-enemies' / 'target-and-adjacent-enemies' alongside the safe targets (it never
+        // offered the three selectors). #399 Change 1a closes that path by restricting the
+        // editor's target options for a `charge`-typed ability to `CHARGE_TARGET_OPTIONS`
+        // (`self` / `all-allies` / `enemy` — the same three the data builders emit), so the
+        // widening is corpus-dead through every current producer, editor included.
         //
         // KNOWN GAP, deliberately not fixed here: `isAlly` above omits 'adjacent-allies', so that
         // target still lands in 'own'. That is a question on the ALLY axis with its own separate

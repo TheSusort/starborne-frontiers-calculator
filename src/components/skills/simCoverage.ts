@@ -1,4 +1,10 @@
-import { Ability, AbilityTrigger, AbilityType, ControlEffect } from '../../types/abilities';
+import {
+    Ability,
+    AbilityTarget,
+    AbilityTrigger,
+    AbilityType,
+    ControlEffect,
+} from '../../types/abilities';
 
 /**
  * Ability types not yet consumed by any calculator. They stay pickable in the
@@ -131,3 +137,23 @@ export function isVictimlessInfliction(ability: Ability): boolean {
     if (!VICTIMLESS_TRIGGERS.has(ability.trigger)) return false;
     return !isSelfResolvingSelector(ability);
 }
+
+/** #399 Change 1a: the ONLY targets a `charge`-typed ability can actually reach today — pinned
+ *  against what the three DATA builders emit (`buildShipAbilities.ts`, `buildEquipmentAbilities.ts`,
+ *  `flatInputToAbilities.ts`): `self` (self-gain), `all-allies` (Liberator/Hayyan/Graphite grants)
+ *  and `enemy` (Opal/Provider/Sefuba/Demolisher/Zosimos/Thresh removal) — see
+ *  `chargeTargetSideWidening.test.ts`'s inventory-gate sweep, which pins the exact same three
+ *  values. Offering the other six `AbilityCard.tsx` target options (plain `ally`, `lowest-hp-ally`,
+ *  `adjacent-allies`, `all-enemies`, `adjacent-enemies`, `target-and-adjacent-enemies`) would let a
+ *  user author a charge ability no parser ever produces, whose engine behaviour is either an
+ *  approximation (`ally`) or a widened bulk-removal nobody asked for (the two enemy-adjacency
+ *  targets, via `playerTurn.ts`'s `isEnemyTarget` charge-pool classification).
+ *
+ *  Lives in this plain `.ts` module (rather than `AbilityCard.tsx` itself) so it can be exported
+ *  without tripping `react-refresh/only-export-components` — same reason `VICTIMLESS_INFLICTION_WARNING`
+ *  above lives here instead of the component file. */
+export const CHARGE_TARGET_OPTIONS: { value: AbilityTarget; label: string }[] = [
+    { value: 'self', label: 'Self' },
+    { value: 'all-allies', label: 'All allies' },
+    { value: 'enemy', label: 'Enemy' },
+];

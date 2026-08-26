@@ -4,6 +4,7 @@ import { buildShipAbilities } from '../buildShipAbilities';
 import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
 import { GEAR_SETS } from '../../../constants/gearSets';
 import { IMPLANTS } from '../../../constants/implants';
+import { CHARGE_TARGET_OPTIONS } from '../../../components/skills/simCoverage';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type { AbilityTarget } from '../../../types/abilities';
@@ -33,6 +34,14 @@ import type { RarityName } from '../../../constants/rarities';
  * the source (`input.selfChargeGain` always resolves to a `self`-targeted charge ability) with no
  * data path that can vary it, so a runtime sweep would only ever re-observe the literal in the
  * code — a static read is the correct instrument for that site, not a corpus test.
+ *
+ * #399 final-review Finding 1: there is a FOURTH producer this file originally missed — the
+ * ability editor (`AbilityCard.tsx`) lets a user hand-author a `charge`-typed ability, and its
+ * target dropdown used to offer two of the five widened targets ('adjacent-enemies' /
+ * 'target-and-adjacent-enemies'). Change 1a restricted the editor to `CHARGE_TARGET_OPTIONS`
+ * (`self` / `all-allies` / `enemy` — the same three values the two sweeps above observe); the
+ * describe block at the bottom of this file imports that real option list — rather than
+ * restating it — so this test tracks the source instead of drifting from it.
  *
  * The CSV is gitignored dev reference data; per `lowestHpAllySelector.test.ts`'s convention this
  * throws rather than skips when it is absent, so the inventory gate cannot silently vanish.
@@ -220,5 +229,23 @@ describe('#399 Task 2 review finding — charge-pool five-target widening is cor
         const rows = sweepEquipmentCharges();
         const observedTargets = [...new Set(rows.map((r) => r.target))].sort();
         expect(observedTargets).toEqual(['self']);
+    });
+});
+
+describe('#399 final-review Finding 1 — the ability editor is the fourth producer, and is narrowed too', () => {
+    // No CSV dependency: `CHARGE_TARGET_OPTIONS` is a static list in simCoverage.ts (imported by
+    // the ability editor, AbilityCard.tsx), not derived from the corpus, so this describe block
+    // needs no `requireCsv` guard.
+
+    it('offers none of the five widened targets for a charge-typed ability', () => {
+        const offending = CHARGE_TARGET_OPTIONS.filter((opt) =>
+            (WIDENED_TARGETS as string[]).includes(opt.value)
+        );
+        expect(offending).toEqual([]);
+    });
+
+    it('offers exactly self, all-allies and enemy — the same three the corpus sweeps observe', () => {
+        const observedTargets = CHARGE_TARGET_OPTIONS.map((opt) => opt.value).sort();
+        expect(observedTargets).toEqual(['all-allies', 'enemy', 'self']);
     });
 });
