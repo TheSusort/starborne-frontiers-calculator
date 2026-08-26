@@ -1,6 +1,7 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
+import { isEnemyTarget } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
     DoTType,
@@ -1044,13 +1045,42 @@ function chargeGainFromSkill(args: {
             ability.target === 'ally' ||
             ability.target === 'all-allies' ||
             ability.target === 'lowest-hp-ally';
-        const isEnemy = ability.target === 'enemy' || ability.target === 'all-enemies';
+        const isEnemy = isEnemyTarget(ability.target);
         // 'own' sums everything that is neither ally- nor enemy-targeted; the other filters
         // sum only their matching target class.
-        // NOTE: only 'enemy'/'all-enemies' count as enemy here; the selector enemy-targets
-        // ('enemy-most-buffs'/'enemy-highest-attack') fall into 'own'. Harmless today — the
-        // skill parser never emits a selector target for type:'charge' — but if charge ever
-        // uses one, add it to the enemy match (and to the reactive branch in triggers.ts).
+        //
+        // #399: `isEnemy` reads the shared classifier, so FIVE targets now count as enemy here
+        // instead of falling into 'own': the three selectors ('enemy-most-buffs' /
+        // 'enemy-highest-attack' / 'enemy-highest-speed') plus 'adjacent-enemies' and
+        // 'target-and-adjacent-enemies' (the pre-#399 code here was a bare
+        // `ability.target === 'enemy' || ability.target === 'all-enemies'` check, which caught
+        // neither the adjacent-scoped enemy targets nor the selectors). The three DATA builders —
+        // `buildShipAbilities.ts`, `buildEquipmentAbilities.ts` and `flatInputToAbilities.ts` —
+        // hardcode `target: 'self' | 'enemy' | 'all-allies'` for every `type: 'charge'` ability
+        // they can emit, pinned by the inventory gate in `chargeTargetSideWidening.test.ts`, so
+        // none of the five widened targets is corpus-reachable through them.
+        //
+        // There IS a fourth producer: the ability editor (`AbilityCard.tsx`) lets a user
+        // hand-author a `charge`-typed ability, and its target dropdown used to offer
+        // 'adjacent-enemies' / 'target-and-adjacent-enemies' alongside the safe targets (it never
+        // offered the three selectors). #399 Change 1a restricts the editor's target options for a
+        // `charge`-typed ability to `CHARGE_TARGET_OPTIONS` (`self` / `all-allies` / `enemy` — the
+        // same three the data builders emit), so no NEWLY authored charge ability can carry one of
+        // the five widened targets.
+        //
+        // RESIDUAL, deliberately accepted: an ALREADY-SAVED charge ability carrying
+        // 'adjacent-enemies' / 'target-and-adjacent-enemies' is PRESERVED by the editor as a
+        // labelled legacy option (`AbilityCard.tsx`, the `CHARGE_TARGET_OPTIONS.some(...)` branch)
+        // rather than silently coerced, so it survives an editing session and still reaches this
+        // classification. For that one shape the amount now routes to enemy charge REMOVAL instead
+        // of the caster's own gain — a real behaviour change, and the deliberate cost of using the
+        // shared classifier here. The legacy label is what tells the user to re-pick a supported
+        // target. So: unreachable for anything newly authored, NOT unreachable outright.
+        //
+        // KNOWN GAP, deliberately not fixed here: `isAlly` above omits 'adjacent-allies', so that
+        // target still lands in 'own'. That is a question on the ALLY axis with its own separate
+        // reachability, and widening the shared map to three values to answer it would change
+        // charge routing on a path #399 never measured.
         const matches =
             args.targetFilter === 'ally'
                 ? isAlly

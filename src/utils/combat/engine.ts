@@ -29,6 +29,7 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
+import { isEnemyTarget } from '../abilities/abilityTargetSide';
 import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
 import {
     ActiveDoTStack,
@@ -279,17 +280,23 @@ function registerActorAbilityStatuses(
             // fixtures' "took a turn" placeholder) and orders nothing.
             if (isFiringSlot && cfg.type === 'damage' && cfg.multiplier > 0) sawDamageClause = true;
             if (cfg.type !== 'buff' && cfg.type !== 'debuff') continue;
-            // Ship-kit W5 Task A3: the two enemy-adjacency scopes (Vindicator Provoke/Out. Damage
-            // Down I → 'adjacent-enemies'; Asphyxiator Stasis → 'target-and-adjacent-enemies')
-            // are enemy-side debuffs scoped to the resolved target's board neighbours, not self
-            // buffs — omitting them here silently misregisters the status on the CASTER.
-            const side: 'self' | 'enemy' =
-                ability.target === 'enemy' ||
-                ability.target === 'all-enemies' ||
-                ability.target === 'adjacent-enemies' ||
-                ability.target === 'target-and-adjacent-enemies'
-                    ? 'enemy'
-                    : 'self';
+            // #399: the store side comes from the ONE classifier (abilityTargetSide.ts), not a
+            // local list. The list this replaced omitted the three selector targets, so a
+            // buff/debuff with `target: 'enemy-highest-attack'` and a NON-live trigger was
+            // misregistered on the CASTER's self store — invisible to every enemy-store reader.
+            // Measured in `selectorTargetStoreSide.test.ts`; corpus-unreachable today (every
+            // shipped selector-targeted infliction carries a LIVE trigger and is partitioned to
+            // the reactive path before this loop), which is why nothing observable moves.
+            //
+            // KNOWN, DELIBERATE SCOPE BOUNDARY: this fixes the STORE axis only (WHICH store a
+            // selector-targeted status lands in), not the RECIPIENT axis (WHICH enemy actor it
+            // lands ON, i.e. the per-victim key the enemy store is keyed by). `resolveDebuffRecipientIds`
+            // (debuffRecipients.ts) has no arm for the three selector targets, so on a board with
+            // 2+ enemies a selector-targeted debuff still lands on the cast's anchor (its normal,
+            // non-selector target) rather than the resolved highest-attack/most-buffed/fastest
+            // enemy — see `selectorTargetStoreSide.test.ts`'s SELECTOR arm, which pins this
+            // residual. #399 did not fix it; the owner ruled to document it instead.
+            const side: 'self' | 'enemy' = isEnemyTarget(ability.target) ? 'enemy' : 'self';
             // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
             // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.
             // Only a buff config carries it — `hits` does not exist on the debuff arm.
@@ -298,12 +305,19 @@ function registerActorAbilityStatuses(
             // A hit-counted grant must never resolve to the ENEMY side either — `consumeStatusHit`
             // (statusEngine.ts) only spends from the per-actor SELF timed map (getSelfMap); the
             // enemy timed map is a completely separate store it never reads. `side` above is
-            // 'enemy' only for the two enemy-adjacency DEBUFF scopes (Vindicator/Asphyxiator) —
-            // no corpus BUFF-typed config targets them combined with `hits` today, so this is
-            // corpus-unreachable, same footing as the accumulating/aura guards just below and the
-            // persistent store's throw in statusEngine.ts's applyTimedAbilityStatus. Thrown loudly
-            // here rather than left to silently land a permanent, unspendable grant on the enemy
-            // side if a future parser change ever produces one.
+            // 'enemy' for SEVEN targets now (#399 added the three selectors to the four pre-
+            // existing enemy targets: 'enemy', 'all-enemies', and the two enemy-adjacency DEBUFF
+            // scopes Vindicator/Asphyxiator) — but a hit-counted grant only ever exists on a
+            // `buff`-typed config (`hits` is a buff-config field; see its declaration in
+            // types/abilities.ts), and every corpus BUFF carrying `hits` is self-targeted ("for N
+            // hit(s)": Malvex/Panon/Quixilver/Sansi Barrier). The ability editor cannot produce the
+            // combination either — `AbilityCard.tsx`'s buff/debuff editor exposes no `hits` control
+            // at all, and does not offer the three selector targets. So the throw below is
+            // corpus-unreachable regardless of which/how-many targets classify as 'enemy', same
+            // footing as the accumulating/aura guards just below and the persistent store's throw
+            // in statusEngine.ts's applyTimedAbilityStatus. Thrown loudly here rather than left to
+            // silently land a permanent, unspendable grant on the enemy side if a future parser or
+            // editor change ever produces one.
             if (hitCounted && side === 'enemy') {
                 throw new Error(
                     `registerActorAbilityStatuses: hit-counted buff '${cfg.buffName}' resolved to ` +

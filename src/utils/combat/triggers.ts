@@ -1,5 +1,6 @@
 import {
     Ability,
+    AbilityTarget,
     AbilityTrigger,
     LIVE_TRIGGERS,
     ShipSkills,
@@ -3402,6 +3403,53 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
     });
 }
 
+/**
+ * #399 review Finding 2 — which of the reactive charge executor's arms a `type: 'charge'`
+ * ability's `target` routes to. Extracted into a total `Record<AbilityTarget, …>` (rather than the
+ * `===` chain this replaces) for the same reason `abilityTargetSide.ts` exists: the key set is
+ * DERIVED from `AbilityTarget`, so `tsc` rejects a new variant until somebody classifies it here.
+ * The chain this replaces was itself an instance of the stale-hand-enumeration class
+ * `abilityTargetSide.ts`'s doc comment warns about — a 13th `AbilityTarget` member would have
+ * compiled happily and silently fallen through to `'owner-gain'` below.
+ *
+ * PRESERVES TODAY'S BEHAVIOUR EXACTLY — this is a dispatch refactor, not a widening:
+ *   - the three SELECTOR targets each resolve to ONE opposing actor (#399 Task 3);
+ *   - `enemy` / `all-enemies` bulk-remove from every opposing actor (`everyNthEvent` included);
+ *   - `lowest-hp-ally` bumps the one lowest-HP ally (SP-4e);
+ *   - `ally` / `all-allies` bump every same-side actor;
+ *   - everything else — `self`, `adjacent-allies`, and (deliberately, per #399's scope) the two
+ *     enemy-adjacency targets `adjacent-enemies` / `target-and-adjacent-enemies` — falls to the
+ *     OWNER-ONLY gain arm, exactly as before this refactor. `playerTurn.ts`'s cast-path
+ *     classification (`isEnemyTarget`) treats the adjacency pair as enemy-side for the CHARGE-POOL
+ *     total; this reactive drain intentionally does not follow suit here — widening it is a
+ *     separate, unmeasured question (see the #399 spec's Task 2 "deliberately not folded in").
+ */
+type ChargeTargetKind =
+    | 'selector-most-buffs'
+    | 'selector-highest-attack'
+    | 'selector-highest-speed'
+    | 'enemy-bulk'
+    | 'lowest-hp-ally'
+    | 'ally-bulk'
+    | 'owner-gain';
+
+const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
+    self: 'owner-gain',
+    ally: 'ally-bulk',
+    'all-allies': 'ally-bulk',
+    'lowest-hp-ally': 'lowest-hp-ally',
+    // KNOWN GAP, deliberately unwidened here — see the doc comment above.
+    'adjacent-allies': 'owner-gain',
+    enemy: 'enemy-bulk',
+    'all-enemies': 'enemy-bulk',
+    // KNOWN GAP, deliberately unwidened here — see the doc comment above.
+    'adjacent-enemies': 'owner-gain',
+    'target-and-adjacent-enemies': 'owner-gain',
+    'enemy-most-buffs': 'selector-most-buffs',
+    'enemy-highest-attack': 'selector-highest-attack',
+    'enemy-highest-speed': 'selector-highest-speed',
+};
+
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // Brand every reactive-capable event this resolution emits with duringTurnOf/triggerActorId
     // (combat-log attribution). The wrapped bus is local to THIS call — on-turn emissions never
@@ -3496,49 +3544,97 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // charges, and every on-ally-crit rider — see PER_HIT_REACTIVE_TRIGGERS).
         const chargeGuardKey = oncePerAttackGuardKey(intent);
         if (chargeGuardKey && ctx.reactionFiredThisAttack?.has(chargeGuardKey)) return;
-        if (intent.ability.target === 'enemy' || intent.ability.target === 'all-enemies') {
-            // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
-            // repairer); only act on the Nth event. Requires a repairer id and the counter map.
-            if (intent.ability.everyNthEvent) {
-                const repairerId = intent.eventCtx?.repairerId;
-                if (!repairerId || !ctx.repairCountBySource) return;
-                const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
-                const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
-                ctx.repairCountBySource.set(key, n);
-                if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
-                ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
+        // #399 review Finding 2: dispatch by the total `CHARGE_TARGET_KIND` lookup (declared above
+        // `executeIntent`) instead of a hand-written `===` chain — see that Record's doc comment
+        // for why, and for the exact behaviour each arm below preserves unchanged.
+        const chargeKind = CHARGE_TARGET_KIND[intent.ability.target];
+        switch (chargeKind) {
+            // #399: the three SELECTOR targets each name exactly ONE opposing actor, resolved at
+            // drain time. Routing them through `removeEnemyCharges` would strip charges off every
+            // enemy the clause never named; letting them fall through (the pre-#399 behaviour)
+            // landed on the owner-only GAIN arm below, so the caster gained a charge and no enemy
+            // lost one. Resolved through the SAME ctx delegates the reactive damage and debuff
+            // branches use (see the `enemy-most-buffs` / `enemy-highest-speed` resolution below and
+            // the `enemy-highest-attack` one in the debuff branch), so all three routes agree on
+            // WHICH enemy a selector names.
+            //
+            // `everyNthEvent` is deliberately NOT handled here: it is keyed to
+            // `eventCtx.repairerId` ("every second repair, decrease THAT enemy's charge" —
+            // Zosimos), and a selector target names its own victim rather than inheriting one from
+            // the event. The two are mutually exclusive by construction.
+            //
+            // HAND-AUTHORED ONLY: `parseChargeRemoval` hardcodes target:'enemy', so no corpus skill
+            // text reaches this arm today.
+            case 'selector-most-buffs':
+            case 'selector-highest-attack':
+            case 'selector-highest-speed': {
+                const selectedId =
+                    chargeKind === 'selector-most-buffs'
+                        ? ctx.enemyWithMostBuffs?.(intent.ownerId)
+                        : chargeKind === 'selector-highest-attack'
+                          ? ctx.enemyWithHighestAttack?.(intent.ownerId)
+                          : ctx.enemyWithHighestSpeed?.(intent.ownerId);
+                // Unresolved (no living candidate, or the delegate is absent) → NO-OP, matching the
+                // SP-4c-2d precedent the purge branch sets. It must NEVER fall through to the
+                // owner-gain arm below: that would turn "remove a charge from one enemy" into "give
+                // the caster a charge".
+                if (selectedId === undefined) return;
+                ctx.removeChargesFrom(selectedId, cfg.amount, owner.attackerAffinity, ctx.bus);
                 return;
             }
-            // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
-            // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack') are NOT matched
-            // here and fall through to the owner-only gain below. Unreachable for parsed charge
-            // abilities today.
-            ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
-            return;
-        }
-        // SP-4e: the named selector bumps exactly ONE same-side ally — the engine resolves it
-        // (live HP), owner EXCLUDED. Handled ahead of the ally/all-allies arm below, and
-        // deliberately NOT routed through `footprintFilteredRecipients`: a named selector is never
-        // footprint-narrowed, and that helper's `resolveSupportRecipients` throws on this target by
-        // design. `undefined` (owner is the only living candidate) returns without granting
-        // anything — falling through to the owner-only gain below would be the self-target the
-        // variant forbids.
-        if (intent.ability.target === 'lowest-hp-ally') {
-            // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
-            const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
-            if (rid !== undefined) {
-                ctx.grantAllyCharges(cfg.amount, { recipientIds: [rid], emitBus: ctx.bus });
+            case 'enemy-bulk': {
+                // every-Nth-event gate (Zosimos "every second repair"): count per (owner, ability,
+                // repairer); only act on the Nth event. Requires a repairer id and the counter map.
+                if (intent.ability.everyNthEvent) {
+                    const repairerId = intent.eventCtx?.repairerId;
+                    if (!repairerId || !ctx.repairCountBySource) return;
+                    const key = `${intent.ownerId}:${intent.ability.id}:${repairerId}`;
+                    const n = (ctx.repairCountBySource.get(key) ?? 0) + 1;
+                    ctx.repairCountBySource.set(key, n);
+                    if (n % intent.ability.everyNthEvent !== 0) return; // not the Nth repair yet
+                    ctx.removeChargesFrom(repairerId, cfg.amount, owner.attackerAffinity, ctx.bus); // "that enemy" only
+                    return;
+                }
+                // On-cast / bomb removal: "the enemy" = bulk all-opposing (Phase 0 semantics).
+                // Selector enemy-targets ('enemy-most-buffs'/'enemy-highest-attack'/
+                // 'enemy-highest-speed') are matched ABOVE this arm — see the #399 block.
+                ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
+                return;
             }
-            return;
-        }
-        // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
-        // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
-        if (intent.ability.target === 'ally' || intent.ability.target === 'all-allies') {
-            ctx.grantAllyCharges(cfg.amount, {
-                recipientIds: footprintFilteredRecipients(intent, ctx, ctx.playerIds),
-                emitBus: ctx.bus,
-            });
-            return;
+            // SP-4e: the named selector bumps exactly ONE same-side ally — the engine resolves it
+            // (live HP), owner EXCLUDED. Handled ahead of the ally/all-allies arm below, and
+            // deliberately NOT routed through `footprintFilteredRecipients`: a named selector is
+            // never footprint-narrowed, and that helper's `resolveSupportRecipients` throws on this
+            // target by design. `undefined` (owner is the only living candidate) returns without
+            // granting anything — falling through to the owner-only gain below would be the
+            // self-target the variant forbids.
+            case 'lowest-hp-ally': {
+                // FIX 3: required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
+                const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
+                if (rid !== undefined) {
+                    ctx.grantAllyCharges(cfg.amount, { recipientIds: [rid], emitBus: ctx.bus });
+                }
+                return;
+            }
+            // Charge follow-up routes by the ability's target (Task 6): ally/all-allies bumps
+            // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
+            case 'ally-bulk': {
+                ctx.grantAllyCharges(cfg.amount, {
+                    recipientIds: footprintFilteredRecipients(intent, ctx, ctx.playerIds),
+                    emitBus: ctx.bus,
+                });
+                return;
+            }
+            // self, adjacent-allies, adjacent-enemies, target-and-adjacent-enemies — see the
+            // `CHARGE_TARGET_KIND` doc comment for why these fall to the owner-only gain below.
+            case 'owner-gain':
+                break;
+            default: {
+                const exhaustive: never = chargeKind;
+                throw new Error(
+                    `executeIntent charge branch: unhandled ChargeTargetKind ${String(exhaustive)}`
+                );
+            }
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
         if (owner.actor.chargeCount === 0) return;

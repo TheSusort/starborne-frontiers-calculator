@@ -27,6 +27,7 @@ import {
     NOT_SIMULATED_NOTE,
     PASSIVE_NOOP_WARNING,
     VICTIMLESS_INFLICTION_WARNING,
+    CHARGE_TARGET_OPTIONS,
 } from './simCoverage';
 import { ConditionRow } from './ConditionRow';
 
@@ -250,6 +251,26 @@ export const AbilityCard: React.FC<Props> = ({
     // `factionFilter` at all — see the "Recipient faction filter" control's own comment below for
     // why `charge` is excluded rather than wired up.
     const factionFilterHonoredForType = ability.type !== 'charge';
+
+    // #399 Change 1a: a `charge`-typed ability may only pick from `CHARGE_TARGET_OPTIONS` — see
+    // that constant's doc comment for why. A previously-saved ability may still carry one of the
+    // now-removed targets (a legacy save, or a shape imported from elsewhere); rather than let the
+    // `Select` silently fall back to its blank "Select" placeholder for an unrecognised value
+    // (or coerce it to something the user never chose), the stored value is appended as its own
+    // labelled, still-selectable option so it stays visible and editable until the user picks a
+    // supported target.
+    const targetOptionsForSelect: { value: AbilityTarget; label: string }[] =
+        ability.type !== 'charge'
+            ? TARGET_OPTIONS
+            : CHARGE_TARGET_OPTIONS.some((opt) => opt.value === ability.target)
+              ? CHARGE_TARGET_OPTIONS
+              : [
+                    ...CHARGE_TARGET_OPTIONS,
+                    {
+                        value: ability.target,
+                        label: `${TARGET_OPTIONS.find((opt) => opt.value === ability.target)?.label ?? ability.target} (legacy — not offered for new Charge abilities)`,
+                    },
+                ];
 
     // "Scales per condition": per-unit bonus × the count from conditions[conditionIndex],
     // capped. Shared by damage and modifier abilities (e.g. "7.5% defPen per buff, up to 45%").
@@ -987,7 +1008,7 @@ export const AbilityCard: React.FC<Props> = ({
             <Select
                 label="Target"
                 value={ability.target}
-                options={TARGET_OPTIONS}
+                options={targetOptionsForSelect}
                 onChange={(value) => {
                     // #363: factionFilter is a RECIPIENT scope, so it hangs off the TARGET axis
                     // (not the trigger axis roleFilter uses). Strip it when the new target cannot
