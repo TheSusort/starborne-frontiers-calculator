@@ -3,6 +3,7 @@ import {
     effectiveStatsOf,
     foldActorBuffTotals,
     effectiveDamageStatsOf,
+    effectiveOutgoingStatsOf,
     liveDebuffLandingChance,
 } from '../effectiveStats';
 import { foldSpeedBuffPct } from '../engine';
@@ -842,5 +843,172 @@ describe('attackFlat additive fold — adds AFTER the percentage term', () => {
         });
         // 1000 * (1 + 20/100) + 300 = 1000 * 1.20 + 300 = 1500
         expect(dmg.attack).toBeCloseTo(1500);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// effectiveOutgoingStatsOf — #395's third accessor
+// ---------------------------------------------------------------------------
+/**
+ * The arithmetic the two engine sites that throw an attack OUTSIDE the turn loop
+ * (`applyCounterAttack`, `applyReactiveDamage`) depend on. `reactiveOutgoingFold.test.ts` drives
+ * those two paths end-to-end; this suite pins the fold itself, including the two things an
+ * end-to-end fixture cannot reach cleanly: the `attackFlat` term, and the claim that the result
+ * does not depend on which SIDE the owner is on.
+ */
+describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => {
+    /** An actor + status engine with BOTH stores seeded for the actor.
+     *
+     *  ⚠️ The id must be `'attacker'`: `createStatusEngine({ selfBuffs })` schedules its self-buffs
+     *  onto the DEFAULT player-side carrier, and `foldActorBuffTotals` reads them back via
+     *  `snapshot(actorId).activeSelfBuffs`. Any other id leaves the SELF half of every fixture
+     *  below empty — which reads exactly like the enemy half working and the self half being
+     *  dropped, i.e. it silently inverts what these tests claim to measure. */
+    const outgoingHarness = (opts: {
+        side?: 'player' | 'enemy';
+        attack: number;
+        selfBuffs?: SelectedGameBuff[];
+        enemyApplied?: SelectedGameBuff[];
+    }) => {
+        const selfBuffs = opts.selfBuffs ?? [];
+        const eng = createStatusEngine({ selfBuffs, enemyDebuffs: [] });
+        const selfBuffLookup = new Map<string, SelectedGameBuff[]>();
+        for (const b of selfBuffs) selfBuffLookup.set(b.buffName, [b]);
+        eng.beginRound(1);
+        const actor = {
+            id: 'attacker',
+            side: opts.side ?? 'player',
+            kind: 'attacker',
+            stats: {
+                attack: opts.attack,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                shieldPenetration: 0,
+                defence: 0,
+                hp: 1_000,
+                speed: 100,
+                hacking: 0,
+                security: 0,
+            },
+            currentHp: 1_000,
+            shieldPool: 0,
+        } as unknown as CombatActor;
+        // The per-victim ENEMY store, keyed by the HOLDER's id — the store the two engine sites
+        // never read before #395.
+        for (const b of opts.enemyApplied ?? []) {
+            eng.applyTimedAbilityStatus(
+                1,
+                {
+                    payload: {
+                        buffName: b.buffName,
+                        stacks: b.stacks,
+                        parsedEffects: b.parsedEffects,
+                    },
+                    side: 'enemy',
+                    sourceSlot: 'active',
+                    duration: 5,
+                    conditions: [],
+                    kind: 'timed',
+                },
+                undefined,
+                actor.id
+            );
+        }
+        return { eng, selfBuffLookup, actor };
+    };
+
+    const buff = (
+        buffName: string,
+        parsedEffects: SelectedGameBuff['parsedEffects']
+    ): SelectedGameBuff => ({
+        id: `b-${buffName}`,
+        buffName,
+        stacks: 1,
+        parsedEffects,
+        isStackable: false,
+    });
+
+    it('with neither store populated it equals the status-mode attack and a zero channel', () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({ attack: 10_000 });
+        const out = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor);
+        expect(out.attack).toBeCloseTo(effectiveStatsOf(eng, selfBuffLookup, actor).attack);
+        expect(out.attack).toBeCloseTo(10_000);
+        expect(out.outgoingDamageBuffPct).toBe(0);
+    });
+
+    it("folds the owner's OWN outgoing total — the channel the hardcoded 0 used to drop", () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 10_000,
+            selfBuffs: [buff('Out. Damage Up III', { outgoingDamage: 30 })],
+        });
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).outgoingDamageBuffPct).toBe(30);
+    });
+
+    it('folds an enemy-APPLIED Attack Down into the same additive term, not as a second factor', () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 10_000,
+            selfBuffs: [buff('Attack Up III', { attack: 30 })],
+            enemyApplied: [buff('Attack Down III', { attack: -60 })],
+        });
+        // ADDITIVE: 10,000 × (1 + (30 − 60)/100) = 7,000. Post-multiplying the delta instead
+        // (10,000 × 1.30 × 0.40) would give 5,200 — a compounding that the turn loop does not do.
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(7_000);
+    });
+
+    it('keeps attackFlat OUTSIDE the percentage term', () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 1_000,
+            selfBuffs: [buff('Combat Preparation', { attackFlat: 300 })],
+            enemyApplied: [buff('Attack Down II', { attack: -50 })],
+        });
+        // 1,000 × (1 − 0.50) + 300 = 800. Folding the flat term inside the multiplier would
+        // give (1,000 + 300) × 0.50 = 650.
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(800);
+    });
+
+    it('SHADOWS same-family halves across the store boundary (highest tier wins, never sums)', () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 10_000,
+            selfBuffs: [buff('Attack Down I', { attack: -20 })],
+            enemyApplied: [buff('Attack Down III', { attack: -60 })],
+        });
+        // -60 wins outright: 4,000. A sum (-80) gives 2,000; own-wins (-20) gives 8,000.
+        expect(effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).attack).toBeCloseTo(4_000);
+    });
+
+    it('a WEAKER enemy tier does not raise the owner past its own instance', () => {
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 10_000,
+            selfBuffs: [buff('Out. Damage Down III', { outgoingDamage: -60 })],
+            enemyApplied: [buff('Out. Damage Down I', { outgoingDamage: -20 })],
+        });
+        // The owner's own III already stands; the enemy's I loses, so the channel stays at -60.
+        expect(
+            effectiveOutgoingStatsOf(eng, selfBuffLookup, actor).outgoingDamageBuffPct
+        ).toBeCloseTo(-60);
+    });
+
+    it('is SIDE-AGNOSTIC: the fold never consults `actor.side`', () => {
+        // Both stores are keyed by the HOLDER's id, never by its side — the same property that
+        // makes `foldActorBuffTotals` team-agnostic. So the honest instrument is ONE seeded
+        // harness read twice with only `actor.side` flipped: two separate harnesses would differ
+        // in their engines too, and could agree for the wrong reason.
+        const { eng, selfBuffLookup, actor } = outgoingHarness({
+            attack: 10_000,
+            selfBuffs: [buff('Out. Damage Up III', { outgoingDamage: 30 })],
+            enemyApplied: [buff('Attack Down III', { attack: -60 })],
+        });
+        const asPlayer = effectiveOutgoingStatsOf(eng, selfBuffLookup, actor);
+        const asEnemy = effectiveOutgoingStatsOf(eng, selfBuffLookup, {
+            ...actor,
+            side: 'enemy',
+        } as unknown as CombatActor);
+        // Non-vacuous: both stores are populated and both channels moved off their defaults, so
+        // this is not 10,000 === 10,000 with a zero channel on each side.
+        expect(asPlayer.attack).toBeCloseTo(4_000);
+        expect(asPlayer.outgoingDamageBuffPct).toBe(30);
+        expect(asEnemy.attack).toBeCloseTo(asPlayer.attack);
+        expect(asEnemy.outgoingDamageBuffPct).toBe(asPlayer.outgoingDamageBuffPct);
     });
 });
