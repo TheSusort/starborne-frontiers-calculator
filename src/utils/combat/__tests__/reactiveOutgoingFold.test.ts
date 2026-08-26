@@ -373,6 +373,9 @@ interface ProcRun {
     ownerSelfBuffs: string[];
 }
 
+/** Same three arms as `runCounter`, driven through the OTHER path: the owner's proc reacts to the
+ *  foe's CHARGED cast, whose first clause plants the payload on the owner. Observable is the
+ *  per-victim dealt credit (`perTargetDealt`), which is where `applyReactiveDamage` books. */
 function runProc(
     payloadName: string,
     payload: ParsedBuffEffects,

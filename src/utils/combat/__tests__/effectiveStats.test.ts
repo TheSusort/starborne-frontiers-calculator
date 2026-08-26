@@ -918,6 +918,8 @@ describe('effectiveOutgoingStatsOf — the two outgoing-damage channels', () => 
         return { eng, selfBuffLookup, actor };
     };
 
+    /** One named family instance. The TIER SUFFIX is load-bearing: `deriveFamilyKey` reads it, and
+     *  it is what decides which side of the store boundary wins under shadowing. */
     const buff = (
         buffName: string,
         parsedEffects: SelectedGameBuff['parsedEffects']

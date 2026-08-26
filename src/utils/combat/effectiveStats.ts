@@ -54,11 +54,6 @@ export interface EffectiveStats {
 }
 
 /**
- * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
- * (scheduled self-buffs + timed ability statuses). Generalizes foldSpeedBuffPct to the full
- * calculateBuffTotals shape.
- */
-/**
  * The two SELF-sourced buff lists `foldActorBuffTotals` folds into its totals: the scheduled
  * self-buffs (expanded through `selfBuffLookup`) and the timed `'self'` ability statuses.
  *
@@ -87,6 +82,11 @@ function selfSourcedBuffs(
     return { scheduledSelfBuffs, timedEffects };
 }
 
+/**
+ * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
+ * (scheduled self-buffs + timed ability statuses, via `selfSourcedBuffs`). Generalizes
+ * foldSpeedBuffPct to the full calculateBuffTotals shape.
+ */
 export function foldActorBuffTotals(
     statusEngine: StatusEngine,
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
