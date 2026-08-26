@@ -1063,10 +1063,19 @@ function chargeGainFromSkill(args: {
         // There IS a fourth producer: the ability editor (`AbilityCard.tsx`) lets a user
         // hand-author a `charge`-typed ability, and its target dropdown used to offer
         // 'adjacent-enemies' / 'target-and-adjacent-enemies' alongside the safe targets (it never
-        // offered the three selectors). #399 Change 1a closes that path by restricting the
-        // editor's target options for a `charge`-typed ability to `CHARGE_TARGET_OPTIONS`
-        // (`self` / `all-allies` / `enemy` — the same three the data builders emit), so the
-        // widening is corpus-dead through every current producer, editor included.
+        // offered the three selectors). #399 Change 1a restricts the editor's target options for a
+        // `charge`-typed ability to `CHARGE_TARGET_OPTIONS` (`self` / `all-allies` / `enemy` — the
+        // same three the data builders emit), so no NEWLY authored charge ability can carry one of
+        // the five widened targets.
+        //
+        // RESIDUAL, deliberately accepted: an ALREADY-SAVED charge ability carrying
+        // 'adjacent-enemies' / 'target-and-adjacent-enemies' is PRESERVED by the editor as a
+        // labelled legacy option (`AbilityCard.tsx`, the `CHARGE_TARGET_OPTIONS.some(...)` branch)
+        // rather than silently coerced, so it survives an editing session and still reaches this
+        // classification. For that one shape the amount now routes to enemy charge REMOVAL instead
+        // of the caster's own gain — a real behaviour change, and the deliberate cost of using the
+        // shared classifier here. The legacy label is what tells the user to re-pick a supported
+        // target. So: unreachable for anything newly authored, NOT unreachable outright.
         //
         // KNOWN GAP, deliberately not fixed here: `isAlly` above omits 'adjacent-allies', so that
         // target still lands in 'own'. That is a question on the ALLY axis with its own separate
