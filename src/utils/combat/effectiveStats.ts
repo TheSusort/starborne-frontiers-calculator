@@ -9,7 +9,9 @@ import {
     calculateBuffTotals,
     payloadToSelectedBuff,
     shadowedDelta,
+    shadowedOutgoingDelta,
     FOLD_SHADOW_CHANNELS,
+    OUTGOING_CHANNELS,
 } from './buffTotals';
 import { victimOwnEnemyFamilies } from './triggers';
 
@@ -52,15 +54,20 @@ export interface EffectiveStats {
 }
 
 /**
- * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
- * (scheduled self-buffs + timed ability statuses). Generalizes foldSpeedBuffPct to the full
- * calculateBuffTotals shape.
+ * The two SELF-sourced buff lists `foldActorBuffTotals` folds into its totals: the scheduled
+ * self-buffs (expanded through `selfBuffLookup`) and the timed `'self'` ability statuses.
+ *
+ * WHY IT IS ITS OWN FUNCTION. A cross-store shadowing consumer must compare an enemy-applied
+ * family against THE VERY LIST the totals were built from — `shadowedDelta` subtracts the self
+ * contribution when the enemy tier wins, so a list that merely resembles the folded one removes a
+ * term the totals never held. Sharing the construction makes that impossible to get wrong; two
+ * hand-kept copies would drift the first time either source gains a layer.
  */
-export function foldActorBuffTotals(
+function selfSourcedBuffs(
     statusEngine: StatusEngine,
     selfBuffLookup: Map<string, SelectedGameBuff[]>,
     actorId: string
-): ReturnType<typeof calculateBuffTotals> {
+): { scheduledSelfBuffs: SelectedGameBuff[]; timedEffects: SelectedGameBuff[] } {
     const scheduledSelfBuffs = statusEngine.snapshot(actorId).activeSelfBuffs.flatMap((ab) => {
         const bufs = selfBuffLookup.get(ab.buffName) ?? [];
         return ab.stacks !== undefined
@@ -72,6 +79,24 @@ export function foldActorBuffTotals(
     const timedEffects = statusEngine
         .timedAbilityStatuses('self', actorId)
         .map((s) => payloadToSelectedBuff(s.payload));
+    return { scheduledSelfBuffs, timedEffects };
+}
+
+/**
+ * Sum an actor's live self-buff totals from the same two sources foldSpeedBuffPct uses
+ * (scheduled self-buffs + timed ability statuses, via `selfSourcedBuffs`). Generalizes
+ * foldSpeedBuffPct to the full calculateBuffTotals shape.
+ */
+export function foldActorBuffTotals(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    actorId: string
+): ReturnType<typeof calculateBuffTotals> {
+    const { scheduledSelfBuffs, timedEffects } = selfSourcedBuffs(
+        statusEngine,
+        selfBuffLookup,
+        actorId
+    );
     const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
     const timed = calculateBuffTotals(toSimBuffs(timedEffects));
     // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
@@ -137,6 +162,77 @@ export function effectiveStatsOf(
         speed: s.speed * (1 + t.speedBuff / 100),
         hacking: (s.hacking ?? 0) + t.hackingBuff,
         security: (s.security ?? 0) + t.securityBuff,
+    };
+}
+
+/** What an attack THROWN OUTSIDE THE TURN LOOP needs on the two outgoing-damage channels. */
+export interface EffectiveOutgoingStats {
+    /** Effective attack — base × (1 + attackBuff%) + attackFlat, with the shadowed enemy-applied
+     *  `Attack Down` delta folded into the same additive percentage term the turn loop uses. */
+    attack: number;
+    /** The `outgoingDamage` channel in percentage points: the owner's OWN self-sourced total PLUS
+     *  the shadowed enemy-applied `Out. Damage Down` delta. Feeds `victimHitDamageParts`'
+     *  `outgoingDamageBuffPct` directly. */
+    outgoingDamageBuffPct: number;
+}
+
+/**
+ * #395 — DAMAGE-mode outgoing stats for an attack thrown OUTSIDE the turn loop: a counter-attack
+ * and a reactive proc (`applyCounterAttack` / `applyReactiveDamage` in engine.ts).
+ *
+ * WHY A THIRD ACCESSOR. Those two paths cannot use `effectiveDamageStatsOf`: that one wants
+ * RESOLVED ingredients the turn loop owns (gated auras, the firing skill's modifier channel,
+ * `scheduledTotals`), and a reactive hit has no cast of its own to resolve them from. So they used
+ * `effectiveStatsOf` (STATUS mode) — which folds only self-sourced layers and exposes no outgoing
+ * channel at all — plus a hardcoded `outgoingDamageBuffPct: 0`. Two things were therefore missing
+ * from every retaliation and every proc:
+ *
+ *   • the enemy-APPLIED half of both channels (#389's fix, which landed only on the centralised
+ *     applied-damage path). An enemy's `Attack Down III` on the owner lands in the owner's
+ *     per-victim ENEMY store, which `foldActorBuffTotals` does not read on these two channels;
+ *   • the owner's OWN `Out. Damage Up`, dropped outright by the hardcoded 0 — so Grif's team-wide
+ *     `Out. Damage Up III` reached an ally's ordinary attacks but not its retaliation, while
+ *     `Attack Up III` from the same cast reached both.
+ *
+ * THE TWO ARE ONE FIX, not two. `shadowedDelta` enforces highest-tier-wins by SUBTRACTING the
+ * owner's own same-family contribution when the enemy tier wins, which is sound only if that
+ * contribution is in the total. It always was on `attack`; on `outgoingDamage` the total was 0, so
+ * shadowing there would have removed a term that was never added.
+ *
+ * NOT FOR THE TURN LOOP. `runPlayerTurn` folds the same delta itself, into `scheduledTotals` ahead
+ * of `effectiveDamageStatsOf` (see its `args.enemyAppliedFamilies` block); calling this there
+ * would double-count. It is also NOT a general replacement for `effectiveStatsOf` — the ~20 other
+ * engine readers of `.attack`/`.defence` are not throwing an attack and must keep the status-mode
+ * fold. Two channels, two call sites, deliberately.
+ *
+ * Team-agnostic for free, for the same reason `foldActorBuffTotals` is: the per-victim enemy store
+ * is keyed by the holder's id regardless of side, and both call sites run for a player or an enemy
+ * owner identically. The store axis and the side axis are independent — see
+ * `enemyStoreChannelCoverage.test.ts`.
+ */
+export function effectiveOutgoingStatsOf(
+    statusEngine: StatusEngine,
+    selfBuffLookup: Map<string, SelectedGameBuff[]>,
+    actor: CombatActor
+): EffectiveOutgoingStats {
+    const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
+    const { scheduledSelfBuffs, timedEffects } = selfSourcedBuffs(
+        statusEngine,
+        selfBuffLookup,
+        actor.id
+    );
+    // The self list is EXACTLY what `foldActorBuffTotals` summed above, so `shadowedDelta`'s
+    // subtraction can only ever remove a contribution the totals actually hold.
+    const { attackPct, outgoingDamagePct } = shadowedOutgoingDelta(
+        victimOwnEnemyFamilies(statusEngine, actor.id, OUTGOING_CHANNELS),
+        [...scheduledSelfBuffs, ...timedEffects]
+    );
+    return {
+        // Same shape as `effectiveStatsOf.attack`, with the delta added to the SAME additive
+        // percentage term — mirroring the turn loop's `scheduledTotals.attackBuff += delta.attack`
+        // rather than post-multiplying, which would compound instead of adding.
+        attack: actor.stats.attack * (1 + (t.attackBuff + attackPct) / 100) + t.attackFlatBuff,
+        outgoingDamageBuffPct: t.outgoingDamageBuff + outgoingDamagePct,
     };
 }
 

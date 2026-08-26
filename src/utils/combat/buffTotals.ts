@@ -191,7 +191,11 @@ export function incomingHealFactor(pct: number): number {
 // THE CHANNEL LIST IS THE AUDIT RESULT, not a guess (#396 spec §1.1). A channel belongs here iff
 // an ENEMY-store read is combined with a SELF-store read of the SAME `parsedEffects` key:
 //   • `attack` / `outgoingDamage` — `victimOwnEnemyOutgoingFamilies` vs the actor's own named
-//     self statuses, combined in playerTurn's late fold (#389).
+//     self statuses, combined in playerTurn's late fold (#389) AND, since #395, in
+//     `effectiveOutgoingStatsOf` for the two attacks thrown outside the turn loop
+//     (engine.ts's `applyCounterAttack` / `applyReactiveDamage`). TWO sites, one per path, and
+//     they are mutually exclusive by construction: a reactive hit has no cast, so it never
+//     reaches playerTurn's fold, and the turn loop never calls the accessor.
 //   • `defense` / `incomingDamage` — `toEnemyModifiers(victimEnemyBuffs)` vs
 //     `toSelfDefenseModifier`/`toSelfIncomingDamageModifier(victimSelfBuffs)`, combined in
 //     engine.ts's `victimIncomingModifiers`.

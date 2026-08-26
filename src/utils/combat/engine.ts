@@ -30,7 +30,12 @@ import {
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 import { isEnemyTarget } from '../abilities/abilityTargetSide';
-import { foldActorBuffTotals, effectiveStatsOf, liveDebuffLandingChance } from './effectiveStats';
+import {
+    foldActorBuffTotals,
+    effectiveStatsOf,
+    effectiveOutgoingStatsOf,
+    liveDebuffLandingChance,
+} from './effectiveStats';
 import {
     ActiveDoTStack,
     ActorDamage,
@@ -6874,6 +6879,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (attacker.destroyedRound !== undefined || attacker.id === owner.id) return;
 
             const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
+            // #395: the two outgoing-damage channels, which STATUS mode does not carry — the
+            // owner's own `Out. Damage Up` plus the shadowed enemy-APPLIED `Attack Down` /
+            // `Out. Damage Down`. Everything else below still reads `ownerStats` (crit, crit
+            // damage, base pen), which is the correct fold for those.
+            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
             const attackerStats = effectiveStatsOf(statusEngine, selfBuffLookup, attacker);
 
             // Roll the OWNER's crit via the dedicated gate (one stream per counter ability per owner).
@@ -6885,7 +6895,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
             const rawParts = victimHitDamageParts(
                 {
-                    effectiveAttack: ownerStats.attack,
+                    effectiveAttack: ownerOutgoing.attack,
                     // `multiplier` is the PER-HIT value, so the full counter total is
                     // multiplier × hits. The counter is modeled as ONE consolidated applied
                     // hit, so fold the count into the multiplier and pass hits:1 — passing the
@@ -6896,21 +6906,18 @@ export function runCombat(rawInput: CombatEngineInput): {
                     secondaryStatValue: 0,
                     hits: 1,
                     effectiveCritDamage: ownerStats.critDamage,
-                    // #389 RESIDUAL, DELIBERATELY NOT WIDENED — tracked as #395. This site does not
-                    // honour an enemy-APPLIED `Attack Down` / `Out. Damage Down` on the owner:
-                    // `ownerStats` comes from `effectiveStatsOf`, which folds only the two SELF-side
-                    // layers, and the outgoing channel is the hardcoded 0 below (which already drops
-                    // the owner's OWN `Out. Damage Up` — a pre-existing approximation, not a #389
-                    // regression). MEASURED over the whole suite before leaving it, with a
-                    // console.error probe at this line reporting every counter whose owner carries
-                    // an enemy-applied instance of either family: NOT ONE of the counters the suite
-                    // fires qualifies, and the probe was validated by removing its guard so it
-                    // reported every counter instead (re-run it rather than trusting a raw count
-                    // here, which goes stale as the suite grows). So the gap is corpus-unreachable
-                    // and widening it would be untestable — but it IS reachable in a real fight
-                    // (Opal debuffs an attacker; that attacker counters), so it is a filed
-                    // follow-up, not a closed question.
-                    outgoingDamageBuffPct: 0,
+                    // #395 CLOSED THE #389 RESIDUAL HERE. This used to be a hardcoded 0, which
+                    // dropped BOTH halves of the channel: the enemy-APPLIED `Out. Damage Down` on
+                    // the owner (#389's fix reached only the centralised applied-damage path) AND
+                    // the owner's OWN `Out. Damage Up` (Grif grants it to all allies; Centurion's
+                    // retaliation never saw it, while `Attack Up` from the same cast did).
+                    // `effectiveOutgoingStatsOf` folds both, shadowed per named family.
+                    //
+                    // The gap was corpus-unreachable when filed — 861 counter invocations across
+                    // the suite, none with a suppressed owner, measured with a probe validated by
+                    // removing its guard — so `reactiveOutgoingFold.test.ts` hand-authors the
+                    // shape rather than relying on a ship kit to produce it.
+                    outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
                     // APPROXIMATION (asymmetry vs Reflect, which threads the attacker's
                     // incomingReductionForHit): the counter does NOT apply the attacker's
                     // incoming-damage-reduction abilities. Harmless today (no Stalwart fixture);
@@ -7056,6 +7063,11 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (!victim || victim.destroyedRound !== undefined) return;
 
             const ownerStats = effectiveStatsOf(statusEngine, selfBuffLookup, owner);
+            // #395: twin of the counter site's read — the two outgoing-damage channels STATUS mode
+            // does not carry. Only the ATTACK-basis arm of `basisStat` below consumes `.attack`; an
+            // hp-basis or shield-basis proc is not attack-scaled, so an `Attack Down` must not
+            // touch its basis, while `Out. Damage Down` still reduces the resulting damage.
+            const ownerOutgoing = effectiveOutgoingStatsOf(statusEngine, selfBuffLookup, owner);
             const victimStats = effectiveStatsOf(statusEngine, selfBuffLookup, victim);
 
             let raw: number;
@@ -7109,7 +7121,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         ? recipientMaxHp(ownerId)
                         : shieldBasisPct !== undefined
                           ? owner.shieldPool
-                          : ownerStats.attack;
+                          : ownerOutgoing.attack;
                 const basisPct =
                     hpBasisPct !== undefined
                         ? hpBasisPct
@@ -7126,15 +7138,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         secondaryStatValue: 0,
                         hits: 1,
                         effectiveCritDamage: ownerStats.critDamage,
-                        // #389 RESIDUAL, DELIBERATELY NOT WIDENED — twin of the counter-attack
-                        // site's note, tracked in the same issue, #395. The reactive proc reads
-                        // `effectiveStatsOf` (self-side layers only) and hardcodes the outgoing
-                        // channel to 0, so an enemy-APPLIED suppression debuff on the owner is not
-                        // honoured here. MEASURED with the same validated console.error probe as
-                        // the counter site: every reactive proc the suite fires has an owner
-                        // carrying no such debuff. Corpus-unreachable, reachable in a real fight,
-                        // filed follow-up.
-                        outgoingDamageBuffPct: 0,
+                        // #395 CLOSED THE #389 RESIDUAL HERE — twin of the counter-attack site's
+                        // note. Was a hardcoded 0, dropping the enemy-APPLIED `Out. Damage Down` on
+                        // the owner AND the owner's own `Out. Damage Up`. Applies on every basis:
+                        // `Out. Damage Down` reduces the DAMAGE, whatever the basis it was computed
+                        // from — only the `flatBasis` arm above is exempt, and by construction
+                        // (it never reaches `victimHitDamageParts`, being a copy of an
+                        // already-resolved number rather than a new attack).
+                        outgoingDamageBuffPct: ownerOutgoing.outgoingDamageBuffPct,
                         incomingDamageModifierPct: 0,
                         defensePenetrationPct: ownerStats.defensePenetration,
                         attackerAffinity: owner.affinity ?? 'antimatter',
