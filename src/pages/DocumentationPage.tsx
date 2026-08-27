@@ -2491,6 +2491,40 @@ const DocumentationPage: React.FC = () => {
                                         buttons in the skill editor.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            &quot;Most Buffs&quot; / &quot;Highest Attack&quot;
+                                            Targeting:
+                                        </span>{' '}
+                                        Effects that pick an enemy by a fleet-wide rule — Rhodium
+                                        and Lodolite purge{' '}
+                                        <span className="text-primary">the most-buffed enemy</span>,
+                                        Selenite debuffs the highest-attack one, Chakara hits the
+                                        fastest — only ever consider{' '}
+                                        <span className="text-primary">living</span> ships. A
+                                        destroyed ship keeps the buffs it died holding, so before
+                                        this it could keep winning the &quot;most buffs&quot; count
+                                        and the purge landed on the wreck. If every buffed enemy is
+                                        dead, the effect simply does nothing. Note that Stealth does
+                                        not hide a ship from these effects: it hides a ship from
+                                        being chosen as an attack target, not from a fleet-wide
+                                        search.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">
+                                            Targets Offered Per Effect Type:
+                                        </span>{' '}
+                                        In the skill editor, the{' '}
+                                        <span className="text-primary">Target</span> dropdown only
+                                        offers targets that make sense for the effect type you
+                                        picked — a Buff cannot be aimed at enemies, and a Damage or
+                                        Debuff effect is not offered your own allies. Effects that
+                                        genuinely work in both directions (Charge, Control — Taunt
+                                        targets your own ship — and Extend Status) keep both sets.
+                                        If you already saved an effect whose target is no longer
+                                        offered, it stays visible and is marked as not valid for
+                                        that effect type, so nothing is silently rewritten.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">Charge Manipulation:</span>{' '}
                                         Ships that add charges to their own Charged Skill each round
                                         (e.g. &quot;+1 charge if you crit&quot;) make the charged

@@ -1128,3 +1128,106 @@ describe('AbilityCard', () => {
         expect(screen.getByText(/\+10% Atk/i)).toBeInTheDocument();
     });
 });
+
+/**
+ * #407 — the target dropdown is narrowed by ability TYPE.
+ *
+ * Unfiltered, it let a user author a `buff` aimed at `all-enemies` and SAVE it: a status that lands
+ * in the per-victim ENEMY store but inflicts on ONE enemy (the cast anchor), because
+ * `playerTurn.ts`'s `matchingAbility` lookup searches debuff-typed configs only. Owner ruling R4
+ * closes it at the authoring boundary, so the engine is untouched and this is where it is pinned.
+ *
+ * The saved-data case matters as much as the filter: a `Select` whose value is absent from its
+ * options falls back to a blank placeholder and MISREPRESENTS what is stored. Whatever a user
+ * already saved must stay visible and selectable, labelled — the same treatment #399 gave the
+ * legacy charge targets, whose tests above are the pattern this describe follows.
+ */
+describe('AbilityCard target options (#407)', () => {
+    /** The Select is a custom portal listbox, not a native <select>: open it, then read the
+     *  options out of the listbox. Same access path as the #399 charge-target tests above. */
+    const openTargetOptions = (): string[] => {
+        fireEvent.click(screen.getByLabelText('Target'));
+        return within(screen.getByRole('listbox'))
+            .getAllByRole('option')
+            .map((o) => o.textContent ?? '');
+    };
+
+    it('a buff ability is not offered any enemy target', () => {
+        render(<AbilityCard ability={buffAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+        expect(openTargetOptions()).toEqual([
+            'Self',
+            'Ally',
+            'All allies',
+            'Lowest HP ally',
+            'Adjacent allies',
+        ]);
+    });
+
+    it('a damage ability is not offered any ally target', () => {
+        // Instrument validation for the test above: without this, "the enemy targets are missing"
+        // could be explained by the filter hiding everything but the ally side for every type.
+        render(<AbilityCard ability={damageAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+        expect(openTargetOptions()).toEqual([
+            'Enemy',
+            'All enemies',
+            'Adjacent enemies',
+            'Target + adjacent enemies',
+        ]);
+    });
+
+    it('a control ability keeps BOTH sides — Taunt is its self arm', () => {
+        // `control` is one of the three genuinely both-sided types (measured: 6 corpus Taunts
+        // alongside 37 inflicted controls, on Anemone/Iridium/Isha/Madax among others). Narrowing
+        // it would break real ships.
+        const controlAbility: Ability = {
+            id: 'a-control',
+            type: 'control',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'control', effect: 'stasis' },
+        };
+        render(<AbilityCard ability={controlAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+        const labels = openTargetOptions();
+        expect(labels).toContain('Self');
+        expect(labels).toContain('All enemies');
+    });
+
+    it('a SAVED buff-at-enemy target stays visible and labelled, not silently dropped', () => {
+        // The exact shape a user could already have persisted before this filter existed. The
+        // Select must still show it — otherwise the editor displays a target the ability does not
+        // have, and the next save would silently rewrite the user's own data.
+        render(
+            <AbilityCard
+                ability={{ ...buffAbility, target: 'all-enemies' }}
+                onChange={vi.fn()}
+                onRemove={vi.fn()}
+            />
+        );
+        // Visible in the CLOSED button, i.e. the Select is not falling back to its placeholder.
+        expect(screen.getByText(/All enemies \(saved value/)).toBeInTheDocument();
+        expect(openTargetOptions()).toEqual([
+            'Self',
+            'Ally',
+            'All allies',
+            'Lowest HP ally',
+            'Adjacent allies',
+            'All enemies (saved value — not valid for a Buff ability)',
+        ]);
+    });
+
+    it('leaves the stricter #399 charge narrowing alone', () => {
+        // `charge` is both-sided, so the side filter would narrow nothing for it — CHARGE_TARGET_OPTIONS
+        // must keep winning, with its own legacy wording (asserted by the #399 describe above).
+        const chargeAbility: Ability = {
+            id: 'a-charge-407',
+            type: 'charge',
+            target: 'self',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'charge', amount: 1 },
+        };
+        render(<AbilityCard ability={chargeAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
+        expect(openTargetOptions()).toEqual(['Self', 'All allies', 'Enemy']);
+    });
+});
