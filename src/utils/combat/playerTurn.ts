@@ -1298,14 +1298,34 @@ function reduceEnemyBombs(args: {
     detonatorId: string;
     landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
+    /** #407: the board-neighbour fan-out and the SELECTOR delegate, threaded so this loop resolves
+     *  recipients by exactly the same rules as the debuff-clause path. */
+    adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    positionalLanding: boolean;
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): void {
     if (args.targetId === undefined) return;
     for (const ab of args.gatedSkill?.abilities ?? []) {
         if (ab.config.type !== 'bomb-countdown-reduce') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
         if (!args.landsTimedEnemyApplicationLive('inflict')) continue;
-        const recipients =
-            ab.target === 'all-enemies' && args.aoeVictimIds ? args.aoeVictimIds : [args.targetId];
+        // #407: was a bare `all-enemies`-or-anchor ternary with no selector arm at all, so a
+        // `bomb-countdown-reduce` aimed at 'enemy-highest-attack' reduced the countdown on
+        // whichever enemy the pattern anchored on. Now routed through the SAME resolver the
+        // debuff-clause path uses, which also fixes the two enemy-adjacency scopes here for free.
+        //
+        // `undefined` in the resolver's result means "the turn's own bound victim" — a sink this
+        // loop has no equivalent of, since it looks its victim up BY ID below. Filtered out rather
+        // than mapped: dropping it changes nothing for the pre-existing arms, which always resolved
+        // to real ids.
+        const recipients = resolveDebuffRecipientIds({
+            abTarget: ab.target,
+            anchorId: args.targetId,
+            aoeVictimIds: args.aoeVictimIds,
+            adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
+            positionalLanding: args.positionalLanding,
+            selectorEnemyIdFor: args.selectorEnemyIdFor,
+        }).filter((id): id is string => id !== undefined);
         for (const vid of recipients) {
             const victim =
                 args.opposingVictimById?.get(vid) ??
@@ -3663,6 +3683,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             detonatorId: actor.id, // Ship-kit W7: the countdown-reduce caster is the detonator.
             landsTimedEnemyApplicationLive,
             forceDetonateBomb: args.forceDetonateBomb,
+            adjacentEnemyIdsFor,
+            positionalLanding,
+            selectorEnemyIdFor,
         });
     }
 
@@ -3966,15 +3989,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // purge loop and the debuff clause loop disagree on the unresolved case ON PURPOSE.
                 // If you are aligning them, change this one and say so in the commit.
                 //
-                // #403 review Finding 7: this file actually has FIVE on-cast loops that ask the
-                // footprint question, not two. Besides this purge loop and the debuff clause path,
-                // three more are entirely SELECTOR-UNAWARE — they resolve recipients with a bare
-                // `ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId]` that
-                // has no selector arm at all, so a selector target on any of them lands on the
-                // anchor with no note anywhere: the `bomb-countdown-reduce` loop (reduceEnemyBombs),
-                // the standalone `shield-strip` loop, and the `extend-status` debuff branch. Leaving
-                // them is correct scope discipline — corpus-unreachable, since no selector-phrase
-                // ship emits those config types — not an oversight to fix here.
+                // #403 review Finding 7, CLOSED by #407: this file has FIVE on-cast loops that ask
+                // the footprint question. Three of them — the `bomb-countdown-reduce` loop
+                // (reduceEnemyBombs), the standalone `shield-strip` loop, and the `extend-status`
+                // debuff branch — used to resolve recipients with a bare
+                // `ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId]` and had
+                // no selector arm at all. All three now route through `resolveDebuffRecipientIds`,
+                // so every one of the five agrees on which enemy a selector names — and on the two
+                // enemy-adjacency scopes, which those three were also collapsing to the anchor.
+                //
+                // THIS purge loop is the one that still differs, deliberately: it keeps its anchor
+                // fall-back for an unresolved selector (see the R4 paragraph above). Four sites
+                // share one resolver; this one shares the resolver and overrides the tail.
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds
                         ? aoeVictimIds
@@ -4042,8 +4068,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 ab.trigger === 'on-cast' &&
                 conditionsMet(ab.conditions, ctx)
             ) {
-                const recipients =
-                    ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+                // #407: same widening as the bomb-countdown loop — this was a bare
+                // `all-enemies`-or-anchor ternary, so a 'enemy-most-buffs' shield-strip stripped the
+                // anchor's shield instead of the most-buffed enemy's. See that loop for why the
+                // `undefined` sink is filtered out rather than mapped.
+                const recipients = resolveDebuffRecipientIds({
+                    abTarget: ab.target,
+                    anchorId: targetId,
+                    aoeVictimIds,
+                    adjacentEnemyIdsFor,
+                    positionalLanding,
+                    selectorEnemyIdFor,
+                }).filter((id): id is string => id !== undefined);
                 for (const vid of recipients) {
                     // SP-4c-2b: anchor fallback arm dropped when there is no victim (as at the I6
                     // purge-strip site above).
@@ -4096,8 +4132,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // (aoeVictimIds) for an 'all-enemies' target — same E3 pattern the purge/shield-strip
             // blocks above use. Requires a hit target; skipped when there is none.
             if (targetId === undefined) continue;
-            const recipients =
-                ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId];
+            // #407: same widening as the bomb-countdown and shield-strip loops above — this was a
+            // bare `all-enemies`-or-anchor ternary with no selector arm. See the bomb loop for why
+            // the `undefined` sink is filtered out rather than mapped.
+            const recipients = resolveDebuffRecipientIds({
+                abTarget: ab.target,
+                anchorId: targetId,
+                aoeVictimIds,
+                adjacentEnemyIdsFor,
+                positionalLanding,
+                selectorEnemyIdFor,
+            }).filter((id): id is string => id !== undefined);
             for (const vid of recipients) {
                 statusEngine.extendAllDebuffsDuration(vid, turns);
             }
