@@ -1305,6 +1305,9 @@ function reduceEnemyBombs(args: {
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): void {
     if (args.targetId === undefined) return;
+    // Captured after the guard: `args.targetId` is `string | undefined` on the args type and TS does
+    // not carry the narrowing into the loop below, where the `?? ` fall-back needs a definite id.
+    const boundVictimId: string = args.targetId;
     for (const ab of args.gatedSkill?.abilities ?? []) {
         if (ab.config.type !== 'bomb-countdown-reduce') continue;
         if (!conditionsMet(ab.conditions, args.ctx)) continue;
@@ -1314,10 +1317,15 @@ function reduceEnemyBombs(args: {
         // whichever enemy the pattern anchored on. Now routed through the SAME resolver the
         // debuff-clause path uses, which also fixes the two enemy-adjacency scopes here for free.
         //
-        // `undefined` in the resolver's result means "the turn's own bound victim" — a sink this
-        // loop has no equivalent of, since it looks its victim up BY ID below. Filtered out rather
-        // than mapped: dropping it changes nothing for the pre-existing arms, which always resolved
-        // to real ids.
+        // `undefined` in the resolver's result means "the turn's own bound victim" — the
+        // non-positional single-target answer. It MUST be mapped to `args.targetId`, not dropped:
+        // #403 ruling R1 says an unresolved selector fizzles for a POSITIONAL caller (the resolver
+        // returns `[]`, so the map is a no-op) and keeps the bound victim for a NON-POSITIONAL one.
+        // A DPS caller never supplies `selectorEnemyIdFor` at all, so every selector target lands
+        // here — and `?? args.targetId` reproduces the old ternary's `[args.targetId]` tail exactly,
+        // byte-identical for DPS. An earlier draft filtered `undefined` out instead, which silently
+        // made a selector-targeted clause hit NOBODY in DPS mode (caught in review on PR #408).
+        // `boundVictimId` is the post-guard capture of `args.targetId` (see its declaration).
         const recipients = resolveDebuffRecipientIds({
             abTarget: ab.target,
             anchorId: args.targetId,
@@ -1325,7 +1333,7 @@ function reduceEnemyBombs(args: {
             adjacentEnemyIdsFor: args.adjacentEnemyIdsFor,
             positionalLanding: args.positionalLanding,
             selectorEnemyIdFor: args.selectorEnemyIdFor,
-        }).filter((id): id is string => id !== undefined);
+        }).map((id) => id ?? boundVictimId);
         for (const vid of recipients) {
             const victim =
                 args.opposingVictimById?.get(vid) ??
@@ -4071,7 +4079,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // #407: same widening as the bomb-countdown loop — this was a bare
                 // `all-enemies`-or-anchor ternary, so a 'enemy-most-buffs' shield-strip stripped the
                 // anchor's shield instead of the most-buffed enemy's. See that loop for why the
-                // `undefined` sink is filtered out rather than mapped.
+                // `undefined` sink is MAPPED to the bound victim rather than dropped.
                 const recipients = resolveDebuffRecipientIds({
                     abTarget: ab.target,
                     anchorId: targetId,
@@ -4079,7 +4087,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     adjacentEnemyIdsFor,
                     positionalLanding,
                     selectorEnemyIdFor,
-                }).filter((id): id is string => id !== undefined);
+                }).map((id) => id ?? targetId);
                 for (const vid of recipients) {
                     // SP-4c-2b: anchor fallback arm dropped when there is no victim (as at the I6
                     // purge-strip site above).
@@ -4134,7 +4142,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (targetId === undefined) continue;
             // #407: same widening as the bomb-countdown and shield-strip loops above — this was a
             // bare `all-enemies`-or-anchor ternary with no selector arm. See the bomb loop for why
-            // the `undefined` sink is filtered out rather than mapped.
+            // the `undefined` sink is MAPPED to the bound victim rather than dropped.
             const recipients = resolveDebuffRecipientIds({
                 abTarget: ab.target,
                 anchorId: targetId,
@@ -4142,7 +4150,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 adjacentEnemyIdsFor,
                 positionalLanding,
                 selectorEnemyIdFor,
-            }).filter((id): id is string => id !== undefined);
+            }).map((id) => id ?? targetId);
             for (const vid of recipients) {
                 statusEngine.extendAllDebuffsDuration(vid, turns);
             }

@@ -275,6 +275,83 @@ describe('#407: the three selector-unaware on-cast loops now resolve selectors',
         expect(turnsLeftOn(statusEngine, anchor.id)).toBe(2);
     });
 
+    it('a NON-POSITIONAL (DPS) caller keeps the bound victim when the selector cannot resolve', () => {
+        // PR #408 review finding (CodeRabbit), confirmed real. A DPS caller never supplies
+        // `selectorEnemyIdFor` at all — it has no roster to resolve against — so EVERY selector
+        // target reaches the resolver's unresolved arm, which returns the `undefined` sink meaning
+        // "the turn's own bound victim". #403 ruling R1: a positional caller inflicts nobody, a
+        // non-positional one keeps that victim.
+        //
+        // The first draft of this change FILTERED `undefined` out instead of mapping it, which made
+        // a selector-targeted shield-strip silently hit nobody in DPS mode. The `?? targetId` map
+        // reproduces the old ternary's `[targetId]` tail exactly, so DPS output stays
+        // byte-identical.
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const anchor = makeVictim(ANCHOR_ID);
+        const selected = makeVictim(SELECTED_ID);
+        anchor.shieldPool = 1000;
+        selected.shieldPool = 1000;
+
+        const runtime = makeRuntime(
+            skills([
+                {
+                    id: 'ab-shield-strip-dps',
+                    type: 'shield-strip',
+                    target: 'enemy-most-buffs',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'shield-strip', pct: 50 },
+                },
+            ])
+        );
+        runPlayerTurn(
+            makeArgs(runtime, anchor, selected, statusEngine, {
+                // The DPS shape: no positional landing, no victim map, no selector delegate.
+                deferAbilityPerformedToEngine: false,
+                opposingVictimById: undefined,
+                selectorEnemyIdFor: undefined,
+            })
+        );
+
+        expect(anchor.shieldPool).toBe(500);
+        expect(selected.shieldPool).toBe(1000);
+    });
+
+    it('a POSITIONAL caller inflicts NOBODY when the selector cannot resolve', () => {
+        // The other half of ruling R1, and the reason the fix is a `??` map rather than an
+        // unconditional fall-back: positionally, the resolver returns [] and the map is a no-op, so
+        // an unresolved "most buffs" must not quietly hit the anchor instead.
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const anchor = makeVictim(ANCHOR_ID);
+        const selected = makeVictim(SELECTED_ID);
+        anchor.shieldPool = 1000;
+        selected.shieldPool = 1000;
+
+        const runtime = makeRuntime(
+            skills([
+                {
+                    id: 'ab-shield-strip-unresolved',
+                    type: 'shield-strip',
+                    target: 'enemy-most-buffs',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'shield-strip', pct: 50 },
+                },
+            ])
+        );
+        runPlayerTurn(
+            makeArgs(runtime, anchor, selected, statusEngine, {
+                // Positional, but the delegate finds nobody (no opposing actor carries a buff).
+                selectorEnemyIdFor: () => undefined,
+            })
+        );
+
+        expect(anchor.shieldPool).toBe(1000);
+        expect(selected.shieldPool).toBe(1000);
+    });
+
     it('INSTRUMENT: a plain target:enemy clause still lands on the anchor', () => {
         // Without this, every assertion above could be explained by the loops now ALWAYS using the
         // selector delegate — which would be a different, worse bug. The delegate is supplied here
