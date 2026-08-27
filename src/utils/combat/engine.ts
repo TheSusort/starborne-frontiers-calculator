@@ -8713,12 +8713,27 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // folds no extra live stats. NOT memoized (see the arg's doc in playerTurn.ts):
                 // resolution must be live at clause time so a purge earlier in the same cast is
                 // visible to a later debuff clause.
-                selectorEnemyIdFor: (kind: EnemySelectorKind): string | undefined =>
-                    kind === 'most-buffs'
-                        ? mostBuffsAmong(tb.opposingRoster)
-                        : kind === 'highest-attack'
-                          ? highestAttackInRoster(tb.opposingRoster)
-                          : highestSpeedInRoster(tb.opposingRoster),
+                // #403 review Finding 2: exhaustive `switch` with a `never`-typed default, same
+                // idiom as `passiveSlotPattern`'s exhaustiveness guard above (~line 7988) — a
+                // fourth `EnemySelectorKind` variant must be classified here explicitly, loud
+                // (throw) rather than silently inheriting `highestSpeedInRoster` the way an
+                // unconditional ternary tail would.
+                selectorEnemyIdFor: (kind: EnemySelectorKind): string | undefined => {
+                    switch (kind) {
+                        case 'most-buffs':
+                            return mostBuffsAmong(tb.opposingRoster);
+                        case 'highest-attack':
+                            return highestAttackInRoster(tb.opposingRoster);
+                        case 'highest-speed':
+                            return highestSpeedInRoster(tb.opposingRoster);
+                        default: {
+                            const exhaustive: never = kind;
+                            throw new Error(
+                                `selectorEnemyIdFor: unhandled EnemySelectorKind ${String(exhaustive)}`
+                            );
+                        }
+                    }
+                },
                 // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
                 // per turn from its own side's roster — same adjacentAllyIdsFor helper
                 // 'adjacent-allies' targets use elsewhere (adjacency.ts). Team-symmetric via
@@ -9875,6 +9890,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         // arrays built from the input rosters and never filtered by death, and since SP-4b-2b the
         // boundary refuses an absent/empty `enemyAttackers`. The guard stays as a total-function
         // contract, not as a live branch.
+        // #403 review Finding 5: unlike its two siblings below (`highestAttackInRoster`,
+        // `highestSpeedInRoster`), this loop does NOT filter `destroyedRound` — it walks the whole
+        // roster, dead or alive. That is an asymmetry, not a fizzle: `opposingVictimById` is built
+        // from `tb.opposingRoster`, which is never death-filtered, `landsDebuffOnVictim` has no
+        // liveness check, and death does not clear an actor's self statuses, so a buffed CORPSE can
+        // win this selection and the status lands on the corpse's store. Corpus-unreachable today
+        // (no known cast both buffs and then kills the same actor before this selector reads it in
+        // the same window), not fixed here — shared with the pre-existing I6 on-cast purge path and
+        // must not be altered by this comment.
         const mostBuffsAmong = (roster: CombatActor[]): string | undefined => {
             let best: string | undefined;
             let bestCount = -1;

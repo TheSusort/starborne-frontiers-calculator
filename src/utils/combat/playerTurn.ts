@@ -809,8 +809,14 @@ export interface PlayerTurnArgs {
      *  which a memo would hide.
      *
      *  Absent → an unresolved selector degrades exactly like the recipient tail: positional
-     *  inflicts nobody, non-positional keeps the turn's bound victim. Every non-positional/DPS
-     *  caller supplies none, so their output is byte-identical. */
+     *  inflicts nobody, non-positional keeps the turn's bound victim. #403 review Finding 6: that
+     *  `[undefined]` sink is exercised by test files that call `runPlayerTurn` directly with no
+     *  delegate — in PRODUCTION all three calculators (`dpsSimulator.ts`, `battleSimulator.ts`,
+     *  `healingEngineAdapter.ts`) enter through `runCombat`, where `buildTurnArgs` supplies this
+     *  delegate UNCONDITIONALLY, so the sink is unreachable there. DPS output being unchanged is
+     *  therefore corpus-unreachability of a selector-typed clause on a DPS-mode kit, not delegate
+     *  absence — do not lean on "every non-positional/DPS caller supplies none" as a production
+     *  fact. */
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
@@ -3950,9 +3956,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts)
                 // does NOT fall back to the anchor when its selector fails to resolve — positional
                 // inflicts nobody, non-positional keeps the bound victim. Purge keeps the anchor
-                // fall-back: it is a different clause type and re-ruling it was outside #403. The
-                // two loops in this file disagree on the unresolved case ON PURPOSE. If you are
-                // aligning them, change this one and say so in the commit.
+                // fall-back: it is a different clause type and re-ruling it was outside #403. This
+                // purge loop and the debuff clause loop disagree on the unresolved case ON PURPOSE.
+                // If you are aligning them, change this one and say so in the commit.
+                //
+                // #403 review Finding 7: this file actually has FIVE on-cast loops that ask the
+                // footprint question, not two. Besides this purge loop and the debuff clause path,
+                // three more are entirely SELECTOR-UNAWARE — they resolve recipients with a bare
+                // `ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId]` that
+                // has no selector arm at all, so a selector target on any of them lands on the
+                // anchor with no note anywhere: the `bomb-countdown-reduce` loop (reduceEnemyBombs),
+                // the standalone `shield-strip` loop, and the `extend-status` debuff branch. Leaving
+                // them is correct scope discipline — corpus-unreachable, since no selector-phrase
+                // ship emits those config types — not an oversight to fix here.
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds
                         ? aoeVictimIds

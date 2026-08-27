@@ -10,6 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { resolveDebuffRecipientIds } from '../debuffRecipients';
+import type { EnemySelectorKind } from '../../abilities/abilityTargetSide';
 
 const adjacentOf = (anchorId: string): string[] => [`${anchorId}-left`, `${anchorId}-right`];
 
@@ -163,8 +164,12 @@ describe('resolveDebuffRecipientIds', () => {
     // Before #403 these fell through the whole ternary to its tail, `[anchorId]` — the cast's
     // normal target — so a clause naming "the highest attack enemy" hit whoever the pattern
     // anchored on. The delegate below stands in for engine.ts's buildTurnArgs closure.
-    const selectorFor = (byKind: Record<string, string | undefined>) => (kind: string) =>
-        byKind[kind];
+    // #403 review Finding 3: typed against the real `EnemySelectorKind` union (not `string`) so a
+    // typo'd kind key is a compile error instead of silently resolving to `undefined`.
+    const selectorFor =
+        (byKind: Partial<Record<EnemySelectorKind, string>>) =>
+        (kind: EnemySelectorKind): string | undefined =>
+            byKind[kind];
 
     it('#403 enemy-highest-attack resolves through the delegate, not the anchor', () => {
         expect(

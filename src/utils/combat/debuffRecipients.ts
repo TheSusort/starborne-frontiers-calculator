@@ -82,7 +82,10 @@ export function resolveDebuffRecipientIds(args: {
     // is a different clause type and re-ruling it was outside #403 (spec ruling R4). If you are
     // making the two agree, change it there and say so, do not quietly align this one.
     const selectorKind = abTarget !== undefined ? enemySelectorKind(abTarget) : null;
-    if (selectorKind !== null) {
+    // #403 review Finding 1, belt-and-braces: `!= null` (not `!== null`) so this guard is safe even
+    // if `enemySelectorKind`'s own `?? null` coalesce were ever lost — an out-of-union target must
+    // fall through to the anchor tail below, never reach the selector arm on an `undefined` kind.
+    if (selectorKind != null) {
         const selected = selectorEnemyIdFor?.(selectorKind);
         if (selected !== undefined) return [selected];
         return positionalLanding ? [] : [undefined];

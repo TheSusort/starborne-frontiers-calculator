@@ -78,6 +78,16 @@ export const ABILITY_TARGET_SELECTOR: Record<AbilityTarget, EnemySelectorKind | 
     'enemy-highest-speed': 'highest-speed',
 };
 
+/**
+ * #403 review Finding 1: the `?? null` is NOT redundant with the `Record`'s type. `ABILITY_TARGET_SELECTOR`
+ * is typed as total over `AbilityTarget`, but ability configs are user-persisted and unvalidated on
+ * read (no Zod schema covers them — see `engine.ts`'s `passiveSlotPattern` exhaustiveness-guard
+ * comment for the same fact stated at that call site). A `target` string OUTSIDE the union at
+ * runtime indexes the `Record` to `undefined`, which is NOT `null` and so slips past a
+ * `selectorKind !== null` guard downstream. An out-of-union target must resolve to "not a
+ * selector" and fall through to the anchor tail — never be mistaken for a real selector arm. Do
+ * not "simplify" this back to a bare index lookup.
+ */
 export function enemySelectorKind(target: AbilityTarget): EnemySelectorKind | null {
-    return ABILITY_TARGET_SELECTOR[target];
+    return ABILITY_TARGET_SELECTOR[target] ?? null;
 }

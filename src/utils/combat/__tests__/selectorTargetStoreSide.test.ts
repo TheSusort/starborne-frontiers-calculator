@@ -253,6 +253,15 @@ describe('#399 reachability — selector targets and the status store side', () 
         // non-positional caller keeps the turn's bound victim, which is written under
         // DEFAULT_ENEMY_TARGET rather than a named victim id.
         //
+        // #403 review Finding 4: this arm's "absent everywhere" shape is, in isolation, also what
+        // a NO-OP clause would look like (e.g. "the clause never ran" for an unrelated reason). The
+        // SAME `abTarget` ('enemy-most-buffs') on a materially identical board lands POSITIVELY one
+        // test above — 'SELECTOR: target:enemy-most-buffs lands on the BUFFED enemy, not the
+        // anchor' — so that arm is a same-target positive control for this one, stronger than the
+        // `CONTROL: target:enemy` arm at the top of this file (which uses a different `abTarget`
+        // entirely). Together they show the clause DOES run and DOES resolve through the selector
+        // machinery; it is the "nobody is buffed" input, not a dead code path, that produces [].
+        //
         // MEASURED: this harness's cast is POSITIONAL — `stores.defaultBucket` comes back empty,
         // not `['Probe Mark']`. `willApplyPositionally` (engine.ts) is
         // `resolvesPositionalVictim(actor.position, enemyAttackerActors) && target != null &&

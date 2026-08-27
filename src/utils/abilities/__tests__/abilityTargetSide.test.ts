@@ -96,4 +96,17 @@ describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
             Object.keys(ABILITY_TARGET_SIDE).sort()
         );
     });
+
+    // #403 review Finding 1: `ABILITY_TARGET_SELECTOR` is a total `Record<AbilityTarget, …>`, but
+    // ability configs are user-persisted and unvalidated on read, so a stale/imported config can
+    // carry a `target` string OUTSIDE the union at runtime. Indexing a `Record` with an unknown
+    // key returns `undefined`, not `null` — and `undefined !== null`, so without the `?? null`
+    // coalesce an out-of-union target would slip past `debuffRecipients.ts`'s
+    // `selectorKind !== null` guard and get routed to a selector arm (in practice,
+    // `highestSpeedInRoster`, the ternary's last arm) instead of falling through to the safe
+    // anchor tail. `tsc` forbids authoring an out-of-union target directly, so cast at the call
+    // boundary to simulate the unvalidated-persisted-config input.
+    it('an out-of-union target resolves to null, not undefined (unvalidated persisted config)', () => {
+        expect(enemySelectorKind('bogus-target' as AbilityTarget)).toBeNull();
+    });
 });
