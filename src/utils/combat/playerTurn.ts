@@ -1,7 +1,7 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
-import { isEnemyTarget } from '../abilities/abilityTargetSide';
+import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
     DoTType,
@@ -796,6 +796,22 @@ export interface PlayerTurnArgs {
      *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
      *  fallback (see the recipientIds computation). */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    /** #403: resolves one of the three enemy SELECTOR kinds to a live opposing actor id, for a
+     *  debuff clause whose ability `target` is 'enemy-most-buffs' / 'enemy-highest-attack' /
+     *  'enemy-highest-speed'. Supplied by engine.ts's `buildTurnArgs` (team-symmetric — it closes
+     *  over `tb.opposingRoster`, which is already side-relative, so a player caster and an enemy
+     *  caster get the same rule against their own opposing board).
+     *
+     *  Called at CLAUSE time, never pre-resolved, and deliberately NOT memoized — the reactive ctx
+     *  wraps `mostBuffsAmong` in `onceByOwner` (engine.ts) because a purge co-occurs with its
+     *  drain, but the cast path has the opposite requirement: by the intra-cast clause-order rule a
+     *  purge clause written EARLIER IN THE SAME CAST must be visible to a later debuff clause,
+     *  which a memo would hide.
+     *
+     *  Absent → an unresolved selector degrades exactly like the recipient tail: positional
+     *  inflicts nobody, non-positional keeps the turn's bound victim. Every non-positional/DPS
+     *  caller supplies none, so their output is byte-identical. */
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
@@ -1340,6 +1356,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyMostBuffsId,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
+        selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2316,6 +2333,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
+            selectorEnemyIdFor,
         });
 
         landStatusOnRecipients(status, recipientIds);
@@ -2342,6 +2360,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     aoeVictimIds: sub.victimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding: true,
+                    selectorEnemyIdFor,
                 }),
                 collected
             );

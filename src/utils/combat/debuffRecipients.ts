@@ -1,4 +1,5 @@
 import type { Ability } from '../../types/abilities';
+import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 
 /**
  * Which actors a direct enemy-debuff clause lands on, given the ability's `target` and a RESOLVED
@@ -31,6 +32,13 @@ import type { Ability } from '../../types/abilities';
  *                          correct for free.
  * @param positionalLanding `deferAbilityPerformedToEngine` — true when the engine resolves this
  *                          cast against a real positioned roster.
+ * @param selectorEnemyIdFor #403: resolves one of the three enemy SELECTOR kinds
+ *                          ('most-buffs' / 'highest-attack' / 'highest-speed') to a live opposing
+ *                          actor id. Supplied by engine.ts's `buildTurnArgs`; absent for every
+ *                          non-positional/DPS caller, which is why an unresolved selector degrades
+ *                          exactly like the tail (positional → nobody, non-positional → the bound
+ *                          victim). Called at CLAUSE time so a purge earlier in the same cast is
+ *                          visible to it.
  */
 export function resolveDebuffRecipientIds(args: {
     abTarget: Ability['target'] | undefined;
@@ -38,8 +46,47 @@ export function resolveDebuffRecipientIds(args: {
     aoeVictimIds: string[] | undefined;
     adjacentEnemyIdsFor: ((anchorId: string) => string[]) | undefined;
     positionalLanding: boolean;
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
 }): (string | undefined)[] {
-    const { abTarget, anchorId, aoeVictimIds, adjacentEnemyIdsFor, positionalLanding } = args;
+    const {
+        abTarget,
+        anchorId,
+        aoeVictimIds,
+        adjacentEnemyIdsFor,
+        positionalLanding,
+        selectorEnemyIdFor,
+    } = args;
+    // #403: the three enemy SELECTOR targets ('enemy-most-buffs', 'enemy-highest-attack',
+    // 'enemy-highest-speed') name ONE opposing actor chosen by a global rule, not the cast's
+    // anchor and not a positional footprint. They are resolved FIRST and returned directly: a
+    // selector is single-victim, so it must never fall into the `all-enemies` / adjacency arms
+    // below, and before #403 it fell all the way past them to the tail `[anchorId]` — the cast's
+    // normal target. In-fight that meant a clause reading "applies Stasis to the highest attack
+    // enemy" landed on the front-most enemy the pattern anchored on, leaving the 9,000-attack
+    // ship behind it untouched.
+    //
+    // Resolution is the CALLER's (engine.ts `buildTurnArgs` builds the delegate over the live
+    // opposing roster), and it is LIVE at clause time, not a turn-start snapshot: by the locked
+    // intra-cast clause-order rule a purge clause written earlier in the SAME cast changes who
+    // carries the most buffs, and the later debuff clause must see the post-purge board.
+    //
+    // UNRESOLVED (ruling R1): a positional caller inflicts NOTHING — 'most buffs' with no buff
+    // anywhere on the opposing side has no victim, so nothing is inflicted, nothing is resisted,
+    // and no landing draw is taken. A non-positional/DPS caller never supplies the delegate at
+    // all (it has no roster to resolve against), so it keeps the turn's own bound victim via the
+    // `undefined` sink — byte-identical DPS output for every kit. Same fork, same reason, as the
+    // tail below.
+    //
+    // NOTE, deliberate divergence: the sibling on-cast PURGE loop (playerTurn.ts, the
+    // `enemy-most-buffs` arm) falls back to the anchor when its selector does not resolve. Purge
+    // is a different clause type and re-ruling it was outside #403 (spec ruling R4). If you are
+    // making the two agree, change it there and say so, do not quietly align this one.
+    const selectorKind = abTarget !== undefined ? enemySelectorKind(abTarget) : null;
+    if (selectorKind !== null) {
+        const selected = selectorEnemyIdFor?.(selectorKind);
+        if (selected !== undefined) return [selected];
+        return positionalLanding ? [] : [undefined];
+    }
     const isAllEnemies = abTarget === 'all-enemies';
     const adjacentEnemyRecipients: string[] =
         anchorId !== undefined && adjacentEnemyIdsFor ? adjacentEnemyIdsFor(anchorId) : [];

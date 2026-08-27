@@ -37,11 +37,13 @@
  * come apart. Measured result: the debuff still lands on the ANCHOR (`ANCHOR_ID`), never on the
  * true highest-attack enemy (`HIGH_ATTACK_ID`) — `resolveDebuffRecipientIds`
  * (`debuffRecipients.ts`) has no arm for the three selector targets, so it falls to the tail
- * `[anchorId]`. This is a KNOWN, DELIBERATE scope boundary of #399: the STORE side is fixed (this
- * file's original point), RECIPIENT resolution is not (see `engine.ts`'s matching comment at the
- * `side` computation). The CONTROL arm was re-verified against the same widened roster and behaves
- * identically (lands on the anchor, absent from the second enemy) — the widening does not change
- * its answer.
+ * `[anchorId]`. #403 closed the RECIPIENT axis: `resolveDebuffRecipientIds` now resolves the three
+ * selector targets through engine.ts's `selectorEnemyIdFor` delegate, so the SELECTOR arm below
+ * asserts the true highest-attack enemy (`HIGH_ATTACK_ID`) and the ABSENCE of the mark from the
+ * anchor. The pre-#403 reading — the mark on `ANCHOR_ID`, never on the real selector victim — is
+ * left recorded above because it is the only evidence that defect existed. The CONTROL arm is
+ * unchanged and is still the instrument validation: `target:'enemy'` must keep landing on the
+ * anchor. If CONTROL ever moves, this file is measuring its own wiring, not the engine.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
@@ -168,19 +170,16 @@ describe('#399 reachability — selector targets and the status store side', () 
         expect(stores.casterSelfStore).not.toContain('Probe Mark');
     });
 
-    it('SELECTOR: target:enemy-highest-attack on-cast debuff lands in the ENEMY store side (store-axis fix)', () => {
+    it('SELECTOR: target:enemy-highest-attack on-cast debuff lands on the HIGHEST-ATTACK enemy', () => {
         const stores = runProbe(skills([debuffAbility('enemy-highest-attack')]), twoEnemyBoard());
-        // The STORE-AXIS fix (#399 Task 2): the status is on SOME enemy store, never the caster's
-        // own self store.
+        // STORE axis (#399 Task 2): on an enemy store, never the caster's own self store.
         expect(stores.casterSelfStore).not.toContain('Probe Mark');
-        // The RECIPIENT-AXIS residual (#399 final-review Finding 3, KNOWN and DELIBERATE — not
-        // fixed by this branch): it lands on the cast ANCHOR, not on the true highest-attack
-        // enemy. `resolveDebuffRecipientIds` has no arm for the three selector targets and falls
-        // to its non-selector tail, `[anchorId]`. If this ever starts asserting `toContain` on
-        // `highAttackEnemyStore` instead, recipient resolution has been fixed — update this
-        // comment (and `engine.ts`'s matching one) rather than leaving it stale.
-        expect(stores.anchorEnemyStore).toContain('Probe Mark');
-        expect(stores.highAttackEnemyStore).not.toContain('Probe Mark');
+        // RECIPIENT axis (#403): the selector's victim, NOT the cast anchor. Before #403 this
+        // asserted the opposite — `resolveDebuffRecipientIds` had no selector arm and fell to its
+        // tail `[anchorId]`, so the mark sat on the front-most enemy while the 9,000-attack ship
+        // behind it went untouched.
+        expect(stores.highAttackEnemyStore).toContain('Probe Mark');
+        expect(stores.anchorEnemyStore).not.toContain('Probe Mark');
     });
 });
 

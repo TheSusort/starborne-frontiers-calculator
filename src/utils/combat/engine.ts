@@ -29,7 +29,7 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { isEnemyTarget } from '../abilities/abilityTargetSide';
+import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     foldActorBuffTotals,
     effectiveStatsOf,
@@ -8705,6 +8705,20 @@ export function runCombat(rawInput: CombatEngineInput): {
             return {
                 runtime: rt,
                 enemyMostBuffsId,
+                // #403: resolve a debuff clause's SELECTOR target to one live opposing actor.
+                // Closes over the same three resolvers the reactive ctx uses and the same
+                // `tb.opposingRoster` the eager `enemyMostBuffsId` above uses — team-symmetric for
+                // free, since that roster is already side-relative. Called lazily, only when a
+                // clause actually carries a selector target, so a cast with no selector clause
+                // folds no extra live stats. NOT memoized (see the arg's doc in playerTurn.ts):
+                // resolution must be live at clause time so a purge earlier in the same cast is
+                // visible to a later debuff clause.
+                selectorEnemyIdFor: (kind: EnemySelectorKind): string | undefined =>
+                    kind === 'most-buffs'
+                        ? mostBuffsAmong(tb.opposingRoster)
+                        : kind === 'highest-attack'
+                          ? highestAttackInRoster(tb.opposingRoster)
+                          : highestSpeedInRoster(tb.opposingRoster),
                 // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
                 // per turn from its own side's roster — same adjacentAllyIdsFor helper
                 // 'adjacent-allies' targets use elsewhere (adjacency.ts). Team-symmetric via
