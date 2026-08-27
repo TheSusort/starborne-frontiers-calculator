@@ -229,6 +229,22 @@ describe('Phase 3 reactive triggers', () => {
     // ----------------------------------------------------------------------
     // Scenario 3 — standing aura debuff grants nothing (recurring fold never
     // emits debuff-applied, so the trigger never fires). Cadence = baseline.
+    //
+    // ⚠️ #390: THIS FIXTURE IS CURRENTLY VACUOUS, AND THE REASON IS NOT THE ONE ABOVE. The
+    // enemy-side AURA channel is dead end-to-end: an enemy-side `duration: 'recurring'` status is
+    // registered under the side-wide '__enemy__' key but folded under the resolved victim's real
+    // id, so this debuff never lands at all. The assertion below therefore cannot tell the stated
+    // rule ("the aura DID land, and a recurring re-application correctly emits no debuff-applied")
+    // apart from "the aura never landed, so of course nothing was emitted" — it would hold either
+    // way. Measured, with the root cause and the corpus census, in
+    // `calculators/__tests__/enemyAuraDebuffChannel.characterization.test.ts`.
+    //
+    // The fixture is left EXACTLY as it is on purpose. Measured 2026-08-27 against a candidate
+    // one-site repair of the read key: with the aura channel live this test still passes, so the
+    // rule it asserts is the right one and only its PROOF is missing. Do not "fix" it by giving
+    // the debuff a numeric duration — that would test the timed path, which scenarios 1 and 2
+    // already cover, and would delete the only fixture aimed at this rule. It becomes a real
+    // measurement the day the channel is repaired; nothing here needs to change then.
     // ----------------------------------------------------------------------
     it('scenario 3: recurring (aura) enemy debuff never feeds the on-debuff-inflicted trigger', () => {
         const skills: ShipSkills = {

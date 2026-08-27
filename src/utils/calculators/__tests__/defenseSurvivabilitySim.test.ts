@@ -432,6 +432,71 @@ describe('simulateDefenseSurvivability', () => {
         expect(gated.breakdown.gross).toBe(24_993);
         expect(gated.breakdown.gross).toBeGreaterThan(ungated.breakdown.gross);
     });
+
+    // ── #394: THE OTHER DIRECTION — GATE MET ⇒ THE BUFF ACTUALLY APPLIES ─────────────────────
+    // The arm above proves gate UNMET ⇒ withheld. On its own that is only half a proof: the whole
+    // suite would have stayed green under an implementation that withholds a gated buff
+    // UNCONDITIONALLY — never applying it even when its condition is satisfied. That is a
+    // plausible regression shape (an inverted comparator, an early return, a condition evaluated
+    // against the wrong subject) and before this arm nothing in the repo could see it.
+    //
+    // SAME FIXTURE, ONE CHARACTER OF DIFFERENCE. Same ship, same pressure, same window, same
+    // `hp-threshold` gate on the same subject and the same 30% threshold — only the COMPARATOR
+    // flips from 'below' to 'above'. That is deliberate: any other change would let the two arms
+    // diverge for a reason other than the gate's verdict, which is the one thing being measured.
+    //
+    // WHY 'above 30' IS MET FOR THE WHOLE WINDOW, not just at cast time. The gate is re-evaluated
+    // every round against live HP, so a gate that lapsed mid-run would land this arm somewhere
+    // between the two reference figures and the exact equality below would be the wrong assertion.
+    // It cannot lapse here: 100,000 HP against a mitigated 21,192 over the whole window leaves the
+    // defender at ~79% — never within 49 points of the threshold. The exact-equality assertion is
+    // what pins that; a `toBeLessThan` would have passed on a gate that flickered.
+    it('a conditionally-gated defensive buff DOES apply while its condition is met', () => {
+        const armoured = { ...DEFENDER, defence: 5_000 };
+        const defenseUp = {
+            type: 'buff' as const,
+            buffName: 'Defense Up II', // '+30% Defense' — constants/buffs.ts:51
+            parsedEffects: { defense: 30 },
+            stacks: 1,
+            isStackable: false,
+            duration: 'recurring' as const,
+        };
+
+        idCounter = 0;
+        const gateMet = simulateDefenseSurvivability(
+            BASE({
+                rounds: 3,
+                defender: armoured,
+                enemies: [attacker(20_000)],
+                shipSkills: skills([
+                    ab({
+                        type: 'buff',
+                        target: 'self',
+                        config: defenseUp,
+                        // The defender never drops below 79% HP, so "self HP above 30%" holds for
+                        // every round of the window.
+                        conditions: [
+                            {
+                                subject: 'hp-threshold',
+                                hpSubject: 'self',
+                                hpComparator: 'above',
+                                hpPercent: 30,
+                                derivable: true,
+                            },
+                        ],
+                    }),
+                ]),
+            })
+        );
+
+        // Gate met → the buff applies → the run is indistinguishable from the UNGATED one, and
+        // strictly better than the gate-unmet one. Both figures are the literals asserted in the
+        // arm above, restated here rather than recomputed so the two arms are read as one pair:
+        //   21,192 = ungated / gate MET      (defence 5000 x 1.30)
+        //   24,993 = no buff / gate UNMET    (defence 5000)
+        expect(gateMet.breakdown.gross).toBe(21_192);
+        expect(gateMet.breakdown.gross).toBeLessThan(24_993);
+    });
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
