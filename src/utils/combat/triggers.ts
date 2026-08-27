@@ -18,6 +18,7 @@ import {
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
 import { conditionsMet } from '../abilities/evaluateConditions';
+import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
 import { computeAffinityModifiers } from '../calculators/affinityUtils';
@@ -3424,16 +3425,47 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
  *     total; this reactive drain intentionally does not follow suit here — widening it is a
  *     separate, unmeasured question (see the #399 spec's Task 2 "deliberately not folded in").
  */
-type ChargeTargetKind =
-    | 'selector-most-buffs'
-    | 'selector-highest-attack'
-    | 'selector-highest-speed'
-    | 'enemy-bulk'
-    | 'lowest-hp-ally'
-    | 'ally-bulk'
-    | 'owner-gain';
+/**
+ * #407: the three selector arms are DERIVED from `EnemySelectorKind` rather than re-listed. Before
+ * this, `ChargeTargetKind` spelled out 'selector-most-buffs' / 'selector-highest-attack' /
+ * 'selector-highest-speed' by hand — the same three-target partition `ABILITY_TARGET_SELECTOR`
+ * (abilityTargetSide.ts) already owns, authored separately in a different file. Both are total
+ * `Record`s over `AbilityTarget`, so `tsc` forced a NEW target to be classified in each, but
+ * NOTHING forced the two to AGREE about which targets are selectors at all. Now a fourth
+ * `EnemySelectorKind` widens this union automatically, and the `switch` in `executeIntent` fails to
+ * compile until it is handled.
+ */
+type SelectorChargeKind = `selector-${EnemySelectorKind}`;
 
-const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
+type ChargeTargetKind =
+    SelectorChargeKind | 'enemy-bulk' | 'lowest-hp-ally' | 'ally-bulk' | 'owner-gain';
+
+/**
+ * #407: the VALUE side of the same derivation — the map's three selector entries are computed from
+ * `ABILITY_TARGET_SELECTOR` instead of written out, so the two classifications cannot disagree
+ * about which targets are selectors.
+ *
+ * Throws rather than falling back if handed a non-selector target. That can only happen if somebody
+ * reclassifies one of these three in `abilityTargetSide.ts` while leaving this map alone — i.e.
+ * exactly the drift this derivation exists to prevent — and a loud module-load failure is the right
+ * answer to it. Same "loud, not silently inherited" idiom as `selectorEnemyIdFor`'s `never` default
+ * in engine.ts. Cross-checked from the other direction by
+ * `chargeTargetKindDerivation.test.ts`.
+ */
+function selectorChargeKind(target: AbilityTarget): SelectorChargeKind {
+    const kind = enemySelectorKind(target);
+    if (kind === null) {
+        throw new Error(
+            `selectorChargeKind: '${target}' is not classified as an enemy selector by ` +
+                `ABILITY_TARGET_SELECTOR — CHARGE_TARGET_KIND and abilityTargetSide.ts disagree`
+        );
+    }
+    return `selector-${kind}`;
+}
+
+/** Exported for `chargeTargetKindDerivation.test.ts`, which cross-checks it against
+ *  `ABILITY_TARGET_SELECTOR`. Not used outside this module in production. */
+export const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     self: 'owner-gain',
     ally: 'ally-bulk',
     'all-allies': 'ally-bulk',
@@ -3445,9 +3477,10 @@ const CHARGE_TARGET_KIND: Record<AbilityTarget, ChargeTargetKind> = {
     // KNOWN GAP, deliberately unwidened here — see the doc comment above.
     'adjacent-enemies': 'owner-gain',
     'target-and-adjacent-enemies': 'owner-gain',
-    'enemy-most-buffs': 'selector-most-buffs',
-    'enemy-highest-attack': 'selector-highest-attack',
-    'enemy-highest-speed': 'selector-highest-speed',
+    // #407: derived, not written out — see `selectorChargeKind` above.
+    'enemy-most-buffs': selectorChargeKind('enemy-most-buffs'),
+    'enemy-highest-attack': selectorChargeKind('enemy-highest-attack'),
+    'enemy-highest-speed': selectorChargeKind('enemy-highest-speed'),
 };
 
 export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
