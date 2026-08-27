@@ -300,8 +300,10 @@ function registerActorAbilityStatuses(
             // on the resolved highest-attack/most-buffed/fastest enemy instead of the cast anchor.
             // Residual, measured in `selectorTargetStoreSide.test.ts`'s RESIDUAL arm: a BUFF-typed
             // config aimed at an enemy matches no ability in playerTurn's `matchingAbility` lookup
-            // (which filters `type === 'debuff'`), so THAT half still lands on the anchor. See the
-            // comment there.
+            // (which filters `type === 'debuff'`), so THAT half still lands on the anchor. #407
+            // closed it at the AUTHORING boundary instead of here (ruling R4) — the editor no
+            // longer offers an enemy target to a buff-typed ability — and left this engine path
+            // deliberately unchanged for the hand-edited-saved-data case. See the comment there.
             const side: 'self' | 'enemy' = isEnemyTarget(ability.target) ? 'enemy' : 'self';
             // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
             // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.

@@ -20,6 +20,7 @@ import { CheckboxGroup } from '../ui/CheckboxGroup';
 import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
+import { targetSideAllowedForType } from '../../utils/abilities/abilityTargetSide';
 import {
     isAbilityNotSimulated,
     isVictimlessInfliction,
@@ -252,24 +253,47 @@ export const AbilityCard: React.FC<Props> = ({
     // why `charge` is excluded rather than wired up.
     const factionFilterHonoredForType = ability.type !== 'charge';
 
+    // #407: the target dropdown is narrowed by ability TYPE. Unfiltered, it let a user author a
+    // `buff` aimed at `all-enemies` and save it — a status that lands in the per-victim ENEMY store
+    // but inflicts on ONE enemy (the cast anchor), because `playerTurn.ts`'s `matchingAbility`
+    // lookup searches debuff-typed configs only. Owner ruling R4 closes that here rather than in the
+    // engine. The permitted SIDES come from `ABILITY_TYPE_TARGET_SIDES` (abilityTargetSide.ts),
+    // which is total over `AbilityType` and seeded from a sweep of all 1140 corpus abilities — see
+    // `abilityTypeTargetSides.test.ts`.
+    const sideAllowedTargets = TARGET_OPTIONS.filter((opt) =>
+        targetSideAllowedForType(ability.type, opt.value)
+    );
+
     // #399 Change 1a: a `charge`-typed ability may only pick from `CHARGE_TARGET_OPTIONS` — see
-    // that constant's doc comment for why. A previously-saved ability may still carry one of the
-    // now-removed targets (a legacy save, or a shape imported from elsewhere); rather than let the
-    // `Select` silently fall back to its blank "Select" placeholder for an unrecognised value
-    // (or coerce it to something the user never chose), the stored value is appended as its own
-    // labelled, still-selectable option so it stays visible and editable until the user picks a
-    // supported target.
+    // that constant's doc comment for why. It is STRICTER than the side filter above (three exact
+    // targets, not a side), so it is applied instead of it rather than on top; `charge` is one of
+    // the three `'both'`-sided types, so the side filter would narrow nothing for it anyway.
+    //
+    // Both arms share one rule for saved data: a previously-saved ability may carry a target that
+    // is no longer offered (a legacy save, a shape imported from elsewhere, or — new in #407 — a
+    // buff-at-enemy authored before the filter existed). Rather than let the `Select` silently fall
+    // back to its blank "Select" placeholder for an unrecognised value (or coerce it to something
+    // the user never chose), the stored value is appended as its own labelled, still-selectable
+    // option so it stays visible and editable until the user picks a supported target.
+    const savedTargetLabel = (suffix: string): { value: AbilityTarget; label: string } => ({
+        value: ability.target,
+        label: `${TARGET_OPTIONS.find((opt) => opt.value === ability.target)?.label ?? ability.target} ${suffix}`,
+    });
     const targetOptionsForSelect: { value: AbilityTarget; label: string }[] =
-        ability.type !== 'charge'
-            ? TARGET_OPTIONS
-            : CHARGE_TARGET_OPTIONS.some((opt) => opt.value === ability.target)
-              ? CHARGE_TARGET_OPTIONS
+        ability.type === 'charge'
+            ? CHARGE_TARGET_OPTIONS.some((opt) => opt.value === ability.target)
+                ? CHARGE_TARGET_OPTIONS
+                : [
+                      ...CHARGE_TARGET_OPTIONS,
+                      savedTargetLabel('(legacy — not offered for new Charge abilities)'),
+                  ]
+            : sideAllowedTargets.some((opt) => opt.value === ability.target)
+              ? sideAllowedTargets
               : [
-                    ...CHARGE_TARGET_OPTIONS,
-                    {
-                        value: ability.target,
-                        label: `${TARGET_OPTIONS.find((opt) => opt.value === ability.target)?.label ?? ability.target} (legacy — not offered for new Charge abilities)`,
-                    },
+                    ...sideAllowedTargets,
+                    savedTargetLabel(
+                        `(saved value — not valid for a ${ABILITY_TYPE_LABELS[ability.type]} ability)`
+                    ),
                 ];
 
     // "Scales per condition": per-unit bonus × the count from conditions[conditionIndex],

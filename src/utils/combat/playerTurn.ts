@@ -2326,8 +2326,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // selector targets #403 just fixed for debuff-typed clauses. Measured in
         // `selectorTargetStoreSide.test.ts`'s RESIDUAL arm. Widening this predicate would change
         // recipient resolution for EVERY enemy-store buff-typed status (a buff-typed 'all-enemies'
-        // config would start fanning out), which needs its own reachability census — filed
-        // separately rather than smuggled in here.
+        // config would start fanning out).
+        //
+        // #407 ran that census and ruled (R4) that this predicate STAYS AS IT IS. The corpus holds
+        // zero buff-typed enemy-aimed configs (all 1140 abilities swept), and the only way to make
+        // one was the ability editor's unfiltered target dropdown — now closed by
+        // `ABILITY_TYPE_TARGET_SIDES`, which marks `buff` ally-side only. The remaining route is
+        // hand-edited persisted data (#404's axis), and for that shape the behaviour pinned by the
+        // RESIDUAL arm is the accepted answer. Do not widen this predicate without a new ruling.
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );

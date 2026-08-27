@@ -293,8 +293,17 @@ describe('#399 reachability — selector targets and the status store side', () 
         // This is a KNOWN, DELIBERATE boundary of #403 (spec ruling R3), not an oversight.
         // Widening `matchingAbility` to accept buff-typed configs would change recipient resolution
         // for EVERY enemy-store buff-typed status, not just the selector ones — a buff-typed
-        // 'all-enemies' config would start fanning out instead of hitting the anchor — which needs
-        // its own reachability census. Filed separately.
+        // 'all-enemies' config would start fanning out instead of hitting the anchor.
+        //
+        // #407 MEASURED that census and ruled (R4) that the fix belongs at the AUTHORING boundary,
+        // not here: `ABILITY_TYPE_TARGET_SIDES` (abilityTargetSide.ts) marks `buff` ally-side only,
+        // so `AbilityCard.tsx` no longer offers an enemy target for a buff-typed ability and the
+        // combination cannot be authored. The corpus never contained one either — zero buff-typed
+        // enemy-aimed configs across all 1140 corpus abilities.
+        //
+        // So what this arm still pins is the ENGINE's behaviour for a shape that can nonetheless
+        // arrive: hand-edited persisted data, which is #404's axis (reachability pins do not cover
+        // saved user abilities). The engine is deliberately unchanged.
         //
         // If this arm ever starts asserting `toContain` on the HIGH_ATTACK store instead, that
         // widening has landed: update this comment and the one at `matchingAbility` rather than

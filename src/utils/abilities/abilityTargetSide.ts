@@ -1,4 +1,4 @@
-import type { AbilityTarget } from '../../types/abilities';
+import type { AbilityTarget, AbilityType } from '../../types/abilities';
 
 /**
  * THE one answer to "is this ability target enemy-side?" — the STORE axis, i.e. which of the
@@ -90,4 +90,92 @@ export const ABILITY_TARGET_SELECTOR: Record<AbilityTarget, EnemySelectorKind | 
  */
 export function enemySelectorKind(target: AbilityTarget): EnemySelectorKind | null {
     return ABILITY_TARGET_SELECTOR[target] ?? null;
+}
+
+/**
+ * THE one answer to "which SIDE may an ability of this type aim at?" — the AUTHORING axis, beside
+ * this file's two runtime axes (`ABILITY_TARGET_SIDE`, the store; `ABILITY_TARGET_SELECTOR`, the
+ * footprint). Third total `Record` over a derived key set, same instrument and same reason: `tsc`
+ * rejects a new `AbilityType` until somebody classifies it here.
+ *
+ * WHY (#407, owner ruling R4). `AbilityCard.tsx`'s target dropdown was not filtered by ability
+ * type, so a user could author `type: 'buff'` aimed at `all-enemies` and SAVE it. That status lands
+ * in the per-victim ENEMY store — the store side comes from the TARGET, not the config type — but
+ * `playerTurn.ts`'s `matchingAbility` lookup searches `config.type === 'debuff'` only, so it
+ * matched nothing, recipient resolution degraded to plain single-target, and the "all enemies" buff
+ * hit exactly ONE enemy: the cast anchor. The ruling was to close this at the AUTHORING boundary
+ * and leave the engine's predicate alone, so the fix is this map plus the editor filter. The
+ * engine's behaviour for a shape that arrives anyway (hand-edited persisted data — #404's axis) is
+ * still pinned by `selectorTargetStoreSide.test.ts`'s RESIDUAL arm.
+ *
+ * SEEDED FROM A MEASUREMENT, not from taste. All 1140 abilities `buildShipAbilities` derives from
+ * `docs/ship-skills.csv` were swept for the type→target pairs that actually occur. Exactly three
+ * types appear on BOTH sides and are therefore `'both'`:
+ *   • `charge`        — self-gain (24), enemy-removal (8), ally-bulk grants (5);
+ *   • `control`       — inflicted control (35 + 2 adjacency) AND Taunt, which
+ *                       `parseControlInflicts` emits with `side: 'self'` (6);
+ *   • `extend-status` — Ripper's `all-allies` buff-extend (2) AND Sokol/Lev's enemy debuff-extend
+ *                       (2).
+ * Every other type was observed on one side only. `buff` is `'self'` — 262 ally-side occurrences
+ * (self 160, all-allies 87, ally 12, adjacent-allies 3) and NOT ONE enemy target — which is the
+ * entry that closes the hole. `abilityTypeTargetSides.test.ts` re-runs that sweep as a gate.
+ *
+ * Note `charge` is narrowed FURTHER by `CHARGE_TARGET_OPTIONS` (#399 Change 1a) to exactly three
+ * targets. `'both'` here answers only the SIDE question; the editor applies the stricter list
+ * first, so the two are not in conflict. See `AbilityCard.tsx`'s `targetOptionsForSelect`.
+ */
+export const ABILITY_TYPE_TARGET_SIDES: Record<AbilityType, 'self' | 'enemy' | 'both'> = {
+    damage: 'enemy',
+    counter: 'enemy',
+    'additional-damage': 'enemy',
+    'shield-strip': 'enemy',
+    modifier: 'self',
+    buff: 'self',
+    debuff: 'enemy',
+    dot: 'enemy',
+    'extend-dot': 'enemy',
+    // Ripper extends ally buffs; Sokol/Lev extend enemy debuffs. Genuinely both.
+    'extend-status': 'both',
+    'detonate-dot': 'enemy',
+    'accumulate-detonate': 'enemy',
+    // Self-gain, enemy-removal and ally-bulk grants all exist in the corpus. Narrowed further by
+    // CHARGE_TARGET_OPTIONS in the editor.
+    charge: 'both',
+    'extra-action': 'self',
+    heal: 'self',
+    shield: 'self',
+    cleanse: 'self',
+    purge: 'enemy',
+    'buff-steal': 'enemy',
+    // Inflicted control is enemy-side; Taunt is the self arm (parseControlInflicts, side 'self').
+    control: 'both',
+    'remove-self-buff': 'self',
+    'incoming-reduction': 'self',
+    'incoming-block': 'self',
+    'incoming-shield-grant': 'self',
+    'outgoing-amplification': 'self',
+    'heal-amplification': 'self',
+    'incoming-heal-amplification': 'self',
+    'pre-combat-stat': 'self',
+    'transform-incoming-to-dot': 'self',
+    'convert-dot': 'enemy',
+    'defense-substitution': 'self',
+    'bomb-countdown-reduce': 'enemy',
+    'conditional-stat': 'self',
+};
+
+/**
+ * May an ability of `type` aim at `target`? Backs the editor's target-dropdown filter and the
+ * corpus gate in `abilityTypeTargetSides.test.ts`.
+ *
+ * The `undefined` guard is NOT redundant with the `Record`'s type, for the same reason
+ * `enemySelectorKind`'s `?? null` is not: abilities are user-persisted and unvalidated on read, so
+ * an out-of-union `type` indexes this total `Record` to `undefined` at runtime. Treat that as "no
+ * restriction" — the editor must not hide the target a saved ability already carries just because
+ * its type is unrecognised, which would silently misrepresent stored data.
+ */
+export function targetSideAllowedForType(type: AbilityType, target: AbilityTarget): boolean {
+    const allowed = ABILITY_TYPE_TARGET_SIDES[type];
+    if (allowed === undefined || allowed === 'both') return true;
+    return ABILITY_TARGET_SIDE[target] === allowed;
 }
