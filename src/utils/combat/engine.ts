@@ -293,14 +293,14 @@ function registerActorAbilityStatuses(
             // shipped selector-targeted infliction carries a LIVE trigger and is partitioned to
             // the reactive path before this loop), which is why nothing observable moves.
             //
-            // KNOWN, DELIBERATE SCOPE BOUNDARY: this fixes the STORE axis only (WHICH store a
-            // selector-targeted status lands in), not the RECIPIENT axis (WHICH enemy actor it
-            // lands ON, i.e. the per-victim key the enemy store is keyed by). `resolveDebuffRecipientIds`
-            // (debuffRecipients.ts) has no arm for the three selector targets, so on a board with
-            // 2+ enemies a selector-targeted debuff still lands on the cast's anchor (its normal,
-            // non-selector target) rather than the resolved highest-attack/most-buffed/fastest
-            // enemy — see `selectorTargetStoreSide.test.ts`'s SELECTOR arm, which pins this
-            // residual. #399 did not fix it; the owner ruled to document it instead.
+            // #403 CLOSED the recipient axis for DEBUFF-typed clauses: `resolveDebuffRecipientIds`
+            // (debuffRecipients.ts) now resolves the three selector targets through engine
+            // `buildTurnArgs`'s `selectorEnemyIdFor` delegate, so a selector-targeted debuff lands
+            // on the resolved highest-attack/most-buffed/fastest enemy instead of the cast anchor.
+            // Residual, measured in `selectorTargetStoreSide.test.ts`'s RESIDUAL arm: a BUFF-typed
+            // config aimed at an enemy matches no ability in playerTurn's `matchingAbility` lookup
+            // (which filters `type === 'debuff'`), so THAT half still lands on the anchor. See the
+            // comment there.
             const side: 'self' | 'enemy' = isEnemyTarget(ability.target) ? 'enemy' : 'self';
             // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
             // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.

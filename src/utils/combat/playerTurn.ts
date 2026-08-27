@@ -2313,6 +2313,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!hasVictim) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
 
+        // #403 R3, KNOWN BOUNDARY: `config.type === 'debuff'` only. A status that reached the
+        // ENEMY store from a BUFF-typed config aimed at an enemy (the other half of what #399's
+        // store-side fix covers) matches nothing here, so `abTarget` stays undefined and recipient
+        // resolution degrades to plain single-target — the cast anchor — including for the three
+        // selector targets #403 just fixed for debuff-typed clauses. Measured in
+        // `selectorTargetStoreSide.test.ts`'s RESIDUAL arm. Widening this predicate would change
+        // recipient resolution for EVERY enemy-store buff-typed status (a buff-typed 'all-enemies'
+        // config would start fanning out), which needs its own reachability census — filed
+        // separately rather than smuggled in here.
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
@@ -3938,6 +3947,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // anchor when no living opposing actor carries a buff (mostBuffsAmong's
                 // no-buffs-anywhere case) or for a non-positional/DPS caller that never supplies
                 // enemyMostBuffsId — byte-identical to pre-I6 behavior in both cases.
+                // #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts)
+                // does NOT fall back to the anchor when its selector fails to resolve — positional
+                // inflicts nobody, non-positional keeps the bound victim. Purge keeps the anchor
+                // fall-back: it is a different clause type and re-ruling it was outside #403. The
+                // two loops in this file disagree on the unresolved case ON PURPOSE. If you are
+                // aligning them, change this one and say so in the commit.
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds
                         ? aoeVictimIds

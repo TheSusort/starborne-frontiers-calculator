@@ -273,6 +273,48 @@ describe('#399 reachability — selector targets and the status store side', () 
         expect(stores.casterSelfStore).not.toContain('Probe Mark');
         expect(stores.defaultBucket).not.toContain('Probe Mark');
     });
+
+    it('RESIDUAL (#403 R3): a BUFF-typed enemy-selector status still lands on the anchor', () => {
+        // `matchingAbility` (playerTurn.ts) searches `config.type === 'debuff'` only. A status that
+        // reached the ENEMY store from a BUFF-typed config aimed at an enemy — the other half of
+        // what #399's store fix covers — matches no ability, so `abTarget` is undefined and
+        // recipient resolution behaves as plain single-target: the cast ANCHOR.
+        //
+        // This is a KNOWN, DELIBERATE boundary of #403 (spec ruling R3), not an oversight.
+        // Widening `matchingAbility` to accept buff-typed configs would change recipient resolution
+        // for EVERY enemy-store buff-typed status, not just the selector ones — a buff-typed
+        // 'all-enemies' config would start fanning out instead of hitting the anchor — which needs
+        // its own reachability census. Filed separately.
+        //
+        // If this arm ever starts asserting `toContain` on the HIGH_ATTACK store instead, that
+        // widening has landed: update this comment and the one at `matchingAbility` rather than
+        // leaving them stale.
+        const stores = runProbe(
+            skills([
+                {
+                    id: 'ab-buff-selector',
+                    type: 'buff',
+                    target: 'enemy-highest-attack',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'buff',
+                        buffName: 'Probe Boon',
+                        duration: 5,
+                        stacks: 1,
+                        isStackable: false,
+                        parsedEffects: {},
+                    },
+                },
+            ]),
+            twoEnemyBoard()
+        );
+        // STORE axis is correct (#399): it is on an enemy store, not the caster's own.
+        expect(stores.casterSelfStore).not.toContain('Probe Boon');
+        // RECIPIENT axis is the residual: the anchor, not the highest-attack enemy.
+        expect(stores.enemyStores[ANCHOR_ID]).toContain('Probe Boon');
+        expect(stores.enemyStores[HIGH_ATTACK_ID]).not.toContain('Probe Boon');
+    });
 });
 
 function shipFromCsv(name: string): Ship {
