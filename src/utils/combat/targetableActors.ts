@@ -9,11 +9,28 @@ import type { CombatActor } from './state';
  * `engine.ts` and one of the four forgot: `highestAttackInRoster` and `highestSpeedInRoster` each
  * passed their own `destroyedRound === undefined` predicate, `livingOpposingActorIds` filtered
  * inline at both drain contexts, and `mostBuffsAmong` filtered NOTHING. A buffed CORPSE therefore
- * won the "most buffs" selection and the purge landed on its store. That was MEASURED, not
- * theorised: 1086 corpse selections across the test suite, 525 of which should have retargeted to
- * a living buffed enemy and 561 of which should have fizzled. In-fight: the enemy Curator gets a
- * Barrier in round 2 and dies in round 3; in round 4 Rhodium's end-of-round purge strips the
+ * won the "most buffs" selection and the status landed on its store. In-fight: the enemy Curator
+ * gets a Barrier in round 2 and dies in round 3; in round 4 Rhodium's end-of-round purge strips the
  * corpse and leaves the living, Barrier-carrying enemy in front of it untouched.
+ *
+ * ── THE BLAST RADIUS, MEASURED HONESTLY ───────────────────────────────────────────────────────
+ * Two numbers were taken here and they say different things. Do not quote the first one as impact.
+ *
+ *   1263 — times the gate CHANGES `mostBuffsAmong`'s answer at the EAGER `enemyMostBuffsId` site
+ *          in `buildTurnArgs`. Nearly all of them are discarded: that value is computed once per
+ *          turn for EVERY caster, whether or not the cast contains a purge clause that reads it. A
+ *          count of resolver calls is not a count of behaviour changes, and an earlier draft of
+ *          this comment made exactly that mistake.
+ *      4 — times the gate changes an answer that is actually CONSUMED: 3 at the cast-path
+ *          `selectorEnemyIdFor('most-buffs')` delegate and 1 at the player reactive drain's
+ *          `enemyWithMostBuffs`. Zero at the enemy drain.
+ *     24 — times the on-cast purge loop reaches its `enemy-most-buffs` arm at all across the whole
+ *          suite (8 of them with a resolved selector). The corpus exercises this mechanic barely.
+ *
+ * Consequently the ENTIRE existing suite — 596 files, 6705 tests, every golden fingerprint —
+ * is byte-identical across this change. That is not evidence the fix is inert: it is evidence the
+ * suite never covered the mechanic. `aliveSelectorTarget.integration.test.ts` is the only thing
+ * that observes it, which is why that file leads with its own instrument-validation arm.
  *
  * BOTH CONJUNCTS ARE LOAD-BEARING (ruling R2). `currentHp <= 0` is NOT the same question as
  * `destroyedRound !== undefined`: a NEVER-ALIVE actor (max hp 0, never killed) has no

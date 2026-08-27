@@ -30,6 +30,7 @@ import {
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
+import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
     effectiveStatsOf,
@@ -8700,8 +8701,19 @@ export function runCombat(rawInput: CombatEngineInput): {
             // round to round) from THIS actor's opposing roster — same roster mostBuffsAmong's
             // other two call sites use for the reactive path. Undefined for a DPS-mode/empty
             // roster (mostBuffsAmong's own no-buffs-anywhere case) or a non-purge cast — the
-            // playerTurn purge loop falls back to the anchor `targetId` in that case.
-            const enemyMostBuffsId = mostBuffsAmong(tb.opposingRoster);
+            // playerTurn purge loop falls back to the anchor `targetId` in that case. #407 adds a
+            // third way to be undefined: every opposing actor carrying a buff is DEAD. The purge
+            // loop's anchor fall-back is therefore reachable in a new way, which is BY DESIGN —
+            // #403 ruling R4 keeps that fall-back for purge and denies it to the debuff clause
+            // path; do not quietly align the two.
+            // #407: THE aliveness gate for this seam — one call, in a THUNK. Evaluated at use time
+            // because rosters are mutated in place as actors die during a round: a roster filtered
+            // at turn start would go stale and re-admit an actor that died after the snapshot.
+            // Deliberately UNMEMOIZED for the same reason #403 left `selectorEnemyIdFor`
+            // unmemoized — a purge earlier in the SAME cast changes who carries the most buffs, and
+            // the later clause must see the post-purge, post-death board.
+            const aliveOpposing = (): AliveRoster => aliveTargetsOf(tb.opposingRoster);
+            const enemyMostBuffsId = mostBuffsAmong(aliveOpposing());
             return {
                 runtime: rt,
                 enemyMostBuffsId,
@@ -8721,11 +8733,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 selectorEnemyIdFor: (kind: EnemySelectorKind): string | undefined => {
                     switch (kind) {
                         case 'most-buffs':
-                            return mostBuffsAmong(tb.opposingRoster);
+                            return mostBuffsAmong(aliveOpposing());
                         case 'highest-attack':
-                            return highestAttackInRoster(tb.opposingRoster);
+                            return highestAttackInRoster(aliveOpposing());
                         case 'highest-speed':
-                            return highestSpeedInRoster(tb.opposingRoster);
+                            return highestSpeedInRoster(aliveOpposing());
                         default: {
                             const exhaustive: never = kind;
                             throw new Error(
@@ -9890,25 +9902,28 @@ export function runCombat(rawInput: CombatEngineInput): {
         // arrays built from the input rosters and never filtered by death, and since SP-4b-2b the
         // boundary refuses an absent/empty `enemyAttackers`. The guard stays as a total-function
         // contract, not as a live branch.
-        // #403 review Finding 5 — OPEN, not fixed here: unlike its two siblings below
-        // (`highestAttackInRoster`, `highestSpeedInRoster`), this loop does NOT filter
-        // `destroyedRound` — it walks the whole roster, dead or alive. That is an asymmetry, not a
-        // fizzle: `opposingVictimById` is built from `tb.opposingRoster`, which is never
-        // death-filtered, `landsDebuffOnVictim` has no liveness check, and death does not clear an
-        // actor's self statuses, so a buffed CORPSE can win this selection and the status lands on
-        // the corpse's store.
+        // #407 CLOSED what #403 review Finding 5 left open. This loop used to walk the whole
+        // roster, dead or alive, while its two siblings below each filtered `destroyedRound` — so a
+        // buffed CORPSE won the selection and the status landed on the corpse's store (death does
+        // not clear an actor's self statuses, and a dead actor takes no turns to tick them down, so
+        // a corpse from ANY earlier round stayed selectable forever).
         //
-        // UNMEASURED, deliberately not labelled corpus-unreachable. The precondition is only that
-        // an opposing actor died while carrying a buff — it need not die in the same window it was
-        // buffed in, because a dead actor stays in `enemyAttackerActors`/`allPlayerActors` with its
-        // statuses intact and takes no turns to tick them down, so a corpse from any earlier round
-        // remains selectable. Nor is the exposure confined to #403's cast-path delegate: the
-        // REACTIVE purge shares this resolver (`enemyWithMostBuffs`, the `onceByOwner` wrapper
-        // below and its enemy-side mirror), which is Rhodium's end-of-round purge and Lodolite's
-        // on-cast purge — both corpus ships. Calling this unreachable would be a reading, not a
-        // measurement. Shared with the pre-existing I6 on-cast purge path and must not be altered
-        // by this comment.
-        const mostBuffsAmong = (roster: CombatActor[]): string | undefined => {
+        // MEASURED, not argued — and measured twice, because the first number misled. Instrumenting
+        // this resolver found 1086 calls whose winner was DEAD, but that counts resolver CALLS, and
+        // the eager `enemyMostBuffsId` below is computed once per turn for every caster whether or
+        // not the cast has a purge clause to read it. The number that matters is CONSUMED changes:
+        // 4 suite-wide (3 at the cast-path selector delegate, 1 at the player reactive drain), and
+        // the on-cast purge loop reaches its `enemy-most-buffs` arm only 24 times in the whole
+        // suite. The corpus barely exercises this mechanic — which is why the entire existing suite
+        // is byte-identical across the fix, and why `aliveSelectorTarget.integration.test.ts` had to
+        // be written to observe it at all. It was never corpus-UNREACHABLE, though: Rhodium's
+        // end-of-round purge and Lodolite's on-cast purge both share this resolver.
+        //
+        // The fix is NOT a filter added here. Liveness moved UP to the seam: the `AliveRoster`
+        // parameter type below can only be produced by `aliveTargetsOf` (targetableActors.ts), so
+        // `tsc` rejects any call site that hands this function a raw roster. That is what makes the
+        // gate un-forgettable, and why this loop asks nothing about liveness itself.
+        const mostBuffsAmong = (roster: AliveRoster): string | undefined => {
             let best: string | undefined;
             let bestCount = -1;
             for (const a of roster) {
@@ -9921,35 +9936,40 @@ export function runCombat(rawInput: CombatEngineInput): {
             return bestCount > 0 ? best : undefined; // no buffs anywhere → no most-buffs target
         };
 
-        // D-PR14: living opposing actor with the greatest LIVE effective attack
-        // (Doomsayer's enemy-highest-attack target). Ties → roster order.
-        const highestAttackInRoster = (roster: CombatActor[]): string | undefined =>
+        // D-PR14: opposing actor with the greatest LIVE effective attack (Doomsayer's
+        // enemy-highest-attack target). Ties → roster order. #407: the roster arrives already
+        // narrowed to the living by `aliveTargetsOf` at the seam, so this no longer passes its own
+        // `destroyedRound` predicate — see `mostBuffsAmong` above.
+        const highestAttackInRoster = (roster: AliveRoster): string | undefined =>
             highestAttackAmong(
                 roster.map((a) => a.id),
                 (id) => {
                     const a = roster.find((x) => x.id === id);
                     return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).attack : 0;
-                },
-                (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
+                }
             );
 
-        // SP-M M1 (Task 6): living opposing actor with the greatest LIVE effective SPEED
-        // (Chakara's enemy-highest-speed round-boundary hit). Reuses the generic
-        // highestAttackAmong picker (a max-of-a-stat selector) with a speed accessor. Ties →
-        // roster order.
-        const highestSpeedInRoster = (roster: CombatActor[]): string | undefined =>
+        // SP-M M1 (Task 6): opposing actor with the greatest LIVE effective SPEED (Chakara's
+        // enemy-highest-speed round-boundary hit). Reuses the generic highestAttackAmong picker (a
+        // max-of-a-stat selector) with a speed accessor. Ties → roster order. #407: pre-gated at
+        // the seam, same as its sibling above.
+        const highestSpeedInRoster = (roster: AliveRoster): string | undefined =>
             highestAttackAmong(
                 roster.map((a) => a.id),
                 (id) => {
                     const a = roster.find((x) => x.id === id);
                     return a ? effectiveStatsOf(statusEngine, selfBuffLookup, a).speed : 0;
-                },
-                (id) => roster.find((a) => a.id === id)?.destroyedRound === undefined
+                }
             );
 
         // D-PR16: the id of the sole living actor in a roster, or undefined if !=1 alive.
         // Drives the `last-standing` condition (Last Stand). Recomputed each drain so it
         // reflects deaths recorded before the reactive drain.
+        //
+        // #407: DELIBERATELY NOT routed through `aliveTargetsOf`. "How many of my team are still
+        // standing" is a survivor COUNT, not a targeting question, and the gate's second conjunct
+        // (`currentHp > 0`) would silently re-rule the Last Stand gate for a never-alive 0-hp
+        // actor. See targetableActors.ts's "WHAT THIS IS NOT FOR".
         const soleSurvivorOf = (roster: CombatActor[]): string | undefined => {
             const living = roster.filter((a) => a.destroyedRound === undefined);
             return living.length === 1 ? living[0].id : undefined;
@@ -9983,6 +10003,14 @@ export function runCombat(rawInput: CombatEngineInput): {
             };
         };
 
+        // #407: THE aliveness gate for the two reactive drain contexts below — one thunk per side,
+        // read by every selector in that ctx. Thunked, never hoisted into an array: actors die
+        // between drains within a round, and a snapshot would re-admit a corpse. The two are exact
+        // mirrors (each side's OPPOSING roster), which is what makes the fix team-symmetric by
+        // construction rather than by a pair of parallel edits that could drift.
+        const alivePlayerDrainOpposing = (): AliveRoster => aliveTargetsOf(enemyAttackerActors);
+        const aliveEnemyDrainOpposing = (): AliveRoster => aliveTargetsOf(allPlayerActors);
+
         // Player drain — binds the player queue + player-side ctx. Behaviourally identical to
         // the pre-refactor drainIntents (same runtimes/playerIds/lowest-speed/grantAllyCharges).
         // Hoisted into a named factory (SP-G G2) so the new pre-cast start-of-turn grant drain
@@ -10013,16 +10041,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             //   • the then-named `positionalTeamBattle` input field (now `mode: 'battle'`)
             //     over-corrected: only simulateBattle set it, yet direct-engine tests (e.g.
             //     purgeConditionalSources.test.ts) supply a real positioned roster without it.
-            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(enemyAttackerActors)),
-            enemyWithHighestAttack: () => highestAttackInRoster(enemyAttackerActors),
+            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(alivePlayerDrainOpposing())),
+            enemyWithHighestAttack: () => highestAttackInRoster(alivePlayerDrainOpposing()),
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
-            enemyWithHighestSpeed: () => highestSpeedInRoster(enemyAttackerActors),
+            enemyWithHighestSpeed: () => highestSpeedInRoster(alivePlayerDrainOpposing()),
             // SP-M M1 (Task 7): living opposing roster for an 'all-enemies' reactive damage proc
             // (Judge/Incinerator) — each resolved victim's own hp-threshold/enemy-debuff gates are
-            // re-checked per victim downstream.
-            livingOpposingActorIds: () =>
-                enemyAttackerActors.filter((a) => a.destroyedRound === undefined).map((a) => a.id),
+            // re-checked per victim downstream. #407: reads the shared gate instead of its own
+            // inline `destroyedRound` filter, so it now also excludes the never-alive 0-hp shape.
+            livingOpposingActorIds: () => alivePlayerDrainOpposing().map((a) => a.id),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(allPlayerActors),
             oncePerRoundConsumed,
@@ -10053,13 +10081,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             removeEnemyCharges: bySide('enemy').removeEnemyCharges,
             removeChargesFrom: bySide('enemy').removeChargesFrom,
             selfHpPctFor: bySide('enemy').selfHpPctFor,
-            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(allPlayerActors)),
-            enemyWithHighestAttack: () => highestAttackInRoster(allPlayerActors),
+            enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(aliveEnemyDrainOpposing())),
+            enemyWithHighestAttack: () => highestAttackInRoster(aliveEnemyDrainOpposing()),
             // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
-            enemyWithHighestSpeed: () => highestSpeedInRoster(allPlayerActors),
-            // SP-M M1 (Task 7): mirror — an enemy owner scans the living player roster.
-            livingOpposingActorIds: () =>
-                allPlayerActors.filter((a) => a.destroyedRound === undefined).map((a) => a.id),
+            enemyWithHighestSpeed: () => highestSpeedInRoster(aliveEnemyDrainOpposing()),
+            // SP-M M1 (Task 7): mirror — an enemy owner scans the living player roster. #407: same
+            // shared gate as the player mirror above.
+            livingOpposingActorIds: () => aliveEnemyDrainOpposing().map((a) => a.id),
             firstActivatorId,
             lastStandingId: soleSurvivorOf(enemyAttackerActors),
             oncePerRoundConsumed,
