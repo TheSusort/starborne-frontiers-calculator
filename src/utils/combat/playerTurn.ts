@@ -1,7 +1,7 @@
 import { calculateDamageReduction } from '../autogear/priorityScore';
 import { evaluateCondition, scaledBonus, conditionsMet } from '../abilities/evaluateConditions';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
-import { isEnemyTarget } from '../abilities/abilityTargetSide';
+import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     DoTApplicationConfig,
     DoTType,
@@ -796,6 +796,28 @@ export interface PlayerTurnArgs {
      *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
      *  fallback (see the recipientIds computation). */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    /** #403: resolves one of the three enemy SELECTOR kinds to a live opposing actor id, for a
+     *  debuff clause whose ability `target` is 'enemy-most-buffs' / 'enemy-highest-attack' /
+     *  'enemy-highest-speed'. Supplied by engine.ts's `buildTurnArgs` (team-symmetric — it closes
+     *  over `tb.opposingRoster`, which is already side-relative, so a player caster and an enemy
+     *  caster get the same rule against their own opposing board).
+     *
+     *  Called at CLAUSE time, never pre-resolved, and deliberately NOT memoized — the reactive ctx
+     *  wraps `mostBuffsAmong` in `onceByOwner` (engine.ts) because a purge co-occurs with its
+     *  drain, but the cast path has the opposite requirement: by the intra-cast clause-order rule a
+     *  purge clause written EARLIER IN THE SAME CAST must be visible to a later debuff clause,
+     *  which a memo would hide.
+     *
+     *  Absent → an unresolved selector degrades exactly like the recipient tail: positional
+     *  inflicts nobody, non-positional keeps the turn's bound victim. #403 review Finding 6: that
+     *  `[undefined]` sink is exercised by test files that call `runPlayerTurn` directly with no
+     *  delegate — in PRODUCTION all three calculators (`dpsSimulator.ts`, `battleSimulator.ts`,
+     *  `healingEngineAdapter.ts`) enter through `runCombat`, where `buildTurnArgs` supplies this
+     *  delegate UNCONDITIONALLY, so the sink is unreachable there. DPS output being unchanged is
+     *  therefore corpus-unreachability of a selector-typed clause on a DPS-mode kit, not delegate
+     *  absence — do not lean on "every non-positional/DPS caller supplies none" as a production
+     *  fact. */
+    selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
     /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
@@ -1340,6 +1362,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyMostBuffsId,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
+        selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
@@ -2296,6 +2319,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (!hasVictim) continue;
         if (!conditionsMet(status.conditions, preDebuffGateCtx)) continue;
 
+        // #403 R3, KNOWN BOUNDARY: `config.type === 'debuff'` only. A status that reached the
+        // ENEMY store from a BUFF-typed config aimed at an enemy (the other half of what #399's
+        // store-side fix covers) matches nothing here, so `abTarget` stays undefined and recipient
+        // resolution degrades to plain single-target — the cast anchor — including for the three
+        // selector targets #403 just fixed for debuff-typed clauses. Measured in
+        // `selectorTargetStoreSide.test.ts`'s RESIDUAL arm. Widening this predicate would change
+        // recipient resolution for EVERY enemy-store buff-typed status (a buff-typed 'all-enemies'
+        // config would start fanning out), which needs its own reachability census — filed
+        // separately rather than smuggled in here.
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
@@ -2316,6 +2348,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             aoeVictimIds,
             adjacentEnemyIdsFor,
             positionalLanding,
+            selectorEnemyIdFor,
         });
 
         landStatusOnRecipients(status, recipientIds);
@@ -2342,6 +2375,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     aoeVictimIds: sub.victimIds,
                     adjacentEnemyIdsFor,
                     positionalLanding: true,
+                    selectorEnemyIdFor,
                 }),
                 collected
             );
@@ -3919,6 +3953,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // anchor when no living opposing actor carries a buff (mostBuffsAmong's
                 // no-buffs-anywhere case) or for a non-positional/DPS caller that never supplies
                 // enemyMostBuffsId — byte-identical to pre-I6 behavior in both cases.
+                // #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts)
+                // does NOT fall back to the anchor when its selector fails to resolve — positional
+                // inflicts nobody, non-positional keeps the bound victim. Purge keeps the anchor
+                // fall-back: it is a different clause type and re-ruling it was outside #403. This
+                // purge loop and the debuff clause loop disagree on the unresolved case ON PURPOSE.
+                // If you are aligning them, change this one and say so in the commit.
+                //
+                // #403 review Finding 7: this file actually has FIVE on-cast loops that ask the
+                // footprint question, not two. Besides this purge loop and the debuff clause path,
+                // three more are entirely SELECTOR-UNAWARE — they resolve recipients with a bare
+                // `ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId]` that
+                // has no selector arm at all, so a selector target on any of them lands on the
+                // anchor with no note anywhere: the `bomb-countdown-reduce` loop (reduceEnemyBombs),
+                // the standalone `shield-strip` loop, and the `extend-status` debuff branch. Leaving
+                // them is correct scope discipline — corpus-unreachable, since no selector-phrase
+                // ship emits those config types — not an oversight to fix here.
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds
                         ? aoeVictimIds

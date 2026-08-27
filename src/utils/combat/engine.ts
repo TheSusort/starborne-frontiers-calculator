@@ -29,7 +29,7 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { isEnemyTarget } from '../abilities/abilityTargetSide';
+import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import {
     foldActorBuffTotals,
     effectiveStatsOf,
@@ -293,14 +293,14 @@ function registerActorAbilityStatuses(
             // shipped selector-targeted infliction carries a LIVE trigger and is partitioned to
             // the reactive path before this loop), which is why nothing observable moves.
             //
-            // KNOWN, DELIBERATE SCOPE BOUNDARY: this fixes the STORE axis only (WHICH store a
-            // selector-targeted status lands in), not the RECIPIENT axis (WHICH enemy actor it
-            // lands ON, i.e. the per-victim key the enemy store is keyed by). `resolveDebuffRecipientIds`
-            // (debuffRecipients.ts) has no arm for the three selector targets, so on a board with
-            // 2+ enemies a selector-targeted debuff still lands on the cast's anchor (its normal,
-            // non-selector target) rather than the resolved highest-attack/most-buffed/fastest
-            // enemy — see `selectorTargetStoreSide.test.ts`'s SELECTOR arm, which pins this
-            // residual. #399 did not fix it; the owner ruled to document it instead.
+            // #403 CLOSED the recipient axis for DEBUFF-typed clauses: `resolveDebuffRecipientIds`
+            // (debuffRecipients.ts) now resolves the three selector targets through engine
+            // `buildTurnArgs`'s `selectorEnemyIdFor` delegate, so a selector-targeted debuff lands
+            // on the resolved highest-attack/most-buffed/fastest enemy instead of the cast anchor.
+            // Residual, measured in `selectorTargetStoreSide.test.ts`'s RESIDUAL arm: a BUFF-typed
+            // config aimed at an enemy matches no ability in playerTurn's `matchingAbility` lookup
+            // (which filters `type === 'debuff'`), so THAT half still lands on the anchor. See the
+            // comment there.
             const side: 'self' | 'enemy' = isEnemyTarget(ability.target) ? 'enemy' : 'self';
             // Hit count ("Barrier for 1 hit"), captured as the VALUE rather than a flag so the
             // timed literal below can thread it without re-narrowing `cfg` back to the buff arm.
@@ -8705,6 +8705,35 @@ export function runCombat(rawInput: CombatEngineInput): {
             return {
                 runtime: rt,
                 enemyMostBuffsId,
+                // #403: resolve a debuff clause's SELECTOR target to one live opposing actor.
+                // Closes over the same three resolvers the reactive ctx uses and the same
+                // `tb.opposingRoster` the eager `enemyMostBuffsId` above uses — team-symmetric for
+                // free, since that roster is already side-relative. Called lazily, only when a
+                // clause actually carries a selector target, so a cast with no selector clause
+                // folds no extra live stats. NOT memoized (see the arg's doc in playerTurn.ts):
+                // resolution must be live at clause time so a purge earlier in the same cast is
+                // visible to a later debuff clause.
+                // #403 review Finding 2: exhaustive `switch` with a `never`-typed default, same
+                // idiom as `passiveSlotPattern`'s exhaustiveness guard above (~line 7988) — a
+                // fourth `EnemySelectorKind` variant must be classified here explicitly, loud
+                // (throw) rather than silently inheriting `highestSpeedInRoster` the way an
+                // unconditional ternary tail would.
+                selectorEnemyIdFor: (kind: EnemySelectorKind): string | undefined => {
+                    switch (kind) {
+                        case 'most-buffs':
+                            return mostBuffsAmong(tb.opposingRoster);
+                        case 'highest-attack':
+                            return highestAttackInRoster(tb.opposingRoster);
+                        case 'highest-speed':
+                            return highestSpeedInRoster(tb.opposingRoster);
+                        default: {
+                            const exhaustive: never = kind;
+                            throw new Error(
+                                `selectorEnemyIdFor: unhandled EnemySelectorKind ${String(exhaustive)}`
+                            );
+                        }
+                    }
+                },
                 // PR10 (buff steal): THIS caster's own living adjacent allies, resolved fresh
                 // per turn from its own side's roster — same adjacentAllyIdsFor helper
                 // 'adjacent-allies' targets use elsewhere (adjacency.ts). Team-symmetric via
@@ -9861,6 +9890,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         // arrays built from the input rosters and never filtered by death, and since SP-4b-2b the
         // boundary refuses an absent/empty `enemyAttackers`. The guard stays as a total-function
         // contract, not as a live branch.
+        // #403 review Finding 5 — OPEN, not fixed here: unlike its two siblings below
+        // (`highestAttackInRoster`, `highestSpeedInRoster`), this loop does NOT filter
+        // `destroyedRound` — it walks the whole roster, dead or alive. That is an asymmetry, not a
+        // fizzle: `opposingVictimById` is built from `tb.opposingRoster`, which is never
+        // death-filtered, `landsDebuffOnVictim` has no liveness check, and death does not clear an
+        // actor's self statuses, so a buffed CORPSE can win this selection and the status lands on
+        // the corpse's store.
+        //
+        // UNMEASURED, deliberately not labelled corpus-unreachable. The precondition is only that
+        // an opposing actor died while carrying a buff — it need not die in the same window it was
+        // buffed in, because a dead actor stays in `enemyAttackerActors`/`allPlayerActors` with its
+        // statuses intact and takes no turns to tick them down, so a corpse from any earlier round
+        // remains selectable. Nor is the exposure confined to #403's cast-path delegate: the
+        // REACTIVE purge shares this resolver (`enemyWithMostBuffs`, the `onceByOwner` wrapper
+        // below and its enemy-side mirror), which is Rhodium's end-of-round purge and Lodolite's
+        // on-cast purge — both corpus ships. Calling this unreachable would be a reading, not a
+        // measurement. Shared with the pre-existing I6 on-cast purge path and must not be altered
+        // by this comment.
         const mostBuffsAmong = (roster: CombatActor[]): string | undefined => {
             let best: string | undefined;
             let bestCount = -1;
