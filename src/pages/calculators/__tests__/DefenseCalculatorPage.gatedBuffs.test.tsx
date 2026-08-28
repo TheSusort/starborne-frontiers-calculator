@@ -139,9 +139,9 @@ const mockShip: Ship = {
     refits: [],
 };
 
-const renderDefenseCalculatorPage = () =>
+const renderDefenseCalculatorPage = (initialEntry = '/') =>
     render(
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[initialEntry]}>
             <DefenseCalculatorPage />
         </MemoryRouter>
     );
@@ -242,5 +242,83 @@ describe('DefenseCalculatorPage gated buffs (#391)', () => {
                 '- Defense Up II - when this unit has the lowest Speed among allies'
             )
         ).toBeInTheDocument();
+    });
+});
+
+// #414 — the SAME ship must give the SAME answer whichever way the defender was built. The page
+// has two builders: `selectShipForConfig` (hand-picking) ran `buildSkillBuffAutoFill` +
+// `mergeAutoFill`; `getInitialConfig`'s `?shipId=` branch set `buffs: []`. So a shareable link off
+// the ship page produced a defender with NO kit buffs — understating Theoretical EHP — and, once
+// #391 landed, no "Not counted (conditional):" disclosure either, because there were no auto-filled
+// buffs left to gate. These live beside the #391 tests because they reuse the same ability/buff
+// join mocks, and because the missing disclosure is #391's own knock-on.
+describe('DefenseCalculatorPage ?shipId= arrival (#414)', () => {
+    beforeEach(() => {
+        mockGetShipById.mockReset();
+        // The URL branch resolves the defender through `getShipById` — unlike the click path,
+        // which receives the ship straight from the selector.
+        mockGetShipById.mockImplementation((id: string) =>
+            id === mockShip.id ? mockShip : undefined
+        );
+        mockState.conditions = [];
+        vi.mocked(ShipSelector).mockReset();
+        vi.mocked(ShipSelector).mockImplementation(
+            ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
+                <button onClick={() => onSelect(mockShip)}>pick mock ship</button>
+            )
+        );
+    });
+
+    it('auto-fills the kit buffs, so Theoretical EHP counts them exactly as the ship-picker path does', () => {
+        renderDefenseCalculatorPage(`/?shipId=${mockShip.id}`);
+        const card = screen.getByText('pick mock ship').closest('.card') as HTMLElement;
+
+        // The URL branch really did build the defender from the ship, not from the page defaults.
+        expect(within(card).getByDisplayValue(mockShip.name)).toBeInTheDocument();
+
+        const hp = Number(within(card).getByLabelText<HTMLInputElement>('HP').value);
+        const defense = Number(within(card).getByLabelText<HTMLInputElement>('Defense').value);
+        const security = Number(within(card).getByLabelText<HTMLInputElement>('Security').value);
+
+        const withBuffCounted = Math.round(
+            computeBuffedStats(hp, defense, security, {
+                defenseBuff: 30,
+                incomingDamageBuff: 0,
+                securityBuff: 0,
+            }).effectiveHP
+        );
+        const withNoBuffAtAll = Math.round(
+            computeBuffedStats(hp, defense, security, undefined).effectiveHP
+        );
+        // Distinctness guard: if the mocked grant moved nothing, both expectations would be the
+        // same number and the assertion below would pass on the broken `buffs: []` path too.
+        expect(withBuffCounted).toBeGreaterThan(withNoBuffAtAll);
+
+        expect(readTheoreticalEHP(card)).toBe(withBuffCounted);
+    });
+
+    it('shows the gated-buff disclosure on a URL-arrived defender', () => {
+        mockState.conditions = [
+            {
+                subject: 'hp-threshold',
+                derivable: true,
+                hpComparator: 'below',
+                hpPercent: 60,
+                hpSubject: 'self',
+            },
+        ];
+        renderDefenseCalculatorPage(`/?shipId=${mockShip.id}`);
+        const card = screen.getByText('pick mock ship').closest('.card') as HTMLElement;
+
+        expect(within(card).getByText('Not counted (conditional):')).toBeInTheDocument();
+        expect(within(card).getByText('- Defense Up II - below 60% HP')).toBeInTheDocument();
+    });
+
+    it('leaves the default defender alone when no ?shipId= is present', () => {
+        renderDefenseCalculatorPage('/');
+        const card = screen.getByText('pick mock ship').closest('.card') as HTMLElement;
+
+        expect(within(card).getByDisplayValue('Ship 1')).toBeInTheDocument();
+        expect(within(card).queryByText('Not counted (conditional):')).not.toBeInTheDocument();
     });
 });
