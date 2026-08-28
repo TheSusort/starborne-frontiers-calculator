@@ -21,7 +21,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
-import { shipFinalStats } from '../../utils/calculators/rosterHelpers';
+import { shipFinalStats, detectShipCharged } from '../../utils/calculators/rosterHelpers';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
@@ -55,7 +55,10 @@ const defenderFieldsFromShip = (
     hacking: Math.round(final.hacking ?? 200),
     healModifier: Math.round(final.healModifier ?? 0),
     chargeCount: ship.chargeSkillCharge ?? 0,
-    startCharged: false,
+    // The ship's own kit text decides this, exactly as it does for this page's enemy and team
+    // rosters (via `useEnemyTeamRoster`) and for the healing page's healer picker — this defender
+    // was previously the only actor on the page whose charged-at-start text was ignored.
+    startCharged: detectShipCharged(ship),
     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
     affinity: ship.affinity,
     role: ship.type,

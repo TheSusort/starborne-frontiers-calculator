@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
 import { simulateDefenseSurvivability } from '../../../utils/calculators/defenseSurvivabilitySim';
+import { ShipSelector } from '../../../components/ship/ShipSelector';
 import type { Ship } from '../../../types/ship';
 
 // This file exists to answer a question the sibling DefenseCalculatorPage.test.tsx cannot: HOW
@@ -22,7 +23,7 @@ vi.mock('../../../hooks/useEngineeringStats', () => ({
     useEngineeringStats: () => ({ getEngineeringStatsForShipType: () => undefined }),
 }));
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
-vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: () => null }));
+vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: vi.fn(() => null) }));
 vi.mock('../../../components/seo/Seo', () => ({ default: () => null }));
 vi.mock('../../../hooks/useThemeColors', () => ({
     useThemeColors: () => ({ gridStroke: '#000', text: '#fff', bg: '#000' }),
@@ -70,6 +71,8 @@ describe('DefenseCalculatorPage sim call count', () => {
     // being `undefined`.
     beforeEach(() => {
         simSpy.mockClear();
+        vi.mocked(ShipSelector).mockReset();
+        vi.mocked(ShipSelector).mockReturnValue(null);
     });
 
     it('editing a config NAME runs zero simulations', () => {
@@ -201,5 +204,41 @@ describe('DefenseCalculatorPage sim call count', () => {
         } finally {
             vi.useRealTimers();
         }
+    });
+
+    // Task 10 (#391 follow-up): `defenderFieldsFromShip` hardcoded `startCharged: false` while
+    // still reading `chargeCount` off `ship.chargeSkillCharge` — charge count honoured,
+    // charged-at-start dropped. This is the ONLY actor on the page whose charged-at-start text was
+    // ignored: the enemy and team rosters get it through `useEnemyTeamRoster`, and the healing
+    // page's healer picker calls `detectShipCharged` directly. Akula, Los, Sansi, Valkyrie and
+    // Wusheng all declare "starts combat fully charged" — picking any of them as the defender must
+    // simulate them charged, exactly as picking them for the enemy or team roster already does.
+    //
+    // ShipSelector is stubbed to null for every other test in this file; this is the one place
+    // that swaps in a real, clickable stand-in so the actual `onSelectShip` handler runs
+    // end-to-end, rather than re-asserting the mapping in isolation.
+    it('a defender whose kit says it starts combat fully charged is simulated charged', () => {
+        const akula = {
+            id: 'akula',
+            name: 'Akula',
+            baseStats: { hp: 40000, attack: 10000, defence: 5000, security: 1000, speed: 100 },
+            chargeSkillCharge: 2,
+            firstPassiveSkillText: 'This Unit starts combat fully charged.',
+        } as unknown as Ship;
+        vi.mocked(ShipSelector).mockImplementation(
+            ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
+                <button onClick={() => onSelect(akula)}>pick defender ship</button>
+            )
+        );
+
+        renderPage();
+        simSpy.mockClear();
+        fireEvent.click(screen.getByText('pick defender ship'));
+
+        expect(simSpy).toHaveBeenCalled();
+        expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({
+            chargeCount: 2,
+            startCharged: true,
+        });
     });
 });

@@ -192,6 +192,49 @@ describe('DefenseShipCard', () => {
         expect(screen.queryByText(/Not counted \(conditional\)/i)).not.toBeInTheDocument();
     });
 
+    // Follow-up on Task 9: `buildSkillBuffAutoFill` dedupes by (name, target, source), so a ship
+    // that grants the same buff under the same gate from two passive tiers (Chakara's Defense Up
+    // II, both gated on lowest Speed) produces two `GatedBuff`s that differ only in `buffId`/
+    // `skillSource`. Rendered as two lines that read as one duplicated row.
+    it('collapses two gated buffs with the same name and reason into one rendered row', () => {
+        renderCard({
+            gatedBuffs: [
+                {
+                    buffId: 'buff-1',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+                {
+                    buffId: 'buff-2',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+            ],
+        });
+        expect(
+            screen.getAllByText(/Defense Up II - when this unit has the lowest Speed among allies/i)
+        ).toHaveLength(1);
+    });
+
+    // A ship really can be gated two DIFFERENT ways on the same buff — collapsing that would hide
+    // information the disclosure exists to surface.
+    it('keeps two gated buffs with the same name but different reasons as two rendered rows', () => {
+        renderCard({
+            gatedBuffs: [
+                { buffId: 'buff-1', buffName: 'Defense Up II', reason: 'below 60% HP' },
+                {
+                    buffId: 'buff-2',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+            ],
+        });
+        expect(screen.getByText(/Defense Up II - below 60% HP/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(/Defense Up II - when this unit has the lowest Speed among allies/i)
+        ).toBeInTheDocument();
+    });
+
     // #358 ADDENDUM 3 (Part B, finding 6) — THE BREAKDOWN ROWS ARE ROUNDED. They rendered through a
     // bare `.toLocaleString()` while the headline was `Math.round`-ed, so a real fight printed
     // "To hull 24,999.667" directly under a clean "30,000". Fractional fixture values, because an

@@ -453,10 +453,27 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         // Task 9 (#391): names what Theoretical EHP left out and why, so "conditional
                         // gating" above isn't a vague disclaimer — Redeemer's Defense Up II is only
                         // gated below 60% HP, and the card now says so by name.
+                        //
+                        // Dedupe by (buffName, reason) at THIS render site only. `gatedBuffs` itself
+                        // is a per-grant-path list — `buildSkillBuffAutoFill` reads all three passive
+                        // text fields and produces one entry per (name, target, source), so a ship
+                        // that grants the same buff under the same gate from two passive tiers (e.g.
+                        // Chakara's Defense Up II, both gated on lowest Speed) yields two GatedBuffs
+                        // that read identically here. That per-grant list is correct and is what
+                        // `audit:gated-buffs` consumes, so it is left untouched — only the rendered
+                        // line is collapsed, and two entries with the SAME name but a DIFFERENT
+                        // reason (a ship genuinely gated two distinct ways) still render two lines.
                         <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
                             <div>Not counted (conditional):</div>
-                            {gatedBuffs.map((gated) => (
-                                <div key={gated.buffId}>
+                            {Array.from(
+                                new Map(
+                                    gatedBuffs.map((gated) => [
+                                        `${gated.buffName} ${gated.reason}`,
+                                        gated,
+                                    ])
+                                ).values()
+                            ).map((gated) => (
+                                <div key={`${gated.buffName} ${gated.reason}`}>
                                     - {gated.buffName} - {gated.reason}
                                 </div>
                             ))}
