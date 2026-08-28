@@ -31,6 +31,7 @@ import {
     gatedAutoFilledBuffs,
     GatedBuff,
     GatedBuffsPageState,
+    isBuffGrantFor,
     isEhpRelevant,
 } from '../src/utils/calculators/gatedBuffs';
 import { computeBuffedStats } from '../src/utils/calculators/defenseCalculator';
@@ -229,12 +230,25 @@ function run(): void {
         );
         const widened = collectFindings((buffs, shipSkills) => {
             if (!shipSkills) return [];
-            // Deliberately widened: count every auto-filled buff whose grant carries ANY
-            // condition at all (including 'always'), proving the instrument CAN report a
-            // non-empty result before trusting the real (unwidened) empty answer above.
+            // Deliberately widened: count every auto-filled buff that has at least one matching
+            // grant ability whose OWN `conditions` list is non-empty — including `always`, which
+            // the real predicate (`realGates`) deliberately filters out. That is the entire point
+            // of widening: prove the instrument CAN report a non-empty result (any condition, not
+            // just a genuine gate) before trusting the real, narrower, empty answer above.
+            //
+            // Matches `gatedAutoFilledBuffs`'s own grant-matching exactly (same `isBuffGrantFor`
+            // helper, searched across every slot) so a non-zero count here means "a real
+            // conditional grant exists on this ship", not merely "an auto-filled buff exists" —
+            // the bug this self-check used to have.
             const result: GatedBuff[] = [];
             for (const buff of buffs) {
                 if (!buff.autoFilled || !buff.skillSource) continue;
+                const matches = shipSkills.slots
+                    .flatMap((s) => s.abilities)
+                    .filter((a) => isBuffGrantFor(a, buff.buffName));
+                if (!matches.length) continue;
+                const hasAnyCondition = matches.some((a) => (a.conditions ?? []).length > 0);
+                if (!hasAnyCondition) continue;
                 result.push({ buffId: buff.id, buffName: buff.buffName, reason: 'any-condition' });
             }
             return result;

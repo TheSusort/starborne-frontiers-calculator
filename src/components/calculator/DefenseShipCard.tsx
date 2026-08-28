@@ -174,7 +174,11 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     // full engine simulation per keystroke.
     const [chargeCountDraft, onChargeCountChange] = useDebouncedNumericField(
         config.chargeCount,
-        (value) => onUpdate('chargeCount', value),
+        // Clamped: this is a new user-facing input (Task 10 follow-up), and a negative charge
+        // count reaches `simulateDefenseSurvivability` -> `combat/state.ts`'s
+        // `charges = startCharged ? chargeCount : 0` seed unvalidated. There is no in-game
+        // meaning for a negative charge count, so it is floored at 0 rather than passed through.
+        (value) => onUpdate('chargeCount', Math.max(0, value)),
         resetKey
     );
     const { getShipById } = useShips();
@@ -281,6 +285,8 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         <Input
                             label="Charge Count"
                             type="number"
+                            min={0}
+                            step={1}
                             value={chargeCountDraft}
                             onChange={(e) => onChargeCountChange(e.target.value)}
                         />

@@ -287,4 +287,42 @@ describe('DefenseCalculatorPage sim call count', () => {
             vi.useRealTimers();
         }
     });
+
+    // CodeRabbit finding on PR #416: Charge Count is a new user-facing input (Task 10 follow-up)
+    // and reached `simulateDefenseSurvivability` unclamped — a negative value fed straight into
+    // `combat/state.ts`'s `charges = startCharged ? chargeCount : 0` seed, which has no in-game
+    // meaning. Asserted on the sim boundary argument (this card's own established pattern above),
+    // not on a rendered figure, since a negative charge count with the default zero-pressure
+    // roster renders no damage figure a value-level assertion could read.
+    it('entering a negative Charge Count clamps to 0 at the simulation boundary', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByText(/Show Advanced/i));
+
+            const chargeCount = screen.getByLabelText('Charge Count');
+            // Default `config.chargeCount` is already 0, so committing the clamped 0 straight
+            // from the default would be a no-op the config reducer never sees as a change — unable
+            // to tell "clamped, and reached the sim" apart from "nothing happened at all". Settle
+            // on a nonzero value first so the later negative-to-0 commit is an observable change.
+            fireEvent.change(chargeCount, { target: { value: '3' } });
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 3 });
+
+            simSpy.mockClear();
+            fireEvent.change(chargeCount, { target: { value: '-5' } });
+            expect(simSpy).toHaveBeenCalledTimes(0);
+
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+
+            expect(simSpy).toHaveBeenCalledTimes(1);
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 0 });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

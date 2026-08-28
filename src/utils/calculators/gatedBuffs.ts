@@ -185,7 +185,10 @@ const reasonForConditions = (conditions: Condition[]): string =>
         .map((group) => group.map(conditionSummary).join(' or '))
         .join(', ');
 
-const isBuffGrantFor = (ability: Ability, buffName: string): boolean =>
+// Exported so the corpus reachability self-check (scripts/auditGatedBuffs.ts) can match buffs to
+// their grant abilities the SAME way this predicate does, rather than re-deriving its own (and
+// silently drifting from what "a grant for this buff" actually means).
+export const isBuffGrantFor = (ability: Ability, buffName: string): boolean =>
     ability.config.type === 'buff' && ability.config.buffName === buffName;
 
 export function gatedAutoFilledBuffs(
