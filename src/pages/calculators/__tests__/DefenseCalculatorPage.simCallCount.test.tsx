@@ -119,4 +119,87 @@ describe('DefenseCalculatorPage sim call count', () => {
             vi.useRealTimers();
         }
     });
+
+    // Task 6 final-review item 3 — this file's name promises "N sims per keystroke", but until
+    // here it was narrower than that on two axes at once:
+    //
+    //   1. It only ever exercised HP. `simulateDefenseSurvivability` is called once per config,
+    //      inside a `configs.forEach` — nothing above pinned that Defense and Security debounce
+    //      their commit too, so removing the debounce from either alone (leaving HP's untouched)
+    //      left every test in this file green.
+    //   2. It only ever had ONE config, so `toHaveBeenCalledTimes(1)` could not tell "1 because
+    //      the debounce/memo held" apart from "1 because there is exactly one config to
+    //      simulate". A SECOND config makes a correctly-settled pass report exactly 2 — one call
+    //      per config, from the same `forEach` — so the count now pins N, not just >0.
+    //
+    // The three arms below add a second config and repeat the "type digits, assert 0 before the
+    // debounce fires, advance past it, assert the settled count" shape from the HP test above for
+    // all three debounced fields, each asserting 2 (not 1) on settle.
+    it('typing into HP across two configs settles to TWO simulation passes, not one', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+            simSpy.mockClear();
+            const hpInputs = screen.getAllByLabelText('HP');
+            expect(hpInputs).toHaveLength(2);
+            for (const value of ['1', '12', '123', '1234', '12345', '123456', '1234567']) {
+                fireEvent.change(hpInputs[0], { target: { value } });
+            }
+            expect(simSpy).toHaveBeenCalledTimes(0);
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+            // One pass PER CONFIG, not one pass total — the second config is the tripwire a
+            // single-config suite cannot set.
+            expect(simSpy).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('editing Defense debounces its commit and settles to TWO simulation passes across two configs', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+            simSpy.mockClear();
+            const defenseInputs = screen.getAllByLabelText('Defense');
+            expect(defenseInputs).toHaveLength(2);
+            for (const value of ['1', '12', '123', '1234']) {
+                fireEvent.change(defenseInputs[1], { target: { value } });
+            }
+            // Nothing should have run yet — Defense debounces its commit exactly like HP does.
+            // Without this arm, a debounce removed from Defense alone left the whole file green.
+            expect(simSpy).toHaveBeenCalledTimes(0);
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(simSpy).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('editing Security debounces its commit and settles to TWO simulation passes across two configs', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+            simSpy.mockClear();
+            const securityInputs = screen.getAllByLabelText('Security');
+            expect(securityInputs).toHaveLength(2);
+            for (const value of ['1', '12', '123', '1234']) {
+                fireEvent.change(securityInputs[1], { target: { value } });
+            }
+            // Nothing should have run yet — Security debounces its commit exactly like HP does.
+            expect(simSpy).toHaveBeenCalledTimes(0);
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(simSpy).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

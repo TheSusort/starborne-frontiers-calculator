@@ -73,6 +73,13 @@ const useDebouncedNumericField = (
             timer.current = undefined;
             const value = parseInt(raw) || 0;
             lastCommitted.current = value;
+            // Snap the draft to the committed INTEGER now, at commit time — not on every
+            // keystroke, which would fight the user mid-typing. Before this, `value={hpDraft}`
+            // (in place of the old `value={config.hp}`) had removed the `parseInt` snap-back the
+            // page used to get for free: "5.5" stayed on screen indefinitely even though the sim
+            // and every derived figure (Theoretical EHP, Damage Reduction, HP Multiplier) were
+            // already reading the committed "5". Same for "1e5" -> 1, "007" -> 7, "-" -> 0.
+            setDraft(String(value));
             onCommit(value);
         }, DEBOUNCE_MS);
     };

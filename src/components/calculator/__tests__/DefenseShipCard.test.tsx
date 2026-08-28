@@ -389,6 +389,94 @@ describe('DefenseShipCard', () => {
         }
     });
 
+    // Task 6 final-review item 1 — THE ECHO GUARD. `useDebouncedNumericField` effect 1 opens with
+    // `if (committed === lastCommitted.current) return;` before it does anything else. Deleting
+    // that one line leaves every other test in this file (and the sim call-count/page suites)
+    // green, because none of them re-render the card with the SAME value the hook itself just
+    // committed while the user keeps typing.
+    //
+    // Scenario: the user types "5"; the debounce fires and commits it (`lastCommitted.current`
+    // becomes 5); the parent re-renders with `config.hp === 5` — its own commit echoing back down
+    // through props, simulated here via `rerender`, exactly as the ship-selection tests above
+    // simulate a real prop change; and, in the same window, the user types more digits, landing
+    // the draft on "53". Effect 1 then runs because `committed` really did change (10000 -> 5)
+    // across that render. The guard is what tells that render apart from a genuinely NEW external
+    // value: `committed` (5) equals `lastCommitted.current` (5), so it is the hook's own echo and
+    // must leave the draft alone. Delete the guard and the effect unconditionally resets the draft
+    // to "5", silently eating the digits the user just typed.
+    it('does not stomp continued typing when its own commit echoes back through the committed prop', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type "5" and let the debounce commit it.
+            fireEvent.change(hpInput, { target: { value: '5' } });
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).toHaveBeenCalledWith('hp', 5);
+
+            // Keep typing before the parent's re-render (carrying that same committed value 5)
+            // lands.
+            fireEvent.change(screen.getByLabelText('HP'), { target: { value: '53' } });
+            expect(screen.getByLabelText('HP')).toHaveValue(53);
+
+            // The parent re-renders with `config.hp` now equal to the value THIS hook just
+            // committed — the echo.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, hp: 5 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The echo must NOT stomp the digits the user typed after the commit.
+            expect(screen.getByLabelText('HP')).toHaveValue(53);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Task 6 final-review item 4 — a real UX regression this branch introduced. The inputs moved
+    // from `value={config.hp}` to `value={hpDraft}`, which removed the `parseInt` snap-back the
+    // page used to get for free: typing "5.5" left the field reading "5.5" indefinitely even
+    // though the committed value (and every derived figure that reads `config.hp`) was already
+    // "5". The fix snaps the draft to the committed integer AT COMMIT TIME, once the debounce
+    // fires — not on every keystroke, which would fight the user mid-typing.
+    it('snaps the displayed draft to the committed integer once the debounce fires', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            fireEvent.change(hpInput, { target: { value: '5.5' } });
+            // Mid-typing, the raw text stays on screen untouched.
+            expect(screen.getByLabelText('HP')).toHaveValue(5.5);
+
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+
+            // The commit itself used the integer (pre-existing `parseInt` behaviour)…
+            expect(onUpdate).toHaveBeenCalledWith('hp', 5);
+            // …and now the DISPLAYED value reconciles with it too, instead of showing "5.5"
+            // forever while the sim and derived figures already read "5".
+            expect(screen.getByLabelText('HP')).toHaveValue(5);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('shows a Passive row for a ship with passive skill text', () => {
         mockGetShipById.mockImplementation((id: string) =>
             id === 'x'
