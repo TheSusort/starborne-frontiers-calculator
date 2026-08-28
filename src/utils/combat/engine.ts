@@ -2806,7 +2806,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         throw new Error(`runCombat: mode 'healing' requires healTargetId`);
     }
 
-    const healTarget = explicitHealTarget ?? (runMode === 'battle' ? attacker : undefined);
+    // SP-U U5 anchored this to the focus in battle mode; #415 extends that to EVERY mode. The
+    // anchor's two jobs are now separate flags below: it switches on the heal/shield/leech RUNTIME
+    // (which a DPS run needs, so an attacker whose damage comes from a shield or leech basis shows
+    // its real output) and it anchors the healing REPORT (which a DPS run has no use for).
+    const healTarget = explicitHealTarget ?? attacker;
 
     /**
      * The heal/shield pipeline is active — TRUE IN BATTLE MODE TOO, because battle mode anchors
@@ -2815,6 +2819,14 @@ export function runCombat(rawInput: CombatEngineInput): {
      * `battleSimulator` result carries that block today.
      */
     const healPipelineActive = !!healTarget;
+
+    /**
+     * The healing RESULT BLOCK — NOT the runtime, which is `healPipelineActive` above. A DPS run
+     * builds the full runtime and emits NO healing report: #415's ruling is that heal ACCOUNTING is
+     * unwanted there while a full engine RUN is wanted. Also gates the dead-target turn skip, which
+     * is a healing/battle concept: see the comment at that site.
+     */
+    const healReportActive = !!explicitHealTarget || runMode === 'battle';
 
     /**
      * A DPS MEASUREMENT run: one focus attacker whose output is the whole point. Load-bearing for
@@ -4772,7 +4784,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     : e.target === 'ally'
                       ? ownerIsEnemy
                           ? []
-                          : [healTarget!.id]
+                          : [healTarget.id]
                       : e.target === 'all-allies'
                         ? ownerIsEnemy
                             ? healingCtx.enemyIds
@@ -6787,7 +6799,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             (id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0;
         const applyIncomingToTarget = (
             damage: number,
-            victim: CombatActor = healTarget!,
+            victim: CombatActor = healTarget,
             // C2b-2 T5: defaults to the DIRECT-damage attribution (the acting actor landed this
             // hit). The DoT-tick batch caller overrides with { byDirectDamage: false } — a DoT
             // batch is an aggregate of multiple appliers with NO single killer.
@@ -9515,7 +9527,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         // tick (a lethal Corrosion/Inferno tick kills it mid-turn → it must not fall through and
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
-            if (!(healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0)) {
+            // Gated on `healReportActive`, NOT merely on `healTarget` (#415): `hp` defaults to 0 in
+            // `simulateDPS` and on the DPS page, so every DPS focus enters the run at currentHp 0.
+            // That is NEVER-ALIVE, not KILLED (normalizeRoster.ts:126) — reading it as a corpse
+            // skipped the focus's whole turn and returned 0 damage for the entire calculator.
+            // Measured: 124 tests across 11 files fail without this gate.
+            if (!(
+                healReportActive &&
+                healTarget &&
+                actor.id === healTarget.id &&
+                healTarget.currentHp <= 0
+            )) {
                 return false;
             }
             // A destroyed heal target shows no buffs this round.
@@ -13045,9 +13067,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             teamTotal: totalTeamRaw,
             generic: totalGenericRaw,
         },
-        // Additive — present whenever the heal pipeline is active (battle mode too; DPS callers
+        // Additive — present whenever the heal REPORT is active (battle mode too; DPS callers
         // with no heal target see the legacy shape).
-        ...(healPipelineActive
+        ...(healReportActive
             ? {
                   healing: {
                       rounds: healingRounds,
