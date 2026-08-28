@@ -4,7 +4,7 @@ import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import { DefenseSurvivabilityResult } from '../../utils/calculators/defenseSurvivabilitySim';
-import { GatedBuff } from '../../utils/calculators/gatedBuffs';
+import { GatedBuff, isEhpRelevant } from '../../utils/calculators/gatedBuffs';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
@@ -176,6 +176,18 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
         config.security,
         buffTotals
     );
+
+    // Item 2 (#391 review): `gatedBuffs` is the full per-grant-path list — it names every
+    // conditionally-gated auto-filled buff regardless of what it affects. The disclosure line
+    // below sits under Theoretical EHP and asserts "this was left out of the number above it", so
+    // it must only name buffs that could have moved that number in the first place. An
+    // attack/critDamage/outgoing-damage buff was never counted in Theoretical EHP even when
+    // ungated, so excluding it here is filtering the CLAIM, not the underlying gated-buff list —
+    // `gatedBuffs`/`mergedBuffTotals`/`audit:gated-buffs` all keep seeing the unfiltered set.
+    const ehpRelevantGatedBuffs = (gatedBuffs ?? []).filter((gated) => {
+        const buff = config.buffs.find((b) => b.id === gated.buffId);
+        return !!buff && isEhpRelevant(buff);
+    });
 
     return (
         <div className={`card relative ${isBest ? 'border-primary' : ''}`}>
@@ -449,31 +461,31 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         ignores shields, Barrier, self-repair and conditional gating, and no enemy
                         ever fires at it. Prefer the measured figures above when one is available.
                     </div>
-                    {gatedBuffs && gatedBuffs.length > 0 && (
+                    {ehpRelevantGatedBuffs.length > 0 && (
                         // Task 9 (#391): names what Theoretical EHP left out and why, so "conditional
                         // gating" above isn't a vague disclaimer — Redeemer's Defense Up II is only
-                        // gated below 60% HP, and the card now says so by name.
+                        // gated below 60% HP, and the card now says so by name. Filtered above to
+                        // `ehpRelevantGatedBuffs` so a gated ATTACK/critDamage/outgoing-damage buff
+                        // — never part of this figure in the first place — isn't named as something
+                        // this line deducted from it (Item 2, #391 review).
                         //
-                        // Dedupe by (buffName, reason) at THIS render site only. `gatedBuffs` itself
-                        // is a per-grant-path list — `buildSkillBuffAutoFill` reads all three passive
-                        // text fields and produces one entry per (name, target, source), so a ship
-                        // that grants the same buff under the same gate from two passive tiers (e.g.
-                        // Chakara's Defense Up II, both gated on lowest Speed) yields two GatedBuffs
-                        // that read identically here. That per-grant list is correct and is what
-                        // `audit:gated-buffs` consumes, so it is left untouched — only the rendered
-                        // line is collapsed, and two entries with the SAME name but a DIFFERENT
-                        // reason (a ship genuinely gated two distinct ways) still render two lines.
+                        // Dedupe by (buffName, reason) at THIS render site only, and only defensively:
+                        // `parseAllSkillEffects` resolves ONE passive per ship — the refit-active row
+                        // (`getShipSkillRows`), not all three columns — so no current producer emits
+                        // two GatedBuffs with the same (name, reason) for one ship. Kept as a guard in
+                        // case a future producer changes that; the per-grant `gatedBuffs` list itself
+                        // is untouched and is what `audit:gated-buffs` consumes.
                         <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
                             <div>Not counted (conditional):</div>
                             {Array.from(
                                 new Map(
-                                    gatedBuffs.map((gated) => [
-                                        `${gated.buffName} ${gated.reason}`,
+                                    ehpRelevantGatedBuffs.map((gated) => [
+                                        `${gated.buffName}|${gated.reason}`,
                                         gated,
                                     ])
                                 ).values()
                             ).map((gated) => (
-                                <div key={`${gated.buffName} ${gated.reason}`}>
+                                <div key={`${gated.buffName}|${gated.reason}`}>
                                     - {gated.buffName} - {gated.reason}
                                 </div>
                             ))}

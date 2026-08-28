@@ -210,9 +210,9 @@ describe('DefenseCalculatorPage sim call count', () => {
     // still reading `chargeCount` off `ship.chargeSkillCharge` — charge count honoured,
     // charged-at-start dropped. This is the ONLY actor on the page whose charged-at-start text was
     // ignored: the enemy and team rosters get it through `useEnemyTeamRoster`, and the healing
-    // page's healer picker calls `detectShipCharged` directly. Akula, Los, Sansi, Valkyrie and
-    // Wusheng all declare "starts combat fully charged" — picking any of them as the defender must
-    // simulate them charged, exactly as picking them for the enemy or team roster already does.
+    // page's healer picker calls `detectShipCharged` directly. Akula, Chimei, Los, Sansi, Valkyrie
+    // and Wusheng all declare "starts combat fully charged" — picking any of them as the defender
+    // must simulate them charged, exactly as picking them for the enemy or team roster already does.
     //
     // ShipSelector is stubbed to null for every other test in this file; this is the one place
     // that swaps in a real, clickable stand-in so the actual `onSelectShip` handler runs

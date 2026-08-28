@@ -86,4 +86,53 @@ describe('gatedAutoFilledBuffs', () => {
     it('reports nothing for an absent shipSkills (a manual config with no ship)', () => {
         expect(gatedAutoFilledBuffs([buff()], undefined)).toEqual([]);
     });
+
+    it('joins an anyOf OR-run with "or", not ", " — Panon\'s "Provoked or Taunted" shape', () => {
+        // The second condition carries anyOf:true, meaning it is an ALTERNATIVE to the first,
+        // not an additional AND-ed requirement. ', ' would overclaim the gate as stricter than
+        // the game rule ("while Taunt is active, while affected by Provoke" reads as needing
+        // BOTH).
+        // Matches the real producer's shape (buildShipAbilities.ts's affectedByConditions /
+        // statusEffectCondition): BOTH conditions in an OR-alternation carry anyOf:true, not
+        // just the second one.
+        const orGatedAbility = {
+            config: { type: 'buff', buffName: 'Defense Up II' },
+            conditions: [
+                { subject: 'self-debuff', derivable: true, buffName: 'Provoke', anyOf: true },
+                { subject: 'self-buff', derivable: true, buffName: 'Taunt', anyOf: true },
+            ],
+        };
+        const result = gatedAutoFilledBuffs([buff()], skills([orGatedAbility]));
+        expect(result).toEqual([
+            {
+                buffId: 'Defense Up II-passive1-self',
+                buffName: 'Defense Up II',
+                reason: 'while affected by Provoke or while Taunt is active',
+            },
+        ]);
+    });
+
+    it('keeps AND-joining with ", " for non-anyOf conditions on the same ability', () => {
+        const andGatedAbility = {
+            config: { type: 'buff', buffName: 'Defense Up II' },
+            conditions: [
+                {
+                    subject: 'hp-threshold',
+                    derivable: true,
+                    hpComparator: 'below',
+                    hpPercent: 60,
+                    hpSubject: 'self',
+                },
+                { subject: 'self-buff', derivable: true, buffName: 'Taunt' },
+            ],
+        };
+        const result = gatedAutoFilledBuffs([buff()], skills([andGatedAbility]));
+        expect(result).toEqual([
+            {
+                buffId: 'Defense Up II-passive1-self',
+                buffName: 'Defense Up II',
+                reason: 'below 60% HP, while Taunt is active',
+            },
+        ]);
+    });
 });

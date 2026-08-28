@@ -2920,9 +2920,12 @@ const DocumentationPage: React.FC = () => {
                                         now leaves that +30% Defense out. On a 100,000 HP ship at
                                         5,000 Defense that is the difference between counting it
                                         (283,125) and holding it back (240,062) &mdash; the figure
-                                        now reads the lower number until the gate is actually met.
-                                        When a config has one or more buffs held back this way, the
-                                        card lists them under &ldquo;Not counted
+                                        now reads the lower number. This is a hangar-stats estimate
+                                        with no fight and no HP changing over time, so it never
+                                        evaluates whether a gate is actually met right now; a buff
+                                        is held back purely because its grant carries a condition at
+                                        all, full stop. When a config has one or more buffs held
+                                        back this way, the card lists them under &ldquo;Not counted
                                         (conditional)&rdquo; by name and reason, e.g. &ldquo;Defense
                                         Up II - below 60% HP&rdquo;. A buff you add yourself through
                                         the buff picker is unaffected by any of this &mdash; it

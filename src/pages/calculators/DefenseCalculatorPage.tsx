@@ -338,9 +338,11 @@ const DefenseCalculatorPage: React.FC = () => {
     // Theoretical EHP is a hangar-stats figure with no enemy firing, so it has no way to know a
     // gate is unmet — it counted Redeemer's below-60%-HP Defense Up II as standing from turn one and
     // read 18% high against the engine-measured figure beside it. Gated AUTO-FILLED buffs are dropped
-    // here, which moves all three consumers at once: the card figure, SecurityEHPChart's tank score,
-    // and the badge tie-break's effectiveHP (via `mergedBuffTotals` below). A buff the user picked by
-    // hand (or a global buff) is deliberate and stays counted regardless of any gate.
+    // here, which moves all three consumers at once: the card figure, SecurityEHPChart's per-ship
+    // star markers (its x/y/z and tooltip read `buffTotals.get(c.id)` — the heatmap's own tank
+    // score does not; it scores raw grid defense/security and never reads a buff), and the badge
+    // tie-break's effectiveHP (via `mergedBuffTotals` below). A buff the user picked by hand (or a
+    // global buff) is deliberate and stays counted regardless of any gate.
     const gatedBuffsByConfig = useMemo(
         () =>
             new Map(

@@ -27,7 +27,7 @@ import { readFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import { buildSkillBuffAutoFill } from '../src/utils/calculators/skillBuffAutoFill';
-import { gatedAutoFilledBuffs, GatedBuff } from '../src/utils/calculators/gatedBuffs';
+import { gatedAutoFilledBuffs, GatedBuff, isEhpRelevant } from '../src/utils/calculators/gatedBuffs';
 import { computeBuffedStats } from '../src/utils/calculators/defenseCalculator';
 import { Ship } from '../src/types/ship';
 import { DefenseBuffTotals, SelectedGameBuff } from '../src/types/calculator';
@@ -98,15 +98,6 @@ function buildShipVariant(row: ShipRow, refitCount: number): Ship {
         secondPassiveSkillText: row.p2,
         thirdPassiveSkillText: row.p3,
     };
-}
-
-/** Theoretical-EHP-relevant: the buff's own parsedEffects carries a key Theoretical EHP reads. */
-function isEhpRelevant(buff: SelectedGameBuff): boolean {
-    return (
-        'defense' in buff.parsedEffects ||
-        'incomingDamage' in buff.parsedEffects ||
-        'security' in buff.parsedEffects
-    );
 }
 
 function sumBuffTotals(buffs: SelectedGameBuff[]): DefenseBuffTotals {

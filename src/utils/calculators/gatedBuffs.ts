@@ -24,6 +24,21 @@ export interface GatedBuff {
     reason: string;
 }
 
+/** Theoretical-EHP-relevant: the buff's own `parsedEffects` carries a key Theoretical EHP
+ *  actually reads (`computeBuffedStats`'s inputs — defense, incomingDamage, security). A buff
+ *  that only moves e.g. `attack`/`critDamage`/`outgoingDamage` was never counted in that figure
+ *  in the first place, so naming it under "Not counted (conditional)" beside Theoretical EHP
+ *  falsely implies it WAS deducted from that number. Single source of truth shared by the
+ *  disclosure render (DefenseShipCard) and the corpus audit (`scripts/auditGatedBuffs.ts`) so the
+ *  two can't drift. */
+export function isEhpRelevant(buff: SelectedGameBuff): boolean {
+    return (
+        'defense' in buff.parsedEffects ||
+        'incomingDamage' in buff.parsedEffects ||
+        'security' in buff.parsedEffects
+    );
+}
+
 /** `SelectedGameBuff.skillSource` has FIVE values; `Skill.slot` has THREE. The join is lossy in
  *  two ways — `charge` becomes `charged`, and all three passives collapse into one slot — which is
  *  why the every-match rule below is conservative. Mitigating fact: only the refit-active passive
@@ -40,6 +55,39 @@ const SLOT_OF: Record<NonNullable<SelectedGameBuff['skillSource']>, SkillSlot> =
  *  `crossing()` emits it on the buff-merge path. */
 const realGates = (conditions: Condition[] | undefined): Condition[] =>
     (conditions ?? []).filter((c) => c.subject !== 'always');
+
+/** Groups consecutive `anyOf` conditions into OR-runs; a non-`anyOf` condition starts its own
+ *  singleton run. Mirrors `evaluateConditions.ts`'s (unexported) `groupConditions` — duplicated
+ *  here as a tiny pure helper rather than exporting that one for a single caller. Needed so the
+ *  printed reason can join OR-alternatives with " or " instead of the AND-implying ", " —
+ *  Panon's "If this Unit is Provoked or Taunted" is TWO conditions with `anyOf` linking them,
+ *  and joining them with ", " prints "while Taunt is active, while affected by Provoke", which
+ *  reads as a strictly stronger AND than the game's actual OR gate. */
+const groupByAnyOf = (conditions: Condition[]): Condition[][] => {
+    const groups: Condition[][] = [];
+    let run: Condition[] = [];
+    for (const c of conditions) {
+        if (c.anyOf) {
+            run.push(c);
+        } else {
+            if (run.length) {
+                groups.push(run);
+                run = [];
+            }
+            groups.push([c]);
+        }
+    }
+    if (run.length) groups.push(run);
+    return groups;
+};
+
+/** One grant path's full reason phrase: OR-runs join with " or ", separate runs (an AND of
+ *  distinct gates) join with ", ". A single-condition ability collapses to plain `conditionSummary`
+ *  output, unchanged from before this fix. */
+const reasonForConditions = (conditions: Condition[]): string =>
+    groupByAnyOf(conditions)
+        .map((group) => group.map(conditionSummary).join(' or '))
+        .join(', ');
 
 const isBuffGrantFor = (ability: Ability, buffName: string): boolean =>
     ability.config.type === 'buff' && ability.config.buffName === buffName;
@@ -67,7 +115,11 @@ export function gatedAutoFilledBuffs(
         if (!matches.every((a) => realGates(a.conditions).length > 0)) continue;
 
         const reasons = [
-            ...new Set(matches.flatMap((a) => realGates(a.conditions).map(conditionSummary))),
+            ...new Set(
+                matches
+                    .map((a) => reasonForConditions(realGates(a.conditions)))
+                    .filter((r) => r.length > 0)
+            ),
         ];
         result.push({ buffId: buff.id, buffName: buff.buffName, reason: reasons.join(', ') });
     }
