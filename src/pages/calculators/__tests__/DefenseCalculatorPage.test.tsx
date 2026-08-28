@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
 import type { Ship } from '../../../types/ship';
@@ -123,38 +123,52 @@ describe('DefenseCalculatorPage', () => {
     // ⚠️ THE WEAKER CONFIG IS DELIBERATELY FIRST. With it second, "first wins" and "best wins"
     // would be the same card and this arm would prove nothing.
     it('breaks a flat-survivor tie on Theoretical EHP rather than insertion order', async () => {
-        renderDefenseCalculatorPage();
-        fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+        // The HP/Defense inputs debounce their commit (Task 6, 250ms trailing edge). Fake timers +
+        // an explicit flush BEFORE reading rendered state — not a real-time wait — so this can't
+        // race a still-stale committed value the way `findByText`'s own polling briefly could (the
+        // pre-edit template values can themselves satisfy "Survived all" for the wrong reason).
+        vi.useFakeTimers();
+        try {
+            renderDefenseCalculatorPage();
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
 
-        const hpInputs = screen.getAllByLabelText('HP');
-        const defenseInputs = screen.getAllByLabelText('Defense');
-        // Both effectively unkillable, so both survive the whole window and their damage-absorbed
-        // figures tie exactly. Only Defense separates them, i.e. only Theoretical EHP.
-        fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
-        fireEvent.change(defenseInputs[0], { target: { value: '1000' } }); // FIRST, and weaker
-        fireEvent.change(hpInputs[1], { target: { value: '999999999' } });
-        fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+            const hpInputs = screen.getAllByLabelText('HP');
+            const defenseInputs = screen.getAllByLabelText('Defense');
+            // Both effectively unkillable, so both survive the whole window and their damage-absorbed
+            // figures tie exactly. Only Defense separates them, i.e. only Theoretical EHP.
+            fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
+            fireEvent.change(defenseInputs[0], { target: { value: '1000' } }); // FIRST, and weaker
+            fireEvent.change(hpInputs[1], { target: { value: '999999999' } });
+            fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
 
-        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+            fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
 
-        const notes = await screen.findAllByText(/Survived all/i);
-        expect(notes).toHaveLength(2);
-        const cards = notes.map((n) => n.closest('.card') as HTMLElement);
-        expect(cards[0]).not.toBe(cards[1]);
+            const notes = screen.getAllByText(/Survived all/i);
+            expect(notes).toHaveLength(2);
+            const cards = notes.map((n) => n.closest('.card') as HTMLElement);
+            expect(cards[0]).not.toBe(cards[1]);
 
-        // The tie is REAL and this arm depends on it: the non-best card's "Compared to best" delta
-        // is measured on `damageAbsorbed`, so a 0.00% there is direct evidence that the primary
-        // axis could not decide and the ladder did. (It also pins finding I3 — the delta is on the
-        // ranking axis, not on Theoretical EHP, where these two cards differ enormously.)
-        const bestCard = cards.find((c) => c.textContent?.includes('Best ship configuration'));
-        const otherCard = cards.find((c) => !c.textContent?.includes('Best ship configuration'));
-        expect(bestCard).toBeDefined();
-        expect(otherCard).toBeDefined();
-        expect(within(otherCard as HTMLElement).getByText('0.00%')).toBeInTheDocument();
+            // The tie is REAL and this arm depends on it: the non-best card's "Compared to best" delta
+            // is measured on `damageAbsorbed`, so a 0.00% there is direct evidence that the primary
+            // axis could not decide and the ladder did. (It also pins finding I3 — the delta is on the
+            // ranking axis, not on Theoretical EHP, where these two cards differ enormously.)
+            const bestCard = cards.find((c) => c.textContent?.includes('Best ship configuration'));
+            const otherCard = cards.find(
+                (c) => !c.textContent?.includes('Best ship configuration')
+            );
+            expect(bestCard).toBeDefined();
+            expect(otherCard).toBeDefined();
+            expect(within(otherCard as HTMLElement).getByText('0.00%')).toBeInTheDocument();
 
-        // The badge is on the HIGHER-Defense card — the second one added, so this cannot be
-        // "whichever came first".
-        expect(within(bestCard as HTMLElement).getByDisplayValue('20000')).toBeInTheDocument();
+            // The badge is on the HIGHER-Defense card — the second one added, so this cannot be
+            // "whichever came first".
+            expect(within(bestCard as HTMLElement).getByDisplayValue('20000')).toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     // Carried from Task 9: `bestShip` (the reduce behind the `isBest` highlight) had NO test. Before
@@ -176,43 +190,54 @@ describe('DefenseCalculatorPage', () => {
     //   • `return best`    never leaves the `null` seed, so NO card is marked (also assertion 1).
     // Re-verified against both mutations. If you reorder these configs, this test stops testing.
     it('gives the best-ship marker to the config that withstands more raw damage, not less', async () => {
-        renderDefenseCalculatorPage();
+        // Same debounce-flush reasoning as the tie-break test above: fake timers + an explicit
+        // flush before reading rendered state, not a real-time wait racing `findByText`'s polling.
+        vi.useFakeTimers();
+        try {
+            renderDefenseCalculatorPage();
 
-        // Add a second config. Both still read the same default hp/defense at this point, so
-        // `getAllByLabelText` unambiguously returns [ship1, ship2] in render order.
-        fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+            // Add a second config. Both still read the same default hp/defense at this point, so
+            // `getAllByLabelText` unambiguously returns [ship1, ship2] in render order.
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
 
-        const hpInputs = screen.getAllByLabelText('HP');
-        const defenseInputs = screen.getAllByLabelText('Defense');
-        expect(hpInputs).toHaveLength(2);
-        expect(defenseInputs).toHaveLength(2);
+            const hpInputs = screen.getAllByLabelText('HP');
+            const defenseInputs = screen.getAllByLabelText('Defense');
+            expect(hpInputs).toHaveLength(2);
+            expect(defenseInputs).toHaveLength(2);
 
-        // Config 1 ("Ship 1"): effectively unkillable — outlasts the whole round window. FIRST, so
-        // "marks the last config" and "marks the best config" cannot be the same answer.
-        fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
-        fireEvent.change(defenseInputs[0], { target: { value: '20000' } });
-        // Config 2 ("Ship 2"): fragile — dies to the first hit.
-        fireEvent.change(hpInputs[1], { target: { value: '50' } });
-        fireEvent.change(defenseInputs[1], { target: { value: '0' } });
+            // Config 1 ("Ship 1"): effectively unkillable — outlasts the whole round window. FIRST,
+            // so "marks the last config" and "marks the best config" cannot be the same answer.
+            fireEvent.change(hpInputs[0], { target: { value: '999999999' } });
+            fireEvent.change(defenseInputs[0], { target: { value: '20000' } });
+            // Config 2 ("Ship 2"): fragile — dies to the first hit.
+            fireEvent.change(hpInputs[1], { target: { value: '50' } });
+            fireEvent.change(defenseInputs[1], { target: { value: '0' } });
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
 
-        // Add one enemy attacker so there is pressure to measure at all.
-        fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
+            // Add one enemy attacker so there is pressure to measure at all.
+            fireEvent.click(screen.getByRole('button', { name: /Add Enemy/i }));
 
-        const survivorNote = await screen.findByText(/Survived all/i);
-        const destroyedNote = screen.getByText(/Destroyed round/i);
+            const survivorNote = screen.getByText(/Survived all/i);
+            const destroyedNote = screen.getByText(/Destroyed round/i);
 
-        const survivorCard = survivorNote.closest('.card');
-        const destroyedCard = destroyedNote.closest('.card');
-        expect(survivorCard).not.toBeNull();
-        expect(destroyedCard).not.toBeNull();
-        expect(survivorCard).not.toBe(destroyedCard);
+            const survivorCard = survivorNote.closest('.card');
+            const destroyedCard = destroyedNote.closest('.card');
+            expect(survivorCard).not.toBeNull();
+            expect(destroyedCard).not.toBeNull();
+            expect(survivorCard).not.toBe(destroyedCard);
 
-        // The tankier config (the survivor) must carry the marker; the one that died first must not.
-        expect(
-            within(survivorCard as HTMLElement).getByText('Best ship configuration')
-        ).toBeInTheDocument();
-        expect(
-            within(destroyedCard as HTMLElement).queryByText('Best ship configuration')
-        ).not.toBeInTheDocument();
+            // The tankier config (the survivor) must carry the marker; the one that died first must
+            // not.
+            expect(
+                within(survivorCard as HTMLElement).getByText('Best ship configuration')
+            ).toBeInTheDocument();
+            expect(
+                within(destroyedCard as HTMLElement).queryByText('Best ship configuration')
+            ).not.toBeInTheDocument();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

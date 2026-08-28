@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
@@ -14,6 +14,37 @@ import { useShips } from '../../contexts/ShipsContext';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
 import { GameBuffPicker } from './GameBuffPicker';
+
+const DEBOUNCE_MS = 250;
+
+/** Local display value + trailing-edge push. These three inputs write straight through to
+ *  `configs`, and each write re-runs a full engine simulation per config — typing seven digits
+ *  into HP ran seven passes on the render path. */
+const useDebouncedNumericField = (
+    committed: number,
+    onCommit: (value: number) => void
+): [string, (raw: string) => void] => {
+    const [draft, setDraft] = useState(String(committed));
+    const timer = useRef<ReturnType<typeof setTimeout>>();
+
+    // Adopt an externally-changed value (ship picker, URL param) unless the user is mid-edit.
+    useEffect(() => {
+        if (timer.current === undefined) setDraft(String(committed));
+    }, [committed]);
+
+    useEffect(() => () => clearTimeout(timer.current), []);
+
+    const onChange = (raw: string) => {
+        setDraft(raw);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => {
+            timer.current = undefined;
+            onCommit(parseInt(raw) || 0);
+        }, DEBOUNCE_MS);
+    };
+
+    return [draft, onChange];
+};
 
 interface DefenseShipCardProps {
     config: DefenseShipConfig;
@@ -60,6 +91,15 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     onShipSkillsChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    const [hpDraft, onHpChange] = useDebouncedNumericField(config.hp, (value) =>
+        onUpdate('hp', value)
+    );
+    const [defenseDraft, onDefenseChange] = useDebouncedNumericField(config.defense, (value) =>
+        onUpdate('defense', value)
+    );
+    const [securityDraft, onSecurityChange] = useDebouncedNumericField(config.security, (value) =>
+        onUpdate('security', value)
+    );
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
     // Show the Passive slot whenever the ship has passive skill text to read/edit — not only
@@ -105,20 +145,20 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     <Input
                         label="HP"
                         type="number"
-                        value={config.hp}
-                        onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                        value={hpDraft}
+                        onChange={(e) => onHpChange(e.target.value)}
                     />
                     <Input
                         label="Defense"
                         type="number"
-                        value={config.defense}
-                        onChange={(e) => onUpdate('defense', parseInt(e.target.value) || 0)}
+                        value={defenseDraft}
+                        onChange={(e) => onDefenseChange(e.target.value)}
                     />
                     <Input
                         label="Security"
                         type="number"
-                        value={config.security}
-                        onChange={(e) => onUpdate('security', parseInt(e.target.value) || 0)}
+                        value={securityDraft}
+                        onChange={(e) => onSecurityChange(e.target.value)}
                     />
                 </div>
 
