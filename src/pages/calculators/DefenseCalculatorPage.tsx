@@ -13,84 +13,29 @@ import {
     simulateDefenseSurvivability,
     DefenseSurvivabilityResult,
 } from '../../utils/calculators/defenseSurvivabilitySim';
-import { EnemyAttackerInput } from '../../utils/calculators/healingEngineAdapter';
-import {
-    EnemyAttackersPanel,
-    EnemyAttackerConfig,
-} from '../../components/calculator/EnemyAttackersPanel';
+import { EnemyAttackersPanel } from '../../components/calculator/EnemyAttackersPanel';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
+import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
+import { shipFinalStats } from '../../utils/calculators/rosterHelpers';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
-import {
-    DefenseShipConfig,
-    DefenseBuffTotals,
-    SelectedGameBuff,
-    TeamShipConfig,
-    TeamActorInput,
-} from '../../types/calculator';
+import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { asFactionKey } from '../../constants/factions';
-import {
-    defaultEnemySlot,
-    HEALING_SLOT_OPTIONS as ENEMY_SLOT_OPTIONS,
-} from '../../utils/calculators/healingPlacement';
-import {
-    DEFAULT_ENEMY_DEFENCE,
-    DEFAULT_ENEMY_HP,
-    DEFAULT_ENEMY_SECURITY,
-    DEFAULT_ENEMY_SPEED,
-} from '../../utils/calculators/healingDefaultEnemy';
-import type { Position } from '../../types/encounters';
-import { detectFullyCharged } from '../../utils/skillTextParser';
 import { targetingOf } from '../../utils/calculators/shipTargeting';
-
-/** The stat block a manually-added enemy starts from, placed at the Nth default enemy cell.
- *  Copied verbatim from `HealingCalculatorPage.tsx` — see that module for why none of these may be
- *  0 (`healingDefaultEnemy.ts` holds the shared reasoning). */
-const defaultEnemyStats = (index: number) => ({
-    attack: 4000,
-    crit: 0,
-    critDamage: 0,
-    speed: DEFAULT_ENEMY_SPEED,
-    hacking: 200,
-    chargeCount: 0,
-    startCharged: false,
-    position: defaultEnemySlot(index),
-    hp: DEFAULT_ENEMY_HP,
-    defence: DEFAULT_ENEMY_DEFENCE,
-    security: DEFAULT_ENEMY_SECURITY,
-});
-
-/** `wanted` if free, else the first unoccupied cell — copied verbatim from
- *  `HealingCalculatorPage.tsx`. */
-const firstFreeSlot = (wanted: Position, taken: ReadonlyArray<Position | undefined>): Position => {
-    const used = new Set(taken.filter((p): p is Position => !!p));
-    if (!used.has(wanted)) return wanted;
-    return ENEMY_SLOT_OPTIONS.find((p) => !used.has(p)) ?? wanted;
-};
-
-const detectShipCharged = (ship: Ship): boolean =>
-    detectFullyCharged([
-        ship.activeSkillText,
-        ship.chargeSkillText,
-        ship.firstPassiveSkillText,
-        ship.secondPassiveSkillText,
-        ship.thirdPassiveSkillText,
-    ]);
 
 /** Engine stats + kit for a defender built from a real ship. Shared by the URL-param initial
  *  config and the ship-picker, which previously duplicated the stat mapping. */
 const defenderFieldsFromShip = (
     ship: Ship,
-    final: ReturnType<typeof calculateTotalStats>['final'],
+    final: ReturnType<typeof shipFinalStats>,
     getGearPiece: Parameters<typeof buildShipAbilitiesWithEquipment>[1]
 ) => ({
     shipId: ship.id,
@@ -122,30 +67,13 @@ const DefenseCalculatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
-    // Both start at 1 (not the healing page's 2): this page's initial enemy/team rosters are
-    // empty, unlike the healing page's pre-seeded first slot, so the FIRST added enemy/team ship
-    // should be numbered 1.
-    const nextEnemyIdRef = useRef(1);
-    const nextTeamIdRef = useRef(1);
 
     const getInitialConfig = (): DefenseShipConfig[] => {
         const shipId = searchParams.get('shipId');
         if (shipId) {
             const ship = getShipById(shipId);
             if (ship) {
-                const engineeringStats = ship.type
-                    ? getEngineeringStatsForShipType(ship.type)
-                    : undefined;
-                const statsBreakdown = calculateTotalStats(
-                    ship.baseStats,
-                    ship.equipment || {},
-                    getGearPiece,
-                    ship.refits,
-                    ship.implants,
-                    engineeringStats,
-                    ship.id
-                );
-                const final = statsBreakdown.final;
+                const final = shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType);
                 const fields = defenderFieldsFromShip(ship, final, getGearPiece);
                 return [
                     {
@@ -186,10 +114,29 @@ const DefenseCalculatorPage: React.FC = () => {
     const [globalBuffs, setGlobalBuffs] = useState<SelectedGameBuff[]>([]);
     const [settingsPanelOpen, setSettingsPanelOpen] = useState(false);
     const [rounds, setRounds] = useState(20);
-    const [enemies, setEnemies] = useState<EnemyAttackerConfig[]>([]);
-    const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([]);
     const [enemyPanelOpen, setEnemyPanelOpen] = useState(false);
     const [teamPanelOpen, setTeamPanelOpen] = useState(false);
+
+    const {
+        enemies,
+        teamShips,
+        enemyInputs,
+        teamActors,
+        addEnemy,
+        removeEnemy,
+        selectEnemyShip,
+        updateEnemy,
+        addTeamShip,
+        removeTeamShip,
+        selectShipForTeamSlot,
+        updateTeamShip,
+    } = useEnemyTeamRoster({
+        // This page's rosters start EMPTY, so the first added enemy is "Enemy 1", not "Enemy 2",
+        // and removing the last team ship deletes it rather than resetting it.
+        minTeamShips: 0,
+        enemyIdSeed: 1,
+        teamIdSeed: 1,
+    });
 
     useEffect(() => {
         if (shipInitialized.current) return;
@@ -260,17 +207,7 @@ const DefenseCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        const statsBreakdown = calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        );
-        const final = statsBreakdown.final;
+        const final = shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType);
         const fields = defenderFieldsFromShip(ship, final, getGearPiece);
         const { selfBuffs } = buildSkillBuffAutoFill(ship);
         setConfigs((prev) =>
@@ -295,191 +232,6 @@ const DefenseCalculatorPage: React.FC = () => {
     const updateConfigShipSkills = (id: string, shipSkills: ShipSkills) => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, shipSkills } : c)));
     };
-
-    // ---- Enemy attacker handlers ----
-    // Copied verbatim from `HealingCalculatorPage.tsx` (shared shape) — an empty roster is allowed;
-    // the adapter synthesizes an inert practice target for it.
-    const addEnemy = () => {
-        const n = nextEnemyIdRef.current++;
-        setEnemies((prev) => [
-            ...prev,
-            {
-                id: n.toString(),
-                name: `Enemy ${n}`,
-                ...defaultEnemyStats(prev.length),
-                position: firstFreeSlot(
-                    defaultEnemySlot(prev.length),
-                    prev.map((e) => e.position)
-                ),
-            },
-        ]);
-    };
-
-    const removeEnemy = (id: string) => {
-        setEnemies((prev) => prev.filter((e) => e.id !== id));
-    };
-
-    const selectEnemyShip = (id: string, ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        const final = calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        ).final;
-        setEnemies((prev) =>
-            prev.map((e) => {
-                if (e.id !== id) return e;
-                return {
-                    ...e,
-                    shipId: ship.id,
-                    name: ship.name,
-                    attack: Math.round(final.attack ?? 0),
-                    crit: Math.round(final.crit ?? 0),
-                    critDamage: Math.round(final.critDamage ?? 0),
-                    speed: Math.round(final.speed ?? 50),
-                    hacking: Math.round(final.hacking ?? 200),
-                    hp: Math.max(1, Math.round(final.hp ?? DEFAULT_ENEMY_HP)),
-                    defence: Math.round(final.defence ?? DEFAULT_ENEMY_DEFENCE),
-                    security: Math.round(final.security ?? DEFAULT_ENEMY_SECURITY),
-                    chargeCount: ship.chargeSkillCharge ?? 0,
-                    startCharged: detectShipCharged(ship),
-                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                    affinity: ship.affinity,
-                };
-            })
-        );
-    };
-
-    const updateEnemy = (id: string, updates: Partial<EnemyAttackerConfig>) => {
-        setEnemies((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
-    };
-
-    // ---- Team handlers ----
-    // Copied verbatim from `HealingCalculatorPage.tsx` (shared shape).
-    const addTeamShip = () => {
-        if (teamShips.length >= 4) return;
-        const id = `team-${nextTeamIdRef.current++}`;
-        setTeamShips((prev) => [
-            ...prev,
-            {
-                id,
-                buffs: [],
-                enemyDebuffs: [],
-                startCharged: false,
-                speed: 100,
-                chargeCount: 0,
-            },
-        ]);
-    };
-
-    const removeTeamShip = (id: string) => {
-        setTeamShips((prev) => prev.filter((t) => t.id !== id));
-    };
-
-    const selectShipForTeamSlot = (id: string, ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        const final = calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        ).final;
-        setTeamShips((prev) =>
-            prev.map((t) => {
-                if (t.id !== id) return t;
-                return {
-                    ...t,
-                    shipId: ship.id,
-                    startCharged: detectShipCharged(ship),
-                    speed: Math.round(final.speed ?? 100),
-                    chargeCount: ship.chargeSkillCharge ?? 0,
-                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                    stats: {
-                        attack: Math.round(final.attack ?? 0),
-                        crit: Math.round(final.crit ?? 0),
-                        critDamage: Math.round(final.critDamage ?? 0),
-                        defensePenetration: Math.round(final.defensePenetration ?? 0),
-                        hacking: Math.round(final.hacking ?? 200),
-                        defence: Math.round(final.defence ?? 0),
-                        hp: Math.round(final.hp ?? 0),
-                        healModifier: Math.round(final.healModifier ?? 0),
-                    },
-                    affinity: ship.affinity,
-                    role: ship.type,
-                    faction: asFactionKey(ship.faction),
-                    buffs: t.buffs.filter((b) => !b.autoFilled),
-                    enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
-                };
-            })
-        );
-    };
-
-    const updateTeamShip = (id: string, updates: Partial<TeamShipConfig>) => {
-        setTeamShips((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-    };
-
-    // ---- Derived sim inputs ----
-    // Copied verbatim from `HealingCalculatorPage.tsx:543` — maps TeamShipConfig -> TeamActorInput.
-    const teamActors = useMemo<TeamActorInput[]>(
-        () =>
-            teamShips.map((t) => ({
-                id: t.id,
-                speed: t.speed,
-                chargeCount: t.chargeCount,
-                startCharged: t.startCharged,
-                selfBuffs: t.buffs,
-                enemyDebuffs: t.enemyDebuffs,
-                shipSkills: t.shipSkills,
-                stats: t.stats,
-                affinity: t.affinity,
-                role: t.role,
-                faction: t.faction,
-                ...(t.position ? { position: t.position } : {}),
-            })),
-        [teamShips]
-    );
-
-    // Copied verbatim from `HealingCalculatorPage.tsx:616` — maps EnemyAttackerConfig ->
-    // EnemyAttackerInput, including each enemy's OWN parsed targeting (decision 4: targeting comes
-    // from every actor's parsed skill targeting, not just the defender's).
-    const enemyInputs = useMemo<EnemyAttackerInput[]>(
-        () =>
-            enemies.map((e) => {
-                const enemyShip = e.shipId ? getShipById(e.shipId) : undefined;
-                const targeting = targetingOf(enemyShip);
-                return {
-                    id: e.id,
-                    faction: asFactionKey(enemyShip?.faction),
-                    stats: {
-                        attack: e.attack,
-                        crit: e.crit,
-                        critDamage: e.critDamage,
-                        speed: e.speed,
-                        hp: e.hp,
-                        defence: e.defence,
-                        security: e.security,
-                    },
-                    hacking: e.hacking,
-                    chargeCount: e.chargeCount,
-                    startCharged: e.startCharged,
-                    shipSkills: e.shipSkills,
-                    affinity: e.affinity,
-                    position: e.position,
-                    target: targeting?.active?.target,
-                    pattern: targeting?.active?.pattern,
-                    chargedTarget: targeting?.charged?.target,
-                    chargedPattern: targeting?.charged?.pattern,
-                };
-            }),
-        [enemies, getShipById]
-    );
 
     // ---- Survivability sim, memoized ----
     const simResults = useMemo(() => {

@@ -8,50 +8,41 @@ import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
     SelectedGameBuff,
-    TeamShipConfig,
     TeamActorInput,
     CombatStatBlock,
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
-import { detectFullyCharged } from '../../utils/skillTextParser';
 import { type ParsedPattern } from '../../utils/targetingParser';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
-import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { targetingOf } from '../../utils/calculators/shipTargeting';
 import {
     simulateHealing,
     HealingSimulationResult,
-    EnemyAttackerInput,
     // The engine's focus-actor id — the key the RECIPIENT-axis map uses for the healer itself.
     FOCUS_ID as HEALER_ACTOR_ID,
 } from '../../utils/calculators/healingEngineAdapter';
 import {
     DEFAULT_HEALER_SLOT,
-    HEALING_SLOT_OPTIONS,
-    defaultEnemySlot,
     defaultHealTargetSlot,
     defaultHealingTeamSlot,
     resolveHealingPlayerPlacement,
     uncoveredAllyIds,
 } from '../../utils/calculators/healingPlacement';
-import {
-    DEFAULT_ENEMY_DEFENCE,
-    DEFAULT_ENEMY_HP,
-    DEFAULT_ENEMY_SECURITY,
-    DEFAULT_ENEMY_SPEED,
-} from '../../utils/calculators/healingDefaultEnemy';
 import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
+import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
+import {
+    defaultEnemyStats,
+    detectShipCharged,
+    shipFinalStats,
+} from '../../utils/calculators/rosterHelpers';
 import { Input } from '../../components/ui/Input';
 import { HealerConfigCard } from '../../components/calculator/HealerConfigCard';
 import { HealTargetPanel, HealTargetState } from '../../components/calculator/HealTargetPanel';
-import {
-    EnemyAttackersPanel,
-    EnemyAttackerConfig,
-} from '../../components/calculator/EnemyAttackersPanel';
+import { EnemyAttackersPanel } from '../../components/calculator/EnemyAttackersPanel';
 import { TeamPanel } from '../../components/calculator/TeamPanel';
 import { GameBuffPicker } from '../../components/calculator/GameBuffPicker';
 import { HealingCumulativeChart } from '../../components/calculator/HealingCumulativeChart';
@@ -67,34 +58,6 @@ import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 
 const HEAL_TARGET_ID = 'heal-target';
-
-/** The stat block a manually-added enemy starts from, placed at the Nth default enemy cell.
- *
- *  The stats themselves live in `healingDefaultEnemy.ts` because the adapter needs the same numbers
- *  for the PRACTICE TARGET it synthesizes when the roster is empty — see that module for why none of
- *  them may be 0. `attack` and `hacking` stay here: they are the two the practice target does not
- *  share (it has no attack, and an absent hacking already defaults to the engine's 200). */
-const defaultEnemyStats = (index: number) => ({
-    attack: 4000,
-    crit: 0,
-    critDamage: 0,
-    speed: DEFAULT_ENEMY_SPEED,
-    hacking: 200,
-    chargeCount: 0,
-    startCharged: false,
-    position: defaultEnemySlot(index),
-    hp: DEFAULT_ENEMY_HP,
-    defence: DEFAULT_ENEMY_DEFENCE,
-    security: DEFAULT_ENEMY_SECURITY,
-});
-
-/** `wanted` if free, else the first unoccupied cell — two actors on one cell means the sim MOVES
- *  one of them, so a freshly-added ship should not start in a collision. */
-const firstFreeSlot = (wanted: Position, taken: ReadonlyArray<Position | undefined>): Position => {
-    const used = new Set(taken.filter((p): p is Position => !!p));
-    if (!used.has(wanted)) return wanted;
-    return HEALING_SLOT_OPTIONS.find((p) => !used.has(p)) ?? wanted;
-};
 
 /**
  * A ship's ACTIVE pattern — the coverage source `uncoveredAllyIds` reads.
@@ -114,36 +77,12 @@ const firstFreeSlot = (wanted: Position, taken: ReadonlyArray<Position | undefin
 const activePatternOf = (ship?: Ship): ParsedPattern | undefined =>
     targetingOf(ship)?.active?.pattern;
 
-const detectShipCharged = (ship: Ship): boolean =>
-    detectFullyCharged([
-        ship.activeSkillText,
-        ship.chargeSkillText,
-        ship.firstPassiveSkillText,
-        ship.secondPassiveSkillText,
-        ship.thirdPassiveSkillText,
-    ]);
-
 const HealingCalculatorPage: React.FC = () => {
     const [searchParams, setSearchParams] = useSearchParams();
     const { getShipById } = useShips();
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const shipInitialized = useRef(false);
-    const nextTeamIdRef = useRef(2);
-    const nextEnemyIdRef = useRef(2);
-
-    const shipFinalStats = (ship: Ship) => {
-        const engineeringStats = ship.type ? getEngineeringStatsForShipType(ship.type) : undefined;
-        return calculateTotalStats(
-            ship.baseStats,
-            ship.equipment || {},
-            getGearPiece,
-            ship.refits,
-            ship.implants,
-            engineeringStats,
-            ship.id
-        ).final;
-    };
 
     // Shared healer-stat extraction from resolved final stats.
     const healerStatsFromShip = (final: ReturnType<typeof shipFinalStats>) => ({
@@ -187,7 +126,9 @@ const HealingCalculatorPage: React.FC = () => {
                             id: '1',
                             shipId: ship.id,
                             name: ship.name,
-                            ...healerStatsFromShip(shipFinalStats(ship)),
+                            ...healerStatsFromShip(
+                                shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType)
+                            ),
                             chargeCount: ship.chargeSkillCharge ?? 0,
                             startCharged: detectShipCharged(ship),
                             shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
@@ -237,30 +178,43 @@ const HealingCalculatorPage: React.FC = () => {
         undefined
     );
 
-    const [enemies, setEnemies] = useState<EnemyAttackerConfig[]>([
-        { id: '1', name: 'Enemy 1', ...defaultEnemyStats(0) },
-    ]);
-
-    // ⚠️ NO `position` HERE, DELIBERATELY. `position` on a team ship means "the user picked this
-    // cell": `resolveHealingPlayerPlacement` reads its presence as an EXPLICIT placement and lets it
-    // outrank the heal target's coverage-aware default. Seeding the index-derived default into state
-    // made every untouched team ship look deliberate, so `contestedByExplicit` fired against a
-    // *default*, the heal target lost its nomination and was evicted to the first free cell in
-    // `ATTACKER_SLOT_OPTIONS` order — chosen with no knowledge of coverage. Measured on the default
-    // board with Volk (`Pattern-Line-Support-from-centre-Range-1`, covering {M2, M1, M3} from M2):
-    // the moment a separate heal target was chosen, the untouched team ship's "explicit" M1 took the
-    // heal target's only covered cell and the page reported 0 healing — no placement edit involved.
-    // The default is a DISPLAY value only, supplied by `teamShipSlot` below.
-    const [teamShips, setTeamShips] = useState<TeamShipConfig[]>([
-        {
-            id: 'team-1',
-            buffs: [],
-            enemyDebuffs: [],
-            startCharged: false,
-            speed: 100,
-            chargeCount: 0,
-        },
-    ]);
+    const {
+        enemies,
+        teamShips,
+        enemyInputs,
+        teamActors,
+        addEnemy,
+        removeEnemy,
+        selectEnemyShip,
+        updateEnemy,
+        addTeamShip,
+        removeTeamShip,
+        selectShipForTeamSlot,
+        updateTeamShip,
+        teamShipSlot,
+        changeTeamShipSlot,
+    } = useEnemyTeamRoster({
+        minTeamShips: 1,
+        enemyIdSeed: 2,
+        teamIdSeed: 2,
+        defaultTeamSlot: defaultHealingTeamSlot,
+        initialEnemies: [{ id: '1', name: 'Enemy 1', ...defaultEnemyStats(0) }],
+        // ⚠️ NO `position` HERE, DELIBERATELY. `position` on a team ship means "the user picked this
+        // cell": `resolveHealingPlayerPlacement` reads its presence as an EXPLICIT placement and lets
+        // it outrank the heal target's coverage-aware default. Seeding the index-derived default made
+        // every untouched team ship look deliberate, the heal target lost its nomination and the page
+        // reported 0 healing. The default is a DISPLAY value only, supplied by `teamShipSlot`.
+        initialTeamShips: [
+            {
+                id: 'team-1',
+                buffs: [],
+                enemyDebuffs: [],
+                startCharged: false,
+                speed: 100,
+                chargeCount: 0,
+            },
+        ],
+    });
 
     useEffect(() => {
         if (shipInitialized.current) return;
@@ -298,7 +252,9 @@ const HealingCalculatorPage: React.FC = () => {
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
-        const stats = healerStatsFromShip(shipFinalStats(ship));
+        const stats = healerStatsFromShip(
+            shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType)
+        );
         setConfigs((prev) =>
             prev.map((c) => {
                 if (c.id !== configId) return c;
@@ -317,7 +273,7 @@ const HealingCalculatorPage: React.FC = () => {
 
     // ---- Heal target handlers ----
     const selectTargetShip = (ship: Ship) => {
-        const final = shipFinalStats(ship);
+        const final = shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType);
         setTarget((prev) => ({
             ...prev,
             shipId: ship.id,
@@ -343,211 +299,7 @@ const HealingCalculatorPage: React.FC = () => {
         });
     };
 
-    // ---- Enemy attacker handlers ----
-    const addEnemy = () => {
-        const n = nextEnemyIdRef.current++;
-        setEnemies((prev) => [
-            ...prev,
-            {
-                id: n.toString(),
-                name: `Enemy ${n}`,
-                ...defaultEnemyStats(prev.length),
-                // Index-derived defaults collide once the user has moved anyone, and a collision is
-                // resolved by MOVING an enemy at sim time — so pick a free cell up front.
-                position: firstFreeSlot(
-                    defaultEnemySlot(prev.length),
-                    prev.map((e) => e.position)
-                ),
-            },
-        ]);
-    };
-
-    // An empty roster is allowed: it means "nothing shoots back", and the adapter synthesizes an
-    // inert PRACTICE TARGET for it (`healingEngineAdapter.practiceTarget`) so the run reads as pure
-    // healing output with everything overhealed.
-    //
-    // History, and why the practice target carries a real defence rather than 0: before SP-4b-2b an
-    // empty roster fell to the engine's vestigial dummy — a fixed 10,000-defence / 1,000,000-HP sink
-    // that never dies — so every `basis:'damage-dealt'` rider silently rebased off that 10,000 and
-    // `perTargetDealt` disappeared. Measured at the time: totalDirectHeal 3,876 with one real enemy
-    // at defence 1,000 → 1,290 with none, a 3x move from a single click on a fresh page. The practice
-    // target carries the same numbers this page's own default card does, so emptying the roster now
-    // changes only the damage coming at you.
-    const removeEnemy = (id: string) => {
-        setEnemies((prev) => prev.filter((e) => e.id !== id));
-    };
-
-    const selectEnemyShip = (id: string, ship: Ship) => {
-        const final = shipFinalStats(ship);
-        setEnemies((prev) =>
-            prev.map((e) => {
-                if (e.id !== id) return e;
-                return {
-                    ...e,
-                    shipId: ship.id,
-                    name: ship.name,
-                    attack: Math.round(final.attack ?? 0),
-                    crit: Math.round(final.crit ?? 0),
-                    critDamage: Math.round(final.critDamage ?? 0),
-                    speed: Math.round(final.speed ?? 50),
-                    hacking: Math.round(final.hacking ?? 200),
-                    // The enemy is a real, killable actor since SP-3: its own HP/defence/security
-                    // drive whether it dies, how much the healer's cast hurts it (the basis for
-                    // damage-dealt riders), and whether the healer's debuffs land on it.
-                    // Floored at 1: `final.hp` can resolve to 0 (e.g. a ship with 0 base HP), and
-                    // `??` only substitutes the default for null/undefined — it lets a resolved 0
-                    // straight through. A 0-HP enemy enters the run already destroyed, which
-                    // silently zeroes every `basis:'damage-dealt'` rider (see the HP-field comment
-                    // in EnemyAttackersPanel.tsx, which clamps for the same reason on manual entry).
-                    hp: Math.max(1, Math.round(final.hp ?? DEFAULT_ENEMY_HP)),
-                    defence: Math.round(final.defence ?? DEFAULT_ENEMY_DEFENCE),
-                    security: Math.round(final.security ?? DEFAULT_ENEMY_SECURITY),
-                    chargeCount: ship.chargeSkillCharge ?? 0,
-                    startCharged: detectShipCharged(ship),
-                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                    affinity: ship.affinity,
-                };
-            })
-        );
-    };
-
-    const updateEnemy = (id: string, updates: Partial<EnemyAttackerConfig>) => {
-        setEnemies((prev) => prev.map((e) => (e.id === id ? { ...e, ...updates } : e)));
-    };
-
-    // ---- Team handlers ----
-    const addTeamShip = () => {
-        if (teamShips.length >= 4) return;
-        const id = `team-${nextTeamIdRef.current++}`;
-        // Again NO `position`: an added ship the user has not placed must stay a DEFAULT, or it
-        // outranks the heal target's coverage-aware cell (see the state initialiser above).
-        // `teamShipSlot(id, index)` shows `defaultHealingTeamSlot(index)` for it, which is the very
-        // cell the adapter will resolve for it.
-        setTeamShips((prev) => [
-            ...prev,
-            {
-                id,
-                buffs: [],
-                enemyDebuffs: [],
-                startCharged: false,
-                speed: 100,
-                chargeCount: 0,
-            },
-        ]);
-    };
-
-    const removeTeamShip = (id: string) => {
-        setTeamShips((prev) => {
-            if (prev.length <= 1)
-                return [
-                    {
-                        id: prev[0].id,
-                        buffs: [],
-                        enemyDebuffs: [],
-                        startCharged: false,
-                        speed: 100,
-                        chargeCount: 0,
-                        // Carried through as-is, `undefined` included: an untouched ship must not
-                        // gain an explicit cell just because the roster shrank to one.
-                        position: prev[0].position,
-                    },
-                ];
-            return prev.filter((t) => t.id !== id);
-        });
-    };
-
-    const selectShipForTeamSlot = (id: string, ship: Ship) => {
-        const final = shipFinalStats(ship);
-        setTeamShips((prev) =>
-            prev.map((t) => {
-                if (t.id !== id) return t;
-                return {
-                    ...t,
-                    shipId: ship.id,
-                    startCharged: detectShipCharged(ship),
-                    speed: Math.round(final.speed ?? 100),
-                    chargeCount: ship.chargeSkillCharge ?? 0,
-                    shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
-                    stats: {
-                        attack: Math.round(final.attack ?? 0),
-                        crit: Math.round(final.crit ?? 0),
-                        critDamage: Math.round(final.critDamage ?? 0),
-                        defensePenetration: Math.round(final.defensePenetration ?? 0),
-                        hacking: Math.round(final.hacking ?? 200),
-                        defence: Math.round(final.defence ?? 0),
-                        hp: Math.round(final.hp ?? 0),
-                        healModifier: Math.round(final.healModifier ?? 0),
-                    },
-                    affinity: ship.affinity,
-                    role: ship.type,
-                    // #363: faction-scoped ally grants (Fuying's Tianchao Stealth) resolve the
-                    // recipient's faction from here.
-                    faction: asFactionKey(ship.faction),
-                    buffs: t.buffs.filter((b) => !b.autoFilled),
-                    enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
-                };
-            })
-        );
-    };
-
-    const updateTeamShip = (id: string, updates: Partial<TeamShipConfig>) => {
-        setTeamShips((prev) => prev.map((t) => (t.id === id ? { ...t, ...updates } : t)));
-    };
-
-    /** This team ship's cell, falling back to its index-derived default. */
-    const teamShipSlot = (id: string, index: number): Position =>
-        teamShips.find((t) => t.id === id)?.position ?? defaultHealingTeamSlot(index);
-
-    /**
-     * Move a team ship, SWAPPING with whichever team ship already holds the cell.
-     *
-     * Scoped to team ships, matching the DPS page: healer CONFIGS are alternatives simulated in
-     * separate runs, so they never share a board with each other. Swapping (rather than leaving the
-     * collision to the sim) keeps the displayed board honest — the sim's own collision pass would
-     * move a ship to a cell no dropdown shows.
-     */
-    const changeTeamShipSlot = (id: string, slot: Position) =>
-        setTeamShips((prev) => {
-            const moving = prev.find((t) => t.id === id);
-            if (!moving) return prev;
-            const from = moving.position ?? defaultHealingTeamSlot(prev.indexOf(moving));
-            if (from === slot) return prev;
-            const occupantIndex = prev.findIndex(
-                (t, i) => t.id !== id && (t.position ?? defaultHealingTeamSlot(i)) === slot
-            );
-            return prev.map((t, i) => {
-                if (t.id === id) return { ...t, position: slot };
-                if (i === occupantIndex) return { ...t, position: from };
-                return t;
-            });
-        });
-
     // ---- Derived sim inputs ----
-    const teamActors = useMemo<TeamActorInput[]>(
-        () =>
-            teamShips.map((t) => ({
-                id: t.id,
-                speed: t.speed,
-                chargeCount: t.chargeCount,
-                startCharged: t.startCharged,
-                selfBuffs: t.buffs,
-                enemyDebuffs: t.enemyDebuffs,
-                shipSkills: t.shipSkills,
-                stats: t.stats,
-                affinity: t.affinity,
-                role: t.role,
-                faction: t.faction,
-                // Board cell, ONLY when the user actually picked one — the same shape `targetActor`
-                // uses below, and for the same reason. Left absent, the adapter applies
-                // `defaultHealingTeamSlot(index)` itself (identical to what `teamShipSlot` displays)
-                // and, crucially, treats the ship as UNPLACED, so it cannot outrank the heal
-                // target's coverage-aware default. Sending the default here made every untouched
-                // team ship look deliberate and could evict the heal target off its covered cell.
-                ...(t.position ? { position: t.position } : {}),
-            })),
-        [teamShips]
-    );
-
     // The heal target as its own team actor (only when NOT healing the healer itself).
     // The actor ALWAYS carries shipSkills + stats so the engine honours its editable HP and
     // defence (a team actor without `walk` defaults to HP 1 / defence 0 in the engine). When no
@@ -595,54 +347,6 @@ const HealingCalculatorPage: React.FC = () => {
         targetRole,
         targetFaction,
     ]);
-
-    const enemyInputs = useMemo<EnemyAttackerInput[]>(
-        () =>
-            enemies.map((e) => {
-                // The enemy's OWN parsed targeting, exactly as the healer gets its own (decision 4:
-                // targeting comes from every ACTOR's parsed skill targeting, not just the healer's).
-                // Without it every enemy defaulted to single-target FRONT, so an enemy AoE attacker hit
-                // exactly one player ship instead of its real footprint — understating incoming
-                // pressure on a spread board and making defensive placement inert against the enemy
-                // side. Undefined for a manual enemy (or an unparseable kit), and the adapter's
-                // synthetic front/base fallback then applies.
-                const enemyShip = e.shipId ? getShipById(e.shipId) : undefined;
-                const targeting = targetingOf(enemyShip);
-                return {
-                    id: e.id,
-                    // #363: this enemy's own faction — mirrors how the player-side team-ship/
-                    // target-ship branches above already thread `faction: asFactionKey(ship.
-                    // faction)`. Without this an ENEMY-side Fuying grants Stealth to nobody
-                    // (unknown faction never matches a filter), the opposite-direction defect
-                    // from those branches missing it. A manual enemy (no `shipId`) stays
-                    // unknown-faction, same as before.
-                    faction: asFactionKey(enemyShip?.faction),
-                    stats: {
-                        attack: e.attack,
-                        crit: e.crit,
-                        critDamage: e.critDamage,
-                        speed: e.speed,
-                        // The enemy's OWN numbers, no longer the adapter's legacy-sink fallbacks: its
-                        // defence is the basis for the healer's damage-dealt riders, its HP decides
-                        // whether it can be destroyed, and its security resists the healer's debuffs.
-                        hp: e.hp,
-                        defence: e.defence,
-                        security: e.security,
-                    },
-                    hacking: e.hacking,
-                    chargeCount: e.chargeCount,
-                    startCharged: e.startCharged,
-                    shipSkills: e.shipSkills,
-                    affinity: e.affinity,
-                    position: e.position,
-                    target: targeting?.active?.target,
-                    pattern: targeting?.active?.pattern,
-                    chargedTarget: targeting?.charged?.target,
-                    chargedPattern: targeting?.charged?.pattern,
-                };
-            }),
-        [enemies, getShipById]
-    );
 
     const simResults = useMemo(() => {
         const map = new Map<string, HealingSimulationResult>();
@@ -823,6 +527,15 @@ const HealingCalculatorPage: React.FC = () => {
     // stays selectable.
     const teamShipCells = teamShips.map((t, i) => t.position ?? defaultHealingTeamSlot(i));
     const healerCells = configs.map((c) => c.position ?? DEFAULT_HEALER_SLOT);
+    // `teamShipSlot`/`changeTeamShipSlot` come back possibly-undefined from the hook's shared type —
+    // undefined only when `defaultTeamSlot` is omitted, which is the defense page's case, never this
+    // one (it always passes `defaultHealingTeamSlot` above). Asserted once here, with an explicit
+    // non-optional variable type, rather than sprinkling `?.` through the JSX below: TeamPanel's own
+    // props are optional too (shared with the defense page), so passing the hook's value straight
+    // through would still type-check even if it silently went undefined — this keeps that guarantee
+    // explicit instead.
+    const teamShipSlotForPanel: (id: string, index: number) => Position = teamShipSlot!;
+    const changeTeamShipSlotForPanel: (id: string, slot: Position) => void = changeTeamShipSlot!;
     /** The heal target's cell: its own when chosen, else the coverage-aware default of the FIRST
      *  config's footprint. Only a display value — the adapter resolves it per config. */
     const healTargetCell =
@@ -962,8 +675,8 @@ const HealingCalculatorPage: React.FC = () => {
                         onTeamShipShipSkillsChange={(id, shipSkills) =>
                             updateTeamShip(id, { shipSkills })
                         }
-                        teamShipSlot={teamShipSlot}
-                        onTeamShipSlotChange={changeTeamShipSlot}
+                        teamShipSlot={teamShipSlotForPanel}
+                        onTeamShipSlotChange={changeTeamShipSlotForPanel}
                         otherTakenSlots={[...healerCells, ...healTargetCells]}
                     />
 
