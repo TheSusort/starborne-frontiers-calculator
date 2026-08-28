@@ -158,6 +158,29 @@ export type CombatEvent =
           targetId: string;
           round: number;
           buffName: string;
+          /** #413: TRUE only when the hacking-vs-security landing gate was actually DRAWN and
+           *  came back a failure. Three unrelated causes emit this one event — a Block-Debuff
+           *  auto-resist, an affinity-disadvantage `apply`, and a failed roll — and by emit time
+           *  they were indistinguishable, so no consumer could tell "the enemy rolled a resist"
+           *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence) fires
+           *  on the roll only; every other resist consumer (Vindicator, Ravager, Lockdown) stays
+           *  cause-agnostic and ignores this field.
+           *
+           *  MUST be stamped at the point of decision and passed through — never re-derived at
+           *  the emit site. The reactive path deliberately folds immunity INTO its landing
+           *  condition, so at the `else` you cannot tell which arm short-circuited; and the
+           *  reactive and cast paths feed `computeAffinityModifiers` DIFFERENT affinity inputs on
+           *  purpose, so a re-test drifts from the decision that was actually made. */
+          viaLandingRoll?: true;
+          /** The 0-based sub-attack that raised this resist, so a consumer can be attack-scoped
+           *  rather than round-scoped. Present on the positional/deferred cast path, where the
+           *  engine buffers each sub-attack's enemy-application emitters under its own index and
+           *  hands that index back to the emitter. ABSENT on the non-positional path, whose debuff
+           *  loop resolves the whole cast in one call and so has no per-sub-attack identity to
+           *  stamp, and on hand-built fixture events. Consumers must read absent as "the only
+           *  sub-attack" — the same `?? 'x'` contract the sibling counter guard uses — and must
+           *  NOT substitute 0 when comparing across DIFFERENT actors. */
+          subAttackIndex?: number;
       } & ReactiveStamp)
     /** `sourceId` identifies the inflicting actor. */
     | ({

@@ -9145,7 +9145,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             // point — sub-attack k's stack must be in the store when sub-attack k+1 reads
             // defenseProfileOf); only the events wait here, so each lands after its own
             // sub-attack's `ability-performed` row exists.
-            const debuffEmittersBySubAttack = new Map<number, (() => void)[]>();
+            const debuffEmittersBySubAttack = new Map<
+                number,
+                ((subAttackIndex?: number) => void)[]
+            >();
             const bufferDebuffEmitters = (
                 index: number,
                 pairs: PlayerTurnResult['deferredEnemyApplications']
@@ -9308,7 +9311,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 steps.push({
                     isEvent: false,
                     run: () => {
-                        for (const emit of emitters) emit();
+                        // #413: hand each emitter the index of the bucket it was filed under. This
+                        // is the only place that identity still exists — the pairs were built
+                        // inside runPlayerTurn's debuff loop, which does not know which sub-attack
+                        // it is in — and it is what lets a `debuff-resisted` be attack-scoped.
+                        for (const emit of emitters) emit(idx);
                     },
                 });
             };

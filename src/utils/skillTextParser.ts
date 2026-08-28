@@ -474,10 +474,15 @@ export function parseOnResistHpDamage(text: string | null | undefined): { pct: n
 /**
  * Ship-kit W8 — Xcellence p2 reactive proc: "When an enemy resists a debuff infliction, this
  * Unit deals damage equal to <unit-damage>115%</unit-damage> of this Unit's current shield.."
- * INFLICTOR-scoped sibling of parseOnResistHpDamage — the subject is "an enemy" (the resister),
- * not "this Unit" (contrast Vindicator's "When THIS UNIT resists…"), so this reads as "when an
- * enemy resists A DEBUFF [THIS UNIT INFLICTED]": the on-own-debuff-resisted trigger (inflictor-
- * scoped mirror of on-debuff-resisted, triggers.ts ~775), not Vindicator's on-debuff-resisted.
+ * ENEMY-RESISTER-scoped and INFLICTOR-AGNOSTIC sibling of parseOnResistHpDamage: the subject is
+ * "an enemy" (the resister), not "this Unit" (contrast Vindicator's "When THIS UNIT resists…"),
+ * and the object is "a debuff infliction" with NO possessive (contrast Ravager's "if ITS debuff is
+ * resisted"). It therefore fires whoever inflicted the debuff — an ally's included.
+ *
+ * ⚠️ #413: this comment used to gloss the clause as "when an enemy resists A DEBUFF [THIS UNIT
+ * INFLICTED]" and route it onto `on-own-debuff-resisted` on that basis. The bracketed insertion is
+ * not in the skill row, and it cost every ally-inflicted resist. It now routes on
+ * `on-enemy-debuff-resisted`. Do not reintroduce a scope the text does not state.
  * The basis is the owner's CURRENT SHIELD rather than max HP. Standalone REACTIVE damage — NOT
  * an on-cast rider (parseSecondaryDamage's sentence guard deliberately excludes this same
  * clause, see its comment above). Returns { pct } or null.

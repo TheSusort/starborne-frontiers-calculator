@@ -1173,6 +1173,44 @@ export function registerReactiveListeners(args: {
                         );
                     });
                     break;
+                case 'on-enemy-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // #413 Xcellence: "When an enemy resists a debuff infliction". The subject
+                        // is the RESISTER and the object carries no possessive, so this is scoped on
+                        // the resister's SIDE and is deliberately blind to `e.sourceId` — an ally's
+                        // debuff being resisted procs it exactly like the owner's own does. That is
+                        // the whole defect this trigger exists to fix: she was wired to
+                        // `on-own-debuff-resisted`, which drops every ally-inflicted resist.
+                        //
+                        // Team-symmetric by construction: `isOpposing` is the owner's own view of
+                        // the board, so an enemy-side Xcellence watches the PLAYER roster resist.
+                        if (!isOpposing(e.targetId)) return;
+                        // Roll-only (locked ruling). A Block-Debuff auto-resist and an
+                        // affinity-disadvantage `apply` both short-circuit WITHOUT drawing the
+                        // hacking-vs-security gate, and a resist that was never rolled is not a
+                        // resist this reaction sees. The flag is stamped at each decision site and
+                        // travels on the event — see `debuff-resisted.viaLandingRoll` for why it
+                        // must never be re-derived here.
+                        if (e.viaLandingRoll !== true) return;
+                        // The RESISTER is the retaliation target: the damage hits each enemy that
+                        // resisted (owner ruling, 2026-08-28). Note this is the opposite routing
+                        // from `on-debuff-resisted`, which retaliates at the INFLICTOR — there the
+                        // owner is the one who resisted, here the owner is a bystander.
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                counterTargetId: e.targetId,
+                                // Carries the attack identity to the drain, which runs once per
+                                // turn and cannot ask the engine which sub-attack it is in. Absent
+                                // on the non-positional path (its debuff loop resolves the whole
+                                // cast in one call), where the guard key falls back to `'x'` and
+                                // the proc stays turn-collapsed.
+                                subAttackIndex: e.subAttackIndex,
+                            },
+                        });
+                    });
+                    break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
@@ -4042,6 +4080,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `landsTimedEnemyApplication`-only condition.
             const debuffTargetId = applicationTargetId;
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
+            // #413: computed HERE, beside `blockedByImmunity` and before the `if`, because the
+            // `else` below cannot tell which of the two short-circuits sent it there — that fold is
+            // deliberate ("so the EXISTING resist `else` handles it"). `cfg.application` is the sole
+            // input `owner.landsTimedEnemyApplication` uses to pick its arm: `'apply'` resolves on
+            // affinity and draws nothing, anything else calls `debuffLandingGate`. So this reads the
+            // arm choice rather than re-deciding the outcome, and it can only be true when the
+            // immunity short-circuit did NOT fire.
+            const drewLandingRoll = !blockedByImmunity && cfg.application !== 'apply';
             // Draw the OWNER's landing gate (its hacking-vs-security / affinity disadvantage),
             // NOT a global one — a team ship's debuff lands at ITS landing chance. One draw PER
             // TARGET (per-victim landing, matching the established per-victim precedent) — for
@@ -4101,6 +4147,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     // sourceId = the inflictor (PR-J) so an on-debuff-resisted reaction (Vindicator)
                     // can route retaliation back at it.
                     sourceId: intent.ownerId,
+                    ...(drewLandingRoll ? { viaLandingRoll: true as const } : {}),
                     // The RESOLVED target the debuff was aimed at (enemy-highest-attack /
                     // counter-infliction route) — so the combat log names the ship that resisted
                     // ("src → <that ship>: X resisted"). SP-4c-2d: it can no longer be the dummy
@@ -4247,12 +4294,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // local rationale, and it keeps this branch's only intended change the per-victim
                 // CHANCE rather than the draw schedule.
                 if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+                    // #413: no gate is drawn on this arm (that is the point of the note above), so
+                    // this resist must not proc an on-resist reaction.
                     emitBlockDebuffResist(
                         ctx.bus,
                         intent.ownerId,
                         victimId,
                         ctx.round,
-                        dotResistLabel(cfg.dotType, cfg.tier)
+                        dotResistLabel(cfg.dotType, cfg.tier),
+                        false
                     );
                     continue;
                 }
@@ -4294,12 +4344,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
         // zero-stack/tier DoT doesn't surface a spurious resist.
         if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
+            // #413: block path — no landing gate drawn, so no on-resist proc.
             emitBlockDebuffResist(
                 ctx.bus,
                 intent.ownerId,
                 victimId,
                 ctx.round,
-                dotResistLabel(cfg.dotType, cfg.tier)
+                dotResistLabel(cfg.dotType, cfg.tier),
+                false
             );
             return;
         }
@@ -4888,13 +4940,26 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (cfg.type === 'damage') {
         if (!passesProcChanceGate(intent, ctx)) return;
         // HP/Shield-basis reactive (Vindicator on-resist HP / Xcellence on-resist Shield,
-        // Ship-kit W8): REQUIRES a routed inflictor (counterTargetId) and has no fallback — you
-        // cannot retaliate against no-one. (There was never one here; the sibling arms that DID
-        // fall back to the dummy sink were no-oped in SP-4c-2d.) Frequency: one proc per
-        // triggering enemy action, keyed (owner, ability, round, source) so multiple debuffs
-        // resisted from ONE cast collapse to a single proc while two DIFFERENT enemies each proc.
-        // (oncePerRoundConsumed is the per-round set; a 3-part key never collides with the 2-part
-        // keys passesOncePerRoundGate uses.)
+        // Ship-kit W8): REQUIRES a routed retaliation target (counterTargetId) and has no fallback
+        // — you cannot retaliate against no-one. (There was never one here; the sibling arms that
+        // DID fall back to the dummy sink were no-oped in SP-4c-2d.)
+        //
+        // FREQUENCY: one proc per retaliation target, PER ATTACK — the locked family ruling for
+        // on-resist reactions (user, 2026-08-28): multiple debuffs resisted by the same enemy in
+        // ONE attack collapse to one proc, each DIFFERENT enemy resisting in that attack procs on
+        // its own, and a debuffer resisted on two SEPARATE attacks in one turn procs twice.
+        //
+        // #413 moved this off `oncePerRoundConsumed`, whose per-round lifetime supplied the key's
+        // implicit fourth component and made it per-ROUND. That collapsed two separate attacks in
+        // one round into a single proc — wrong for Xcellence, and equally wrong for Vindicator,
+        // which is why the fix lands on this shared arm rather than on one trigger. The guard is
+        // now `counterFiredThisTurn` (cleared at every actor turn-start) keyed with the triggering
+        // event's `subAttackIndex`, exactly like the sibling counter guard 30 lines up — the two
+        // together give per-turn × per-sub-attack × per-target, which is "per attack".
+        //
+        // `?? 'x'` reproduces the old turn-collapsed behaviour where no attack identity reached the
+        // event: the non-positional cast path, whose debuff loop resolves the whole cast in one
+        // call, and hand-built fixture intents carrying no eventCtx.
         if (cfg.hpBasisPct !== undefined || cfg.shieldBasisPct !== undefined) {
             const sourceId = intent.eventCtx?.counterTargetId;
             if (sourceId === undefined) return;
@@ -4905,9 +4970,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // gate does not burn the round's charge, matching the pre-scrub ordering where the global
             // gate ran before the branch was entered at all.
             if (!perVictimOk(sourceId)) return;
-            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}`;
-            if (ctx.oncePerRoundConsumed?.has(onceKey)) return;
-            ctx.oncePerRoundConsumed?.add(onceKey);
+            const onceKey = `${intent.ownerId}:${intent.ability.id}:${sourceId}:${
+                intent.eventCtx?.subAttackIndex ?? 'x'
+            }`;
+            if (ctx.counterFiredThisTurn?.has(onceKey)) return;
+            ctx.counterFiredThisTurn?.add(onceKey);
             const hpOutcome = ctx.applyReactiveDamage?.(
                 intent.ownerId,
                 sourceId,

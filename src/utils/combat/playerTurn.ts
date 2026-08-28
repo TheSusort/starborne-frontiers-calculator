@@ -98,6 +98,17 @@ export { scaledStatusCount };
 
 type StatusEngine = ReturnType<typeof createStatusEngine>;
 
+/** #413 — the outcome of one debuff-landing decision, and WHICH of the three arms produced it.
+ *
+ *  `viaRoll` is true only when the hacking-vs-security gate was actually DRAWN. It is deliberately
+ *  a property of the DECISION rather than something a consumer can recompute: the two no-roll arms
+ *  (Block-Debuff immunity, affinity-disadvantage `apply`) short-circuit WITHOUT drawing, on purpose
+ *  — a phantom draw against a 0 chance would shift the deterministic schedule of every later real
+ *  application — so "was the gate drawn?" is already load-bearing here. Carrying it forward is what
+ *  lets `on-enemy-debuff-resisted` (Xcellence) fire on a real resist and stay silent on the two
+ *  causes where the debuff never had a chance. */
+export type LandingDecision = { landed: boolean; viaRoll: boolean };
+
 /** A deterministic event gate: maps a probability/rate to a fire/no-fire decision. */
 export type RateGate = (rate: number) => boolean;
 
@@ -297,7 +308,14 @@ export interface HealingRuntimeCtx {
  */
 export interface DeferredEnemyApplication {
     applyState: () => void;
-    emitEvents: () => void;
+    /** #413: the engine buffers these per sub-attack (`debuffEmittersBySubAttack`) and so is the
+     *  only party that knows WHICH sub-attack produced the pair by the time they run — the pair is
+     *  built inside the debuff loop, long before emission. It hands the index back here so a
+     *  `debuff-resisted` can carry it and an on-resist reaction can be attack-scoped instead of
+     *  round-scoped. Omitted by the post-walk fallback flush, which drains the list outside any
+     *  sub-attack boundary and has no index to give; consumers read absent as "the only
+     *  sub-attack". */
+    emitEvents: (subAttackIndex?: number) => void;
 }
 
 /**
@@ -935,7 +953,10 @@ function resolveEnemyDebuffs(args: {
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
     affinityDisadvantage: boolean;
     roundDebuffLanded: () => boolean;
-    emitResisted: (buffName: string) => void;
+    /** #413: `viaLandingRoll` is decided HERE, where the arm is chosen — an `apply` entry resolves
+     *  on affinity alone and draws nothing, everything else consults `roundDebuffLanded`, which is
+     *  the round's single memoized hacking-vs-security draw. */
+    emitResisted: (buffName: string, viaLandingRoll: boolean) => void;
 }): {
     roundEnemyDebuffs: SelectedGameBuff[];
     landedEnemyDebuffs: ActiveBuff[];
@@ -954,7 +975,7 @@ function resolveEnemyDebuffs(args: {
         const lands = isApply ? !args.affinityDisadvantage : args.roundDebuffLanded();
         if (!lands) {
             resistedEnemyDebuffs.push(ab);
-            args.emitResisted(ab.buffName);
+            args.emitResisted(ab.buffName, !isApply);
             return [];
         }
         landedEnemyDebuffs.push(ab);
@@ -1662,13 +1683,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // victim to default to on a no-victim turn, and an application/resist event with no victim is
     // not a thing — so every caller now names its victim, and each enclosing application block is
     // fenced on `hasVictim` so a no-victim turn never reaches one.
-    const emitDebuffResisted = (buffName: string, victimId: string) =>
+    //
+    // #413: `viaLandingRoll` says whether the hacking-vs-security gate was DRAWN and failed. Every
+    // caller passes it explicitly rather than defaulting, so adding a new resist path cannot
+    // silently inherit "not a roll" — the two causes that draw nothing (Block-Debuff immunity and
+    // an affinity-disadvantage `apply`) must not proc an on-resist reaction, and the compiler is
+    // the only thing that reliably asks the question at a new call site.
+    const emitDebuffResisted = (
+        buffName: string,
+        victimId: string,
+        viaLandingRoll: boolean,
+        subAttackIndex?: number
+    ) =>
         bus.emit({
             type: 'debuff-resisted',
             sourceId: actor.id,
             targetId: victimId,
             round: r,
             buffName,
+            ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
+            ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
         });
     // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
@@ -1794,12 +1828,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // SP-4c-2b: with NO VICTIM nothing lands, and it does so WITHOUT drawing the gate — a phantom
     // draw against a 0 chance (makeRateGate draws unconditionally, rateAccumulator.ts:105) would
     // shift the deterministic schedule of every later real application for no reason.
-    const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
+    //
+    // #413: the decision now reports WHICH of the three arms answered, because only the third one
+    // draws the hacking-vs-security gate and only a drawn-and-failed gate procs an on-resist
+    // reaction. `viaRoll` is produced HERE, at the point of decision, and travels with the answer
+    // — re-testing `targetImmuneToDebuffs`/affinity at the emit site would be a second copy of
+    // this ternary, free to drift from it.
+    //
+    // DRAWS. Call this (or its boolean wrapper) exactly ONCE per application: the `inflict` arm
+    // consults `debuffLandingGate`, which advances the deterministic rate accumulator, so a second
+    // call to "just check" would shift the schedule of every later application.
+    const decideTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): LandingDecision =>
         !hasVictim || targetImmuneToDebuffs
-            ? false
+            ? { landed: false, viaRoll: false }
             : application === 'apply'
-              ? !landingAtDisadvantage
-              : debuffLandingGate(liveLandingChance);
+              ? { landed: !landingAtDisadvantage, viaRoll: false }
+              : { landed: debuffLandingGate(liveLandingChance), viaRoll: true };
+    /** Boolean face of `decideTimedEnemyApplicationLive` for the callers that do not need to know
+     *  whether a roll was drawn. Defined in terms of it so the two can never disagree — and it
+     *  DRAWS just the same, so a caller uses one or the other, never both. */
+    const landsTimedEnemyApplicationLive = (application?: 'inflict' | 'apply'): boolean =>
+        decideTimedEnemyApplicationLive(application).landed;
     /** The CAST path's per-victim landing decision (the positional apply loop's victims).
      *
      *  DELIBERATELY NOT THE SAME as the reactive path's `reactiveLandingChanceFor` (engine.ts), and a
@@ -1809,16 +1858,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  deliberately takes the base `computeAffinityModifiers` matchup instead, matching its own
      *  sibling (the reactive `'apply'` arm's `getAffinityMatchup`), because a reaction fires outside
      *  any cast and has no override in scope. Same formula, different affinity input, on purpose. */
-    const landsDebuffOnVictim = (
+    const decideDebuffOnVictim = (
         application: 'inflict' | 'apply' | undefined,
         victim: CombatActor
-    ): boolean => {
-        if (targetCarriesBlockDebuff(statusEngine, victim.id)) return false;
+    ): LandingDecision => {
+        // #413: same three arms, same `viaRoll` contract as the turn-scoped twin above — only the
+        // final `debuffLandingGate` call draws, and only it can produce a proc-worthy resist.
+        if (targetCarriesBlockDebuff(statusEngine, victim.id)) {
+            return { landed: false, viaRoll: false };
+        }
         // SP-F F4: per-victim affinity honours the override (offensive advantage / this victim's
         // defensive override) before falling back to the real matchup.
         const victimAffinityMod = affinityModsVsVictim(victim).damageModifier;
         if (application === 'apply') {
-            return victimAffinityMod >= 0;
+            return { landed: victimAffinityMod >= 0, viaRoll: false };
         }
         const chance = liveDebuffLandingChance(
             statusEngine,
@@ -1827,7 +1880,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             victim,
             victimAffinityMod
         );
-        return debuffLandingGate(chance);
+        return { landed: debuffLandingGate(chance), viaRoll: true };
     };
     // Publish this turn's chance onto the runtime. It is a CAST-PATH value: the chance THIS actor's
     // own turn target resists, for THIS turn.
@@ -1881,9 +1934,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (hasVictim) runtime.liveDebuffLandingChance = liveLandingChance;
     // Point the status engine's sourceFired landing hook at THIS actor's live closure for the
     // duration of this turn (it is invoked synchronously inside sourceFired below).
-    statusEngine.setLandsTimedEnemyApplication((buff) =>
-        landsTimedEnemyApplicationLive(buff.application)
-    );
+    // #413: `sourceFired` hands back only the buffNames it rejected, so the CAUSE of each
+    // rejection would be lost between this hook and the resist emit below. Record it here, at the
+    // decision, instead of re-deriving `buff.application` at the emit — the same single-source rule
+    // `LandingDecision` exists for. Keyed by buffName because that is the only identity
+    // `resistedEnemy` carries; a name repeated within one `sourceFired` call is the same buff
+    // definition and therefore the same `application`, so the two entries cannot disagree.
+    const scheduledResistViaRoll = new Map<string, boolean>();
+    statusEngine.setLandsTimedEnemyApplication((buff) => {
+        const decision = decideTimedEnemyApplicationLive(buff.application);
+        if (!decision.landed) scheduledResistViaRoll.set(buff.buffName, decision.viaRoll);
+        return decision.landed;
+    });
 
     // Per-round buff totals from the status engine. This actor notifies the
     // engine of its REAL fired slot this round (action-fed: scheduled timed
@@ -2004,10 +2066,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffLookup,
         affinityDisadvantage: landingAtDisadvantage,
         roundDebuffLanded,
-        emitResisted: (buffName) => {
+        emitResisted: (buffName, viaLandingRoll) => {
             // Unreachable with no victim (empty input above). Guarded rather than defaulted so the
             // event can never name a phantom victim.
-            if (hasVictim) emitDebuffResisted(buffName, enemy.id);
+            if (hasVictim) emitDebuffResisted(buffName, enemy.id, viaLandingRoll);
         },
         // No emitApplied: recurring/aura per-round re-applications are NOT discrete inflictions.
     });
@@ -2027,7 +2089,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // for an enemy-targeted control, which is the correct outcome — nothing was controlled.)
     const resistedScheduledTimed: ActiveBuff[] = hasVictim
         ? synthesizeResisted(resistedScheduledTimedNames, enemyDebuffLookup, (buffName) =>
-              emitDebuffResisted(buffName, enemy.id)
+              // `?? false` is the conservative arm, not a shrug: a name in `resistedEnemy` that the
+              // landing hook never recorded did not come from a drawn gate as far as this turn can
+              // tell, and an unproven roll must not proc an on-resist reaction.
+              emitDebuffResisted(buffName, enemy.id, scheduledResistViaRoll.get(buffName) ?? false)
           )
         : [];
     // DELIBERATELY NOT FENCED ON THE VICTIM (SP-4c-2b, ruled by the owner at review): unlike the
@@ -2244,9 +2309,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (resolvedVictim === undefined) continue;
             const emitTargetId = vid ?? resolvedVictim.id;
 
-            const lands = usePerVictim
-                ? landsDebuffOnVictim(status.payload.application, resolvedVictim)
-                : landsTimedEnemyApplicationLive(status.payload.application);
+            // #413: the DECISION, not just its boolean — the resist emits below need to know
+            // whether a gate was drawn. Called exactly once per recipient: both faces draw.
+            const decision = usePerVictim
+                ? decideDebuffOnVictim(status.payload.application, resolvedVictim)
+                : decideTimedEnemyApplicationLive(status.payload.application);
+            const lands = decision.landed;
 
             if (lands) {
                 // Intra-cast clause order: a clause that follows a damage clause in this same slot
@@ -2323,10 +2391,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // landed sibling so the log row it attaches to is that sub-attack's own.
                 collect.push({
                     applyState: () => {},
-                    emitEvents: () => emitDebuffResisted(status.payload.buffName, emitTargetId),
+                    // #413: the engine supplies the sub-attack index at emission (see
+                    // `DeferredEnemyApplication.emitEvents`), which is what makes an on-resist
+                    // reaction fire once per resisted enemy PER ATTACK rather than per round.
+                    emitEvents: (subAttackIndex) =>
+                        emitDebuffResisted(
+                            status.payload.buffName,
+                            emitTargetId,
+                            decision.viaRoll,
+                            subAttackIndex
+                        ),
                 });
             } else {
-                emitDebuffResisted(status.payload.buffName, emitTargetId);
+                emitDebuffResisted(status.payload.buffName, emitTargetId, decision.viaRoll);
             }
         }
 
@@ -2534,7 +2611,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const lands = isApply ? !landingAtDisadvantage : roundDebuffLanded();
             if (!lands) {
                 resistedAbilityEnemy.push(s.active);
-                emitDebuffResisted(s.payload.buffName, enemy.id);
+                // #413: `!isApply` is the arm choice one line above — an `apply` resolves on
+                // affinity with no draw, everything else consults the round's memoized roll.
+                emitDebuffResisted(s.payload.buffName, enemy.id, !isApply);
                 continue;
             }
             landedAbilityEnemy.push(s.active);
@@ -3815,7 +3894,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // NOTE: a blocked `bomb` DoT emits the resist event but has NO `resistedDots`
             // row — the engine's resistedDots derivation filters to corrosion/inferno only
             // (bombs are display-only elsewhere too). Event-yes/surface-no is intentional.
-            emitBlockDebuffResist(bus, actor.id, enemy.id, r, dotResistLabel(dot.type, dot.tier));
+            // #413: the Block-Debuff arm — an immune target auto-resists WITHOUT drawing the
+            // landing gate, so this resist must not proc an on-resist reaction.
+            emitBlockDebuffResist(
+                bus,
+                actor.id,
+                enemy.id,
+                r,
+                dotResistLabel(dot.type, dot.tier),
+                false
+            );
         }
     } else {
         // DoTs gate at application: draw the shared per-round roll only when there are
@@ -3863,12 +3951,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // corpus has none today, so this equals dotsConfig, but stays victim-correct if one
             // is ever added.
             for (const dot of primaryDots) {
+                // #413: this arm is the LANDING-ROLL FAILURE (`dotsLanded` came back false from
+                // `roundDebuffLanded`), despite the callee's Block-Debuff name — so it DOES proc an
+                // on-resist reaction. Note the loop emits one event per DoT for a single enemy in a
+                // single attack; the reaction's own per-(resister, sub-attack) key is what collapses
+                // a Corrosion+Inferno cast back to one proc.
                 emitBlockDebuffResist(
                     bus,
                     actor.id,
                     enemy.id,
                     r,
-                    dotResistLabel(dot.type, dot.tier)
+                    dotResistLabel(dot.type, dot.tier),
+                    true
                 );
             }
         }
@@ -3914,14 +4008,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         for (const rid of adjacentEnemyIdsFor(targetId)) {
             const victim = opposingVictimById?.get(rid);
             if (!victim) continue;
-            if (!landsDebuffOnVictim('inflict', victim)) {
+            // #413: the decision, so a neighbour blocked by its own Block Debuff (no gate drawn)
+            // is told apart from one that drew and failed. `'inflict'` is hardcoded here, so the
+            // affinity arm is unreachable on this path — but the immunity arm is not.
+            const splashDecision = decideDebuffOnVictim('inflict', victim);
+            if (!splashDecision.landed) {
                 // Per-neighbour landing gate FAILED → resisted. Emit a resist per splash DoT
                 // against the neighbour id, symmetric with the primary-DoT resist path above
                 // (a resisted DoT is a log line). Live for Asphyxiator's target-and-adjacent-
                 // enemies Inferno (a neighbour that resists now surfaces a resist line);
                 // the neighbours-only 'adjacent-enemies' variant has no corpus yet.
                 for (const dot of splashDots) {
-                    emitDebuffResisted(dotResistLabel(dot.type, dot.tier), rid);
+                    emitDebuffResisted(
+                        dotResistLabel(dot.type, dot.tier),
+                        rid,
+                        splashDecision.viaRoll
+                    );
                 }
                 continue;
             }

@@ -56,24 +56,33 @@ describe.skipIf(!csvAvailable())('Wave 8 Task 7 — Xcellence active untagged St
 // "…When an enemy resists a debuff infliction, this Unit deals damage equal to <unit-damage>
 // 115%</unit-damage> of this Unit's current shield.." — a reactive on-resist proc whose basis
 // is the OWNER's current shield rather than max HP (the Vindicator on-resist analog,
-// parseOnResistHpDamage). Subject is "an enemy resists" (the enemy resisted A DEBUFF THIS UNIT
-// inflicted), an INFLICTOR-scoped proc, so it routes on 'on-own-debuff-resisted' (the mirror of
-// Vindicator's self-resisted 'on-debuff-resisted'). Field names verified against the shipped
-// hpBasisPct sibling (buildShipAbilities.ts's Vindicator wiring): multiplier:0, the amount rides
-// a dedicated *BasisPct field, not `pct`.
+// parseOnResistHpDamage).
+//
+// #413: the subject is "an enemy" (the RESISTER) and the object is "a debuff infliction" with NO
+// possessive, so this is enemy-resister-scoped and INFLICTOR-AGNOSTIC — 'on-enemy-debuff-resisted'.
+// This test used to pin 'on-own-debuff-resisted', matching a parser doc comment that glossed the
+// clause as "a debuff [THIS UNIT INFLICTED]"; that clause is not in the CSV row, and the
+// inflictor-scoped trigger dropped every ally-inflicted resist. Ravager's "if ITS debuff is
+// resisted" is the genuinely inflictor-scoped one and stays on 'on-own-debuff-resisted'.
+//
+// Field names verified against the shipped hpBasisPct sibling (buildShipAbilities.ts's Vindicator
+// wiring): multiplier:0, the amount rides a dedicated *BasisPct field, not `pct`.
 describe.skipIf(!csvAvailable())(
     'Wave 8 Task 8 — Xcellence on-resist shield-basis reactive damage',
     () => {
-        it('passive emits an on-own-debuff-resisted damage ability with shieldBasisPct 115', () => {
+        it('passive emits an on-enemy-debuff-resisted damage ability with shieldBasisPct 115', () => {
             const abilities = buildShipAbilities(shipFromCsv('Xcellence'));
             const passive = abilities.slots.find((s) => s.slot === 'passive')?.abilities ?? [];
 
             const onResist = passive.find(
-                (a) => a.type === 'damage' && a.trigger === 'on-own-debuff-resisted'
+                (a) => a.type === 'damage' && a.trigger === 'on-enemy-debuff-resisted'
             );
             expect(onResist).toBeDefined();
             expect(onResist?.target).toBe('enemy');
             expect(onResist?.config).toMatchObject({ type: 'damage', shieldBasisPct: 115 });
+            // The scope this issue was about: nothing on Xcellence may still route on the
+            // inflictor-scoped trigger, or the ally-inflicted resist stays dropped.
+            expect(passive.some((a) => a.trigger === 'on-own-debuff-resisted')).toBe(false);
         });
     }
 );

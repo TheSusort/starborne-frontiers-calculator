@@ -1576,13 +1576,21 @@ function abilitiesFromText(
         }
 
         // Xcellence p2: "When an enemy resists a debuff infliction, this Unit deals damage
-        // equal to X% of this Unit's current shield." Ship-kit W8 — an INFLICTOR-scoped
-        // sibling of the Vindicator proc above: THIS unit inflicted the debuff and the ENEMY
-        // resisted it, so it routes on the on-own-debuff-resisted trigger (not
-        // on-debuff-resisted) — that trigger stamps counterTargetId = the resister, exactly
-        // the enemy this reaction should retaliate against. multiplier:0 — the amount rides
-        // shieldBasisPct (owner's current shield), read by the same reactive-damage executor
-        // that already reads hpBasisPct.
+        // equal to X% of this Unit's current shield." Ship-kit W8.
+        //
+        // #413: routes on `on-enemy-debuff-resisted` — enemy resister, INFLICTOR-AGNOSTIC. It stood
+        // on `on-own-debuff-resisted` because the parser's own doc comment glossed the text as
+        // "when an enemy resists A DEBUFF [THIS UNIT INFLICTED]", and that bracketed clause is not
+        // in the skill row: the subject is "an enemy" (the resister) and the object is "a debuff
+        // infliction", with no possessive anywhere. So an ally's resisted debuff procs her too,
+        // which the inflictor-scoped trigger (`e.sourceId !== ownerId` → drop) silently discarded.
+        // Contrast the two shipped neighbours, both of which are correctly scoped and unchanged:
+        // Vindicator's "When THIS UNIT resists…" is resister-scoped (`on-debuff-resisted`) and
+        // Ravager's "If ITS debuff is resisted" really is inflictor-scoped (`on-own-debuff-resisted`).
+        //
+        // Both triggers stamp counterTargetId = the resister, so the retaliation still hits the
+        // enemy that resisted. multiplier:0 — the amount rides shieldBasisPct (owner's current
+        // shield), read by the same reactive-damage executor that already reads hpBasisPct.
         const onResistShield = parseOnResistShieldDamage(text);
         if (onResistShield) {
             const onResistShieldIdx = text.search(/<unit-damage>/i);
@@ -1591,7 +1599,7 @@ function abilitiesFromText(
                     id: nextId(),
                     type: 'damage',
                     target: 'enemy',
-                    trigger: 'on-own-debuff-resisted',
+                    trigger: 'on-enemy-debuff-resisted',
                     conditions: [],
                     config: {
                         type: 'damage',
