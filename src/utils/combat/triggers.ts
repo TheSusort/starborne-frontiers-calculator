@@ -1149,7 +1149,18 @@ export function registerReactiveListeners(args: {
                             e.sourceId !== undefined
                                 ? {
                                       ...intent,
-                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.sourceId },
+                                      eventCtx: {
+                                          ...intent.eventCtx,
+                                          counterTargetId: e.sourceId,
+                                          // Carries the attack identity to the drain, which runs
+                                          // once per turn and cannot ask the engine which
+                                          // sub-attack it is in. Without it Vindicator's proc fell
+                                          // to the `'x'` key and a 2-hit enemy cast that it
+                                          // resisted TWICE retaliated once — #413 wired this on the
+                                          // sibling `on-enemy-debuff-resisted` listener but not
+                                          // here, leaving the family rule half-applied.
+                                          subAttackIndex: e.subAttackIndex,
+                                      },
                                   }
                                 : intent
                         );
@@ -1167,7 +1178,18 @@ export function registerReactiveListeners(args: {
                             e.targetId !== undefined
                                 ? {
                                       ...intent,
-                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.targetId },
+                                      eventCtx: {
+                                          ...intent.eventCtx,
+                                          counterTargetId: e.targetId,
+                                          // "A sub-attack is a separate attack, in the same turn,
+                                          // in ALL the scenarios" (owner, 2026-08-28) — so this
+                                          // listener threads the identity like both siblings. INERT
+                                          // for the corpus today: its only consumer is Ravager,
+                                          // which is single-hit, and Enforcer (the one multi-hit
+                                          // ship) has no inflictor-scoped reaction. Wired for the
+                                          // rule, not for a ship.
+                                          subAttackIndex: e.subAttackIndex,
+                                      },
                                   }
                                 : intent
                         );
@@ -4155,6 +4177,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
+                    // The REACHABLE multi-hit resist path. Enforcer is the corpus's only multi-hit
+                    // ship and inflicts nothing directly — but its passive inflicts Defense Shred
+                    // ON CRIT, and a 3-hit cast can crit on several sub-attacks, so one turn really
+                    // does produce several separate resists against the same victim. The intent
+                    // already carries the identity (the `on-crit` listener stamps it from
+                    // `ability-performed.subAttackIndex`); without passing it on, an on-resist
+                    // reaction collapses them into one proc.
+                    ...(intent.eventCtx?.subAttackIndex !== undefined
+                        ? { subAttackIndex: intent.eventCtx.subAttackIndex }
+                        : {}),
                 });
             }
         }
