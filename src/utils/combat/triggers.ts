@@ -1149,7 +1149,18 @@ export function registerReactiveListeners(args: {
                             e.sourceId !== undefined
                                 ? {
                                       ...intent,
-                                      eventCtx: { ...intent.eventCtx, counterTargetId: e.sourceId },
+                                      eventCtx: {
+                                          ...intent.eventCtx,
+                                          counterTargetId: e.sourceId,
+                                          // Carries the attack identity to the drain, which runs
+                                          // once per turn and cannot ask the engine which
+                                          // sub-attack it is in. Without it Vindicator's proc fell
+                                          // to the `'x'` key and a 2-hit enemy cast that it
+                                          // resisted TWICE retaliated once — #413 wired this on the
+                                          // sibling `on-enemy-debuff-resisted` listener but not
+                                          // here, leaving the family rule half-applied.
+                                          subAttackIndex: e.subAttackIndex,
+                                      },
                                   }
                                 : intent
                         );
