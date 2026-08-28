@@ -9521,6 +9521,24 @@ export function runCombat(rawInput: CombatEngineInput): {
         // tick (a lethal Corrosion/Inferno tick kills it mid-turn → it must not fall through and
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
+            // A DESTROYED focus does not act, in ANY mode — independent of `healReportActive`.
+            // `destroyedRound` is the canonical death signal (state.ts:167, stamped once by
+            // `recordDestroyed`); `currentHp <= 0` is NOT, because a never-alive actor (DPS's
+            // `hp`-defaults-to-0 focus, see the gate below) also satisfies it
+            // (normalizeRoster.ts:126). Before #415 this case was covered incidentally by the
+            // `currentHp` branch below, which DPS mode could never reach (healReportActive was
+            // false there) — so a faster enemy killing the focus before its own turn left the
+            // focus falling through to act anyway. Checked first, unconditionally.
+            if (actor.id === focusActorId && actor.destroyedRound !== undefined) {
+                // Mirror the gated branch below: when the destroyed focus IS also the heal
+                // target (the default — `healTarget = explicitHealTarget ?? attacker`), it
+                // shows no buffs this round.
+                if (healTarget && actor.id === healTarget.id) {
+                    healTargetBuffs = [];
+                }
+                pushSynthesizedFocusSkipTurn();
+                return true;
+            }
             // Gated on `healReportActive`, NOT merely on `healTarget` (#415): `hp` defaults to 0 in
             // `simulateDPS` and on the DPS page, so every DPS focus enters the run at currentHp 0.
             // That is NEVER-ALIVE, not KILLED (normalizeRoster.ts:126) — reading it as a corpse
