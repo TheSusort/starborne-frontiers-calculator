@@ -2813,18 +2813,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     const healTarget = explicitHealTarget ?? attacker;
 
     /**
-     * The heal/shield pipeline is active — TRUE IN BATTLE MODE TOO, because battle mode anchors
-     * `healTarget` to the focus above. This is NOT a mode and must never be conflated with
-     * `runMode === 'healing'`: the healing RESULT BLOCK is gated on it, and every
-     * `battleSimulator` result carries that block today.
-     */
-    const healPipelineActive = !!healTarget;
-
-    /**
-     * The healing RESULT BLOCK — NOT the runtime, which is `healPipelineActive` above. A DPS run
-     * builds the full runtime and emits NO healing report: #415's ruling is that heal ACCOUNTING is
-     * unwanted there while a full engine RUN is wanted. Also gates the dead-target turn skip, which
-     * is a healing/battle concept: see the comment at that site.
+     * The healing RESULT BLOCK — NOT the runtime, which is `healTarget` above and is always
+     * defined. A DPS run builds the full runtime (heal/shield/leech basis still resolves, so an
+     * attacker whose damage comes from a shield or leech basis shows its real output) and emits NO
+     * healing report: #415's ruling is that heal ACCOUNTING is unwanted there while a full engine
+     * RUN is wanted. Also gates the dead-target turn skip, which is a healing/battle concept: see
+     * the comment at that site.
      */
     const healReportActive = !!explicitHealTarget || runMode === 'battle';
 
