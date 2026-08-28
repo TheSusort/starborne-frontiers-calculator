@@ -109,6 +109,105 @@ describe('conditionSummary', () => {
         );
     });
 
+    // --- countComparator/countThreshold: a binary THRESHOLD, not the per-unit scaling rate the
+    // generic subject labels describe. Only reached when the condition carries no buffName. ---
+
+    it('renders a count threshold with "at least" for gte', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 3,
+            })
+        ).toBe('while the enemy has at least 3 debuffs');
+    });
+
+    it('renders a count threshold with "at most" for lte', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff',
+                derivable: true,
+                countComparator: 'lte',
+                countThreshold: 2,
+            })
+        ).toBe('while the enemy has at most 2 debuffs');
+    });
+
+    it('renders a count threshold with "exactly" for eq, singular at 1', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 1,
+            })
+        ).toBe('while the enemy has exactly 1 debuff');
+    });
+
+    it('renders count thresholds for self-buff, self-debuff, enemy-buff, adjacency and destroyed subjects', () => {
+        expect(
+            conditionSummary({
+                subject: 'self-buff',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 2,
+            })
+        ).toBe('while this unit has at least 2 buffs');
+        expect(
+            conditionSummary({
+                subject: 'self-debuff',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 1,
+            })
+        ).toBe('while this unit has at least 1 debuff');
+        expect(
+            conditionSummary({
+                subject: 'enemy-buff',
+                derivable: true,
+                countComparator: 'lte',
+                countThreshold: 1,
+            })
+        ).toBe('while the enemy has at most 1 buff');
+        expect(
+            conditionSummary({
+                subject: 'adjacent-ally',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 2,
+            })
+        ).toBe('while this unit has at least 2 adjacent allies');
+        expect(
+            conditionSummary({
+                subject: 'enemy-adjacent',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 1,
+            })
+        ).toBe('while exactly 1 unit is adjacent to the enemy');
+        expect(
+            conditionSummary({
+                subject: 'enemy-destroyed',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 3,
+            })
+        ).toBe('while at least 3 enemies have been destroyed');
+    });
+
+    it('ignores countComparator/countThreshold when buffName is set — the named phrasing wins', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-debuff',
+                derivable: true,
+                buffName: 'Exposed',
+                countComparator: 'gte',
+                countThreshold: 3,
+            })
+        ).toBe('while the enemy is affected by Exposed');
+    });
+
     it('ignores anyOf, countComparator/countThreshold, period/offset, and compareStat/statComparator', () => {
         // These fields drive OR-combination across a condition LIST, count-threshold gating,
         // periodic-turn gating, and owner-vs-target stat comparisons respectively — none of

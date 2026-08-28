@@ -48,6 +48,48 @@ const HP_SUBJECT_NAMES: Partial<Record<NonNullable<Condition['hpSubject']>, stri
 const fallbackLabel = (subject: ConditionSubject): string =>
     CONDITION_SUBJECT_LABELS[subject] ?? subject;
 
+const COUNT_COMPARATOR_WORDS: Record<NonNullable<Condition['countComparator']>, string> = {
+    gte: 'at least',
+    lte: 'at most',
+    eq: 'exactly',
+};
+
+/** Natural-language THRESHOLD phrasing (not a per-unit rate) for the "buff/debuff/adjacency/
+ *  destroyed counts" subjects `Condition.countComparator`/`countThreshold` are documented to gate
+ *  (see the field comment on `Condition` in `src/types/abilities.ts`). Only reached when the
+ *  condition carries no `buffName` — a NAMED buff/debuff gate ("while the enemy has Taunt") already
+ *  has its own specific phrasing above and a count threshold on it would be a contradiction in the
+ *  corpus, never a real authored combination.
+ *
+ *  Without this, a threshold gate like "the enemy has at least 3 debuffs" falls back to
+ *  `CONDITION_SUBJECT_LABELS['enemy-debuff']` = "per debuff on the enemy", which reads as a
+ *  per-unit SCALING RATE rather than a binary threshold — misstating why a buff was excluded. */
+const countThresholdPhrase = (
+    subject: ConditionSubject,
+    comparatorWord: string,
+    n: number
+): string | undefined => {
+    const plural = n !== 1;
+    switch (subject) {
+        case 'self-buff':
+            return `while this unit has ${comparatorWord} ${n} ${plural ? 'buffs' : 'buff'}`;
+        case 'self-debuff':
+            return `while this unit has ${comparatorWord} ${n} ${plural ? 'debuffs' : 'debuff'}`;
+        case 'enemy-buff':
+            return `while the enemy has ${comparatorWord} ${n} ${plural ? 'buffs' : 'buff'}`;
+        case 'enemy-debuff':
+            return `while the enemy has ${comparatorWord} ${n} ${plural ? 'debuffs' : 'debuff'}`;
+        case 'adjacent-ally':
+            return `while this unit has ${comparatorWord} ${n} adjacent ${plural ? 'allies' : 'ally'}`;
+        case 'enemy-adjacent':
+            return `while ${comparatorWord} ${n} ${plural ? 'units are' : 'unit is'} adjacent to the enemy`;
+        case 'enemy-destroyed':
+            return `while ${comparatorWord} ${n} ${plural ? 'enemies have' : 'enemy has'} been destroyed`;
+        default:
+            return undefined;
+    }
+};
+
 /** Human-readable one-line summary of a gating condition, e.g. "below 60% HP".
  *
  * Renders the SPECIFIC phrasing for the subjects that carry enough data for one
@@ -57,19 +99,32 @@ const fallbackLabel = (subject: ConditionSubject): string =>
  * for everything else — including a buff/debuff/enemy-type subject missing the field
  * it needs for the specific phrasing.
  *
+ * `countComparator`/`countThreshold` render a THRESHOLD phrase ("while the enemy has at least 3
+ * debuffs") for the buff/debuff/adjacency/destroyed count subjects, but only when the condition
+ * carries no `buffName` — a named buff/debuff gate keeps its own specific phrasing above.
+ *
  * Fields deliberately NOT read here (see `src/types/abilities.ts`'s `Condition` for the
  * full list): `manualCount` (only meaningful with `derivable: false`, an authoring
  * detail, not part of what the condition itself says); `anyOf` (governs how this
  * condition combines with the PREVIOUS one in a list — a fact about the list, not this
- * condition); `countComparator`/`countThreshold` (threshold gating for count subjects —
- * the generic subject labels above already describe the rate/count vocabulary, e.g.
- * "per debuff on the enemy", without needing a specific number); `period`/`offset`
- * (only used by `every-n-turns`, itself only reached via the fallback label); and
- * `compareStat`/`statComparator` (only used by `stat-vs-target`, likewise
- * fallback-only). None of these change what a SINGLE condition's one-line phrase says
- * about itself.
+ * condition); `period`/`offset` (only used by `every-n-turns`, itself only reached via
+ * the fallback label); and `compareStat`/`statComparator` (only used by `stat-vs-target`,
+ * likewise fallback-only). None of these change what a SINGLE condition's one-line phrase
+ * says about itself.
  */
 export function conditionSummary(condition: Condition): string {
+    if (
+        condition.countComparator &&
+        condition.countThreshold !== undefined &&
+        !condition.buffName
+    ) {
+        const phrase = countThresholdPhrase(
+            condition.subject,
+            COUNT_COMPARATOR_WORDS[condition.countComparator],
+            condition.countThreshold
+        );
+        if (phrase) return phrase;
+    }
     switch (condition.subject) {
         case 'hp-threshold': {
             const comparator = condition.hpComparator ?? 'below';

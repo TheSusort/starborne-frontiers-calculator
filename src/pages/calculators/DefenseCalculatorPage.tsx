@@ -26,6 +26,7 @@ import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
+import { gatedAutoFilledBuffs } from '../../utils/calculators/gatedBuffs';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { asFactionKey } from '../../constants/factions';
@@ -331,34 +332,55 @@ const DefenseCalculatorPage: React.FC = () => {
         [globalBuffs]
     );
 
+    // Theoretical EHP is a hangar-stats figure with no enemy firing, so it has no way to know a
+    // gate is unmet — it counted Redeemer's below-60%-HP Defense Up II as standing from turn one and
+    // read 18% high against the engine-measured figure beside it. Gated AUTO-FILLED buffs are dropped
+    // here, which moves all three consumers at once: the card figure, SecurityEHPChart's tank score,
+    // and the badge tie-break's effectiveHP (via `mergedBuffTotals` below). A buff the user picked by
+    // hand (or a global buff) is deliberate and stays counted regardless of any gate.
+    const gatedBuffsByConfig = useMemo(
+        () =>
+            new Map(
+                configs.map((c) => [c.id, gatedAutoFilledBuffs(c.buffs, c.shipSkills)] as const)
+            ),
+        [configs]
+    );
+
     const mergedBuffTotals = useMemo(
         () =>
             new Map<string, DefenseBuffTotals>(
-                configs.map((c) => [
-                    c.id,
-                    {
-                        defenseBuff:
-                            globalBuffTotals.defenseBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
-                                0
-                            ),
-                        incomingDamageBuff:
-                            globalBuffTotals.incomingDamageBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
-                                0
-                            ),
-                        securityBuff:
-                            globalBuffTotals.securityBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
-                                0
-                            ),
-                    },
-                ])
+                configs.map((c) => {
+                    const gatedIds = new Set(
+                        (gatedBuffsByConfig.get(c.id) ?? []).map((g) => g.buffId)
+                    );
+                    const countedBuffs = c.buffs.filter((b) => !gatedIds.has(b.id));
+                    return [
+                        c.id,
+                        {
+                            defenseBuff:
+                                globalBuffTotals.defenseBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                                    0
+                                ),
+                            incomingDamageBuff:
+                                globalBuffTotals.incomingDamageBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) =>
+                                        sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
+                                    0
+                                ),
+                            securityBuff:
+                                globalBuffTotals.securityBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
+                                    0
+                                ),
+                        },
+                    ];
+                })
             ),
-        [configs, globalBuffTotals]
+        [configs, globalBuffTotals, gatedBuffsByConfig]
     );
 
     // Ranking now reads the MEASURED figure from the survivability sim, not the static formula —
