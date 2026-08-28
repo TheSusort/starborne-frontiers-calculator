@@ -1,9 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { DefenseShipCard } from '../DefenseShipCard';
-import { DefenseShipConfig } from '../../../types/calculator';
+import { DefenseShipConfig, SelectedGameBuff } from '../../../types/calculator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
 import { Ship } from '../../../types/ship';
+
+/** A minimal EHP-relevant SelectedGameBuff for `config.buffs` lookups the disclosure filter
+ *  needs (Item 2, #391 review) — `parsedEffects` carries `defense` by default so the buff
+ *  survives `isEhpRelevant`. Pass `parsedEffects` to build an attack-only (non-relevant) one. */
+const gameBuff = (over: Partial<SelectedGameBuff> = {}): SelectedGameBuff => ({
+    id: 'buff-1',
+    buffName: 'Defense Up II',
+    stacks: 1,
+    parsedEffects: { defense: 30 },
+    isStackable: false,
+    ...over,
+});
 
 const mockGetShipById = vi.fn((_id: string): Ship | undefined => undefined);
 
@@ -72,6 +84,7 @@ const renderCard = (overrides: Partial<Parameters<typeof DefenseShipCard>[0]> = 
             onSelectShip={noop}
             onBuffsChange={noop}
             onShipSkillsChange={noop}
+            onStartChargedChange={noop}
             {...overrides}
         />
     );
@@ -175,6 +188,131 @@ describe('DefenseShipCard', () => {
         // …and the static figure says it is an estimate, not a measurement.
         expect(
             screen.getByText(/An estimate from hangar stats, not a measurement/i)
+        ).toBeInTheDocument();
+    });
+
+    // Task 9 (#391) — the disclosure line under Theoretical EHP names what was left out and why.
+    it('names a gated buff and its reason under Theoretical EHP', () => {
+        renderCard({
+            config: { ...baseConfig, buffs: [gameBuff({ id: 'buff-1' })] },
+            gatedBuffs: [{ buffId: 'buff-1', buffName: 'Defense Up II', reason: 'below 60% HP' }],
+        });
+        expect(screen.getByText(/Not counted \(conditional\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/Defense Up II - below 60% HP/i)).toBeInTheDocument();
+    });
+
+    it('renders no disclosure line when there are no gated buffs', () => {
+        renderCard({ gatedBuffs: [] });
+        expect(screen.queryByText(/Not counted \(conditional\)/i)).not.toBeInTheDocument();
+    });
+
+    // Item 2 (#391 final review): the disclosure sits under Theoretical EHP and asserts "this was
+    // left out of the number above it" — so a gated buff whose `parsedEffects` never touch
+    // `defense`/`incomingDamage`/`security` (an attack/critDamage buff, say) was never counted in
+    // that figure and must not be named here, even though `gatedAutoFilledBuffs` still reports it
+    // (that per-grant list stays unfiltered — `mergedBuffTotals`/`audit:gated-buffs` need it).
+    it('does not disclose a gated buff whose parsedEffects are attack-only (never in Theoretical EHP)', () => {
+        renderCard({
+            config: {
+                ...baseConfig,
+                buffs: [
+                    gameBuff({
+                        id: 'buff-1',
+                        buffName: 'Marauder Rage II',
+                        parsedEffects: { attack: 20, critDamage: 10 },
+                    }),
+                ],
+            },
+            gatedBuffs: [
+                { buffId: 'buff-1', buffName: 'Marauder Rage II', reason: 'below 60% HP' },
+            ],
+        });
+        expect(screen.queryByText(/Not counted \(conditional\)/i)).not.toBeInTheDocument();
+        // Scoped to the disclosure row's exact text ("- {name} - {reason}"), not a bare name
+        // match: `config.buffs` also feeds the GameBuffPicker's own selected-buffs list, which
+        // legitimately renders "Marauder Rage II" elsewhere on the card.
+        expect(screen.queryByText(/Marauder Rage II - below 60% HP/i)).not.toBeInTheDocument();
+    });
+
+    it('discloses a defense-affecting gated buff alongside a filtered-out attack-only one', () => {
+        renderCard({
+            config: {
+                ...baseConfig,
+                buffs: [
+                    gameBuff({
+                        id: 'buff-1',
+                        buffName: 'Marauder Rage II',
+                        parsedEffects: { attack: 20, critDamage: 10 },
+                    }),
+                    gameBuff({
+                        id: 'buff-2',
+                        buffName: 'Defense Up II',
+                        parsedEffects: { defense: 30 },
+                    }),
+                ],
+            },
+            gatedBuffs: [
+                { buffId: 'buff-1', buffName: 'Marauder Rage II', reason: 'below 60% HP' },
+                { buffId: 'buff-2', buffName: 'Defense Up II', reason: 'below 60% HP' },
+            ],
+        });
+        expect(screen.getByText(/Not counted \(conditional\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/Defense Up II - below 60% HP/i)).toBeInTheDocument();
+        // Scoped to the disclosure row's exact text ("- {name} - {reason}"), not a bare name
+        // match: `config.buffs` also feeds the GameBuffPicker's own selected-buffs list, which
+        // legitimately renders "Marauder Rage II" elsewhere on the card.
+        expect(screen.queryByText(/Marauder Rage II - below 60% HP/i)).not.toBeInTheDocument();
+    });
+
+    // Follow-up on Task 9: dedupe by (name, reason) at this render site is DEFENSIVE only.
+    // `parseAllSkillEffects` resolves ONE passive per ship — the refit-active row
+    // (`getShipSkillRows`), not all three columns — so no current producer emits two `GatedBuff`s
+    // with the same (name, reason) for a single ship; this fixture hand-constructs a state no
+    // producer currently reaches, to pin the dedupe behaviour anyway (Item 5, #391 final review).
+    it('collapses two gated buffs with the same name and reason into one rendered row', () => {
+        renderCard({
+            config: {
+                ...baseConfig,
+                buffs: [gameBuff({ id: 'buff-1' }), gameBuff({ id: 'buff-2' })],
+            },
+            gatedBuffs: [
+                {
+                    buffId: 'buff-1',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+                {
+                    buffId: 'buff-2',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+            ],
+        });
+        expect(
+            screen.getAllByText(/Defense Up II - when this unit has the lowest Speed among allies/i)
+        ).toHaveLength(1);
+    });
+
+    // A ship really can be gated two DIFFERENT ways on the same buff — collapsing that would hide
+    // information the disclosure exists to surface.
+    it('keeps two gated buffs with the same name but different reasons as two rendered rows', () => {
+        renderCard({
+            config: {
+                ...baseConfig,
+                buffs: [gameBuff({ id: 'buff-1' }), gameBuff({ id: 'buff-2' })],
+            },
+            gatedBuffs: [
+                { buffId: 'buff-1', buffName: 'Defense Up II', reason: 'below 60% HP' },
+                {
+                    buffId: 'buff-2',
+                    buffName: 'Defense Up II',
+                    reason: 'when this unit has the lowest Speed among allies',
+                },
+            ],
+        });
+        expect(screen.getByText(/Defense Up II - below 60% HP/i)).toBeInTheDocument();
+        expect(
+            screen.getByText(/Defense Up II - when this unit has the lowest Speed among allies/i)
         ).toBeInTheDocument();
     });
 
@@ -317,6 +455,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 
@@ -372,6 +511,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 
@@ -436,6 +576,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 

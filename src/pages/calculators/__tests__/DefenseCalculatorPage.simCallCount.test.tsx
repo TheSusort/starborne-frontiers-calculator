@@ -3,6 +3,7 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
 import { simulateDefenseSurvivability } from '../../../utils/calculators/defenseSurvivabilitySim';
+import { ShipSelector } from '../../../components/ship/ShipSelector';
 import type { Ship } from '../../../types/ship';
 
 // This file exists to answer a question the sibling DefenseCalculatorPage.test.tsx cannot: HOW
@@ -22,7 +23,7 @@ vi.mock('../../../hooks/useEngineeringStats', () => ({
     useEngineeringStats: () => ({ getEngineeringStatsForShipType: () => undefined }),
 }));
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
-vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: () => null }));
+vi.mock('../../../components/ship/ShipSelector', () => ({ ShipSelector: vi.fn(() => null) }));
 vi.mock('../../../components/seo/Seo', () => ({ default: () => null }));
 vi.mock('../../../hooks/useThemeColors', () => ({
     useThemeColors: () => ({ gridStroke: '#000', text: '#fff', bg: '#000' }),
@@ -70,6 +71,8 @@ describe('DefenseCalculatorPage sim call count', () => {
     // being `undefined`.
     beforeEach(() => {
         simSpy.mockClear();
+        vi.mocked(ShipSelector).mockReset();
+        vi.mocked(ShipSelector).mockReturnValue(null);
     });
 
     it('editing a config NAME runs zero simulations', () => {
@@ -198,6 +201,126 @@ describe('DefenseCalculatorPage sim call count', () => {
                 vi.advanceTimersByTime(300);
             });
             expect(simSpy).toHaveBeenCalledTimes(2);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Task 10 (#391 follow-up): `defenderFieldsFromShip` hardcoded `startCharged: false` while
+    // still reading `chargeCount` off `ship.chargeSkillCharge` — charge count honoured,
+    // charged-at-start dropped. This is the ONLY actor on the page whose charged-at-start text was
+    // ignored: the enemy and team rosters get it through `useEnemyTeamRoster`, and the healing
+    // page's healer picker calls `detectShipCharged` directly. Akula, Chimei, Los, Sansi, Valkyrie
+    // and Wusheng all declare "starts combat fully charged" — picking any of them as the defender
+    // must simulate them charged, exactly as picking them for the enemy or team roster already does.
+    //
+    // ShipSelector is stubbed to null for every other test in this file; this is the one place
+    // that swaps in a real, clickable stand-in so the actual `onSelectShip` handler runs
+    // end-to-end, rather than re-asserting the mapping in isolation.
+    it('a defender whose kit says it starts combat fully charged is simulated charged', () => {
+        const akula = {
+            id: 'akula',
+            name: 'Akula',
+            baseStats: { hp: 40000, attack: 10000, defence: 5000, security: 1000, speed: 100 },
+            chargeSkillCharge: 2,
+            firstPassiveSkillText: 'This Unit starts combat fully charged.',
+        } as unknown as Ship;
+        vi.mocked(ShipSelector).mockImplementation(
+            ({ onSelect }: { onSelect: (ship: Ship) => void }) => (
+                <button onClick={() => onSelect(akula)}>pick defender ship</button>
+            )
+        );
+
+        renderPage();
+        simSpy.mockClear();
+        fireEvent.click(screen.getByText('pick defender ship'));
+
+        expect(simSpy).toHaveBeenCalled();
+        expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({
+            chargeCount: 2,
+            startCharged: true,
+        });
+    });
+
+    // Item 2 (#391 final review): Task 10 above made the auto-detected value REACH the sim, but
+    // left the card with no control to see or override it. This pins the control itself — the
+    // "Start Charged" checkbox added to `DefenseShipCard` — reaches the same sim boundary, the way
+    // every other numeric/boolean field on this card already does. Asserted on the argument
+    // `simulateDefenseSurvivability` is actually called with, not on a rendered number (the
+    // instruction's own boundary-spy pattern), since the default zero-pressure roster renders no
+    // damage figure a value-level assertion could read.
+    it("toggling the defender's own Start Charged checkbox reaches the simulation", () => {
+        renderPage();
+        simSpy.mockClear();
+        fireEvent.click(screen.getByText(/Show Advanced/i));
+
+        const checkbox = screen.getByLabelText('Start Charged');
+        expect(checkbox).not.toBeChecked(); // default config.startCharged is false
+        fireEvent.click(checkbox);
+
+        expect(simSpy).toHaveBeenCalled();
+        expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ startCharged: true });
+    });
+
+    // The sibling control: Charge Count debounces its commit exactly like HP/Defense/Security
+    // (Task 6's reasoning applies here too — it feeds the same `simInputKey`), so it needs the
+    // same "nothing yet, then settles" shape as those three tests above, not the checkbox's
+    // synchronous one.
+    it('editing Charge Count debounces its commit and reaches the simulation once settled', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByText(/Show Advanced/i));
+            simSpy.mockClear();
+
+            const chargeCount = screen.getByLabelText('Charge Count');
+            fireEvent.change(chargeCount, { target: { value: '3' } });
+            expect(simSpy).toHaveBeenCalledTimes(0);
+
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+
+            expect(simSpy).toHaveBeenCalledTimes(1);
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 3 });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // CodeRabbit finding on PR #416: Charge Count is a new user-facing input (Task 10 follow-up)
+    // and reached `simulateDefenseSurvivability` unclamped — a negative value fed straight into
+    // `combat/state.ts`'s `charges = startCharged ? chargeCount : 0` seed, which has no in-game
+    // meaning. Asserted on the sim boundary argument (this card's own established pattern above),
+    // not on a rendered figure, since a negative charge count with the default zero-pressure
+    // roster renders no damage figure a value-level assertion could read.
+    it('entering a negative Charge Count clamps to 0 at the simulation boundary', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByText(/Show Advanced/i));
+
+            const chargeCount = screen.getByLabelText('Charge Count');
+            // Default `config.chargeCount` is already 0, so committing the clamped 0 straight
+            // from the default would be a no-op the config reducer never sees as a change — unable
+            // to tell "clamped, and reached the sim" apart from "nothing happened at all". Settle
+            // on a nonzero value first so the later negative-to-0 commit is an observable change.
+            fireEvent.change(chargeCount, { target: { value: '3' } });
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 3 });
+
+            simSpy.mockClear();
+            fireEvent.change(chargeCount, { target: { value: '-5' } });
+            expect(simSpy).toHaveBeenCalledTimes(0);
+
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+
+            expect(simSpy).toHaveBeenCalledTimes(1);
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 0 });
         } finally {
             vi.useRealTimers();
         }

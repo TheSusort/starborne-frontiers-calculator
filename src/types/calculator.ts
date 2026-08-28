@@ -68,18 +68,6 @@ export interface ChargeGain {
     conditions?: Condition[];
 }
 
-export const CONDITIONAL_CONDITION_LABELS: Record<ConditionalCondition, string> = {
-    'self-buff': 'per buff on this unit',
-    'enemy-debuff': 'per debuff on the enemy',
-    'enemy-buff': 'per buff on the enemy',
-    'adjacent-ally': 'per adjacent ally',
-    'enemy-adjacent': 'per unit adjacent to the enemy',
-    'enemy-destroyed': 'per destroyed enemy',
-    always: 'every round',
-    'self-crit': 'on critical hit',
-    'enemy-type': 'when enemy matches type',
-};
-
 export interface Buff {
     id: string;
     stat:

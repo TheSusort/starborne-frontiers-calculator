@@ -21,11 +21,12 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useEnemyTeamRoster } from '../../hooks/useEnemyTeamRoster';
-import { shipFinalStats } from '../../utils/calculators/rosterHelpers';
+import { shipFinalStats, detectShipCharged } from '../../utils/calculators/rosterHelpers';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
+import { gatedAutoFilledBuffs, GatedBuffsPageState } from '../../utils/calculators/gatedBuffs';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { asFactionKey } from '../../constants/factions';
@@ -54,7 +55,10 @@ const defenderFieldsFromShip = (
     hacking: Math.round(final.hacking ?? 200),
     healModifier: Math.round(final.healModifier ?? 0),
     chargeCount: ship.chargeSkillCharge ?? 0,
-    startCharged: false,
+    // The ship's own kit text decides this, exactly as it does for this page's enemy and team
+    // rosters (via `useEnemyTeamRoster`) and for the healing page's healer picker — this defender
+    // was previously the only actor on the page whose charged-at-start text was ignored.
+    startCharged: detectShipCharged(ship),
     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
     affinity: ship.affinity,
     role: ship.type,
@@ -190,7 +194,7 @@ const DefenseCalculatorPage: React.FC = () => {
 
     const updateConfig = (
         id: string,
-        field: 'name' | 'hp' | 'defense' | 'security',
+        field: 'name' | 'hp' | 'defense' | 'security' | 'chargeCount',
         value: string | number
     ) => {
         setConfigs((prev) =>
@@ -204,6 +208,13 @@ const DefenseCalculatorPage: React.FC = () => {
                 return updated;
             })
         );
+    };
+
+    // Item 2 (#391 final review): a separate boolean setter, mirroring `onStartChargedChange` on
+    // every other actor card in the app (Team, Healer, DPS) rather than widening `updateConfig`'s
+    // `string | number` value type for one boolean field.
+    const updateConfigStartCharged = (id: string, startCharged: boolean) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, startCharged } : c)));
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
@@ -331,34 +342,78 @@ const DefenseCalculatorPage: React.FC = () => {
         [globalBuffs]
     );
 
+    // Theoretical EHP is a hangar-stats figure with no enemy firing, so it has no way to know a
+    // gate is unmet — it counted Redeemer's below-60%-HP Defense Up II as standing from turn one and
+    // read 18% high against the engine-measured figure beside it. Gated AUTO-FILLED buffs are dropped
+    // here, which moves all three consumers at once: the card figure, SecurityEHPChart's per-ship
+    // star markers (its x/y/z and tooltip read `buffTotals.get(c.id)` — the heatmap's own tank
+    // score does not; it scores raw grid defense/security and never reads a buff), and the badge
+    // tie-break's effectiveHP (via `mergedBuffTotals` below). A buff the user picked by hand (or a
+    // global buff) is deliberate and stays counted regardless of any gate.
+    //
+    // Gates that CAN be true at full health (Chakara's "lowest Speed among allies", Asphyxiator/
+    // Bayah's "enemy has N+ debuffs") are no longer dropped on mere presence — they are evaluated
+    // against this page's own configured rosters (`teamShips`, `enemies`) and only dropped when
+    // that evaluation says NOT MET, or when the gate isn't one this page can answer at all. See
+    // `GatedBuffsPageState`'s field docs in gatedBuffs.ts for exactly what each field feeds and
+    // why it's safe to read as real (not fabricated) data.
+    const enemyDebuffNames = useMemo(
+        () => [...new Set(teamShips.flatMap((t) => t.enemyDebuffs.map((b) => b.buffName)))],
+        [teamShips]
+    );
+    const allySpeeds = useMemo(() => teamShips.map((t) => t.speed), [teamShips]);
+    const hasEnemy = enemies.length > 0;
+    const gatedBuffsByConfig = useMemo(
+        () =>
+            new Map(
+                configs.map((c) => {
+                    const pageState: GatedBuffsPageState = {
+                        selfSpeed: c.speed,
+                        allySpeeds,
+                        hasEnemy,
+                        enemyDebuffNames,
+                    };
+                    return [c.id, gatedAutoFilledBuffs(c.buffs, c.shipSkills, pageState)] as const;
+                })
+            ),
+        [configs, allySpeeds, hasEnemy, enemyDebuffNames]
+    );
+
     const mergedBuffTotals = useMemo(
         () =>
             new Map<string, DefenseBuffTotals>(
-                configs.map((c) => [
-                    c.id,
-                    {
-                        defenseBuff:
-                            globalBuffTotals.defenseBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
-                                0
-                            ),
-                        incomingDamageBuff:
-                            globalBuffTotals.incomingDamageBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
-                                0
-                            ),
-                        securityBuff:
-                            globalBuffTotals.securityBuff +
-                            c.buffs.reduce(
-                                (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
-                                0
-                            ),
-                    },
-                ])
+                configs.map((c) => {
+                    const gatedIds = new Set(
+                        (gatedBuffsByConfig.get(c.id) ?? []).map((g) => g.buffId)
+                    );
+                    const countedBuffs = c.buffs.filter((b) => !gatedIds.has(b.id));
+                    return [
+                        c.id,
+                        {
+                            defenseBuff:
+                                globalBuffTotals.defenseBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.defense ?? 0) * b.stacks,
+                                    0
+                                ),
+                            incomingDamageBuff:
+                                globalBuffTotals.incomingDamageBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) =>
+                                        sum + (b.parsedEffects.incomingDamage ?? 0) * b.stacks,
+                                    0
+                                ),
+                            securityBuff:
+                                globalBuffTotals.securityBuff +
+                                countedBuffs.reduce(
+                                    (sum, b) => sum + (b.parsedEffects.security ?? 0) * b.stacks,
+                                    0
+                                ),
+                        },
+                    ];
+                })
             ),
-        [configs, globalBuffTotals]
+        [configs, globalBuffTotals, gatedBuffsByConfig]
     );
 
     // Ranking now reads the MEASURED figure from the survivability sim, not the static formula —
@@ -515,12 +570,16 @@ const DefenseCalculatorPage: React.FC = () => {
                                 noEnemiesConfigured={enemies.length === 0}
                                 buffTotals={mergedBuffTotals.get(config.id)}
                                 result={simResults.get(config.id)}
+                                gatedBuffs={gatedBuffsByConfig.get(config.id)}
                                 onRemove={() => removeConfig(config.id)}
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}
                                 onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
                                 onShipSkillsChange={(shipSkills) =>
                                     updateConfigShipSkills(config.id, shipSkills)
+                                }
+                                onStartChargedChange={(checked) =>
+                                    updateConfigStartCharged(config.id, checked)
                                 }
                             />
                         ))}

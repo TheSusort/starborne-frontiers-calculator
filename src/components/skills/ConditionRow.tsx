@@ -1,6 +1,7 @@
 import React from 'react';
 import { Condition, ConditionSubject } from '../../types/abilities';
-import { CONDITIONAL_CONDITION_LABELS, EnemyBaseClass } from '../../types/calculator';
+import { EnemyBaseClass } from '../../types/calculator';
+import { CONDITION_SUBJECT_LABELS } from '../../utils/abilities/conditionSummary';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -34,25 +35,8 @@ const SUBJECT_VALUES: ConditionSubject[] = [
     'target-repaired-this-round',
 ];
 
-// Labels not covered by CONDITIONAL_CONDITION_LABELS.
-const EXTRA_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>> = {
-    always: 'Always',
-    'self-debuff': 'per debuff on this unit',
-    'hp-threshold': 'when HP crosses a threshold',
-    'enemy-hp-pct': "per point of the enemy's current HP %",
-    'enemy-hp-missing-pct': "per point of the enemy's missing HP %",
-    'ally-inflicts-debuff': 'when an ally inflicts a debuff',
-    'ally-critically-repaired': 'after an ally is critically repaired',
-    'ally-crit-dot': 'when an ally crits with a DoT',
-    'ally-on-team': 'when a specific ally is on the team',
-    'lowest-speed-ally': 'when this unit has the lowest Speed among allies',
-    'target-repaired-this-round': 'when the target was repaired this round',
-};
-
 const subjectLabel = (subject: ConditionSubject): string =>
-    EXTRA_SUBJECT_LABELS[subject] ??
-    (CONDITIONAL_CONDITION_LABELS as Partial<Record<ConditionSubject, string>>)[subject] ??
-    subject;
+    CONDITION_SUBJECT_LABELS[subject] ?? subject;
 
 const SUBJECT_OPTIONS = SUBJECT_VALUES.map((value) => ({
     value,

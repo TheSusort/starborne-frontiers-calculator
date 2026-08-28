@@ -2911,19 +2911,43 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Theoretical EHP</span> is the
                                         third figure, and the old static one: an estimate computed
-                                        from hangar stats (HP and Defense only), not a measurement.
-                                        No enemy ever fires at it, and it cannot see shields,
-                                        Barrier or self-repair. A conditionally-gated buff it{' '}
-                                        <em>does</em> see &mdash; but not the gate: the buff is read
-                                        out of the skill text and counted as permanently active, so
-                                        the estimate is overstated rather than blind. Redeemer is
-                                        the concrete case: its first passive grants Defense Up II
-                                        only once its own HP drops below 60%, and this figure
-                                        applies that +30% Defense from the first moment. On a
-                                        100,000 HP ship at 5,000 Defense that is the difference
-                                        between 240,062 and 283,125. Theoretical EHP is shown so you
-                                        can compare, but where the two disagree the measured pair is
-                                        the one that saw the real fight.
+                                        from configured stats, not a live measurement. No enemy ever
+                                        fires at it round by round, and it cannot see shields,
+                                        Barrier or self-repair. A kit buff whose own grant carries a
+                                        condition is held back UNLESS this figure can tell, from
+                                        what you have configured on this page, that the condition is
+                                        actually satisfied. HP-based gates are checked against a
+                                        ship at full health: Redeemer&apos;s first passive grants
+                                        Defense Up II only once its own HP drops below 60%, so at
+                                        full health this figure leaves that +30% Defense out &mdash;
+                                        on a 100,000 HP ship at 5,000 Defense that is the difference
+                                        between counting it (283,125) and holding it back (240,062).
+                                        Roster-based gates are checked against the ally and enemy
+                                        rosters on this page: Chakara&apos;s &ldquo;lowest Speed
+                                        among allies&rdquo; counts as soon as no ally in your team
+                                        roster is as slow or slower (an empty team roster counts too
+                                        &mdash; Chakara is trivially the slowest ship on a team of
+                                        one), and Asphyxiator/Bayah&apos;s &ldquo;enemy has N+
+                                        debuffs&rdquo; counts once your team roster is configured to
+                                        land at least that many distinct debuffs on a configured
+                                        enemy. Every gate is resolved ONCE against that configured
+                                        state, not re-evaluated turn by turn &mdash; this is not a
+                                        second combat simulation. A gate this figure genuinely
+                                        cannot answer (Taunt/Provoke status, a live crit, an enemy
+                                        type, and similar) still gets held back, exactly as before.
+                                        When a config has one or more buffs held back this way, the
+                                        card lists them under &ldquo;Not counted
+                                        (conditional)&rdquo; by name and reason, e.g. &ldquo;Defense
+                                        Up II - below 60% HP&rdquo;. A buff you add yourself through
+                                        the buff picker is unaffected by any of this &mdash; it
+                                        always counts, gate or no gate. Because roster-based gates
+                                        now read your team and enemy setup, Theoretical EHP is no
+                                        longer a pure hangar-stats number &mdash; changing the team
+                                        roster or the enemy debuffs you have configured can move it
+                                        even though nothing about the measured ship itself changed.
+                                        Theoretical EHP is shown so you can compare, but where the
+                                        two disagree the measured pair is the one that saw the real
+                                        fight.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> (to
@@ -2951,6 +2975,20 @@ const DocumentationPage: React.FC = () => {
                                         out of it &mdash; purely defensive and repair passives often
                                         parse to nothing, and those are exactly the ones worth
                                         entering manually on this page.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Charge Count</span> and{' '}
+                                        <span className="text-primary">Start Charged</span> also
+                                        live in Show Advanced. Some ships have skills that begin
+                                        combat already charged (Akula, Chimei, Los, Sansi, Valkyrie
+                                        and Wusheng); when detected from the picked ship&apos;s
+                                        skill data, Start Charged is pre-checked and its charged
+                                        skill fires in round 1 of the simulation, the same as for
+                                        the enemy roster, team roster and healer cards. Both fields
+                                        are editable, so you can turn a detected charge off to see
+                                        how the ship fares without its first-turn burst, or set a
+                                        charge count by hand on a manually-configured card with no
+                                        ship attached.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

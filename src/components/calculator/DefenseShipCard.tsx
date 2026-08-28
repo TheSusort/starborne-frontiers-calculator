@@ -4,9 +4,11 @@ import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import { DefenseSurvivabilityResult } from '../../utils/calculators/defenseSurvivabilitySim';
+import { GatedBuff, isEhpRelevant } from '../../utils/calculators/gatedBuffs';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
@@ -109,11 +111,26 @@ interface DefenseShipCardProps {
      *  `survived` is true — see the render below for why survivors and casualties must never
      *  read as the same kind of number. */
     result?: DefenseSurvivabilityResult;
+    /** Auto-filled kit buffs excluded from Theoretical EHP because their grant is conditionally
+     *  gated (Task 8). Computed once on the page from `gatedAutoFilledBuffs` and passed down here
+     *  — never recomputed in the card — so the disclosure line always agrees with the number it
+     *  is explaining. */
+    gatedBuffs?: GatedBuff[];
     onRemove: () => void;
-    onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
+    onUpdate: (
+        field: 'name' | 'hp' | 'defense' | 'security' | 'chargeCount',
+        value: string | number
+    ) => void;
     onSelectShip: (ship: Ship) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onShipSkillsChange: (shipSkills: ShipSkills) => void;
+    /** Task 10 (#391 follow-up) made the measured defender honour "starts combat fully charged"
+     *  kit text (`detectShipCharged`), auto-filling `config.startCharged` on ship selection — but
+     *  left the card with no control to SEE or override it, unlike every other actor on this app
+     *  (enemy/team rows, the healer picker, the DPS ship card). Mirrors their
+     *  `onStartChargedChange` shape rather than folding a boolean into `onUpdate`'s
+     *  string-or-number value type. */
+    onStartChargedChange: (checked: boolean) => void;
 }
 
 export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
@@ -125,11 +142,13 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     noEnemiesConfigured = false,
     buffTotals,
     result,
+    gatedBuffs,
     onRemove,
     onUpdate,
     onSelectShip,
     onBuffsChange,
     onShipSkillsChange,
+    onStartChargedChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     // Shared across all three fields on this card: a ship selection must reset HP, Defense, and
@@ -148,6 +167,18 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     const [securityDraft, onSecurityChange] = useDebouncedNumericField(
         config.security,
         (value) => onUpdate('security', value),
+        resetKey
+    );
+    // Debounced for the same reason as HP/Defense/Security above — `chargeCount` feeds the sim
+    // memo key (`simInputKey`) exactly like those three, so an undebounced field would re-run a
+    // full engine simulation per keystroke.
+    const [chargeCountDraft, onChargeCountChange] = useDebouncedNumericField(
+        config.chargeCount,
+        // Clamped: this is a new user-facing input (Task 10 follow-up), and a negative charge
+        // count reaches `simulateDefenseSurvivability` -> `combat/state.ts`'s
+        // `charges = startCharged ? chargeCount : 0` seed unvalidated. There is no in-game
+        // meaning for a negative charge count, so it is floored at 0 rather than passed through.
+        (value) => onUpdate('chargeCount', Math.max(0, value)),
         resetKey
     );
     const { getShipById } = useShips();
@@ -169,6 +200,18 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
         config.security,
         buffTotals
     );
+
+    // Item 2 (#391 review): `gatedBuffs` is the full per-grant-path list — it names every
+    // conditionally-gated auto-filled buff regardless of what it affects. The disclosure line
+    // below sits under Theoretical EHP and asserts "this was left out of the number above it", so
+    // it must only name buffs that could have moved that number in the first place. An
+    // attack/critDamage/outgoing-damage buff was never counted in Theoretical EHP even when
+    // ungated, so excluding it here is filtering the CLAIM, not the underlying gated-buff list —
+    // `gatedBuffs`/`mergedBuffTotals`/`audit:gated-buffs` all keep seeing the unfiltered set.
+    const ehpRelevantGatedBuffs = (gatedBuffs ?? []).filter((gated) => {
+        const buff = config.buffs.find((b) => b.id === gated.buffId);
+        return !!buff && isEhpRelevant(buff);
+    });
 
     return (
         <div className={`card relative ${isBest ? 'border-primary' : ''}`}>
@@ -226,6 +269,35 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                 </Button>
 
                 <CollapsibleForm isVisible={advancedOpen}>
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
+                        Charge
+                    </div>
+                    {/* Item 2 (#391 final review): Task 10 made the measured defender honour
+                        "starts combat fully charged" kit text, but this card had no control to see
+                        or override the result — the value was auto-detected and invisible. Charge
+                        Count ships alongside the checkbox (not on its own) because the two are
+                        mechanically coupled: the engine seeds `charges = startCharged ? chargeCount
+                        : 0` (`combat/state.ts`), so "Start Charged" is a no-op whenever chargeCount
+                        reads 0 — exactly the default for a manually-configured card with no ship
+                        selected. Without this field, that checkbox would be invisible-by-a-different-
+                        route: present, but silently inert. */}
+                    <div className="grid grid-cols-2 gap-4 items-end mb-4">
+                        <Input
+                            label="Charge Count"
+                            type="number"
+                            min={0}
+                            step={1}
+                            value={chargeCountDraft}
+                            onChange={(e) => onChargeCountChange(e.target.value)}
+                        />
+                        <Checkbox
+                            id={`defense-start-charged-${config.id}`}
+                            label="Start Charged"
+                            checked={config.startCharged}
+                            onChange={onStartChargedChange}
+                        />
+                    </div>
+
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                         Skills
                     </div>
@@ -442,6 +514,36 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         ignores shields, Barrier, self-repair and conditional gating, and no enemy
                         ever fires at it. Prefer the measured figures above when one is available.
                     </div>
+                    {ehpRelevantGatedBuffs.length > 0 && (
+                        // Task 9 (#391): names what Theoretical EHP left out and why, so "conditional
+                        // gating" above isn't a vague disclaimer — Redeemer's Defense Up II is only
+                        // gated below 60% HP, and the card now says so by name. Filtered above to
+                        // `ehpRelevantGatedBuffs` so a gated ATTACK/critDamage/outgoing-damage buff
+                        // — never part of this figure in the first place — isn't named as something
+                        // this line deducted from it (Item 2, #391 review).
+                        //
+                        // Dedupe by (buffName, reason) at THIS render site only, and only defensively:
+                        // `parseAllSkillEffects` resolves ONE passive per ship — the refit-active row
+                        // (`getShipSkillRows`), not all three columns — so no current producer emits
+                        // two GatedBuffs with the same (name, reason) for one ship. Kept as a guard in
+                        // case a future producer changes that; the per-grant `gatedBuffs` list itself
+                        // is untouched and is what `audit:gated-buffs` consumes.
+                        <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
+                            <div>Not counted (conditional):</div>
+                            {Array.from(
+                                new Map(
+                                    ehpRelevantGatedBuffs.map((gated) => [
+                                        `${gated.buffName}|${gated.reason}`,
+                                        gated,
+                                    ])
+                                ).values()
+                            ).map((gated) => (
+                                <div key={`${gated.buffName}|${gated.reason}`}>
+                                    - {gated.buffName} - {gated.reason}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div className="flex justify-between mb-2">
                         <span className="text-theme-text-secondary">Damage Reduction:</span>
                         <span>{damageReduction.toFixed(2)}%</span>
