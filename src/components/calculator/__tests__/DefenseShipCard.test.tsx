@@ -632,4 +632,74 @@ describe('DefenseShipCard', () => {
         fireEvent.click(screen.getByText(/Show Advanced/i));
         expect(screen.getByText('Passive')).toBeInTheDocument();
     });
+
+    // #412 — the NaN class. None of HP/Defense/Security has an in-game meaning below zero, and a
+    // negative Defense is not merely odd: `calculateDamageReduction` takes `Math.log10(defense)`,
+    // and `log10` of a negative is NaN, which then poisons Damage Reduction, Theoretical EHP and
+    // the HP Multiplier. `parseInt("-5")` is `-5` — TRUTHY — so the field's `|| 0` never fired.
+    // Asserted per field because the clamp lives in the shared hook: a per-call-site fix would
+    // pass one of these and fail the others.
+    it.each([
+        ['HP', 'hp'],
+        ['Defense', 'defense'],
+        ['Security', 'security'],
+    ] as const)(
+        'clamps a negative %s to 0 at commit instead of passing it through',
+        (label, field) => {
+            vi.useFakeTimers();
+            try {
+                const onUpdate = vi.fn();
+                renderCard({ onUpdate });
+
+                fireEvent.change(screen.getByLabelText(label), { target: { value: '-5' } });
+                act(() => {
+                    vi.advanceTimersByTime(300);
+                });
+
+                expect(onUpdate).toHaveBeenCalledWith(field, 0);
+                expect(onUpdate).not.toHaveBeenCalledWith(field, -5);
+                // The DISPLAY must reconcile too. Committing 0 while "-5" stays on screen is the same
+                // class of lie the `parseInt` snap-back above was added to close.
+                expect(screen.getByLabelText(label)).toHaveValue(0);
+            } finally {
+                vi.useRealTimers();
+            }
+        }
+    );
+
+    // The clamp must not eat legitimate input — a zero-check that also rejects positives would
+    // pass every assertion above.
+    it('still commits a positive value unchanged', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            renderCard({ onUpdate });
+
+            fireEvent.change(screen.getByLabelText('Defense'), { target: { value: '4200' } });
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+
+            expect(onUpdate).toHaveBeenCalledWith('defense', 4200);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // #412 second instance. Clearing HP legitimately commits 0 — the input must NOT refuse it —
+    // but the HP Multiplier row divides by `config.hp`, so 0/0 rendered the literal string "NaNx".
+    it('does not render NaN for the HP Multiplier when HP is zero', () => {
+        const { container } = renderCard({ config: { ...baseConfig, hp: 0 } });
+
+        expect(screen.getByText(/HP Multiplier/i)).toBeInTheDocument();
+        expect(container.textContent ?? '').not.toContain('NaN');
+    });
+
+    // ...and the row still reports a real multiplier when HP is non-zero, so the guard above is
+    // not just blanking the row unconditionally.
+    it('still renders a numeric HP Multiplier when HP is non-zero', () => {
+        renderCard({ config: { ...baseConfig, hp: 10_000, defense: 5_000 } });
+
+        expect(screen.getByText(/^\d+\.\d\dx$/)).toBeInTheDocument();
+    });
 });

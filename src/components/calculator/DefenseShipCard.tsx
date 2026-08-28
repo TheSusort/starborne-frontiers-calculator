@@ -73,7 +73,14 @@ const useDebouncedNumericField = (
         clearTimeout(timer.current);
         timer.current = setTimeout(() => {
             timer.current = undefined;
-            const value = parseInt(raw) || 0;
+            // Floored at 0 for every field this hook drives (#412). None of HP / Defense /
+            // Security / Charge Count has an in-game meaning below zero, and a negative Defense is
+            // not merely odd: `calculateDamageReduction` takes `Math.log10(defense)`, so it makes
+            // Damage Reduction, Theoretical EHP and the HP Multiplier render as `NaN`. The old
+            // `parseInt(raw) || 0` never caught it — `parseInt("-5")` is `-5`, which is truthy.
+            // The clamp lives HERE rather than in each `onCommit` so the draft snap-back below
+            // shows the same number that was committed; a call-site clamp left "-5" on screen.
+            const value = Math.max(0, parseInt(raw) || 0);
             lastCommitted.current = value;
             // Snap the draft to the committed INTEGER now, at commit time — not on every
             // keystroke, which would fight the user mid-typing. Before this, `value={hpDraft}`
@@ -174,11 +181,10 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     // full engine simulation per keystroke.
     const [chargeCountDraft, onChargeCountChange] = useDebouncedNumericField(
         config.chargeCount,
-        // Clamped: this is a new user-facing input (Task 10 follow-up), and a negative charge
-        // count reaches `simulateDefenseSurvivability` -> `combat/state.ts`'s
-        // `charges = startCharged ? chargeCount : 0` seed unvalidated. There is no in-game
-        // meaning for a negative charge count, so it is floored at 0 rather than passed through.
-        (value) => onUpdate('chargeCount', Math.max(0, value)),
+        // The floor that used to live here moved into the hook itself (#412) — the other three
+        // fields need the same clamp, and clamping at the call site left the input DISPLAYING the
+        // negative it had already committed as 0.
+        (value) => onUpdate('chargeCount', value),
         resetKey
     );
     const { getShipById } = useShips();
@@ -556,7 +562,12 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     )}
                     <div className="flex justify-between mt-2">
                         <span className="text-theme-text-secondary">HP Multiplier:</span>
-                        <span>{(effectiveHP / config.hp).toFixed(2)}x</span>
+                        {/* Clearing the HP field legitimately commits 0 — the input must not
+                            refuse it — so the zero denominator is guarded HERE instead (#412).
+                            Without this the row rendered the literal string "NaNx". */}
+                        <span>
+                            {config.hp > 0 ? `${(effectiveHP / config.hp).toFixed(2)}x` : '-'}
+                        </span>
                     </div>
                     <div className="flex justify-between mt-2">
                         <span className="text-theme-text-secondary">Security:</span>

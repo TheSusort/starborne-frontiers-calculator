@@ -33,7 +33,15 @@ import { asFactionKey } from '../../constants/factions';
 import { targetingOf } from '../../utils/calculators/shipTargeting';
 
 /** Engine stats + kit for a defender built from a real ship. Shared by the URL-param initial
- *  config and the ship-picker, which previously duplicated the stat mapping. */
+ *  config and the ship-picker, which previously duplicated the stat mapping.
+ *
+ *  The auto-filled kit `buffs` are part of this shape ON PURPOSE (#414). The two builders used to
+ *  disagree — the picker ran `buildSkillBuffAutoFill`/`mergeAutoFill` while the `?shipId=` branch
+ *  set `buffs: []` — so the same ship gave two different Theoretical EHPs depending on how you
+ *  reached the page, and a URL-arrived defender never showed #391's "Not counted (conditional):"
+ *  disclosure because it had no auto-filled buffs to gate. Returning them here means a new call
+ *  site gets the kit by default instead of having to remember to ask for it; the picker still
+ *  overrides `buffs` after the spread to MERGE with whatever the user had added by hand. */
 const defenderFieldsFromShip = (
     ship: Ship,
     final: ReturnType<typeof shipFinalStats>,
@@ -63,6 +71,8 @@ const defenderFieldsFromShip = (
     affinity: ship.affinity,
     role: ship.type,
     faction: asFactionKey(ship.faction),
+    // Player-side kit grants only — `enemyDebuffs` belong to the enemy roster, not the defender.
+    buffs: buildSkillBuffAutoFill(ship).selfBuffs,
 });
 
 const DefenseCalculatorPage: React.FC = () => {
@@ -85,7 +95,6 @@ const DefenseCalculatorPage: React.FC = () => {
                         ...fields,
                         damageReduction: calculateDamageReduction(fields.defense),
                         effectiveHP: calculateEffectiveHP(fields.hp, fields.defense),
-                        buffs: [],
                     },
                 ];
             }
@@ -220,7 +229,6 @@ const DefenseCalculatorPage: React.FC = () => {
     const selectShipForConfig = (configId: string, ship: Ship) => {
         const final = shipFinalStats(ship, getGearPiece, getEngineeringStatsForShipType);
         const fields = defenderFieldsFromShip(ship, final, getGearPiece);
-        const { selfBuffs } = buildSkillBuffAutoFill(ship);
         setConfigs((prev) =>
             prev.map((c) =>
                 c.id === configId
@@ -229,7 +237,10 @@ const DefenseCalculatorPage: React.FC = () => {
                           ...fields,
                           damageReduction: calculateDamageReduction(fields.defense),
                           effectiveHP: calculateEffectiveHP(fields.hp, fields.defense),
-                          buffs: mergeAutoFill(c.buffs, selfBuffs),
+                          // Overrides the `buffs` that came in with `...fields`: re-picking a
+                          // ship must drop the PREVIOUS ship's auto-fill while keeping the buffs
+                          // the user added by hand. The URL path has no such history to merge.
+                          buffs: mergeAutoFill(c.buffs, fields.buffs),
                       }
                     : c
             )
