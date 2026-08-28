@@ -2,12 +2,18 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
+import type { Ship } from '../../../types/ship';
+
+const mockGetShipById = vi.fn((_id: string): Ship | undefined => undefined);
 
 // Heavy contexts and the chart library are mocked: this is a render smoke that verifies the page
 // mounts with its default ship config and that the Advanced section hosts the skill editor —
 // mirroring the HealingCalculatorPage.test.tsx render-harness conventions.
+//
+// A FRESH closure per call gives the sim memo new inputs every render, so memo stability is
+// exercised only by the real ShipsContext (which wraps it in useCallback) and never by a test.
 vi.mock('../../../contexts/ShipsContext', () => ({
-    useShips: () => ({ ships: [], getShipById: () => undefined }),
+    useShips: () => ({ ships: [], getShipById: mockGetShipById }),
 }));
 vi.mock('../../../contexts/InventoryProvider', () => ({
     useInventory: () => ({ getGearPiece: () => undefined }),

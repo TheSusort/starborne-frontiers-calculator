@@ -89,10 +89,14 @@ const SHIPS_BY_ID = new Map<string, Ship>([
     [SLEDGEHAMMER.id, SLEDGEHAMMER],
 ]);
 
+// A FRESH closure per call gives the sim memo new inputs every render, so memo stability is
+// exercised only by the real ShipsContext (which wraps it in useCallback) and never by a test.
+const mockGetShipById = vi.fn((id: string): Ship | undefined => SHIPS_BY_ID.get(id));
+
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: [...SHIPS_BY_ID.values()],
-        getShipById: (id: string) => SHIPS_BY_ID.get(id),
+        getShipById: mockGetShipById,
     }),
 }));
 vi.mock('../../../contexts/InventoryProvider', () => ({
