@@ -633,9 +633,11 @@ export interface PlayerTurnArgs {
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
-    /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
-     *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
-     *  goldens byte-identical. */
+    /** The shared heal/shield/cleanse runtime. #415: this used to say "present ONLY when the
+     *  engine runs in healing mode / absent for DPS-mode turns". The engine anchors `healTarget`
+     *  in EVERY mode now, so it supplies this on DPS turns too and the heal block runs there —
+     *  what a DPS run omits is the healing REPORT (`healReportActive`). Still optional because
+     *  standalone callers (tests) may leave it unset. */
     healing?: HealingRuntimeCtx;
     /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5; HP-restore lifted in E5 §4.1):
      *  when true (the enemy walk), the heal block EMITS `heal-performed`/`cleanse-performed`
@@ -652,8 +654,12 @@ export interface PlayerTurnArgs {
     selfHpPct?: number;
     /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
      *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
-     *  40% HP" evaluated at cast time. Defaults to 100 so DPS-mode / un-updated callers behave
-     *  as if the target is full HP → a "below N" gate fails → grant inert in DPS (correct).
+     *  40% HP" evaluated at cast time. Defaults to 100 so un-updated callers behave as if the
+     *  target is full HP → a "below N" gate fails. #415: this used to add "so DPS-mode … callers
+     *  … → grant inert in DPS (correct)" — the twin of the `hpSubject:'target'` doc in
+     *  `types/abilities.ts`. The engine now threads `healTargetHpPctNow()` unconditionally
+     *  (`engine.ts`, the per-actor turn-args block), so a DPS turn reads the focus's REAL live HP
+     *  and the gate can open; only callers that supply nothing still see the 100 default.
      *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
     targetHpPct?: number;
     /** The acting attacker's STRUCK target was repaired (HP-healed) this round (C2b-3). Default
@@ -4190,25 +4196,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
 
     // ====================================================================
-    // HEALING MODE — heal/shield/cleanse consumption against the live heal
-    // target (healing-calc adoption). FULLY GATED on `args.healing`: DPS mode
-    // never supplies it, so this block is inert there (goldens byte-identical).
+    // HEAL/SHIELD/CLEANSE CONSUMPTION (every mode since #415; formerly labelled
+    // "HEALING MODE") against the live heal target (healing-calc adoption). The
+    // old banner outlived its accuracy — see below. Gated on `args.healing`, which #415 now
+    // supplies in EVERY mode (`healTarget` is anchored to the focus even in DPS
+    // runs), so this is no longer a healing-mode carve-out. A DPS run without a
+    // shield/heal/leech basis in its kit still produces byte-identical goldens
+    // because the buckets this block feeds go unused there, not because the
+    // block itself is skipped.
     //
-    // #371 asked whether the HoT tick further down being inside this gate is a DEFECT — no ship
-    // ticks a Repair Over Time in DPS mode at all, not even for a reduced amount. ANSWERED, and the
-    // answer is no, so this is a comment rather than a fix. DPS mode does not track the holder's
-    // live HP anywhere: `healTarget` is `explicitHealTarget ?? (runMode === 'battle' ? attacker :
-    // undefined)`, so a DPS run has none, which makes the engine's `selfHpPctFor` for the player
-    // side `undefined` (engine.ts) and leaves `selfHpPct` here at its `= 100` default. So there is
-    // no live self-HP gate to mis-fire, no HP bar to under-report, and no focus-side death or
-    // termination to reach early. A tick would change no output DPS mode produces.
-    //
-    // What WOULD make this a real gap: giving DPS mode a live self-HP read of any kind — an
-    // hp-threshold gate evaluated against current HP, `lowest-hp-ally` selection, or focus-side
-    // termination. If you add one of those, revisit this gate first; the fix then has the same
-    // shape as #369's — separate what the gate genuinely protects (the player healing buckets and
-    // the report, which DPS mode has no use for) from the HP application, which is side- and
-    // mode-independent.
+    // #371 asked whether the HoT tick further down being inside this gate is a DEFECT. It was
+    // ANSWERED "no" on the premise that DPS mode had no live self-HP read anywhere — `healTarget`
+    // was undefined there, so `selfHpPctFor` sat at its `= 100` default and no gate could mis-fire.
+    // #415 RETIRED THAT PREMISE: `healTarget` is now anchored to the focus in every mode, so DPS
+    // now gets a real drain-time self-HP read (`ctx.selfHpPctFor`, consumed in triggers.ts) — not
+    // to be confused with the cast-path `selfHpPct` below, which is per-actor and always read real
+    // HP, pre-#415 included — plus `lowest-hp-ally` selection and repair-over-time ticks. The gate
+    // below is no longer a DPS carve-out — it now separates what it always should have: the player
+    // healing BUCKETS and the report (which DPS has no use for) from HP APPLICATION, which is side-
+    // and mode-independent. Do not re-derive #371's original argument from this comment; it expired.
     // Runs at a fixed sequence point AFTER all DoT-application steps and BEFORE
     // the turnCtx assembly. Processes gated firing + passive abilities in array
     // order; heals draw the SEPARATE per-actor heal crit gate (never the damage

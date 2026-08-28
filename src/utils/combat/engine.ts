@@ -1689,7 +1689,9 @@ interface ReactiveSideCtx {
         emitBus?: CombatEventBus
     ) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
-     *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
+     *  absent/undefined → buildDrainContext defaults the gate to 100. Pre-#415 this was always the
+     *  DPS-mode case (no `healTarget` to source it from); #415 anchors `healTarget` to the focus in
+     *  every mode, so the player side is now always defined here, DPS included. Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
@@ -2806,15 +2808,21 @@ export function runCombat(rawInput: CombatEngineInput): {
         throw new Error(`runCombat: mode 'healing' requires healTargetId`);
     }
 
-    const healTarget = explicitHealTarget ?? (runMode === 'battle' ? attacker : undefined);
+    // SP-U U5 anchored this to the focus in battle mode; #415 extends that to EVERY mode. The
+    // anchor's two jobs are now separate flags below: it switches on the heal/shield/leech RUNTIME
+    // (which a DPS run needs, so an attacker whose damage comes from a shield or leech basis shows
+    // its real output) and it anchors the healing REPORT (which a DPS run has no use for).
+    const healTarget = explicitHealTarget ?? attacker;
 
     /**
-     * The heal/shield pipeline is active — TRUE IN BATTLE MODE TOO, because battle mode anchors
-     * `healTarget` to the focus above. This is NOT a mode and must never be conflated with
-     * `runMode === 'healing'`: the healing RESULT BLOCK is gated on it, and every
-     * `battleSimulator` result carries that block today.
+     * The healing RESULT BLOCK — NOT the runtime, which is `healTarget` above and is always
+     * defined. A DPS run builds the full runtime (heal/shield/leech basis still resolves, so an
+     * attacker whose damage comes from a shield or leech basis shows its real output) and emits NO
+     * healing report: #415's ruling is that heal ACCOUNTING is unwanted there while a full engine
+     * RUN is wanted. Also gates the dead-target turn skip, which is a healing/battle concept: see
+     * the comment at that site.
      */
-    const healPipelineActive = !!healTarget;
+    const healReportActive = !!explicitHealTarget || runMode === 'battle';
 
     /**
      * A DPS MEASUREMENT run: one focus attacker whose output is the whole point. Load-bearing for
@@ -3238,9 +3246,10 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  supplied no roster. Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
         /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
-         *  heal target's live HP (every other id → 100), undefined in DPS mode (→ buildDrainContext
-         *  defaults to 100). Enemy side returns 100 for every owner (no per-actor enemy HP until
-         *  PR5). Consumed in Task 2. */
+         *  heal target's live HP (every other id → 100). #415 anchors `healTarget` to the focus in
+         *  every mode, so this is now defined in DPS mode too — it was undefined there pre-#415,
+         *  defaulting to 100 via buildDrainContext. Enemy side returns 100 for every owner (no
+         *  per-actor enemy HP until PR5). Consumed in Task 2. */
         selfHpPctFor?: (ownerId: string) => number;
         /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
          *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
@@ -3510,9 +3519,12 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
-    // the turn-start DoT tick but not the cast's heal. DPS mode (no healTarget) → 100 → a "below
-    // N" target gate fails → the grant is inert in DPS (correct). Defined here so every player
-    // turn dispatch (attacker + walked team) reads the same denominator (recipientMaxHp).
+    // the turn-start DoT tick but not the cast's heal. Pre-#415, DPS mode had no `healTarget`, so
+    // this always returned 100 there — a "below N" target gate always failed, inert by
+    // construction. #415 anchors `healTarget` to the focus (the attacker, absent an explicit heal
+    // target) in every mode, so DPS now reads this actor's real live HP% too. Defined here so
+    // every player turn dispatch (attacker + walked team) reads the same denominator
+    // (recipientMaxHp).
     const healTargetHpPctNow = (): number => {
         if (!healTarget) return 100;
         const maxHp = recipientMaxHp(healTarget.id);
@@ -3968,8 +3980,11 @@ export function runCombat(rawInput: CombatEngineInput): {
      * documented one.
      *
      * Feeds `IntentExecContext.lowestHpAllyIdFor` (reactives) and the standing-leech procs.
-     * `undefined` without a healing ctx (DPS mode): there is no live HP view to rank over, and the
-     * consumers answer "no recipient" rather than falling back to the owner.
+     * `undefined` without a healing ctx: there is no live HP view to rank over, and the consumers
+     * answer "no recipient" rather than falling back to the owner. Pre-#415 this guard always
+     * tripped in DPS mode (no `healTarget` meant no `healingCtx`); #415 anchors `healTarget` to the
+     * focus in every mode, so `healingCtx` is now always built — DPS mode ranks a real
+     * `lowest-hp-ally` recipient too, rather than defaulting to "no recipient".
      */
     const lowestHpAllyIdForOwner = (ownerId: string): string | undefined => {
         if (!healingCtx) return undefined;
@@ -4772,7 +4787,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     : e.target === 'ally'
                       ? ownerIsEnemy
                           ? []
-                          : [healTarget!.id]
+                          : [healTarget.id]
                       : e.target === 'all-allies'
                         ? ownerIsEnemy
                             ? healingCtx.enemyIds
@@ -6787,7 +6802,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             (id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0;
         const applyIncomingToTarget = (
             damage: number,
-            victim: CombatActor = healTarget!,
+            victim: CombatActor = healTarget,
             // C2b-2 T5: defaults to the DIRECT-damage attribution (the acting actor landed this
             // hit). The DoT-tick batch caller overrides with { byDirectDamage: false } — a DoT
             // batch is an aggregate of multiple appliers with NO single killer.
@@ -9515,7 +9530,35 @@ export function runCombat(rawInput: CombatEngineInput): {
         // tick (a lethal Corrosion/Inferno tick kills it mid-turn → it must not fall through and
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
-            if (!(healTarget && actor.id === healTarget.id && healTarget.currentHp <= 0)) {
+            // A DESTROYED focus does not act, in ANY mode — independent of `healReportActive`.
+            // `destroyedRound` is the canonical death signal (state.ts:167, stamped once by
+            // `recordDestroyed`); `currentHp <= 0` is NOT, because a never-alive actor (DPS's
+            // `hp`-defaults-to-0 focus, see the gate below) also satisfies it
+            // (normalizeRoster.ts:126). Before #415 this case was covered incidentally by the
+            // `currentHp` branch below, which DPS mode could never reach (healReportActive was
+            // false there) — so a faster enemy killing the focus before its own turn left the
+            // focus falling through to act anyway. Checked first, unconditionally.
+            if (actor.id === focusActorId && actor.destroyedRound !== undefined) {
+                // Mirror the gated branch below: when the destroyed focus IS also the heal
+                // target (the default — `healTarget = explicitHealTarget ?? attacker`), it
+                // shows no buffs this round.
+                if (healTarget && actor.id === healTarget.id) {
+                    healTargetBuffs = [];
+                }
+                pushSynthesizedFocusSkipTurn();
+                return true;
+            }
+            // Gated on `healReportActive`, NOT merely on `healTarget` (#415): `hp` defaults to 0 in
+            // `simulateDPS` and on the DPS page, so every DPS focus enters the run at currentHp 0.
+            // That is NEVER-ALIVE, not KILLED (normalizeRoster.ts:126) — reading it as a corpse
+            // skipped the focus's whole turn and returned 0 damage for the entire calculator.
+            // Measured: 124 tests across 11 files fail without this gate.
+            if (!(
+                healReportActive &&
+                healTarget &&
+                actor.id === healTarget.id &&
+                healTarget.currentHp <= 0
+            )) {
                 return false;
             }
             // A destroyed heal target shows no buffs this round.
@@ -9739,10 +9782,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                         applyCounterAttack,
                         counterFiredThisTurn,
                         reactionFiredThisAttack,
-                        // Healing mode only — the SAME shared ctx the player turns use, so a
-                        // reactive heal/shield/cleanse credits the same per-round buckets and
-                        // mutates the same live target. Undefined in DPS mode → the executor's
-                        // heal/shield/cleanse branches stay inert (goldens byte-identical).
+                        // The SAME shared ctx the player turns use, so a reactive
+                        // heal/shield/cleanse credits the same per-round buckets and mutates the
+                        // same live target. #415: this used to read "healing mode only — undefined
+                        // in DPS mode → the executor's heal/shield/cleanse branches stay inert".
+                        // `healTarget` is now anchored in EVERY mode, so `healingCtx` (`:3724`) is
+                        // always built and the reactive heal/shield/cleanse branches are LIVE in
+                        // DPS mode too — pinned by `dpsBattleShieldParity.test.ts`. What DPS mode
+                        // still omits is the healing REPORT, gated on `healReportActive`.
                         healing: healingCtx,
                         // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
@@ -9762,9 +9809,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         isLowestSpeedAllyFor: sideCtx.isLowestSpeedAllyFor,
                         // Phase 4c PR 1 Task 6 / bySide PR3 Task 2: live self-HP% for drain-time
                         // hp-threshold gates, now sourced per-side from sideCtx.selfHpPctFor.
-                        // Player side: heal-target current/max HP (every other id → 100); DPS mode
-                        // has no closure (undefined → buildDrainContext defaults to 100). Enemy
-                        // side: 100 for every owner until PR5. byte-identical to the old inline spread.
+                        // Player side: heal-target current/max HP (every other id → 100). Enemy
+                        // side: 100 for every owner until PR5. #415: this used to add "DPS mode has
+                        // no closure (undefined → buildDrainContext defaults to 100)" — with
+                        // `healTarget` anchored in every mode the player-side closure (`:3362`) is
+                        // always built, so a DPS drain-time hp-threshold gate reads the focus's REAL
+                        // live HP instead of a hardcoded 100 (both directions pinned by
+                        // `dpsFullEngineChannels.test.ts`'s drain-time gate pair).
                         selfHpPctFor: sideCtx.selfHpPctFor,
                         enemyWithMostBuffs: sideCtx.enemyWithMostBuffs,
                         // Task A: resolve any actor's RAW affinity (combat-wide map, both sides) so
@@ -10436,6 +10487,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // kind-branches) → a STASISED victim STILL ticks, matching the heal-target
                 // precedent and the E5-symmetry invariant. Moving this inside a stasis gate would
                 // wrongly silence a stasised victim's DoTs.
+                //
+                // #415 NOTE — this fork is now REACHABLE IN DPS MODE, and it costs accounting.
+                // `healTarget = explicitHealTarget ?? attacker` in every mode, so the DPS FOCUS
+                // matches `isHealTarget` and its turn-start DoT tick takes the heal-target branch
+                // instead of the per-victim one. HP and intake are IDENTICAL (both branches end in
+                // `applyVictimDamage(…, sink)`), but the heal-target branch deliberately omits
+                // `creditDealt` and `roundPerTargetDamage` — the pre-existing healing-mode gap
+                // documented and DECLINED in place at the `tankDotDamage > 0` block below. So in
+                // DPS mode an enemy DoT ticking on the focus is absent from
+                // `RoundData.perTargetDamage[attacker]` and `perTargetDealt[<enemy>]`. Opt-in (it
+                // needs enemy attack > 0 AND a DoT-applying enemy kit) and accounting-only — NOT
+                // widened here, for the same reason it was declined below: closing it would move
+                // `perTargetDealt` in every healing-mode fixture carrying an enemy DoT on the tank.
                 const isHealTarget = !!healTarget && actor.id === healTarget.id;
                 if (isHealTarget) {
                     // Snapshot BEFORE tickDoTs so expiring entries still appear in the
@@ -10729,9 +10793,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // currentHp 0). healTarget carve-out mirrors the top-of-turn guard. A focus
                         // actor killed by its own burst must still push a synthesized focus turn so
                         // the post-round focusTurns.length guard does not throw.
+                        // #415: the `focusActorId` clause is the MID-TURN twin of the unconditional
+                        // branch added to handleDeadTargetSkip (`:9533`) — the top-of-turn guard
+                        // cannot catch this death, which is the whole reason this second check
+                        // exists. Anchoring healTarget to the focus in every mode turned the
+                        // healTarget carve-out ON in DPS mode, so a focus killed by its own
+                        // turn-start timed burst fell through and cast anyway. A DESTROYED FOCUS
+                        // MUST NEVER ACT, in any mode; the carve-out survives only for a heal
+                        // target that is NOT the focus (an explicitly-healed walked ally), which is
+                        // where it was aimed to begin with.
                         const burstDestroyedActor =
                             actor.destroyedRound !== undefined &&
-                            !(healTarget && actor.id === healTarget.id);
+                            (actor.id === focusActorId ||
+                                !(healTarget && actor.id === healTarget.id));
                         if (!burstDestroyedActor) {
                             // SP-F F5: on a charge-firing turn, resolve BOTH the footprint pattern
                             // and the target selection from the CHARGED axes (each falls back to
@@ -13020,8 +13094,11 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // The heal target's death round comes from its per-actor `destroyedRound` field (stamped by
     // recordDestroyed), falling back to the post-round backstop's start-dead capture for the
-    // no-`recordDestroyed` path (Task-1 OUTCOME B). Computed unconditionally — in non-healing mode
-    // healTarget is undefined → undefined, never read (the healing shape is omitted below).
+    // no-`recordDestroyed` path (Task-1 OUTCOME B). Computed unconditionally. #415: this used to
+    // add "in non-healing mode healTarget is undefined → undefined" — `healTarget` is now anchored
+    // in every mode, so in DPS mode this resolves the FOCUS's real death round. It is still never
+    // read there, but for the other reason the sentence already gave: the healing shape below is
+    // gated on `healReportActive`, which a DPS run leaves false.
     const healTargetDestroyedRound = healTarget?.destroyedRound ?? backstopDestroyedRound;
 
     // SP-4c-2d DELETED `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) and the
@@ -13045,9 +13122,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             teamTotal: totalTeamRaw,
             generic: totalGenericRaw,
         },
-        // Additive — present whenever the heal pipeline is active (battle mode too; DPS callers
+        // Additive — present whenever the heal REPORT is active (battle mode too; DPS callers
         // with no heal target see the legacy shape).
-        ...(healPipelineActive
+        ...(healReportActive
             ? {
                   healing: {
                       rounds: healingRounds,

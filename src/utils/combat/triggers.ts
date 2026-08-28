@@ -78,8 +78,11 @@ export const MAX_INTENT_GENERATIONS = 10;
 /** Ability types the executor knows how to follow up (see executeIntent). These reactive
  *  types are routed through the trigger machinery; any other type carrying a live trigger
  *  stays on the on-cast path (not-simulated follow-up payloads — e.g. control from a
- *  bomb-detonate reactive). heal/shield/cleanse are routed too (Task 9) but only DO anything
- *  in healing mode — in DPS mode the executor's healing-ctx-off guard makes them inert.
+ *  bomb-detonate reactive). heal/shield/cleanse are routed too (Task 9); they DO anything only
+ *  when the executor has a healing ctx. #415: that used to read "only in healing mode — in DPS
+ *  mode the executor's healing-ctx-off guard makes them inert". The engine anchors `healTarget`
+ *  in every mode now, so a DPS run supplies `ctx.healing` and these branches are LIVE there; the
+ *  guard only still bites for standalone (unit-test) contexts that supply no healing ctx.
  *  `damage` (Phase 4c PR 4 — Grif's on-enemy-cleansed "75% Damage that cannot critically hit")
  *  is reactive ONLY when its trigger is in LIVE_TRIGGERS. SAFETY: `on-cast` is NOT a live
  *  trigger, so every normal on-cast damage ability stays on the cast path — only damage
@@ -1694,9 +1697,11 @@ export interface IntentExecContext {
      *  each reactive draw of the same ability so the proc lands at its true frequency. */
     procChanceGates?: Map<string, RateGate>;
     /** Live self-HP% per owner (0..100) for drain-time hp-threshold gates (Phase 4c
-     *  PR 1). The engine closes over the heal target's current/max HP (healing mode);
-     *  every other owner — and DPS mode entirely — reports 100 (the pre-4c default),
-     *  keeping all existing drain gating byte-identical. */
+     *  PR 1). The engine closes over the heal target's current/max HP; every OTHER owner
+     *  reports 100 (the pre-4c default). #415: this used to say "(healing mode)" and "DPS mode
+     *  entirely — reports 100". The anchor makes the player-side closure exist in EVERY mode, so
+     *  a DPS drain-time gate reads the focus's real live HP; only a caller that supplies no
+     *  closure at all (unit contexts) still falls back to 100 in buildDrainContext. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
      *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
@@ -2330,8 +2335,12 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // splitDrainGateConditions); the rest are now honestly unresolvable instead of
         // dead-but-fail-closed. Do not reintroduce a scalar here.
         // Task 6 (Phase 4c PR 1): live self-HP% for drain-time hp-threshold gates. The engine
-        // closes over the heal target's current/max HP; every non-tank id and DPS mode report 100
-        // (the pre-4c default) → all existing drain gating stays byte-identical.
+        // closes over the heal target's current/max HP; every non-tank id reports 100 (the pre-4c
+        // default). #415 RETIRED the rest of this note ("and DPS mode report 100 → all existing
+        // drain gating stays byte-identical"): `healTarget` is anchored in every mode, so THIS is
+        // the drain-time gate a DPS run revived — the focus's own reactive hp-threshold gates now
+        // read its real live HP and can open (`dpsFullEngineChannels.test.ts` pins both
+        // directions). The `?? 100` fallback is for callers with no closure, not for DPS mode.
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Task 7 (names only — never folded, no double-fold): the drain owner's `enemy-buff` gate
         // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
@@ -3153,12 +3162,15 @@ function passesMaxPerRoundGate(intent: Intent, ctx: IntentExecContext): boolean 
  *    stack (duration ?? 1 is irrelevant — statusEngine routes it persistent by name).
  *  - dot → landing draw, then append to the enemy DoT containers + dot-applied
  *    (chainable). Bombs need effectiveAttack; skipped with a note when undefined.
- *  - heal/shield (Task 9) → healing mode only (ctx.healing): credit the owner's bucket
+ *  - heal/shield (Task 9) → gated on a healing ctx (ctx.healing), which #415 makes present in
+ *    EVERY engine mode (DPS included) rather than healing mode only: credit the owner's bucket
  *    + route the consumption/pool to the target. Reactive heals NEVER crit (no draw at
  *    drain time — deterministic, documented approximation) and use a SIMPLIFIED fold
  *    (heal: healModifier only; shield: basis×pct). DELIBERATELY emits NO heal-performed
- *    (a reactive heal must not re-trigger heal listeners — chain guard). Off → silent skip.
- *  - cleanse (Task 9) → healing mode only: credit cleanseCount. Off → silent skip.
+ *    (a reactive heal must not re-trigger heal listeners — chain guard). Absent (standalone
+ *    unit contexts) → silent skip.
+ *  - cleanse (Task 9) → same ctx.healing gate, same #415 correction: credit cleanseCount.
+ *    Absent → silent skip.
  *  - any other type → skipped silently (not-simulated follow-up payloads).
  * Intents that emit events (debuff/dot) chain through the listeners again. heal/shield/
  * cleanse emit nothing, so they never chain.

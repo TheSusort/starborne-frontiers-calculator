@@ -518,8 +518,10 @@ export interface Condition {
     hpComparator?: 'below' | 'above';
     hpPercent?: number;
     // For 'hp-threshold': whose HP the threshold applies to. Defaults to 'enemy' (offensive
-    // scaling). 'target' = the heal target's live HP%, threaded in healing mode only; defaults
-    // to 100 elsewhere (DPS-mode inert — the condition never fires without a live target HP).
+    // scaling). 'target' = the heal target's live HP%. Until #415 this was threaded in healing
+    // mode only and defaulted to 100 everywhere else, making it DPS-inert; DPS runs now anchor a
+    // heal target too, so it reads real HP in every mode. Still defaults to 100 when no target
+    // resolves.
     hpSubject?: 'self' | 'enemy' | 'target';
     // Threshold gating for count subjects (buff/debuff/adjacency/destroyed counts).
     // When set, the condition is "met" only when the derived/manual count satisfies
