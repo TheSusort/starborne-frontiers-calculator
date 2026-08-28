@@ -244,6 +244,15 @@ export type AbilityTrigger =
     // sourceId === ownerId). Mirror of on-debuff-resisted (resister-scoped). Ravager's Hacking
     // Module Overdrive grant.
     | 'on-own-debuff-resisted'
+    // #413 Xcellence: fires when ANY OPPOSING unit resists a debuff — inflictor-AGNOSTIC, unlike
+    // both siblings above. Her text is "When an enemy resists a debuff infliction": the subject is
+    // the resister and the object carries NO possessive, so nothing scopes the infliction to her.
+    // She was wired to on-own-debuff-resisted because a parser doc comment silently glossed the
+    // text as "a debuff [THIS UNIT INFLICTED]"; that clause is not in the skill row. Routes the
+    // RESISTER as counterTargetId so the reaction hits the enemy that resisted, and fires ONLY on
+    // a drawn-and-failed landing roll (`viaLandingRoll`) — an affinity-disadvantage or Block-Debuff
+    // auto-resist draws no roll and must not proc.
+    | 'on-enemy-debuff-resisted'
     // Fired once per shield-application CAST. Reaction is keyed on the granter (acting actor)
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
@@ -350,6 +359,9 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-debuff-resisted',
     // PR-B2: inflictor-scoped mirror — reaction to a debuff THIS unit inflicted being resisted.
     'on-own-debuff-resisted',
+    // #413 Xcellence: opposing-resister-scoped and inflictor-agnostic — any enemy resisting any
+    // debuff, whoever inflicted it. Roll-only.
+    'on-enemy-debuff-resisted',
     // Warpstrike: owner dealt direct damage on its turn.
     'on-deal-damage',
     // Resonating Fury: granter-scoped reaction fired once per shield-application cast.

@@ -70,14 +70,32 @@ const CONTROL_EFFECT_LABEL: Record<ControlEffect, string> = {
 };
 export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFFECT_LABEL[effect];
 
-/** Emit a debuff-resisted event for a Block-Debuff-blocked DoT. Call ONLY on the block path —
- *  normal DoT landing-roll failures stay silent (byte-identical). */
+/** Emit a `debuff-resisted` event for a DoT that did not land.
+ *
+ *  ⚠️ THE NAME IS NARROWER THAN THE FUNCTION. The doc that stood here said "Call ONLY on the block
+ *  path — normal DoT landing-roll failures stay silent (byte-identical)", and that stopped being
+ *  true: `playerTurn`'s `else if (dotsConfig.length > 0)` branch — the LANDING-ROLL FAILURE arm —
+ *  calls it too, so the combat log can show "Inferno III resisted" symmetrically with stat-debuff
+ *  resists. Reading the old comment and tagging every call here as a Block-Debuff auto-resist would
+ *  drop exactly the rolled DoT resists that #413's `viaLandingRoll` gate is supposed to keep.
+ *
+ *  Hence `viaLandingRoll`, which the CALLER supplies because only the caller knows which arm it is
+ *  in: `false` on the Block-Debuff branch (no gate drawn), `true` on the landing-roll-failure
+ *  branch. */
 export function emitBlockDebuffResist(
     bus: CombatEventBus,
     sourceId: string,
     targetId: string,
     round: number,
-    buffName: string
+    buffName: string,
+    viaLandingRoll: boolean
 ): void {
-    bus.emit({ type: 'debuff-resisted', sourceId, targetId, round, buffName });
+    bus.emit({
+        type: 'debuff-resisted',
+        sourceId,
+        targetId,
+        round,
+        buffName,
+        ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
+    });
 }

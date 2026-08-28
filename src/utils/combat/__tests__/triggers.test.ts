@@ -4503,8 +4503,13 @@ describe('on-debuff-resisted listener — source routing', () => {
 // ----------------------------------------------------------------------
 // Task 4: the `cfg.type === 'damage'` executor branch for an hpBasisPct-flagged
 // ability (Vindicator on-resist). Requires a routed source (never falls back to
-// ctx.enemy), dedups per (owner, ability, source) via oncePerRoundConsumed, and
-// passes hpBasisPct through to ctx.applyReactiveDamage as the 7th arg.
+// ctx.enemy), dedups per (owner, ability, source, sub-attack) via counterFiredThisTurn,
+// and passes hpBasisPct through to ctx.applyReactiveDamage as the 7th arg.
+//
+// #413 moved the guard off `oncePerRoundConsumed`. That set lives for a ROUND, which made the
+// key per-round and collapsed two SEPARATE attacks in one round into a single proc — wrong under
+// the locked family ruling ("per attack, not per turn/round"). `counterFiredThisTurn` is cleared
+// at each actor turn-start, so turn × sub-attack × target is what "per attack" means here.
 // ----------------------------------------------------------------------
 describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
     type Call = { owner: string; victim: string; mult: number; hpPct?: number };
@@ -4531,6 +4536,7 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
             lastTurnCtxByActor: new Map(),
             recordResisted: () => {},
             oncePerRoundConsumed: new Set<string>(),
+            counterFiredThisTurn: new Set<string>(),
             applyReactiveDamage: (
                 owner: string,
                 victim: string,
@@ -4544,7 +4550,7 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
         } as unknown as IntentExecContext;
         return { ctx, calls };
     };
-    const intent = (counterTargetId?: string): Intent => ({
+    const intent = (counterTargetId?: string, subAttackIndex?: number): Intent => ({
         ownerId: 'vindi',
         sourceSlot: 'passive',
         ability: {
@@ -4555,7 +4561,14 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
             conditions: [],
             config: { type: 'damage', multiplier: 0, hits: 1, hpBasisPct: 30 },
         },
-        ...(counterTargetId ? { eventCtx: { counterTargetId } } : {}),
+        ...(counterTargetId
+            ? {
+                  eventCtx: {
+                      counterTargetId,
+                      ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
+                  },
+              }
+            : {}),
     });
 
     it('passes hpBasisPct through to applyReactiveDamage, targeting the routed source', () => {
@@ -4571,20 +4584,42 @@ describe('on-debuff-resisted damage branch (hpBasisPct)', () => {
         expect(calls).toHaveLength(0);
     });
 
-    it('dedups multiple resists from the SAME source in one round to one proc', () => {
+    it('dedups multiple resists from the SAME source in ONE attack to one proc', () => {
         const shared = new Set<string>();
-        const { ctx, calls } = makeCtx({ oncePerRoundConsumed: shared });
-        executeIntent(intent('enemy1'), ctx);
-        executeIntent(intent('enemy1'), ctx);
+        const { ctx, calls } = makeCtx({ counterFiredThisTurn: shared });
+        executeIntent(intent('enemy1', 0), ctx);
+        executeIntent(intent('enemy1', 0), ctx);
         expect(calls).toHaveLength(1);
     });
 
-    it('fires once per DISTINCT source in the same round', () => {
+    it('fires once per DISTINCT source in the same attack', () => {
         const shared = new Set<string>();
-        const { ctx, calls } = makeCtx({ oncePerRoundConsumed: shared });
-        executeIntent(intent('enemy1'), ctx);
-        executeIntent(intent('enemy2'), ctx);
+        const { ctx, calls } = makeCtx({ counterFiredThisTurn: shared });
+        executeIntent(intent('enemy1', 0), ctx);
+        executeIntent(intent('enemy2', 0), ctx);
         expect(calls).toHaveLength(2);
+    });
+
+    // #413 — the regression the round-scoped key could not see. Same owner, same ability, same
+    // resister, one turn, but TWO separate attacks: the locked ruling says two procs. Under the
+    // old `(owner, ability, source)` key in the per-ROUND set, the second one was swallowed.
+    it('fires again for the SAME source on a LATER sub-attack of the same turn', () => {
+        const shared = new Set<string>();
+        const { ctx, calls } = makeCtx({ counterFiredThisTurn: shared });
+        executeIntent(intent('enemy1', 0), ctx);
+        executeIntent(intent('enemy1', 1), ctx);
+        expect(calls).toHaveLength(2);
+    });
+
+    // The `?? 'x'` fallback: an intent with no attack identity (the non-positional cast path, and
+    // hand-built fixtures) keeps the historical turn-collapsed behaviour rather than splitting on
+    // `undefined`. Asserted so a future change to the fallback cannot pass unnoticed.
+    it('collapses two resists carrying NO sub-attack identity to one proc', () => {
+        const shared = new Set<string>();
+        const { ctx, calls } = makeCtx({ counterFiredThisTurn: shared });
+        executeIntent(intent('enemy1'), ctx);
+        executeIntent(intent('enemy1'), ctx);
+        expect(calls).toHaveLength(1);
     });
 });
 
