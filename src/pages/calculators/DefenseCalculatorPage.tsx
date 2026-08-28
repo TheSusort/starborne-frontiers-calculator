@@ -26,7 +26,7 @@ import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/skillBuffAutoFill';
-import { gatedAutoFilledBuffs } from '../../utils/calculators/gatedBuffs';
+import { gatedAutoFilledBuffs, GatedBuffsPageState } from '../../utils/calculators/gatedBuffs';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
 import { asFactionKey } from '../../constants/factions';
@@ -350,12 +350,33 @@ const DefenseCalculatorPage: React.FC = () => {
     // score does not; it scores raw grid defense/security and never reads a buff), and the badge
     // tie-break's effectiveHP (via `mergedBuffTotals` below). A buff the user picked by hand (or a
     // global buff) is deliberate and stays counted regardless of any gate.
+    //
+    // Gates that CAN be true at full health (Chakara's "lowest Speed among allies", Asphyxiator/
+    // Bayah's "enemy has N+ debuffs") are no longer dropped on mere presence — they are evaluated
+    // against this page's own configured rosters (`teamShips`, `enemies`) and only dropped when
+    // that evaluation says NOT MET, or when the gate isn't one this page can answer at all. See
+    // `GatedBuffsPageState`'s field docs in gatedBuffs.ts for exactly what each field feeds and
+    // why it's safe to read as real (not fabricated) data.
+    const enemyDebuffNames = useMemo(
+        () => [...new Set(teamShips.flatMap((t) => t.enemyDebuffs.map((b) => b.buffName)))],
+        [teamShips]
+    );
+    const allySpeeds = useMemo(() => teamShips.map((t) => t.speed), [teamShips]);
+    const hasEnemy = enemies.length > 0;
     const gatedBuffsByConfig = useMemo(
         () =>
             new Map(
-                configs.map((c) => [c.id, gatedAutoFilledBuffs(c.buffs, c.shipSkills)] as const)
+                configs.map((c) => {
+                    const pageState: GatedBuffsPageState = {
+                        selfSpeed: c.speed,
+                        allySpeeds,
+                        hasEnemy,
+                        enemyDebuffNames,
+                    };
+                    return [c.id, gatedAutoFilledBuffs(c.buffs, c.shipSkills, pageState)] as const;
+                })
             ),
-        [configs]
+        [configs, allySpeeds, hasEnemy, enemyDebuffNames]
     );
 
     const mergedBuffTotals = useMemo(

@@ -27,7 +27,12 @@ import { readFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import { buildSkillBuffAutoFill } from '../src/utils/calculators/skillBuffAutoFill';
-import { gatedAutoFilledBuffs, GatedBuff, isEhpRelevant } from '../src/utils/calculators/gatedBuffs';
+import {
+    gatedAutoFilledBuffs,
+    GatedBuff,
+    GatedBuffsPageState,
+    isEhpRelevant,
+} from '../src/utils/calculators/gatedBuffs';
 import { computeBuffedStats } from '../src/utils/calculators/defenseCalculator';
 import { Ship } from '../src/types/ship';
 import { DefenseBuffTotals, SelectedGameBuff } from '../src/types/calculator';
@@ -36,6 +41,25 @@ import { parseCsvLine, readCsvRecords, csvAvailable, CSV_PATH } from './lib/ship
 // The brief's fixed reference point, so the printed before/after figures are reproducible.
 const REFERENCE_HP = 40_000;
 const REFERENCE_DEFENSE = 5_000;
+
+// This audit measures one ship in isolation — no team, no enemy, exactly the state a user sees
+// on a fresh visit to the Defense calculator (`teamShips`/`enemies` both start empty). That
+// means `lowest-speed-ally` gates (Chakara) resolve MET here — an empty ally roster makes the
+// audited ship trivially the sole, and therefore lowest-Speed, actor, matching the engine's own
+// `lowestSpeedIds()` semantics — while `enemy-debuff` gates (Asphyxiator/Bayah) stay unanswered
+// (no enemy configured, so "the enemy's debuff count" has no referent) and so still drop, exactly
+// as before this ruling. `selfSpeed` is inert with an empty ally roster (any value is trivially
+// the minimum), so it is a placeholder, not a real ship stat.
+const DEFAULT_GATE_STATE: GatedBuffsPageState = {
+    selfSpeed: 100,
+    allySpeeds: [],
+    hasEnemy: false,
+    enemyDebuffNames: [],
+};
+const auditGatedAutoFilledBuffs = (
+    buffs: SelectedGameBuff[],
+    shipSkills: ReturnType<typeof buildShipAbilities>
+): GatedBuff[] => gatedAutoFilledBuffs(buffs, shipSkills, DEFAULT_GATE_STATE);
 
 // One build per refit-count bucket, matching getShipSkillRows' own thresholds (R0/R2/R4).
 const REFIT_BUCKETS = [0, 2, 4];
@@ -132,7 +156,7 @@ export function collectFindings(
     gatedOf: (
         buffs: SelectedGameBuff[],
         shipSkills: ReturnType<typeof buildShipAbilities>
-    ) => GatedBuff[] = gatedAutoFilledBuffs
+    ) => GatedBuff[] = auditGatedAutoFilledBuffs
 ): { findings: GatedBuffFinding[]; shipCount: number } {
     const rows = readShipRows();
     const findings: GatedBuffFinding[] = [];

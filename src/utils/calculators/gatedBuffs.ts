@@ -16,12 +16,108 @@
 import type { SelectedGameBuff } from '../../types/calculator';
 import type { Ability, Condition, ShipSkills } from '../../types/abilities';
 import { conditionSummary } from '../abilities/conditionSummary';
+import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
 
 export interface GatedBuff {
     buffId: string;
     buffName: string;
     /** e.g. "below 60% HP" — from conditionSummary. */
     reason: string;
+}
+
+/**
+ * The page state Theoretical EHP's gate evaluation is answerable from. Deliberately narrow: only
+ * the fields three condition SUBJECTS need (see `isAnswerableCondition`), not a general-purpose
+ * combat context. Every other subject (self-crit, enemy-type, adjacent-ally, ally-on-team, …)
+ * stays unanswerable regardless of what this carries — see `isAnswerableCondition`'s doc for why
+ * that gate is enforced BEFORE the engine's evaluator ever sees a condition, not by leaving a
+ * field blank and hoping the evaluator degrades safely.
+ */
+export interface GatedBuffsPageState {
+    /** The ship being measured's own Speed. Feeds `lowest-speed-ally` (Chakara): this ship is
+     *  the OWNER of the gate, so its own Speed is one of the values the "lowest among allies"
+     *  comparison is taken over — an empty `allySpeeds` still resolves (trivially the sole, and
+     *  therefore lowest, actor), matching the engine's own `lowestSpeedIds()` semantics
+     *  (computed over ALL same-side actors, owner included — see `engine.ts`'s `bySide('player')`
+     *  wiring, which folds the acting attacker into the same `actors` array it takes the min
+     *  over). Sourced from `DefenseShipConfig.speed`. */
+    selfSpeed: number;
+    /** Speeds of the ships in the page's ally roster (`teamShips`), EXCLUDING the measured ship
+     *  itself. An empty array is the page's own default state (no team ships added) and is not a
+     *  missing-data case — it is a real, answerable roster of zero. Sourced from
+     *  `TeamShipConfig.speed`, which is a required (non-optional) field auto-filled on ship pick,
+     *  so every entry here is a real number, never a fabricated stand-in. */
+    allySpeeds: number[];
+    /** True when at least one enemy is configured (`enemies.length > 0`). Feeds `enemy-debuff`
+     *  (Asphyxiator/Bayah's "while the enemy has N+ debuffs"). With no enemy configured, "the
+     *  enemy's debuff count" has no referent — not a knowable zero, not a knowable N — so this
+     *  is threaded to leave `enemyDebuffCount`/`enemyDebuffNames` UNDEFINED in the built
+     *  `ConditionContext` rather than fabricating either extreme. `conditionMet` already treats
+     *  an undefined count as NOT MET (never as an assumed match), so an absent enemy correctly
+     *  keeps the gate dropped — the same conservative outcome as before this ruling, not a new
+     *  one. */
+    hasEnemy: boolean;
+    /** Distinct debuff names the page's ally roster is configured to inflict on the enemy
+     *  (`TeamShipConfig.enemyDebuffs[].buffName`, deduped). Deduped, not counted per applying
+     *  ship, because the engine's own status model is name-keyed: a debuff NAME is one active
+     *  status (highest tier wins), not one entry per ship that lands it — two team ships both
+     *  configured to inflict "Attack Down" put exactly one "Attack Down" on the enemy, not two.
+     *  Only consulted when `hasEnemy` is true. */
+    enemyDebuffNames: string[];
+}
+
+/** Builds the `ConditionContext` this page can honestly answer from `GatedBuffsPageState`.
+ *  Every field NOT documented above (crit rate, buffs/debuffs by name, adjacency, shields, …)
+ *  is left at an inert default (0 / [] / false) — safe ONLY because `isAnswerableCondition`
+ *  refuses every condition whose subject would read one of those fields before this context is
+ *  ever handed to `conditionsMet`. This function does not enforce answerability; the filter in
+ *  `gatedAutoFilledBuffs` does, and must run first. */
+function buildPageConditionContext(state: GatedBuffsPageState): ConditionContext {
+    const allSpeeds = [state.selfSpeed, ...state.allySpeeds];
+    const lowestSpeed = Math.min(...allSpeeds);
+    return {
+        selfBuffNames: [],
+        selfDebuffNames: [],
+        enemyBuffNames: [],
+        effectiveCritRate: 0,
+        adjacentAllyCount: 0,
+        enemyAdjacentCount: 0,
+        enemyDestroyedCount: 0,
+        // Theoretical EHP is resolved once for a ship at full health — not a live per-round
+        // reading. Ties → all tied qualify, matching `lowestSpeedIds()`.
+        selfHpPct: 100,
+        isLowestSpeedAlly: state.selfSpeed <= lowestSpeed,
+        enemyDebuffCount: state.hasEnemy ? state.enemyDebuffNames.length : undefined,
+        enemyDebuffNames: state.hasEnemy ? state.enemyDebuffNames : undefined,
+    };
+}
+
+/**
+ * Whether the page can genuinely answer this SINGLE condition — the answerability allow-list.
+ * Deliberately small: admitting a subject here means `buildPageConditionContext` populates a
+ * REAL (not fabricated) reading for it. Everything else, including every `derivable: false`
+ * subject, is refused here and therefore never reaches `conditionsMet` — closing off the
+ * assume-met fallback in `evaluateCondition` (`if (!cond.derivable) return Math.max(0,
+ * cond.manualCount ?? 1)`, and the `ally-on-team` no-roster branch) that would otherwise make
+ * an unknowable gate silently COUNT. This check runs on every condition in a grant path BEFORE
+ * `conditionsMet` sees any of them — a path with one answerable and one unanswerable condition
+ * (an AND) is treated as wholly unanswerable, not partially evaluated, per the ruling's "better
+ * to drop a gate you could theoretically answer than to count one you cannot".
+ */
+function isAnswerableCondition(cond: Condition): boolean {
+    switch (cond.subject) {
+        // hp-threshold with hpSubject 'self' is the Redeemer case: evaluated against the fixed
+        // full-health assumption (`buildPageConditionContext`'s `selfHpPct: 100`). 'enemy' and
+        // 'target' hpSubjects read fields (`enemyHpPct`, `targetHpPct`) this page has no
+        // configured value for — those stay unanswerable.
+        case 'hp-threshold':
+            return cond.hpSubject === 'self';
+        case 'lowest-speed-ally':
+        case 'enemy-debuff':
+            return true;
+        default:
+            return false;
+    }
 }
 
 /** Theoretical-EHP-relevant: the buff's own `parsedEffects` carries a key Theoretical EHP
@@ -82,10 +178,12 @@ const isBuffGrantFor = (ability: Ability, buffName: string): boolean =>
 
 export function gatedAutoFilledBuffs(
     buffs: SelectedGameBuff[],
-    shipSkills: ShipSkills | undefined
+    shipSkills: ShipSkills | undefined,
+    pageState: GatedBuffsPageState
 ): GatedBuff[] {
     if (!shipSkills) return [];
     const result: GatedBuff[] = [];
+    const ctx = buildPageConditionContext(pageState);
 
     for (const buff of buffs) {
         // A buff the user picked by hand is deliberate and always counts, gate or no gate.
@@ -102,15 +200,25 @@ export function gatedAutoFilledBuffs(
             .filter((a) => isBuffGrantFor(a, buff.buffName));
 
         if (!matches.length) continue;
-        // If ANY grant path is unconditional the buff genuinely can stand always-on.
-        if (!matches.every((a) => realGates(a.conditions).length > 0)) continue;
+
+        // Per grant path: unconditional, or gated-but-genuinely-satisfied paths make the buff
+        // stand; a path is "genuinely satisfied" only when EVERY condition on it is answerable
+        // (isAnswerableCondition) AND the engine's own `conditionsMet` says the answerable set is
+        // met. A path with any unanswerable condition never reaches `conditionsMet` at all — see
+        // `isAnswerableCondition`'s doc for why that ordering is load-bearing.
+        const pathReasons = matches.map((a) => {
+            const gates = realGates(a.conditions);
+            if (gates.length === 0) return null; // unconditional — this path stands
+            if (gates.every(isAnswerableCondition) && conditionsMet(gates, ctx)) return null;
+            return reasonForConditions(gates);
+        });
+
+        // Any path standing (unconditional, or answerable-and-met) means the buff genuinely can
+        // be counted — it is not dropped, and nothing is printed for it.
+        if (pathReasons.some((r) => r === null)) continue;
 
         const reasons = [
-            ...new Set(
-                matches
-                    .map((a) => reasonForConditions(realGates(a.conditions)))
-                    .filter((r) => r.length > 0)
-            ),
+            ...new Set(pathReasons.filter((r): r is string => r !== null && r.length > 0)),
         ];
         result.push({ buffId: buff.id, buffName: buff.buffName, reason: reasons.join(', ') });
     }
