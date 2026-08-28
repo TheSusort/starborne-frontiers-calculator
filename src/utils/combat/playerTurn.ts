@@ -4196,8 +4196,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
 
     // ====================================================================
-    // HEALING MODE — heal/shield/cleanse consumption against the live heal
-    // target (healing-calc adoption). Gated on `args.healing`, which #415 now
+    // HEAL/SHIELD/CLEANSE CONSUMPTION (every mode since #415; formerly labelled
+    // "HEALING MODE") against the live heal target (healing-calc adoption). The
+    // old banner outlived its accuracy — see below. Gated on `args.healing`, which #415 now
     // supplies in EVERY mode (`healTarget` is anchored to the focus even in DPS
     // runs), so this is no longer a healing-mode carve-out. A DPS run without a
     // shield/heal/leech basis in its kit still produces byte-identical goldens
