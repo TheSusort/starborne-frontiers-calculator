@@ -210,4 +210,37 @@ describe('DefenseCalculatorPage gated buffs (#391)', () => {
         expect(ungatedEHP).toBe(expectedWithBuffCounted);
         expect(ungatedEHP).toBeGreaterThan(gatedEHP);
     });
+
+    // Item 3 (#391 final review): `gatedBuffsByConfig`'s `useMemo` threads real page state
+    // (`c.speed`, `allySpeeds`/`enemyDebuffNames` derived from `teamShips`, `hasEnemy` from
+    // `enemies.length > 0`) into `gatedAutoFilledBuffs` — but nothing previously observed that
+    // wiring surviving a regression to hardcoded/inert state. Chakara's "lowest Speed among
+    // allies" shape is the sharpest lever: with an EMPTY ally roster the measured ship is
+    // trivially the slowest of one -> MET -> the buff counts and the disclosure line is absent.
+    // Adding a real team ship with a LOWER speed flips the gate to NOT MET -> the buff drops and
+    // "Not counted (conditional):" appears naming it. A hardcoded `allySpeeds: []` state (the
+    // reviewer's proven mutation) cannot see the added team ship at all, so this assertion stays
+    // on the "absent" branch even after the slower ally is added.
+    it('threads the real ally roster into the gate: adding a slower team ship flips lowest-speed-ally from met to unmet', () => {
+        mockState.conditions = [{ subject: 'lowest-speed-ally', derivable: true }];
+        renderDefenseCalculatorPage();
+        const card = screen.getByText('pick mock ship').closest('.card') as HTMLElement;
+        fireEvent.click(within(card).getByText('pick mock ship'));
+
+        // Empty ally roster (the page's default state): the measured ship (speed 100) is
+        // trivially the sole, and therefore lowest-speed, actor -> MET -> nothing dropped.
+        expect(screen.queryByText('Not counted (conditional):')).not.toBeInTheDocument();
+
+        // Add a team ship and give it a Speed lower than the measured ship's 100 — a real ally
+        // that is genuinely slower, so the measured ship is no longer the lowest-speed one.
+        fireEvent.click(screen.getByText('+ Add team ship'));
+        fireEvent.change(screen.getByLabelText('Speed'), { target: { value: '50' } });
+
+        expect(within(card).getByText('Not counted (conditional):')).toBeInTheDocument();
+        expect(
+            within(card).getByText(
+                '- Defense Up II - when this unit has the lowest Speed among allies'
+            )
+        ).toBeInTheDocument();
+    });
 });

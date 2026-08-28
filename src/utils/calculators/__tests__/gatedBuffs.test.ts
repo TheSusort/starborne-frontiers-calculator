@@ -311,19 +311,51 @@ describe('gatedAutoFilledBuffs', () => {
             ]);
         });
 
-        it('an unanswerable subject (self-crit) stays dropped regardless of any page state', () => {
-            const selfCritAbility = {
+        // Item 1 (#391 final review): these two used to use `self-crit`, which is `derivable:
+        // true` and reads `effectiveCritRate / 100 = 0` in this page's context — NOT MET via an
+        // inert context field, never via the allow-list. Flipping `isAnswerableCondition`'s
+        // `default:` from `false` to `true` left the whole suite green, because self-crit stayed
+        // NOT MET either way. `adjacent-ally` (derivable: false) and `not-hit-this-round`
+        // (derivable: true, but its context field is never populated by this page) are the two
+        // subjects the reviewer names as genuinely pinning the allow-list: both read as MET the
+        // moment the allow-list lets them through, so only the allow-list itself keeps them
+        // dropped.
+        it("an unanswerable derivable:false subject (adjacent-ally) stays dropped, not silently met via evaluateCondition's own assume-met fallback", () => {
+            // `evaluateCondition` returns `Math.max(0, cond.manualCount ?? 1)` — i.e. 1, MET — for
+            // ANY `derivable: false` condition before it even looks at `subject`. Only
+            // `isAnswerableCondition` refusing this subject up front stops that fallback from
+            // ever being consulted.
+            const adjacentAllyAbility = {
                 config: { type: 'buff', buffName: 'Defense Up II' },
-                conditions: [{ subject: 'self-crit', derivable: true }],
+                conditions: [{ subject: 'adjacent-ally', derivable: false }],
             };
-            const result = gatedAutoFilledBuffs([buff()], skills([selfCritAbility]), defaultState);
+            const result = gatedAutoFilledBuffs(
+                [buff()],
+                skills([adjacentAllyAbility]),
+                defaultState
+            );
             expect(result).toHaveLength(1);
             expect(result[0].buffId).toBe('Defense Up II-passive1-self');
         });
 
-        it('a mixed AND (one answerable-met, one unanswerable) is treated as wholly unanswerable', () => {
-            // hp-threshold above 50% is met at full health, but self-crit can never be answered —
-            // the whole path must stay dropped, not partially credited.
+        it("an unanswerable subject (not-hit-this-round) stays dropped even though this page's context would read it as MET", () => {
+            // `wasHitThisRound` is never populated by `buildPageConditionContext`, so
+            // `evaluateCondition`'s 'not-hit-this-round' arm (`ctx.wasHitThisRound ? 0 : 1`) reads
+            // undefined -> falsy -> 1 -> MET. Only the allow-list refusing this subject keeps the
+            // gate dropped.
+            const notHitAbility = {
+                config: { type: 'buff', buffName: 'Defense Up II' },
+                conditions: [{ subject: 'not-hit-this-round', derivable: true }],
+            };
+            const result = gatedAutoFilledBuffs([buff()], skills([notHitAbility]), defaultState);
+            expect(result).toHaveLength(1);
+            expect(result[0].buffId).toBe('Defense Up II-passive1-self');
+        });
+
+        it('a mixed AND (one answerable-met, one allow-list-unanswerable) is treated as wholly unanswerable', () => {
+            // hp-threshold above 50% is met at full health, but adjacent-ally (derivable: false)
+            // is never on the allow-list — the whole path must stay dropped, not partially
+            // credited.
             const mixedAbility = {
                 config: { type: 'buff', buffName: 'Defense Up II' },
                 conditions: [
@@ -334,11 +366,83 @@ describe('gatedAutoFilledBuffs', () => {
                         hpPercent: 50,
                         hpSubject: 'self',
                     },
-                    { subject: 'self-crit', derivable: true },
+                    { subject: 'adjacent-ally', derivable: false },
                 ],
             };
             const result = gatedAutoFilledBuffs([buff()], skills([mixedAbility]), defaultState);
             expect(result).toHaveLength(1);
+        });
+
+        // Item 2 (#391 final review): the no-enemy sentinel (`enemyDebuffCount` left `undefined`
+        // rather than fabricated to `0`) only does observable work on `eq`/`lte` comparators —
+        // `gte 3` against 0 or undefined is NOT MET either way, so the existing `gte`-based tests
+        // above cannot tell the sentinel apart from its absence. Deleting the sentinel (making
+        // `enemyDebuffCount` unconditionally `state.enemyDebuffNames.length`) makes THIS gate
+        // silently COUNT instead of drop, because a real 0 satisfies `eq 0` while `undefined`
+        // never does (`conditionMet` returns `false` outright on an `undefined` count).
+        it('Asphyxiator-shape (eq 0): stays unknowable with NO enemy configured, not silently satisfied by a fabricated zero', () => {
+            const enemyDebuffEqZeroAbility = {
+                config: { type: 'buff', buffName: 'Defense Up II' },
+                conditions: [
+                    {
+                        subject: 'enemy-debuff',
+                        derivable: true,
+                        countComparator: 'eq',
+                        countThreshold: 0,
+                    },
+                ],
+            };
+            const result = gatedAutoFilledBuffs(
+                [buff()],
+                skills([enemyDebuffEqZeroAbility]),
+                defaultState
+            );
+            expect(result).toEqual([
+                {
+                    buffId: 'Defense Up II-passive1-self',
+                    buffName: 'Defense Up II',
+                    reason: 'while the enemy has exactly 0 debuffs',
+                },
+            ]);
+        });
+
+        // Item 4 (#391 final review): `realGates` strips `subject: 'always'` before the array
+        // reaches `conditionsMet`, which groups CONSECUTIVE `anyOf` conditions into one OR-run.
+        // Stripping a middle `always` can make two previously-separated `anyOf` groups adjacent,
+        // silently turning an AND into an OR. Shape: an anyOf hp-threshold, a non-anyOf `always`,
+        // then an anyOf lowest-speed-ally. The engine's own grouping (on the UNFILTERED list) is
+        // `A AND true AND B` — two singleton/OR groups — so with A met and B unmet the whole path
+        // is NOT MET. Filtering `always` out first merges A and B into one OR-group (`A OR B`),
+        // which is MET and would silently count the buff.
+        it('stripping "always" does not merge two AND-ed anyOf groups into one OR-group', () => {
+            const alwaysBetweenOrGroupsAbility = {
+                config: { type: 'buff', buffName: 'Defense Up II' },
+                conditions: [
+                    {
+                        subject: 'hp-threshold',
+                        derivable: true,
+                        hpComparator: 'above',
+                        hpPercent: 50,
+                        hpSubject: 'self',
+                        anyOf: true,
+                    },
+                    { subject: 'always', derivable: true },
+                    { subject: 'lowest-speed-ally', derivable: true, anyOf: true },
+                ],
+            };
+            const result = gatedAutoFilledBuffs([buff()], skills([alwaysBetweenOrGroupsAbility]), {
+                selfSpeed: 100,
+                allySpeeds: [50], // a real, slower ally — lowest-speed-ally is NOT MET
+                hasEnemy: false,
+                enemyDebuffNames: [],
+            });
+            expect(result).toEqual([
+                {
+                    buffId: 'Defense Up II-passive1-self',
+                    buffName: 'Defense Up II',
+                    reason: 'above 50% HP or when this unit has the lowest Speed among allies',
+                },
+            ]);
         });
     });
 });

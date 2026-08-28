@@ -95,14 +95,26 @@ function buildPageConditionContext(state: GatedBuffsPageState): ConditionContext
 /**
  * Whether the page can genuinely answer this SINGLE condition — the answerability allow-list.
  * Deliberately small: admitting a subject here means `buildPageConditionContext` populates a
- * REAL (not fabricated) reading for it. Everything else, including every `derivable: false`
- * subject, is refused here and therefore never reaches `conditionsMet` — closing off the
- * assume-met fallback in `evaluateCondition` (`if (!cond.derivable) return Math.max(0,
- * cond.manualCount ?? 1)`, and the `ally-on-team` no-roster branch) that would otherwise make
- * an unknowable gate silently COUNT. This check runs on every condition in a grant path BEFORE
- * `conditionsMet` sees any of them — a path with one answerable and one unanswerable condition
- * (an AND) is treated as wholly unanswerable, not partially evaluated, per the ruling's "better
- * to drop a gate you could theoretically answer than to count one you cannot".
+ * REAL (not fabricated) reading for it. Every OTHER subject is refused here and therefore never
+ * reaches `conditionsMet` — closing off the assume-met fallback in `evaluateCondition`
+ * (`if (!cond.derivable) return Math.max(0, cond.manualCount ?? 1)`, and the `ally-on-team`
+ * no-roster branch) that would otherwise make an unknowable gate silently COUNT. This check runs
+ * on every condition in a grant path BEFORE `conditionsMet` sees any of them — a path with one
+ * answerable and one unanswerable condition (an AND) is treated as wholly unanswerable, not
+ * partially evaluated, per the ruling's "better to drop a gate you could theoretically answer
+ * than to count one you cannot".
+ *
+ * NOT closed off for an ADMITTED subject carrying `derivable: false`: this switch keys only on
+ * `cond.subject`, never on `cond.derivable`, so a hand-authored 'hp-threshold' (self)/
+ * 'lowest-speed-ally'/'enemy-debuff' condition with `derivable: false` still passes this gate and
+ * reaches `conditionsMet`, which lands it in `evaluateCondition`'s assume-met early return. That
+ * IS reachable in the live app — the ability editor is also a producer of `Condition`s, not just
+ * the skill-text parser: `ConditionRow.tsx`'s "Set manually (assume active)" checkbox sets
+ * `derivable: false` (+ `manualCount`), and it renders on this very card (`DefenseShipCard.tsx`
+ * -> `SkillSlotList` -> `AbilityCard` -> `ConditionRow`), wired back through `onShipSkillsChange`.
+ * A `derivable: false` condition on an admitted subject is therefore treated as its AUTHORED
+ * assumption, not a computed reading — deliberately; hardening it is a separate open ruling, not
+ * something this comment should misstate as already closed.
  */
 function isAnswerableCondition(cond: Condition): boolean {
     switch (cond.subject) {
@@ -202,14 +214,26 @@ export function gatedAutoFilledBuffs(
         if (!matches.length) continue;
 
         // Per grant path: unconditional, or gated-but-genuinely-satisfied paths make the buff
-        // stand; a path is "genuinely satisfied" only when EVERY condition on it is answerable
-        // (isAnswerableCondition) AND the engine's own `conditionsMet` says the answerable set is
-        // met. A path with any unanswerable condition never reaches `conditionsMet` at all — see
-        // `isAnswerableCondition`'s doc for why that ordering is load-bearing.
+        // stand; a path is "genuinely satisfied" only when EVERY REAL condition on it is
+        // answerable (isAnswerableCondition) AND the engine's own `conditionsMet` says the FULL,
+        // UNFILTERED condition list is met. A path with any unanswerable condition never reaches
+        // `conditionsMet` at all — see `isAnswerableCondition`'s doc for why that ordering is
+        // load-bearing.
+        //
+        // `conditionsMet` is deliberately called with `a.conditions` (unfiltered), not `gates`
+        // (the `always`-stripped list): `conditionsMet` groups conditions into AND-ed OR-runs by
+        // CONSECUTIVE `anyOf`, so stripping a middle `always` before grouping can merge two
+        // separate OR-groups into one — turning `A AND always AND B` (an AND) into `A OR B` once
+        // `always` is gone from between them. `always` itself always evaluates to 1 (met), so
+        // handing the engine the unfiltered list is equivalent everywhere else and never changes
+        // the verdict on its own — it only preserves the grouping. `gates` (the filtered list)
+        // stays reserved for the answerability check and the printed reason string, where an
+        // `always` entry has no phrasing and isn't a real gate to name.
         const pathReasons = matches.map((a) => {
-            const gates = realGates(a.conditions);
+            const conditions = a.conditions ?? [];
+            const gates = realGates(conditions);
             if (gates.length === 0) return null; // unconditional — this path stands
-            if (gates.every(isAnswerableCondition) && conditionsMet(gates, ctx)) return null;
+            if (gates.every(isAnswerableCondition) && conditionsMet(conditions, ctx)) return null;
             return reasonForConditions(gates);
         });
 
