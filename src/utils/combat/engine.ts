@@ -1689,7 +1689,9 @@ interface ReactiveSideCtx {
         emitBus?: CombatEventBus
     ) => void;
     /** Live self-HP% for a same-side drain owner (drain-time hp-threshold gates). Optional —
-     *  absent/undefined → buildDrainContext defaults the gate to 100 (DPS / pre-4c). Sourced from
+     *  absent/undefined → buildDrainContext defaults the gate to 100. Pre-#415 this was always the
+     *  DPS-mode case (no `healTarget` to source it from); #415 anchors `healTarget` to the focus in
+     *  every mode, so the player side is now always defined here, DPS included. Sourced from
      *  bySide(side).selfHpPctFor (bySide PR3): player = heal-target HP, enemy = 100 until PR5. */
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
@@ -3244,9 +3246,10 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  supplied no roster. Recomputed per gate eval (speed is dynamic). */
         lowestSpeedIds: () => Set<string>;
         /** Live self-HP% for a same-side drain owner (hp-threshold gates). Player side reads the
-         *  heal target's live HP (every other id → 100), undefined in DPS mode (→ buildDrainContext
-         *  defaults to 100). Enemy side returns 100 for every owner (no per-actor enemy HP until
-         *  PR5). Consumed in Task 2. */
+         *  heal target's live HP (every other id → 100). #415 anchors `healTarget` to the focus in
+         *  every mode, so this is now defined in DPS mode too — it was undefined there pre-#415,
+         *  defaulting to 100 via buildDrainContext. Enemy side returns 100 for every owner (no
+         *  per-actor enemy HP until PR5). Consumed in Task 2. */
         selfHpPctFor?: (ownerId: string) => number;
         /** Same-side ids adjacent to `ownerId` on the board (living, owner excluded). Positional
          *  → board neighbours; non-positional (no positions wired) → all living same-side allies. */
@@ -3516,9 +3519,12 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
-    // the turn-start DoT tick but not the cast's heal. DPS mode (no healTarget) → 100 → a "below
-    // N" target gate fails → the grant is inert in DPS (correct). Defined here so every player
-    // turn dispatch (attacker + walked team) reads the same denominator (recipientMaxHp).
+    // the turn-start DoT tick but not the cast's heal. Pre-#415, DPS mode had no `healTarget`, so
+    // this always returned 100 there — a "below N" target gate always failed, inert by
+    // construction. #415 anchors `healTarget` to the focus (the attacker, absent an explicit heal
+    // target) in every mode, so DPS now reads this actor's real live HP% too. Defined here so
+    // every player turn dispatch (attacker + walked team) reads the same denominator
+    // (recipientMaxHp).
     const healTargetHpPctNow = (): number => {
         if (!healTarget) return 100;
         const maxHp = recipientMaxHp(healTarget.id);
@@ -3974,8 +3980,11 @@ export function runCombat(rawInput: CombatEngineInput): {
      * documented one.
      *
      * Feeds `IntentExecContext.lowestHpAllyIdFor` (reactives) and the standing-leech procs.
-     * `undefined` without a healing ctx (DPS mode): there is no live HP view to rank over, and the
-     * consumers answer "no recipient" rather than falling back to the owner.
+     * `undefined` without a healing ctx: there is no live HP view to rank over, and the consumers
+     * answer "no recipient" rather than falling back to the owner. Pre-#415 this guard always
+     * tripped in DPS mode (no `healTarget` meant no `healingCtx`); #415 anchors `healTarget` to the
+     * focus in every mode, so `healingCtx` is now always built — DPS mode ranks a real
+     * `lowest-hp-ally` recipient too, rather than defaulting to "no recipient".
      */
     const lowestHpAllyIdForOwner = (ownerId: string): string | undefined => {
         if (!healingCtx) return undefined;

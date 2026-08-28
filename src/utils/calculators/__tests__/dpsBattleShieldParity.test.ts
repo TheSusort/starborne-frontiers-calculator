@@ -8,6 +8,12 @@
  * The battle arm is NOT re-driven here: `simulateBattle` builds its own event bus and ignores an
  * injected one, so a hand-rolled battle arm reads as agreement no matter what. The shipped
  * integration test is the battle arm; this file is the DPS half of the same claim.
+ *
+ * NOT a duplicate of `dpsFullEngineRun.test.ts`'s shield test, despite landing on the same numbers
+ * (`[200k,200k,200k]` granted, `[200k,400k,600k]` pool): that one grants via an on-cast, active-slot
+ * ability, exercised through the inline cast path. This one grants via a passive-slot
+ * `start-of-turn` ability, exercised through the reactive bus-registration path
+ * (`partitionReactiveAbilities` → listener). Same result, different code path — both are needed.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
