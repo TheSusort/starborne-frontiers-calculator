@@ -26,10 +26,21 @@ const useDebouncedNumericField = (
 ): [string, (raw: string) => void] => {
     const [draft, setDraft] = useState(String(committed));
     const timer = useRef<ReturnType<typeof setTimeout>>();
+    // The last value THIS HOOK pushed upward via `onCommit`. Used to tell an external change
+    // (ship picker, URL param) apart from that same commit echoing back down through `committed`
+    // once the parent re-renders — only the former should cancel a pending edit and reset the
+    // draft; the latter must leave continued typing alone.
+    const lastCommitted = useRef(committed);
 
-    // Adopt an externally-changed value (ship picker, URL param) unless the user is mid-edit.
+    // An external change to `committed` always wins and cancels whatever the user had mid-typed —
+    // unlike the pre-fix guard (`timer.current === undefined`), which let a still-armed timer keep
+    // the stale draft on screen and then commit IT over the freshly-selected ship's stat.
     useEffect(() => {
-        if (timer.current === undefined) setDraft(String(committed));
+        if (committed === lastCommitted.current) return; // our own commit echoing back — ignore
+        clearTimeout(timer.current);
+        timer.current = undefined;
+        lastCommitted.current = committed;
+        setDraft(String(committed));
     }, [committed]);
 
     useEffect(() => () => clearTimeout(timer.current), []);
@@ -39,7 +50,9 @@ const useDebouncedNumericField = (
         clearTimeout(timer.current);
         timer.current = setTimeout(() => {
             timer.current = undefined;
-            onCommit(parseInt(raw) || 0);
+            const value = parseInt(raw) || 0;
+            lastCommitted.current = value;
+            onCommit(value);
         }, DEBOUNCE_MS);
     };
 

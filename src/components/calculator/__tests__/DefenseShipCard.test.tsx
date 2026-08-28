@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { DefenseShipCard } from '../DefenseShipCard';
 import { DefenseShipConfig } from '../../../types/calculator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
@@ -286,6 +286,55 @@ describe('DefenseShipCard', () => {
         renderCard({ config: { ...baseConfig, shipId: 'x' } });
         fireEvent.click(screen.getByText(/Show Advanced/i));
         expect(screen.queryByText('Passive')).not.toBeInTheDocument();
+    });
+
+    // Regression for the edit-then-select race (CodeRabbit finding on #393): a pending debounced
+    // edit must NOT survive a ship selection that lands inside the 250ms window. The adopt-effect
+    // used to gate on `timer.current === undefined`, so a still-armed timer kept the stale typed
+    // draft on screen and then committed IT, silently overwriting the freshly-selected ship's HP.
+    it('a ship selection within the debounce window cancels the pending edit and adopts the ship HP', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type into HP — this only arms the debounce timer, it does not commit yet.
+            fireEvent.change(hpInput, { target: { value: '5' } });
+            expect(hpInput).toHaveValue(5);
+
+            // Within the debounce window, the user picks a ship. In the real page this is
+            // `selectShipForConfig` writing `hp`/`defense`/`security` straight onto the config,
+            // which flows back down as a new `config` prop — simulate that here via rerender.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, hp: 40000 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The external change must win immediately — the input reflects the ship's HP, not
+            // the stale typed "5".
+            expect(screen.getByLabelText('HP')).toHaveValue(40000);
+
+            // And the cancelled timer must never fire: advancing past 250ms must not commit the
+            // stale typed value over the ship's HP.
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).not.toHaveBeenCalledWith('hp', 5);
+            expect(onUpdate).not.toHaveBeenCalled();
+            expect(screen.getByLabelText('HP')).toHaveValue(40000);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('shows a Passive row for a ship with passive skill text', () => {
