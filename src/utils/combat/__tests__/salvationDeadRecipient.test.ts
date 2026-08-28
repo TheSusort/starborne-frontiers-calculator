@@ -79,7 +79,7 @@ const makeHealing = (
             const consumed = Math.min(raw, 500);
             return { reversed: false, consumed, overheal: raw - consumed };
         },
-        grantShieldToTarget: () => 0,
+        grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
         playerIds,
         enemyIds: [],
         // SP-4e Task 2: no longer an "unused E5 field present for type-correctness" — the reactive

@@ -43,7 +43,7 @@ import {
     RegisteredAbilityStatus,
     createStatusEngine,
 } from './statusEngine';
-import { CombatEventBus } from './events';
+import { CombatEventBus, ShieldApplyAccumulator } from './events';
 import { detonateContainers, type DetonationRecipe } from './detonation';
 import { synthesizeResisted } from './shared';
 import {
@@ -183,6 +183,20 @@ export interface PlayerRoundCtx {
 export type HealApplyResult =
     { reversed: false; consumed: number; overheal: number } | { reversed: true };
 
+/** The outcome of one shield grant. TWO numbers, because the emit gate and the surfaced amount
+ *  need DIFFERENT bases (#418):
+ *   • `granted` — the POST-CAP pool growth. What the UI reads as "shield gained", and 0 for a
+ *     recipient whose pool was already saturated.
+ *   • `gross` — what the grant TRIED to apply. This is the "did it happen at all" signal, the
+ *     shield twin of the heal path's `healRawSum > 0` gate: a saturated recipient has
+ *     `gross > 0, granted 0` and MUST still emit `shield-applied`, whereas a no-op (dead
+ *     recipient, or a zero-magnitude grant) has `gross === 0` and must stay silent.
+ *  The clipped portion is `gross - granted` — the shield analogue of `overheal`. */
+export interface ShieldGrantResult {
+    granted: number;
+    gross: number;
+}
+
 /** Healing-mode context threaded into player turns (and later the executor). The ENGINE
  *  owns all mutation (applyHealToTarget/grantShieldToTarget close over the live target). */
 export interface HealingRuntimeCtx {
@@ -251,10 +265,11 @@ export interface HealingRuntimeCtx {
         repairSourceId: string
     ) => HealApplyResult;
     /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
-     *  Dead victim → no-op (returns 0). `victim` defaults to the heal target (E2 T1: optional
-     *  per-victim override for positional AoE leech). Returns the REAL pool growth (post-cap
-     *  delta) so the caller can build a shield-applied event (H3.6). */
-    grantShieldToTarget: (raw: number, victim?: CombatActor) => number;
+     *  Dead victim → no-op (returns `{ granted: 0, gross: 0 }`). `victim` defaults to the heal
+     *  target (E2 T1: optional per-victim override for positional AoE leech). Returns BOTH the
+     *  post-cap pool growth and the gross attempt so the caller can build a shield-applied event
+     *  (H3.6) that still fires on a saturated pool (#418) — see `ShieldGrantResult`. */
+    grantShieldToTarget: (raw: number, victim?: CombatActor) => ShieldGrantResult;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
     /** Fixed enemy-attacker-id order for an ENEMY caster's all-allies routing (E5). */
@@ -4848,29 +4863,26 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // (recipientsFor, grantShieldToTarget caps at recipientMaxHp, the absorb path).
                         // No crit / no modifiers (shields aren't repairs), matching the player branch.
                         const recipients = recipientsFor(ability, fromPassive);
-                        const shieldRecipientIds: string[] = [];
-                        let shieldGrantedSum = 0;
-                        const shieldPerTarget: { targetId: string; amount: number }[] = [];
+                        const shieldAcc = new ShieldApplyAccumulator();
                         for (const rid of recipients) {
                             const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                             const recipientActor = healing.recipientActor(rid);
                             if (recipientActor) {
-                                const granted = healing.grantShieldToTarget(raw, recipientActor);
-                                if (granted > 0) {
-                                    shieldRecipientIds.push(rid);
-                                    shieldGrantedSum += granted;
-                                    shieldPerTarget.push({ targetId: rid, amount: granted });
-                                }
+                                shieldAcc.add(
+                                    rid,
+                                    healing.grantShieldToTarget(raw, recipientActor)
+                                );
                             }
                         }
-                        if (shieldRecipientIds.length > 0) {
+                        if (shieldAcc.shouldEmit) {
                             bus.emit({
                                 type: 'shield-applied',
                                 granterId: actor.id,
-                                recipientIds: shieldRecipientIds,
+                                recipientIds: shieldAcc.recipientIds,
                                 round: r,
-                                amount: shieldGrantedSum,
-                                perTarget: shieldPerTarget,
+                                amount: shieldAcc.amount,
+                                ...shieldAcc.overshieldFields,
+                                perTarget: shieldAcc.perTarget,
                             });
                         }
                         continue;
@@ -4878,11 +4890,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     // Shields aren't repairs (documented assumption): NO crit, NO healModifier/
                     // outgoingHeal/incomingHeal channels — raw = basis × pct.
                     const recipients = recipientsFor(ability, fromPassive);
-                    // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied
-                    // per cast (NOT per recipient) carrying only recipients that actually gained pool.
-                    const shieldRecipientIds: string[] = [];
-                    let shieldGrantedSum = 0;
-                    const shieldPerTarget: { targetId: string; amount: number }[] = [];
+                    // H3.6: collect the per-recipient outcome so we emit ONE shield-applied per cast
+                    // (NOT per recipient). #418: the accumulator carries the gross attempt too, so
+                    // the emit gate is "the grant resolved onto someone", not "someone's pool grew".
+                    const shieldAcc = new ShieldApplyAccumulator();
                     for (const rid of recipients) {
                         const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                         healing.credit(actor.id, 'shield', raw);
@@ -4894,28 +4905,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // (mirrors the heal-recipient handling for an unwalked legacy team actor).
                         const recipientActor = healing.recipientActor(rid);
                         if (recipientActor) {
-                            const granted = healing.grantShieldToTarget(raw, recipientActor);
-                            if (granted > 0) {
-                                shieldRecipientIds.push(rid);
-                                shieldGrantedSum += granted;
-                                shieldPerTarget.push({ targetId: rid, amount: granted });
-                            }
+                            shieldAcc.add(rid, healing.grantShieldToTarget(raw, recipientActor));
                         }
                     }
-                    // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing only
-                    // recipients whose pool actually grew (granted > 0). Drives Resonating Fury
-                    // (on-shield-applied). No recipient gained pool → no event. Mirrors the
-                    // heal-performed emit below. NOTE: enemy event-only shields now grant their OWN
-                    // pool and emit their OWN shield-applied from the lifted event-only sub-branch
-                    // above; this player-path emit is the non-event-only (player-side) path.
-                    if (shieldRecipientIds.length > 0) {
+                    // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing
+                    // every RESOLVED recipient. Drives Resonating Fury (on-shield-applied).
+                    //
+                    // #418: this now genuinely mirrors the heal-performed emit below — it gates on
+                    // the GROSS attempt (`shouldEmit`), exactly as that one gates on
+                    // `healRawSum > 0`. The comment here used to CLAIM it mirrored that emit while
+                    // gating on post-cap pool growth, the opposite rule, so a grant onto a
+                    // saturated pool silently failed to fire Resonating Fury. Only a grant that
+                    // applied nothing at all is silenced now.
+                    //
+                    // NOTE: enemy event-only shields grant their OWN pool and emit their OWN
+                    // shield-applied from the lifted event-only sub-branch above; this player-path
+                    // emit is the non-event-only (player-side) path.
+                    if (shieldAcc.shouldEmit) {
                         bus.emit({
                             type: 'shield-applied',
                             granterId: actor.id,
-                            recipientIds: shieldRecipientIds,
+                            recipientIds: shieldAcc.recipientIds,
                             round: r,
-                            amount: shieldGrantedSum,
-                            perTarget: shieldPerTarget,
+                            amount: shieldAcc.amount,
+                            ...shieldAcc.overshieldFields,
+                            perTarget: shieldAcc.perTarget,
                         });
                     }
                 } else if (cfg.type === 'cleanse') {

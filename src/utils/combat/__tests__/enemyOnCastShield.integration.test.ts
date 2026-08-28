@@ -191,6 +191,46 @@ describe('enemy on-cast self-shield: pool grant + shield-applied emission', () =
             events.filter((e) => e.type === 'shield-applied' && e.granterId === 'foe')
         ).toHaveLength(0);
     });
+    // ── #418 ────────────────────────────────────────────────────────────────────────────────
+    it('#418: a saturated ENEMY pool still emits, with the clip in overshield (team symmetry)', () => {
+        // The enemy (event-only) cast branch is a THIRD emit site, separate from the player cast
+        // path and the reactive executor. #418's gate change has to hold on all three — combat
+        // engine work is team-symmetric by locked convention, and Resonating Fury exists on the
+        // enemy side too (the downstream-reactive case at the bottom of this file proves the
+        // channel is live for an enemy granter).
+        //
+        // 100% of Max HP saturates the pool on the enemy's first cast; the player deals 0 so
+        // nothing drains it, making every later cast a fully-clipped grant.
+        const bus = createEventBus();
+        const events: Extract<CombatEvent, { type: 'shield-applied' }>[] = [];
+        bus.on('shield-applied', (e) => {
+            if (e.type === 'shield-applied') events.push(e);
+        });
+        let captured: CombatActor[] = [];
+        runCombat(
+            playerAttacksEnemy([enemyAt('foe', 'M4', selfShieldActiveSkills(100), 0, 40_000, 50)], {
+                attack: 0, // nothing drains the pool → round 2's grant is entirely clipped
+                numRounds: 2,
+                bus,
+                __testTapActors: (actors) => {
+                    captured = actors;
+                },
+            })
+        );
+
+        // Instrument check: the enemy pool really is pinned at its max-HP cap.
+        expect(captured.find((a) => a.id === 'foe')?.shieldPool).toBe(40_000);
+
+        const enemyEvents = events.filter((e) => e.granterId === 'foe');
+        expect(enemyEvents).toHaveLength(2);
+        // Round 1 filled the pool: real growth, nothing clipped.
+        expect(enemyEvents[0].amount).toBeCloseTo(40_000, 6);
+        expect(enemyEvents[0].overshield).toBeUndefined();
+        // Round 2 landed on a full pool: still emitted, growth 0, clip carried in overshield.
+        expect(enemyEvents[1].recipientIds).toEqual(['foe']);
+        expect(enemyEvents[1].amount).toBe(0);
+        expect(enemyEvents[1].overshield).toBeCloseTo(40_000, 6);
+    });
 });
 
 describe('enemy on-cast self-shield: chains to the enemy Nyxen shield-hit counter', () => {

@@ -316,7 +316,12 @@ describe('Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse emission', () => 
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: (raw) => shields.push(raw),
+            grantShieldToTarget: (raw) => {
+                shields.push(raw);
+                // #418: the real closure returns both the post-cap growth and the gross
+                // attempt. This stub caps nothing, so the two are equal.
+                return { granted: raw, gross: raw };
+            },
             playerIds: ['enemy1', 'tank'],
             // E5 + SP-4e Task 4: an enemy heal resolves over the ENEMY roster (the caster's own
             // side) — by the support footprint for a plain `'ally'`, or by live HP for a text-named
@@ -634,7 +639,12 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
                 appliedTo.push(victim.id);
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: (raw) => shields.push(raw),
+            grantShieldToTarget: (raw) => {
+                shields.push(raw);
+                // #418: the real closure returns both the post-cap growth and the gross
+                // attempt. This stub caps nothing, so the two are equal.
+                return { granted: raw, gross: raw };
+            },
             playerIds: ['attacker', 'tank'],
             // Neither of these two is read by the path this describe exercises: `tickHot` passes
             // the acting actor straight to `applyHealToTarget` (the holder IS that actor, by

@@ -33,6 +33,7 @@ import {
 import { createEventBus } from '../events';
 import { createStatusEngine } from '../statusEngine';
 import type { CombatActor } from '../state';
+import type { ShieldGrantResult } from '../playerTurn';
 import type { Ability } from '../../../types/abilities';
 
 const OWNER_ID = 'medic';
@@ -76,7 +77,9 @@ function captureIntentForOverheal(overheal: number): Intent {
     return intents[0];
 }
 
-function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) => void): {
+function makeShieldCtx(
+    grantShieldToTarget: (raw: number, actor: CombatActor) => ShieldGrantResult
+): {
     ctx: IntentExecContext;
 } {
     const bus = createEventBus();
@@ -179,7 +182,12 @@ describe('H3.3 — reactive overheal shield basis', () => {
         expect(intent.eventCtx?.overhealAmount).toBe(OH);
 
         // Step 2: the executor's overheal basis reads overhealAmount and lands on the ally.
-        const grantSpy = vi.fn<(raw: number, actor: CombatActor) => void>();
+        const grantSpy = vi.fn<(raw: number, actor: CombatActor) => ShieldGrantResult>(
+            // #418: the real closure returns the post-cap growth AND the gross attempt. This spy
+            // caps nothing, so the two are equal — the assertions below read `mock.calls`, not
+            // the return, so the shape only has to be a legal one.
+            (raw) => ({ granted: raw, gross: raw })
+        );
         const { ctx } = makeShieldCtx(grantSpy);
         executeIntent(intent, ctx);
 

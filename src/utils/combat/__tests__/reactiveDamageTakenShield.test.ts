@@ -29,6 +29,7 @@ import {
 import { createEventBus } from '../events';
 import { createStatusEngine } from '../statusEngine';
 import type { CombatActor } from '../state';
+import type { ShieldGrantResult } from '../playerTurn';
 import type { Ability } from '../../../types/abilities';
 
 const OWNER_ID = 'carrier';
@@ -63,7 +64,9 @@ function captureIntentForAttack(damage: number): Intent {
     return intents[0];
 }
 
-function makeShieldCtx(grantShieldToTarget: (raw: number, actor: CombatActor) => void): {
+function makeShieldCtx(
+    grantShieldToTarget: (raw: number, actor: CombatActor) => ShieldGrantResult
+): {
     ctx: IntentExecContext;
 } {
     const bus = createEventBus();
@@ -141,7 +144,12 @@ describe('H3.1 — reactive damage-taken shield basis', () => {
         expect(intent.eventCtx?.triggerDamage).toBe(D);
 
         // Step 2: the executor's damage-taken basis reads triggerDamage.
-        const grantSpy = vi.fn<(raw: number, actor: CombatActor) => void>();
+        const grantSpy = vi.fn<(raw: number, actor: CombatActor) => ShieldGrantResult>(
+            // #418: the real closure returns the post-cap growth AND the gross attempt. This spy
+            // caps nothing, so the two are equal — the assertions below read `mock.calls`, not
+            // the return, so the shape only has to be a legal one.
+            (raw) => ({ granted: raw, gross: raw })
+        );
         const { ctx } = makeShieldCtx(grantSpy);
         executeIntent(intent, ctx);
 

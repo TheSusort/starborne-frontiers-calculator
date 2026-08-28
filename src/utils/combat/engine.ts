@@ -3939,7 +3939,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                   return { reversed: false, consumed, overheal: raw - consumed };
               },
               grantShieldToTarget: (raw, victim = healTarget) => {
-                  if (victim.currentHp <= 0) return 0; // dead → no-op
+                  // dead → no-op. `gross: 0` (not `raw`) is the value that would keep a grant onto
+                  // a CORPSE silent at #418's emit gate: a saturated pool and a dead recipient are
+                  // both "granted 0", and only `gross` separates "the grant landed and was clipped"
+                  // from "nothing was applied at all".
+                  //
+                  // ⚠️ It is correct but NOT test-observable, measured 2026-08-28: no emit site can
+                  // reach this arm. `recipientsFor` never selects a dead ship on the two cast paths,
+                  // and the reactive executor `continue`s on `recipientHp <= 0` before its shield
+                  // branch. The one channel that DOES reach here — a damage-taken leech shield onto
+                  // a fresh corpse — is the standing-leech site below, which emits no
+                  // shield-applied by design. Mutating this to `gross: raw` reddens nothing.
+                  // See the matching note in shieldAppliedEvent.test.ts before "fixing" a test for it.
+                  if (victim.currentHp <= 0) return { granted: 0, gross: 0 };
                   const targetMaxHp = recipientMaxHp(victim.id);
                   // Capped at the CURRENT effective max HP. Note: if a max-HP buff later expires
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
@@ -3956,9 +3968,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                       (perActorShieldGranted.get(victim.id) ?? 0) + actualGranted
                   );
                   // H3.6: return the REAL pool growth so the cast path / reactive executor can
-                  // build the shield-applied event's recipientIds (granted > 0) + amount. Existing
-                  // callers ignore the return (non-breaking — call for effect only).
-                  return actualGranted;
+                  // build the shield-applied event's `amount`; #418 adds `gross` so those sites
+                  // can gate the EMIT on the attempt rather than on the growth. `raw` can be
+                  // negative in no shipped path, but Math.max keeps `gross` from ever reporting a
+                  // grant that could not have happened.
+                  return { granted: actualGranted, gross: Math.max(0, raw) };
               },
               playerIds,
               enemyIds: enemyRecipientIds,

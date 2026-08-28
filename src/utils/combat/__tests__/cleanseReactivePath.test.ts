@@ -249,7 +249,7 @@ function makeCtx(opts?: {
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => undefined,
             applyHealToTarget: () => ({ reversed: false as const, consumed: 0, overheal: 0 }),
-            grantShieldToTarget: () => {},
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: [OWNER_ID],
             enemyIds: [],
             // SP-4e fix wave 1: production supplies `(id) => allActorsById.get(id)`, which
@@ -539,7 +539,7 @@ describe('Task 3: reactive cleanse executor — procChance + crit-count', () => 
             recipientIncomingHealPct: () => 0,
             applierMaxHp: () => undefined,
             applyHealToTarget: () => ({ reversed: false as const, consumed: 0, overheal: 0 }),
-            grantShieldToTarget: () => {},
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: [OWNER_ID],
             enemyIds: [],
             // Faithful to production (see the note on the main double above).

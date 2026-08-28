@@ -583,7 +583,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
                 applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: () => 0,
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: PLAYER_IDS,
             enemyIds: [],
             // SP-4e Task 2: the reactive heal branch resolves `recipientActor` to decide whose
