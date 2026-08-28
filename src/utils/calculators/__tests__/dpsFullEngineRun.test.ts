@@ -8,6 +8,8 @@ import { simulateDPS } from '../dpsSimulator';
 import { setupKeyedTestRng } from '../rateAccumulator';
 import { baseInput, damageKit } from '../__testutils__/dpsRealEnemyFixture';
 import type { ShipSkills } from '../../../types/abilities';
+import { runCombat } from '../../combat/engine';
+import { bareInput, bareEnemy } from '../../combat/__testutils__/bareRosterFixture';
 
 /** A focus that damages AND shields itself for 20% of its own max HP on every cast. */
 const selfShieldKit = (): ShipSkills => ({
@@ -50,5 +52,35 @@ describe('#415 the DPS calculator runs the full engine', () => {
         // BEEN ALIVE — it is not a corpse — so it must still take its turn.
         const { rounds } = simulateDPS(baseInput({ shipSkills: damageKit(), rounds: 3 }));
         expect(rounds.every((r) => r.directDamage > 0)).toBe(true);
+    });
+});
+
+describe('#415 the healing report stays out of a DPS result', () => {
+    beforeEach(() => setupKeyedTestRng(12345));
+
+    it('omits the healing block in dps mode', () => {
+        const result = runCombat({ ...bareInput(), mode: 'dps' });
+        expect('healing' in result).toBe(false);
+    });
+
+    it('keeps the healing block in battle mode', () => {
+        const result = runCombat({ ...bareInput(), mode: 'battle', enemyAttackers: bareEnemy() });
+        expect('healing' in result).toBe(true);
+    });
+
+    it('keeps the healing block in healing mode', () => {
+        const result = runCombat({
+            ...bareInput(),
+            mode: 'healing',
+            healTargetId: 'attacker',
+            enemyAttackers: bareEnemy(),
+        });
+        expect('healing' in result).toBe(true);
+    });
+
+    it('still refuses an explicit healTargetId in dps mode', () => {
+        expect(() => runCombat({ ...bareInput(), mode: 'dps', healTargetId: 'attacker' })).toThrow(
+            /healTargetId requires mode/
+        );
     });
 });
