@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { DefenseShipCard } from '../DefenseShipCard';
 import { DefenseShipConfig } from '../../../types/calculator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
@@ -286,6 +286,195 @@ describe('DefenseShipCard', () => {
         renderCard({ config: { ...baseConfig, shipId: 'x' } });
         fireEvent.click(screen.getByText(/Show Advanced/i));
         expect(screen.queryByText('Passive')).not.toBeInTheDocument();
+    });
+
+    // Regression for the edit-then-select race (CodeRabbit finding on #393): a pending debounced
+    // edit must NOT survive a ship selection that lands inside the 250ms window. The adopt-effect
+    // used to gate on `timer.current === undefined`, so a still-armed timer kept the stale typed
+    // draft on screen and then committed IT, silently overwriting the freshly-selected ship's HP.
+    it('a ship selection within the debounce window cancels the pending edit and adopts the ship HP', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type into HP — this only arms the debounce timer, it does not commit yet.
+            fireEvent.change(hpInput, { target: { value: '5' } });
+            expect(hpInput).toHaveValue(5);
+
+            // Within the debounce window, the user picks a ship. In the real page this is
+            // `selectShipForConfig` writing `hp`/`defense`/`security` straight onto the config,
+            // which flows back down as a new `config` prop — simulate that here via rerender.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, hp: 40000 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The external change must win immediately — the input reflects the ship's HP, not
+            // the stale typed "5".
+            expect(screen.getByLabelText('HP')).toHaveValue(40000);
+
+            // And the cancelled timer must never fire: advancing past 250ms must not commit the
+            // stale typed value over the ship's HP.
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).not.toHaveBeenCalledWith('hp', 5);
+            expect(onUpdate).not.toHaveBeenCalled();
+            expect(screen.getByLabelText('HP')).toHaveValue(40000);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Residual of the fix above (task 6, fix 2): the echo-guard in `useDebouncedNumericField`
+    // compares NUMBERS. If a genuinely external change lands a value that numerically EQUALS the
+    // already-committed value — a different ship whose HP happens to coincide — the `committed`
+    // prop does not change across the render, so React never re-runs the cancel effect at all,
+    // and a pending edit survives to overwrite the freshly-selected ship's stat. A `resetKey`
+    // (the config's `shipId`) closes this: it changes even when the number doesn't, and
+    // unconditionally cancels the pending timer.
+    it('a ship selection whose HP EQUALS the current committed value still cancels the pending edit', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({
+                onUpdate,
+                config: { ...baseConfig, shipId: 'ship-a' },
+            });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type a different value — arms the debounce timer, does not commit yet.
+            fireEvent.change(hpInput, { target: { value: '99999' } });
+            expect(hpInput).toHaveValue(99999);
+
+            // Within the debounce window, select a DIFFERENT ship whose HP numerically EQUALS the
+            // original committed value (baseConfig.hp === 10000). The numeric prop does not
+            // change, but the ship identity does.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, shipId: 'ship-b', hp: 10000 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The new ship's HP must be shown immediately, not the stale typed "99999".
+            expect(screen.getByLabelText('HP')).toHaveValue(10000);
+
+            // And the cancelled timer must never fire.
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).not.toHaveBeenCalled();
+            expect(screen.getByLabelText('HP')).toHaveValue(10000);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Task 6 final-review item 1 — THE ECHO GUARD. `useDebouncedNumericField` effect 1 opens with
+    // `if (committed === lastCommitted.current) return;` before it does anything else. Deleting
+    // that one line leaves every other test in this file (and the sim call-count/page suites)
+    // green, because none of them re-render the card with the SAME value the hook itself just
+    // committed while the user keeps typing.
+    //
+    // Scenario: the user types "5"; the debounce fires and commits it (`lastCommitted.current`
+    // becomes 5); the parent re-renders with `config.hp === 5` — its own commit echoing back down
+    // through props, simulated here via `rerender`, exactly as the ship-selection tests above
+    // simulate a real prop change; and, in the same window, the user types more digits, landing
+    // the draft on "53". Effect 1 then runs because `committed` really did change (10000 -> 5)
+    // across that render. The guard is what tells that render apart from a genuinely NEW external
+    // value: `committed` (5) equals `lastCommitted.current` (5), so it is the hook's own echo and
+    // must leave the draft alone. Delete the guard and the effect unconditionally resets the draft
+    // to "5", silently eating the digits the user just typed.
+    it('does not stomp continued typing when its own commit echoes back through the committed prop', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type "5" and let the debounce commit it.
+            fireEvent.change(hpInput, { target: { value: '5' } });
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).toHaveBeenCalledWith('hp', 5);
+
+            // Keep typing before the parent's re-render (carrying that same committed value 5)
+            // lands.
+            fireEvent.change(screen.getByLabelText('HP'), { target: { value: '53' } });
+            expect(screen.getByLabelText('HP')).toHaveValue(53);
+
+            // The parent re-renders with `config.hp` now equal to the value THIS hook just
+            // committed — the echo.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, hp: 5 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The echo must NOT stomp the digits the user typed after the commit.
+            expect(screen.getByLabelText('HP')).toHaveValue(53);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // Task 6 final-review item 4 — a real UX regression this branch introduced. The inputs moved
+    // from `value={config.hp}` to `value={hpDraft}`, which removed the `parseInt` snap-back the
+    // page used to get for free: typing "5.5" left the field reading "5.5" indefinitely even
+    // though the committed value (and every derived figure that reads `config.hp`) was already
+    // "5". The fix snaps the draft to the committed integer AT COMMIT TIME, once the debounce
+    // fires — not on every keystroke, which would fight the user mid-typing.
+    it('snaps the displayed draft to the committed integer once the debounce fires', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            renderCard({ onUpdate });
+
+            const hpInput = screen.getByLabelText('HP');
+            fireEvent.change(hpInput, { target: { value: '5.5' } });
+            // Mid-typing, the raw text stays on screen untouched.
+            expect(screen.getByLabelText('HP')).toHaveValue(5.5);
+
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+
+            // The commit itself used the integer (pre-existing `parseInt` behaviour)…
+            expect(onUpdate).toHaveBeenCalledWith('hp', 5);
+            // …and now the DISPLAYED value reconciles with it too, instead of showing "5.5"
+            // forever while the sim and derived figures already read "5".
+            expect(screen.getByLabelText('HP')).toHaveValue(5);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('shows a Passive row for a ship with passive skill text', () => {

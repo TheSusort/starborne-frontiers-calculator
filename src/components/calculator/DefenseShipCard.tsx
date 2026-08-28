@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
@@ -14,6 +14,78 @@ import { useShips } from '../../contexts/ShipsContext';
 import { getSkillRowForSlot } from '../../utils/ship/skillRows';
 import { SkillSlotList } from '../skills/SkillSlotList';
 import { GameBuffPicker } from './GameBuffPicker';
+
+const DEBOUNCE_MS = 250;
+
+/** Local display value + trailing-edge push. These three inputs write straight through to
+ *  `configs`, and each write re-runs a full engine simulation per config — typing seven digits
+ *  into HP ran seven passes on the render path. */
+const useDebouncedNumericField = (
+    committed: number,
+    onCommit: (value: number) => void,
+    // Identifies WHICH SHIP this card is showing (`config.shipId ?? ''`). The numeric echo check
+    // below is blind to an external change that happens to land the same number the hook already
+    // committed (e.g. selecting a different ship whose HP coincides with the current value) —
+    // `committed` doesn't change across that render, so React never re-runs the effect at all.
+    // `resetKey` changes regardless of the number, so it catches that case unconditionally.
+    resetKey: string
+): [string, (raw: string) => void] => {
+    const [draft, setDraft] = useState(String(committed));
+    const timer = useRef<ReturnType<typeof setTimeout>>();
+    // The last value THIS HOOK pushed upward via `onCommit`. Used to tell an external change
+    // (ship picker, URL param) apart from that same commit echoing back down through `committed`
+    // once the parent re-renders — only the former should cancel a pending edit and reset the
+    // draft; the latter must leave continued typing alone.
+    const lastCommitted = useRef(committed);
+    // The previous `resetKey` seen. Only a CHANGE should force a reset — on first render it must
+    // not fight the initial `useState(String(committed))`, and it must not fire on a re-render
+    // where the key is unchanged (which would clobber a user's in-progress typing).
+    const lastResetKey = useRef(resetKey);
+
+    // An external change to `committed` always wins and cancels whatever the user had mid-typed —
+    // unlike the pre-fix guard (`timer.current === undefined`), which let a still-armed timer keep
+    // the stale draft on screen and then commit IT over the freshly-selected ship's stat.
+    useEffect(() => {
+        if (committed === lastCommitted.current) return; // our own commit echoing back — ignore
+        clearTimeout(timer.current);
+        timer.current = undefined;
+        lastCommitted.current = committed;
+        setDraft(String(committed));
+    }, [committed]);
+
+    // A ship-identity change always wins too, even when the incoming number happens to equal what
+    // is already committed — the case the numeric check above cannot see at all.
+    useEffect(() => {
+        if (resetKey === lastResetKey.current) return;
+        lastResetKey.current = resetKey;
+        clearTimeout(timer.current);
+        timer.current = undefined;
+        lastCommitted.current = committed;
+        setDraft(String(committed));
+    }, [resetKey, committed]);
+
+    useEffect(() => () => clearTimeout(timer.current), []);
+
+    const onChange = (raw: string) => {
+        setDraft(raw);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => {
+            timer.current = undefined;
+            const value = parseInt(raw) || 0;
+            lastCommitted.current = value;
+            // Snap the draft to the committed INTEGER now, at commit time — not on every
+            // keystroke, which would fight the user mid-typing. Before this, `value={hpDraft}`
+            // (in place of the old `value={config.hp}`) had removed the `parseInt` snap-back the
+            // page used to get for free: "5.5" stayed on screen indefinitely even though the sim
+            // and every derived figure (Theoretical EHP, Damage Reduction, HP Multiplier) were
+            // already reading the committed "5". Same for "1e5" -> 1, "007" -> 7, "-" -> 0.
+            setDraft(String(value));
+            onCommit(value);
+        }, DEBOUNCE_MS);
+    };
+
+    return [draft, onChange];
+};
 
 interface DefenseShipCardProps {
     config: DefenseShipConfig;
@@ -60,6 +132,24 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     onShipSkillsChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
+    // Shared across all three fields on this card: a ship selection must reset HP, Defense, and
+    // Security together, not just the field whose number happened to change.
+    const resetKey = config.shipId ?? '';
+    const [hpDraft, onHpChange] = useDebouncedNumericField(
+        config.hp,
+        (value) => onUpdate('hp', value),
+        resetKey
+    );
+    const [defenseDraft, onDefenseChange] = useDebouncedNumericField(
+        config.defense,
+        (value) => onUpdate('defense', value),
+        resetKey
+    );
+    const [securityDraft, onSecurityChange] = useDebouncedNumericField(
+        config.security,
+        (value) => onUpdate('security', value),
+        resetKey
+    );
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;
     // Show the Passive slot whenever the ship has passive skill text to read/edit — not only
@@ -105,20 +195,20 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                     <Input
                         label="HP"
                         type="number"
-                        value={config.hp}
-                        onChange={(e) => onUpdate('hp', parseInt(e.target.value) || 0)}
+                        value={hpDraft}
+                        onChange={(e) => onHpChange(e.target.value)}
                     />
                     <Input
                         label="Defense"
                         type="number"
-                        value={config.defense}
-                        onChange={(e) => onUpdate('defense', parseInt(e.target.value) || 0)}
+                        value={defenseDraft}
+                        onChange={(e) => onDefenseChange(e.target.value)}
                     />
                     <Input
                         label="Security"
                         type="number"
-                        value={config.security}
-                        onChange={(e) => onUpdate('security', parseInt(e.target.value) || 0)}
+                        value={securityDraft}
+                        onChange={(e) => onSecurityChange(e.target.value)}
                     />
                 </div>
 

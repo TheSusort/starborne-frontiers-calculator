@@ -25,7 +25,7 @@
  * its mock block).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import DefenseCalculatorPage from '../DefenseCalculatorPage';
 import type { Ship } from '../../../types/ship';
@@ -89,10 +89,14 @@ const SHIPS_BY_ID = new Map<string, Ship>([
     [SLEDGEHAMMER.id, SLEDGEHAMMER],
 ]);
 
+// A FRESH closure per call gives the sim memo new inputs every render, so memo stability is
+// exercised only by the real ShipsContext (which wraps it in useCallback) and never by a test.
+const mockGetShipById = vi.fn((id: string): Ship | undefined => SHIPS_BY_ID.get(id));
+
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({
         ships: [...SHIPS_BY_ID.values()],
-        getShipById: (id: string) => SHIPS_BY_ID.get(id),
+        getShipById: mockGetShipById,
     }),
 }));
 vi.mock('../../../contexts/InventoryProvider', () => ({
@@ -141,60 +145,74 @@ vi.mock('recharts', () => {
 
 describe('DefenseCalculatorPage — zero-pressure ranking', () => {
     it('ranks on Theoretical EHP, not on the rounds a weak attacker racks up', async () => {
-        render(
-            <MemoryRouter>
-                <DefenseCalculatorPage />
-            </MemoryRouter>
-        );
+        // The HP/Defense inputs debounce their commit (Task 6, 250ms trailing edge). Fake timers +
+        // an explicit flush BEFORE reading rendered state — a real-time wait here would race
+        // `findByText`'s own polling, which could resolve against the still-stale, pre-edit
+        // committed values (both ships share the same sheet HP/Defense before this test's edits).
+        vi.useFakeTimers();
+        try {
+            render(
+                <MemoryRouter>
+                    <DefenseCalculatorPage />
+                </MemoryRouter>
+            );
 
-        // NO enemy is added. Deliberately: this is the default page, key 1 (`damageAbsorbed`) ties
-        // at 0, and the question is which key breaks that tie.
-        fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
+            // NO enemy is added. Deliberately: this is the default page, key 1 (`damageAbsorbed`)
+            // ties at 0, and the question is which key breaks that tie.
+            fireEvent.click(screen.getByRole('button', { name: 'Add Ship' }));
 
-        // ⚠️ ORDER IS THE TEST. The card that must LOSE is FIRST, so "first wins" and "best wins"
-        // cannot be the same answer. Card 1 is the weak attacker (many rounds, low Theoretical
-        // EHP); card 2 is the hard hitter (few rounds, high Theoretical EHP).
-        const pickWeak = screen.getAllByRole('button', { name: 'pick-peashooter' });
-        const pickHard = screen.getAllByRole('button', { name: 'pick-sledgehammer' });
-        expect(pickWeak).toHaveLength(2);
-        fireEvent.click(pickWeak[0]);
-        fireEvent.click(pickHard[1]);
+            // ⚠️ ORDER IS THE TEST. The card that must LOSE is FIRST, so "first wins" and "best
+            // wins" cannot be the same answer. Card 1 is the weak attacker (many rounds, low
+            // Theoretical EHP); card 2 is the hard hitter (few rounds, high Theoretical EHP).
+            const pickWeak = screen.getAllByRole('button', { name: 'pick-peashooter' });
+            const pickHard = screen.getAllByRole('button', { name: 'pick-sledgehammer' });
+            expect(pickWeak).toHaveLength(2);
+            fireEvent.click(pickWeak[0]);
+            fireEvent.click(pickHard[1]);
 
-        // Toughness is set AFTER selection, because selecting a ship overwrites hp/defense from the
-        // sheet. Card 2 is far tankier, so Theoretical EHP orders them the opposite way to rounds.
-        const hpInputs = screen.getAllByLabelText('HP');
-        const defenseInputs = screen.getAllByLabelText('Defense');
-        fireEvent.change(hpInputs[0], { target: { value: '10000' } });
-        fireEvent.change(defenseInputs[0], { target: { value: '0' } });
-        fireEvent.change(hpInputs[1], { target: { value: '999999' } });
-        fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+            // Toughness is set AFTER selection, because selecting a ship overwrites hp/defense from
+            // the sheet. Card 2 is far tankier, so Theoretical EHP orders them the opposite way to
+            // rounds.
+            const hpInputs = screen.getAllByLabelText('HP');
+            const defenseInputs = screen.getAllByLabelText('Defense');
+            fireEvent.change(hpInputs[0], { target: { value: '10000' } });
+            fireEvent.change(defenseInputs[0], { target: { value: '0' } });
+            fireEvent.change(hpInputs[1], { target: { value: '999999' } });
+            fireEvent.change(defenseInputs[1], { target: { value: '20000' } });
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
 
-        // LIVENESS 1 — the two configs really do have DIFFERENT round counts, so key 3 is not
-        // inert and this arm is genuinely discriminating. The weak attacker never finishes the
-        // practice target and reports the full window; the hard hitter ends the run early.
-        expect(await screen.findByText(/Survived all 20 rounds/)).toBeInTheDocument();
-        const earlyFinish = screen.getByText(/destroyed the inert practice target on round/);
-        expect(earlyFinish).toBeInTheDocument();
+            // LIVENESS 1 — the two configs really do have DIFFERENT round counts, so key 3 is not
+            // inert and this arm is genuinely discriminating. The weak attacker never finishes the
+            // practice target and reports the full window; the hard hitter ends the run early.
+            expect(screen.getByText(/Survived all 20 rounds/)).toBeInTheDocument();
+            const earlyFinish = screen.getByText(/destroyed the inert practice target on round/);
+            expect(earlyFinish).toBeInTheDocument();
 
-        // LIVENESS 2 — key 1 really is tied, so the tie-break ladder is what answered. With
-        // nothing shooting back the "Compared to best" row is suppressed (0/0), and the
-        // zero-pressure notice above the cards states the same thing.
-        expect(
-            screen.getByText(/No enemy attackers yet, so nothing is being thrown/)
-        ).toBeInTheDocument();
+            // LIVENESS 2 — key 1 really is tied, so the tie-break ladder is what answered. With
+            // nothing shooting back the "Compared to best" row is suppressed (0/0), and the
+            // zero-pressure notice above the cards states the same thing.
+            expect(
+                screen.getByText(/No enemy attackers yet, so nothing is being thrown/)
+            ).toBeInTheDocument();
 
-        // THE ASSERTION. The badge is on the tanky card — the SECOND one added, and the one with
-        // FEWER rounds. With `elapsedRounds` back at key 2 it lands on the Peashooter instead.
-        const badge = screen.getByText('Best ship configuration');
-        const bestCard = badge.closest('.card') as HTMLElement;
-        expect(bestCard).not.toBeNull();
-        expect(within(bestCard).getByDisplayValue('999999')).toBeInTheDocument();
-        expect(within(bestCard).getByDisplayValue('20000')).toBeInTheDocument();
-        // …and the early finish is on that same card, i.e. the winner is the one with the FEWEST
-        // rounds. Without this the assertion above would also pass on an engine where the tanky
-        // ship happened to survive longest.
-        expect(earlyFinish.closest('.card')).toBe(bestCard);
-        // Exactly one badge — a reduce that marks everything would satisfy the checks above.
-        expect(screen.getAllByText('Best ship configuration')).toHaveLength(1);
+            // THE ASSERTION. The badge is on the tanky card — the SECOND one added, and the one
+            // with FEWER rounds. With `elapsedRounds` back at key 2 it lands on the Peashooter
+            // instead.
+            const badge = screen.getByText('Best ship configuration');
+            const bestCard = badge.closest('.card') as HTMLElement;
+            expect(bestCard).not.toBeNull();
+            expect(within(bestCard).getByDisplayValue('999999')).toBeInTheDocument();
+            expect(within(bestCard).getByDisplayValue('20000')).toBeInTheDocument();
+            // …and the early finish is on that same card, i.e. the winner is the one with the
+            // FEWEST rounds. Without this the assertion above would also pass on an engine where
+            // the tanky ship happened to survive longest.
+            expect(earlyFinish.closest('.card')).toBe(bestCard);
+            // Exactly one badge — a reduce that marks everything would satisfy the checks above.
+            expect(screen.getAllByText('Best ship configuration')).toHaveLength(1);
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

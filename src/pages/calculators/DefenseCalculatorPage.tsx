@@ -233,6 +233,43 @@ const DefenseCalculatorPage: React.FC = () => {
         setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, shipSkills } : c)));
     };
 
+    // The sim reads every config field EXCEPT `name`, so keying the memo on `configs` re-ran a
+    // full engine simulation per config on every keystroke in the name box. The field list below
+    // is derived from the `simulateDefenseSurvivability({...})` call directly below — NOT from
+    // `DefenseShipConfig` — so a field added to the type but never passed to the sim cannot
+    // silently rejoin the key. `shipId` is included because it drives `targeting` via
+    // `getShipById`, and `id` because it is the sim-results map key.
+    //
+    // ⚠️ `configs.map(pick)` returns NEW objects every render, so the projection must be compared
+    // BY VALUE, not by identity, or this fixes nothing. The serialization IS the dependency.
+    const simInputKey = useMemo(
+        () =>
+            JSON.stringify(
+                configs.map((c) => [
+                    c.id,
+                    c.hp,
+                    c.defense,
+                    c.security,
+                    c.attack,
+                    c.crit,
+                    c.critDamage,
+                    c.speed,
+                    c.hacking,
+                    c.healModifier,
+                    c.chargeCount,
+                    c.startCharged,
+                    c.affinity,
+                    c.role,
+                    c.faction,
+                    c.position,
+                    c.shipId,
+                    c.buffs,
+                    c.shipSkills,
+                ])
+            ),
+        [configs]
+    );
+
     // ---- Survivability sim, memoized ----
     const simResults = useMemo(() => {
         const map = new Map<string, DefenseSurvivabilityResult>();
@@ -272,7 +309,9 @@ const DefenseCalculatorPage: React.FC = () => {
             );
         });
         return map;
-    }, [configs, globalBuffs, teamActors, enemyInputs, rounds, getShipById]);
+        // `configs` is read through `simInputKey` (by-value) deliberately — see the comment above.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [simInputKey, globalBuffs, teamActors, enemyInputs, rounds, getShipById]);
 
     const globalBuffTotals = useMemo(
         () => ({
