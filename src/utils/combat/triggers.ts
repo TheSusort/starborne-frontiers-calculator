@@ -48,7 +48,7 @@ import { BARRIER_BUFFS } from './barrierBuffs';
 import { resolveSupportRecipients, narrowByFaction } from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
-import { CombatEvent, CombatEventBus, CombatEventType } from './events';
+import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
 import { CombatActor, ActiveDoTStack, PendingBomb } from './state';
 import {
     ActiveAbilityStatus,
@@ -871,10 +871,15 @@ export function registerReactiveListeners(args: {
                     bus.on('shield-applied', (e) => {
                         // Granter-scoped (H3.6 keys the event on the acting granter): THIS owner
                         // applied a shield (Resonating Fury). One enqueue per CAST -> one proc-gate
-                        // roll; the grant fans out to every recipient whose pool grew via
+                        // roll; the grant fans out to every RESOLVED recipient via
                         // eventCtx.shieldRecipientIds (mirrors on-own-repair-to-ally/repairedAllyIds).
-                        // An empty recipient list (no pool grew) emits no event by construction, but
-                        // guard defensively so a 0-recipient event never enqueues a no-op intent.
+                        //
+                        // #418: "every recipient whose pool GREW" is no longer the rule — a grant
+                        // onto a saturated pool resolves onto its recipient and lists it, so this
+                        // reaction now fires there too (before #418 the event was never emitted at
+                        // all and the kit silently stopped working from the round the pool capped).
+                        // The 0-recipient guard below stays defensive-only: the engine cannot build
+                        // such an event, since a recipient is listed exactly when the emit gate opens.
                         if (e.granterId !== ownerId) return;
                         if (e.recipientIds.length === 0) return;
                         enqueue({
@@ -4534,11 +4539,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             overhealByAlly && Object.keys(overhealByAlly).length > 0
                 ? Object.keys(overhealByAlly)
                 : reactiveRecipients(intent, ctx, healing.targetId);
-        // H3.6: collect the per-recipient REAL pool growth so we emit ONE shield-applied per
-        // reactive shield (NOT per recipient) listing only recipients that actually gained pool.
-        const shieldRecipientIds: string[] = [];
-        let shieldGrantedSum = 0;
-        const shieldPerTarget: { targetId: string; amount: number }[] = [];
+        // H3.6: collect the per-recipient outcome so we emit ONE shield-applied per reactive
+        // shield (NOT per recipient). #418: the accumulator carries the gross attempt too, so the
+        // emit gate is "the grant resolved onto someone", not "someone's pool grew".
+        const shieldAcc = new ShieldApplyAccumulator();
         // #2 log visibility: accumulate the reactive HEAL's per-recipient raw repair so we can emit
         // ONE reactive-heal-performed after the loop (the executor emits no heal-performed).
         const healPerTarget: { targetId: string; amount: number }[] = [];
@@ -4640,12 +4644,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 // playerTurn.ts); an unresolvable recipient is credited but not pool-applied.
                 const recipientActor = ctx.healing.recipientActor(rid);
                 if (recipientActor) {
-                    const granted = ctx.healing.grantShieldToTarget(raw, recipientActor);
-                    if (granted > 0) {
-                        shieldRecipientIds.push(rid);
-                        shieldGrantedSum += granted;
-                        shieldPerTarget.push({ targetId: rid, amount: granted });
-                    }
+                    shieldAcc.add(rid, ctx.healing.grantShieldToTarget(raw, recipientActor));
                 }
             }
         }
@@ -4654,18 +4653,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // conventions). heal/shield therefore never chain.
         //
         // H3.6: shield IS the one exception — we DO emit shield-applied here (ONE per reactive
-        // shield, keyed on the owner, listing only recipients whose pool grew). This is
-        // intentional, NOT the deliberate no-heal-performed re-emit above: shield-applied drives
-        // Resonating Fury, which grants a BUFF (not a shield), so it cannot chain back into
-        // another shield-applied. No recipient gained pool → no event.
-        if (cfg.type === 'shield' && shieldRecipientIds.length > 0) {
+        // shield, keyed on the owner, listing every RESOLVED recipient). This is intentional, NOT
+        // the deliberate no-heal-performed re-emit above: shield-applied drives Resonating Fury,
+        // which grants a BUFF (not a shield), so it cannot chain back into another shield-applied.
+        //
+        // #418: gated on the GROSS attempt, so a reactive grant onto a SATURATED pool still emits
+        // (amount 0, clip in `overshield`) — same rule as the two cast sites and as the gross
+        // `healSum > 0` gate on the reactive HEAL emit below. A grant that applied nothing at all
+        // (dead recipient, zero magnitude) is still silenced.
+        if (cfg.type === 'shield' && shieldAcc.shouldEmit) {
             ctx.bus.emit({
                 type: 'shield-applied',
                 granterId: intent.ownerId,
-                recipientIds: shieldRecipientIds,
+                recipientIds: shieldAcc.recipientIds,
                 round: ctx.round,
-                amount: shieldGrantedSum,
-                perTarget: shieldPerTarget,
+                amount: shieldAcc.amount,
+                ...shieldAcc.overshieldFields,
+                perTarget: shieldAcc.perTarget,
             });
         }
         // #2 log visibility: a reactive HEAL emits reactive-heal-performed (NOT heal-performed —

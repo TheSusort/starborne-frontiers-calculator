@@ -228,20 +228,34 @@ export type CombatEvent =
     /** A shield-application cast resolved (one event per cast, not per recipient).
      *  `granterId` is the acting actor that applied the shield(s) — named granter (not
      *  caster) because Resonating Fury is granter-scoped and listens on this;
-     *  `recipientIds` are the recipients whose pool actually grew (actualGranted > 0) —
-     *  RF's buff targets; `amount` is the total shield actually granted this cast
-     *  (post-cap). `perTarget` carries the actually-granted amount per recipient
-     *  (post-cap, same filter as recipientIds: only entries where granted > 0). */
+     *  `recipientIds` are the recipients the grant RESOLVED onto — RF's buff targets;
+     *  `amount` is the total shield actually granted this cast (POST-CAP pool growth).
+     *
+     *  ⚠️ #418 — the emit gate is the GROSS attempt, not the pool growth. A grant onto an
+     *  already-saturated pool DID happen (the recipient was simply already full), so it emits
+     *  with `amount: 0` and the clipped portion in `overshield`. This mirrors `heal-performed`,
+     *  which gates on gross `healRawSum > 0` and carries the clip in `overheal`; before #418 the
+     *  shield path gated on post-cap growth — the opposite rule — and a saturated recipient
+     *  silently failed to fire `on-shield-applied` (Resonating Fury). Only a grant that applied
+     *  NOTHING AT ALL — a dead recipient, or a zero-magnitude grant — is silenced.
+     *
+     *  `recipientIds` therefore lists every RESOLVED recipient, including one whose pool did not
+     *  grow. Consumers wanting "actually gained pool" must read `perTarget[].amount > 0`. */
     | ({
           type: 'shield-applied';
           granterId: string;
           recipientIds: string[];
           round: number;
           amount: number;
-          /** Per-recipient breakdown: one entry per recipient whose pool actually grew
-           *  (mirrors `recipientIds`). `amount` is the post-cap pool growth for that
-           *  recipient. Always populated by the engine; absent only in hand-crafted test emits. */
-          perTarget?: { targetId: string; amount: number }[];
+          /** #418: the portion of the gross grant clipped by the max-HP cap, summed across
+           *  recipients. The shield twin of `overheal`. Present only when > 0, so every cast that
+           *  clips nothing emits the exact shape it emitted before #418. */
+          overshield?: number;
+          /** Per-recipient breakdown: one entry per RESOLVED recipient (mirrors `recipientIds`).
+           *  `amount` is the post-cap pool growth for that recipient — 0 when its pool was already
+           *  saturated — and `overshield` that recipient's clipped portion, present only when > 0.
+           *  Always populated by the engine; absent only in hand-crafted test emits. */
+          perTarget?: { targetId: string; amount: number; overshield?: number }[];
       } & ReactiveStamp)
     /** LOG-ONLY: a drain-time REACTIVE damage proc resolved (applyReactiveDamage → creditDamage).
      *  A reactive damage credits its total but emits NO `ability-performed` (chain guard — an
@@ -804,4 +818,57 @@ export function createEventBus(): CombatEventBus {
             }
         },
     };
+}
+
+/**
+ * Accumulator for the THREE `shield-applied` emit sites — the cast path, the enemy (event-only)
+ * cast path (both in `playerTurn.ts`) and the reactive executor (`triggers.ts`).
+ *
+ * It exists because #418 moved the emit gate from post-cap pool growth onto the GROSS attempt, and
+ * that rule has to hold identically at all three. Before #418 the three sites carried three
+ * hand-copied `if (granted > 0)` blocks and the shipped comment at one of them claimed it
+ * "mirrors the heal-performed emit below" when it did the precise opposite. One accumulator, one
+ * rule: `add()` per recipient, then `emit` only when `shouldEmit` — see the `shield-applied` doc
+ * above for the ruling.
+ */
+export class ShieldApplyAccumulator {
+    readonly recipientIds: string[] = [];
+    readonly perTarget: { targetId: string; amount: number; overshield?: number }[] = [];
+    private grantedSum = 0;
+    private grossSum = 0;
+
+    /** Book one recipient's grant outcome. A grant that applied nothing at all (`gross <= 0` — a
+     *  dead recipient, or a zero-magnitude grant) is NOT booked: it never happened, so it must
+     *  neither appear in `recipientIds` nor open the emit gate. */
+    add(targetId: string, outcome: { granted: number; gross: number }): void {
+        if (outcome.gross <= 0) return;
+        const clipped = outcome.gross - outcome.granted;
+        this.recipientIds.push(targetId);
+        this.grantedSum += outcome.granted;
+        this.grossSum += outcome.gross;
+        this.perTarget.push({
+            targetId,
+            amount: outcome.granted,
+            ...(clipped > 0 ? { overshield: clipped } : {}),
+        });
+    }
+
+    /** True once ANY grant resolved onto a recipient — the shield twin of `healRawSum > 0`. Note
+     *  this is deliberately NOT `grantedSum > 0`: a fully-clipped grant onto a saturated pool has
+     *  `grantedSum === 0` and MUST emit. */
+    get shouldEmit(): boolean {
+        return this.grossSum > 0;
+    }
+
+    /** Total POST-CAP pool growth — the event's `amount`. 0 for an entirely-clipped cast. */
+    get amount(): number {
+        return this.grantedSum;
+    }
+
+    /** The `overshield` spread: present only when something was clipped, so a cast that clips
+     *  nothing emits the exact shape it emitted before #418 and no existing fixture moves. */
+    get overshieldFields(): { overshield?: number } {
+        const clipped = this.grossSum - this.grantedSum;
+        return clipped > 0 ? { overshield: clipped } : {};
+    }
 }

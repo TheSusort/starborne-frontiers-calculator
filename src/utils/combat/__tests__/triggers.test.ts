@@ -2734,7 +2734,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: () => 0,
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: ['A'],
             enemyIds: [],
             // SP-4e: the reactive heal branch now applies to the RESOLVED recipient's own pool
@@ -3258,7 +3258,7 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
                 applied.push(raw);
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: () => 0,
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: ['A'],
             enemyIds: [],
             // SP-4e: see the identical note on the once-per-combat double above — the reactive
@@ -3530,7 +3530,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
                 applied.push({ raw, id: victim?.id, sourceId: repairSourceId });
                 return { reversed: false, consumed: raw, overheal: 0 };
             },
-            grantShieldToTarget: () => 0,
+            grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: PLAYER_IDS,
             enemyIds: [],
             // SP-4e: production resolves every roster id here (`allActorsById.get`), and the

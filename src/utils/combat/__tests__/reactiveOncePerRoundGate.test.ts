@@ -158,7 +158,10 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
     });
 
     it('(b) shield oncePerRound: grants once this round, not twice, resets next round', () => {
-        const shieldSpy = vi.fn();
+        // #418: must return a legal ShieldGrantResult — the executor now folds the outcome
+        // into the shield-applied accumulator. Inert (nothing granted, nothing attempted): this
+        // test counts CALLS, not events.
+        const shieldSpy = vi.fn(() => ({ granted: 0, gross: 0 }));
         const consumed = new Set<string>();
         const intent = makeShieldIntent({ oncePerRound: true });
 
@@ -188,7 +191,10 @@ describe('D-PR14: reactive damage/shield branches — passesOncePerRoundGate', (
     });
 
     it('(c-shield) no oncePerRound: shield grants on every trigger (pass-through)', () => {
-        const shieldSpy = vi.fn();
+        // #418: must return a legal ShieldGrantResult — the executor now folds the outcome
+        // into the shield-applied accumulator. Inert (nothing granted, nothing attempted): this
+        // test counts CALLS, not events.
+        const shieldSpy = vi.fn(() => ({ granted: 0, gross: 0 }));
         const consumed = new Set<string>();
         const intent = makeShieldIntent(/* no oncePerRound */);
 
