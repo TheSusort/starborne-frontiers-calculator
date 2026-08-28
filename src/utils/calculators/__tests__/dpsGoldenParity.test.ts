@@ -1304,4 +1304,148 @@ describe('dpsGoldenParity', () => {
             };
         }
     );
+    // ─────────────────────────────────────────────────────────────────────────────────────────
+    // Scenarios 24-26: the shield / repair / leech family #415 made live in DPS mode.
+    //
+    // WHY THREE SCENARIOS AND NOT SIX. Measured 2026-08-28, RNG pinned per simulation. (The
+    // suite bootstrap seeds once per `it`, so a probe that runs several sims inside ONE test
+    // reads its own stream drift as engine nondeterminism — re-seed per run or the sensitivity
+    // reading is worthless.) Each shape was run with the ability and without it, and the whole
+    // `DPSSimulationResult` compared:
+    //
+    //   channel                                fired?               result moved?
+    //   shield, cast rider (basis 'hp')        shield-applied x12   YES — perActorShield
+    //   repair, cast rider (basis 'hp')        heal-performed x12   NO  — nothing
+    //   repair leech, passive 'damage-dealt'   no event             NO  — nothing
+    //   shield leech, passive 'damage-dealt'   no event             YES — perActorShield
+    //   shield leech, passive 'damage-taken'   no event             YES — perActorShield
+    //
+    // `RoundData` carries `perActorShield` and NO repair field of any kind (see its declaration
+    // in dpsSimulator.ts — perActorShield / Reflected / Splash / Detonation / Incoming, and no
+    // heal sibling). The REPAIR-flavoured half of this family is therefore unobservable through
+    // this surface BY CONSTRUCTION: a repair golden here would be green, deterministic and
+    // blind. Those channels are covered where the healing buckets are readable —
+    // `combat/__tests__/leech.test.ts` and `combat/__tests__/healing.test.ts`. Do not "complete"
+    // this file with a repair scenario; add it there.
+    //
+    // NOTE the third column of the table: a leech-granted shield pool moves the result but emits
+    // NO `shield-applied`, while the cast rider emits one per grant. Measured directly —
+    // 30,000 granted / 0 events (damage-dealt) and 16,081 granted / 0 events (damage-taken)
+    // against 30,000 granted / 12 events for the cast rider. That asymmetry is a live gap in the
+    // same family as #418, tracked separately; these goldens lock the ACCOUNTING either way, so
+    // they stay valid whichever way the emit question is settled.
+
+    // Scenario 24: cast-rider shield — the per-round ramp AND the max-HP cap plateau.
+    // 20% of 30,000 max HP = 6,000 granted per round against a 30,000 cap, so the pool climbs
+    // for five rounds and then plateaus: every later round grants 0 while `pool` holds at max.
+    // The enemy never attacks, so nothing drains it — this golden is purely the grant-side
+    // ledger and the cap that bounds it.
+    snap('cast-rider shield: per-round grant ramp to the max-HP cap plateau', () => ({
+        ...BASE,
+        chargeCount: 0,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                        ab({
+                            type: 'shield',
+                            target: 'self',
+                            config: { type: 'shield', pct: 20, basis: 'hp' },
+                        }),
+                    ],
+                },
+            ],
+        },
+    }));
+
+    // Scenario 25: OUTGOING shield leech — passive-slot `basis: 'damage-dealt'`, the standing
+    // leech owned by the engine's credit hook (`procStandingLeechesPerVictim`) rather than the
+    // cast path. The grant scales with what the focus actually dealt that round, so this golden
+    // couples the damage ledger to the shield ledger: a change to either moves it.
+    snap('outgoing shield leech (passive damage-dealt) grants pool from credited damage', () => ({
+        ...BASE,
+        chargeCount: 0,
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'shield',
+                            target: 'self',
+                            config: { type: 'shield', pct: 25, basis: 'damage-dealt' },
+                        }),
+                    ],
+                },
+            ],
+        },
+    }));
+
+    // Scenario 26: INCOMING shield leech — passive-slot `basis: 'damage-taken'` (the Malvex /
+    // Quixilver shape), against a REAL attacking enemy. This is the only golden in the file that
+    // fields an attacking enemy, and it is load-bearing: `damage-taken` cannot proc without one,
+    // and the page's own default is `attack: 0`.
+    //
+    // The behavioural lock is survival, not just accounting. Measured: with the leech the focus
+    // lasts all 12 requested rounds; with the ability removed and nothing else changed it dies
+    // and the run truncates to 9. So a regression that kills this channel does not merely zero a
+    // column here — it shortens the snapshot by three rounds.
+    snap('incoming shield leech (passive damage-taken) absorbs and extends the run', () => ({
+        ...BASE,
+        chargeCount: 0,
+        enemyAttackers: [
+            {
+                id: 'e1',
+                stats: {
+                    attack: 9000,
+                    crit: 0,
+                    critDamage: 0,
+                    speed: 50,
+                    defence: 8000,
+                    hp: 400000,
+                    security: 100,
+                },
+                chargeCount: 0,
+                startCharged: false,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({ type: 'damage', config: { type: 'damage', multiplier: 100 } }),
+                            ],
+                        },
+                    ],
+                },
+            },
+        ],
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        ab({ type: 'damage', config: { type: 'damage', multiplier: 150 } }),
+                    ],
+                },
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'shield',
+                            target: 'self',
+                            config: { type: 'shield', pct: 40, basis: 'damage-taken' },
+                        }),
+                    ],
+                },
+            ],
+        },
+    }));
 });
