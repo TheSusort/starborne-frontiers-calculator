@@ -369,3 +369,80 @@ describe('#415 lowest-hp-ally resolves to a real recipient in DPS mode', () => {
         expect(heals.map((h) => h.targets)).toEqual(heals.map(() => [ALLY_ID]));
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+// (f) The MID-TURN dead-focus guard — the sibling of the top-of-turn one
+//     (`handleDeadTargetSkip`, fixed in e02ab4bb).
+//
+// `handleDeadTargetSkip` catches a focus that was ALREADY dead when its turn came up. It cannot
+// catch a focus killed by its OWN turn-start timed burst: `applyPositionedTimedBurst` stamps
+// `destroyedRound` inside `applyVictimDamage` AFTER the top-of-turn skip has run, which is why
+// `engine.ts` carries a second `burstDestroyedActor` check inside the turn body. That check
+// carried the same `!(healTarget && actor.id === healTarget.id)` carve-out, unreachable in DPS
+// mode while `healTarget` was `undefined` there — #415's anchor turned it ON, so a focus killed by
+// its own burst fell through it and cast anyway.
+//
+// The probe: an enemy that plants a one-round Bomb on the focus and is fast enough to go first.
+// The bomb bursts at the focus's own turn-start, for more than the focus's remaining HP. The
+// destroyed focus must book NO direct damage in the round it dies.
+// ─────────────────────────────────────────────────────────────────────────────────────────────
+
+/** Damage + a one-round Bomb, aimed at the focus. `duration: 1` makes it burst at the victim's
+ *  NEXT turn-start, which — with the enemy at speed 9999 and the focus below it — is inside the
+ *  focus's own turn body, after the top-of-turn dead-skip has already run. */
+const enemyBombKit = (): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                ...damageKit().slots[0].abilities,
+                {
+                    id: 'eb1',
+                    type: 'dot',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'dot', dotType: 'bomb', tier: 500, stacks: 1, duration: 1 },
+                },
+            ],
+        },
+    ],
+});
+
+describe('#415 a focus killed by its own turn-start burst does not act', () => {
+    beforeEach(() => setupKeyedTestRng(12345));
+
+    it('books no direct damage in the round it dies', () => {
+        const { rounds } = simulateDPS(
+            baseInput({
+                // 200,000 HP against a 100,000-attack enemy plus a tier-500 Bomb: the focus is
+                // destroyed in round 1, mid-turn, by the burst — not by the enemy's direct hit
+                // (which lands first and leaves it alive; the guard under test only exists for the
+                // burst's after-the-fact stamp).
+                hp: 200_000,
+                rounds: 3,
+                enemyAttackers: [
+                    {
+                        id: 'enemy-1',
+                        stats: {
+                            attack: 100_000,
+                            crit: 0,
+                            critDamage: 150,
+                            speed: 9999,
+                            defence: 1000,
+                            hp: 10_000_000,
+                            security: 100,
+                        },
+                        chargeCount: 0,
+                        startCharged: false,
+                        shipSkills: enemyBombKit(),
+                    },
+                ],
+            })
+        );
+
+        // Red before the `focusActorId` clause was added to `burstDestroyedActor`: the destroyed
+        // focus fell through the carve-out and cast, booking real direct damage in its death round.
+        expect(rounds.map((r) => r.directDamage)).toEqual(rounds.map(() => 0));
+    });
+});

@@ -10772,9 +10772,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // currentHp 0). healTarget carve-out mirrors the top-of-turn guard. A focus
                         // actor killed by its own burst must still push a synthesized focus turn so
                         // the post-round focusTurns.length guard does not throw.
+                        // #415: the `focusActorId` clause is the MID-TURN twin of the unconditional
+                        // branch added to handleDeadTargetSkip (`:9533`) — the top-of-turn guard
+                        // cannot catch this death, which is the whole reason this second check
+                        // exists. Anchoring healTarget to the focus in every mode turned the
+                        // healTarget carve-out ON in DPS mode, so a focus killed by its own
+                        // turn-start timed burst fell through and cast anyway. A DESTROYED FOCUS
+                        // MUST NEVER ACT, in any mode; the carve-out survives only for a heal
+                        // target that is NOT the focus (an explicitly-healed walked ally), which is
+                        // where it was aimed to begin with.
                         const burstDestroyedActor =
                             actor.destroyedRound !== undefined &&
-                            !(healTarget && actor.id === healTarget.id);
+                            (actor.id === focusActorId ||
+                                !(healTarget && actor.id === healTarget.id));
                         if (!burstDestroyedActor) {
                             // SP-F F5: on a charge-firing turn, resolve BOTH the footprint pattern
                             // and the target selection from the CHARGED axes (each falls back to
