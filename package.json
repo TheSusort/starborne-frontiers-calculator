@@ -48,6 +48,7 @@
         "audit:kit-ledger": "tsx scripts/writeKitLedger.ts",
         "audit:interactions": "tsx scripts/auditInteractions.ts",
         "audit:placement-symmetry": "tsx scripts/auditPlacementSymmetry.ts",
+        "audit:gated-buffs": "tsx scripts/auditGatedBuffs.ts",
         "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts",
         "fetch:ship-data": "tsx scripts/fetch-ship-data.ts",
         "audit": "node scripts/audit.mjs"

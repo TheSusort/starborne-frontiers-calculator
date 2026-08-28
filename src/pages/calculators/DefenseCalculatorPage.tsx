@@ -537,6 +537,7 @@ const DefenseCalculatorPage: React.FC = () => {
                                 noEnemiesConfigured={enemies.length === 0}
                                 buffTotals={mergedBuffTotals.get(config.id)}
                                 result={simResults.get(config.id)}
+                                gatedBuffs={gatedBuffsByConfig.get(config.id)}
                                 onRemove={() => removeConfig(config.id)}
                                 onUpdate={(field, value) => updateConfig(config.id, field, value)}
                                 onSelectShip={(ship) => selectShipForConfig(config.id, ship)}

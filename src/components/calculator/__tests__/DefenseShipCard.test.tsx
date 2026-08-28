@@ -178,6 +178,20 @@ describe('DefenseShipCard', () => {
         ).toBeInTheDocument();
     });
 
+    // Task 9 (#391) — the disclosure line under Theoretical EHP names what was left out and why.
+    it('names a gated buff and its reason under Theoretical EHP', () => {
+        renderCard({
+            gatedBuffs: [{ buffId: 'buff-1', buffName: 'Defense Up II', reason: 'below 60% HP' }],
+        });
+        expect(screen.getByText(/Not counted \(conditional\)/i)).toBeInTheDocument();
+        expect(screen.getByText(/Defense Up II - below 60% HP/i)).toBeInTheDocument();
+    });
+
+    it('renders no disclosure line when there are no gated buffs', () => {
+        renderCard({ gatedBuffs: [] });
+        expect(screen.queryByText(/Not counted \(conditional\)/i)).not.toBeInTheDocument();
+    });
+
     // #358 ADDENDUM 3 (Part B, finding 6) — THE BREAKDOWN ROWS ARE ROUNDED. They rendered through a
     // bare `.toLocaleString()` while the headline was `Math.round`-ed, so a real fight printed
     // "To hull 24,999.667" directly under a clean "30,000". Fractional fixture values, because an

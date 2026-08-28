@@ -36,6 +36,12 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'ally-on-team': 'when a specific ally is on the team',
     'lowest-speed-ally': 'when this unit has the lowest Speed among allies',
     'target-repaired-this-round': 'when the target was repaired this round',
+    // Task 9 (#391 review): these three previously had no entry, so conditionSummary's
+    // fallback printed the raw enum string (e.g. "enemy-dot-count") on any card that
+    // surfaces a gate reason — invisible until the Theoretical EHP disclosure line existed.
+    'enemy-dot-count': 'per DoT effect on the enemy',
+    'every-n-turns': 'on a recurring turn interval',
+    'stat-vs-target': "when a stat compares favourably to the target's",
 };
 
 /** Human-facing name for `Condition.hpSubject`. 'self' is deliberately absent — it
@@ -155,6 +161,21 @@ export function conditionSummary(condition: Condition): string {
             return condition.negate
                 ? `when targeting a non-${condition.requiredEnemyType}`
                 : `when targeting a ${condition.requiredEnemyType}`;
+        // Handled here rather than by the top-of-function countThresholdPhrase() guard: that
+        // guard's "only reached when the condition carries no buffName" rule assumes buffName
+        // always means a NAMED buff/debuff gate with its own phrasing above. For
+        // 'enemy-dot-count' buffName instead names a DoT FAMILY (e.g. "Acidic Decay") and is
+        // meant to combine WITH the threshold, not replace it — so this subject needs its own
+        // case rather than falling into the generic guard or the raw-enum fallback.
+        case 'enemy-dot-count': {
+            if (condition.countComparator && condition.countThreshold !== undefined) {
+                const comparatorWord = COUNT_COMPARATOR_WORDS[condition.countComparator];
+                const n = condition.countThreshold;
+                const noun = condition.buffName ?? (n === 1 ? 'DoT' : 'DoTs');
+                return `while the enemy has ${comparatorWord} ${n} ${noun}`;
+            }
+            return fallbackLabel(condition.subject);
+        }
         default:
             return fallbackLabel(condition.subject);
     }

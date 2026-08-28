@@ -2913,17 +2913,22 @@ const DocumentationPage: React.FC = () => {
                                         third figure, and the old static one: an estimate computed
                                         from hangar stats (HP and Defense only), not a measurement.
                                         No enemy ever fires at it, and it cannot see shields,
-                                        Barrier or self-repair. A conditionally-gated buff it{' '}
-                                        <em>does</em> see &mdash; but not the gate: the buff is read
-                                        out of the skill text and counted as permanently active, so
-                                        the estimate is overstated rather than blind. Redeemer is
-                                        the concrete case: its first passive grants Defense Up II
-                                        only once its own HP drops below 60%, and this figure
-                                        applies that +30% Defense from the first moment. On a
-                                        100,000 HP ship at 5,000 Defense that is the difference
-                                        between 240,062 and 283,125. Theoretical EHP is shown so you
-                                        can compare, but where the two disagree the measured pair is
-                                        the one that saw the real fight.
+                                        Barrier or self-repair. A kit buff whose own grant carries a
+                                        condition is held back rather than counted as always-on:
+                                        Redeemer&apos;s first passive grants Defense Up II only once
+                                        its own HP drops below 60%, so at full health this figure
+                                        now leaves that +30% Defense out. On a 100,000 HP ship at
+                                        5,000 Defense that is the difference between counting it
+                                        (283,125) and holding it back (240,062) &mdash; the figure
+                                        now reads the lower number until the gate is actually met.
+                                        When a config has one or more buffs held back this way, the
+                                        card lists them under &ldquo;Not counted
+                                        (conditional)&rdquo; by name and reason, e.g. &ldquo;Defense
+                                        Up II - below 60% HP&rdquo;. A buff you add yourself through
+                                        the buff picker is unaffected by any of this &mdash; it
+                                        always counts, gate or no gate. Theoretical EHP is shown so
+                                        you can compare, but where the two disagree the measured
+                                        pair is the one that saw the real fight.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">The breakdown</span> (to

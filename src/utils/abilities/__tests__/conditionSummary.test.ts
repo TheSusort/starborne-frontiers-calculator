@@ -228,4 +228,64 @@ describe('conditionSummary', () => {
             })
         ).toBe('while the enemy is affected by Exposed');
     });
+
+    // --- Task 9 (#391 review): three subjects with no CONDITION_SUBJECT_LABELS entry, which
+    // previously made conditionSummary print the raw enum string. ---
+
+    it('renders a readable label for every-n-turns instead of the raw enum', () => {
+        expect(
+            conditionSummary({ subject: 'every-n-turns', derivable: true, period: 2, offset: 1 })
+        ).toBe('on a recurring turn interval');
+    });
+
+    it('renders a readable label for stat-vs-target instead of the raw enum', () => {
+        expect(
+            conditionSummary({
+                subject: 'stat-vs-target',
+                derivable: true,
+                compareStat: 'speed',
+                statComparator: 'gt',
+            })
+        ).toBe("when a stat compares favourably to the target's");
+    });
+
+    it('renders a readable fallback label for enemy-dot-count with no threshold', () => {
+        expect(conditionSummary({ subject: 'enemy-dot-count', derivable: true })).toBe(
+            'per DoT effect on the enemy'
+        );
+    });
+
+    it('renders enemy-dot-count with a count threshold and no named DoT family', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-dot-count',
+                derivable: true,
+                countComparator: 'gte',
+                countThreshold: 3,
+            })
+        ).toBe('while the enemy has at least 3 DoTs');
+    });
+
+    it('renders enemy-dot-count singular at threshold 1', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-dot-count',
+                derivable: true,
+                countComparator: 'eq',
+                countThreshold: 1,
+            })
+        ).toBe('while the enemy has exactly 1 DoT');
+    });
+
+    it('renders enemy-dot-count with a named DoT family, combining threshold and name', () => {
+        expect(
+            conditionSummary({
+                subject: 'enemy-dot-count',
+                derivable: true,
+                buffName: 'Acidic Decay',
+                countComparator: 'gte',
+                countThreshold: 3,
+            })
+        ).toBe('while the enemy has at least 3 Acidic Decay');
+    });
 });

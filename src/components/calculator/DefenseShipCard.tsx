@@ -4,6 +4,7 @@ import { ShipSkills } from '../../types/abilities';
 import { DefenseShipConfig, DefenseBuffTotals, SelectedGameBuff } from '../../types/calculator';
 import { computeBuffedStats } from '../../utils/calculators/defenseCalculator';
 import { DefenseSurvivabilityResult } from '../../utils/calculators/defenseSurvivabilitySim';
+import { GatedBuff } from '../../utils/calculators/gatedBuffs';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
@@ -109,6 +110,11 @@ interface DefenseShipCardProps {
      *  `survived` is true — see the render below for why survivors and casualties must never
      *  read as the same kind of number. */
     result?: DefenseSurvivabilityResult;
+    /** Auto-filled kit buffs excluded from Theoretical EHP because their grant is conditionally
+     *  gated (Task 8). Computed once on the page from `gatedAutoFilledBuffs` and passed down here
+     *  — never recomputed in the card — so the disclosure line always agrees with the number it
+     *  is explaining. */
+    gatedBuffs?: GatedBuff[];
     onRemove: () => void;
     onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
     onSelectShip: (ship: Ship) => void;
@@ -125,6 +131,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     noEnemiesConfigured = false,
     buffTotals,
     result,
+    gatedBuffs,
     onRemove,
     onUpdate,
     onSelectShip,
@@ -442,6 +449,19 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                         ignores shields, Barrier, self-repair and conditional gating, and no enemy
                         ever fires at it. Prefer the measured figures above when one is available.
                     </div>
+                    {gatedBuffs && gatedBuffs.length > 0 && (
+                        // Task 9 (#391): names what Theoretical EHP left out and why, so "conditional
+                        // gating" above isn't a vague disclaimer — Redeemer's Defense Up II is only
+                        // gated below 60% HP, and the card now says so by name.
+                        <div className="text-xs text-theme-text-secondary -mt-1 mb-3">
+                            <div>Not counted (conditional):</div>
+                            {gatedBuffs.map((gated) => (
+                                <div key={gated.buffId}>
+                                    - {gated.buffName} - {gated.reason}
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <div className="flex justify-between mb-2">
                         <span className="text-theme-text-secondary">Damage Reduction:</span>
                         <span>{damageReduction.toFixed(2)}%</span>
