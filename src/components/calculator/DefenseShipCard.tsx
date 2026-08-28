@@ -22,7 +22,13 @@ const DEBOUNCE_MS = 250;
  *  into HP ran seven passes on the render path. */
 const useDebouncedNumericField = (
     committed: number,
-    onCommit: (value: number) => void
+    onCommit: (value: number) => void,
+    // Identifies WHICH SHIP this card is showing (`config.shipId ?? ''`). The numeric echo check
+    // below is blind to an external change that happens to land the same number the hook already
+    // committed (e.g. selecting a different ship whose HP coincides with the current value) —
+    // `committed` doesn't change across that render, so React never re-runs the effect at all.
+    // `resetKey` changes regardless of the number, so it catches that case unconditionally.
+    resetKey: string
 ): [string, (raw: string) => void] => {
     const [draft, setDraft] = useState(String(committed));
     const timer = useRef<ReturnType<typeof setTimeout>>();
@@ -31,6 +37,10 @@ const useDebouncedNumericField = (
     // once the parent re-renders — only the former should cancel a pending edit and reset the
     // draft; the latter must leave continued typing alone.
     const lastCommitted = useRef(committed);
+    // The previous `resetKey` seen. Only a CHANGE should force a reset — on first render it must
+    // not fight the initial `useState(String(committed))`, and it must not fire on a re-render
+    // where the key is unchanged (which would clobber a user's in-progress typing).
+    const lastResetKey = useRef(resetKey);
 
     // An external change to `committed` always wins and cancels whatever the user had mid-typed —
     // unlike the pre-fix guard (`timer.current === undefined`), which let a still-armed timer keep
@@ -42,6 +52,17 @@ const useDebouncedNumericField = (
         lastCommitted.current = committed;
         setDraft(String(committed));
     }, [committed]);
+
+    // A ship-identity change always wins too, even when the incoming number happens to equal what
+    // is already committed — the case the numeric check above cannot see at all.
+    useEffect(() => {
+        if (resetKey === lastResetKey.current) return;
+        lastResetKey.current = resetKey;
+        clearTimeout(timer.current);
+        timer.current = undefined;
+        lastCommitted.current = committed;
+        setDraft(String(committed));
+    }, [resetKey, committed]);
 
     useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -104,14 +125,23 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     onShipSkillsChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
-    const [hpDraft, onHpChange] = useDebouncedNumericField(config.hp, (value) =>
-        onUpdate('hp', value)
+    // Shared across all three fields on this card: a ship selection must reset HP, Defense, and
+    // Security together, not just the field whose number happened to change.
+    const resetKey = config.shipId ?? '';
+    const [hpDraft, onHpChange] = useDebouncedNumericField(
+        config.hp,
+        (value) => onUpdate('hp', value),
+        resetKey
     );
-    const [defenseDraft, onDefenseChange] = useDebouncedNumericField(config.defense, (value) =>
-        onUpdate('defense', value)
+    const [defenseDraft, onDefenseChange] = useDebouncedNumericField(
+        config.defense,
+        (value) => onUpdate('defense', value),
+        resetKey
     );
-    const [securityDraft, onSecurityChange] = useDebouncedNumericField(config.security, (value) =>
-        onUpdate('security', value)
+    const [securityDraft, onSecurityChange] = useDebouncedNumericField(
+        config.security,
+        (value) => onUpdate('security', value),
+        resetKey
     );
     const { getShipById } = useShips();
     const selectedShip = config.shipId ? getShipById(config.shipId) : undefined;

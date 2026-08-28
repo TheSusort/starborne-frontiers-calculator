@@ -337,6 +337,58 @@ describe('DefenseShipCard', () => {
         }
     });
 
+    // Residual of the fix above (task 6, fix 2): the echo-guard in `useDebouncedNumericField`
+    // compares NUMBERS. If a genuinely external change lands a value that numerically EQUALS the
+    // already-committed value — a different ship whose HP happens to coincide — the `committed`
+    // prop does not change across the render, so React never re-runs the cancel effect at all,
+    // and a pending edit survives to overwrite the freshly-selected ship's stat. A `resetKey`
+    // (the config's `shipId`) closes this: it changes even when the number doesn't, and
+    // unconditionally cancels the pending timer.
+    it('a ship selection whose HP EQUALS the current committed value still cancels the pending edit', () => {
+        vi.useFakeTimers();
+        try {
+            const onUpdate = vi.fn();
+            const { rerender } = renderCard({
+                onUpdate,
+                config: { ...baseConfig, shipId: 'ship-a' },
+            });
+
+            const hpInput = screen.getByLabelText('HP');
+            // Type a different value — arms the debounce timer, does not commit yet.
+            fireEvent.change(hpInput, { target: { value: '99999' } });
+            expect(hpInput).toHaveValue(99999);
+
+            // Within the debounce window, select a DIFFERENT ship whose HP numerically EQUALS the
+            // original committed value (baseConfig.hp === 10000). The numeric prop does not
+            // change, but the ship identity does.
+            rerender(
+                <DefenseShipCard
+                    config={{ ...baseConfig, shipId: 'ship-b', hp: 10000 }}
+                    isBest={false}
+                    isComparing={false}
+                    rounds={3}
+                    onRemove={noop}
+                    onUpdate={onUpdate}
+                    onSelectShip={noop}
+                    onBuffsChange={noop}
+                    onShipSkillsChange={noop}
+                />
+            );
+
+            // The new ship's HP must be shown immediately, not the stale typed "99999".
+            expect(screen.getByLabelText('HP')).toHaveValue(10000);
+
+            // And the cancelled timer must never fire.
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(onUpdate).not.toHaveBeenCalled();
+            expect(screen.getByLabelText('HP')).toHaveValue(10000);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
     it('shows a Passive row for a ship with passive skill text', () => {
         mockGetShipById.mockImplementation((id: string) =>
             id === 'x'
