@@ -241,4 +241,50 @@ describe('DefenseCalculatorPage sim call count', () => {
             startCharged: true,
         });
     });
+
+    // Item 2 (#391 final review): Task 10 above made the auto-detected value REACH the sim, but
+    // left the card with no control to see or override it. This pins the control itself — the
+    // "Start Charged" checkbox added to `DefenseShipCard` — reaches the same sim boundary, the way
+    // every other numeric/boolean field on this card already does. Asserted on the argument
+    // `simulateDefenseSurvivability` is actually called with, not on a rendered number (the
+    // instruction's own boundary-spy pattern), since the default zero-pressure roster renders no
+    // damage figure a value-level assertion could read.
+    it("toggling the defender's own Start Charged checkbox reaches the simulation", () => {
+        renderPage();
+        simSpy.mockClear();
+        fireEvent.click(screen.getByText(/Show Advanced/i));
+
+        const checkbox = screen.getByLabelText('Start Charged');
+        expect(checkbox).not.toBeChecked(); // default config.startCharged is false
+        fireEvent.click(checkbox);
+
+        expect(simSpy).toHaveBeenCalled();
+        expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ startCharged: true });
+    });
+
+    // The sibling control: Charge Count debounces its commit exactly like HP/Defense/Security
+    // (Task 6's reasoning applies here too — it feeds the same `simInputKey`), so it needs the
+    // same "nothing yet, then settles" shape as those three tests above, not the checkbox's
+    // synchronous one.
+    it('editing Charge Count debounces its commit and reaches the simulation once settled', async () => {
+        vi.useFakeTimers();
+        try {
+            renderPage();
+            fireEvent.click(screen.getByText(/Show Advanced/i));
+            simSpy.mockClear();
+
+            const chargeCount = screen.getByLabelText('Charge Count');
+            fireEvent.change(chargeCount, { target: { value: '3' } });
+            expect(simSpy).toHaveBeenCalledTimes(0);
+
+            await act(async () => {
+                vi.advanceTimersByTime(300);
+            });
+
+            expect(simSpy).toHaveBeenCalledTimes(1);
+            expect(simSpy.mock.calls.at(-1)![0]).toMatchObject({ chargeCount: 3 });
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

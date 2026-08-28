@@ -194,7 +194,7 @@ const DefenseCalculatorPage: React.FC = () => {
 
     const updateConfig = (
         id: string,
-        field: 'name' | 'hp' | 'defense' | 'security',
+        field: 'name' | 'hp' | 'defense' | 'security' | 'chargeCount',
         value: string | number
     ) => {
         setConfigs((prev) =>
@@ -208,6 +208,13 @@ const DefenseCalculatorPage: React.FC = () => {
                 return updated;
             })
         );
+    };
+
+    // Item 2 (#391 final review): a separate boolean setter, mirroring `onStartChargedChange` on
+    // every other actor card in the app (Team, Healer, DPS) rather than widening `updateConfig`'s
+    // `string | number` value type for one boolean field.
+    const updateConfigStartCharged = (id: string, startCharged: boolean) => {
+        setConfigs((prev) => prev.map((c) => (c.id === id ? { ...c, startCharged } : c)));
     };
 
     const selectShipForConfig = (configId: string, ship: Ship) => {
@@ -549,6 +556,9 @@ const DefenseCalculatorPage: React.FC = () => {
                                 onBuffsChange={(buffs) => updateConfigBuffs(config.id, buffs)}
                                 onShipSkillsChange={(shipSkills) =>
                                     updateConfigShipSkills(config.id, shipSkills)
+                                }
+                                onStartChargedChange={(checked) =>
+                                    updateConfigStartCharged(config.id, checked)
                                 }
                             />
                         ))}

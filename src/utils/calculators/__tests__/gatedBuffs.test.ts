@@ -59,6 +59,20 @@ describe('gatedAutoFilledBuffs', () => {
         expect(gatedAutoFilledBuffs([buff()], skills([gatedAbility, ungatedAbility]))).toEqual([]);
     });
 
+    it('does NOT report a buff gated in one slot when a DIFFERENT slot grants it unconditionally', () => {
+        // Panon's shape: Barrier is gated behind Taunt/Provoke from the CHARGE slot, but granted
+        // unconditionally from the PASSIVE slot. The every-match rule must see across ALL slots,
+        // not just the one `skillSource` nominally maps to, or it drops a buff the ship also
+        // grants for free.
+        const multiSlot = {
+            slots: [
+                { slot: 'charged', abilities: [gatedAbility] },
+                { slot: 'passive', abilities: [ungatedAbility] },
+            ],
+        } as unknown as ShipSkills;
+        expect(gatedAutoFilledBuffs([buff({ skillSource: 'charge' })], multiSlot)).toEqual([]);
+    });
+
     it('ignores a subject:"always" condition — that is not a gate', () => {
         const alwaysAbility = {
             config: { type: 'buff', buffName: 'Defense Up II' },
@@ -67,7 +81,7 @@ describe('gatedAutoFilledBuffs', () => {
         expect(gatedAutoFilledBuffs([buff()], skills([alwaysAbility]))).toEqual([]);
     });
 
-    it('maps skillSource to Skill.slot: charge -> charged, passive1|2|3 -> passive', () => {
+    it('finds a matching ability regardless of which slot it lives in', () => {
         const charged = {
             slots: [{ slot: 'charged', abilities: [gatedAbility] }],
         } as unknown as ShipSkills;

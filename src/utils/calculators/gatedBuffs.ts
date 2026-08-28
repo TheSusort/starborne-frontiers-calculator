@@ -14,7 +14,7 @@
  * `enemy-hp-missing-pct`) live on the statModifiers path, not this one.
  */
 import type { SelectedGameBuff } from '../../types/calculator';
-import type { Ability, Condition, ShipSkills, SkillSlot } from '../../types/abilities';
+import type { Ability, Condition, ShipSkills } from '../../types/abilities';
 import { conditionSummary } from '../abilities/conditionSummary';
 
 export interface GatedBuff {
@@ -38,18 +38,6 @@ export function isEhpRelevant(buff: SelectedGameBuff): boolean {
         'security' in buff.parsedEffects
     );
 }
-
-/** `SelectedGameBuff.skillSource` has FIVE values; `Skill.slot` has THREE. The join is lossy in
- *  two ways — `charge` becomes `charged`, and all three passives collapse into one slot — which is
- *  why the every-match rule below is conservative. Mitigating fact: only the refit-active passive
- *  applies in-game (resolved via `getShipSkillRows()`), so a multi-match is rare in practice. */
-const SLOT_OF: Record<NonNullable<SelectedGameBuff['skillSource']>, SkillSlot> = {
-    active: 'active',
-    charge: 'charged',
-    passive1: 'passive',
-    passive2: 'passive',
-    passive3: 'passive',
-};
 
 /** `always` is not a gate. Belt-and-braces: verified that neither `detectGrantConditions` nor
  *  `crossing()` emits it on the buff-merge path. */
@@ -104,9 +92,12 @@ export function gatedAutoFilledBuffs(
         if (!buff.autoFilled) continue;
         if (!buff.skillSource) continue;
 
-        const slot = SLOT_OF[buff.skillSource];
+        // Searched across EVERY slot, not just the one `skillSource` nominally maps to: the same
+        // buff NAME can be granted from more than one slot (e.g. Panon's Barrier — gated behind a
+        // Taunt/Provoke check from the charge slot, unconditional from the passive slot), and a
+        // gate on one grant path is meaningless if another path on the SAME ship hands out the
+        // identical buff for free. The every-match rule below only holds if it sees every path.
         const matches = shipSkills.slots
-            .filter((s) => s.slot === slot)
             .flatMap((s) => s.abilities)
             .filter((a) => isBuffGrantFor(a, buff.buffName));
 

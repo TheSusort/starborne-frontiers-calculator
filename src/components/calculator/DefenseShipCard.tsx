@@ -8,6 +8,7 @@ import { GatedBuff, isEhpRelevant } from '../../utils/calculators/gatedBuffs';
 import { ShipSelector } from '../ship/ShipSelector';
 import { CloseIcon } from '../ui';
 import { Button } from '../ui/Button';
+import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import { ChevronDownIcon } from '../ui/icons/ChevronIcons';
@@ -116,10 +117,20 @@ interface DefenseShipCardProps {
      *  is explaining. */
     gatedBuffs?: GatedBuff[];
     onRemove: () => void;
-    onUpdate: (field: 'name' | 'hp' | 'defense' | 'security', value: string | number) => void;
+    onUpdate: (
+        field: 'name' | 'hp' | 'defense' | 'security' | 'chargeCount',
+        value: string | number
+    ) => void;
     onSelectShip: (ship: Ship) => void;
     onBuffsChange: (buffs: SelectedGameBuff[]) => void;
     onShipSkillsChange: (shipSkills: ShipSkills) => void;
+    /** Task 10 (#391 follow-up) made the measured defender honour "starts combat fully charged"
+     *  kit text (`detectShipCharged`), auto-filling `config.startCharged` on ship selection — but
+     *  left the card with no control to SEE or override it, unlike every other actor on this app
+     *  (enemy/team rows, the healer picker, the DPS ship card). Mirrors their
+     *  `onStartChargedChange` shape rather than folding a boolean into `onUpdate`'s
+     *  string-or-number value type. */
+    onStartChargedChange: (checked: boolean) => void;
 }
 
 export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
@@ -137,6 +148,7 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     onSelectShip,
     onBuffsChange,
     onShipSkillsChange,
+    onStartChargedChange,
 }) => {
     const [advancedOpen, setAdvancedOpen] = useState(false);
     // Shared across all three fields on this card: a ship selection must reset HP, Defense, and
@@ -155,6 +167,14 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
     const [securityDraft, onSecurityChange] = useDebouncedNumericField(
         config.security,
         (value) => onUpdate('security', value),
+        resetKey
+    );
+    // Debounced for the same reason as HP/Defense/Security above — `chargeCount` feeds the sim
+    // memo key (`simInputKey`) exactly like those three, so an undebounced field would re-run a
+    // full engine simulation per keystroke.
+    const [chargeCountDraft, onChargeCountChange] = useDebouncedNumericField(
+        config.chargeCount,
+        (value) => onUpdate('chargeCount', value),
         resetKey
     );
     const { getShipById } = useShips();
@@ -245,6 +265,33 @@ export const DefenseShipCard: React.FC<DefenseShipCardProps> = ({
                 </Button>
 
                 <CollapsibleForm isVisible={advancedOpen}>
+                    <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
+                        Charge
+                    </div>
+                    {/* Item 2 (#391 final review): Task 10 made the measured defender honour
+                        "starts combat fully charged" kit text, but this card had no control to see
+                        or override the result — the value was auto-detected and invisible. Charge
+                        Count ships alongside the checkbox (not on its own) because the two are
+                        mechanically coupled: the engine seeds `charges = startCharged ? chargeCount
+                        : 0` (`combat/state.ts`), so "Start Charged" is a no-op whenever chargeCount
+                        reads 0 — exactly the default for a manually-configured card with no ship
+                        selected. Without this field, that checkbox would be invisible-by-a-different-
+                        route: present, but silently inert. */}
+                    <div className="grid grid-cols-2 gap-4 items-end mb-4">
+                        <Input
+                            label="Charge Count"
+                            type="number"
+                            value={chargeCountDraft}
+                            onChange={(e) => onChargeCountChange(e.target.value)}
+                        />
+                        <Checkbox
+                            id={`defense-start-charged-${config.id}`}
+                            label="Start Charged"
+                            checked={config.startCharged}
+                            onChange={onStartChargedChange}
+                        />
+                    </div>
+
                     <div className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">
                         Skills
                     </div>

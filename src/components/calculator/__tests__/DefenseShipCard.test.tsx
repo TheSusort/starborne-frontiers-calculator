@@ -84,6 +84,7 @@ const renderCard = (overrides: Partial<Parameters<typeof DefenseShipCard>[0]> = 
             onSelectShip={noop}
             onBuffsChange={noop}
             onShipSkillsChange={noop}
+            onStartChargedChange={noop}
             {...overrides}
         />
     );
@@ -454,6 +455,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 
@@ -509,6 +511,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 
@@ -573,6 +576,7 @@ describe('DefenseShipCard', () => {
                     onSelectShip={noop}
                     onBuffsChange={noop}
                     onShipSkillsChange={noop}
+                    onStartChargedChange={noop}
                 />
             );
 

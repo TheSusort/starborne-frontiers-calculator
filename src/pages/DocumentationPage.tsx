@@ -2961,6 +2961,20 @@ const DocumentationPage: React.FC = () => {
                                         entering manually on this page.
                                     </p>
                                     <p className="text-theme-text mb-2">
+                                        <span className="text-primary">Charge Count</span> and{' '}
+                                        <span className="text-primary">Start Charged</span> also
+                                        live in Show Advanced. Some ships have skills that begin
+                                        combat already charged (Akula, Chimei, Los, Sansi, Valkyrie
+                                        and Wusheng); when detected from the picked ship&apos;s
+                                        skill data, Start Charged is pre-checked and its charged
+                                        skill fires in round 1 of the simulation, the same as for
+                                        the enemy roster, team roster and healer cards. Both fields
+                                        are editable, so you can turn a detected charge off to see
+                                        how the ship fares without its first-turn burst, or set a
+                                        charge count by hand on a manually-configured card with no
+                                        ship attached.
+                                    </p>
+                                    <p className="text-theme-text mb-2">
                                         <span className="text-primary">
                                             Which card gets highlighted:
                                         </span>{' '}
