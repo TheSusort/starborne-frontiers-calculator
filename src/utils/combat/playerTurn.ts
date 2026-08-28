@@ -633,9 +633,11 @@ export interface PlayerTurnArgs {
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
-    /** Healing mode (healing calc): present ONLY when the engine runs in healing mode.
-     *  Absent for DPS-mode turns — the heal block is fully gated on this, keeping the DPS
-     *  goldens byte-identical. */
+    /** The shared heal/shield/cleanse runtime. #415: this used to say "present ONLY when the
+     *  engine runs in healing mode / absent for DPS-mode turns". The engine anchors `healTarget`
+     *  in EVERY mode now, so it supplies this on DPS turns too and the heal block runs there —
+     *  what a DPS run omits is the healing REPORT (`healReportActive`). Still optional because
+     *  standalone callers (tests) may leave it unset. */
     healing?: HealingRuntimeCtx;
     /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5; HP-restore lifted in E5 §4.1):
      *  when true (the enemy walk), the heal block EMITS `heal-performed`/`cleanse-performed`
@@ -652,8 +654,12 @@ export interface PlayerTurnArgs {
     selfHpPct?: number;
     /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
      *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
-     *  40% HP" evaluated at cast time. Defaults to 100 so DPS-mode / un-updated callers behave
-     *  as if the target is full HP → a "below N" gate fails → grant inert in DPS (correct).
+     *  40% HP" evaluated at cast time. Defaults to 100 so un-updated callers behave as if the
+     *  target is full HP → a "below N" gate fails. #415: this used to add "so DPS-mode … callers
+     *  … → grant inert in DPS (correct)" — the twin of the `hpSubject:'target'` doc in
+     *  `types/abilities.ts`. The engine now threads `healTargetHpPctNow()` unconditionally
+     *  (`engine.ts`, the per-actor turn-args block), so a DPS turn reads the focus's REAL live HP
+     *  and the gate can open; only callers that supply nothing still see the 100 default.
      *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
     targetHpPct?: number;
     /** The acting attacker's STRUCK target was repaired (HP-healed) this round (C2b-3). Default
