@@ -444,6 +444,48 @@ describe.skipIf(!csvAvailable())('Vindicator on-resist — per-attack granularit
         expect(procDamage(result, 1, 'attacker')).toHaveLength(1);
     });
 
+    // THE REACHABLE REAL-KIT CASE, and the reason this is not a theoretical fix. The corpus has
+    // exactly one multi-hit ship (Enforcer) and it inflicts nothing directly — which is why the
+    // synthetic arms above exist. But its PASSIVE inflicts Defense Shred ON CRIT, and a 3-hit cast
+    // that crits on several sub-attacks really does produce several separate resists against the
+    // same victim in one turn. That path goes through the REACTIVE infliction emit in triggers.ts,
+    // a different site from the cast debuff loop the arms above exercise.
+    it('procs per sub-attack against a real Enforcer crit-inflicting Defense Shred', () => {
+        const rec = loadShipSkillRecords().find((r) => r.name.toUpperCase() === 'ENFORCER');
+        if (!rec) throw new Error('docs/ship-skills.csv: no record for "Enforcer"');
+        const enforcer: Ship = {
+            ...enemyDebuffer('enforcer', rec.active),
+            name: 'Enforcer',
+            refits: Array.from({ length: 4 }, () => ({})) as unknown as Ship['refits'],
+            secondPassiveSkillText: rec.passives[1],
+            chargeSkillText: rec.charge,
+            chargeSkillCharge: rec.chargeCharge,
+        };
+        const result = simulateBattle({
+            playerTeam: [placement(vindicatorShip('v'), 'M4', { speed: 40 })],
+            enemyTeam: [
+                placement(enforcer, 'M4', {
+                    // crit 100 so EVERY sub-attack crits and therefore inflicts; hacking 0 so every
+                    // inflicted Defense Shred is resisted by a drawn-and-failed roll.
+                    crit: 100,
+                    hacking: 0,
+                }),
+            ],
+            rounds: 1,
+        });
+        const round1 = result.combatLog.find((r) => r.round === 1)!;
+
+        // THE INSTRUMENT: several resists, from ONE turn of ONE enemy. If Enforcer's kit ever
+        // stops crit-inflicting, this drops to 0/1 and the arm fails rather than quietly asserting
+        // the collapsed behaviour.
+        const resists = flattenRound(round1).filter((e) => e.kind === 'debuff-resisted').length;
+        expect(resists).toBeGreaterThan(1);
+        // One retaliation per resisted sub-attack, each a flat 30% of max HP.
+        const amounts = procDamage(result, 1, 'attacker');
+        expect(amounts).toHaveLength(resists);
+        for (const amount of amounts) expect(amount).toBeCloseTo(ONE_PROC, 0);
+    });
+
     it('procs ONCE on a single-hit cast (the baseline both arms are measured against)', () => {
         const result = runVsEnemyCasting(
             'This Unit Inflicts <unit-skill>Speed Down II</unit-skill> for 2 turns.'
