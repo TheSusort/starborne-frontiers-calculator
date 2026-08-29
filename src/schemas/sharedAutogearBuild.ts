@@ -20,10 +20,10 @@ const limitableStatSchema = z
         message: 'Unknown limit stat',
     });
 
-/** Gear set keys and implant keys share the setPriorities list (kind: 'implant'). */
-const setNameSchema = z
+/** Gear set keys only — used by setPriorities entries with no `kind` (or `kind: undefined`). */
+const gearSetKeySchema = z
     .string()
-    .refine((v) => isKeyOf(GEAR_SETS, v) || isKeyOf(IMPLANTS, v), { message: 'Unknown set' });
+    .refine((v) => isKeyOf(GEAR_SETS, v), { message: 'Unknown gear set' });
 
 const implantKeySchema = z
     .string()
@@ -41,11 +41,23 @@ const statPrioritySchema = z.object({
     hardRequirement: z.boolean().optional(),
 });
 
-const setPrioritySchema = z.object({
-    setName: setNameSchema,
-    count: z.number().int().min(0).max(6),
-    kind: z.literal('implant').optional(),
-});
+// Gear-set keys and implant keys share the setPriorities list, disambiguated by
+// `kind`: an entry with no `kind` (or `kind: undefined`) must name a gear set,
+// and `kind: 'implant'` must name an implant — GEAR_SETS and IMPLANTS keys are
+// not disjoint (e.g. 'AMBUSH' exists in both), so `kind` — not the key alone —
+// decides which inventory a requirement is checked against.
+const setPrioritySchema = z.union([
+    z.object({
+        setName: gearSetKeySchema,
+        count: z.number().int().min(0).max(6),
+        kind: z.undefined().optional(),
+    }),
+    z.object({
+        setName: implantKeySchema,
+        count: z.number().int().min(0).max(6),
+        kind: z.literal('implant'),
+    }),
+]);
 
 const statBonusSchema = z.object({
     stat: statNameSchema,

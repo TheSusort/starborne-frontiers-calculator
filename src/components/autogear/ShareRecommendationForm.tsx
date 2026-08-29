@@ -3,8 +3,8 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
-import { communityBuildSummary } from '../../utils/communityBuildSummary';
 import type { SharedAutogearBuild } from '../../types/communityRecommendation';
+import { SharedBuildFields } from './SharedBuildFields';
 
 interface ShareRecommendationFormProps {
     onSubmit: (title: string, description: string, isImplantSpecific: boolean) => Promise<boolean>;
@@ -73,9 +73,11 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-            <div className="p-3 bg-dark-lighter text-xs space-y-1">
+            <div className="card text-xs space-y-2">
                 <p className="font-semibold text-theme-text">This build will be shared as:</p>
-                <p className="text-theme-text-secondary">{communityBuildSummary(build)}</p>
+                <div className="text-theme-text-secondary text-sm space-y-2">
+                    <SharedBuildFields build={build} />
+                </div>
                 <p className="text-theme-text-secondary">
                     Your algorithm choice and your gear filters (ignore equipped, ignore unleveled,
                     use upgraded stats, complete sets, calibration, arena modifiers) stay private.

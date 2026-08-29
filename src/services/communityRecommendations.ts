@@ -48,7 +48,11 @@ export class CommunityRecommendationService {
         // independently. RLS allows any profile the auth user owns (has_profile_access).
         createdBy: string
     ): Promise<CommunityRecommendation | null> {
-        if (!validateSharedAutogearBuild(input.sharedConfig)) {
+        // Use the parsed result, not the raw input: object schemas strip unknown
+        // keys (zod's .strip()), so `sharedConfig` is the sanitised build and
+        // `input.sharedConfig` may still carry caller-supplied extra keys.
+        const sharedConfig = validateSharedAutogearBuild(input.sharedConfig);
+        if (!sharedConfig) {
             console.error('Refusing to share an invalid autogear build');
             throw new InvalidSharedConfigError();
         }
@@ -64,12 +68,13 @@ export class CommunityRecommendationService {
                 ultimate_implant: input.ultimateImplant,
                 // Dual write: shared_config is the source of truth, but the legacy
                 // columns keep being populated so a stale cached bundle still reads
-                // a usable build. Derived from the same object so they cannot drift.
-                shared_config: JSON.parse(JSON.stringify(input.sharedConfig)),
-                ship_role: input.sharedConfig.shipRole,
-                stat_priorities: JSON.parse(JSON.stringify(input.sharedConfig.statPriorities)),
-                stat_bonuses: JSON.parse(JSON.stringify(input.sharedConfig.statBonuses)),
-                set_priorities: JSON.parse(JSON.stringify(input.sharedConfig.setPriorities)),
+                // a usable build. Derived from the same (sanitised) object so they
+                // cannot drift.
+                shared_config: JSON.parse(JSON.stringify(sharedConfig)),
+                ship_role: sharedConfig.shipRole,
+                stat_priorities: JSON.parse(JSON.stringify(sharedConfig.statPriorities)),
+                stat_bonuses: JSON.parse(JSON.stringify(sharedConfig.statBonuses)),
+                set_priorities: JSON.parse(JSON.stringify(sharedConfig.setPriorities)),
                 // activeProfileId passed from call site — one recommendation per alt profile
                 created_by: createdBy,
             })

@@ -1706,13 +1706,13 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         When you select a ship, every community build shared for
-                                        that ship is listed, best rated first
+                                        that ship is listed, grouped by implant relevance first and
+                                        then ordered by your chosen sort within each group
                                     </li>
                                     <li>
                                         Builds tagged for the ultimate implant you have equipped
-                                        sort to the top, untagged (generic) builds come next, and
-                                        builds tagged for a different implant stay visible at the
-                                        bottom
+                                        come first, untagged (generic) builds come next, and builds
+                                        tagged for a different implant stay visible at the bottom
                                     </li>
                                     <li>
                                         Click a build to expand its full configuration — role, stat

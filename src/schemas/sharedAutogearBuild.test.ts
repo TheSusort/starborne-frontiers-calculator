@@ -64,6 +64,29 @@ describe('validateSharedAutogearBuild', () => {
         expect(validateSharedAutogearBuild(build)).toBeNull();
     });
 
+    describe('setPriority kind/setName consistency', () => {
+        // MARTYRDOM is an implant-only key (absent from GEAR_SETS): a set
+        // priority naming it without `kind: 'implant'` must not silently
+        // validate as a gear-set requirement.
+        it('rejects an implant key with no kind', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: [{ setName: 'MARTYRDOM', count: 4 }],
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        // CRITICAL is a gear-set-only key (absent from IMPLANTS): tagging it
+        // `kind: 'implant'` must not silently validate as an implant requirement.
+        it('rejects a gear-set key tagged kind: implant', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: [{ setName: 'CRITICAL', count: 4, kind: 'implant' }],
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+    });
+
     it('does not treat inherited Object keys as valid stats', () => {
         const build = { ...structuredClone(validBuild), statPriorities: [{ stat: 'toString' }] };
         expect(validateSharedAutogearBuild(build)).toBeNull();

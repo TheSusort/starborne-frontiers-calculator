@@ -73,7 +73,9 @@ export const CommunityBuildList: React.FC<CommunityBuildListProps> = ({
                         onToggle={() => onToggleExpand(build.id)}
                     />
                     {expandedId === build.id && (
-                        <div className="border border-t-0 border-dark-border bg-dark-lighter p-3">
+                        // `card` for the shared box treatment; the top border stays
+                        // suppressed so the panel reads as attached to the row above.
+                        <div className="card border-t-0">
                             <CommunityBuildDetails
                                 build={build}
                                 userVote={userVote}
