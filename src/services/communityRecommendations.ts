@@ -52,6 +52,33 @@ export class CommunityRecommendationService {
         );
     }
 
+    /**
+     * Every community recommendation for a ship, best-scored first.
+     *
+     * Implant relevance is applied client-side (sortCommunityBuilds) rather than
+     * filtered in SQL, so a build tagged for a different ultimate implant stays
+     * visible instead of disappearing.
+     *
+     * Supersedes getBestRecommendation + getAlternatives, which are removed in
+     * Task 7 along with their last callers.
+     */
+    static async listForShip(shipName: string): Promise<CommunityRecommendation[]> {
+        const { data, error } = await supabase
+            .from('community_recommendations')
+            .select('*')
+            .eq('ship_name', shipName)
+            .order('score', { ascending: false })
+            .order('total_votes', { ascending: false })
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching community recommendations:', error);
+            return [];
+        }
+
+        return data || [];
+    }
+
     static async createRecommendation(
         input: CreateCommunityRecommendationInput,
         // Authorship uses the active profile so alt accounts can share recommendations
