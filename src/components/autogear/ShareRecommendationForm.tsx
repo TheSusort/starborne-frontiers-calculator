@@ -3,15 +3,20 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
+import { communityBuildSummary } from '../../utils/communityBuildSummary';
+import type { SharedAutogearBuild } from '../../types/communityRecommendation';
 
 interface ShareRecommendationFormProps {
     onSubmit: (title: string, description: string, isImplantSpecific: boolean) => Promise<boolean>;
     onCancel: () => void;
     ultimateImplantName: string | null;
     isSubmitting?: boolean;
+    /** The config that will be published — shown read-only so the sharer can check it. */
+    build: SharedAutogearBuild;
 }
 
 export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = ({
+    build,
     onSubmit,
     onCancel,
     ultimateImplantName,
@@ -68,6 +73,15 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            <div className="p-3 bg-dark-lighter text-xs space-y-1">
+                <p className="font-semibold text-theme-text">This build will be shared as:</p>
+                <p className="text-theme-text-secondary">{communityBuildSummary(build)}</p>
+                <p className="text-theme-text-secondary">
+                    Your algorithm choice and your gear filters (ignore equipped, ignore unleveled,
+                    use upgraded stats, complete sets, calibration, arena modifiers) stay private.
+                </p>
+            </div>
+
             <Input
                 label="Title"
                 value={title}

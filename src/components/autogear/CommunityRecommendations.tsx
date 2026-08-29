@@ -1,82 +1,59 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
-import { SavedAutogearConfig } from '../../types/autogear';
-import { AutogearSuggestion } from '../../types/autogearSuggestion';
-import { CommunityRecommendation, AIRecommendation } from '../../types/communityRecommendation';
+import { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
+import { ConfirmModal } from '../ui/layout/ConfirmModal';
+import { Button } from '../ui/Button';
 import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendations';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
+import { useAuth } from '../../contexts/AuthProvider';
+import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
+import type { CommunityBuild } from '../../utils/communityBuild';
 import { RecommendationHeader } from './RecommendationHeader';
-import { RecommendationContent } from './RecommendationContent';
-import { AlternativeRecommendations } from './AlternativeRecommendations';
-import { CommunityActions } from './CommunityActions';
+import { CommunityBuildList } from './CommunityBuildList';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
-
-/**
- * Convert CommunityRecommendation to AIRecommendation format for AlternativeRecommendations
- * The main difference is stat_bonuses uses 'percentage' in CommunityRecommendation but 'weight' in AIRecommendation
- */
-const toAIRecommendation = (rec: CommunityRecommendation): AIRecommendation => ({
-    id: rec.id,
-    ship_name: rec.ship_name,
-    ship_refit_level: rec.ship_refit_level,
-    ship_implants: {},
-    ship_role: rec.ship_role,
-    stat_priorities: rec.stat_priorities.map((p) => ({
-        stat: p.stat,
-        minLimit: p.minLimit,
-        maxLimit: p.maxLimit,
-    })),
-    stat_bonuses: rec.stat_bonuses.map((b) => ({
-        stat: b.stat,
-        weight: b.percentage,
-    })),
-    set_priorities: rec.set_priorities.map((s) => ({
-        setName: s.setName,
-    })),
-    reasoning: rec.reasoning || rec.description || '',
-    upvotes: rec.upvotes,
-    downvotes: rec.downvotes,
-    total_votes: rec.total_votes,
-    score: rec.score,
-    created_by: rec.created_by,
-    created_at: rec.created_at,
-    updated_at: rec.updated_at,
-});
 
 interface CommunityRecommendationsProps {
     selectedShip: Ship | null;
-    currentConfig: SavedAutogearConfig | null;
+    currentBuild: SharedAutogearBuild | null;
+    /** Null when the page cannot apply (no ship). */
+    onApplyBuild: ((build: SharedAutogearBuild) => void) | null;
+    /** Whether the ship already has build config that Apply would overwrite. */
+    hasExistingConfig: boolean;
 }
 
 export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> = ({
     selectedShip,
-    currentConfig,
+    currentBuild,
+    onApplyBuild,
+    hasExistingConfig,
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [pendingApply, setPendingApply] = useState<CommunityBuild | null>(null);
+
+    // Votes are one-per-human: gated on the auth user, not the active profile,
+    // so alt profiles cannot cast duplicate votes.
+    const { user } = useAuth();
+    // Authorship is per active profile.
+    const { activeProfileId } = useActiveProfile();
 
     const {
-        recommendation,
-        alternatives,
-        selectedAlternative,
+        builds,
         loading,
         error,
+        expandedId,
+        toggleExpanded,
+        sort,
+        setSort,
         userVote,
+        handleVote,
         showShareForm,
-        showAlternatives,
+        setShowShareForm,
         ultimateImplantName,
         canShare,
-        handleVote,
         handleShare,
-        handleSelectAlternative,
-        handleBackToMain,
-        setShowShareForm,
-        setShowAlternatives,
-    } = useCommunityRecommendations({
-        selectedShip,
-        currentConfig,
-    });
+    } = useCommunityRecommendations({ selectedShip, currentBuild });
 
     useTutorialTrigger('autogear-community');
 
@@ -84,27 +61,18 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         return null;
     }
 
-    const currentRecommendation = selectedAlternative || recommendation;
+    const applyBuild = (build: CommunityBuild) => {
+        onApplyBuild?.(build.build);
+    };
 
-    const suggestionFromRecommendation: AutogearSuggestion | null = currentRecommendation
-        ? {
-              shipRole: currentRecommendation.ship_role,
-              statPriorities: currentRecommendation.stat_priorities.map((p) => ({
-                  stat: p.stat,
-                  minLimit: p.minLimit,
-                  maxLimit: p.maxLimit,
-                  hardRequirement: p.hardRequirement,
-              })),
-              statBonuses: currentRecommendation.stat_bonuses.map((b) => ({
-                  stat: b.stat,
-                  weight: b.percentage,
-              })),
-              setPriorities: currentRecommendation.set_priorities.map((s) => ({
-                  setName: s.setName,
-              })),
-              reasoning: currentRecommendation.reasoning || currentRecommendation.description || '',
-          }
-        : null;
+    // Confirm only when Apply would actually overwrite something.
+    const requestApply = (build: CommunityBuild) => {
+        if (hasExistingConfig) {
+            setPendingApply(build);
+            return;
+        }
+        applyBuild(build);
+    };
 
     const handleShareSubmit = async (
         title: string,
@@ -113,8 +81,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
     ): Promise<boolean> => {
         setIsSubmitting(true);
         try {
-            const success = await handleShare(title, description, isImplantSpecific);
-            return success;
+            return await handleShare(title, description, isImplantSpecific);
         } finally {
             setIsSubmitting(false);
         }
@@ -126,88 +93,99 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
             data-tutorial="autogear-community-recommendations"
         >
             <RecommendationHeader
-                recommendation={currentRecommendation}
+                buildCount={builds.length}
                 loading={loading}
                 isExpanded={isExpanded}
                 onToggleExpand={() => setIsExpanded(!isExpanded)}
             />
 
             <CollapsibleAccordion isOpen={isExpanded}>
-                {error && (
-                    <div className="text-red-400 bg-red-900/20 border border-red-700">
-                        <p className="font-medium">Error: {error}</p>
-                    </div>
-                )}
+                <div className="p-3 space-y-3">
+                    {error && (
+                        <div className="text-red-400 bg-red-900/20 border border-red-700 p-2 text-sm">
+                            Error: {error}
+                        </div>
+                    )}
 
-                {currentRecommendation && (
-                    <div className="space-y-4">
-                        {currentRecommendation.description && (
-                            <p className="text-theme-text text-sm italic">
-                                &ldquo;{currentRecommendation.description}&rdquo;
-                            </p>
-                        )}
-
-                        {suggestionFromRecommendation && (
-                            <RecommendationContent suggestion={suggestionFromRecommendation} />
-                        )}
-
-                        <AlternativeRecommendations
-                            alternatives={alternatives.map(toAIRecommendation)}
-                            showAlternatives={showAlternatives}
-                            selectedAlternative={
-                                selectedAlternative ? toAIRecommendation(selectedAlternative) : null
-                            }
-                            onToggleShow={() => setShowAlternatives(!showAlternatives)}
-                            onSelectAlternative={(alt) => {
-                                const originalAlt = alternatives.find((a) => a.id === alt.id);
-                                if (originalAlt) {
-                                    handleSelectAlternative(originalAlt);
-                                }
-                            }}
-                            onBackToMain={() => void handleBackToMain()}
-                        />
-
-                        <CommunityActions
-                            recommendation={currentRecommendation}
+                    {!loading && (
+                        <CommunityBuildList
+                            builds={builds}
+                            equippedUltimateImplant={ultimateImplantName}
+                            sort={sort}
+                            onSortChange={setSort}
+                            expandedId={expandedId}
+                            onToggleExpand={toggleExpanded}
                             userVote={userVote}
-                            canShare={canShare}
-                            showShareForm={showShareForm}
+                            canVote={!!user}
+                            canApply={!!onApplyBuild}
                             onVote={(voteType) => void handleVote(voteType)}
-                            onToggleShareForm={() => setShowShareForm(!showShareForm)}
+                            onApply={requestApply}
                         />
-                    </div>
-                )}
+                    )}
 
-                {!loading && !currentRecommendation && !showShareForm && (
-                    <div className="text-center">
-                        <p className="text-theme-text-secondary text-sm mb-2">
-                            Be the first to share a recommendation for this ship!
-                        </p>
-                        <CommunityActions
-                            recommendation={null}
-                            userVote={null}
-                            canShare={canShare}
-                            showShareForm={showShareForm}
-                            onVote={() => {}}
-                            onToggleShareForm={() => setShowShareForm(true)}
-                        />
-                    </div>
-                )}
+                    {!showShareForm && (
+                        <div className="pt-2 border-t border-dark-border flex justify-center">
+                            {!activeProfileId ? (
+                                <span className="text-sm text-theme-text-secondary">
+                                    Sign in to share your build
+                                </span>
+                            ) : canShare ? (
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setShowShareForm(true)}
+                                    className="w-full"
+                                >
+                                    Share your build
+                                </Button>
+                            ) : (
+                                <span className="text-sm text-theme-text-secondary">
+                                    Configure autogear settings to share your build
+                                </span>
+                            )}
+                        </div>
+                    )}
 
-                {showShareForm && (
-                    <div className="border-t border-dark-border">
-                        <h4 className="text-sm font-semibold text-theme-text mb-3">
-                            Share Your Build
-                        </h4>
-                        <ShareRecommendationForm
-                            onSubmit={handleShareSubmit}
-                            onCancel={() => setShowShareForm(false)}
-                            ultimateImplantName={ultimateImplantName}
-                            isSubmitting={isSubmitting}
-                        />
-                    </div>
-                )}
+                    {showShareForm && currentBuild && (
+                        <div className="pt-2 border-t border-dark-border">
+                            <h4 className="text-sm font-semibold text-theme-text mb-3">
+                                Share Your Build
+                            </h4>
+                            <ShareRecommendationForm
+                                build={currentBuild}
+                                onSubmit={handleShareSubmit}
+                                onCancel={() => setShowShareForm(false)}
+                                ultimateImplantName={ultimateImplantName}
+                                isSubmitting={isSubmitting}
+                            />
+                        </div>
+                    )}
+                </div>
             </CollapsibleAccordion>
+
+            <ConfirmModal
+                isOpen={pendingApply !== null}
+                onClose={() => setPendingApply(null)}
+                onConfirm={() => {
+                    if (pendingApply) applyBuild(pendingApply);
+                    setPendingApply(null);
+                }}
+                title="Apply this build?"
+                confirmLabel="Apply"
+                message={
+                    <div className="space-y-2 text-sm">
+                        <p>
+                            This replaces your role, stat priorities, gear sets, stat bonuses, fleet
+                            buffs and implant settings for {selectedShip.name}.
+                        </p>
+                        <p className="text-theme-text-secondary">
+                            Your algorithm choice and gear filters (ignore equipped, ignore
+                            unleveled, use upgraded stats, complete sets, calibration, arena
+                            modifiers) are not changed.
+                        </p>
+                    </div>
+                }
+            />
         </div>
     );
 };
