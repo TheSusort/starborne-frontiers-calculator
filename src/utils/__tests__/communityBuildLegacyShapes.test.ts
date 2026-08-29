@@ -94,4 +94,73 @@ describe('toCommunityBuild — real legacy row shapes', () => {
     it('still drops a row when the ship_role resolves to nothing usable', () => {
         expect(toCommunityBuild(makeRow({ ship_role: 'ZONK' }))).toBeNull();
     });
+
+    it('resolves display-label stat identifiers in stat_bonuses/stat_priorities (real row: Cultivator "SUPPORTER Build")', () => {
+        const build = toCommunityBuild(
+            makeRow({
+                ship_role: 'SUPPORTER',
+                stat_priorities: [
+                    { stat: 'hp', maxLimit: 150000, minLimit: 10000 } as never,
+                    { stat: 'heal modifier', maxLimit: 200, minLimit: 100 } as never,
+                    { stat: 'defense', maxLimit: 2000, minLimit: 1000 } as never,
+                ],
+                stat_bonuses: [
+                    { stat: 'hp', weight: 10 } as never,
+                    { stat: 'heal modifier', weight: 5 } as never,
+                ],
+            })
+        );
+
+        expect(build).not.toBeNull();
+        expect(build?.build.statPriorities.map((p) => p.stat)).toEqual([
+            'hp',
+            'healModifier',
+            'defence',
+        ]);
+        expect(build?.build.statBonuses).toEqual([
+            { stat: 'hp', percentage: 10 },
+            { stat: 'healModifier', percentage: 5 },
+        ]);
+    });
+
+    it('resolves display-label stat identifiers in stat_priorities (real row: Wisteria "Welcome to Wisteria Lane")', () => {
+        const build = toCommunityBuild(
+            makeRow({
+                ship_role: 'CORROSION',
+                stat_priorities: [
+                    { stat: 'crit rate', minLimit: 100 } as never,
+                    { stat: 'crit power', minLimit: 100 } as never,
+                    { stat: 'hacking', minLimit: 350 } as never,
+                ],
+                stat_bonuses: [],
+            })
+        );
+
+        expect(build).not.toBeNull();
+        expect(build?.build.statPriorities.map((p) => p.stat)).toEqual([
+            'crit',
+            'critDamage',
+            'hacking',
+        ]);
+    });
+
+    it('still drops a row when a stat_priorities entry resolves to nothing usable', () => {
+        expect(
+            toCommunityBuild(
+                makeRow({
+                    stat_priorities: [{ stat: 'not a real stat', minLimit: 100 } as never],
+                })
+            )
+        ).toBeNull();
+    });
+
+    it('still drops a row when a stat_bonuses entry resolves to nothing usable', () => {
+        expect(
+            toCommunityBuild(
+                makeRow({
+                    stat_bonuses: [{ stat: 'not a real stat', percentage: 5 }],
+                })
+            )
+        ).toBeNull();
+    });
 });

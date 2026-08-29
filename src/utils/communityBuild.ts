@@ -1,4 +1,5 @@
 import { SHIP_TYPES, type ShipTypeName } from '../constants/shipTypes';
+import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../types/autogear';
 import type {
     CommunityRecommendation,
@@ -61,20 +62,105 @@ export const normalizeShipRole = (raw: string): ShipTypeName | null => {
     return null;
 };
 
+/** Lowercase, strip everything but letters/digits — the shared key for
+ *  matching a display label (`'Crit Rate'`) or a real key (`'crit'`) against
+ *  a legacy value (`'crit rate'`) regardless of spacing/case/punctuation. */
+const normalizeStatIdentifier = (raw: string): string =>
+    raw.toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Reverse index: normalised key OR label -> real key. Built from the live
+ * `entries` (key, label) pairs rather than hand-typed, because a key and its
+ * label can genuinely differ in spelling — e.g. the `defence` stat displays
+ * as `'Defense'` (American) while the key itself is British. A hand-written
+ * map is exactly where that divergence gets typed wrong; deriving it from
+ * `STATS`/`DERIVED_STAT_LABELS` means it can never drift from them.
+ */
+const buildReverseStatIndex = (entries: Array<[string, string]>): Map<string, string> => {
+    const index = new Map<string, string>();
+    for (const [key, label] of entries) {
+        index.set(normalizeStatIdentifier(key), key);
+        index.set(normalizeStatIdentifier(label), key);
+    }
+    return index;
+};
+
+const STAT_NAME_ENTRIES: Array<[string, string]> = Object.entries(STATS).map(([key, def]) => [
+    key,
+    def.label,
+]);
+const DERIVED_STAT_ENTRIES: Array<[string, string]> = Object.entries(DERIVED_STAT_LABELS).map(
+    ([key, def]) => [key, def.label]
+);
+
+/** Valid for stat bonuses/fleet buffs — real `StatName`s only. */
+const STAT_NAME_INDEX = buildReverseStatIndex(STAT_NAME_ENTRIES);
+/** Valid for stat priorities — `StatName`s plus derived limit stats (effectiveHp). */
+const LIMITABLE_STAT_INDEX = buildReverseStatIndex([...STAT_NAME_ENTRIES, ...DERIVED_STAT_ENTRIES]);
+
+const isStatNameKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(STATS, key);
+const isLimitableStatKey = (key: string): boolean =>
+    isStatNameKey(key) || Object.prototype.hasOwnProperty.call(DERIVED_STAT_LABELS, key);
+
+/**
+ * Resolve a legacy stat identifier that may hold a real key already, OR the
+ * display label the old UI showed (e.g. `'crit rate'`, `'defense'`). Leaves
+ * the value unchanged when nothing resolves, so the schema still rejects it
+ * exactly as before — this never invents a stat, only recovers a
+ * differently-spelled real one.
+ */
+const resolveLegacyStat = (
+    raw: unknown,
+    index: Map<string, string>,
+    isValidKey: (key: string) => boolean
+): unknown => {
+    if (typeof raw !== 'string') return raw;
+    if (isValidKey(raw)) return raw;
+    return index.get(normalizeStatIdentifier(raw)) ?? raw;
+};
+
+/**
+ * Legacy `stat_priorities[].stat` may hold a display label (e.g. `'crit
+ * rate'`, `'defense'`) instead of a `LimitableStat` key. Resolve it via the
+ * derived reverse index; stat priorities accept derived limit stats
+ * (effectiveHp) in addition to real stats.
+ */
+const normalizeLegacyStatPriorities = (raw: unknown): unknown => {
+    if (!Array.isArray(raw)) return raw;
+    return raw.map((entry) => {
+        if (entry && typeof entry === 'object' && 'stat' in entry) {
+            const { stat, ...rest } = entry as Record<string, unknown>;
+            return {
+                ...rest,
+                stat: resolveLegacyStat(stat, LIMITABLE_STAT_INDEX, isLimitableStatKey),
+            };
+        }
+        return entry;
+    });
+};
+
 /**
  * Legacy `stat_bonuses` rows may use the shape of the old, now-deleted
- * `AIRecommendation` type: `{ stat, weight }` instead of `{ stat, percentage }`.
+ * `AIRecommendation` type: `{ stat, weight }` instead of `{ stat, percentage }`,
+ * AND/OR hold a display label (e.g. `'heal modifier'`) instead of a
+ * `StatName` key — never a derived stat here, unlike stat priorities.
  * Map `weight` forward only when `percentage` is absent — never accepted by
  * the schema itself, only adapted here on the way in.
  */
 const normalizeLegacyStatBonuses = (raw: unknown): unknown => {
     if (!Array.isArray(raw)) return raw;
     return raw.map((entry) => {
-        if (entry && typeof entry === 'object' && !('percentage' in entry) && 'weight' in entry) {
-            const { weight, ...rest } = entry as Record<string, unknown>;
-            return { ...rest, percentage: weight };
-        }
-        return entry;
+        if (!entry || typeof entry !== 'object') return entry;
+        const withPercentage =
+            !('percentage' in entry) && 'weight' in entry
+                ? (() => {
+                      const { weight, ...rest } = entry as Record<string, unknown>;
+                      return { ...rest, percentage: weight };
+                  })()
+                : (entry as Record<string, unknown>);
+        if (!('stat' in withPercentage)) return withPercentage;
+        const { stat, ...rest } = withPercentage;
+        return { ...rest, stat: resolveLegacyStat(stat, STAT_NAME_INDEX, isStatNameKey) };
     });
 };
 
@@ -155,7 +241,7 @@ export const toCommunityBuild = (row: CommunityRecommendation): CommunityBuild |
         // Fall back to the raw value when normalisation fails so validation —
         // and the drop-the-row behaviour below — happens exactly as before.
         shipRole: normalizedShipRole ?? row.ship_role,
-        statPriorities: row.stat_priorities ?? [],
+        statPriorities: normalizeLegacyStatPriorities(row.stat_priorities ?? []),
         setPriorities: row.set_priorities ?? [],
         statBonuses: normalizeLegacyStatBonuses(row.stat_bonuses ?? []),
         fleetBuffs: [],
