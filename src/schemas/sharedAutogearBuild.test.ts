@@ -94,4 +94,64 @@ describe('validateSharedAutogearBuild', () => {
         expect(result).not.toBeNull();
         expect(result as unknown as Record<string, unknown>).not.toHaveProperty('evil');
     });
+
+    describe('array cardinality bound', () => {
+        // Cardinality guard on a trust boundary: any signed-in user can write
+        // shared_config directly via PostgREST, and every element here is
+        // otherwise individually valid, so shape checks alone don't stop an
+        // oversized array from reaching every viewer's autogear panel.
+        it('accepts exactly 20 stat priorities (the boundary itself)', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                statPriorities: Array.from({ length: 20 }, () => ({ stat: 'crit' })),
+            };
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it('rejects 21 stat priorities', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                statPriorities: Array.from({ length: 21 }, () => ({ stat: 'crit' })),
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it('rejects 21 set priorities', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: Array.from({ length: 21 }, () => ({
+                    setName: 'CRITICAL',
+                    count: 4,
+                })),
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it('rejects 21 stat bonuses', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                statBonuses: Array.from({ length: 21 }, () => ({
+                    stat: 'attack',
+                    percentage: 10,
+                })),
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it('rejects 21 fleet buffs', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                fleetBuffs: Array.from({ length: 21 }, () => ({ stat: 'attack', percentage: 10 })),
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it('rejects 21 excluded implant types', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                excludedImplantTypes: Array.from({ length: 21 }, () => 'MARTYRDOM'),
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+    });
 });

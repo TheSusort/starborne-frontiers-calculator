@@ -107,7 +107,12 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
 
             <div className="space-y-1">
                 <Checkbox
-                    label={`Only show to users with ${ultimateImplantName || 'the same ultimate implant'}`}
+                    label={
+                        ultimateImplantName
+                            ? `Tag this build for ${ultimateImplantName}`
+                            : 'Tag this build for your ultimate implant'
+                    }
+                    helpLabel="Tagged builds sort to the top for players with the same implant equipped. They stay visible to everyone else, just lower in the list."
                     checked={isImplantSpecific}
                     onChange={setIsImplantSpecific}
                     disabled={!ultimateImplantName || isSubmitting}

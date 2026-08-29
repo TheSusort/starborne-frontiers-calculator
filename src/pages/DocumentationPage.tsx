@@ -1710,8 +1710,9 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Builds tagged for the ultimate implant you have equipped
-                                        sort to the top; builds for a different implant stay visible
-                                        at the bottom
+                                        sort to the top, untagged (generic) builds come next, and
+                                        builds tagged for a different implant stay visible at the
+                                        bottom
                                     </li>
                                     <li>
                                         Click a build to expand its full configuration — role, stat
@@ -1744,8 +1745,10 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>Optionally add a description explaining your strategy</li>
                                     <li>
-                                        Check &quot;Only show to users with same ultimate
-                                        implant&quot; if your build is implant-specific
+                                        Check &quot;Tag this build for [your ultimate implant]&quot;
+                                        if your build is implant-specific — it stays visible to
+                                        everyone, but sorts to the top for players with that implant
+                                        equipped
                                     </li>
                                     <li>Click &quot;Share&quot; to publish</li>
                                 </ol>
@@ -1803,9 +1806,9 @@ const DocumentationPage: React.FC = () => {
                                         Tank Build&quot;)
                                     </li>
                                     <li>
-                                        When your build relies on a specific ultimate implant,
-                                        enable the implant filter to help users find relevant
-                                        recommendations
+                                        When your build relies on a specific ultimate implant, tag
+                                        it so it sorts to the top for players who have that implant
+                                        equipped
                                     </li>
                                     <li>
                                         Check community recommendations before running autogear to

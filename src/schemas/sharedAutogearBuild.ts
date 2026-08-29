@@ -58,16 +58,24 @@ const fleetBuffSchema = z.object({
     percentage: z.number(),
 });
 
+// Cardinality guard, not a business rule: this table's INSERT policy admits any
+// authenticated user and SELECT is public, so a hostile row can otherwise carry
+// an array of any length — every element here is individually valid, so shape
+// checks alone don't stop it. The real UI never produces more than a handful of
+// entries in any of these arrays; 20 is generous headroom while still bounding
+// the row size any viewer has to validate and render.
+const MAX_ARRAY_LENGTH = 20;
+
 // Object schemas strip unknown keys by default (zod's .strip()), which is what
 // we want for a foreign payload: sanitise rather than reject on an extra field.
 export const sharedAutogearBuildSchema = z.object({
     version: z.literal(1),
     shipRole: shipRoleSchema,
-    statPriorities: z.array(statPrioritySchema),
-    setPriorities: z.array(setPrioritySchema),
-    statBonuses: z.array(statBonusSchema),
-    fleetBuffs: z.array(fleetBuffSchema),
-    excludedImplantTypes: z.array(implantKeySchema),
+    statPriorities: z.array(statPrioritySchema).max(MAX_ARRAY_LENGTH),
+    setPriorities: z.array(setPrioritySchema).max(MAX_ARRAY_LENGTH),
+    statBonuses: z.array(statBonusSchema).max(MAX_ARRAY_LENGTH),
+    fleetBuffs: z.array(fleetBuffSchema).max(MAX_ARRAY_LENGTH),
+    excludedImplantTypes: z.array(implantKeySchema).max(MAX_ARRAY_LENGTH),
     optimizeImplants: z.boolean(),
 });
 
