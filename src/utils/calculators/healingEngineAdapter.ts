@@ -131,6 +131,13 @@ export interface HealingSimulationInput {
      *  through untouched). Absent (manual config, no ship picked) → unknown faction → the healer
      *  never receives a faction-scoped grant. */
     healerFaction?: FactionKey;
+    /** #426: the HEALER ship's NAME, for the live `ally-on-team` roster check (Isha/Nayra's
+     *  reciprocal Affinity Override gate). Team actors carry their own `name` on `TeamActorInput`
+     *  (passed through untouched). Supply the picked ship's real name, never a display label —
+     *  absent (manual config, no ship picked) → `ally-on-team` keeps its assume-met fallback,
+     *  which is the right answer when there is no ship to ask about. Mirrors `healerRole` and
+     *  `healerFaction`'s contract exactly. */
+    healerName?: string;
     /** The heal target's security stat. Deprecated — reserved for future per-target live landing
      *  recompute; currently unused by the adapter (inbound enemy landing is driven by the live
      *  hacking-vs-security recompute from enemy.hacking / heal-target's effective security). */
@@ -707,6 +714,9 @@ export function simulateHealing(input: HealingSimulationInput): HealingSimulatio
         healModifier: healer.healModifier,
         role: input.healerRole,
         faction: input.healerFaction,
+        // #426: seeds `nameByActorId` so `ally-on-team` is a live roster check whenever a real
+        // ship was picked, instead of silently assuming the named ally is present.
+        name: input.healerName,
         healTargetId,
         enemyAttackers: engineEnemyAttackers,
         mode: 'healing',

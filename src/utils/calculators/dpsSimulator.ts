@@ -105,6 +105,16 @@ export interface DPSSimulationInput {
      *  unchanged). Absent (manual config, no ship picked) → unknown faction → the focus never
      *  matches a faction filter (conservative), mirroring the healing adapter's `healerFaction`. */
     faction?: FactionKey;
+    /** #426: the focus attacker's SHIP name, for the live `ally-on-team` roster check
+     *  (Isha/Nayra's reciprocal Affinity Override gate). Supply the picked ship's real name —
+     *  NOT the config's display label, which is a placeholder like "Ship 1" for a manual config.
+     *
+     *  Absent → `nameByActorId` may stay empty → `allyTeamNames` is undefined → `ally-on-team`
+     *  keeps its assume-met fallback, which is the correct answer for a manual config (there is no
+     *  ship, so "is X on the same team" cannot be asked). Present → the gate goes LIVE, and since
+     *  `allyTeamNames` excludes the owner itself, a solo named focus yields `[]` and a
+     *  "if X is on the same team" gate correctly reads NOT-met. */
+    name?: string;
     /** Skill model. When omitted, derived from the flat fields via flatInputToAbilities. */
     shipSkills?: ShipSkills;
     /** Team ships as real speed-ordered actors (Phase 2). When present, their buffs enter
@@ -662,6 +672,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         // this was missing entirely before, so a Fuying focus attacker's faction-scoped grant
         // could never include herself as a recipient (see DPSSimulationInput.faction's doc).
         faction: input.faction,
+        // #426: threaded so `nameByActorId` is non-empty whenever a real ship was picked, which is
+        // what switches `ally-on-team` from assume-met to a live roster check. Mirrors `faction`
+        // above; team actors carry their own `name` through `deriveTeamEngineActors`' spread.
+        name: input.name,
         defence,
         hp,
         // Base hacking/security (A2 Task 2) — the OLD landing-formula defaults (200 / 100) applied at
