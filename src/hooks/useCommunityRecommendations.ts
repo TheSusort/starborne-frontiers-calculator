@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
 import { SharedAutogearBuild } from '../types/communityRecommendation';
-import { CommunityRecommendationService } from '../services/communityRecommendations';
+import {
+    CommunityRecommendationService,
+    InvalidSharedConfigError,
+} from '../services/communityRecommendations';
 import {
     toCommunityBuild,
     type CommunityBuild,
@@ -199,7 +202,11 @@ export const useCommunityRecommendations = ({
                 );
             } catch (err) {
                 console.error('Error sharing recommendation:', err);
-                setError('Failed to share recommendation');
+                if (err instanceof InvalidSharedConfigError) {
+                    setError('This build could not be validated and was not shared.');
+                } else {
+                    setError('Failed to share recommendation');
+                }
                 return false;
             }
 

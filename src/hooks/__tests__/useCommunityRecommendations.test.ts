@@ -20,6 +20,20 @@ const createRecommendationMock = vi.fn();
 const voteOnRecommendationMock = vi.fn();
 const removeVoteMock = vi.fn();
 
+// Mirrors the real class from '../../services/communityRecommendations' so the
+// hook's `instanceof InvalidSharedConfigError` check has a real class to match
+// against, even though that module is otherwise fully mocked below. Declared
+// via vi.hoisted so it exists before vi.mock's hoisted factory runs.
+const { InvalidSharedConfigError } = vi.hoisted(() => {
+    class InvalidSharedConfigError extends Error {
+        constructor() {
+            super('Invalid shared autogear build');
+            this.name = 'InvalidSharedConfigError';
+        }
+    }
+    return { InvalidSharedConfigError };
+});
+
 vi.mock('../../services/communityRecommendations', () => ({
     CommunityRecommendationService: {
         listForShip: (...args: unknown[]) => listForShipMock(...args),
@@ -28,6 +42,7 @@ vi.mock('../../services/communityRecommendations', () => ({
         voteOnRecommendation: (...args: unknown[]) => voteOnRecommendationMock(...args),
         removeVote: (...args: unknown[]) => removeVoteMock(...args),
     },
+    InvalidSharedConfigError,
 }));
 
 const makeShip = (id: string, name: string): Ship => ({ id, name }) as Ship;
@@ -174,6 +189,27 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         expect(result.current.error).toBe(
             'Failed to share recommendation. Please make sure you are signed in.'
         );
+    });
+
+    it('reports a validation-specific message when the shared config is rejected, distinct from the not-signed-in message', async () => {
+        const ship = makeShip('1', 'Ares');
+        listForShipMock.mockResolvedValueOnce([]); // initial mount fetch
+        createRecommendationMock.mockRejectedValueOnce(new InvalidSharedConfigError());
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: sampleBuild })
+        );
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let shareResult: boolean | undefined;
+        await act(async () => {
+            shareResult = await result.current.handleShare('Title', 'Description', false);
+        });
+
+        expect(shareResult).toBe(false);
+        expect(result.current.error).toBe('This build could not be validated and was not shared.');
+        expect(result.current.error).not.toContain('signed in');
     });
 });
 

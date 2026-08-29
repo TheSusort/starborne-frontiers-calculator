@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
+import { GEAR_SETS } from '../constants/gearSets';
 import { validateSharedAutogearBuild } from './sharedAutogearBuild';
+
+// Mirrors the schema's private MAX_ARRAY_LENGTH so the boundary tests move
+// with it rather than drifting from a hardcoded magic number.
+const MAX_ARRAY_LENGTH = 50;
 
 const validBuild: SharedAutogearBuild = {
     version: 1,
@@ -100,26 +105,28 @@ describe('validateSharedAutogearBuild', () => {
         // shared_config directly via PostgREST, and every element here is
         // otherwise individually valid, so shape checks alone don't stop an
         // oversized array from reaching every viewer's autogear panel.
-        it('accepts exactly 20 stat priorities (the boundary itself)', () => {
+        it(`accepts exactly ${MAX_ARRAY_LENGTH} stat priorities (the boundary itself)`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                statPriorities: Array.from({ length: 20 }, () => ({ stat: 'crit' })),
+                statPriorities: Array.from({ length: MAX_ARRAY_LENGTH }, () => ({ stat: 'crit' })),
             };
             expect(validateSharedAutogearBuild(build)).not.toBeNull();
         });
 
-        it('rejects 21 stat priorities', () => {
+        it(`rejects ${MAX_ARRAY_LENGTH + 1} stat priorities`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                statPriorities: Array.from({ length: 21 }, () => ({ stat: 'crit' })),
+                statPriorities: Array.from({ length: MAX_ARRAY_LENGTH + 1 }, () => ({
+                    stat: 'crit',
+                })),
             };
             expect(validateSharedAutogearBuild(build)).toBeNull();
         });
 
-        it('rejects 21 set priorities', () => {
+        it(`rejects ${MAX_ARRAY_LENGTH + 1} set priorities`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                setPriorities: Array.from({ length: 21 }, () => ({
+                setPriorities: Array.from({ length: MAX_ARRAY_LENGTH + 1 }, () => ({
                     setName: 'CRITICAL',
                     count: 4,
                 })),
@@ -127,10 +134,10 @@ describe('validateSharedAutogearBuild', () => {
             expect(validateSharedAutogearBuild(build)).toBeNull();
         });
 
-        it('rejects 21 stat bonuses', () => {
+        it(`rejects ${MAX_ARRAY_LENGTH + 1} stat bonuses`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                statBonuses: Array.from({ length: 21 }, () => ({
+                statBonuses: Array.from({ length: MAX_ARRAY_LENGTH + 1 }, () => ({
                     stat: 'attack',
                     percentage: 10,
                 })),
@@ -138,20 +145,39 @@ describe('validateSharedAutogearBuild', () => {
             expect(validateSharedAutogearBuild(build)).toBeNull();
         });
 
-        it('rejects 21 fleet buffs', () => {
+        it(`rejects ${MAX_ARRAY_LENGTH + 1} fleet buffs`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                fleetBuffs: Array.from({ length: 21 }, () => ({ stat: 'attack', percentage: 10 })),
+                fleetBuffs: Array.from({ length: MAX_ARRAY_LENGTH + 1 }, () => ({
+                    stat: 'attack',
+                    percentage: 10,
+                })),
             };
             expect(validateSharedAutogearBuild(build)).toBeNull();
         });
 
-        it('rejects 21 excluded implant types', () => {
+        it(`rejects ${MAX_ARRAY_LENGTH + 1} excluded implant types`, () => {
             const build = {
                 ...structuredClone(validBuild),
-                excludedImplantTypes: Array.from({ length: 21 }, () => 'MARTYRDOM'),
+                excludedImplantTypes: Array.from(
+                    { length: MAX_ARRAY_LENGTH + 1 },
+                    () => 'MARTYRDOM'
+                ),
             };
             expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        // The regression this whole bound exists to catch: a legitimate build
+        // ranking every real gear set must never be rejected. This is the case
+        // the previous MAX_ARRAY_LENGTH of 20 got wrong (27 real GEAR_SETS keys).
+        it('accepts a build with a set priority entry for every real gear set', () => {
+            const setNames = Object.keys(GEAR_SETS);
+            expect(setNames.length).toBeGreaterThan(20);
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: setNames.map((setName) => ({ setName, count: 4 })),
+            };
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
         });
     });
 });

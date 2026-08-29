@@ -5,6 +5,18 @@ import {
 } from '../types/communityRecommendation';
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
 
+/**
+ * Thrown by createRecommendation when the shared config fails schema
+ * validation, so callers can tell this apart from a not-signed-in / RLS
+ * insert failure — both of which otherwise just resolve to `null`.
+ */
+export class InvalidSharedConfigError extends Error {
+    constructor() {
+        super('Invalid shared autogear build');
+        this.name = 'InvalidSharedConfigError';
+    }
+}
+
 export class CommunityRecommendationService {
     /**
      * Every community recommendation for a ship, best-scored first.
@@ -38,7 +50,7 @@ export class CommunityRecommendationService {
     ): Promise<CommunityRecommendation | null> {
         if (!validateSharedAutogearBuild(input.sharedConfig)) {
             console.error('Refusing to share an invalid autogear build');
-            return null;
+            throw new InvalidSharedConfigError();
         }
 
         const { data, error } = await supabase

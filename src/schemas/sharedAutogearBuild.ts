@@ -61,10 +61,13 @@ const fleetBuffSchema = z.object({
 // Cardinality guard, not a business rule: this table's INSERT policy admits any
 // authenticated user and SELECT is public, so a hostile row can otherwise carry
 // an array of any length — every element here is individually valid, so shape
-// checks alone don't stop it. The real UI never produces more than a handful of
-// entries in any of these arrays; 20 is generous headroom while still bounding
-// the row size any viewer has to validate and render.
-const MAX_ARRAY_LENGTH = 20;
+// checks alone don't stop it. The bound is deliberately set well above any
+// configuration the real UI can produce (setPriorities alone covers all 27
+// GEAR_SETS keys plus implants, and fleetBuffs has no natural ceiling since
+// duplicate-stat buffs from stacking sources are legitimate) — it exists only
+// to cap the row size any viewer has to validate and render, not to reject a
+// real build.
+const MAX_ARRAY_LENGTH = 50;
 
 // Object schemas strip unknown keys by default (zod's .strip()), which is what
 // we want for a foreign payload: sanitise rather than reject on an extra field.
