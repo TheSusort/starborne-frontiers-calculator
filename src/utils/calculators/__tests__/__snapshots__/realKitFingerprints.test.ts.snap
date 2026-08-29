@@ -1864,6 +1864,7 @@ exports[`kit fingerprints > Malvex 1`] = `
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "shield",
     "shield-destroyed",
   ],
   "richEnemy": [
@@ -1873,12 +1874,14 @@ exports[`kit fingerprints > Malvex 1`] = `
     "buff-expired",
     "buff:charged",
     "charge-changed",
+    "shield",
     "shield:active",
   ],
   "wounded": [
     "attack:active",
     "attack:charged",
     "charge-changed",
+    "shield",
     "shield-destroyed",
   ],
 }
