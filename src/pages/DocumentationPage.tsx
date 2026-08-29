@@ -1787,8 +1787,9 @@ const DocumentationPage: React.FC = () => {
                                         an existing configuration
                                     </li>
                                     <li>
-                                        Builds shared before August 2026 carry role, stat
-                                        priorities, gear sets and stat bonuses only
+                                        Builds shared before fleet buffs and implant settings were
+                                        captured carry role, stat priorities, gear sets and stat
+                                        bonuses only
                                     </li>
                                 </ul>
                             </div>
