@@ -279,6 +279,16 @@ export type CombatEvent =
            *  saturated — and `overshield` that recipient's clipped portion, present only when > 0.
            *  Always populated by the engine; absent only in hand-crafted test emits. */
           perTarget?: { targetId: string; amount: number; overshield?: number }[];
+          /** #424: this application did NOT come from a cast. The two engine LEECH sites convert
+           *  damage into shield off a passive, with no skill of their own — so `buildCombatLog`
+           *  must NOT call `consumePendingSkill()` for them. That call is not cosmetic: the tag
+           *  is a single-use token, so a leech row consuming it both mislabels ITSELF with an
+           *  unrelated skill's slot AND steals the tag from the cast row that earned it. Measured:
+           *  without this flag Malvex's fingerprint gained `shield:active` in the `plain` and
+           *  `wounded` scenarios — the pinned #296/#297 regression, whose whole point is that
+           *  Malvex's ACTIVE self-shield fires only against a shielded target, read as broken.
+           *  Set only by the leech sites; a cast or reactive grant leaves it absent. */
+          uncast?: true;
       } & ReactiveStamp)
     /** LOG-ONLY: a drain-time REACTIVE damage proc resolved (applyReactiveDamage → creditDamage).
      *  A reactive damage credits its total but emits NO `ability-performed` (chain guard — an

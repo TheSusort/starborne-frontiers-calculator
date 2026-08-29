@@ -230,21 +230,26 @@ describe('Phase 3 reactive triggers', () => {
     // Scenario 3 — standing aura debuff grants nothing (recurring fold never
     // emits debuff-applied, so the trigger never fires). Cadence = baseline.
     //
-    // ⚠️ #390: THIS FIXTURE IS CURRENTLY VACUOUS, AND THE REASON IS NOT THE ONE ABOVE. The
-    // enemy-side AURA channel is dead end-to-end: an enemy-side `duration: 'recurring'` status is
-    // registered under the side-wide '__enemy__' key but folded under the resolved victim's real
-    // id, so this debuff never lands at all. The assertion below therefore cannot tell the stated
-    // rule ("the aura DID land, and a recurring re-application correctly emits no debuff-applied")
-    // apart from "the aura never landed, so of course nothing was emitted" — it would hold either
-    // way. Measured, with the root cause and the corpus census, in
-    // `calculators/__tests__/enemyAuraDebuffChannel.characterization.test.ts`.
+    // ⚠️ #390: THIS FIXTURE IS STILL VACUOUS, AND THE REASON IS NOT THE ONE ABOVE. An enemy-side
+    // `duration: 'recurring'` status is registered under the side-wide '__enemy__' key but folded
+    // under the resolved victim's real id, so this debuff never lands at all. The assertion below
+    // therefore cannot tell the stated rule ("the aura DID land, and a recurring re-application
+    // correctly emits no debuff-applied") apart from "the aura never landed, so of course nothing
+    // was emitted" — it would hold either way.
+    //
+    // The 2026-08-29 repair did NOT revive it, deliberately. That fix folds the '__enemy__' bucket
+    // into per-victim reads only for BOARD-WIDE targets (`all-enemies`); this fixture's target is
+    // a single `enemy`, a SUBSET scope, and the bucket carries no victim id to place it by — so it
+    // is still dropped. Root cause, the repaired half and the dropped half are all measured in
+    // `calculators/__tests__/enemyAuraDebuffChannel.characterization.test.ts` (arm 4 is this case).
     //
     // The fixture is left EXACTLY as it is on purpose. Measured 2026-08-27 against a candidate
-    // one-site repair of the read key: with the aura channel live this test still passes, so the
-    // rule it asserts is the right one and only its PROOF is missing. Do not "fix" it by giving
-    // the debuff a numeric duration — that would test the timed path, which scenarios 1 and 2
-    // already cover, and would delete the only fixture aimed at this rule. It becomes a real
-    // measurement the day the channel is repaired; nothing here needs to change then.
+    // repair of the read key: with the aura channel live this test still passes, so the rule it
+    // asserts is the right one and only its PROOF is missing. Do not "fix" it by giving the debuff
+    // a numeric duration — that would test the timed path, which scenarios 1 and 2 already cover,
+    // and would delete the only fixture aimed at this rule. Do not switch it to `all-enemies`
+    // either: that changes the cadence the assertion below is written against. It becomes a real
+    // measurement the day subset-scoped enemy auras register at CAST time.
     // ----------------------------------------------------------------------
     it('scenario 3: recurring (aura) enemy debuff never feeds the on-debuff-inflicted trigger', () => {
         const skills: ShipSkills = {

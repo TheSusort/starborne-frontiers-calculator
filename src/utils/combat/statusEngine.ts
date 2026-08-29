@@ -80,6 +80,15 @@ interface AbilityStatusBase {
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
      *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
     factionFilter?: FactionKey[];
+    /** #390: set to `'all'` ONLY on an enemy-side status whose source target covers the whole
+     *  opposing board (`all-enemies` — see `ABILITY_TARGET_ENEMY_SCOPE`). Enemy-side aura and
+     *  accumulating statuses are registered once at actor construction, under the singular
+     *  `DEFAULT_ENEMY_TARGET` key, because no victim id exists yet; `activeAbilityStatuses` folds
+     *  that bucket into a per-victim read only for the entries carrying this flag, since a
+     *  board-wide status is correct for EVERY victim while a subset-scoped one would be smeared
+     *  onto enemies it never touched. Absent → not folded (every self-side status, every
+     *  subset-scoped enemy status, and every fixture that predates this flag). */
+    enemyScope?: 'all';
 }
 
 /**
@@ -501,6 +510,44 @@ interface TimedSourceSets {
  *  to the old singular enemyMap path. Exported so triggers.ts can reference the same constant
  *  instead of duplicating the string literal. */
 export const DEFAULT_ENEMY_TARGET = '__enemy__';
+
+/**
+ * #390 — the DEFAULT_ENEMY_TARGET fold, for the AURA store only. Enemy-side aura and accumulating
+ * statuses are both registered once at actor construction, into the singular
+ * `DEFAULT_ENEMY_TARGET` bucket, because no victim id exists that early. Every reader looks them
+ * up under the resolved victim's REAL id, so before this the bucket was written and never read —
+ * the channel was inert end to end.
+ *
+ * Only the AURA store is folded. The accumulating store is left dropped on purpose: cleanse
+ * gathers its candidates per victim, so a folded accumulating entry would be readable by every
+ * victim and removable by none. See the call site in `activeAbilityStatuses` for the full reason.
+ *
+ * This returns the bucket entries that may be folded into ONE victim's read:
+ *  - nothing at all when the caller IS reading the default bucket (it already has them, and
+ *    folding would double every entry);
+ *  - only entries flagged `enemyScope: 'all'`. A board-wide status is correct for every victim by
+ *    definition. A subset-scoped one is NOT foldable — the bucket does not record which enemy it
+ *    was meant for, so folding it would smear a one-victim debuff across the whole opposing board.
+ *    Repairing that half means moving enemy-side aura registration to cast time; until then those
+ *    statuses stay dropped, pinned by `enemyAuraDebuffChannel.characterization.test.ts` arm 4.
+ *  - nothing already present under `alreadyHave` (a real per-target entry is the more specific
+ *    answer and must not be doubled by the bucket's copy).
+ */
+function boardWideEnemyExtras<T extends { enemyScope?: 'all' }>(
+    bucket: Iterable<T> | undefined,
+    enemyTargetId: string,
+    keyOf: (entry: T) => string,
+    alreadyHave: (key: string) => boolean
+): T[] {
+    if (!bucket || enemyTargetId === DEFAULT_ENEMY_TARGET) return [];
+    const out: T[] = [];
+    for (const entry of bucket) {
+        if (entry.enemyScope !== 'all') continue;
+        if (alreadyHave(keyOf(entry))) continue;
+        out.push(entry);
+    }
+    return out;
+}
 
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
@@ -1660,11 +1707,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // still gated by the caster's buffs/state — resolveCtx maps casterId → that ctx).
         // Self-side auras are per-owner — only the requested owner's list is read so a team
         // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
-        // Enemy-side auras are per-target — only the requested target's list is read (mirrors self).
+        // Enemy-side auras are per-target — only the requested target's list is read (mirrors
+        // self), PLUS the board-wide entries from the singular DEFAULT_ENEMY_TARGET bucket (#390).
+        const perTargetAuras = side === 'enemy' ? (auraEnemyMaps.get(enemyTargetId) ?? []) : [];
+        const perTargetAuraNames = new Set(perTargetAuras.map((a) => a.payload.buffName));
         const auraList =
             side === 'self'
                 ? (auraSelfMaps.get(ownerId) ?? [])
-                : (auraEnemyMaps.get(enemyTargetId) ?? []);
+                : [
+                      ...perTargetAuras,
+                      ...boardWideEnemyExtras(
+                          auraEnemyMaps.get(DEFAULT_ENEMY_TARGET),
+                          enemyTargetId,
+                          (a) => a.payload.buffName,
+                          (name) => perTargetAuraNames.has(name)
+                      ),
+                  ];
         for (const a of auraList) {
             // casterId defaults to 'attacker' (the engine always sets it; only unit-test
             // fixtures omit it) so the resolver returns the local ctx in the attacker-only path.
@@ -1697,6 +1755,21 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             side === 'self'
                 ? (accumSelfMaps.get(ownerId) ?? new Map<string, AccumulatingState>())
                 : (accumEnemyMaps.get(enemyTargetId) ?? new Map<string, AccumulatingState>());
+        // #390: the board-wide entries from the DEFAULT_ENEMY_TARGET bucket, minus any buffName
+        // the per-target map already holds — a real per-target entry is the more specific answer
+        // and must not be doubled by the bucket's copy.
+        // #390: the DEFAULT_ENEMY_TARGET fold is deliberately NOT applied to the accumulating
+        // store, even for a board-wide target. `removeNewestFirst` (cleanse) gathers its
+        // accumulating candidates from `accumEnemyMaps.get(actorId)` alone, so a folded entry
+        // would be visible in every victim's read yet absent from every victim's cleanse — a
+        // status that cannot be removed from one enemy without removing it from all of them,
+        // which contradicts the very ruling this repair implements ("stays until it is cleansed
+        // or removed in another way"). Auras have no such conflict: they are uncleansable BY
+        // CONSTRUCTION on both sides (see removeNewestFirst's "NOT in these maps" note — they
+        // re-derive each round and have no stored entry to remove), so folding them changes
+        // nothing about removability. The accumulating half needs the same real fix the subset
+        // scopes need — registration at CAST time, per resolved victim — and stays dropped until
+        // then, guarded by `enemyAuraChannelCorpus.test.ts`.
         for (const s of accumMap.values()) {
             if (!s.payload) continue;
             if (s.stacks <= 0) continue;

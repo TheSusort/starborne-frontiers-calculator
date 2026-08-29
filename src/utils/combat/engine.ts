@@ -29,7 +29,11 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
+import {
+    isEnemyTarget,
+    isAllEnemiesTarget,
+    type EnemySelectorKind,
+} from '../abilities/abilityTargetSide';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -95,7 +99,7 @@ import { isDisable } from './disableBuffs';
 import { highestAttackAmong } from './highestAttack';
 import { emitAttacked } from './emitAttacked';
 import { emitPerVictimAttacked } from './emitPerVictimAttacked';
-import { CombatEvent, CombatEventBus, createEventBus } from './events';
+import { CombatEvent, CombatEventBus, ShieldApplyAccumulator, createEventBus } from './events';
 import { resolveLethalHp } from './lethalHp';
 import { reversedRepairsOn } from './reversedRepairs';
 // `incomingHealFactor` lives in the `buffTotals` LEAF module precisely so every consumer of the
@@ -441,6 +445,15 @@ function registerActorAbilityStatuses(
                 // here — this function runs at actor construction. Attached only when the ability
                 // carries one, so every other ship's status object is byte-identical.
                 ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
+                // #390: mark the enemy-side statuses whose target covers the whole opposing board.
+                // The aura/accumulating registration below has no victim id to key by (it runs at
+                // actor construction, before any cast), so it writes into the singular
+                // DEFAULT_ENEMY_TARGET bucket; statusEngine folds that bucket into a per-victim
+                // read only for entries carrying this flag. Attached only when it is 'all', so
+                // every other status object stays byte-identical (same rule as factionFilter).
+                ...(side === 'enemy' && isAllEnemiesTarget(ability.target)
+                    ? { enemyScope: 'all' as const }
+                    : {}),
             } as const;
             let status: RegisteredAbilityStatus;
             if (accumulating) {
@@ -4726,6 +4739,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
+        // #424: proc-call scope (every entry, every recipient), not per entry — see the emit below.
+        const shieldAcc = new ShieldApplyAccumulator();
         for (const e of entries) {
             // BOTH conjuncts are load-bearing. This copy once kept only the first, which
             // degenerates "a detonation-scoped leech skips non-detonation channels" into "skips
@@ -4904,9 +4919,44 @@ export function runCombat(rawInput: CombatEngineInput): {
                     }
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
-                    if (recipientActor) healingCtx.grantShieldToTarget(raw, recipientActor);
+                    // #424, sibling arm. CORPUS-DEAD TODAY and wired anyway. Measured 2026-08-29
+                    // over all 149 CSV rows: the passive-slot `damage-dealt` entries that reach
+                    // this map are Magnolia (heal 40%) and Valerian (heal 15%) — both HEALS, so
+                    // nothing shipped enters this `else`. (#424's own text named FrontLine here;
+                    // that is wrong. Her 30% damage-dealt shield is an ACTIVE-slot cast rider plus
+                    // a reactive `on-enemy-charged` passive, and both of those already emit
+                    // through their own accumulators.) It is wired regardless because leaving one
+                    // of two sibling arms silent is the precise hand-copied-divergence shape #418
+                    // was filed against — the next `damage-dealt` shield to ship must not have to
+                    // rediscover this.
+                    //
+                    // ⚠️ ONE KNOWN GAP, live only if that ship ever ships. The owner's ruling is
+                    // ONE ROLL PER ATTACK, and unlike the taken sibling this proc runs once per
+                    // VICTIM, so an AoE would emit once per victim rather than once per attack.
+                    // Closing that needs an attack-scoped accumulator threaded through
+                    // `drivePositionalApply`'s walk, which is a new seam and deliberately not
+                    // built for a dead arm. Single-target — every attack in the corpus that could
+                    // reach here — is already exactly one emit.
+                    if (recipientActor)
+                        shieldAcc.add(rid, healingCtx.grantShieldToTarget(raw, recipientActor));
                 }
             }
+        }
+        // ONE event per proc call, keyed on the LEECHER: it is the ship applying the shield, even
+        // when an `all-allies` entry lands the pool on someone else. Same gross-attempt gate as
+        // the cast sites (#418).
+        if (shieldAcc.shouldEmit) {
+            bus.emit({
+                type: 'shield-applied',
+                granterId: sourceId,
+                recipientIds: shieldAcc.recipientIds,
+                round: currentRound,
+                amount: shieldAcc.amount,
+                ...shieldAcc.overshieldFields,
+                perTarget: shieldAcc.perTarget,
+                // No cast behind this grant — see the field's doc in `events.ts`.
+                uncast: true,
+            });
         }
     };
 
@@ -4955,6 +5005,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         const entries = takenLeechesByOwner.get(victim.id);
         if (!entries) return;
         const rt = allRuntimesById.get(victim.id);
+        // #424: scoped to the whole proc call (all entries), not to one entry — see the emit
+        // below for the one-roll-per-attack ruling that fixes this scope.
+        const shieldAcc = new ShieldApplyAccumulator();
         for (const e of entries) {
             // requiresHpDamage gate (per victim): shield present at hit start AND HP damage dealt.
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
@@ -5030,12 +5083,40 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
-                // H3.6: this engine standing-leech shield site intentionally does NOT emit
-                // shield-applied — it is per-recipient (no shield-application CAST to key on) and
-                // no H2/H3 source routes through it, so it is out of H3 scope. Emission lives only
-                // in the cast path (playerTurn.ts) and the reactive executor (triggers.ts).
-                healingCtx.grantShieldToTarget(raw, victim);
+                // #424: this site now EMITS. The H3.6 comment that stood here declared the
+                // silence deliberate ("no shield-application CAST to key on"), and #424 measured
+                // what that cost: a damage-taken leech grants a real pool and rolled NOTHING,
+                // because `shield-applied` is what drives `on-shield-applied` — the RESONATING
+                // FURY implant, which pairs with any hull. OWNER RULING 2026-08-29, from the
+                // Quixilver example: a leech-granted shield IS "applying a shield", so the roll
+                // happens on that hit. The "no cast to key on" premise was never the right
+                // question — the granularity ruling is ONE ROLL PER ATTACK, and this proc runs
+                // once per victim per attack, so the attack IS the unit and the accumulator
+                // below is its scope.
+                shieldAcc.add(victim.id, healingCtx.grantShieldToTarget(raw, victim));
             }
+        }
+        // ONE event per proc call, i.e. per attack on this victim — never one per entry. A hull
+        // carrying two damage-taken shields converts one hit twice, and that is still a single
+        // application of shield. Same accumulator, same gross-attempt gate (#418) as all three
+        // cast sites: routing the rule through `ShieldApplyAccumulator` rather than a hand-copied
+        // `if (granted > 0)` is the whole point of that class existing.
+        if (shieldAcc.shouldEmit) {
+            bus.emit({
+                type: 'shield-applied',
+                // A damage-taken leech is a SELF-shield: the victim converts the damage it took,
+                // so it is both granter and recipient. Distinct victims of one AoE are distinct
+                // GRANTERS and therefore correctly get one event each — the per-attack ruling is
+                // per granter, and Resonating Fury is worn by a ship, not by the attack.
+                granterId: victim.id,
+                recipientIds: shieldAcc.recipientIds,
+                round: currentRound,
+                amount: shieldAcc.amount,
+                ...shieldAcc.overshieldFields,
+                perTarget: shieldAcc.perTarget,
+                // No cast behind this grant — see the field's doc in `events.ts`.
+                uncast: true,
+            });
         }
     };
 
