@@ -46,6 +46,14 @@ import {
 // one-victim debuff across the whole opposing board, which is worse than dropping it. Repairing
 // those needs registration to move to CAST time, per resolved victim. Arm 4 pins that gap open.
 //
+// The ACCUMULATING store is NOT folded either, board-wide or not. `removeNewestFirst` (cleanse)
+// gathers its candidates from `accumEnemyMaps.get(actorId)`, so a folded entry would be readable
+// by every victim and removable by none — uncleansable, which contradicts the very ruling above.
+// Auras carry no such conflict: they have no stored per-victim entry to remove on EITHER side
+// (removeNewestFirst's own "NOT in these maps" note — they re-derive each round), so they were
+// uncleansable long before this and folding them changes nothing about removability. Both dropped
+// halves want the same cast-time fix.
+//
 // BLAST RADIUS, RE-MEASURED 2026-08-29 (post-#428). Zero live corpus instances, on either store.
 // `enemyAuraChannelCorpus.test.ts` is the standing census and the guard: 149 ships x refits 0/2/4,
 // every slot, aura AND accumulating. The only enemy-side hits are Amartya's `Exposed` (aura) and

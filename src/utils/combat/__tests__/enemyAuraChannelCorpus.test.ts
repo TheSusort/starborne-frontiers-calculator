@@ -12,11 +12,19 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 //
 // WHAT THIS GUARDS. Enemy-side AURA and ACCUMULATING statuses are registered once at actor
 // construction into the singular `DEFAULT_ENEMY_TARGET` bucket (no victim id exists that early).
-// `statusEngine.activeAbilityStatuses` now folds that bucket into every per-victim read — but ONLY
-// for statuses whose target covers the whole opposing board (`enemyScope: 'all'`). A SUBSET-scoped
-// one — single `enemy`, either adjacency scope, any of the three selectors — is still dropped,
-// because the bucket does not record which enemy it was meant for and folding it would smear a
-// one-victim debuff across the board. See `enemyAuraDebuffChannel.characterization.test.ts` arm 4.
+// `statusEngine.activeAbilityStatuses` now folds that bucket into every per-victim read — but for
+// exactly ONE shape: a board-wide (`all-enemies`) AURA. Two things stay dropped.
+//
+//   • Every SUBSET scope — single `enemy`, either adjacency scope, any of the three selectors.
+//     The bucket does not record which enemy the status was meant for, so folding it would smear
+//     a one-victim debuff across the whole board. See
+//     `enemyAuraDebuffChannel.characterization.test.ts` arm 4.
+//   • The whole ACCUMULATING store, board-wide or not. `removeNewestFirst` (cleanse) gathers its
+//     accumulating candidates from `accumEnemyMaps.get(actorId)`, so a folded entry would be
+//     readable by every victim and removable by none — a status nobody can cleanse off one enemy,
+//     which contradicts the ruling below.
+//
+// Both need the same real fix: registration at CAST time, per resolved victim.
 //
 // Nothing in the corpus lands in that dropped half today, which is exactly why it is dangerous: a
 // kit that lands there does not crash, log, or look wrong — its debuff silently does nothing, and
@@ -27,15 +35,22 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 // WHEN THIS TEST FAILS, IT IS NOT THE TEST THAT IS WRONG. A named ship has arrived in the dropped
 // half. Either its skill text states a turn count that the parser is missing (fix the parser), or
 // it genuinely has no turn window — which by the owner's 2026-08-29 ruling means "stays until it
-// is cleansed or removed in another way", i.e. it SHOULD stand for the fight, and the subset half
+// is cleansed or removed in another way", i.e. it SHOULD stand for the fight, and the dropped half
 // of the channel now has a real instance to justify repairing it. That repair means moving
-// enemy-side aura registration to CAST time, where the resolved victim id is in scope.
+// enemy-side aura/accumulating registration to CAST time, where the resolved victim id is in
+// scope — which fixes the subset scopes and the cleanse gap in one move.
 //
 // WHY REACTIVE ABILITIES DO NOT COUNT. `partitionReactiveAbilities` strips reactive abilities out
 // of `castSkills` BEFORE the engine's `isAura` classification runs, so a reactive enemy-side
 // status never reaches this channel at all — it is routed to the trigger executor instead. Both of
 // the corpus' current enemy-side hits (Amartya's `Exposed` aura and `Defense Shred` accumulating)
 // are reactive, which is why the live count is zero rather than two.
+//
+// WHY AURAS ARE EXEMPT FROM THE CLEANSE OBJECTION. An aura has no stored per-victim entry to
+// remove on EITHER side — `removeNewestFirst`'s own "NOT in these maps" note says so: auras
+// re-derive each round. They were uncleansable before this repair and are uncleansable after it,
+// so folding them changes nothing about removability. That is a pre-existing property of the aura
+// model, not something #390 introduced.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 /** Refit levels swept. Only the refit-active passive applies in-game, so a status can be present
@@ -127,29 +142,36 @@ describe('#390 enemy-side aura/accumulating channel — corpus census', () => {
     });
 
     // ── THE GUARD ────────────────────────────────────────────────────────────────────────────
-    it('no shipped kit lands in the DROPPED half (subset-scoped, non-reactive)', () => {
-        const dropped = rows.filter((r) => !r.reactive && !r.boardWide);
+    // Exactly ONE shape is repaired: a board-wide AURA. Everything else in this channel is still
+    // dropped — every subset scope (no victim id in the bucket to place it by) and the whole
+    // ACCUMULATING store regardless of scope (cleanse gathers per victim, so a folded entry would
+    // be readable by all and removable by none). Both await the same real fix: registration at
+    // CAST time, per resolved victim.
+    const isRepaired = (r: Row): boolean => r.boardWide && r.kind === 'aura';
+
+    it('no shipped kit lands in the DROPPED half of the channel', () => {
+        const dropped = rows.filter((r) => !r.reactive && !isRepaired(r));
         expect(
             dropped.map(describeRow),
-            'A ship now reaches the subset half of the enemy aura/accumulating channel, where its ' +
-                'status is silently discarded. Read this file’s header before changing this ' +
-                'assertion — the fix is in the engine, not here.'
+            'A ship now reaches a part of the enemy aura/accumulating channel that silently ' +
+                'discards its status. Read this file’s header before changing this assertion — ' +
+                'the fix is in the engine, not here.'
         ).toEqual([]);
     });
 
-    // Board-wide entries are no longer a defect (the fold reaches them), but their arrival is the
-    // first time that repaired path carries a real kit, so it is worth seeing rather than assuming.
-    // Not an error: this arm reports, it does not forbid.
-    it('reports any shipped kit now riding the REPAIRED board-wide fold', () => {
-        const boardWide = rows.filter((r) => !r.reactive && r.boardWide);
-        expect(boardWide.every((r) => r.boardWide)).toBe(true);
-        if (boardWide.length > 0) {
+    // Board-wide auras are no longer a defect (the fold reaches them), but their arrival would be
+    // the first time that repaired path carries a real kit, so it is worth seeing rather than
+    // assuming. Not an error: this arm reports, it does not forbid.
+    it('reports any shipped kit now riding the REPAIRED board-wide aura fold', () => {
+        const repaired = rows.filter((r) => !r.reactive && isRepaired(r));
+        if (repaired.length > 0) {
             // eslint-disable-next-line no-console
             console.log(
-                `#390: ${boardWide.length} corpus status(es) now ride the board-wide fold:\n` +
-                    boardWide.map((r) => `  ${describeRow(r)}`).join('\n')
+                `#390: ${repaired.length} corpus status(es) now ride the board-wide aura fold:\n` +
+                    repaired.map((r) => `  ${describeRow(r)}`).join('\n')
             );
         }
+        expect(repaired.every(isRepaired)).toBe(true);
     });
 
     // ── THE INSTRUMENT'S OWN VALIDITY ────────────────────────────────────────────────────────
