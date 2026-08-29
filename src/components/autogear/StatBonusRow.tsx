@@ -63,7 +63,7 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
                 )}
             </div>
             <span>
-                {STATS[bonus.stat as StatName].label} ({' '}
+                {STATS[bonus.stat as StatName]?.label ?? bonus.stat} ({' '}
                 <InlineNumberEdit
                     value={bonus.percentage}
                     onSave={(v) => v !== undefined && onUpdate({ ...bonus, percentage: v })}

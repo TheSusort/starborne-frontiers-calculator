@@ -62,7 +62,7 @@ export const FleetBuffRow: React.FC<FleetBuffRowProps> = ({
                 )}
             </div>
             <span>
-                {STATS[buff.stat].label} +
+                {STATS[buff.stat]?.label ?? buff.stat} +
                 <InlineNumberEdit
                     value={buff.percentage}
                     onSave={(v) => v !== undefined && onUpdate({ ...buff, percentage: v })}
