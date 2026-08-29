@@ -290,6 +290,14 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                 affinity: t.affinity,
                 role: t.role,
                 faction: t.faction,
+                // #426: the team ship's real name, for the live `ally-on-team` roster check
+                // (Isha/Nayra's reciprocal Affinity Override gate). DERIVED from `shipId` rather
+                // than stored on `TeamShipConfig` beside `role`/`faction`: those are snapshots of
+                // stats that the user may edit, whereas the name is pure identity and a stored
+                // copy would be one more field every re-enumerating call site has to remember.
+                // Absent for a manual slot → an unnamed actor can never satisfy a name gate,
+                // matching how `role` and `faction` already treat manual slots.
+                name: (t.shipId && getShipById(t.shipId)?.name) || undefined,
                 // Board cell, ONLY when the user actually picked one — the same shape `targetActor`
                 // uses below, and for the same reason. Left absent, the adapter applies
                 // `defaultHealingTeamSlot(index)` itself (identical to what `teamShipSlot` displays)
@@ -298,7 +306,7 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                 // team ship look deliberate and could evict the heal target off its covered cell.
                 ...(t.position ? { position: t.position } : {}),
             })),
-        [teamShips]
+        [teamShips, getShipById]
     );
 
     const enemyInputs = useMemo<EnemyAttackerInput[]>(

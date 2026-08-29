@@ -367,4 +367,40 @@ describe('HealingCalculatorPage', () => {
 
         expect(within(enemyCard).getByLabelText('HP')).toHaveValue(1);
     });
+    // ── #426: the picked ship's NAME must reach the adapter ─────────────────────
+    // The engine's `ally-on-team` gate (Isha/Nayra's reciprocal Affinity Override) is a live
+    // roster check only while `nameByActorId` is non-empty, and that map is fed from the
+    // adapter's `name` / `teamActors[].name`. The adapter's own honouring of those fields is
+    // covered in `utils/calculators/__tests__/allyOnTeamGate.test.ts`; what no adapter test can
+    // see is whether this PAGE sets them, which is exactly where the defect lived.
+    it('#426 passes the picked healer ship name as `healerName`', async () => {
+        const adapter = await import('../../../utils/calculators/healingEngineAdapter');
+        const spy = vi.spyOn(adapter, 'simulateHealing');
+        mockGetShipById.mockImplementation((id) =>
+            id === supportHealer.id ? supportHealer : undefined
+        );
+        render(
+            <MemoryRouter initialEntries={[`/healing?shipId=${supportHealer.id}`]}>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        expect(spy).toHaveBeenCalled();
+        expect(spy.mock.calls.map(([input]) => input.healerName)).toContain('Kindly Medic');
+        spy.mockRestore();
+    });
+
+    it('#426 leaves `healerName` undefined for a manual healer (assume-met fallback kept)', async () => {
+        const adapter = await import('../../../utils/calculators/healingEngineAdapter');
+        const spy = vi.spyOn(adapter, 'simulateHealing');
+        // No ?shipId= → manual config. Its display label must NOT leak through as a ship name:
+        // a name no kit can match is worse than the assume-met fallback it would replace.
+        render(
+            <MemoryRouter>
+                <HealingCalculatorPage />
+            </MemoryRouter>
+        );
+        expect(spy).toHaveBeenCalled();
+        for (const [input] of spy.mock.calls) expect(input.healerName).toBeUndefined();
+        spy.mockRestore();
+    });
 });

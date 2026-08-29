@@ -254,13 +254,18 @@ const DPSCalculatorPage: React.FC = () => {
                 // as affinity above — this was the missing link even though TeamShipConfig.faction
                 // and TeamActorInput.faction already existed.
                 faction: t.faction,
+                // #426: the team ship's real name, forwarded by deriveTeamEngineActors' spread —
+                // this is what makes `ally-on-team` a live roster check instead of assume-met.
+                // Deliberately NOT the `Team N` display placeholder used by the turn-order strip:
+                // an unnamed manual actor must not be able to satisfy a name gate.
+                name: (t.shipId && getShipById(t.shipId)?.name) || undefined,
                 // Board slot — forwarded to the engine by deriveTeamEngineActors' spread. Defaults
                 // walk BACK from the front so team ships never start stacked on the attacker's slot.
                 // Collisions WITH the attacker are resolved per-config below (each config may sit on
                 // a different slot, so it cannot be settled here).
                 position: t.position ?? defaultTeamSlot(i),
             })),
-        [teamShips]
+        [teamShips, getShipById]
     );
 
     const simResults = useMemo(() => {
@@ -318,6 +323,10 @@ const DPSCalculatorPage: React.FC = () => {
                     // #363 follow-up: the attacker config's own faction, mirroring `affinity`
                     // above — see DPSSimulationInput.faction's doc. Absent for a manual config.
                     faction: config.faction,
+                    // #426: the picked ship's real name. `config.name` is NOT usable here — it is a
+                    // display label that reads "Ship 1" for a manual config, and feeding that in
+                    // would switch the gate live with a name no kit can ever match.
+                    name: (config.shipId && getShipById(config.shipId)?.name) || undefined,
                     allyChargePerRound: config.allyChargePerRound,
                     enemyType,
                     // SP-2: opt into the display-only status timeline — the summary's buffed stats
@@ -376,6 +385,7 @@ const DPSCalculatorPage: React.FC = () => {
         enemyBuffs,
         enemyAffinity,
         teamActors,
+        getShipById,
     ]);
 
     const addConfig = () => {

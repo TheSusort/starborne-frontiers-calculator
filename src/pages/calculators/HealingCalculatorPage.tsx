@@ -329,6 +329,10 @@ const HealingCalculatorPage: React.FC = () => {
             role: targetRole,
             // #363: faction-scoped ally grants resolve the recipient's faction here.
             faction: targetFaction,
+            // #426: the heal target is a player-side ALLY, so its name belongs in the roster the
+            // `ally-on-team` gate reads. Derived from the picked ship; deliberately NOT the
+            // 'Heal Target' display fallback used by the placement strip, which no kit can match.
+            name: (target.shipId && getShipById(target.shipId)?.name) || undefined,
             // ONLY when the user chose a cell. Left absent, the adapter applies its coverage-aware
             // `defaultHealTargetSlot` — which knows the healer's support footprint and therefore
             // whether the target gets healed at all. Passing a cell here overrides that.
@@ -337,6 +341,7 @@ const HealingCalculatorPage: React.FC = () => {
     }, [
         target.useHealerAsTarget,
         target.position,
+        target.shipId,
         target.speed,
         target.defence,
         target.hp,
@@ -346,6 +351,7 @@ const HealingCalculatorPage: React.FC = () => {
         targetCombatStats,
         targetRole,
         targetFaction,
+        getShipById,
     ]);
 
     const simResults = useMemo(() => {
@@ -396,6 +402,9 @@ const HealingCalculatorPage: React.FC = () => {
                     healTargetSecurity,
                     healerRole,
                     healerFaction,
+                    // #426: the healer's own ship name — see healerRole/healerFaction above; this
+                    // is what switches `ally-on-team` from assume-met to a live roster check.
+                    healerName: config.shipId ? getShipById(config.shipId)?.name : undefined,
                     teamActors: allTeamActors,
                     enemies: enemyInputs,
                     rounds,
