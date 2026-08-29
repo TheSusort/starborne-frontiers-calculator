@@ -5,6 +5,7 @@ import {
     isImplantMatch,
     configToSharedBuild,
     hasExistingBuildConfig,
+    communityBuildToConfigUpdate,
 } from '../communityBuild';
 import type {
     CommunityRecommendation,
@@ -233,5 +234,40 @@ describe('hasExistingBuildConfig', () => {
 
     it('is true when optimizeImplants is on', () => {
         expect(hasExistingBuildConfig({ ...empty, optimizeImplants: true })).toBe(true);
+    });
+});
+
+describe('communityBuildToConfigUpdate', () => {
+    // Pins the feature's single most important guarantee: applying a community
+    // build writes exactly these seven build-shaping fields and never the
+    // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
+    // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
+    // assumeCalibrated, useArenaModifiers). Adding an eighth key here — of
+    // either kind — must fail this test, not ship silently.
+    it('produces an update object with exactly the seven build-shaping keys', () => {
+        const update = communityBuildToConfigUpdate(sharedConfig);
+        expect(Object.keys(update).sort()).toEqual(
+            [
+                'shipRole',
+                'statPriorities',
+                'setPriorities',
+                'statBonuses',
+                'fleetBuffs',
+                'excludedImplantTypes',
+                'optimizeImplants',
+            ].sort()
+        );
+    });
+
+    it('carries every field through unchanged', () => {
+        expect(communityBuildToConfigUpdate(sharedConfig)).toEqual({
+            shipRole: sharedConfig.shipRole,
+            statPriorities: sharedConfig.statPriorities,
+            setPriorities: sharedConfig.setPriorities,
+            statBonuses: sharedConfig.statBonuses,
+            fleetBuffs: sharedConfig.fleetBuffs,
+            excludedImplantTypes: sharedConfig.excludedImplantTypes,
+            optimizeImplants: sharedConfig.optimizeImplants,
+        });
     });
 });

@@ -21,7 +21,7 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
         aria-expanded={isExpanded}
         className="w-full card hover:bg-dark-lighter transition-colors cursor-pointer border-none text-left"
     >
-        <div className="flex items-center gap-2">
+        <span className="flex items-center gap-2">
             <ChevronDownIcon
                 className={`w-4 h-4 text-theme-text-secondary flex-shrink-0 transition-transform duration-200 ${
                     isExpanded ? 'rotate-180' : ''
@@ -39,6 +39,6 @@ export const RecommendationHeader: React.FC<RecommendationHeaderProps> = ({
             ) : (
                 <span className="text-sm text-theme-text-secondary">No community builds yet</span>
             )}
-        </div>
+        </span>
     </button>
 );

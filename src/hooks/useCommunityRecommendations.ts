@@ -56,7 +56,16 @@ export const useCommunityRecommendations = ({
     const [showShareForm, setShowShareForm] = useState(false);
     const [lastShipName, setLastShipName] = useState<string | null>(null);
 
-    const isFetchingRef = useRef(false);
+    // Always holds the ship name as of the most recent render. An in-flight
+    // fetch or vote request tags itself with the id/name it was started for,
+    // and checks this ref when it resolves so a response for a since-replaced
+    // ship or a since-collapsed/replaced row is discarded rather than rendered
+    // under the wrong name.
+    const currentShipNameRef = useRef<string | null>(null);
+    currentShipNameRef.current = selectedShip?.name ?? null;
+
+    const expandedIdRef = useRef<string | null>(null);
+    expandedIdRef.current = expandedId;
 
     const getUltimateImplantName = useCallback((): string | null => {
         if (!selectedShip?.implants?.['implant_ultimate']) {
@@ -75,9 +84,9 @@ export const useCommunityRecommendations = ({
     const ultimateImplantName = getUltimateImplantName();
 
     const fetchBuilds = useCallback(async () => {
-        if (!selectedShip || isFetchingRef.current) return;
+        if (!selectedShip) return;
+        const shipName = selectedShip.name;
 
-        isFetchingRef.current = true;
         setLoading(true);
         setError(null);
         setBuilds([]);
@@ -85,15 +94,21 @@ export const useCommunityRecommendations = ({
         setUserVote(null);
 
         try {
-            const rows = await CommunityRecommendationService.listForShip(selectedShip.name);
+            const rows = await CommunityRecommendationService.listForShip(shipName);
+            // Discard a response for a ship that is no longer selected — the
+            // slot may have been switched to a different ship while this
+            // fetch was in flight.
+            if (currentShipNameRef.current !== shipName) return;
             // A row whose payload cannot be validated is dropped, not rendered.
             setBuilds(rows.map(toCommunityBuild).filter((b): b is CommunityBuild => b !== null));
         } catch (err) {
+            if (currentShipNameRef.current !== shipName) return;
             console.error('Error fetching community recommendations:', err);
             setError('Failed to load community recommendations');
         } finally {
-            setLoading(false);
-            isFetchingRef.current = false;
+            if (currentShipNameRef.current === shipName) {
+                setLoading(false);
+            }
         }
     }, [selectedShip]);
 
@@ -101,10 +116,17 @@ export const useCommunityRecommendations = ({
     // for every row in the list.
     const toggleExpanded = useCallback(
         (id: string) => {
-            setExpandedId((current) => (current === id ? null : id));
+            const nextExpandedId = expandedId === id ? null : id;
+            setExpandedId(nextExpandedId);
             setUserVote(null);
-            if (expandedId !== id) {
-                void CommunityRecommendationService.getUserVote(id).then(setUserVote);
+            if (nextExpandedId === id) {
+                void CommunityRecommendationService.getUserVote(id).then((vote) => {
+                    // Discard a vote fetch for a row that has since been
+                    // collapsed or replaced by a different expanded row.
+                    if (expandedIdRef.current === id) {
+                        setUserVote(vote);
+                    }
+                });
             }
         },
         [expandedId]
@@ -157,8 +179,9 @@ export const useCommunityRecommendations = ({
                 return false;
             }
 
+            let result;
             try {
-                const result = await CommunityRecommendationService.createRecommendation(
+                result = await CommunityRecommendationService.createRecommendation(
                     {
                         shipName: selectedShip.name,
                         shipRefitLevel: selectedShip.refits?.length ?? 0,
@@ -174,26 +197,33 @@ export const useCommunityRecommendations = ({
                     // independently. Voting stays per auth user.
                     activeProfileId
                 );
-
-                if (result) {
-                    setShowShareForm(false);
-                    await refresh();
-                    return true;
-                }
-
-                setError('Failed to share recommendation. Please make sure you are signed in.');
-                return false;
             } catch (err) {
                 console.error('Error sharing recommendation:', err);
                 setError('Failed to share recommendation');
                 return false;
             }
+
+            if (!result) {
+                setError('Failed to share recommendation. Please make sure you are signed in.');
+                return false;
+            }
+
+            // The share itself already succeeded at this point, so a failure
+            // refreshing the list afterward must not be reported as a share
+            // failure — it isn't one.
+            setShowShareForm(false);
+            try {
+                await refresh();
+            } catch (err) {
+                console.error('Error refreshing community recommendations after share:', err);
+            }
+            return true;
         },
         [selectedShip, currentBuild, ultimateImplantName, activeProfileId, refresh]
     );
 
     useEffect(() => {
-        if (selectedShip?.name && selectedShip.name !== lastShipName && !isFetchingRef.current) {
+        if (selectedShip?.name && selectedShip.name !== lastShipName) {
             setLastShipName(selectedShip.name);
             void fetchBuilds();
         }

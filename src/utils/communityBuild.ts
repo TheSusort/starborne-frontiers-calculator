@@ -140,6 +140,37 @@ export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogear
 };
 
 /**
+ * The exact update object for applying a community build to a ship's config.
+ * Exactly these seven build-shaping fields — never the personal toggles
+ * (algorithm, ignoreEquipped, ignoreUnleveled, useUpgradedStats,
+ * tryToCompleteSets, includeCalibratedGear, assumeCalibrated, useArenaModifiers).
+ * Those are absent from this object's keys, so a caller that spreads it over an
+ * existing config cannot touch them.
+ */
+export interface CommunityBuildConfigUpdate {
+    shipRole: ShipTypeName;
+    statPriorities: StatPriority[];
+    setPriorities: SetPriority[];
+    statBonuses: StatBonus[];
+    fleetBuffs: FleetBuff[];
+    excludedImplantTypes: string[];
+    optimizeImplants: boolean;
+}
+
+/** Adapts a shared community build into the page's per-ship config update shape. */
+export const communityBuildToConfigUpdate = (
+    build: SharedAutogearBuild
+): CommunityBuildConfigUpdate => ({
+    shipRole: build.shipRole,
+    statPriorities: build.statPriorities,
+    setPriorities: build.setPriorities,
+    statBonuses: build.statBonuses,
+    fleetBuffs: build.fleetBuffs,
+    excludedImplantTypes: build.excludedImplantTypes,
+    optimizeImplants: build.optimizeImplants,
+});
+
+/**
  * Whether applying a build would overwrite something. shipRole is excluded on
  * purpose: it always defaults to the ship's own type, so it is never empty and
  * would make every config look non-empty.

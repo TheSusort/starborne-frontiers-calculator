@@ -37,6 +37,7 @@ import { GearSuggestions } from '../../components/autogear/GearSuggestions';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { useNotification } from '../../hooks/useNotification';
 import type { SharedAutogearBuild } from '../../types/communityRecommendation';
+import { communityBuildToConfigUpdate } from '../../utils/communityBuild';
 import { MilestoneModal } from '../../components/ui/MilestoneModal';
 import { Ship } from '../../types/ship';
 import Seo from '../../components/seo/Seo';
@@ -1014,15 +1015,7 @@ export const AutogearPage: React.FC = () => {
      * by the existing saveConfig call when autogear runs.
      */
     const handleApplyCommunityBuild = (shipId: string, build: SharedAutogearBuild) => {
-        updateShipConfig(shipId, {
-            shipRole: build.shipRole,
-            statPriorities: build.statPriorities,
-            setPriorities: build.setPriorities,
-            statBonuses: build.statBonuses,
-            fleetBuffs: build.fleetBuffs,
-            excludedImplantTypes: build.excludedImplantTypes,
-            optimizeImplants: build.optimizeImplants,
-        });
+        updateShipConfig(shipId, communityBuildToConfigUpdate(build));
         addNotification('success', 'Community build applied');
     };
 
