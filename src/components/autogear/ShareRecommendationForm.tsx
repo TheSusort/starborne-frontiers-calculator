@@ -3,15 +3,20 @@ import { Button } from '../ui/Button';
 import { Checkbox } from '../ui/Checkbox';
 import { Input } from '../ui/Input';
 import { Textarea } from '../ui/Textarea';
+import type { SharedAutogearBuild } from '../../types/communityRecommendation';
+import { SharedBuildFields } from './SharedBuildFields';
 
 interface ShareRecommendationFormProps {
     onSubmit: (title: string, description: string, isImplantSpecific: boolean) => Promise<boolean>;
     onCancel: () => void;
     ultimateImplantName: string | null;
     isSubmitting?: boolean;
+    /** The config that will be published — shown read-only so the sharer can check it. */
+    build: SharedAutogearBuild;
 }
 
 export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = ({
+    build,
     onSubmit,
     onCancel,
     ultimateImplantName,
@@ -68,6 +73,17 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+            <div className="card text-xs space-y-2">
+                <p className="font-semibold text-theme-text">This build will be shared as:</p>
+                <div className="text-theme-text-secondary text-sm space-y-2">
+                    <SharedBuildFields build={build} />
+                </div>
+                <p className="text-theme-text-secondary">
+                    Your algorithm choice and your gear filters (ignore equipped, ignore unleveled,
+                    use upgraded stats, complete sets, calibration, arena modifiers) stay private.
+                </p>
+            </div>
+
             <Input
                 label="Title"
                 value={title}
@@ -93,7 +109,12 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
 
             <div className="space-y-1">
                 <Checkbox
-                    label={`Only show to users with ${ultimateImplantName || 'the same ultimate implant'}`}
+                    label={
+                        ultimateImplantName
+                            ? `Tag this build for ${ultimateImplantName}`
+                            : 'Tag this build for your ultimate implant'
+                    }
+                    helpLabel="Tagged builds sort to the top for players with the same implant equipped. They stay visible to everyone else, just lower in the list."
                     checked={isImplantSpecific}
                     onChange={setIsImplantSpecific}
                     disabled={!ultimateImplantName || isSubmitting}

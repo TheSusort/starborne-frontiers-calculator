@@ -7,6 +7,8 @@ import { ChevronDownIcon, ChevronUpIcon, CloseIcon, GearIcon, InfoIcon } from '.
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
+import { configToSharedBuild, hasExistingBuildConfig } from '../../utils/communityBuild';
+import type { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CommunityRecommendations } from './CommunityRecommendations';
 import { AutogearConfigList } from './AutogearConfigList';
 
@@ -23,12 +25,14 @@ interface AutogearQuickSettingsProps {
     onMoveShipDown: (index: number) => void;
     onOpenSettings: (event: React.MouseEvent<HTMLButtonElement>, index: number) => void;
     onFindOptimalGear: () => void;
+    onApplyBuild: (shipId: string, build: SharedAutogearBuild) => void;
     getShipConfig: (shipId: string) => {
         shipRole: ShipTypeName | null;
         statPriorities: StatPriority[];
         setPriorities: SetPriority[];
         statBonuses: StatBonus[];
         fleetBuffs: FleetBuff[];
+        excludedImplantTypes?: string[];
         ignoreEquipped: boolean;
         ignoreUnleveled: boolean;
         useUpgradedStats: boolean;
@@ -52,6 +56,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
     onMoveShipDown,
     onOpenSettings,
     onFindOptimalGear,
+    onApplyBuild,
     getShipConfig,
     children,
 }) => {
@@ -178,30 +183,13 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                                 </ShipSelector>
                             </div>
                         </div>
-                        {/* Community Recommendations - show for every selected ship */}
+                        {/* Community builds — one section per selected ship. */}
                         {ship && (
                             <CommunityRecommendations
                                 selectedShip={ship}
-                                currentConfig={(() => {
-                                    const config = getShipConfig(ship.id);
-                                    if (!config.shipRole) return null;
-                                    return {
-                                        id: '',
-                                        name: '',
-                                        shipId: ship.id,
-                                        shipRole: config.shipRole,
-                                        statPriorities: config.statPriorities,
-                                        setPriorities: config.setPriorities,
-                                        statBonuses: config.statBonuses,
-                                        ignoreEquipped: config.ignoreEquipped,
-                                        ignoreUnleveled: config.ignoreUnleveled,
-                                        useUpgradedStats: config.useUpgradedStats,
-                                        tryToCompleteSets: config.tryToCompleteSets,
-                                        algorithm: config.selectedAlgorithm,
-                                        showSecondaryRequirements: config.showSecondaryRequirements,
-                                        optimizeImplants: config.optimizeImplants,
-                                    };
-                                })()}
+                                currentBuild={configToSharedBuild(getShipConfig(ship.id))}
+                                hasExistingConfig={hasExistingBuildConfig(getShipConfig(ship.id))}
+                                onApplyBuild={(build) => onApplyBuild(ship.id, build)}
                             />
                         )}
                     </div>

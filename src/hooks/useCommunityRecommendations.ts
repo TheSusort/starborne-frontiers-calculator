@@ -1,163 +1,164 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
-import { CommunityRecommendation } from '../types/communityRecommendation';
-import { CommunityRecommendationService } from '../services/communityRecommendations';
-import { SavedAutogearConfig } from '../types/autogear';
+import { SharedAutogearBuild } from '../types/communityRecommendation';
+import {
+    CommunityRecommendationService,
+    InvalidSharedConfigError,
+} from '../services/communityRecommendations';
+import {
+    toCommunityBuild,
+    type CommunityBuild,
+    type CommunityBuildSort,
+} from '../utils/communityBuild';
 import { IMPLANTS } from '../constants/implants';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 
 interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
-    currentConfig: SavedAutogearConfig | null;
+    /** The user's current build for this ship, or null when no role is set. */
+    currentBuild: SharedAutogearBuild | null;
 }
 
 interface UseCommunityRecommendationsReturn {
-    recommendation: CommunityRecommendation | null;
-    alternatives: CommunityRecommendation[];
-    selectedAlternative: CommunityRecommendation | null;
+    builds: CommunityBuild[];
     loading: boolean;
     error: string | null;
+    expandedId: string | null;
+    toggleExpanded: (id: string) => void;
+    sort: CommunityBuildSort;
+    setSort: (sort: CommunityBuildSort) => void;
     userVote: 'upvote' | 'downvote' | null;
+    handleVote: (voteType: 'upvote' | 'downvote') => Promise<void>;
     showShareForm: boolean;
-    showAlternatives: boolean;
+    setShowShareForm: (show: boolean) => void;
     ultimateImplantName: string | null;
     canShare: boolean;
-    handleVote: (voteType: 'upvote' | 'downvote') => Promise<void>;
     handleShare: (
         title: string,
         description: string,
         isImplantSpecific: boolean
     ) => Promise<boolean>;
-    handleSelectAlternative: (alt: CommunityRecommendation) => void;
-    handleBackToMain: () => Promise<void>;
-    setShowShareForm: (show: boolean) => void;
-    setShowAlternatives: (show: boolean) => void;
-    refreshRecommendation: () => Promise<void>;
 }
 
 export const useCommunityRecommendations = ({
     selectedShip,
-    currentConfig,
+    currentBuild,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
     const { activeProfileId } = useActiveProfile();
 
-    // Check if there's a shareable config (has a ship and role configured)
-    const canShare = !!selectedShip && !!currentConfig && !!currentConfig.shipRole;
+    const canShare = !!selectedShip && !!currentBuild;
 
-    const [recommendation, setRecommendation] = useState<CommunityRecommendation | null>(null);
-    const [alternatives, setAlternatives] = useState<CommunityRecommendation[]>([]);
-    const [selectedAlternative, setSelectedAlternative] = useState<CommunityRecommendation | null>(
-        null
-    );
+    const [builds, setBuilds] = useState<CommunityBuild[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [expandedId, setExpandedId] = useState<string | null>(null);
+    const [sort, setSort] = useState<CommunityBuildSort>('top');
     const [userVote, setUserVote] = useState<'upvote' | 'downvote' | null>(null);
     const [showShareForm, setShowShareForm] = useState(false);
-    const [showAlternatives, setShowAlternatives] = useState(false);
     const [lastShipName, setLastShipName] = useState<string | null>(null);
 
-    // Use ref to prevent duplicate calls
-    const isFetchingRef = useRef(false);
+    // Always holds the ship name as of the most recent render. An in-flight
+    // fetch or vote request tags itself with the id/name it was started for,
+    // and checks this ref when it resolves so a response for a since-replaced
+    // ship or a since-collapsed/replaced row is discarded rather than rendered
+    // under the wrong name.
+    const currentShipNameRef = useRef<string | null>(null);
+    currentShipNameRef.current = selectedShip?.name ?? null;
 
-    // Get the ultimate implant name from the ship
+    const expandedIdRef = useRef<string | null>(null);
+    expandedIdRef.current = expandedId;
+
     const getUltimateImplantName = useCallback((): string | null => {
         if (!selectedShip?.implants?.['implant_ultimate']) {
             return null;
         }
 
-        const implantId = selectedShip.implants['implant_ultimate'];
-        const implantPiece = getGearPiece(implantId);
-
+        const implantPiece = getGearPiece(selectedShip.implants['implant_ultimate']);
         if (!implantPiece?.setBonus) {
             return null;
         }
 
         const implantData = IMPLANTS[implantPiece.setBonus];
-        if (implantData && implantData.type === 'ultimate') {
-            return implantData.name;
-        }
-
-        return null;
+        return implantData && implantData.type === 'ultimate' ? implantData.name : null;
     }, [selectedShip, getGearPiece]);
 
     const ultimateImplantName = getUltimateImplantName();
 
-    const fetchRecommendation = useCallback(async () => {
-        if (!selectedShip || isFetchingRef.current) return;
+    const fetchBuilds = useCallback(async () => {
+        if (!selectedShip) return;
+        const shipName = selectedShip.name;
 
-        isFetchingRef.current = true;
         setLoading(true);
         setError(null);
-        setRecommendation(null);
-        setAlternatives([]);
-        setShowAlternatives(false);
-        setSelectedAlternative(null);
+        setBuilds([]);
+        setExpandedId(null);
         setUserVote(null);
 
         try {
-            const implantName = getUltimateImplantName();
-
-            // Get best recommendation for this ship
-            const bestRec = await CommunityRecommendationService.getBestRecommendation(
-                selectedShip.name,
-                implantName ?? undefined
-            );
-
-            if (bestRec) {
-                setRecommendation(bestRec);
-
-                // Get user's vote on this recommendation
-                if (bestRec.id) {
-                    const vote = await CommunityRecommendationService.getUserVote(bestRec.id);
-                    setUserVote(vote);
-                }
-
-                // Get alternative recommendations (excluding the best one)
-                const alts = await CommunityRecommendationService.getAlternatives(
-                    selectedShip.name,
-                    implantName ?? undefined,
-                    bestRec.id
-                );
-                setAlternatives(alts);
-            }
+            const rows = await CommunityRecommendationService.listForShip(shipName);
+            // Discard a response for a ship that is no longer selected — the
+            // slot may have been switched to a different ship while this
+            // fetch was in flight.
+            if (currentShipNameRef.current !== shipName) return;
+            // A row whose payload cannot be validated is dropped, not rendered.
+            setBuilds(rows.map(toCommunityBuild).filter((b): b is CommunityBuild => b !== null));
         } catch (err) {
-            console.error('Error fetching community recommendation:', err);
+            if (currentShipNameRef.current !== shipName) return;
+            console.error('Error fetching community recommendations:', err);
             setError('Failed to load community recommendations');
         } finally {
-            setLoading(false);
-            isFetchingRef.current = false;
+            if (currentShipNameRef.current === shipName) {
+                setLoading(false);
+            }
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedShip]); // Only depend on selectedShip, context functions excluded intentionally
+    }, [selectedShip]);
+
+    // Votes are per expanded build, so the vote is fetched on expand rather than
+    // for every row in the list.
+    const toggleExpanded = useCallback(
+        (id: string) => {
+            const nextExpandedId = expandedId === id ? null : id;
+            setExpandedId(nextExpandedId);
+            setUserVote(null);
+            if (nextExpandedId === id) {
+                void CommunityRecommendationService.getUserVote(id).then((vote) => {
+                    // Discard a vote fetch for a row that has since been
+                    // collapsed or replaced by a different expanded row.
+                    if (expandedIdRef.current === id) {
+                        setUserVote(vote);
+                    }
+                });
+            }
+        },
+        [expandedId]
+    );
+
+    const refresh = useCallback(async () => {
+        if (!selectedShip) return;
+        const rows = await CommunityRecommendationService.listForShip(selectedShip.name);
+        setBuilds(rows.map(toCommunityBuild).filter((b): b is CommunityBuild => b !== null));
+    }, [selectedShip]);
 
     const handleVote = useCallback(
         async (voteType: 'upvote' | 'downvote') => {
-            if (!recommendation?.id) return;
+            if (!expandedId) return;
 
             try {
                 if (userVote === voteType) {
-                    // Remove vote if clicking same vote (toggle off)
-                    await CommunityRecommendationService.removeVote(recommendation.id);
+                    await CommunityRecommendationService.removeVote(expandedId);
                     setUserVote(null);
                 } else {
-                    // Add or change vote
-                    await CommunityRecommendationService.voteOnRecommendation(
-                        recommendation.id,
-                        voteType
-                    );
+                    await CommunityRecommendationService.voteOnRecommendation(expandedId, voteType);
                     setUserVote(voteType);
                 }
-
-                // Refresh the recommendation to get updated vote counts
-                await refreshRecommendation();
+                await refresh();
             } catch (err) {
                 console.error('Error voting:', err);
             }
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [recommendation?.id, userVote] // refreshRecommendation excluded intentionally
+        [expandedId, userVote, refresh]
     );
 
     const handleShare = useCallback(
@@ -166,164 +167,89 @@ export const useCommunityRecommendations = ({
             description: string,
             isImplantSpecific: boolean
         ): Promise<boolean> => {
-            if (!selectedShip || !currentConfig) {
+            if (!selectedShip || !currentBuild) {
                 setError('No configuration to share');
                 return false;
             }
 
-            // Validate implant-specific flag
             if (isImplantSpecific && !ultimateImplantName) {
                 setError('Cannot mark as implant-specific without an ultimate implant equipped');
                 return false;
             }
 
-            try {
-                if (!activeProfileId) {
-                    setError('No active profile. Please sign in to share a recommendation.');
-                    return false;
-                }
+            if (!activeProfileId) {
+                setError('No active profile. Please sign in to share a recommendation.');
+                return false;
+            }
 
-                const result = await CommunityRecommendationService.createRecommendation(
+            let result;
+            try {
+                result = await CommunityRecommendationService.createRecommendation(
                     {
                         shipName: selectedShip.name,
+                        shipRefitLevel: selectedShip.refits?.length ?? 0,
                         title,
                         description,
                         isImplantSpecific,
                         ultimateImplant: isImplantSpecific
                             ? (ultimateImplantName ?? undefined)
                             : undefined,
-                        shipRole: currentConfig.shipRole || selectedShip.type,
-                        statPriorities: currentConfig.statPriorities,
-                        statBonuses: currentConfig.statBonuses,
-                        setPriorities: currentConfig.setPriorities,
+                        sharedConfig: currentBuild,
                     },
-                    // Pass active profile so the recommendation is authored by the
-                    // correct alt profile, not just the root auth user.
+                    // Authorship is per active profile, so alt profiles can share
+                    // independently. Voting stays per auth user.
                     activeProfileId
                 );
-
-                if (result) {
-                    setShowShareForm(false);
-                    // Refresh to show the new recommendation
-                    await refreshRecommendation();
-                    return true;
-                } else {
-                    setError('Failed to share recommendation. Please make sure you are signed in.');
-                    return false;
-                }
             } catch (err) {
                 console.error('Error sharing recommendation:', err);
-                setError('Failed to share recommendation');
+                if (err instanceof InvalidSharedConfigError) {
+                    setError('This build could not be validated and was not shared.');
+                } else {
+                    setError('Failed to share recommendation');
+                }
                 return false;
             }
+
+            if (!result) {
+                setError('Failed to share recommendation. Please make sure you are signed in.');
+                return false;
+            }
+
+            // The share itself already succeeded at this point, so a failure
+            // refreshing the list afterward must not be reported as a share
+            // failure — it isn't one.
+            setShowShareForm(false);
+            try {
+                await refresh();
+            } catch (err) {
+                console.error('Error refreshing community recommendations after share:', err);
+            }
+            return true;
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [selectedShip, currentConfig, ultimateImplantName, activeProfileId] // refreshRecommendation excluded intentionally
+        [selectedShip, currentBuild, ultimateImplantName, activeProfileId, refresh]
     );
 
-    const handleSelectAlternative = useCallback((alt: CommunityRecommendation) => {
-        setSelectedAlternative(alt);
-        setRecommendation(alt);
-        setShowAlternatives(false);
-
-        // Get user's vote on this alternative
-        if (alt.id) {
-            void CommunityRecommendationService.getUserVote(alt.id).then((vote) => {
-                setUserVote(vote);
-            });
-        }
-    }, []);
-
-    const handleBackToMain = useCallback(async () => {
-        if (!selectedShip) return;
-
-        setSelectedAlternative(null);
-
-        // Re-fetch the main (best) recommendation
-        const implantName = getUltimateImplantName();
-        const mainRec = await CommunityRecommendationService.getBestRecommendation(
-            selectedShip.name,
-            implantName ?? undefined
-        );
-
-        if (mainRec) {
-            setRecommendation(mainRec);
-
-            if (mainRec.id) {
-                const vote = await CommunityRecommendationService.getUserVote(mainRec.id);
-                setUserVote(vote);
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedShip]); // Context functions excluded intentionally
-
-    const refreshRecommendation = useCallback(async () => {
-        if (!selectedShip) return;
-
-        const implantName = getUltimateImplantName();
-
-        // If we have a selected alternative, refresh that specific one
-        if (selectedAlternative?.id) {
-            // Re-fetch alternatives to get updated vote counts
-            const alts = await CommunityRecommendationService.getAlternatives(
-                selectedShip.name,
-                implantName ?? undefined
-            );
-            setAlternatives(alts);
-
-            // Find the updated version of the selected alternative
-            const updatedAlt = alts.find((a) => a.id === selectedAlternative.id);
-            if (updatedAlt) {
-                setSelectedAlternative(updatedAlt);
-                setRecommendation(updatedAlt);
-            }
-        } else {
-            // Refresh the main recommendation
-            const bestRec = await CommunityRecommendationService.getBestRecommendation(
-                selectedShip.name,
-                implantName ?? undefined
-            );
-
-            if (bestRec) {
-                setRecommendation(bestRec);
-
-                // Also refresh alternatives
-                const alts = await CommunityRecommendationService.getAlternatives(
-                    selectedShip.name,
-                    implantName ?? undefined,
-                    bestRec.id
-                );
-                setAlternatives(alts);
-            }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedShip, selectedAlternative?.id]); // Context functions excluded intentionally
-
-    // Auto-fetch when ship changes (only depend on ship name to prevent object reference issues)
     useEffect(() => {
-        if (selectedShip?.name && selectedShip.name !== lastShipName && !isFetchingRef.current) {
+        if (selectedShip?.name && selectedShip.name !== lastShipName) {
             setLastShipName(selectedShip.name);
-            void fetchRecommendation();
+            void fetchBuilds();
         }
-    }, [selectedShip?.name, lastShipName, fetchRecommendation]);
+    }, [selectedShip?.name, lastShipName, fetchBuilds]);
 
     return {
-        recommendation,
-        alternatives,
-        selectedAlternative,
+        builds,
         loading,
         error,
+        expandedId,
+        toggleExpanded,
+        sort,
+        setSort,
         userVote,
+        handleVote,
         showShareForm,
-        showAlternatives,
+        setShowShareForm,
         ultimateImplantName,
         canShare,
-        handleVote,
         handleShare,
-        handleSelectAlternative,
-        handleBackToMain,
-        setShowShareForm,
-        setShowAlternatives,
-        refreshRecommendation,
     };
 };

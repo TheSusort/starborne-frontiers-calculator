@@ -1705,11 +1705,24 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        When you select a ship, you&apos;ll see the highest-voted
-                                        community recommendation
+                                        When you select a ship, every community build shared for
+                                        that ship is listed, grouped by implant relevance first and
+                                        then ordered by your chosen sort within each group
                                     </li>
-                                    <li>Click to expand and see the full configuration details</li>
-                                    <li>View alternative recommendations from other players</li>
+                                    <li>
+                                        Builds tagged for the ultimate implant you have equipped
+                                        come first, untagged (generic) builds come next, and builds
+                                        tagged for a different implant stay visible at the bottom
+                                    </li>
+                                    <li>
+                                        Click a build to expand its full configuration — role, stat
+                                        priorities, gear sets, stat bonuses, fleet buffs and implant
+                                        settings
+                                    </li>
+                                    <li>
+                                        Sort by top rated or newest, and see each build&apos;s refit
+                                        level
+                                    </li>
                                 </ul>
                             </div>
 
@@ -1719,14 +1732,12 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
-                                        Configure your autogear settings (stat priorities, set
-                                        bonuses, etc.)
+                                        Configure your autogear settings (role, stat priorities,
+                                        gear sets, stat bonuses, fleet buffs, implant settings)
                                     </li>
                                     <li>
-                                        Click &quot;Find Optimal Gear&quot; to run the optimization
-                                    </li>
-                                    <li>
-                                        Click &quot;Share to Community&quot; to open the share form
+                                        Click &quot;Share your build&quot; to open the share form —
+                                        it previews exactly what will be published
                                     </li>
                                     <li>
                                         Add a descriptive title (e.g., &quot;High Crit DPS
@@ -1734,8 +1745,10 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>Optionally add a description explaining your strategy</li>
                                     <li>
-                                        Check &quot;Only show to users with same ultimate
-                                        implant&quot; if your build is implant-specific
+                                        Check &quot;Tag this build for [your ultimate implant]&quot;
+                                        if your build is implant-specific — it stays visible to
+                                        everyone, but sorts to the top for players with that implant
+                                        equipped
                                     </li>
                                     <li>Click &quot;Share&quot; to publish</li>
                                 </ol>
@@ -1753,6 +1766,37 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
 
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Applying a Build
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click &quot;Apply to autogear&quot; on an expanded build to
+                                        copy it into your configuration for that ship
+                                    </li>
+                                    <li>
+                                        It replaces role, stat priorities, gear sets, stat bonuses,
+                                        fleet buffs and implant settings
+                                    </li>
+                                    <li>
+                                        Your own preferences are never changed: algorithm, ignore
+                                        equipped, ignore unleveled, use upgraded stats, complete
+                                        sets, calibration and arena modifiers all stay as you set
+                                        them
+                                    </li>
+                                    <li>
+                                        You are asked to confirm whenever applying would overwrite
+                                        an existing configuration
+                                    </li>
+                                    <li>
+                                        Builds shared before fleet buffs and implant settings were
+                                        captured carry role, stat priorities, gear sets and stat
+                                        bonuses only
+                                    </li>
+                                </ul>
+                            </div>
+
                             <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
                                 <h4 className="font-semibold text-blue-200 mb-2">Pro Tips</h4>
                                 <ul className="text-blue-100 space-y-2">
@@ -1762,9 +1806,9 @@ const DocumentationPage: React.FC = () => {
                                         Tank Build&quot;)
                                     </li>
                                     <li>
-                                        When your build relies on a specific ultimate implant,
-                                        enable the implant filter to help users find relevant
-                                        recommendations
+                                        When your build relies on a specific ultimate implant, tag
+                                        it so it sorts to the top for players who have that implant
+                                        equipped
                                     </li>
                                     <li>
                                         Check community recommendations before running autogear to

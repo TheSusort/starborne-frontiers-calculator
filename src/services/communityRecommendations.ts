@@ -3,31 +3,30 @@ import {
     CommunityRecommendation,
     CreateCommunityRecommendationInput,
 } from '../types/communityRecommendation';
+import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
+
+/**
+ * Thrown by createRecommendation when the shared config fails schema
+ * validation, so callers can tell this apart from a not-signed-in / RLS
+ * insert failure — both of which otherwise just resolve to `null`.
+ */
+export class InvalidSharedConfigError extends Error {
+    constructor() {
+        super('Invalid shared autogear build');
+        this.name = 'InvalidSharedConfigError';
+    }
+}
 
 export class CommunityRecommendationService {
-    static async getBestRecommendation(
-        shipName: string,
-        ultimateImplant?: string
-    ): Promise<CommunityRecommendation | null> {
-        const { data, error } = await supabase.rpc('get_best_community_recommendation', {
-            p_ship_name: shipName,
-            p_ultimate_implant: ultimateImplant ?? null,
-        });
-
-        if (error) {
-            console.error('Error fetching best recommendation:', error);
-            return null;
-        }
-
-        return data && data.length > 0 ? data[0] : null;
-    }
-
-    static async getAlternatives(
-        shipName: string,
-        ultimateImplant?: string,
-        excludeId?: string
-    ): Promise<CommunityRecommendation[]> {
-        let query = supabase
+    /**
+     * Every community recommendation for a ship, best-scored first.
+     *
+     * Implant relevance is applied client-side (sortCommunityBuilds) rather than
+     * filtered in SQL, so a build tagged for a different ultimate implant stays
+     * visible instead of disappearing.
+     */
+    static async listForShip(shipName: string): Promise<CommunityRecommendation[]> {
+        const { data, error } = await supabase
             .from('community_recommendations')
             .select('*')
             .eq('ship_name', shipName)
@@ -35,21 +34,12 @@ export class CommunityRecommendationService {
             .order('total_votes', { ascending: false })
             .order('created_at', { ascending: false });
 
-        if (excludeId) {
-            query = query.neq('id', excludeId);
-        }
-
-        const { data, error } = await query;
-
         if (error) {
-            console.error('Error fetching alternatives:', error);
+            console.error('Error fetching community recommendations:', error);
             return [];
         }
 
-        // Filter in JavaScript: include if not implant-specific OR ultimate_implant matches
-        return (data || []).filter(
-            (rec) => !rec.is_implant_specific || rec.ultimate_implant === ultimateImplant
-        );
+        return data || [];
     }
 
     static async createRecommendation(
@@ -58,19 +48,33 @@ export class CommunityRecommendationService {
         // independently. RLS allows any profile the auth user owns (has_profile_access).
         createdBy: string
     ): Promise<CommunityRecommendation | null> {
+        // Use the parsed result, not the raw input: object schemas strip unknown
+        // keys (zod's .strip()), so `sharedConfig` is the sanitised build and
+        // `input.sharedConfig` may still carry caller-supplied extra keys.
+        const sharedConfig = validateSharedAutogearBuild(input.sharedConfig);
+        if (!sharedConfig) {
+            console.error('Refusing to share an invalid autogear build');
+            throw new InvalidSharedConfigError();
+        }
+
         const { data, error } = await supabase
             .from('community_recommendations')
             .insert({
                 ship_name: input.shipName,
-                ship_refit_level: 0,
+                ship_refit_level: input.shipRefitLevel,
                 title: input.title,
                 description: input.description,
                 is_implant_specific: input.isImplantSpecific,
                 ultimate_implant: input.ultimateImplant,
-                ship_role: input.shipRole,
-                stat_priorities: JSON.parse(JSON.stringify(input.statPriorities)),
-                stat_bonuses: JSON.parse(JSON.stringify(input.statBonuses)),
-                set_priorities: JSON.parse(JSON.stringify(input.setPriorities)),
+                // Dual write: shared_config is the source of truth, but the legacy
+                // columns keep being populated so a stale cached bundle still reads
+                // a usable build. Derived from the same (sanitised) object so they
+                // cannot drift.
+                shared_config: JSON.parse(JSON.stringify(sharedConfig)),
+                ship_role: sharedConfig.shipRole,
+                stat_priorities: JSON.parse(JSON.stringify(sharedConfig.statPriorities)),
+                stat_bonuses: JSON.parse(JSON.stringify(sharedConfig.statBonuses)),
+                set_priorities: JSON.parse(JSON.stringify(sharedConfig.setPriorities)),
                 // activeProfileId passed from call site — one recommendation per alt profile
                 created_by: createdBy,
             })
