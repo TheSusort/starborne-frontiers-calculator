@@ -10,9 +10,9 @@ configuration it is supposed to describe.
 
 **Fields stored but never displayed.** `RecommendationContent` renders `setPriority.setName` alone —
 it drops `SetPriority.count` (so a 4-piece Critical build reads identically to a 2-piece one) and
-drops `kind: 'implant'`, and it prints the raw set key rather than `GEAR_SETS[key].name`. It never
-shows `StatPriority.weight`. It maps `StatBonus.percentage` to a bare number with no `%` and discards
-`StatBonus.mode`, so an additive bonus and a multiplier bonus render identically.
+drops `kind: 'implant'`, and it prints the raw set key rather than `GEAR_SETS[key].name`. It maps `StatBonus.percentage`
+to a bare number with no `%` and discards `StatBonus.mode`, so an additive bonus and a multiplier
+bonus render identically.
 
 **Fields never captured at all.** `CreateCommunityRecommendationInput` carries only
 `statPriorities`, `statBonuses`, `setPriorities` and `shipRole`. Current `SavedAutogearConfig` also
@@ -21,8 +21,9 @@ carries `fleetBuffs`, `excludedImplantTypes`, `optimizeImplants`, `tryToComplete
 and `useArenaModifiers`. A shared build therefore cannot reproduce the result its author saw.
 
 **A live display bug.** `RecommendationContent.tsx:44` guards the whole row body on
-`(priority.minLimit || priority.maxLimit)`, so a stat priority carrying only a weight renders as an
-empty `<div>`.
+`(priority.minLimit || priority.maxLimit)`, so a stat priority carrying no limits renders as an empty
+`<div>` — and an unlimited priority is the common case, since a priority's strength is its position
+in the ordered list, not a number on the row.
 
 **A silent capture bug.** `AutogearQuickSettings` hand-builds the `currentConfig` object passed to
 `CommunityRecommendations` and omits `fleetBuffs`, `excludedImplantTypes` and the calibration flags.
@@ -75,7 +76,7 @@ new column on an existing table inherits them.
 export interface SharedAutogearBuild {
     version: 1;
     shipRole: ShipTypeName;
-    statPriorities: StatPriority[];   // stat, weight, minLimit, maxLimit, hardRequirement
+    statPriorities: StatPriority[];   // stat, minLimit, maxLimit, hardRequirement; ORDER IS THE PRIORITY
     setPriorities: SetPriority[];     // setName, count, kind
     statBonuses: StatBonus[];         // stat, percentage, mode
     fleetBuffs: FleetBuff[];          // stat, percentage
@@ -119,9 +120,15 @@ engine. It crosses a trust boundary in both directions, so it gets a Zod schema 
 
 **Display lookups must be total-safe regardless.** `STATS`, `GEAR_SETS`, `SHIP_TYPES` and `IMPLANTS`
 are `Record` types that gate authoring, not input — indexing them with a key from a persisted foreign
-payload can yield `undefined`. `StatBonusRow.tsx` currently does `STATS[bonus.stat as StatName].label`
-with no guard and throws on an unknown stat. Every lookup in the new components uses
-`STATS[key]?.label ?? key` and equivalents, and the existing `StatBonusRow` gets the same guard.
+payload can yield `undefined`. `StatBonusRow.tsx` does `STATS[bonus.stat as StatName].label` and
+`FleetBuffRow.tsx` does `STATS[buff.stat].label`, both unguarded — either throws on an unknown stat.
+Every lookup in the new components uses `getLimitStatLabel(key)` or `STATS[key]?.label ?? key` and
+equivalents, and both existing rows get the same guard.
+
+Note that `ShipTypeName` is `keyof typeof SHIP_TYPES` where `SHIP_TYPES` is `Record<string, ShipType>`,
+so it collapses to `string` — it is not a compile-time union and gives no input protection. Likewise
+`GEAR_SETS` and `IMPLANTS` are `Record<string, …>`. Validation must therefore check membership at
+runtime against `Object.keys(...)`, not lean on the type.
 
 ## Service layer
 
@@ -171,9 +178,16 @@ priorities, and stat bonuses with their mode abbreviated.
 
 Sections, in this order, each omitted when empty: Role, Stat priorities, Gear sets, Stat bonuses,
 Fleet buffs, Implants. The rendering mirrors the settings panel word for word — most importantly
-stat bonuses read `Attack (30%) — Additive` / `Speed (50%) — Multiplier`, matching `StatBonusRow`, so
-the two representations cannot drift. Set priorities read `4 × Critical`; implant-kind entries read
-the implant name. Stat priorities show `min 100 · strict` and `weight 3×` and are never blank.
+stat bonuses read `Attack ( 30 %) — Additive` / `Speed ( 50 %) — Multiplier`, matching
+`StatBonusRow`, so the two representations cannot drift. Set priorities read `Critical ( 4 pieces)`,
+matching `SetPriorityRow`; implant-kind entries read the implant name alone. Stat priorities read
+`Crit Rate (min: 100) — Hard Requirement`, matching `StatPriorityRow`, and are rendered as an
+**ordered list** because order is the priority. A priority with no limits renders as its stat name
+alone — never as a blank row.
+
+`StatPriority.weight` is deliberately **not** displayed. `StatPriorityForm.tsx:69` hardcodes it to
+`1` and no UI ever changes it, so a weight readout would be noise. It is still carried in the payload
+so an unchanged round-trip is byte-faithful.
 
 Apply and the two vote buttons sit **inside** the expanded build, so it is unambiguous which build
 they act on. "Share your build" sits in the section footer.
@@ -196,7 +210,7 @@ Changed:
 - `useCommunityRecommendations.ts` — returns a build list plus expansion state instead of
   `recommendation` / `alternatives` / `selectedAlternative`
 - `AutogearQuickSettings.tsx` — stops hand-building `currentConfig`; passes the real config through
-- `StatBonusRow.tsx` — total-safe `STATS` lookup
+- `StatBonusRow.tsx`, `FleetBuffRow.tsx` — total-safe `STATS` lookup
 
 Deleted:
 
@@ -243,8 +257,9 @@ success notification confirms the apply. There is no undo.
   preserved within each group.
 - `communityBuildSummary`: counts, modes and limits all present; unknown keys render as the raw key
   rather than crashing.
-- `CommunityBuildDetails`: a weight-only stat priority renders its weight and not an empty row; an
-  additive and a multiplier bonus render differently; a 4-piece and a 2-piece set render differently.
+- `CommunityBuildDetails`: a stat priority with no limits renders its stat name and not an empty row;
+  priorities render in payload order; an additive and a multiplier bonus render differently; a
+  4-piece and a 2-piece set render differently.
 - Apply: writes exactly the seven build fields; asserts `algorithm`, `ignoreEquipped`,
   `ignoreUnleveled`, `useUpgradedStats`, `tryToCompleteSets`, `includeCalibratedGear`,
   `assumeCalibrated`, `useArenaModifiers` are unchanged.

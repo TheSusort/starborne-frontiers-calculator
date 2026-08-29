@@ -17,7 +17,8 @@
 - **Total-safe lookups.** `STATS`, `GEAR_SETS`, `SHIP_TYPES`, `IMPLANTS` are `Record<string, …>`; they gate authoring, not input. Every lookup keyed by data from a community payload must use `?.` with a fallback, or `getLimitStatLabel()`.
 - **`in` is unsafe for membership on these records** — `'toString' in STATS` is `true`. Always use `Object.prototype.hasOwnProperty.call(RECORD, key)`.
 - **Percentage stats are stored as integers** (`crit: 70`, not `0.70`). Fixtures must match.
-- **Husky pre-commit runs the full `npm test` suite**, so every commit step is also a full-suite gate. Expect it to take a few minutes.
+- **Never guess a display label.** Read it from the constants. Verified real labels used in this plan's tests: `crit` → `'Crit Rate'`, `critDamage` → **`'Crit Power'`** (not "Crit Damage"), `attack` → `'Attack'`, `speed` → `'Speed'`, `defence` → `'Defense'`, `effectiveHp` → `'Effective HP'`; `ATTACKER` → `'Attacker'`, `CRITICAL` → `'Critical'`, `MARTYRDOM` → `'Martyrdom'`. A negative assertion against a label that does not exist passes vacuously.
+- **The husky pre-commit hook runs `npx lint-staged` → `npx tsc --noEmit` → `npm test -- --run`, aborting on the first failure.** So EVERY commit must typecheck AND pass the whole suite. No task may leave `tsc` red at its commit, and `--no-verify` is not available. Expect the hook to take a few minutes.
 - **`docs/` is gitignored** — spec and plan files were added with `git add -f`. Source files are not affected.
 - Run tests with `npx vitest run <path>`; run the whole suite with `npm test`. Typecheck with `npx tsc --noEmit`.
 
@@ -64,7 +65,7 @@ The payload type and its validator. Everything else depends on this.
 
 - [ ] **Step 1: Add the `SharedAutogearBuild` type**
 
-Append to `src/types/communityRecommendation.ts` (keep the existing `AIRecommendation` for now; Task 8 deletes it):
+Append to `src/types/communityRecommendation.ts` (keep the existing `AIRecommendation` for now; Task 7 deletes it):
 
 Extend the existing first import line to `import { StatPriority, SetPriority, StatBonus, FleetBuff } from './autogear';`, add `import type { ShipTypeName } from '../constants/shipTypes';`, then append:
 
@@ -943,21 +944,19 @@ git commit -m "feat(community): add one-line community build summary"
 
 ---
 
-### Task 4: Migration and service layer
+### Task 4: Migration and the list query
 
-The column, the single list query, and the dual-write share path.
+Purely additive: the new column, and one new read method beside the existing ones. Nothing is deleted and no existing signature changes, so `tsc` stays green.
 
 **Files:**
 - Create: `supabase/migrations/20260829000001_community_recommendation_shared_config.sql`
 - Modify: `src/services/communityRecommendations.ts`
-- Modify: `src/types/communityRecommendation.ts`
 
 **Interfaces:**
-- Consumes: `SharedAutogearBuild`, `validateSharedAutogearBuild` (Task 1).
-- Produces:
-  - `CommunityRecommendationService.listForShip(shipName: string): Promise<CommunityRecommendation[]>`
-  - `CreateCommunityRecommendationInput` gains `sharedConfig: SharedAutogearBuild` and `shipRefitLevel: number`
-  - `getBestRecommendation` and `getAlternatives` are removed.
+- Consumes: nothing new.
+- Produces: `CommunityRecommendationService.listForShip(shipName: string): Promise<CommunityRecommendation[]>`
+
+**Do NOT in this task:** delete `getBestRecommendation` or `getAlternatives`, change `CreateCommunityRecommendationInput`, or touch `createRecommendation`. Their only callers are rewritten in Task 7, and changing them here would break the typecheck that the pre-commit hook enforces. Task 7 removes them atomically with their callers.
 
 - [ ] **Step 1: Write the migration**
 
@@ -984,30 +983,11 @@ COMMENT ON COLUMN public.community_recommendations.shared_config IS
   'Versioned SharedAutogearBuild payload. Validated client-side on read; null on pre-2026-08-29 rows.';
 ```
 
-Note for the implementer: this migration is not applied automatically. Tell the user it needs applying via the Supabase CLI or dashboard; the code paths below tolerate a missing column only in the sense that `shared_config` comes back `undefined`, which the adapter treats as a legacy row.
+This migration is not applied automatically and must not be applied by the implementer. Creating the file is the whole job. Never hand-edit `supabase/current-schema.sql`, and never modify an already-applied migration.
 
-- [ ] **Step 2: Extend the create input type**
+- [ ] **Step 2: Add `listForShip` to the service**
 
-In `src/types/communityRecommendation.ts`, change `CreateCommunityRecommendationInput` to:
-
-```ts
-export interface CreateCommunityRecommendationInput {
-    shipName: string;
-    shipRefitLevel: number;
-    title: string;
-    description?: string;
-    isImplantSpecific: boolean;
-    ultimateImplant?: string;
-    /** The full shared build. Its fields are also mirrored into the legacy columns. */
-    sharedConfig: SharedAutogearBuild;
-}
-```
-
-The old `shipRole` / `statPriorities` / `statBonuses` / `setPriorities` members are gone — the service derives the legacy columns from `sharedConfig`, so a caller cannot let the two disagree.
-
-- [ ] **Step 3: Rewrite the read and write paths in the service**
-
-In `src/services/communityRecommendations.ts`, delete `getBestRecommendation` and `getAlternatives` entirely and add in their place:
+In `src/services/communityRecommendations.ts`, add this method to the class, immediately after `getAlternatives`. Leave every existing method exactly as it is.
 
 ```ts
     /**
@@ -1016,6 +996,9 @@ In `src/services/communityRecommendations.ts`, delete `getBestRecommendation` an
      * Implant relevance is applied client-side (sortCommunityBuilds) rather than
      * filtered in SQL, so a build tagged for a different ultimate implant stays
      * visible instead of disappearing.
+     *
+     * Supersedes getBestRecommendation + getAlternatives, which are removed in
+     * Task 7 along with their last callers.
      */
     static async listForShip(shipName: string): Promise<CommunityRecommendation[]> {
         const { data, error } = await supabase
@@ -1035,55 +1018,19 @@ In `src/services/communityRecommendations.ts`, delete `getBestRecommendation` an
     }
 ```
 
-Then replace the body of `createRecommendation`'s `.insert({...})` with:
-
-```ts
-            .insert({
-                ship_name: input.shipName,
-                ship_refit_level: input.shipRefitLevel,
-                title: input.title,
-                description: input.description,
-                is_implant_specific: input.isImplantSpecific,
-                ultimate_implant: input.ultimateImplant,
-                // Dual write: shared_config is the source of truth, but the legacy
-                // columns keep being populated so a stale cached bundle still reads
-                // a usable build. Derived from the same object so they cannot drift.
-                shared_config: JSON.parse(JSON.stringify(input.sharedConfig)),
-                ship_role: input.sharedConfig.shipRole,
-                stat_priorities: JSON.parse(JSON.stringify(input.sharedConfig.statPriorities)),
-                stat_bonuses: JSON.parse(JSON.stringify(input.sharedConfig.statBonuses)),
-                set_priorities: JSON.parse(JSON.stringify(input.sharedConfig.setPriorities)),
-                // activeProfileId passed from call site — one recommendation per alt profile
-                created_by: createdBy,
-            })
-```
-
-Add a validation guard at the top of `createRecommendation`, before the insert:
-
-```ts
-        if (!validateSharedAutogearBuild(input.sharedConfig)) {
-            console.error('Refusing to share an invalid autogear build');
-            return null;
-        }
-```
-
-and import it: `import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';`
-
-The vote methods (`voteOnRecommendation`, `getUserVote`, `removeVote`) are unchanged — including their deliberate use of the auth user rather than the active profile. Do not touch them.
-
-- [ ] **Step 4: Typecheck**
+- [ ] **Step 3: Verify**
 
 Run: `npx tsc --noEmit`
-Expected: errors ONLY in `src/hooks/useCommunityRecommendations.ts` and `src/components/autogear/CommunityRecommendations.tsx`, which still call the deleted methods and the old input shape. Tasks 7 and 8 fix them. Note the exact errors — they are your checklist.
+Expected: **clean, zero errors.** If there are any, something outside this task's scope changed — investigate before committing.
 
-- [ ] **Step 5: Commit**
-
-Because `tsc` is currently red, commit with the tests still green (the pre-commit hook runs `npm test`, not `tsc`):
+- [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20260829000001_community_recommendation_shared_config.sql src/services/communityRecommendations.ts src/types/communityRecommendation.ts
-git commit -m "feat(community): add shared_config column and single listForShip query"
+git add supabase/migrations/20260829000001_community_recommendation_shared_config.sql src/services/communityRecommendations.ts
+git commit -m "feat(community): add shared_config column and the listForShip query"
 ```
+
+The pre-commit hook runs lint-staged, `tsc --noEmit` and the full suite. All three must pass.
 
 ---
 
@@ -1172,8 +1119,11 @@ const renderDetails = (build: CommunityBuild, props: Partial<React.ComponentProp
 
 describe('CommunityBuildDetails', () => {
     it('renders a stat priority with no limits as its stat name, not a blank row', () => {
+        // STATS.critDamage.label is 'Crit Power', NOT 'Crit Damage' — verified in
+        // src/constants/stats.ts:46. Asserting the wrong label here would pass
+        // vacuously against a component that rendered nothing at all.
         renderDetails(makeBuild({ statPriorities: [{ stat: 'critDamage' }] }));
-        expect(screen.getByText(/Crit Damage/)).toBeInTheDocument();
+        expect(screen.getByTestId('community-build-priority').textContent).toContain('Crit Power');
     });
 
     it('renders stat priorities in payload order, because order is the priority', () => {
@@ -1493,7 +1443,7 @@ git add src/components/autogear/CommunityBuildDetails.tsx src/components/autogea
 git commit -m "feat(community): render a shared build in the settings-panel vocabulary"
 ```
 
-`tsc` may still be red from Task 4 in `useCommunityRecommendations.ts` and `CommunityRecommendations.tsx`. That is expected until Task 8; confirm no NEW errors appear in files this task touched.
+`npx tsc --noEmit` must be clean at the end of this task — Task 4 is now purely additive, so nothing upstream leaves it red.
 
 ---
 
@@ -1856,7 +1806,97 @@ git commit -m "feat(community): browsable build list replacing the best/alternat
 
 ---
 
-### Task 7: Rewrite `useCommunityRecommendations`
+### Task 7: Switch the UI over to the build model
+
+**This is one atomic task and one commit.** Rewriting the hook breaks its component; recomposing the component breaks its parent; retiring the old service methods breaks the hook. Each of those, alone, leaves `npx tsc --noEmit` red — and the pre-commit hook runs `tsc` before the tests and aborts on it, so a red intermediate state cannot be committed at all. The whole switchover therefore lands together.
+
+Work through the four parts in order. Do not commit between them — run `npx tsc --noEmit` after each part to see the error count fall, and commit once at the end when it reaches zero.
+
+Expect `tsc` to be red *during* this task. That is the normal working state here, not a defect. It must be clean before you commit.
+
+**Files:**
+- Modify: `src/hooks/useCommunityRecommendations.ts`
+- Modify: `src/services/communityRecommendations.ts`
+- Modify: `src/components/autogear/CommunityRecommendations.tsx`
+- Modify: `src/components/autogear/RecommendationHeader.tsx`
+- Modify: `src/components/autogear/ShareRecommendationForm.tsx`
+- Modify: `src/types/communityRecommendation.ts`
+- Modify: `src/components/autogear/AutogearQuickSettings.tsx`
+- Modify: `src/pages/manager/AutogearPage.tsx`
+- Delete: `src/components/autogear/AlternativeRecommendations.tsx`, `RecommendationContent.tsx`, `CommunityActions.tsx`
+- Test: `src/components/autogear/__tests__/AutogearQuickSettings.test.tsx`
+
+**Interfaces:**
+- Consumes: `listForShip` (Task 4); `toCommunityBuild`, `CommunityBuild`, `CommunityBuildSort`, `configToSharedBuild`, `hasExistingBuildConfig` (Task 2); `communityBuildSummary` (Task 3); `CommunityBuildDetails` (Task 5); `CommunityBuildList` (Task 6).
+- Produces: the finished feature. `AutogearQuickSettings` gains `onApplyBuild: (shipId: string, build: SharedAutogearBuild) => void`; `CommunityRecommendations` takes `{ selectedShip, currentBuild, onApplyBuild, hasExistingConfig }`.
+
+---
+
+#### Part A — the write path and retiring the old read methods
+
+- [ ] **Step A1: Tighten `CreateCommunityRecommendationInput`**
+
+In `src/types/communityRecommendation.ts`, change `CreateCommunityRecommendationInput` to:
+
+```ts
+export interface CreateCommunityRecommendationInput {
+    shipName: string;
+    shipRefitLevel: number;
+    title: string;
+    description?: string;
+    isImplantSpecific: boolean;
+    ultimateImplant?: string;
+    /** The full shared build. Its fields are also mirrored into the legacy columns. */
+    sharedConfig: SharedAutogearBuild;
+}
+```
+
+The old `shipRole` / `statPriorities` / `statBonuses` / `setPriorities` members are gone — the service derives the legacy columns from `sharedConfig`, so a caller cannot let the two disagree.
+
+- [ ] **Step A2: Rewrite the write path and delete the superseded read methods**
+
+In `src/services/communityRecommendations.ts`, delete `getBestRecommendation` and `getAlternatives` entirely (Step 2 of Task 4 added `listForShip` in their place, and after Part B nothing calls them).
+
+Add this import: `import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';`
+
+Add a validation guard as the first statement of `createRecommendation`, before the insert:
+
+```ts
+        if (!validateSharedAutogearBuild(input.sharedConfig)) {
+            console.error('Refusing to share an invalid autogear build');
+            return null;
+        }
+```
+
+and replace the `.insert({...})` object with:
+
+```ts
+            .insert({
+                ship_name: input.shipName,
+                ship_refit_level: input.shipRefitLevel,
+                title: input.title,
+                description: input.description,
+                is_implant_specific: input.isImplantSpecific,
+                ultimate_implant: input.ultimateImplant,
+                // Dual write: shared_config is the source of truth, but the legacy
+                // columns keep being populated so a stale cached bundle still reads
+                // a usable build. Derived from the same object so they cannot drift.
+                shared_config: JSON.parse(JSON.stringify(input.sharedConfig)),
+                ship_role: input.sharedConfig.shipRole,
+                stat_priorities: JSON.parse(JSON.stringify(input.sharedConfig.statPriorities)),
+                stat_bonuses: JSON.parse(JSON.stringify(input.sharedConfig.statBonuses)),
+                set_priorities: JSON.parse(JSON.stringify(input.sharedConfig.setPriorities)),
+                // activeProfileId passed from call site — one recommendation per alt profile
+                created_by: createdBy,
+            })
+```
+
+The vote methods (`voteOnRecommendation`, `getUserVote`, `removeVote`) are unchanged — including their deliberate use of the auth user rather than the active profile, so alt profiles cannot inflate vote counts. Do not touch them or their comments.
+
+---
+
+#### Part B — the hook
+
 
 One fetch, a resolved build list, expansion and sort state, and a share path that sends the full build.
 
@@ -2119,18 +2159,13 @@ export const useCommunityRecommendations = ({
 - [ ] **Step 2: Typecheck**
 
 Run: `npx tsc --noEmit`
-Expected: remaining errors only in `src/components/autogear/CommunityRecommendations.tsx` (Task 8) and `AutogearQuickSettings.tsx` (Task 9).
+Expected: errors remain, now confined to `src/components/autogear/CommunityRecommendations.tsx` and `AutogearQuickSettings.tsx`. Parts C and D of this task clear them. Do not commit yet.
 
-- [ ] **Step 3: Commit**
-
-```bash
-git add src/hooks/useCommunityRecommendations.ts
-git commit -m "refactor(community): hook returns a resolved build list and shares the full build"
-```
 
 ---
 
-### Task 8: Recompose `CommunityRecommendations`, header, share preview; delete dead files
+#### Part C — the component recomposition
+
 
 **Files:**
 - Modify: `src/components/autogear/CommunityRecommendations.tsx`
@@ -2455,18 +2490,13 @@ Expected: no output. If `src/types/autogearSuggestion.ts` is now unreferenced to
 - [ ] **Step 5: Typecheck**
 
 Run: `npx tsc --noEmit`
-Expected: errors only in `AutogearQuickSettings.tsx` (it still passes the old `currentConfig` prop). Task 9 fixes it.
+Expected: errors only in `AutogearQuickSettings.tsx` (it still passes the old `currentConfig` prop). Part D of this task fixes it.
 
-- [ ] **Step 6: Commit**
-
-```bash
-git add -A src/components/autogear src/types/communityRecommendation.ts
-git commit -m "feat(community): recompose the section around the build list and add the apply confirm"
-```
 
 ---
 
-### Task 9: Wire Apply through to the autogear page
+#### Part D — the Apply wiring
+
 
 **Files:**
 - Modify: `src/components/autogear/AutogearQuickSettings.tsx:26-38` (the `getShipConfig` return type) and `:180-198` (the `CommunityRecommendations` usage)
@@ -2713,20 +2743,41 @@ and pass it at the `AutogearQuickSettings` usage (line ~1186):
 
 Confirm `addNotification` is already in scope in this component — it is used by `applySavedConfigs`. If not, pull it from `useNotification()` as that function does.
 
-- [ ] **Step 6: Typecheck, run the full suite, and commit**
-
-```bash
-npx tsc --noEmit
-npm test
-git add src/components/autogear/AutogearQuickSettings.tsx src/components/autogear/__tests__/AutogearQuickSettings.test.tsx src/pages/manager/AutogearPage.tsx
-git commit -m "feat(community): apply a community build to the autogear config"
-```
-
-`npx tsc --noEmit` must now be **clean**. If it is not, the remaining errors are real — fix them before committing.
 
 ---
 
-### Task 10: Documentation and changelog
+#### Final: verify and commit (once, for the whole task)
+
+- [ ] **Step F1: Typecheck**
+
+Run: `npx tsc --noEmit`
+Expected: **clean, zero errors.** If any remain, the switchover is incomplete — finish it before committing.
+
+- [ ] **Step F2: Confirm nothing still references the deleted modules**
+
+```bash
+grep -rn "AlternativeRecommendations\|RecommendationContent\|CommunityActions\|AIRecommendation\|getBestRecommendation\|getAlternatives" src
+```
+
+Expected: no output.
+
+- [ ] **Step F3: Run the full suite**
+
+Run: `npm test -- --run`
+Expected: all tests pass.
+
+- [ ] **Step F4: Commit**
+
+```bash
+git add -A src supabase
+git commit -m "feat(community): browsable build list, richer shared builds, and apply-to-config"
+```
+
+The pre-commit hook runs lint-staged, `tsc --noEmit` and the full suite. All three must pass.
+
+---
+
+### Task 8: Documentation and changelog
 
 **Files:**
 - Modify: `src/pages/DocumentationPage.tsx:1688-1775` (the Community Recommendations section)
