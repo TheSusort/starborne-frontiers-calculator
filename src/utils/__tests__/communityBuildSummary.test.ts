@@ -49,9 +49,9 @@ describe('communityBuildSummary', () => {
                 { stat: 'speed', maxLimit: 200 },
             ],
         });
-        expect(summary).toContain('Crit Rate min 100');
-        expect(summary).toContain('Speed max 200');
-        expect(summary).not.toContain('Crit Damage');
+        // Exact equality proves the unlimited critDamage priority was filtered out.
+        // With the filter removed, this would include 'Crit Power' and fail the match.
+        expect(summary).toBe('Attacker · Crit Rate min 100, Speed max 200');
     });
 
     it('distinguishes an additive bonus from a multiplier bonus', () => {
