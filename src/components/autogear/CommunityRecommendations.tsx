@@ -8,7 +8,7 @@ import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendat
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
-import type { CommunityBuild } from '../../utils/communityBuild';
+import { LEGACY_DEFAULT_SET_COUNT, type CommunityBuild } from '../../utils/communityBuild';
 import { RecommendationHeader } from './RecommendationHeader';
 import { CommunityBuildList } from './CommunityBuildList';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
@@ -183,6 +183,15 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                             unleveled, use upgraded stats, complete sets, calibration, arena
                             modifiers) are not changed.
                         </p>
+                        {pendingApply?.build.setPriorities.some(
+                            (set) => set.count === undefined
+                        ) && (
+                            <p className="text-theme-text-secondary">
+                                This build doesn&apos;t have a saved piece count for one or more
+                                gear sets, so it will be applied using {LEGACY_DEFAULT_SET_COUNT}{' '}
+                                pieces for those.
+                            </p>
+                        )}
                     </div>
                 }
             />

@@ -103,6 +103,16 @@ describe('CommunityBuildDetails', () => {
         expect(row.textContent).not.toContain('pieces');
     });
 
+    // Real production shape: a legacy set priority with no recorded piece
+    // count (e.g. `{ setName: 'DECIMATION' }`). The decision is to show the
+    // set name alone rather than invent a number.
+    it('names a legacy gear-set priority with no recorded piece count', () => {
+        renderDetails(makeBuild({ setPriorities: [{ setName: 'DECIMATION' }] }));
+        const row = screen.getByTestId('community-build-set');
+        expect(row.textContent).toContain('Decimation');
+        expect(row.textContent).not.toContain('pieces');
+    });
+
     it('distinguishes an additive bonus from a multiplier bonus', () => {
         renderDetails(
             makeBuild({

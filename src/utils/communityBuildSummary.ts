@@ -25,7 +25,10 @@ export const communityBuildSummary = (build: SharedAutogearBuild): string => {
         parts.push(
             build.setPriorities
                 .map((set) =>
-                    set.kind === 'implant'
+                    // A legacy set priority with no recorded piece count is
+                    // shown without one, same as the implant-kind case, rather
+                    // than inventing a number.
+                    set.kind === 'implant' || set.count === undefined
                         ? setLabel(set.setName)
                         : `${set.count}x ${setLabel(set.setName)}`
                 )

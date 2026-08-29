@@ -68,7 +68,9 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                 <Section title="Gear Sets">
                     {config.setPriorities.map((set, index) => (
                         <div key={index} data-testid="community-build-set">
-                            {set.kind === 'implant'
+                            {/* A legacy set priority with no recorded piece count is
+                                shown without one, rather than inventing a number. */}
+                            {set.kind === 'implant' || set.count === undefined
                                 ? setLabel(set.setName)
                                 : `${setLabel(set.setName)} ( ${set.count} pieces)`}
                         </div>

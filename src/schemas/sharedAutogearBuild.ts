@@ -46,15 +46,23 @@ const statPrioritySchema = z.object({
 // and `kind: 'implant'` must name an implant — GEAR_SETS and IMPLANTS keys are
 // not disjoint (e.g. 'AMBUSH' exists in both), so `kind` — not the key alone —
 // decides which inventory a requirement is checked against.
+// `count` is optional: a legacy recommendation row written before piece
+// counts were captured has no recorded value (real production example:
+// `[{ setName: 'DECIMATION' }]`). The decision is to display those without a
+// count rather than invent one — see SharedSetPriority. The new write path
+// (configToSharedBuild) always supplies a real count, so this is purely
+// additive there.
+const countSchema = z.number().int().min(0).max(6).optional();
+
 const setPrioritySchema = z.union([
     z.object({
         setName: gearSetKeySchema,
-        count: z.number().int().min(0).max(6),
+        count: countSchema,
         kind: z.undefined().optional(),
     }),
     z.object({
         setName: implantKeySchema,
-        count: z.number().int().min(0).max(6),
+        count: countSchema,
         kind: z.literal('implant'),
     }),
 ]);

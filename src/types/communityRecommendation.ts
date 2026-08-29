@@ -26,6 +26,18 @@ export interface CommunityRecommendation {
 }
 
 /**
+ * A SetPriority as carried in a shared build. Same shape as the engine's
+ * SetPriority, except `count` is optional: a legacy recommendation row
+ * written before piece counts were captured has no recorded value, and the
+ * decision is to show it without inventing one (e.g. "Decimation", not
+ * "Decimation ( 2 pieces)"). The autogear engine's own SetPriority
+ * (types/autogear.ts) keeps `count` required — only the shared/display shape
+ * relaxes it. A build shared from the current UI always has a real count, so
+ * this is purely additive for the new write path.
+ */
+export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
+
+/**
  * The portion of a SavedAutogearConfig that is shared with the community.
  *
  * Deliberately excludes the personal toggles (algorithm, ignoreEquipped,
@@ -40,7 +52,7 @@ export interface SharedAutogearBuild {
     shipRole: ShipTypeName;
     /** Order IS the priority — StatPriority.weight is hardcoded to 1 everywhere. */
     statPriorities: StatPriority[];
-    setPriorities: SetPriority[];
+    setPriorities: SharedSetPriority[];
     statBonuses: StatBonus[];
     fleetBuffs: FleetBuff[];
     excludedImplantTypes: string[];

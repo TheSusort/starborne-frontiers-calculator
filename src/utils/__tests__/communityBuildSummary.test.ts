@@ -31,6 +31,15 @@ describe('communityBuildSummary', () => {
         expect(four).not.toEqual(two);
     });
 
+    it('names a legacy gear-set priority with no recorded piece count', () => {
+        const summary = communityBuildSummary({
+            ...base,
+            setPriorities: [{ setName: 'DECIMATION' }],
+        });
+        expect(summary).toContain('Decimation');
+        expect(summary).not.toContain('x Decimation');
+    });
+
     it('names an implant-kind set priority without a piece count', () => {
         const summary = communityBuildSummary({
             ...base,

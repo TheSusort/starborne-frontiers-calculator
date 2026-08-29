@@ -64,6 +64,29 @@ describe('validateSharedAutogearBuild', () => {
         expect(validateSharedAutogearBuild(build)).toBeNull();
     });
 
+    // Real production shape: a legacy `set_priorities` entry with no recorded
+    // piece count, e.g. `[{ setName: 'DECIMATION' }]` — count must not be
+    // required, but when present it is still bounded/typed as before.
+    describe('setPriority count is optional', () => {
+        it('accepts a gear-set entry with no count', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: [{ setName: 'DECIMATION' }],
+            };
+            const result = validateSharedAutogearBuild(build);
+            expect(result).not.toBeNull();
+            expect(result?.setPriorities[0]).toEqual({ setName: 'DECIMATION' });
+        });
+
+        it('still rejects an out-of-range count when one is present', () => {
+            const build = {
+                ...structuredClone(validBuild),
+                setPriorities: [{ setName: 'DECIMATION', count: 7 }],
+            };
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+    });
+
     describe('setPriority kind/setName consistency', () => {
         // MARTYRDOM is an implant-only key (absent from GEAR_SETS): a set
         // priority naming it without `kind: 'implant'` must not silently

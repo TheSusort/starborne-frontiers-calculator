@@ -270,4 +270,18 @@ describe('communityBuildToConfigUpdate', () => {
             optimizeImplants: sharedConfig.optimizeImplants,
         });
     });
+
+    // The page config's SetPriority.count is required (the autogear engine
+    // consumes it), but a legacy shared build may have no recorded count.
+    // Applying such a build must still produce a config the engine can score.
+    it('fills a missing set priority count with LEGACY_DEFAULT_SET_COUNT, leaving a present count untouched', () => {
+        const update = communityBuildToConfigUpdate({
+            ...sharedConfig,
+            setPriorities: [{ setName: 'DECIMATION' }, { setName: 'CRITICAL', count: 4 }],
+        });
+        expect(update.setPriorities).toEqual([
+            { setName: 'DECIMATION', count: 2 },
+            { setName: 'CRITICAL', count: 4 },
+        ]);
+    });
 });
