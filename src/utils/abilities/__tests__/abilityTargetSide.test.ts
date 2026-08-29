@@ -4,6 +4,8 @@ import {
     isEnemyTarget,
     ABILITY_TARGET_SELECTOR,
     enemySelectorKind,
+    ABILITY_TARGET_ENEMY_SCOPE,
+    isAllEnemiesTarget,
 } from '../abilityTargetSide';
 import type { AbilityTarget } from '../../../types/abilities';
 
@@ -108,5 +110,55 @@ describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
     // boundary to simulate the unvalidated-persisted-config input.
     it('an out-of-union target resolves to null, not undefined (unvalidated persisted config)', () => {
         expect(enemySelectorKind('bogus-target' as AbilityTarget)).toBeNull();
+    });
+});
+
+/**
+ * #390 board-coverage axis. Decides whether an enemy-side AURA/ACCUMULATING status registered into
+ * the singular '__enemy__' bucket may be folded into every per-victim read. `'all'` folds (every
+ * enemy is a recipient by definition, so there is nothing to get wrong); `'subset'` does not (the
+ * bucket has no victim id, so folding would smear a one-victim debuff across the whole board).
+ */
+describe('#390 ABILITY_TARGET_ENEMY_SCOPE — the board-coverage axis', () => {
+    it('classifies all-enemies as the ONLY board-wide scope', () => {
+        const boardWide = (Object.keys(ABILITY_TARGET_ENEMY_SCOPE) as AbilityTarget[]).filter(
+            (t) => ABILITY_TARGET_ENEMY_SCOPE[t] === 'all'
+        );
+        expect(boardWide).toEqual(['all-enemies']);
+    });
+
+    // The self side must answer `null`, not 'subset' — 'subset' would read as "an enemy scope that
+    // happens to be narrow", and this axis is only ever asked about enemy-side statuses.
+    it('every self-side target is null and every enemy-side target is not', () => {
+        for (const target of Object.keys(ABILITY_TARGET_SIDE) as AbilityTarget[]) {
+            if (ABILITY_TARGET_SIDE[target] === 'self') {
+                expect(ABILITY_TARGET_ENEMY_SCOPE[target]).toBeNull();
+            } else {
+                expect(ABILITY_TARGET_ENEMY_SCOPE[target]).not.toBeNull();
+            }
+        }
+    });
+
+    it('covers the same key set as the other two axes', () => {
+        expect(Object.keys(ABILITY_TARGET_ENEMY_SCOPE).sort()).toEqual(
+            Object.keys(ABILITY_TARGET_SIDE).sort()
+        );
+    });
+
+    // Same unvalidated-persisted-config hazard as `enemySelectorKind`'s `?? null`, with the
+    // opposite safe answer: an unrecognised target must be treated as NOT board-wide, so its
+    // statuses stay out of the fold rather than being smeared across enemies they never touched.
+    it('an out-of-union target is NOT board-wide (unvalidated persisted config)', () => {
+        expect(isAllEnemiesTarget('bogus-target' as AbilityTarget)).toBe(false);
+    });
+
+    // The discriminator: without this, `isAllEnemiesTarget` returning a constant false would pass
+    // every arm above that matters.
+    it('isAllEnemiesTarget agrees with the map on both answers', () => {
+        expect(isAllEnemiesTarget('all-enemies')).toBe(true);
+        expect(isAllEnemiesTarget('enemy')).toBe(false);
+        expect(isAllEnemiesTarget('adjacent-enemies')).toBe(false);
+        expect(isAllEnemiesTarget('enemy-highest-attack')).toBe(false);
+        expect(isAllEnemiesTarget('self')).toBe(false);
     });
 });
