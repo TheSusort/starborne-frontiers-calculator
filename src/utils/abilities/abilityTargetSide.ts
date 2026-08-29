@@ -42,6 +42,59 @@ export function isEnemyTarget(target: AbilityTarget): boolean {
     return ABILITY_TARGET_SIDE[target] === 'enemy';
 }
 
+/**
+ * THE one answer to "does this enemy-side target cover the WHOLE opposing board, or a subset of
+ * it?" — the BOARD-COVERAGE axis, beside the SIDE axis above and the FOOTPRINT axis below. Fourth
+ * total `Record` over the same derived key set, same instrument and same reason: `tsc` rejects a
+ * new `AbilityTarget` until somebody classifies it here.
+ *
+ * WHY (#390). Enemy-side AURA and ACCUMULATING statuses are registered ONCE at actor construction,
+ * into a bucket keyed `DEFAULT_ENEMY_TARGET` ('__enemy__') — before any cast has resolved, so no
+ * victim id exists to key them by. Every reader looks them up under the resolved victim's REAL id,
+ * so the bucket was never read and the whole channel was inert (`statusEngine.ts`'s
+ * `activeAbilityStatuses`; measured in `enemyAuraDebuffChannel.characterization.test.ts`).
+ *
+ * Folding that bucket into every per-victim read repairs it — but ONLY for a target that genuinely
+ * covers every enemy. For a subset scope the same fold would smear a one-victim debuff across the
+ * whole opposing board, which is a worse answer than dropping it. Hence this axis: `'all'` folds,
+ * `'subset'` stays dropped until enemy-side aura registration moves to cast time.
+ *
+ * `null` is the SELF side — the question does not apply there. Keep this in sync with
+ * `ABILITY_TARGET_SIDE`: every `'enemy'` entry there must be non-`null` here, which
+ * `abilityTargetSide.test.ts` cross-checks rather than trusting.
+ */
+export const ABILITY_TARGET_ENEMY_SCOPE: Record<AbilityTarget, 'all' | 'subset' | null> = {
+    self: null,
+    ally: null,
+    'all-allies': null,
+    'lowest-hp-ally': null,
+    'adjacent-allies': null,
+    // The one board-wide enemy scope: every opposing actor is a recipient by definition.
+    'all-enemies': 'all',
+    enemy: 'subset',
+    // Positional scopes: the footprint comes from the anchor's neighbours, so which enemies are
+    // covered is not knowable at registration time.
+    'adjacent-enemies': 'subset',
+    'target-and-adjacent-enemies': 'subset',
+    // Global selectors: exactly ONE opposing actor, resolved at drain time.
+    'enemy-most-buffs': 'subset',
+    'enemy-highest-attack': 'subset',
+    'enemy-highest-speed': 'subset',
+};
+
+/**
+ * Does `target` cover every enemy on the board? Backs the #390 aura/accumulating fold.
+ *
+ * The `=== 'all'` comparison (rather than a truthiness check) is load-bearing for the same reason
+ * `enemySelectorKind`'s `?? null` is: ability configs are user-persisted and unvalidated on read,
+ * so an out-of-union `target` indexes this total `Record` to `undefined` at runtime. An
+ * unrecognised target must answer "not board-wide" and keep its statuses OUT of the fold — the
+ * conservative side, since a wrong `true` smears a debuff across enemies it never touched.
+ */
+export function isAllEnemiesTarget(target: AbilityTarget): boolean {
+    return ABILITY_TARGET_ENEMY_SCOPE[target] === 'all';
+}
+
 /** Which of the three global enemy SELECTORS a target names, or `null` for every other target. */
 export type EnemySelectorKind = 'most-buffs' | 'highest-attack' | 'highest-speed';
 

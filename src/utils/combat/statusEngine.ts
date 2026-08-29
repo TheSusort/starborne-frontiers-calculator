@@ -80,6 +80,15 @@ interface AbilityStatusBase {
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
      *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
     factionFilter?: FactionKey[];
+    /** #390: set to `'all'` ONLY on an enemy-side status whose source target covers the whole
+     *  opposing board (`all-enemies` — see `ABILITY_TARGET_ENEMY_SCOPE`). Enemy-side aura and
+     *  accumulating statuses are registered once at actor construction, under the singular
+     *  `DEFAULT_ENEMY_TARGET` key, because no victim id exists yet; `activeAbilityStatuses` folds
+     *  that bucket into a per-victim read only for the entries carrying this flag, since a
+     *  board-wide status is correct for EVERY victim while a subset-scoped one would be smeared
+     *  onto enemies it never touched. Absent → not folded (every self-side status, every
+     *  subset-scoped enemy status, and every fixture that predates this flag). */
+    enemyScope?: 'all';
 }
 
 /**
@@ -464,6 +473,10 @@ interface AccumulatingState {
      *  becomes active). Undefined while seeded-but-inert (stacks === 0). Drives cleanse/purge
      *  newest-applied-first removal ordering for accumulating statuses. */
     appliedSeq?: number;
+    /** #390: copied off the registered status — see `AbilityStatusBase.enemyScope`. Present only
+     *  on an enemy-side entry whose source target is board-wide; gates the DEFAULT_ENEMY_TARGET
+     *  fold in `activeAbilityStatuses`. Scheduled accum entries never carry it. */
+    enemyScope?: 'all';
 }
 
 /** Persistent stacking status state (game-verified 2026-06-05). These statuses land ONCE at
@@ -501,6 +514,39 @@ interface TimedSourceSets {
  *  to the old singular enemyMap path. Exported so triggers.ts can reference the same constant
  *  instead of duplicating the string literal. */
 export const DEFAULT_ENEMY_TARGET = '__enemy__';
+
+/**
+ * #390 — the DEFAULT_ENEMY_TARGET fold. Enemy-side AURA and ACCUMULATING statuses are registered
+ * once at actor construction, into the singular `DEFAULT_ENEMY_TARGET` bucket, because no victim
+ * id exists that early. Every reader looks them up under the resolved victim's REAL id, so before
+ * this the bucket was written and never read — the channel was inert end to end.
+ *
+ * This returns the bucket entries that may be folded into ONE victim's read:
+ *  - nothing at all when the caller IS reading the default bucket (it already has them, and
+ *    folding would double every entry);
+ *  - only entries flagged `enemyScope: 'all'`. A board-wide status is correct for every victim by
+ *    definition. A subset-scoped one is NOT foldable — the bucket does not record which enemy it
+ *    was meant for, so folding it would smear a one-victim debuff across the whole opposing board.
+ *    Repairing that half means moving enemy-side aura registration to cast time; until then those
+ *    statuses stay dropped, pinned by `enemyAuraDebuffChannel.characterization.test.ts` arm 4.
+ *  - nothing already present under `alreadyHave` (a real per-target entry is the more specific
+ *    answer and must not be doubled by the bucket's copy).
+ */
+function boardWideEnemyExtras<T extends { enemyScope?: 'all' }>(
+    bucket: Iterable<T> | undefined,
+    enemyTargetId: string,
+    keyOf: (entry: T) => string,
+    alreadyHave: (key: string) => boolean
+): T[] {
+    if (!bucket || enemyTargetId === DEFAULT_ENEMY_TARGET) return [];
+    const out: T[] = [];
+    for (const entry of bucket) {
+        if (entry.enemyScope !== 'all') continue;
+        if (alreadyHave(keyOf(entry))) continue;
+        out.push(entry);
+    }
+    return out;
+}
 
 export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const { selfBuffs, enemyDebuffs } = input;
@@ -1519,6 +1565,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     payload: s.payload,
                     conditions: s.conditions,
                     casterId: s.casterId,
+                    // #390: carry the board-coverage flag onto the projected state so the
+                    // DEFAULT_ENEMY_TARGET fold can gate on it (the aura map stores the whole
+                    // status object, so it needs no equivalent line).
+                    ...(s.enemyScope ? { enemyScope: s.enemyScope } : {}),
                 });
             } else if (s.kind === 'aura') {
                 // Self-side auras are per-owner; enemy-side auras are per-target.
@@ -1660,11 +1710,22 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // still gated by the caster's buffs/state — resolveCtx maps casterId → that ctx).
         // Self-side auras are per-owner — only the requested owner's list is read so a team
         // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
-        // Enemy-side auras are per-target — only the requested target's list is read (mirrors self).
+        // Enemy-side auras are per-target — only the requested target's list is read (mirrors
+        // self), PLUS the board-wide entries from the singular DEFAULT_ENEMY_TARGET bucket (#390).
+        const perTargetAuras = side === 'enemy' ? (auraEnemyMaps.get(enemyTargetId) ?? []) : [];
+        const perTargetAuraNames = new Set(perTargetAuras.map((a) => a.payload.buffName));
         const auraList =
             side === 'self'
                 ? (auraSelfMaps.get(ownerId) ?? [])
-                : (auraEnemyMaps.get(enemyTargetId) ?? []);
+                : [
+                      ...perTargetAuras,
+                      ...boardWideEnemyExtras(
+                          auraEnemyMaps.get(DEFAULT_ENEMY_TARGET),
+                          enemyTargetId,
+                          (a) => a.payload.buffName,
+                          (name) => perTargetAuraNames.has(name)
+                      ),
+                  ];
         for (const a of auraList) {
             // casterId defaults to 'attacker' (the engine always sets it; only unit-test
             // fixtures omit it) so the resolver returns the local ctx in the attacker-only path.
@@ -1697,7 +1758,19 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             side === 'self'
                 ? (accumSelfMaps.get(ownerId) ?? new Map<string, AccumulatingState>())
                 : (accumEnemyMaps.get(enemyTargetId) ?? new Map<string, AccumulatingState>());
-        for (const s of accumMap.values()) {
+        // #390: the board-wide entries from the DEFAULT_ENEMY_TARGET bucket, minus any buffName
+        // the per-target map already holds — a real per-target entry is the more specific answer
+        // and must not be doubled by the bucket's copy.
+        const accumExtras =
+            side === 'enemy'
+                ? boardWideEnemyExtras(
+                      accumEnemyMaps.get(DEFAULT_ENEMY_TARGET)?.values(),
+                      enemyTargetId,
+                      (s) => s.buffName,
+                      (name) => accumMap.has(name)
+                  )
+                : [];
+        for (const s of [...accumMap.values(), ...accumExtras]) {
             if (!s.payload) continue;
             if (s.stacks <= 0) continue;
             // s.casterId is present for ability-sourced accumulating statuses; scheduled accum

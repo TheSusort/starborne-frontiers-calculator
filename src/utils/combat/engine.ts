@@ -29,7 +29,11 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
-import { isEnemyTarget, type EnemySelectorKind } from '../abilities/abilityTargetSide';
+import {
+    isEnemyTarget,
+    isAllEnemiesTarget,
+    type EnemySelectorKind,
+} from '../abilities/abilityTargetSide';
 import { aliveTargetsOf, type AliveRoster } from './targetableActors';
 import {
     foldActorBuffTotals,
@@ -441,6 +445,15 @@ function registerActorAbilityStatuses(
                 // here — this function runs at actor construction. Attached only when the ability
                 // carries one, so every other ship's status object is byte-identical.
                 ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
+                // #390: mark the enemy-side statuses whose target covers the whole opposing board.
+                // The aura/accumulating registration below has no victim id to key by (it runs at
+                // actor construction, before any cast), so it writes into the singular
+                // DEFAULT_ENEMY_TARGET bucket; statusEngine folds that bucket into a per-victim
+                // read only for entries carrying this flag. Attached only when it is 'all', so
+                // every other status object stays byte-identical (same rule as factionFilter).
+                ...(side === 'enemy' && isAllEnemiesTarget(ability.target)
+                    ? { enemyScope: 'all' as const }
+                    : {}),
             } as const;
             let status: RegisteredAbilityStatus;
             if (accumulating) {
