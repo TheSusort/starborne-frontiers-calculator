@@ -1705,11 +1705,23 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        When you select a ship, you&apos;ll see the highest-voted
-                                        community recommendation
+                                        When you select a ship, every community build shared for
+                                        that ship is listed, best rated first
                                     </li>
-                                    <li>Click to expand and see the full configuration details</li>
-                                    <li>View alternative recommendations from other players</li>
+                                    <li>
+                                        Builds tagged for the ultimate implant you have equipped
+                                        sort to the top; builds for a different implant stay visible
+                                        at the bottom
+                                    </li>
+                                    <li>
+                                        Click a build to expand its full configuration — role, stat
+                                        priorities, gear sets, stat bonuses, fleet buffs and implant
+                                        settings
+                                    </li>
+                                    <li>
+                                        Sort by top rated or newest, and see each build&apos;s refit
+                                        level
+                                    </li>
                                 </ul>
                             </div>
 
@@ -1719,14 +1731,12 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
-                                        Configure your autogear settings (stat priorities, set
-                                        bonuses, etc.)
+                                        Configure your autogear settings (role, stat priorities,
+                                        gear sets, stat bonuses, fleet buffs, implant settings)
                                     </li>
                                     <li>
-                                        Click &quot;Find Optimal Gear&quot; to run the optimization
-                                    </li>
-                                    <li>
-                                        Click &quot;Share to Community&quot; to open the share form
+                                        Click &quot;Share your build&quot; to open the share form —
+                                        it previews exactly what will be published
                                     </li>
                                     <li>
                                         Add a descriptive title (e.g., &quot;High Crit DPS
@@ -1750,6 +1760,36 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>Your votes help surface the best builds for each ship</li>
                                     <li>Sign in required to vote or share</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Applying a Build
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Click &quot;Apply to autogear&quot; on an expanded build to
+                                        copy it into your configuration for that ship
+                                    </li>
+                                    <li>
+                                        It replaces role, stat priorities, gear sets, stat bonuses,
+                                        fleet buffs and implant settings
+                                    </li>
+                                    <li>
+                                        Your own preferences are never changed: algorithm, ignore
+                                        equipped, ignore unleveled, use upgraded stats, complete
+                                        sets, calibration and arena modifiers all stay as you set
+                                        them
+                                    </li>
+                                    <li>
+                                        You are asked to confirm whenever applying would overwrite
+                                        an existing configuration
+                                    </li>
+                                    <li>
+                                        Builds shared before August 2026 carry role, stat
+                                        priorities, gear sets and stat bonuses only
+                                    </li>
                                 </ul>
                             </div>
 
