@@ -628,7 +628,13 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             actorId: e.granterId,
             targets,
             reactions: [],
-            ...(ctx.consumePendingSkill() ?? {}),
+            // #424: a LEECH grant has no cast behind it, so it must not take the pending skill
+            // tag. `consumePendingSkill` is destructive — the tag is a one-shot token — so a
+            // tagless emit calling it would label its own row with an unrelated skill AND leave
+            // the cast row that earned the tag bare. Same reasoning as the `shield-applied-log`
+            // twin below, which likewise never consumes; the difference is that this event must
+            // still fire `on-shield-applied`, so it cannot simply become that log-only twin.
+            ...(e.uncast ? {} : (ctx.consumePendingSkill() ?? {})),
         };
         ctx.attachEntry(entry);
     },

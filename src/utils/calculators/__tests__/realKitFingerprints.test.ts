@@ -110,12 +110,22 @@ describe('pinned regression: Malvex target-shield gates (#296, #297)', () => {
         //
         // Malvex ALSO has an on-damaged passive self-shield ("gains Shield equal to 15% of the
         // damage dealt to them"), and the focus is now genuinely under fire in every scenario, so
-        // that passive fires everywhere. It is still not visible as a bare `shield` token: the
-        // reactive grant emits no shield log entry, only its later destruction does — which is why
-        // `shield-destroyed` sits in plain/wounded while `shield` does not. So a bare-`kind`
-        // fingerprint WOULD also have caught #296/#297 here (bare `shield` is richEnemy-only). The
-        // `:slot` suffix's value is narrower than "it caught this": it separates two same-kind
-        // entries when both are logged, and it names WHICH slot regressed in the diff.
+        // that passive fires everywhere.
+        //
+        // ⚠️ REWRITTEN BY #424, AND THE OLD TEXT INVERTS THE CURRENT ARGUMENT. It read: "It is
+        // still not visible as a bare `shield` token: the reactive grant emits no shield log
+        // entry... So a bare-`kind` fingerprint WOULD also have caught #296/#297 here (bare
+        // `shield` is richEnemy-only)." #424 made that leech grant emit `shield-applied`, so a
+        // bare `shield` token now sits in ALL THREE scenarios and a bare-kind fingerprint would
+        // NO LONGER catch #296/#297 at all — the `:slot` suffix is now the only thing separating
+        // Malvex's gated ACTIVE self-shield from her ungated passive leech. This is exactly the
+        // "separates two same-kind entries when both are logged" case the suffix's own doc
+        // comment (fingerprint.ts) said did not arise on the current corpus. It arises now.
+        //
+        // That separation is only sound because the leech emit sets `uncast` and so does NOT
+        // consume the pending skill tag. Without that flag the leech row took the tag and read as
+        // `shield:active` in plain/wounded — i.e. THIS TEST failed, reporting the #296/#297 gate
+        // as broken when it was intact. The two assertions below are that flag's guard.
         const malvex = buildTraceShip('Malvex');
         expect(malvex).not.toBeNull();
         const fp = fingerprintShip(malvex!);
@@ -123,6 +133,12 @@ describe('pinned regression: Malvex target-shield gates (#296, #297)', () => {
         expect(fp.richEnemy).toContain('shield:active');
         expect(fp.plain).not.toContain('shield:active');
         expect(fp.wounded).not.toContain('shield:active');
+
+        // #424: the leech grant IS logged now, untagged, in every scenario. Pinned so the emit
+        // cannot silently disappear again — the `not.toContain('shield:active')` pair above would
+        // stay green if the leech stopped emitting entirely, which is the failure #424 fixed.
+        expect(fp.plain).toContain('shield');
+        expect(fp.wounded).toContain('shield');
 
         expect(fp.richEnemy).toContain('buff:charged');
         expect(fp.plain).not.toContain('buff:charged');
