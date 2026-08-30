@@ -4676,6 +4676,22 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                       ctx.selfNamedBuffsFor?.(intent.ownerId)
                   )
                 : healing.recipientIncomingHealPct(rid);
+        // #435 (Chimei R2): an `overheal` basis with an EXPLICIT `lowest-hp-ally` target opts out
+        // of Abundant Renewal's per-ally fan-out below. Her clause is the opposite shape — ONE
+        // repair, on the lowest current HP% ally, sized from the SUM of everything the triggering
+        // repair wasted (owner ruling R4, 2026-08-30). Abundant Renewal carries target 'ally' and
+        // is unaffected.
+        const overhealToLowestHpAlly =
+            cfg.basis === 'overheal' && intent.ability.target === 'lowest-hp-ally';
+        // R4: the sum across the triggering repair. Prefers the per-ally breakdown; falls back to
+        // the aggregate for a legacy single-target emit that carries no perTarget.
+        const overhealSum = (() => {
+            const byAlly = intent.eventCtx?.overhealByAlly;
+            if (byAlly && Object.keys(byAlly).length > 0) {
+                return Object.values(byAlly).reduce((sum, v) => sum + v, 0);
+            }
+            return intent.eventCtx?.overhealAmount ?? 0;
+        })();
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
         // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
@@ -4702,18 +4718,23 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                           : undefined) ??
                       0)
                     : cfg.basis === 'overheal'
-                      ? // Reactive overheal (Abundant Renewal on-own-repair-to-ally): scale off the
+                      ? // Reactive overheal. Abundant Renewal (on-own-repair-to-ally) scales off the
                         // clipped over-repair captured in eventCtx.overhealAmount by the listener.
+                        // #435: an explicit lowest-hp-ally target takes the SUM instead (R4).
                         // Falls back to 0 when no overheal context is present — an overheal-scaled
                         // reactive with no over-repair grants nothing.
-                        (intent.eventCtx?.overhealAmount ?? 0)
+                        overhealToLowestHpAlly
+                          ? overhealSum
+                          : (intent.eventCtx?.overhealAmount ?? 0)
                       : (ownerCtx?.effectiveMaxHp ?? owner.hp);
         // Per-ally overheal routing (Abundant Renewal): when the triggering AoE repair supplied a
         // per-ally over-repair breakdown, an `overheal`-basis shield grants EACH over-repaired ally
         // a shield scaled off ITS OWN overheal and lands on that ally. Absent (legacy single-target
         // emit) → fall back to the aggregate overhealAmount routed to healing.targetId below.
         const overhealByAlly =
-            cfg.basis === 'overheal' ? intent.eventCtx?.overhealByAlly : undefined;
+            cfg.basis === 'overheal' && !overhealToLowestHpAlly
+                ? intent.eventCtx?.overhealByAlly
+                : undefined;
         // Recipients: an 'ally'-target heal prefers eventCtx.cleansedAllyIds, then
         // eventCtx.damagedAllyId (an ally-damage reaction repairs THAT ally), then the healing
         // target. The per-ally overheal map (when present) supersedes all of that, so an AoE
@@ -4726,9 +4747,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // (2) SP-4e Task 2 replaced this branch's anchor-only pool gate, so a resolved recipient
         // that is NOT the heal target genuinely gains HP. Neither of those is single-target.
         const recipients =
-            overhealByAlly && Object.keys(overhealByAlly).length > 0
-                ? Object.keys(overhealByAlly)
-                : reactiveRecipients(intent, ctx, healing.targetId);
+            // #435 R4: a zero-sum redirect (no ALLY was over-repaired this cast — e.g. an ally
+            // repaired without waste while the caster over-repaired only herself, which the
+            // listener already excludes from the aggregate) grants nothing. Without this, the
+            // lowest-HP% selector still resolves someone and the executor would heal them for 0
+            // and emit a phantom reactive-heal-performed — which a sibling on-own-repair-to-ally
+            // listener (Abundant Renewal on the same owner) would then react to. Scoped to the
+            // redirect arm only: Abundant Renewal's own zero-grant edge case (pre-existing,
+            // legacy aggregate fallback with no per-ally map) is untouched.
+            overhealToLowestHpAlly && overhealSum <= 0
+                ? []
+                : overhealByAlly && Object.keys(overhealByAlly).length > 0
+                  ? Object.keys(overhealByAlly)
+                  : reactiveRecipients(intent, ctx, healing.targetId);
         // H3.6: collect the per-recipient outcome so we emit ONE shield-applied per reactive
         // shield (NOT per recipient). #418: the accumulator carries the gross attempt too, so the
         // emit gate is "the grant resolved onto someone", not "someone's pool grew".
