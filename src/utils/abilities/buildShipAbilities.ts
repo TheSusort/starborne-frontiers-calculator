@@ -104,6 +104,7 @@ import {
     parseChargeRemoval,
     parseSelfBuffRemovals,
     parseEnemyChargedCastReaction,
+    parseOverRepairRedirect,
     REMOVE_CHARGE_RE,
     ONCE_PER_ALLY_PER_ROUND_RE,
     parseAllyInflictsDebuff,
@@ -2789,6 +2790,19 @@ function abilitiesFromText(
                 pos: reactionPos >= 0 ? reactionPos : MAX_POS,
             });
         }
+    }
+
+    // #435 (Chimei R2): "When over-repairing a damaged ally, the ally with the lowest current
+    // health percentage repairs an amount equivalent to the over-repair." A standalone ability —
+    // the clause has no pct tag, so it never reaches the heal chain. Anchored at its own clause
+    // so the cosmetic editor order matches the text.
+    const overRepairRedirect = parseOverRepairRedirect(text);
+    if (overRepairRedirect) {
+        const redirectPos = text.search(/when\s+over-?repairing/i);
+        out.push({
+            ability: { ...overRepairRedirect, id: nextId() },
+            pos: redirectPos >= 0 ? redirectPos : MAX_POS,
+        });
     }
 
     // Liberator (Phase 4b Task 10): "When an enemy dies, all allies add 1 charge to their
