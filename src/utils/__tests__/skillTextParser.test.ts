@@ -3713,10 +3713,27 @@ describe('detectDamageReactionTrigger', () => {
         ).toBeUndefined();
     });
 
-    it('Panon: "If this Unit is directly damaged" (if, not when) → undefined', () => {
+    // WAS: this locked "if"-phrased direct-damage clauses OUT of the reaction detector as a
+    // deliberate scope carve-out. That left Panon's Barrier grant on the generic `on-cast`
+    // default, so it armed on his OWN TURN rather than when he is hit. The two phrasings mean the
+    // same thing in-game, so the detector now accepts both — see DR_DIRECT_DAMAGE_RE's own note.
+    it('Panon: "If this Unit is directly damaged" reacts to being hit, same as "when"', () => {
         expect(
             at(
                 'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.',
+                'Barrier'
+            )
+        ).toMatchObject({ trigger: 'on-attacked' });
+    });
+
+    // The other side of that widening: Meatshield's ACTIVE clause is a cast-time condition ("has
+    // this Unit been hit this round?"), NOT a reaction that fires on being hit. The optional group
+    // in DR_DIRECT_DAMAGE_RE admits only "this unit is" between "if" and "directly", so the
+    // intervening "has been" keeps this out of the reaction path.
+    it('Meatshield: "If this Unit HAS BEEN directly damaged" stays out of the reaction path', () => {
+        expect(
+            at(
+                'If this Unit has been directly damaged this round, it gains <unit-skill>Barrier</unit-skill> for 1 turn.',
                 'Barrier'
             )
         ).toBeUndefined();

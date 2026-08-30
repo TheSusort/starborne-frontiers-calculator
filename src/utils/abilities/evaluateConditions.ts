@@ -44,9 +44,20 @@ export interface ConditionContext {
      *  'self-crit' evaluates 1/0; when undefined (e.g. modifierCtx — see the two-tier
      *  note in the spec), it falls back to effectiveCritRate/100 as a probability. */
     roundCrit?: boolean;
-    adjacentAllyCount: number;
-    enemyAdjacentCount: number;
-    enemyDestroyedCount: number;
+    /** LIVE-OR-MANUAL counts (see `evaluateCondition`'s dedicated arms). All three are OPTIONAL,
+     *  and ABSENT is the sentinel meaning "this caller has no board / no roster to count on",
+     *  which routes the condition to its manual `manualCount ?? 1` fallback — the single-ship DPS
+     *  behaviour. A PRESENT value is a real live reading and wins, including a real `0`.
+     *
+     *  Do NOT reintroduce a `?? 0` at any builder. These three used to be REQUIRED and were
+     *  written as literal `0`s by every builder, which made them unreachable in two different
+     *  ways at once: no caller could supply a live count, and the parser emits all three subjects
+     *  as `derivable:false`, so `evaluateCondition`'s early return answered `manualCount ?? 1`
+     *  before the switch arms were ever consulted. Panguan/Centurion/Judge each scaled by a fixed
+     *  count of ONE regardless of the real board or kill tally. */
+    adjacentAllyCount?: number;
+    enemyAdjacentCount?: number;
+    enemyDestroyedCount?: number;
     selfHpPct: number; // 0..100
     /** SP-4d: OPTIONAL, and absent means "there is no enemy to ask about" — not "an enemy at full
      *  health". Absent on a no-victim turn (an ally-targeted cast resolves nobody) and at drain
@@ -171,6 +182,14 @@ export interface ConditionContext {
     killedEnemyHadDebuff?: boolean;
 }
 
+/** Subjects whose count is LIVE when the caller can measure it and MANUAL otherwise. Resolved
+ *  ahead of `evaluateCondition`'s `derivable:false` early return — see the block there. */
+const LIVE_OR_MANUAL_SUBJECTS: ReadonlySet<Condition['subject']> = new Set<Condition['subject']>([
+    'adjacent-ally',
+    'enemy-adjacent',
+    'enemy-destroyed',
+]);
+
 /** Resolve one condition to a count (>= 0), or `undefined` when the condition's SUBJECT DOES NOT
  *  EXIST (SP-4d). `undefined` is not "zero" and not "unknown": it means the question cannot be
  *  asked, so `conditionMet` refuses it regardless of comparator and `scaledBonus` pays nothing. */
@@ -183,6 +202,21 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
         if (ctx.allyTeamNames)
             return cond.buffName && ctx.allyTeamNames.includes(cond.buffName) ? 1 : 0;
         return Math.max(0, cond.manualCount ?? 1);
+    }
+    // LIVE-OR-MANUAL subjects: the same shape as `ally-on-team` above, and handled ahead of the
+    // `derivable:false` early return for the same reason — the parser emits all three as
+    // `derivable:false` (a single-ship DPS run has no board and no opposing roster to count), so
+    // routing them through that return would leave their switch arms permanently unreachable.
+    // The combat engine supplies a real count and it wins; every other caller keeps the manual
+    // fallback byte-identical. See ConditionContext's doc on the three fields.
+    if (LIVE_OR_MANUAL_SUBJECTS.has(cond.subject)) {
+        const live =
+            cond.subject === 'adjacent-ally'
+                ? ctx.adjacentAllyCount
+                : cond.subject === 'enemy-adjacent'
+                  ? ctx.enemyAdjacentCount
+                  : ctx.enemyDestroyedCount;
+        return live ?? Math.max(0, cond.manualCount ?? 1);
     }
     if (!cond.derivable) return Math.max(0, cond.manualCount ?? 1);
 
@@ -219,12 +253,13 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             // the legacy probability (0..1) used as gate (>0) and expected-value scaler.
             if (ctx.roundCrit !== undefined) return ctx.roundCrit ? 1 : 0;
             return ctx.effectiveCritRate / 100;
+        // Unreachable — LIVE_OR_MANUAL_SUBJECTS above returns for all three before this switch.
+        // Kept so the subject union stays exhaustively covered here (removing them would make a
+        // future subject rename silently fall through instead of failing the `never` check).
         case 'adjacent-ally':
-            return ctx.adjacentAllyCount;
         case 'enemy-adjacent':
-            return ctx.enemyAdjacentCount;
         case 'enemy-destroyed':
-            return ctx.enemyDestroyedCount;
+            throw new Error(`evaluateCondition: ${cond.subject} must resolve above the switch`);
         case 'enemy-stealth-count':
             return ctx.stealthedEnemyCount ?? 0;
         case 'self-crit-power':

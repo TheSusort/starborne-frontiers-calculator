@@ -125,6 +125,22 @@ export function buildRoundContext(state: {
      *  leave undefined (do NOT pass []) to keep the manual assume-met fallback (single-ship DPS).
      *  Only the live combat engine's drain context supplies a real array. */
     allyTeamNames?: string[];
+    /** LIVE adjacency / kill counts (Panguan, Centurion, Judge). ABSENT is the sentinel: it means
+     *  this caller has no board or opposing roster to count on, and the condition falls back to
+     *  its manual `manualCount ?? 1` — the single-ship DPS behaviour, unchanged. Only the combat
+     *  engine populates them, from data `buildTurnArgs` already threads for other consumers
+     *  (`adjacentAllyIds`, `adjacentEnemyIdsFor`) plus the per-side `opposingRoster` kill tally.
+     *  Passed through with NO `?? 0`: a fabricated 0 here would silently mean "measured, nothing
+     *  adjacent", which is a different (and wrong) answer from "cannot measure". See
+     *  ConditionContext's own doc on the three fields for the history. */
+    /** Living same-side allies board-adjacent to the ACTING unit (the actor itself excluded). */
+    adjacentAllyCount?: number;
+    /** Living opposing actors board-adjacent to this cast's resolved TARGET (target excluded).
+     *  Owner ruling 2026-08-30: living only — a destroyed neighbour adds nothing. */
+    enemyAdjacentCount?: number;
+    /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
+     *  ruling 2026-08-30). Cumulative across rounds — it never resets. */
+    enemyDestroyedCount?: number;
     /** SP-4d — true when this round/reaction has NO opposing victim to ask a per-victim question
      *  about (e.g. an ally-targeted cast that resolves nobody). Default `false`/omitted preserves
      *  every existing caller's behaviour unchanged (a real victim, or the DPS-assumption default).
@@ -168,9 +184,10 @@ export function buildRoundContext(state: {
         // DPS-assumption defaults (overridable for live-engine population)
         selfDebuffNames: state.selfDebuffNames ?? [],
         enemyBuffNames: state.enemyBuffNames ?? [],
-        adjacentAllyCount: 0,
-        enemyAdjacentCount: 0,
-        enemyDestroyedCount: 0,
+        // Pass-through, NOT `?? 0` — see the fields' doc on the state interface above.
+        adjacentAllyCount: state.adjacentAllyCount,
+        enemyAdjacentCount: state.enemyAdjacentCount,
+        enemyDestroyedCount: state.enemyDestroyedCount,
         selfHpPct: state.selfHpPct ?? 100,
         targetHpPct: state.targetHpPct ?? 100,
         isLowestSpeedAlly: state.isLowestSpeedAlly ?? true,

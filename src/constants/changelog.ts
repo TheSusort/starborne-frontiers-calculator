@@ -5,7 +5,10 @@ export const CURRENT_VERSION = '1.66.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    "Combat simulator: skills that scale with the board now actually count it. Panguan's attacks grow with the number of living enemies standing next to his target, Centurion's with the number of allies next to him, and Judge's damage bonus finally climbs as enemies are destroyed — all three previously scored as though the count were always exactly one, no matter what the board looked like. The same applies on the healing and defense calculators, which fight a real positioned team. On the single-ship DPS calculator, which has no board to read, the count you enter yourself is still used.",
+    "Combat simulator: Panon's Barrier now arms the moment he is directly damaged, as his skill says, instead of coming up on his own turn whether or not anything had touched him.",
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

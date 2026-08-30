@@ -835,6 +835,19 @@ export interface PlayerTurnArgs {
      *  `adjacentAllyIds` above). Absent → both scopes degrade to their DPS/non-positional
      *  fallback (see the recipientIds computation). */
     adjacentEnemyIdsFor?: (anchorId: string) => string[];
+    /** True when this run can MEASURE the live adjacency / kill counts below — false under
+     *  `mode: 'dps'`, where the board and the opposing roster are synthetic and a live reading
+     *  would be a permanent structural 0 rather than an observation. False (or absent) withholds
+     *  all three counts from the round contexts, which is what routes their conditions back to the
+     *  user's manual `manualCount ?? 1`. Set by engine.ts's `liveCountsMeasurable`. */
+    liveCountsMeasurable?: boolean;
+    /** Opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed the kill (owner
+     *  ruling 2026-08-30) — the live source for Judge's R2 "20% more direct damage for each
+     *  destroyed enemy, up to max of 100%". Supplied by engine.ts's `buildTurnArgs` off
+     *  `tb.opposingRoster` (already side-relative, so team-symmetric for free). ABSENT — not 0 —
+     *  for non-positional/DPS callers with no opposing roster to tally; the condition then keeps
+     *  its manual `manualCount ?? 1` fallback. See ConditionContext's doc on the field. */
+    enemyDestroyedCount?: number;
     /** #403: resolves one of the three enemy SELECTOR kinds to a live opposing actor id, for a
      *  debuff clause whose ability `target` is 'enemy-most-buffs' / 'enemy-highest-attack' /
      *  'enemy-highest-speed'. Supplied by engine.ts's `buildTurnArgs` (team-symmetric — it closes
@@ -1432,6 +1445,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyMostBuffsId,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
+        liveCountsMeasurable,
+        enemyDestroyedCount: enemyDestroyedCountArg,
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
@@ -1491,6 +1506,44 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  including those that then dereference `enemy` — TS's aliased-condition narrowing carries the
      *  `const` through, closures included. */
     const hasVictim = enemy !== undefined;
+
+    /** The LIVE adjacency / kill-count slice shared by all four round contexts below.
+     *
+     *  Each member is ABSENT (not 0) when this caller cannot measure it, which routes the
+     *  condition to its manual `manualCount ?? 1` fallback — see ConditionContext's doc on the
+     *  three fields. That distinction is the whole point: a fabricated 0 would read as "measured,
+     *  nothing there", silently zeroing Panguan/Centurion/Judge in single-ship DPS mode where the
+     *  user's manual count is the only honest answer.
+     *
+     *  `liveCountsMeasurable` is the run-mode gate: under `mode: 'dps'` the board and the opposing
+     *  roster are synthetic, so every reading would be a permanent structural 0 rather than an
+     *  observation, and the user's manual count is the only honest answer. (`enemyDestroyedCount`
+     *  needs no gate here — engine.ts withholds the ARG itself under that mode.)
+     *
+     *  Team-symmetric for free: `adjacentAllyIds` / `adjacentEnemyIdsFor` / `enemyDestroyedCount`
+     *  are all resolved side-relatively in engine.ts's `buildTurnArgs` (`bySide(a.side)` /
+     *  `isEnemySide(anchorId)` / `tb.opposingRoster`), so an enemy-side Panguan counts the PLAYER
+     *  units adjacent to its own target, with no branching here.
+     *
+     *  `enemyAdjacentCount` anchors on the resolved primary `targetId`, matching every other
+     *  target-anchored adjacency read in this file (the splash-DoT fan-out at ~:4008 and the
+     *  `adjacent-enemies` debuff scope both call `adjacentEnemyIdsFor(targetId)`). A no-victim
+     *  turn has no anchor, so the question cannot be asked and the member stays absent. */
+    const liveCountCtx: {
+        adjacentAllyCount?: number;
+        enemyAdjacentCount?: number;
+        enemyDestroyedCount?: number;
+    } = {
+        ...(liveCountsMeasurable && adjacentAllyIds
+            ? { adjacentAllyCount: adjacentAllyIds.length }
+            : {}),
+        ...(liveCountsMeasurable && adjacentEnemyIdsFor && targetId !== undefined
+            ? { enemyAdjacentCount: adjacentEnemyIdsFor(targetId).length }
+            : {}),
+        ...(enemyDestroyedCountArg !== undefined
+            ? { enemyDestroyedCount: enemyDestroyedCountArg }
+            : {}),
+    };
 
     /** The victim-derived STAT slice of a gate context — the owner-vs-target comparison subjects
      *  (Bayah's crit-power gate, Cobalt's HP gate, Chakara's speed gate). Empty when there is no
@@ -2144,6 +2197,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // therefore resolves effectiveCritRate/100 > 0, i.e. passes whenever the crit rate is
     // non-zero — intended "live-subject, satisfiable" behaviour, not a bug.
     const preDebuffGateCtx = buildRoundContext({
+        // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
+        ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
         landedEnemyDebuffCount: scheduledEnemy.landedEnemyDebuffs.length,
         corrosionEntryCount: corrosionEntries.length,
@@ -2633,6 +2688,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (c) Recount with ability debuffs landed → postDebuffGateCtx.
     // (d) Gate + apply this round's firing-skill TIMED self buff abilities vs postDebuffGateCtx.
     const postDebuffGateCtx = buildRoundContext({
+        // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
+        ...liveCountCtx,
         selfBuffNames: [...scheduledSelfBuffNames, ...priorAbilitySelfNames],
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         corrosionEntryCount: corrosionEntries.length,
@@ -2754,6 +2811,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // 1+2+3) is used only for the rare self-crit-gated modifier condition, avoiding a
     // self-referential gate.
     const modifierCtx = buildRoundContext({
+        // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
+        ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         corrosionEntryCount: corrosionEntries.length,
@@ -3103,6 +3162,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state,
     // matching the prior inline behaviour.
     const ctx = buildRoundContext({
+        // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
+        ...liveCountCtx,
         selfBuffNames: activeSelfBuffNames,
         landedEnemyDebuffCount: landedEnemyDebuffs.length,
         corrosionEntryCount: corrosionEntries.length,

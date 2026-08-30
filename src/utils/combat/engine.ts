@@ -2807,6 +2807,19 @@ export function runCombat(rawInput: CombatEngineInput): {
     // text-named worst-HP ally routes via `lowestHpAllyId`, on either side and in either mode —
     // neither reads this anchor.
     const runMode: RunMode = input.mode ?? 'dps';
+    /** Whether the live adjacency / kill counts (Panguan, Centurion, Judge) are a MEASUREMENT on
+     *  this run, or a question this run cannot ask.
+     *
+     *  `mode: 'dps'` is the single-ship DPS calculator: no board, and a synthetic enemy that
+     *  exists only to be hit. Its "0 allies adjacent, 0 enemies destroyed" is structurally
+     *  permanent, not an observation — so the user's own manual count (`Condition.manualCount`,
+     *  the number the skill editor's condition row asks for) is the only honest answer there, and
+     *  handing the evaluator a live 0 would silently override it. Withholding the fields entirely
+     *  is what routes those conditions back to that manual fallback; see ConditionContext's doc.
+     *
+     *  Gated on the MODE, never derived from a data field (roster emptiness, position presence) —
+     *  see `RunMode`'s own note on why that distinction is the point of the type. */
+    const liveCountsMeasurable = (input.mode ?? 'dps') !== 'dps';
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
     // disagree, which is the difference between validation and the derivation SP-4 removed.
@@ -8864,6 +8877,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // bySide(a.side) (identical for player and enemy casters). Consumed only by a
                 // buff-steal ability whose config carries grantAdjacentAllies.
                 adjacentAllyIds: bySide(a.side).adjacentAllyIdsFor(a.id),
+                // Whether the two ADJACENCY counts derived in runPlayerTurn (from
+                // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
+                // Same mode gate, same reason, as `enemyDestroyedCount` below.
+                liveCountsMeasurable,
                 // Ship-kit W5 Task A3: resolves the board-neighbours of an ENEMY-side anchor
                 // (the resolved target `tgt`, not the caster) for the 'adjacent-enemies' /
                 // 'target-and-adjacent-enemies' debuff fan-out. Reuses the same side-dispatching
@@ -8937,6 +8954,22 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // skills, so it never gains Stealth). There is no structurally-0 caller left since
                 // SP-4b-2b — see `stealthedEnemyCount`'s own note.
                 stealthedEnemyCount: tb.stealthedEnemyCount(),
+                // Judge R2 ("20% more direct damage for each destroyed enemy, up to max of
+                // 100%"): opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed
+                // the kill and cumulative across rounds (owner ruling 2026-08-30). `destroyedRound`
+                // is the engine's canonical destroyed signal (same one adjacency.ts filters on),
+                // and `tb.opposingRoster` is built once and never pruned, so a corpse stays in the
+                // array and keeps being counted. Team-symmetric via `tb`: the player side tallies
+                // the enemy roster, the enemy side tallies the player roster.
+                //
+                // WITHHELD under `mode: 'dps'` — see `liveCountsMeasurable`.
+                ...(liveCountsMeasurable
+                    ? {
+                          enemyDestroyedCount: tb.opposingRoster.filter(
+                              (x) => x.destroyedRound !== undefined
+                          ).length,
+                      }
+                    : {}),
                 // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above, and for the same reason
                 // (SP-4c-2d dropped the identical dummy-sink conjunct). Omitted when there is no
