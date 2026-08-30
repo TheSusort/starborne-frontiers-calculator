@@ -4671,7 +4671,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const shieldAcc = new ShieldApplyAccumulator();
         // #2 log visibility: accumulate the reactive HEAL's per-recipient raw repair so we can emit
         // ONE reactive-heal-performed after the loop (the executor emits no heal-performed).
-        const healPerTarget: { targetId: string; amount: number }[] = [];
+        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
         let healSum = 0;
         for (const rid of recipients) {
             // Skip DEAD recipients from the gross credit (Phase 4b KNOWN LIMITATION 5):
@@ -4724,7 +4724,14 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             if (cfg.type === 'heal')
                 raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
             if (cfg.type === 'heal') {
-                healPerTarget.push({ targetId: rid, amount: raw });
+                // #434: hold the entry so the clipped excess can be attached once
+                // applyHealToTarget has run below — `applied` does not exist yet at push time,
+                // and the emit needs the pair together.
+                const healEntry: { targetId: string; amount: number; overheal?: number } = {
+                    targetId: rid,
+                    amount: raw,
+                };
+                healPerTarget.push(healEntry);
                 healSum += raw;
                 // SP-4e: apply to the RESOLVED recipient's own pool, mirroring the reactive
                 // SHIELD branch below (which has always resolved recipientActor). The old
@@ -4744,6 +4751,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ctx.healing.credit(intent.ownerId, 'directHeal', raw);
                     ctx.healing.credit(intent.ownerId, 'effectiveHeal', applied.consumed);
                     ctx.healing.credit(intent.ownerId, 'overheal', applied.overheal);
+                    // #434: mirror the figure onto the emitted event. Present only when > 0,
+                    // matching heal-performed.perTarget. A REVERSED repair (#362) wastes
+                    // nothing — it damages — so this arm is deliberately the only one that sets
+                    // it, exactly like the `overheal` credit above it.
+                    if (applied.overheal > 0) healEntry.overheal = applied.overheal;
                     // Recipient axis (SP-3b Task 7): mirror where the repair LANDED — which, since
                     // SP-4e, is every recipient whose pool this loop actually touched, not just the
                     // anchor. Gated on `perRecipientApply` to keep a legacy run's `perRecipient`
@@ -4826,6 +4838,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 round: ctx.round,
                 amount: healSum,
                 perTarget: healPerTarget,
+                sourceAbilityId: intent.ability.id,
             });
         }
         return;
