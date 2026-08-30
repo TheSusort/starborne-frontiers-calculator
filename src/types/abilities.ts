@@ -128,6 +128,34 @@ export const FACTION_FILTERABLE_TARGETS: ReadonlySet<AbilityTarget> = new Set<Ab
     'adjacent-allies',
 ]);
 
+/**
+ * A predicate on each RECIPIENT of an ally-scoped grant — see `Ability.recipientFilter`.
+ *
+ * Axes AND together; an absent axis does not narrow. Each is read live, per recipient, at the
+ * moment the grant is applied.
+ */
+export interface RecipientFilter {
+    /** Recipient must currently hold this named self-buff ("all allies with Stealth"). Matched by
+     *  NAME across the same three status sources the rest of the engine reads (scheduled snapshot
+     *  self-buffs, timed ability statuses, aura/accumulating ability statuses) — never
+     *  `parsedEffects`, which a payload-less marker like Stealth does not populate. */
+    hasStatus?: string;
+    /** Recipient's ship role must NOT fall in any of these categories ("non-defender allies").
+     *  Prefix match over ShipTypeName, the same rule `roleFilter` uses.
+     *
+     *  An UNKNOWN role does NOT satisfy this — it is excluded, not admitted. That is the
+     *  conservative direction and it matches the existing precedent (`matchesRoleCategory` is
+     *  always false for `undefined`, and the enemy-input `role` field documents the same
+     *  "unknown → gate stays dormant" contract). A grant that should reach an ally whose role
+     *  the caller never supplied is a data gap, not a licence to widen. */
+    notRole?: ShipRoleCategory[];
+    /** Recipient's live HP fraction must be strictly below this percentage ("allies below 40%
+     *  HP"). Read through the buff-aware max-HP accessor where one exists, never raw `stats.hp`.
+     *  A recipient whose HP cannot be read does NOT match (same conservative direction as
+     *  `notRole`). */
+    hpBelowPct?: number;
+}
+
 // NOTE on the live subset: `round-started` is the engine event key for the
 // `start-of-round` trigger (a deviation from the Phase 1 contract's `turn-started`
 // mapping — in a multi-actor round `turn-started` fires once per actor, so
@@ -1130,6 +1158,21 @@ export interface Ability {
      *  Typed `FactionKey`, NOT `FactionName` — the latter is `string` (see factions.ts), so a
      *  typo'd 'TIANCHOA' would compile and, under the rule above, reach nobody. */
     factionFilter?: FactionKey[];
+    /** Recipient STATE filter for an ally-scoped grant — the axes a clause can name about the
+     *  allies it reaches, as opposed to `factionFilter`'s roster axis. Chimei's R2 names both:
+     *  "all allies WITH STEALTH repair 10% …" and "NON-DEFENDER allies BELOW 40% HP are granted
+     *  Stealth". Applied as an INTERSECTION alongside the footprint and the faction scope, so it
+     *  composes with both rather than replacing either.
+     *
+     *  Every axis is optional and they AND together. Absent (the whole key) → any ally, which is
+     *  what every other ship carries. Read LIVE at application time — the whole point is that a
+     *  recipient's Stealth/HP changes between one round and the next.
+     *
+     *  ⚠️ REACTIVE PATH ONLY. Unlike `factionFilter`, which is honoured at four seams, this is
+     *  intersected in exactly one — `footprintFilteredRecipients` (triggers.ts). Both clauses that
+     *  carry it are live-triggered, so nothing is dropped; `recipientFilterIsReactiveOnly.test.ts`
+     *  is the standing guard. On a cast-path ability the field would be silently ignored. */
+    recipientFilter?: RecipientFilter;
     /** D-PR14 Bulwark: this reactive applies at most once per round per (owner, ability).
      *  Gated executor-side via IntentExecContext.oncePerRoundConsumed (check BEFORE the
      *  proc draw, mark only on a successful proc). Absent → no per-round limit.

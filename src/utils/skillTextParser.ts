@@ -18,6 +18,7 @@ import {
     ConditionSubject,
     ControlEffect,
     ReactiveScalingCountSource,
+    RecipientFilter,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
 import { FACTIONS, FACTION_KEYS, type FactionKey } from '../constants/factions';
@@ -5783,6 +5784,78 @@ function detectGrantScopes(
     }
     if (ALL_ALLIES_RE.test(clause)) return ['all-allies'];
     return ['self'];
+}
+
+// Recipient-STATE filters (`Ability.recipientFilter`). A clause can qualify WHICH of the allies it
+// names actually receive the effect, on axes the roster-level scopes cannot express. Corpus-wide
+// (docs/ship-skills.csv, 2026-08-30) exactly one ship does — Chimei's R2, which names both shapes:
+//
+//   "non-defender allies below 40% HP are granted <Stealth> for 1 turn"
+//   "all allies with <Stealth> repairs 10% of this unit's max HP"
+//
+// Both regexes are anchored on the FULL phrase, not on a keyword. That is deliberate, and it is
+// the calibration lesson the scope/trigger censuses already paid for: "below 40% HP" appears all
+// over the corpus as a SELF gate ("if its HP is below 50%") and as an ENEMY gate ("when the target
+// is below 30% HP"), and "with Stealth" appears as a SCALING source ("for every enemy with
+// Stealth"). Requiring the literal "allies" noun between the qualifier and the effect is what
+// keeps every one of those out. Widen only after reading what the current form misses.
+const RECIPIENT_NON_ROLE_HP_RE =
+    /\bnon-(defender|attacker|supporter|debuffer)s?\s+allies\s+below\s+(\d+)\s*%\s*hp\b/i;
+// "all allies with <Status>". The status name reaches this detector TAGGED on the buff path
+// (`resolveBuffClause` preserves the row's markup) and STRIPPED on the heal path
+// (`healSentence` runs through `stripTags`), so both forms are accepted. In the stripped form the
+// name's extent is bounded by capitalisation — a status name is Title Case ("Stealth", "Repair
+// Over Time II") and the verb that follows it is not ("… with Stealth repairs 10%") — and then
+// validated through `resolveBuffName`, so a phrase that merely reads "all allies with …"
+// something that is not a status yields no filter at all rather than a silent mute.
+const RECIPIENT_HAS_STATUS_RE =
+    /\ball allies with\s+(?:<unit-skill>([^<]+)<\/unit-skill>|([A-Z][\w'’.]*(?:\s+[A-Z][\w'’.]*){0,3}))/;
+
+/**
+ * The recipient-state filter a clause names, or undefined when it names none.
+ *
+ * `clause` must be the TAGGED text of the sentence the ability was parsed from (the buff's own
+ * resolved clause, or a heal's `healSentence`) — passing the whole multi-sentence row would let a
+ * sibling sentence's qualifier leak onto an ability it does not describe, which is the same
+ * clause-scoping rule `detectGrantFactionScope` already follows.
+ */
+export function detectRecipientFilter(clause: string): RecipientFilter | undefined {
+    const filter: RecipientFilter = {};
+    const roleHp = RECIPIENT_NON_ROLE_HP_RE.exec(clause);
+    if (roleHp) {
+        // Through the SAME word→category map `roleFilter` uses, never a bare `toUpperCase()` —
+        // that is what keeps the recipient axis and the trigger axis naming roles identically.
+        const category = ROLE_WORD_TO_CATEGORY[roleHp[1].toLowerCase()];
+        if (category !== undefined) {
+            filter.notRole = [category];
+            filter.hpBelowPct = parseInt(roleHp[2], 10);
+        }
+    }
+    const hasStatus = RECIPIENT_HAS_STATUS_RE.exec(clause);
+    if (hasStatus) {
+        const canonical = resolveBuffName((hasStatus[1] ?? hasStatus[2]).trim());
+        // An unrecognised name is dropped rather than stored raw: `hasStatus` is matched against
+        // the engine's own status names, so a name that is not one of them would filter out every
+        // recipient forever — a silent mute, not a narrowing.
+        if (canonical) filter.hasStatus = canonical;
+    }
+    return Object.keys(filter).length > 0 ? filter : undefined;
+}
+
+/**
+ * The recipient-state filter on a BUFF GRANT's own clause, or undefined when it names none.
+ *
+ * Resolves the clause the same way `detectGrantScope`/`detectGrantFactionScope` do
+ * (`resolveBuffClause`, so "Inc."/"Out." abbreviation periods don't break sentence splitting),
+ * then applies {@link detectRecipientFilter}. Reading the whole row instead would let a sibling
+ * sentence's qualifier attach to a grant it does not describe — Chimei's passive is exactly that
+ * hazard, since its three sentences each carry a different recipient rule.
+ */
+export function detectGrantRecipientFilter(
+    skillText: string,
+    buffName: string
+): RecipientFilter | undefined {
+    return detectRecipientFilter(resolveBuffClause(skillText, buffName));
 }
 
 // #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient

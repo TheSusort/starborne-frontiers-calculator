@@ -1,5 +1,6 @@
-import type { AbilityTarget } from '../../types/abilities';
+import type { AbilityTarget, RecipientFilter } from '../../types/abilities';
 import type { FactionKey } from '../../constants/factions';
+import { matchesRoleCategory, type ShipTypeName } from '../../constants/shipTypes';
 import type { CombatActor } from './state';
 
 /**
@@ -91,6 +92,66 @@ export function narrowByFaction(
     return ids.filter((id) => {
         const f = factionOf?.(id);
         return f !== undefined && wanted.has(f);
+    });
+}
+
+/**
+ * Intersect `ids` with an `Ability.recipientFilter` — the recipient-STATE narrowing that composes
+ * on top of the footprint (which allies the pattern reaches) and the faction scope (which of those
+ * qualify by roster). This one asks about each ally's LIVE state: what it is holding, what role it
+ * plays, how hurt it is.
+ *
+ * Deliberately shaped like {@link narrowByFaction}: an absent filter means no narrowing
+ * (byte-identical for every ability that does not carry one), and a reader the caller could not
+ * supply makes its axis EXCLUDE rather than admit. A grant can therefore only under-reach when
+ * data is missing, never over-reach — the same conservative direction `narrowByFaction` and
+ * `matchesRoleCategory` already run on.
+ *
+ * ⚠️ NOT applied at every site `factionFilter` is. That one runs at FOUR (the registration
+ * fan-out, the cast-path timed loop, the passive-slot combat-start seed, and the reactive
+ * resolver); this one has exactly ONE caller — `footprintFilteredRecipients` in triggers.ts, the
+ * REACTIVE path. Both corpus clauses that carry the field (Chimei's R2) are reactive, so nothing
+ * is dropped today, and `recipientFilterIsReactiveOnly.test.ts` is the standing guard that keeps
+ * it that way. An ability that reached a cast-path seam carrying this field would be silently
+ * UN-narrowed — it would over-reach, not vanish, which is the less-bad of the two directions but
+ * still wrong. Widen the wiring, don't widen the parser, if a cast clause ever needs it.
+ */
+export function narrowByRecipientFilter(
+    ids: string[],
+    filter: RecipientFilter | undefined,
+    readers: {
+        /** Live per-recipient check for `hasStatus`. Absent → the axis matches nobody. */
+        holdsStatus?: (id: string, buffName: string) => boolean;
+        /** Live per-recipient role for `notRole`. Absent (or `undefined` for an id) → excluded. */
+        roleOf?: (id: string) => ShipTypeName | undefined;
+        /** Live per-recipient HP fraction (0..1) for `hpBelowPct`. Absent → the axis matches
+         *  nobody; an unreadable id (dead / unknown) is likewise excluded. */
+        hpFractionOf?: (id: string) => number | undefined;
+    }
+): string[] {
+    if (filter === undefined) return ids;
+    const { hasStatus, notRole, hpBelowPct } = filter;
+    // A filter object carrying no axis narrows nothing — same normalization as an empty
+    // factionFilter array, so a stale/authored `{}` cannot silently mute a grant.
+    if (hasStatus === undefined && notRole === undefined && hpBelowPct === undefined) return ids;
+    return ids.filter((id) => {
+        if (hasStatus !== undefined && !(readers.holdsStatus?.(id, hasStatus) ?? false)) {
+            return false;
+        }
+        if (notRole !== undefined && notRole.length > 0) {
+            const role = readers.roleOf?.(id);
+            // Unknown role → excluded (see RecipientFilter.notRole). `matchesRoleCategory` is
+            // already false for undefined, so a bare `!matches` would ADMIT an unknown role —
+            // the opposite of the documented rule. Hence the explicit undefined arm.
+            if (role === undefined) return false;
+            if (notRole.some((cat) => matchesRoleCategory(role, [cat]))) return false;
+        }
+        if (hpBelowPct !== undefined) {
+            const frac = readers.hpFractionOf?.(id);
+            if (frac === undefined) return false;
+            if (frac * 100 >= hpBelowPct) return false;
+        }
+        return true;
     });
 }
 

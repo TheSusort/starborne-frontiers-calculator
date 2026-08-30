@@ -1040,13 +1040,22 @@ export const AbilityCard: React.FC<Props> = ({
                     // carry one — a faction predicate on 'self' or an enemy scope is meaningless,
                     // and a stale key would silently narrow nothing while looking meaningful.
                     const target = value as AbilityTarget;
-                    const { factionFilter, ...rest } = ability;
+                    // `recipientFilter` hangs off the TARGET axis for the same reason
+                    // `factionFilter` does — it narrows a RECIPIENT SET — so it is dropped by the
+                    // same rule when the new target has no recipient set to narrow. Left in
+                    // place, a "has Stealth" predicate re-pointed at 'self' would quietly become
+                    // a self-mute the editor gives no way to see.
+                    const { factionFilter, recipientFilter, ...rest } = ability;
+                    const keepsRecipientScope = FACTION_FILTERABLE_TARGETS.has(target);
                     onChange({
                         ...rest,
-                        ...(FACTION_FILTERABLE_TARGETS.has(target) &&
+                        ...(keepsRecipientScope &&
                         factionFilterHonoredForType &&
                         factionFilter !== undefined
                             ? { factionFilter }
+                            : {}),
+                        ...(keepsRecipientScope && recipientFilter !== undefined
+                            ? { recipientFilter }
                             : {}),
                         target,
                     });
