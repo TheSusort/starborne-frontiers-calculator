@@ -150,6 +150,7 @@ function captureIntentsForReactiveRepair(args: {
     abilities: Ability[];
     sourceAbilityId: string;
     ownerId?: string;
+    perTarget?: { targetId: string; amount: number; overheal?: number }[];
 }): Intent[] {
     const ownerId = args.ownerId ?? OWNER_ID;
     const bus = createEventBus();
@@ -173,7 +174,7 @@ function captureIntentsForReactiveRepair(args: {
         casterId: ownerId,
         round: 1,
         amount: 5_000,
-        perTarget: [{ targetId: ALLY_ID, amount: 5_000, overheal: 4_000 }],
+        perTarget: args.perTarget ?? [{ targetId: ALLY_ID, amount: 5_000, overheal: 4_000 }],
         sourceAbilityId: args.sourceAbilityId,
     });
     return intents;
@@ -189,6 +190,25 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
         expect(intents[0].eventCtx?.overhealByAlly).toEqual({ [ALLY_ID]: 4_000 });
+    });
+
+    // R-C: the caster's OWN over-repair must never be counted as ally over-repair, even when the
+    // same reactive repair also lands on a real ally with no waste. Guards the
+    // `.filter((pt) => pt.targetId !== ownerId)` on the aggregate at the listener — without it
+    // this test would read the caster's 4,000 self-overheal instead of 0.
+    it("excludes the caster's own over-repair from the ally overheal aggregate", () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [fontOfPower()],
+            sourceAbilityId: 'ab-mixed-repair',
+            perTarget: [
+                { targetId: ALLY_ID, amount: 1_000 }, // ally repaired with NO waste
+                { targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }, // caster over-repairs itself
+            ],
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(0);
+        expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
     });
 
     it('ignores a reactive repair with no non-self recipient', () => {

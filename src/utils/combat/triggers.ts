@@ -4875,9 +4875,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             });
         }
         // #2 log visibility: a reactive HEAL emits reactive-heal-performed (NOT heal-performed —
-        // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). Its only combat
-        // subscriber is on-enemy-repaired, whose riders never heal → still no chain. Stamped
-        // duringTurnOf via ctx.bus so it nests under the triggering turn.
+        // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). It now has TWO
+        // combat subscribers: on-enemy-repaired, whose riders never heal → no chain; and, since
+        // #434, on-own-repair-to-ally (~line 916), which re-subscribes to this same event so a
+        // repair performed from a LIVE TRIGGER also reaches Font of Power/Abundant Renewal. That
+        // listener carries its own termination argument (self-exclusion guard on its own output +
+        // MAX_INTENT_GENERATIONS backstop) — chain-safety still holds, but it is argued there, not
+        // here. Any FUTURE subscriber to this event must re-establish termination for itself the
+        // same way; do not assume it from this comment. Stamped duringTurnOf via ctx.bus so it
+        // nests under the triggering turn.
         //
         // PR6: a repair that repaired NOTHING must not open a combat-log row — symmetric with the
         // shield branch above, which already emits only when a recipient actually gained pool.
