@@ -80,6 +80,21 @@ interface AbilityStatusBase {
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
      *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
     factionFilter?: FactionKey[];
+    /** Recipient BOARD-ADJACENCY scope, copied off the source ability's `target`. Set ONLY for
+     *  `'adjacent-allies'`; absent for every other target.
+     *
+     *  Same reasoning as `factionFilter` directly above, for the other axis registration cannot
+     *  resolve: `recipients` is computed at actor CONSTRUCTION, before any actor has moved or
+     *  died, so it cannot answer "who is a LIVING board-neighbour right now". Registration
+     *  therefore hands `adjacent-allies` the same whole-side roster `all-allies` gets, and the
+     *  scope rides the status to be intersected at APPLICATION time, where the per-side
+     *  `adjacentAllyIds` resolver is in hand.
+     *
+     *  Before this flag existed, `adjacent-allies` fell through registration's trailing
+     *  `[ownerId]` arm — an on-cast adjacent grant reached the CASTER and nobody else, which is
+     *  how Centurion's charged "grants all adjacent allies 2 stacks of Core Charge I" was landing
+     *  those stacks on Centurion instead of on his neighbours. */
+    allyScope?: 'adjacent-allies';
     /** #390: set to `'all'` ONLY on an enemy-side status whose source target covers the whole
      *  opposing board (`all-enemies` — see `ABILITY_TARGET_ENEMY_SCOPE`). Enemy-side aura and
      *  accumulating statuses are registered once at actor construction, under the singular

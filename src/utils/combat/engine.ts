@@ -255,7 +255,14 @@ function registerActorAbilityStatuses(
     // sweep — the aura/accumulating registration fan-out below). Optional so every caller that
     // predates #363 (and every fixture that omits it) keeps the un-narrowed behaviour;
     // `narrowByFaction` treats an absent reader the same as an absent filter.
-    factionOf?: (id: string) => FactionKey | undefined
+    factionOf?: (id: string) => FactionKey | undefined,
+    // Board-adjacency resolver over the owner's OWN side, for narrowing an `adjacent-allies`
+    // AURA/ACCUMULATING fan-out. Those stores are registered here, at actor construction, and
+    // never revisited, so unlike the timed statuses (which carry `allyScope` and are narrowed
+    // against the live roster at application time) they have to be narrowed now. Optional: an
+    // absent resolver leaves the roster-wide list unnarrowed, which is what every fixture that
+    // omits it wants — the same contract `factionOf` above runs on.
+    adjacentAllyIdsFor?: (ownerId: string) => string[]
 ): {
     timedSelfBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
     timedEnemyBySlot: Extract<RegisteredAbilityStatus, { kind: 'timed' }>[];
@@ -394,7 +401,7 @@ function registerActorAbilityStatuses(
             // as plain `'ally'` already does. What matters is that it must NOT fall through to the
             // trailing `[ownerId]`: a self-only grant is the one answer "the OTHER ally" forbids,
             // and that is what an un-armed variant would have got here.
-            const recipients: string[] =
+            const rosterRecipients: string[] =
                 side === 'enemy'
                     ? [] // enemy-side statuses have no player recipients; the timed-enemy application path never reads recipients
                     : castPathCheatDeath &&
@@ -406,9 +413,35 @@ function registerActorAbilityStatuses(
                             : [ownerId]
                       : ability.target === 'ally' ||
                           ability.target === 'all-allies' ||
-                          ability.target === 'lowest-hp-ally'
+                          ability.target === 'lowest-hp-ally' ||
+                          // 'adjacent-allies' starts from the SAME whole-side roster and is then
+                          // narrowed to board neighbours just below. It used to fall through to
+                          // the `[ownerId]` arm instead, which turned an adjacent grant into a
+                          // self-grant — Centurion's charged Core Charge I banked its 2 stacks on
+                          // Centurion rather than handing them to his neighbours.
+                          ability.target === 'adjacent-allies'
                         ? playerIds
                         : [ownerId];
+            // Board-adjacency narrowing, applied to the roster-wide list above. Done HERE, once,
+            // so it reaches every consumer of `recipients`: the aura/accumulating fan-out below,
+            // the `timedSelfBySlot` array playerTurn's cast loop applies, AND the passive-slot
+            // combat-start seed (`seedPassiveTimedStatuses`), which reads `status.recipients`
+            // directly and has no other narrowing hook. `adjacentAllyIds` excludes the owner,
+            // which is correct: "all adjacent allies" never includes the unit granting it.
+            //
+            // This resolver is a CONSTRUCTION-TIME snapshot of static board positions — it cannot
+            // know who dies later. Timed statuses additionally carry `allyScope` and re-narrow
+            // against the LIVE roster when they are applied (playerTurn), which drops a neighbour
+            // destroyed since; intersecting twice is idempotent. Aura/accumulating stores have no
+            // such second chance, but a standing store on a destroyed actor is inert anyway.
+            const recipients: string[] =
+                rosterRecipients.length > 0 &&
+                ability.target === 'adjacent-allies' &&
+                adjacentAllyIdsFor !== undefined
+                    ? ((allowed) => rosterRecipients.filter((id) => allowed.has(id)))(
+                          new Set(adjacentAllyIdsFor(ownerId))
+                      )
+                    : rosterRecipients;
             // A hit-counted grant is never an aura: an aura is re-evaluated per round against
             // its gate and has no consumable charge, so a durationless "Barrier for 1 hit" would
             // otherwise be permanent for as long as its gate held. (`hitCounted` is computed with
@@ -445,6 +478,13 @@ function registerActorAbilityStatuses(
                 // here — this function runs at actor construction. Attached only when the ability
                 // carries one, so every other ship's status object is byte-identical.
                 ...(ability.factionFilter ? { factionFilter: ability.factionFilter } : {}),
+                // Board-adjacency scope, same shape and same reason as factionFilter above: the
+                // roster-wide `recipients` is narrowed to LIVING board-neighbours at application
+                // time, which is the only place a live roster exists. Attached only for
+                // 'adjacent-allies', so every other status object stays byte-identical.
+                ...(side === 'self' && ability.target === 'adjacent-allies'
+                    ? { allyScope: 'adjacent-allies' as const }
+                    : {}),
                 // #390: mark the enemy-side statuses whose target covers the whole opposing board.
                 // The aura/accumulating registration below has no victim id to key by (it runs at
                 // actor construction, before any cast), so it writes into the singular
@@ -519,9 +559,11 @@ function registerActorAbilityStatuses(
                 // same semantics as playerTurn.ts's cast-path loop (site 1), intersecting AFTER
                 // the roster-wide fan-out computed above. This affects the aura/accumulating
                 // stores this function actually populates; the parallel `timedSelfBySlot` array
-                // built above still carries the UN-narrowed `recipients` on the status object —
-                // its own consumers (playerTurn's cast loop, seedPassiveTimedStatuses) apply the
-                // same narrowing themselves at their own application time.
+                // built above still carries the same `recipients` on the status object — its own
+                // consumers (playerTurn's cast loop, seedPassiveTimedStatuses) apply the faction
+                // narrowing themselves at their own application time. Board adjacency, unlike
+                // faction, is already folded into `recipients` at its computation site above, so
+                // all four consumers inherit it without repeating it.
                 for (const rid of narrowByFaction(recipients, ability.factionFilter, factionOf))
                     pushFor(rid, status);
             }
@@ -763,9 +805,14 @@ export function buildEnemyPlayerActorRuntime(
         /** #363: actor id → faction (side-agnostic by key — the same map runCombat threads to
          *  the player-side registration calls), for this enemy's `factionFilter`'d ally scopes. */
         factionOf?: (id: string) => FactionKey | undefined;
+        /** Board-adjacency resolver over the ENEMY side — the mirror of the one runCombat
+         *  threads to the player-side registration calls, so an enemy-side Centurion's
+         *  aura/accumulating `adjacent-allies` grant narrows to ITS neighbours. Absent → no
+         *  narrowing (the pre-existing behaviour every fixture that omits it expects). */
+        adjacentAllyIdsFor?: (ownerId: string) => string[];
     }
 ): PlayerActorRuntime {
-    const { statusEngine, enemyIds, enemyDebuffLookup, factionOf } = ctx;
+    const { statusEngine, enemyIds, enemyDebuffLookup, factionOf, adjacentAllyIdsFor } = ctx;
 
     // Manual flat-card enemy (no shipSkills): synthesize a single basic-attack active slot
     // (100% multiplier, 1 hit, crit-eligible) so the runPlayerTurn walk produces byte-identical
@@ -806,7 +853,8 @@ export function buildEnemyPlayerActorRuntime(
         e.id,
         enemyIds,
         undefined, // healTargetId: not applicable on the enemy side
-        factionOf
+        factionOf,
+        adjacentAllyIdsFor
     );
 
     // Shared with the player focus and walked-team paths — see hasUsableChargedSkill. Deriving
@@ -2266,6 +2314,31 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (e.faction) factionByActorId.set(e.id, e.faction);
     const factionOf = (id: string): FactionKey | undefined => factionByActorId.get(id);
 
+    // Board-adjacency resolver for the REGISTRATION-time fan-out of aura/accumulating
+    // `adjacent-allies` grants (Centurion's charged Core Charge I is the corpus instance).
+    //
+    // Why a second resolver rather than `sideCtx.adjacentAllyIdsFor`: that one is built from the
+    // live `CombatActor` roster much further down, and the registration calls run before it
+    // exists. This one reads the INPUT positions, which are static for the whole fight — the only
+    // thing it cannot see is a neighbour dying later, and a standing aura/accum store on a dead
+    // actor is inert anyway. Timed statuses do NOT use this: they carry `allyScope` and are
+    // narrowed against the live roster at application time (playerTurn's per-slot loop), which is
+    // strictly better where it is available.
+    //
+    // Hoisted alongside `factionOf` for the same reason and threaded to the same three callers,
+    // so both sides narrow identically (an enemy Centurion's neighbours are enemy actors).
+    const positionByActorId = new Map<string, Position | undefined>([
+        [focusActorId, input.position],
+        ...teamActors.map((t) => [t.id, t.position] as const),
+        ...(input.enemyAttackers ?? []).map((e) => [e.id, e.position] as const),
+    ]);
+    /** `sideIds` is the owner's OWN side in fixed source order (playerIds / enemyIds). */
+    const staticAdjacentAllyIdsFor = (sideIds: string[]) => (ownerId: string) =>
+        adjacentAllyIds(
+            ownerId,
+            sideIds.map((id) => ({ id, position: positionByActorId.get(id) }))
+        );
+
     // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
     // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
     // enemy via the status engine's per-source timed sets). For a WALKED team actor the real
@@ -2505,7 +2578,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Heal target (healing mode) — narrows a single-`ally` Cheat-Death-family firing-slot
         // grant to the tank (Hermes). Undefined in DPS mode → falls back to the caster.
         input.healTargetId,
-        factionOf
+        factionOf,
+        staticAdjacentAllyIdsFor(playerIds)
     );
 
     // Lookup maps (moved from simulateDPS) — expand the snapshot's buff names back
@@ -2594,7 +2668,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             // Same carve-out narrowing as the attacker — a walked healer's single-`ally`
             // Cheat-Death-family grant lands on the heal target.
             input.healTargetId,
-            factionOf
+            factionOf,
+            staticAdjacentAllyIdsFor(playerIds)
         );
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
@@ -2923,6 +2998,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyIds: enemyRecipientIds,
             enemyDebuffLookup,
             factionOf,
+            // Same resolver, the enemy side's roster — team symmetry for the adjacency scope.
+            adjacentAllyIdsFor: staticAdjacentAllyIdsFor(enemyRecipientIds),
         })
     );
     const enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor);

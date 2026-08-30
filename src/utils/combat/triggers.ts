@@ -45,7 +45,12 @@ import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 // eslint-disable-next-line import/no-cycle
 import { holdsBarrierRecharging, BARRIER_RECHARGING } from './barrierRecharging';
 import { BARRIER_BUFFS } from './barrierBuffs';
-import { resolveSupportRecipients, narrowByFaction } from './supportRecipients';
+import {
+    resolveSupportRecipients,
+    narrowByFaction,
+    narrowByRecipientFilter,
+    allyHpFraction,
+} from './supportRecipients';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { liveGateConditions } from './abilityStatusGating';
 import { CombatEvent, CombatEventBus, CombatEventType, ShieldApplyAccumulator } from './events';
@@ -1980,7 +1985,13 @@ export interface IntentExecContext {
      *  against the REAL victim of an on-deal-damage purge (Zeolite: "… when dealing damage to a
      *  Defender"), team-symmetrically. Optional — absent in unit-test ctxs that don't drive it
      *  (an `enemy-type`-gated purge with no `roleOf` reads `undefined` → matchesRoleCategory
-     *  always false → conservative no-op, byte-identical to before this task). */
+     *  always false → conservative no-op, byte-identical to before this task).
+     *
+     *  ALSO read by `recipientFilter.notRole` ("non-defender allies", Chimei R2) in
+     *  `footprintFilteredRecipients`. Sharing this one map keeps the RECIPIENT axis and the
+     *  TRIGGER axis from ever disagreeing about an actor's role. Note the two differ in what an
+     *  absent reader means: a `roleFilter` gate with no `roleOf` never FIRES, while a `notRole`
+     *  recipient axis with no `roleOf` reaches NOBODY — both conservative, both "excluded". */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
     /** SP-E, Task E4: live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
      *  the convert-dot executor to compute the conversion chance (hacking) and the paired
@@ -2551,20 +2562,34 @@ export function countOwnersWithSelfBuff(
 ): number {
     let count = 0;
     for (const ownerId of ownerIds) {
-        const snap = statusEngine.snapshot(ownerId);
-        const hasIt =
-            snap.activeSelfBuffs.some(
-                (ab) => ab.buffName === buffName && (ab.stacks === undefined || ab.stacks > 0)
-            ) ||
-            statusEngine
-                .timedAbilityStatuses('self', ownerId)
-                .some((s) => s.active.buffName === buffName) ||
-            statusEngine
-                .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId)
-                .some((s) => s.active.buffName === buffName);
-        if (hasIt) count += 1;
+        if (ownerHoldsSelfBuff(statusEngine, ownerId, buffName)) count += 1;
     }
     return count;
+}
+
+/** Does `ownerId` currently hold the named self-buff? Reads the SAME three sources as
+ *  {@link selfBuffNamesForOwners} (scheduled snapshot self-buffs + timed ability statuses +
+ *  aura/accumulating ability statuses), which is what makes it correct for a payload-less
+ *  marker like Stealth — such a status carries no `parsedEffects` to look for, only a name.
+ *  Extracted from {@link countOwnersWithSelfBuff} so the per-recipient reader used by
+ *  `Ability.recipientFilter`'s `hasStatus` axis cannot drift from the counting one. */
+export function ownerHoldsSelfBuff(
+    statusEngine: StatusEngine,
+    ownerId: string,
+    buffName: string
+): boolean {
+    const snap = statusEngine.snapshot(ownerId);
+    return (
+        snap.activeSelfBuffs.some(
+            (ab) => ab.buffName === buffName && (ab.stacks === undefined || ab.stacks > 0)
+        ) ||
+        statusEngine
+            .timedAbilityStatuses('self', ownerId)
+            .some((s) => s.active.buffName === buffName) ||
+        statusEngine
+            .activeAbilityStatuses('self', () => NEUTRAL_NAMES_CTX, ownerId)
+            .some((s) => s.active.buffName === buffName)
+    );
 }
 
 /** Total STACK count of a single named self-buff held by `ownerId`, aggregated across the SAME
@@ -3127,17 +3152,28 @@ export function footprintFilteredRecipients(
     // `factionFilter`'d ally scope on a reactive ability is not gated on `patternScoped` (that
     // flag governs footprint narrowing only), so both early-return branches below still apply it.
     const factionFilter = intent.ability.factionFilter;
+    // `recipientFilter` (the recipient's own live STATE — held status / role / HP) narrows on the
+    // same terms and for the same reason, so it is applied on ALL THREE branches. This is where
+    // Chimei's R2 lands: both of its clauses are reactive (`end-of-round` Stealth grant,
+    // `start-of-round` repair), so they never touch the cast-path seam.
+    const stateFiltered = narrowByRecipientFilter(baseRecipients, intent.ability.recipientFilter, {
+        holdsStatus: (id, buffName) => ownerHoldsSelfBuff(ctx.statusEngine, id, buffName),
+        roleOf: ctx.roleOf,
+        // Buff-aware max HP where the healing ctx supplies one (requirement (b) on
+        // `lowestHpAllyRecipients`) — the shared reader, not a hand-rolled currentHp/stats.hp.
+        hpFractionOf: (id) => allyHpFraction({ id, healing: ctx.healing }),
+    });
     if (intent.ability.patternScoped !== true) {
-        return narrowByFaction(baseRecipients, factionFilter, ctx.factionOf);
+        return narrowByFaction(stateFiltered, factionFilter, ctx.factionOf);
     }
     const footprint = ctx.footprintAllyIdsFor?.(intent.ownerId);
     if (footprint === undefined) {
-        return narrowByFaction(baseRecipients, factionFilter, ctx.factionOf);
+        return narrowByFaction(stateFiltered, factionFilter, ctx.factionOf);
     }
     return resolveSupportRecipients({
         target: intent.ability.target,
         casterId: intent.ownerId,
-        baseRecipients,
+        baseRecipients: stateFiltered,
         footprintAllyIds: footprint,
         factionFilter,
         factionOf: ctx.factionOf,

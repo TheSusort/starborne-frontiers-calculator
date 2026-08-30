@@ -125,6 +125,8 @@ import {
     detectProtectionTransformToDot,
     detectConvertDot,
     detectGrantFactionScope,
+    detectGrantRecipientFilter,
+    detectRecipientFilter,
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
@@ -2414,6 +2416,16 @@ function abilitiesFromText(
                     ? { triggerCritFilter: h.damageReaction.critFilter }
                     : {}),
                 conditions: healConditions,
+                // Recipient STATE filter ("all allies with Stealth repairs 10% …" — Chimei R2).
+                // Read from this heal's OWN sentence, and only for an ally-scoped target: a
+                // self-repair has no recipient set to narrow, and a `lowest-hp-ally` selector
+                // already names its single recipient by text.
+                ...(FACTION_FILTERABLE_TARGETS.has(healTarget) && healSentence
+                    ? (() => {
+                          const rf = detectRecipientFilter(healSentence);
+                          return rf ? { recipientFilter: rf } : {};
+                      })()
+                    : {}),
                 ...(healScaling ? { scaling: healScaling } : {}),
                 // ship-kit W3 (Sansi): numeric per-round cap ("limited to 3 times per Round").
                 ...(h.maxPerRound !== undefined ? { maxPerRound: h.maxPerRound } : {}),
@@ -3322,6 +3334,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
             const factionFilter = detectGrantFactionScope(rowText, buff.buffName);
             if (factionFilter) ability.factionFilter = factionFilter;
+        }
+        // Recipient STATE filter on an ally-scoped grant ("non-defender allies below 40% HP are
+        // granted Stealth" — Chimei R2). Gated on the same ally-scoped targets as the faction
+        // scope, and read from this buff's OWN resolved clause so a sibling sentence's qualifier
+        // cannot leak onto it. Attached only when the clause names one, so every other ship's
+        // ability object stays byte-identical.
+        if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
+            const recipientFilter = detectGrantRecipientFilter(rowText, buff.buffName);
+            if (recipientFilter) ability.recipientFilter = recipientFilter;
         }
         // Reactive trigger (crit / start-of-round / bomb-detonate) detected on this buff's
         // clause: route through the engine's trigger machinery instead of a gating condition.
