@@ -9,7 +9,7 @@
  * So an explicit `lowest-hp-ally` target must opt OUT of the override. Abundant Renewal carries
  * no such target and keeps the override arm — asserted here so the two cannot drift apart.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { executeIntent, Intent, IntentExecContext } from '../triggers';
 import { createEventBus } from '../events';
 import { createStatusEngine } from '../statusEngine';

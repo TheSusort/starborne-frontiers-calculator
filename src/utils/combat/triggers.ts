@@ -907,7 +907,7 @@ export function registerReactiveListeners(args: {
                     //
                     // CHAIN SAFETY. This is the SECOND subscriber to an event whose emit site
                     // requires each new one to re-establish termination for itself (the Ruiner
-                    // precedent at the on-enemy-repaired listener above). The argument:
+                    // precedent at the `case 'on-enemy-repaired'` listener below). The argument:
                     //  1. Only a `type: 'heal'` reaction re-emits reactive-heal-performed. A
                     //     `shield` reaction emits shield-applied (which grants BUFFS, not shields,
                     //     so it cannot chain back here); a `buff` reaction emits nothing.
@@ -4764,9 +4764,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // per overRepairRedirect.test.ts:164-171, a redirect with nothing to redirect applies
             // to nobody. (2) The engine's idiom that zero-magnitude events are not events, adopted
             // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts:4041), `burn > 0`
-            // gates the reversal log (engine.ts:3982), and `healSum > 0` gates reactive-heal-performed
-            // (triggers.ts:4935). The reactive-heal-performed emit is already independently gated by
-            // `healSum > 0` and therefore cannot fire whether or not this guard exists. (Incidentally,
+            // gates the reversal log (engine.ts:3982), and `healSum > 0` gates the
+            // `reactive-heal-performed` emit below (the `cfg.type === 'heal' && ... && healSum > 0`
+            // guard). That emit is already independently gated this way and therefore cannot fire
+            // whether or not this zero-sum guard exists. (Incidentally,
             // a raw-0 apply would also populate zero-valued entries in per-round healing maps, but
             // that is unverified and not the reason for this guard.) Scoped to the redirect arm only:
             // Abundant Renewal's own zero-grant edge case (pre-existing, legacy aggregate fallback
@@ -4924,7 +4925,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // #2 log visibility: a reactive HEAL emits reactive-heal-performed (NOT heal-performed —
         // that would re-trigger the REPAIRER'S OWN on-repair listeners and loop). It now has TWO
         // combat subscribers: on-enemy-repaired, whose riders never heal → no chain; and, since
-        // #434, on-own-repair-to-ally (~line 916), which re-subscribes to this same event so a
+        // #434, on-own-repair-to-ally (~line 926), which re-subscribes to this same event so a
         // repair performed from a LIVE TRIGGER also reaches Font of Power/Abundant Renewal. That
         // listener carries its own termination argument (self-exclusion guard on its own output +
         // MAX_INTENT_GENERATIONS backstop) — chain-safety still holds, but it is argued there, not
@@ -4940,9 +4941,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // event-scaled repair. A repair that lands but fully overheals still emits — the gross was
         // real, only the target was full.
         //
-        // NOT LOG-ONLY — the knock-on is deliberate. `reactive-heal-performed` has a second
-        // subscriber, the `on-enemy-repaired` listener at ~line 1118, so suppressing the emit also
-        // means a zero-gross repair no longer COUNTS AS A REPAIR for that trigger's riders:
+        // NOT LOG-ONLY — the knock-on is deliberate. `reactive-heal-performed` has the same TWO
+        // combat subscribers as above — `on-enemy-repaired` (~line 1484) and, since #434,
+        // `on-own-repair-to-ally` (~line 926) — so suppressing the emit also means a zero-gross
+        // repair no longer COUNTS AS A REPAIR for `on-enemy-repaired`'s own riders specifically:
         // Ruiner's Bomb debuff and Overload self-buff, Zosimos's charge removal, Amartya's Defense
         // Shred. That was adjudicated correct — a repair that restored nothing is not an enemy
         // "performing a repair" in any sense those riders are meant to punish — but it is a

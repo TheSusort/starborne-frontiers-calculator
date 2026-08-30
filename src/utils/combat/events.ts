@@ -338,9 +338,9 @@ export type CombatEvent =
            *  emitted, so a redirect cannot redirect itself, while every other observer still
            *  sees the repair.
            *
-           *  ⚠️ IN-MEMORY ROUTING KEY ONLY — never serialise it. `nextId()`
-           *  (buildShipAbilities.ts:151) runs off a module-level counter that is never reset, so
-           *  an ability's id depends on how many kits were built before it in the process. Put
+           *  ⚠️ IN-MEMORY ROUTING KEY ONLY — never serialise it. `nextId()` runs off a
+           *  module-level counter that is never reset (`let counter = 0`, buildShipAbilities.ts:151),
+           *  so an ability's id depends on how many kits were built before it in the process. Put
            *  this in a golden, a snapshot or a combat-log row and the artefact becomes
            *  order-dependent. */
           sourceAbilityId?: string;

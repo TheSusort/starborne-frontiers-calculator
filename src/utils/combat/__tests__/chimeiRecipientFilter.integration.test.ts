@@ -262,6 +262,10 @@ function passiveRepairRecipients(teamActors: TeamActorEngineInput[]): string[] {
     const result = runCombat(
         chimeiFight(teamActors, {
             perRecipientHealApply: true,
+            // Deliberately narrowed to one round — this helper only needs to isolate WHO the
+            // passive repair reaches, not per-round recurrence. That's covered separately by
+            // chimeiOverRepairRedirect.integration.test.ts's `for (const round of [1, 2])`
+            // cardinality assertions.
             numRounds: 1,
             enemyAttackers: [PRE_DAMAGE_ATTACKER],
         })

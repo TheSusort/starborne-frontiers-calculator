@@ -162,7 +162,7 @@ describe('SP-4e: a text-named worst-HP ally recipient parses as lowest-hp-ally',
         // all-allies Stealth repair.
         const rec = loadShipSkillRecords().find((r) => r.name.toLowerCase() === 'chimei')!;
         expect(rec.passives[0]).toContain('lowest current health percentage');
-        for (const [slot, text] of csvSlots(rec)) {
+        for (const [, text] of csvSlots(rec)) {
             expect(parseHealAbilities(text).map((h) => h.target)).not.toContain('lowest-hp-ally');
         }
         // The over-repair clause sits in both passive1 and passive2's CSV text (both rows carry
