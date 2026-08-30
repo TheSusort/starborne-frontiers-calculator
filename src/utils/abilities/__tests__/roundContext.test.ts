@@ -30,6 +30,28 @@ describe('buildRoundContext', () => {
         expect(ctx.enemyType).toBe('Defender');
     });
 
+    // #NEW: the three counts below used to be hardcoded literals in the returned object —
+    // `BuildRoundContextState` carried no matching field, so NO caller could populate them and
+    // every `adjacent-ally` / `enemy-adjacent` / `enemy-destroyed` scaling source in the corpus
+    // (Centurion, Panguan, Judge) read a permanent 0. These lock the pass-through half of the
+    // fix; the engine half is locked by liveCountSubjects.integration.test.ts.
+    it('passes through the live adjacency / kill counts when the caller supplies them', () => {
+        const ctx = buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            adjacentAllyCount: 3,
+            enemyAdjacentCount: 2,
+            enemyDestroyedCount: 4,
+        });
+        expect(ctx.adjacentAllyCount).toBe(3);
+        expect(ctx.enemyAdjacentCount).toBe(2);
+        expect(ctx.enemyDestroyedCount).toBe(4);
+    });
+
     it('applies DPS-assumption static defaults', () => {
         const ctx = buildRoundContext({
             selfBuffNames: [],
@@ -41,9 +63,13 @@ describe('buildRoundContext', () => {
         });
         expect(ctx.selfDebuffNames).toEqual([]);
         expect(ctx.enemyBuffNames).toEqual([]);
-        expect(ctx.adjacentAllyCount).toBe(0);
-        expect(ctx.enemyAdjacentCount).toBe(0);
-        expect(ctx.enemyDestroyedCount).toBe(0);
+        // NOT 0 — absent. These three are the live-or-manual counts: a caller that supplies
+        // nothing cannot measure them, and `evaluateCondition` must see that absence so the
+        // condition keeps its manual `manualCount ?? 1` fallback. A 0 here would read as
+        // "measured, nothing adjacent" and silently zero Panguan/Centurion/Judge in DPS mode.
+        expect(ctx.adjacentAllyCount).toBeUndefined();
+        expect(ctx.enemyAdjacentCount).toBeUndefined();
+        expect(ctx.enemyDestroyedCount).toBeUndefined();
         expect(ctx.selfHpPct).toBe(100);
         // SP-4d: enemyHpPct is no longer a DPS-assumption default — see the dedicated
         // "absent enemy/target readings stay absent" test below.

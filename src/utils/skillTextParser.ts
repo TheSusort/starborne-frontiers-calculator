@@ -2907,11 +2907,22 @@ const DR_CRIT_HIT_RE = /when\b[^.;]*\bcriticall?y?\s+hit\b/i;
 const DR_ALLY_CRIT_HIT_RE = /\bis\s+criticall?y?\s+hit\b/i;
 // Self-subject direct-damage reaction: "when (this Unit is) directly damaged" (leading OR
 // trailing clause) / "when attacked" / bare "when hit" (Sansi) / "upon receiving direct
-// damage" (Bizon — the one non-"when" phrasing; corpus-unique so no over-match). "If directly
-// damaged" (Panon) is deliberately NOT matched — the conditional "if" phrasing is out of scope
-// for this reaction phase.
+// damage" (Bizon — the one non-"when" phrasing; corpus-unique so no over-match).
+//
+// The "IF directly damaged" arm (Panon R1/R2, Wusheng R1/R2) used to be deliberately EXCLUDED as
+// "out of scope for this reaction phase". That carve-out went stale: it left Panon's Barrier
+// grant on the generic `on-cast` default, so it armed on PANON'S OWN TURN — every third turn,
+// whether or not anything had touched him — instead of reactively at the moment he is hit. The
+// game text draws no distinction between the two phrasings, and the sibling removal detector
+// (REMOVAL_DIRECT_DAMAGE_RE, ~:1753) already accepts both for exactly that reason.
+//
+// The optional group admits ONLY "this unit is" between "if" and "directly", which is what keeps
+// Meatshield's "If this Unit HAS BEEN directly damaged" out: that is a CAST-TIME condition on an
+// active skill (the `wasHitThisRound` subject), not a reaction that fires on being hit, and
+// promoting it to `on-attacked` would move the clause to the wrong path entirely. Corpus census
+// (docs/ship-skills.csv, 2026-08-30): those 5 sites are every `if …directly damaged` in the file.
 const DR_DIRECT_DAMAGE_RE =
-    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b|when\s+hit\b|upon\s+receiving\s+direct\s+damage\b/i;
+    /when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|if\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b|when\s+attacked\b|when\s+hit\b|upon\s+receiving\s+direct\s+damage\b/i;
 // "while below N% HP" HP gate on a damage-reaction sentence (Makoli: "when directly damaged
 // while below 40% HP, …"). The same regex form as Task 7's parseHealAbilities annotation
 // (/while\s+below\s+(\d+)\s*%\s*hp/i) — kept here in the detector so ALL sentence-scoped

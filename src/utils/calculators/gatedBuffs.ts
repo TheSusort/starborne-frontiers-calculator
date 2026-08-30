@@ -80,9 +80,12 @@ function buildPageConditionContext(state: GatedBuffsPageState): ConditionContext
         selfDebuffNames: [],
         enemyBuffNames: [],
         effectiveCritRate: 0,
-        adjacentAllyCount: 0,
-        enemyAdjacentCount: 0,
-        enemyDestroyedCount: 0,
+        // adjacentAllyCount / enemyAdjacentCount / enemyDestroyedCount are deliberately ABSENT,
+        // not 0: this page has no board and no live opposing roster, so "how many are adjacent"
+        // is unmeasurable here, and a literal 0 would assert the opposite. `isAnswerableCondition`
+        // refuses all three subjects before this context is ever consulted, so the distinction is
+        // unreachable today — it is stated so a future subject added to the answerable set cannot
+        // inherit a fabricated zero.
         // Theoretical EHP is resolved once for a ship at full health — not a live per-round
         // reading. Ties → all tied qualify, matching `lowestSpeedIds()`.
         selfHpPct: 100,
