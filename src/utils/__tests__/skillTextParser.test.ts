@@ -496,18 +496,25 @@ describe('parseSkillEffects', () => {
         ]);
     });
 
-    it('routes a combined "itself and all adjacent allies" grant to all-allies (Tormenter)', () => {
+    it('splits a combined "itself and all adjacent allies" grant into self + adjacent (Tormenter)', () => {
         // Tormenter: "grants Out. Damage Up I to itself and all adjacent allies for 1 turn." The
-        // receiver names BOTH itself and the team — team-wide wins, so "itself" must NOT short-circuit
-        // to self. (Was already all-allies before the verb-aware change via the "allies" match;
-        // this locks that the new self-receiver branch doesn't regress it.)
+        // receiver names TWO disjoint sets — `adjacentAllyIds` excludes the owner, so neither
+        // existing scope covers it alone. This used to route all-allies on the reasoning that
+        // "self + adjacent is broader than adjacency alone"; owner-ruled wrong 2026-08-30 (an ally
+        // on the far flank takes no buff), so it now emits BOTH halves with the same payload.
         expect(
             parseSkillEffects(
                 'This Unit deals 160% damage with a guaranteed critical hit and grants <unit-skill>Out. Damage Up I</unit-skill> to itself and all adjacent allies for 1 turn.',
                 'active'
             )
         ).toEqual([
-            { buffName: 'Out. Damage Up I', target: 'all-allies', duration: 1, source: 'active' },
+            { buffName: 'Out. Damage Up I', target: 'self', duration: 1, source: 'active' },
+            {
+                buffName: 'Out. Damage Up I',
+                target: 'adjacent-allies',
+                duration: 1,
+                source: 'active',
+            },
         ]);
     });
 

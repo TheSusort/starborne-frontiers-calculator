@@ -8,6 +8,8 @@ export const CURRENT_VERSION = '1.66.0';
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: skills that scale with the board now actually count it. Panguan's attacks grow with the number of living enemies standing next to his target, Centurion's with the number of allies next to him, and Judge's damage bonus finally climbs as enemies are destroyed — all three previously scored as though the count were always exactly one, no matter what the board looked like. The same applies on the healing and defense calculators, which fight a real positioned team. On the single-ship DPS calculator, which has no board to read, the count you enter yourself is still used.",
     "Combat simulator: Panon's Barrier now arms the moment he is directly damaged, as his skill says, instead of coming up on his own turn whether or not anything had touched him.",
+    'Combat simulator: Tormenter\'s "Out. Damage Up I to itself and all adjacent allies" now stops at his neighbours. It used to reach the whole team, so an ally on the far side of the board was scored with a damage buff it never gets in game.',
+    'Combat simulator: buffs granted to "all adjacent allies" now reach those allies at all. On a cast, such a grant was landing on the caster instead of on its neighbours.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

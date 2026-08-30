@@ -5580,10 +5580,14 @@ const SINGLE_ALLY_RE =
 const ALL_ALLIES_RE = /friendly|allies/i;
 // Ship-kit W8 Task 1 (Lionheart): a receiver naming "(all) adjacent allies" bare — the crit-buff
 // grant "grants Attack Up II to all adjacent allies for 1 turn." — is board-adjacency scoped, not
-// team-wide. Tested BEFORE ALL_ALLIES_RE (which would otherwise match the "allies" substring and
-// swallow it as all-allies) but ONLY when the receiver is adjacency-ONLY: Tormenter's combined
-// "grants X to itself and all adjacent allies" receiver still routes all-allies (self + adjacent
-// together is broader than adjacency alone) — see the SELF_RECEIVER_RE co-check at the call site.
+// team-wide. Tested BEFORE ALL_ALLIES_RE, which would otherwise match the "allies" substring and
+// swallow it as all-allies.
+//
+// A receiver that names BOTH ("grants X to itself and all adjacent allies" — Tormenter, the only
+// such clause corpus-wide) is the union of two DISJOINT sets, since `adjacentAllyIds` excludes the
+// owner. It used to route all-allies, which reached every ally on the board; owner-ruled wrong
+// 2026-08-30 (only the caster and its board neighbours take the buff), so it now resolves to the
+// PAIR ['self', 'adjacent-allies'] — see detectGrantScopes.
 const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
@@ -5701,9 +5705,14 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *  - BESTOWING verb ("grants") — the OBJECT (receiver) takes the buff:
  *      · explicit self receiver ("grants itself X")                          → 'self'
  *      · bare adjacency receiver ("grants X to all adjacent allies")         → 'adjacent-allies'
+ *      · self + adjacency ("grants X to itself and all adjacent allies")     → BOTH of the above
  *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
+ *
+ * Returns a LIST because of that one combined receiver: the caster and its board neighbours are
+ * disjoint recipient sets (`adjacentAllyIds` excludes the owner) and no single scope spans them.
+ * Every other phrasing returns exactly one entry, so the caller's fan-out is a no-op for them.
  *
  * Subject/object are taken from the buff's own grant span (its verb, the text before it back to
  * the previous verb = subject, the text after it up to the next verb = object) so a sibling
@@ -5722,11 +5731,17 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  * governing verb/receiver is read from THAT grant's own span. Defaults to 0 (first occurrence)
  * — byte-identical for every buff name granted only once in its clause.
  */
-function detectGrantScope(
+type AllyGrantScope = 'self' | 'ally' | 'all-allies' | 'adjacent-allies';
+
+// The one combined receiver, as its two disjoint halves. Ordered self-first so the fan-out's
+// first-emitted ability is the caster's own grant (matches Centurion's self-then-adjacent order).
+const SELF_AND_ADJACENT: readonly AllyGrantScope[] = ['self', 'adjacent-allies'];
+
+function detectGrantScopes(
     skillText: string,
     buffName: string,
     occurrenceIndex = 0
-): 'self' | 'ally' | 'all-allies' | 'adjacent-allies' {
+): readonly AllyGrantScope[] {
     const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
     // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
     // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
@@ -5739,36 +5754,35 @@ function detectGrantScope(
 
     // Receiving verb (gains/has) → route by the SUBJECT (who receives onto itself).
     if (verb !== null && SELF_RECEIVE_VERB_RE.test(verb)) {
-        if (ALL_ALLIES_RE.test(subject)) return 'all-allies';
-        if (SINGLE_ALLY_RE.test(subject)) return 'ally';
-        return 'self';
+        if (ALL_ALLIES_RE.test(subject)) return ['all-allies'];
+        if (SINGLE_ALLY_RE.test(subject)) return ['ally'];
+        return ['self'];
     }
 
-    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Adjacency-ONLY
-    // and team receivers are tested BEFORE the self ("itself") receiver so a combined receiver
-    // like "grants Out. Damage Up I to itself and all adjacent allies" (Tormenter) still routes
-    // all-allies, not self — "itself" only pins to self when it is the SOLE receiver (Nuqtu's
-    // "grants itself"). Ship-kit W8 Task 1 (Lionheart): the adjacency check is co-guarded on the
-    // ABSENCE of "itself" so Tormenter's combined receiver (broader than adjacency alone) falls
-    // through to the plain all-allies branch below instead of being caught here.
+    // Bestowing verb (grants) → route by the OBJECT (the receiver of the grant). Adjacency is
+    // tested BEFORE the team and self receivers: "all adjacent allies" contains the "allies"
+    // substring ALL_ALLIES_RE matches, and the combined "itself and all adjacent allies" contains
+    // both scope words, so either later branch would swallow it. "itself" alongside adjacency
+    // WIDENS the recipient set by exactly the caster (Tormenter); "itself" alone pins to self
+    // (Nuqtu's "grants itself").
     if (verb !== null && GRANT_VERB_RE.test(verb)) {
-        if (ADJACENT_ALLIES_RE.test(object) && !SELF_RECEIVER_RE.test(object)) {
-            return 'adjacent-allies';
+        if (ADJACENT_ALLIES_RE.test(object)) {
+            return SELF_RECEIVER_RE.test(object) ? SELF_AND_ADJACENT : ['adjacent-allies'];
         }
-        if (ALL_ALLIES_RE.test(object)) return 'all-allies';
-        if (SINGLE_ALLY_RE.test(object)) return 'ally';
-        if (SELF_RECEIVER_RE.test(object)) return 'self';
+        if (ALL_ALLIES_RE.test(object)) return ['all-allies'];
+        if (SINGLE_ALLY_RE.test(object)) return ['ally'];
+        if (SELF_RECEIVER_RE.test(object)) return ['self'];
         // Receiver-less grant → all players (the locked routing rule).
-        return 'all-allies';
+        return ['all-allies'];
     }
 
     // No identifiable verb (defensive): fall back to the prior phrasing-only heuristic.
-    if (SINGLE_ALLY_RE.test(clause)) return 'ally';
-    if (ADJACENT_ALLIES_RE.test(clause) && !SELF_RECEIVER_RE.test(clause)) {
-        return 'adjacent-allies';
+    if (SINGLE_ALLY_RE.test(clause)) return ['ally'];
+    if (ADJACENT_ALLIES_RE.test(clause)) {
+        return SELF_RECEIVER_RE.test(clause) ? SELF_AND_ADJACENT : ['adjacent-allies'];
     }
-    if (ALL_ALLIES_RE.test(clause)) return 'all-allies';
-    return 'self';
+    if (ALL_ALLIES_RE.test(clause)) return ['all-allies'];
+    return ['self'];
 }
 
 // #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient
@@ -5964,10 +5978,13 @@ export function parseSkillEffects(
         // Player-side grants get ally-scope granularity from the granting clause (team walk);
         // enemy debuffs get enemy-scope granularity ('enemy' vs 'all-enemies') the same way.
         const side = verbToTarget(verb, buffName, nextText);
-        const target: SkillEffect['target'] =
+        // A player-side grant can name TWO disjoint recipient sets in one receiver ("to itself and
+        // all adjacent allies"), so the scope resolver returns a list; every other phrasing —
+        // and every enemy-side debuff — yields exactly one entry.
+        const targets: readonly SkillEffect['target'][] =
             side === 'self'
-                ? detectGrantScope(skillText, buffName, occurrenceIndex)
-                : detectEnemyGrantScope(skillText, buffName);
+                ? detectGrantScopes(skillText, buffName, occurrenceIndex)
+                : [detectEnemyGrantScope(skillText, buffName)];
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
@@ -6046,17 +6063,21 @@ export function parseSkillEffects(
             buffName === 'Protection' &&
             CLEAR_PROTECTION_ON_REDIRECT_RE.test(stripUnitTags(skillText));
 
-        effects.push({
-            buffName,
-            target,
-            duration,
-            ...(stacks !== undefined ? { stacks } : {}),
-            ...(stackTrigger !== undefined ? { stackTrigger } : {}),
-            ...(application !== undefined ? { application } : {}),
-            ...(isConsumableProtection && stacks !== undefined ? { maxStacks: stacks } : {}),
-            ...(isConsumableProtection ? { clearAllOnRedirect: true } : {}),
-            source,
-        });
+        // One effect per resolved recipient set — a single push for every clause but the combined
+        // "itself and all adjacent allies" receiver, which emits the same payload twice.
+        for (const target of targets) {
+            effects.push({
+                buffName,
+                target,
+                duration,
+                ...(stacks !== undefined ? { stacks } : {}),
+                ...(stackTrigger !== undefined ? { stackTrigger } : {}),
+                ...(application !== undefined ? { application } : {}),
+                ...(isConsumableProtection && stacks !== undefined ? { maxStacks: stacks } : {}),
+                ...(isConsumableProtection ? { clearAllOnRedirect: true } : {}),
+                source,
+            });
+        }
     }
 
     // Supplementary pass: conjoined self-grants ("gains 1 charge … and <BuffName> for N turns")

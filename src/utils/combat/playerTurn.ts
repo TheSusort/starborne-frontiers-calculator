@@ -2746,9 +2746,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Tianchao allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
         // intersection has to happen HERE — the ability object is out of scope by now, which is
         // why the filter rides the status rather than being read through `source`.
+        // Board-adjacency scope (`allyScope`), the sibling of `factionFilter` above and narrowed
+        // for the same reason: registration runs at actor construction, where nobody has moved or
+        // died, so an `adjacent-allies` grant is registered against the whole side and resolved to
+        // LIVING neighbours HERE, where `adjacentAllyIds` — the per-side resolver the engine
+        // threads onto TurnArgs — is in hand. Absent (every other target) → no narrowing.
+        // `adjacentAllyIds` itself excludes the caster, which is correct: "all adjacent allies"
+        // never includes the unit granting it. A ship whose text says BOTH (Tormenter's "to itself
+        // and all adjacent allies") carries a separate `self`-targeted ability for its own half.
+        // Undefined resolver (non-positional run) → no narrowing, matching `adjacentAllyIds`'s own
+        // whole-side fallback rather than silently dropping the grant.
+        const scopedRecipients =
+            status.allyScope === 'adjacent-allies' && adjacentAllyIds !== undefined
+                ? ((allowed) => (status.recipients ?? [actor.id]).filter((id) => allowed.has(id)))(
+                      new Set(adjacentAllyIds)
+                  )
+                : (status.recipients ?? [actor.id]);
         for (const rid of supportRecipients(
             'all-allies',
-            status.recipients ?? [actor.id],
+            scopedRecipients,
             undefined,
             status.factionFilter
         )) {
