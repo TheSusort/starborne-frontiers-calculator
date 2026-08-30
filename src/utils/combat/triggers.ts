@@ -352,10 +352,15 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
- *  - on-own-repair-to-ally → the OWNER's OWN heal-performed (casterId === ownerId) with at least
- *    one non-self recipient — the on-ally-critically-repaired twin WITHOUT the crit filter (Font
- *    of Power). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff branch fans
- *    the grant out to exactly those allies. One enqueue per qualifying cast.
+ *  - on-own-repair-to-ally → the OWNER's OWN repair with at least one non-self recipient — the
+ *    on-ally-critically-repaired twin WITHOUT the crit filter (Font of Power). Subscribes to
+ *    BOTH heal-performed (cast repairs) and, since #434, reactive-heal-performed (repairs
+ *    performed from a live trigger — a start-of-round passive repair, an on-ally-damaged
+ *    reaction repair). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff
+ *    branch fans the grant out to exactly those allies, plus overhealAmount/overhealByAlly for
+ *    an `overheal`-basis reaction. One enqueue per qualifying repair. On the reactive arm an
+ *    ability never observes its OWN output (the #435 redirect must not redirect itself); every
+ *    other observer still does.
  *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
  *    fires once per critting ability-performed — i.e. once per critting SUB-ATTACK, and ONCE for
  *    an AoE footprint however many victims it crit, never per (hit, victim) pair; the owner's own
@@ -841,20 +846,26 @@ export function registerReactiveListeners(args: {
                         }
                     });
                     break;
-                case 'on-own-repair-to-ally':
-                    bus.on('heal-performed', (e) => {
-                        // The OWNER's own repair that reached >= 1 OTHER ally (Font of Power).
-                        // One enqueue per qualifying cast -> one proc-gate roll; the grant fans
-                        // out to all repaired non-self allies via eventCtx.repairedAllyIds.
-                        if (e.casterId !== ownerId) return;
-                        const repaired = e.targets.filter((t) => t !== ownerId);
+                case 'on-own-repair-to-ally': {
+                    // The OWNER's own repair that reached >= 1 OTHER ally (Font of Power).
+                    // One enqueue per qualifying repair -> one proc-gate roll; the grant fans
+                    // out to all repaired non-self allies via eventCtx.repairedAllyIds.
+                    const enqueueForOwnRepair = (
+                        casterId: string,
+                        perTarget: { targetId: string; overheal?: number }[],
+                        aggregateOverheal: number
+                    ) => {
+                        if (casterId !== ownerId) return;
+                        const repaired = perTarget
+                            .map((pt) => pt.targetId)
+                            .filter((t) => t !== ownerId);
                         if (repaired.length === 0) return;
-                        // Per-ally clipped over-repair from the cast's per-target breakdown (non-self
-                        // recipients that were actually over-repaired). Drives Abundant Renewal's
-                        // per-ally shield; absent (legacy single-target emit with no perTarget) →
-                        // the executor falls back to the aggregate overhealAmount + healing.targetId.
+                        // Per-ally clipped over-repair (non-self recipients actually over-repaired).
+                        // Drives Abundant Renewal's per-ally shield; absent (legacy single-target
+                        // emit with no perTarget) -> the executor falls back to the aggregate
+                        // overhealAmount + healing.targetId.
                         const overhealByAlly: Record<string, number> = {};
-                        for (const pt of e.perTarget ?? []) {
+                        for (const pt of perTarget) {
                             if (pt.targetId !== ownerId && (pt.overheal ?? 0) > 0) {
                                 overhealByAlly[pt.targetId] = pt.overheal as number;
                             }
@@ -864,14 +875,67 @@ export function registerReactiveListeners(args: {
                             eventCtx: {
                                 ...intent.eventCtx,
                                 repairedAllyIds: repaired,
-                                overhealAmount: e.overheal ?? 0,
+                                overhealAmount: aggregateOverheal,
                                 ...(Object.keys(overhealByAlly).length > 0
                                     ? { overhealByAlly }
                                     : {}),
                             },
                         });
+                    };
+                    bus.on('heal-performed', (e) =>
+                        enqueueForOwnRepair(
+                            e.casterId,
+                            e.perTarget ?? e.targets.map((targetId) => ({ targetId })),
+                            e.overheal ?? 0
+                        )
+                    );
+                    // #434: a repair performed from a LIVE TRIGGER is still a repair this owner
+                    // performed — owner ruling 2026-08-30, posed as Cultivator's on-ally-damaged
+                    // passive repair with Font of Power and Abundant Renewal equipped: both fire.
+                    // Before this, an on-repair reaction saw CAST repairs only, so every
+                    // reaction-healer's implants were inert for most of the repairs it performed.
+                    //
+                    // CHAIN SAFETY. This is the SECOND subscriber to an event whose emit site
+                    // requires each new one to re-establish termination for itself (the Ruiner
+                    // precedent at the on-enemy-repaired listener above). The argument:
+                    //  1. Only a `type: 'heal'` reaction re-emits reactive-heal-performed. A
+                    //     `shield` reaction emits shield-applied (which grants BUFFS, not shields,
+                    //     so it cannot chain back here); a `buff` reaction emits nothing.
+                    //  2. A heal<->heal cycle therefore needs two DISTINCT heal-type abilities on
+                    //     this trigger.
+                    //  3. The corpus has exactly one (Chimei's R2 redirect, #435), and the guard
+                    //     below excludes an ability from its OWN output — which kills the only
+                    //     cycle that exists, the length-1 self-loop.
+                    //  4. MAX_INTENT_GENERATIONS backstops any future second one.
+                    //
+                    // The guard is deliberately SELF-exclusion and not an emit suppression: owner
+                    // ruling 2026-08-30 is that the redirect's own over-repair must still be
+                    // shielded by Abundant Renewal and still roll Font of Power's proc. Only a
+                    // SECOND redirect is forbidden. Suppressing the emit (the fromPurgeEvent
+                    // pattern) would blind those observers too.
+                    bus.on('reactive-heal-performed', (e) => {
+                        if (e.casterId === ownerId && e.sourceAbilityId === intent.ability.id) {
+                            return;
+                        }
+                        enqueueForOwnRepair(
+                            e.casterId,
+                            e.perTarget,
+                            // NON-SELF excess only. The caster's own entry must not reach the
+                            // aggregate: the clause is "when over-repairing a damaged ALLY", and
+                            // a self-repair wasting HP is not that. Including it would let a
+                            // repair that over-repaired ONLY the caster still size a redirect —
+                            // `repaired` would be non-empty (an ally was repaired, just not
+                            // wastefully), `overhealByAlly` would be empty, and the executor's
+                            // fallback would read the caster's own waste. This also keeps the
+                            // aggregate consistent with overhealByAlly, which already excludes
+                            // self.
+                            e.perTarget
+                                .filter((pt) => pt.targetId !== ownerId)
+                                .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
+                        );
                     });
                     break;
+                }
                 case 'on-shield-applied':
                     bus.on('shield-applied', (e) => {
                         // Granter-scoped (H3.6 keys the event on the acting granter): THIS owner

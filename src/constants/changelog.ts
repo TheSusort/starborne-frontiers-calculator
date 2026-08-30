@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Tormenter\'s "Out. Damage Up I to itself and all adjacent allies" now stops at his neighbours. It used to reach the whole team, so an ally on the far side of the board was scored with a damage buff it never gets in game.',
     'Combat simulator: buffs granted to "all adjacent allies" now reach those allies at all. On a cast, such a grant was landing on the caster instead of on its neighbours.',
     "Combat simulator: Chimei's refit passive now respects who it is actually for. Her round-start repair reaches only allies that have Stealth, and her round-end Stealth goes only to non-Defender allies below 40% HP. Both used to cover the whole team regardless.",
+    "Combat simulator: Font of Power and Abundant Renewal now notice a repair performed from a passive or a reaction, not just from an active or charged skill. A ship that repairs an ally as a reflex — Cultivator repairing an ally the moment it's directly damaged, for example — now grants Font of Power's buff and Abundant Renewal's overheal shield exactly as if that repair had been cast.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

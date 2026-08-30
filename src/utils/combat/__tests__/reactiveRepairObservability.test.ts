@@ -11,7 +11,13 @@
  * ability gets a different id depending on how many kits were built before it.
  */
 import { describe, it, expect } from 'vitest';
-import { executeIntent, Intent, IntentExecContext, ReactiveAbility } from '../triggers';
+import {
+    executeIntent,
+    Intent,
+    IntentExecContext,
+    ReactiveAbility,
+    registerReactiveListeners,
+} from '../triggers';
 import { createEventBus, CombatEvent } from '../events';
 import { createStatusEngine } from '../statusEngine';
 import type { CombatActor } from '../state';
@@ -105,5 +111,174 @@ describe('#434 Task 1 — reactive-heal-performed payload', () => {
     it('stamps the id of the ability that produced it', () => {
         const [e] = runReactiveRepair();
         expect(e.sourceAbilityId).toBe('ab-repair');
+    });
+});
+
+const FONT_OF_POWER_ID = 'ab-font-of-power';
+const REDIRECT_ID = 'ab-redirect';
+
+// Font of Power's shape: a buff grant on the trigger. Stands in for "any observer that is not
+// the producing ability".
+const fontOfPower = (): Ability => ({
+    id: FONT_OF_POWER_ID,
+    type: 'buff',
+    target: 'ally',
+    trigger: 'on-own-repair-to-ally',
+    conditions: [],
+    config: {
+        type: 'buff',
+        buffName: 'Power Infused Nanobots',
+        duration: 1,
+        stacks: 1,
+        isStackable: false,
+        parsedEffects: {},
+    },
+});
+
+// #435's redirect shape: a heal on the same trigger. This is the ability that must not observe
+// its OWN output.
+const redirect = (): Ability => ({
+    id: REDIRECT_ID,
+    type: 'heal',
+    target: 'lowest-hp-ally',
+    trigger: 'on-own-repair-to-ally',
+    conditions: [],
+    config: { type: 'heal', pct: 100, basis: 'overheal' },
+});
+
+function captureIntentsForReactiveRepair(args: {
+    abilities: Ability[];
+    sourceAbilityId: string;
+    ownerId?: string;
+}): Intent[] {
+    const ownerId = args.ownerId ?? OWNER_ID;
+    const bus = createEventBus();
+    const intents: Intent[] = [];
+    registerReactiveListeners({
+        bus,
+        perOwner: [
+            {
+                ownerId,
+                reactiveAbilities: args.abilities.map((ability): ReactiveAbility => ({
+                    ability,
+                    sourceSlot: 'passive',
+                })),
+            },
+        ],
+        enqueue: (i) => intents.push(i),
+        isOpposing: (id) => id === 'enemy',
+    });
+    bus.emit({
+        type: 'reactive-heal-performed',
+        casterId: ownerId,
+        round: 1,
+        amount: 5_000,
+        perTarget: [{ targetId: ALLY_ID, amount: 5_000, overheal: 4_000 }],
+        sourceAbilityId: args.sourceAbilityId,
+    });
+    return intents;
+}
+
+describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
+    it('enqueues off a reactive repair, stamping the same eventCtx keys as the cast path', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [fontOfPower()],
+            sourceAbilityId: 'ab-some-passive-repair',
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
+        expect(intents[0].eventCtx?.overhealByAlly).toEqual({ [ALLY_ID]: 4_000 });
+    });
+
+    it('ignores a reactive repair with no non-self recipient', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [{ ability: fontOfPower(), sourceSlot: 'passive' }],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'reactive-heal-performed',
+            casterId: OWNER_ID,
+            round: 1,
+            amount: 5_000,
+            perTarget: [{ targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }],
+            sourceAbilityId: 'ab-self-repair',
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    it('ignores a reactive repair performed by someone else', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [{ ability: fontOfPower(), sourceSlot: 'passive' }],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'reactive-heal-performed',
+            casterId: 'someone-else',
+            round: 1,
+            amount: 5_000,
+            perTarget: [{ targetId: ALLY_ID, amount: 5_000, overheal: 4_000 }],
+            sourceAbilityId: 'ab-their-repair',
+        });
+        expect(intents).toHaveLength(0);
+    });
+});
+
+describe('#434 Task 2 — the self-exclusion guard (R-B)', () => {
+    // POSITIVE ARM: everything that is not the producing ability still observes the repair.
+    it('lets a DIFFERENT ability observe a repair the redirect produced', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [fontOfPower(), redirect()],
+            sourceAbilityId: REDIRECT_ID,
+        });
+        const ids = intents.map((i) => i.ability.id);
+        expect(ids).toContain(FONT_OF_POWER_ID);
+    });
+
+    // NEGATIVE ARM: the producing ability does not observe its own output. Without this arm the
+    // test passes under a missing guard.
+    it('does NOT let the redirect observe its own output', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [fontOfPower(), redirect()],
+            sourceAbilityId: REDIRECT_ID,
+        });
+        const ids = intents.map((i) => i.ability.id);
+        expect(ids).not.toContain(REDIRECT_ID);
+    });
+
+    it('still lets the redirect observe a repair some OTHER ability produced', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [redirect()],
+            sourceAbilityId: 'ab-start-of-round-repair',
+        });
+        expect(intents.map((i) => i.ability.id)).toEqual([REDIRECT_ID]);
+    });
+
+    // Team symmetry: the guard is self-scoped, so an enemy-side owner behaves identically.
+    it('behaves identically for an enemy-side owner', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [fontOfPower(), redirect()],
+            sourceAbilityId: REDIRECT_ID,
+            ownerId: 'enemy-medic',
+        });
+        expect(intents.map((i) => i.ability.id)).toEqual([FONT_OF_POWER_ID]);
     });
 });
