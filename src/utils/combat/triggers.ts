@@ -882,13 +882,23 @@ export function registerReactiveListeners(args: {
                             },
                         });
                     };
-                    bus.on('heal-performed', (e) =>
-                        enqueueForOwnRepair(
-                            e.casterId,
-                            e.perTarget ?? e.targets.map((targetId) => ({ targetId })),
-                            e.overheal ?? 0
-                        )
-                    );
+                    bus.on('heal-performed', (e) => {
+                        const perTarget =
+                            e.perTarget ?? e.targets.map((targetId) => ({ targetId }));
+                        // A cast heal can be self-inclusive and multi-recipient (`target:
+                        // 'all-allies'` hands the caster its own side, itself included —
+                        // playerTurn.ts). The clause is "when over-repairing a damaged ALLY", so
+                        // the caster's own wasted repair must not count — mirrors the NON-SELF
+                        // filter on the reactive arm below (`reactive-heal-performed`), which
+                        // computes the same aggregate the same way. Only the legacy no-`perTarget`
+                        // emit (no breakdown to filter) falls back to the event's raw aggregate.
+                        const aggregateOverheal = e.perTarget
+                            ? e.perTarget
+                                  .filter((pt) => pt.targetId !== ownerId)
+                                  .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
+                            : (e.overheal ?? 0);
+                        enqueueForOwnRepair(e.casterId, perTarget, aggregateOverheal);
+                    });
                     // #434: a repair performed from a LIVE TRIGGER is still a repair this owner
                     // performed — owner ruling 2026-08-30, posed as Cultivator's on-ally-damaged
                     // passive repair with Font of Power and Abundant Renewal equipped: both fire.

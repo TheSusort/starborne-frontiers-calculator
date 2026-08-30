@@ -260,6 +260,42 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         });
         expect(intents).toHaveLength(0);
     });
+
+    // The CAST arm's mirror of R-C above. `heal-performed` is the emit a `target: 'all-allies'`
+    // cast produces, self INCLUDED (playerTurn.ts). A self-inclusive multi-recipient heal that
+    // over-heals the caster while cleanly repairing an ally must not size an ally-over-repair
+    // reaction off the caster's own waste — the same rule as the reactive arm, on the other event.
+    it("excludes the caster's own over-repair from the ally overheal aggregate on the CAST path", () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [{ ability: fontOfPower(), sourceSlot: 'passive' }],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'heal-performed',
+            casterId: OWNER_ID,
+            targets: [ALLY_ID, OWNER_ID],
+            round: 1,
+            amount: 5_000,
+            overheal: 4_000, // the cast's raw aggregate — INCLUDES the caster's own waste
+            perTarget: [
+                { targetId: ALLY_ID, amount: 1_000 }, // ally repaired with NO waste
+                { targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }, // caster over-repairs itself
+            ],
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(0);
+        expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
+    });
 });
 
 describe('#434 Task 2 — the self-exclusion guard (R-B)', () => {

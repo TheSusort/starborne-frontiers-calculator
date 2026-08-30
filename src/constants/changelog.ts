@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: buffs granted to "all adjacent allies" now reach those allies at all. On a cast, such a grant was landing on the caster instead of on its neighbours.',
     "Combat simulator: Chimei's refit passive now respects who it is actually for. Her round-start repair reaches only allies that have Stealth, and her round-end Stealth goes only to non-Defender allies below 40% HP. Both used to cover the whole team regardless.",
     "Combat simulator: Font of Power and Abundant Renewal now notice a repair performed from a passive or a reaction, not just from an active or charged skill. A ship that repairs an ally as a reflex — Cultivator repairing an ally the moment it's directly damaged, for example — now grants Font of Power's buff and Abundant Renewal's overheal shield exactly as if that repair had been cast.",
+    "Combat simulator: Abundant Renewal no longer sizes its shield off a healer's own wasted self-repair. A cast that heals the whole team, itself included — Chimei's active repairing 9% Max HP to all allies, for example — was letting the healer's own over-repair size the shield, even though the shield is meant to reward over-repairing an ally.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
