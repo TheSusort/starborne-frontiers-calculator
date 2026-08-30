@@ -4749,12 +4749,18 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const recipients =
             // #435 R4: a zero-sum redirect (no ALLY was over-repaired this cast — e.g. an ally
             // repaired without waste while the caster over-repaired only herself, which the
-            // listener already excludes from the aggregate) grants nothing. Without this, the
-            // lowest-HP% selector still resolves someone and the executor would heal them for 0
-            // and emit a phantom reactive-heal-performed — which a sibling on-own-repair-to-ally
-            // listener (Abundant Renewal on the same owner) would then react to. Scoped to the
-            // redirect arm only: Abundant Renewal's own zero-grant edge case (pre-existing,
-            // legacy aggregate fallback with no per-ally map) is untouched.
+            // listener already excludes from the aggregate) must resolve nobody rather than
+            // healing someone for 0. This embodies two principles. (1) The ability's contract:
+            // per overRepairRedirect.test.ts:164-171, a redirect with nothing to redirect applies
+            // to nobody. (2) The engine's idiom that zero-magnitude events are not events, adopted
+            // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts:4041), `burn > 0`
+            // gates the reversal log (engine.ts:3982), and `healSum > 0` gates reactive-heal-performed
+            // (triggers.ts:4935). The reactive-heal-performed emit is already independently gated by
+            // `healSum > 0` and therefore cannot fire whether or not this guard exists. (Incidentally,
+            // a raw-0 apply would also populate zero-valued entries in per-round healing maps, but
+            // that is unverified and not the reason for this guard.) Scoped to the redirect arm only:
+            // Abundant Renewal's own zero-grant edge case (pre-existing, legacy aggregate fallback
+            // with no per-ally map) is untouched.
             overhealToLowestHpAlly && overhealSum <= 0
                 ? []
                 : overhealByAlly && Object.keys(overhealByAlly).length > 0
