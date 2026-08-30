@@ -2819,7 +2819,7 @@ export function runCombat(rawInput: CombatEngineInput): {
      *
      *  Gated on the MODE, never derived from a data field (roster emptiness, position presence) —
      *  see `RunMode`'s own note on why that distinction is the point of the type. */
-    const liveCountsMeasurable = (input.mode ?? 'dps') !== 'dps';
+    const liveCountsMeasurable = runMode !== 'dps';
 
     // Explicitness guards. These do NOT infer a mode — they refuse an input whose mode and data
     // disagree, which is the difference between validation and the derivation SP-4 removed.
