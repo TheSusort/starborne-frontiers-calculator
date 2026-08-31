@@ -224,6 +224,16 @@ export interface Intent {
          *  and lands on that ally — the AoE-repair routing that supersedes the single-target
          *  overhealAmount + healing.targetId fallback. */
         overhealByAlly?: Record<string, number>;
+        /** #442: the over-repair summed across EVERY target of the triggering repair, the
+         *  CASTER INCLUDED. Owner ruling 2026-08-31: "Chimei's overheal redirect is fed by all
+         *  heal targets, himself included" — so her `lowest-hp-ally` redirect sizes off this,
+         *  not off `overhealAmount`. The two fields differ by exactly the caster's own wasted
+         *  repair, and they are deliberately kept apart: `overhealAmount`/`overhealByAlly` stay
+         *  NON-SELF because Abundant Renewal's clause ("over-repairing a damaged ally") has not
+         *  been re-ruled and its per-ally fan-out would otherwise start shielding the caster.
+         *  Stamped on both arms (cast + reactive); the legacy no-`perTarget` emit's raw
+         *  `heal-performed.overheal` is already self-inclusive and is used as-is. */
+        overhealAmountAllTargets?: number;
         /** The recipients of an `on-shield-applied` event (shield-applied.recipientIds — the
          *  actors whose pool grew). The reaction's buff/effect targets EXACTLY these, mirroring
          *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
@@ -853,7 +863,8 @@ export function registerReactiveListeners(args: {
                     const enqueueForOwnRepair = (
                         casterId: string,
                         perTarget: { targetId: string; overheal?: number }[],
-                        aggregateOverheal: number
+                        aggregateOverheal: number,
+                        allTargetsOverheal: number
                     ) => {
                         if (casterId !== ownerId) return;
                         const repaired = perTarget
@@ -876,6 +887,11 @@ export function registerReactiveListeners(args: {
                                 ...intent.eventCtx,
                                 repairedAllyIds: repaired,
                                 overhealAmount: aggregateOverheal,
+                                // #442: self-INCLUSIVE, for Chimei's redirect only. See the
+                                // field's doc — it is not a variant of overhealAmount, it is a
+                                // different question ("what did this repair waste in total?"
+                                // vs "what did it waste on an ally?").
+                                overhealAmountAllTargets: allTargetsOverheal,
                                 ...(Object.keys(overhealByAlly).length > 0
                                     ? { overhealByAlly }
                                     : {}),
@@ -887,17 +903,33 @@ export function registerReactiveListeners(args: {
                             e.perTarget ?? e.targets.map((targetId) => ({ targetId }));
                         // A cast heal can be self-inclusive and multi-recipient (`target:
                         // 'all-allies'` hands the caster its own side, itself included —
-                        // playerTurn.ts). The clause is "when over-repairing a damaged ALLY", so
-                        // the caster's own wasted repair must not count — mirrors the NON-SELF
-                        // filter on the reactive arm below (`reactive-heal-performed`), which
-                        // computes the same aggregate the same way. Only the legacy no-`perTarget`
-                        // emit (no breakdown to filter) falls back to the event's raw aggregate.
+                        // playerTurn.ts). TWO aggregates come out of that, and which one a
+                        // consumer reads is a per-ability ruling, not a style choice:
+                        //  - `overhealAmount` / `overhealByAlly` — NON-SELF. Abundant Renewal's
+                        //    "over-repairing a damaged ally" (#434, 94515b6e).
+                        //  - `overhealAmountAllTargets` — SELF-INCLUSIVE. Chimei's redirect,
+                        //    owner ruling 2026-08-31 (#442): it is fed by all heal targets, the
+                        //    caster included.
+                        // The reactive arm below computes both the same way. Only the legacy
+                        // no-`perTarget` emit (no breakdown to filter) falls back to the event's
+                        // raw aggregate, which is self-inclusive for both.
                         const aggregateOverheal = e.perTarget
                             ? e.perTarget
                                   .filter((pt) => pt.targetId !== ownerId)
                                   .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
                             : (e.overheal ?? 0);
-                        enqueueForOwnRepair(e.casterId, perTarget, aggregateOverheal);
+                        // #442: the same cast's TOTAL waste, caster included — the basis
+                        // Chimei's redirect reads. The legacy no-`perTarget` emit's raw
+                        // aggregate is already self-inclusive.
+                        const allTargetsOverheal = e.perTarget
+                            ? e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
+                            : (e.overheal ?? 0);
+                        enqueueForOwnRepair(
+                            e.casterId,
+                            perTarget,
+                            aggregateOverheal,
+                            allTargetsOverheal
+                        );
                     });
                     // #434: a repair performed from a LIVE TRIGGER is still a repair this owner
                     // performed — owner ruling 2026-08-30, posed as Cultivator's on-ally-damaged
@@ -930,18 +962,15 @@ export function registerReactiveListeners(args: {
                         enqueueForOwnRepair(
                             e.casterId,
                             e.perTarget,
-                            // NON-SELF excess only. The caster's own entry must not reach the
-                            // aggregate: the clause is "when over-repairing a damaged ALLY", and
-                            // a self-repair wasting HP is not that. Including it would let a
-                            // repair that over-repaired ONLY the caster still size a redirect —
-                            // `repaired` would be non-empty (an ally was repaired, just not
-                            // wastefully), `overhealByAlly` would be empty, and the executor's
-                            // fallback would read the caster's own waste. This also keeps the
-                            // aggregate consistent with overhealByAlly, which already excludes
-                            // self.
+                            // NON-SELF excess only — Abundant Renewal's basis. Its clause is
+                            // "when over-repairing a damaged ALLY", and a self-repair wasting HP
+                            // is not that. Kept consistent with overhealByAlly, which also
+                            // excludes self.
                             e.perTarget
                                 .filter((pt) => pt.targetId !== ownerId)
-                                .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
+                                .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0),
+                            // #442: SELF-INCLUSIVE — Chimei's redirect. Mirrors the cast arm.
+                            e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0)
                         );
                     });
                     break;
@@ -4693,15 +4722,20 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // is unaffected.
         const overhealToLowestHpAlly =
             cfg.basis === 'overheal' && intent.ability.target === 'lowest-hp-ally';
-        // R4: the sum across the triggering repair. Prefers the per-ally breakdown; falls back to
-        // the aggregate for a legacy single-target emit that carries no perTarget.
-        const overhealSum = (() => {
-            const byAlly = intent.eventCtx?.overhealByAlly;
-            if (byAlly && Object.keys(byAlly).length > 0) {
-                return Object.values(byAlly).reduce((sum, v) => sum + v, 0);
-            }
-            return intent.eventCtx?.overhealAmount ?? 0;
-        })();
+        // R4: the sum across the triggering repair — everything it wasted, on EVERY target.
+        //
+        // #442, owner ruling 2026-08-31: "Chimei's overheal redirect is fed by all heal targets,
+        // himself included." Her active is `target: 'all-allies'`, which hands her her own side
+        // with herself in it, so a cast that lands cleanly on damaged allies and wastes only her
+        // own share still redirects — sized by that share. This INVERTS 94515b6e, which read the
+        // clause's "damaged ally" wording as excluding the caster's own waste.
+        //
+        // Deliberately NOT the byAlly/overhealAmount pair: those stay non-self for Abundant
+        // Renewal (see the eventCtx field docs). `overhealAmountAllTargets` is stamped on both
+        // listener arms whenever this trigger enqueues, so the `?? 0` is unreachable in the
+        // engine — it is the shape guard for a hand-built intent, and it fails LOUD (no redirect)
+        // rather than silently restoring the pre-#442 non-self sum.
+        const overhealSum = intent.eventCtx?.overhealAmountAllTargets ?? 0;
         // Non-target-hp bases are owner-scoped → resolve ONCE. For 'target-hp' the basis is the
         // RECIPIENT's max HP, which differs per recipient for all-allies/self reactive heals, so
         // it must be resolved per recipient inside the loop (below). nonTargetHpBasis is unused
@@ -4757,10 +4791,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // (2) SP-4e Task 2 replaced this branch's anchor-only pool gate, so a resolved recipient
         // that is NOT the heal target genuinely gains HP. Neither of those is single-target.
         const recipients =
-            // #435 R4: a zero-sum redirect (no ALLY was over-repaired this cast — e.g. an ally
-            // repaired without waste while the caster over-repaired only herself, which the
-            // listener already excludes from the aggregate) must resolve nobody rather than
-            // healing someone for 0. This embodies two principles. (1) The ability's contract:
+            // #435 R4: a zero-sum redirect (the triggering repair wasted NOTHING, on any target
+            // — every recipient absorbed its whole share) must resolve nobody rather than healing
+            // someone for 0. Since #442 the caster's own waste counts toward that sum, so the
+            // caster-over-repairs-only-herself case is no longer zero and DOES redirect. This embodies two principles. (1) The ability's contract:
             // per overRepairRedirect.test.ts:164-171, a redirect with nothing to redirect applies
             // to nobody. (2) The engine's idiom that zero-magnitude events are not events, adopted
             // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts:4041), `burn > 0`

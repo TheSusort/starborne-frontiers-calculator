@@ -253,9 +253,9 @@ const ally = (opts: {
 
 /** The one enemy: a genuine board-wide AoE (`shape: 'all'`, not `basePattern()`, which would
  *  resolve to a single victim) fast enough to act before Chimei every round. */
-const aoeEnemy = (): CombatEngineInput['enemyAttackers'][number] => ({
+const aoeEnemy = (hit: number = AOE_HIT): CombatEngineInput['enemyAttackers'][number] => ({
     id: 'aoe',
-    stats: { attack: AOE_HIT, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    stats: { attack: hit, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
     chargeCount: 0,
     startCharged: false,
     position: 'M4',
@@ -301,6 +301,9 @@ function runFight(opts: {
     allies: TeamActorEngineInput[];
     implants?: boolean;
     rounds?: number;
+    /** #442's fixture lowers this so nobody is badly hurt when Chimei casts — see that describe
+     *  block. Every other case in this file relies on the 16,000 default. */
+    aoeHit?: number;
 }): Fight {
     const kit = chimeiKit({ implants: opts.implants });
     const bus = createEventBus();
@@ -340,7 +343,7 @@ function runFight(opts: {
         pattern: basePattern(),
         speed: 100,
         teamActors: opts.allies,
-        enemyAttackers: [aoeEnemy()],
+        enemyAttackers: [aoeEnemy(opts.aoeHit)],
         bus,
     } as unknown as CombatEngineInput);
     return { events, kit };
@@ -617,5 +620,91 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
                 (e) => e.type === 'reactive-heal-performed' && e.sourceAbilityId === kit.redirectId
             )
         ).toHaveLength(1);
+    });
+});
+
+/**
+ * #442 — the CAST arm, and the ruling that inverts 94515b6e.
+ *
+ * OWNER RULING 2026-08-31: "Chimei's overheal redirect is fed by all heal targets, himself
+ * included." Her active is `repairs 9% of its Max HP to all allies`, and `target: 'all-allies'`
+ * hands the caster its own side WITH ITSELF IN IT (playerTurn.ts) — so her own wasted share is
+ * part of the sum R4 sizes the redirect from. 94515b6e read the clause's "damaged ally" wording
+ * the other way and filtered her entry out; this fixture is what would have caught that.
+ *
+ * WHAT MAKES IT A MEASUREMENT. The assertion is DIFFERENTIAL, not absolute: the redirect must
+ * equal ally-waste + Chimei's-own-waste, and must NOT equal ally-waste alone — which is exactly
+ * the number the pre-#442 code produced. Both quantities are asserted non-zero first, so the
+ * comparison cannot pass by both being 0. Undo the listener's self-inclusive aggregate and the
+ * `not.toBe` arm reddens.
+ *
+ * FIXTURE. Nobody is Stealthed, so the start-of-round passive repairs NOBODY and cannot
+ * contribute a redirect — every redirect here comes from the cast (asserted). The AoE is dropped
+ * to 200 so that when Chimei casts, she and both allies are only lightly damaged and her 9,000
+ * repair wastes on all three.
+ *
+ * Heal modifiers stay neutral (no Repair Up, no implants, `healModifier` 0) — the open
+ * heal-modifier ruling must not be smuggled in as a decided answer.
+ */
+describe('#442 — the caster’s own over-repair feeds the redirect', () => {
+    beforeAll(requireReferenceData);
+
+    type HealPerformed = Extract<CombatEvent, { type: 'heal-performed' }>;
+
+    /** Two plain allies, neither Stealthed: the passive repair reaches nobody. */
+    const NO_STEALTH = (): TeamActorEngineInput[] => [
+        ally({ id: TOPPED_ID, position: 'M4' }),
+        ally({ id: LOW_ID, position: 'M1' }),
+    ];
+
+    const wasteOn = (e: HealPerformed, id: string): number =>
+        (e.perTarget ?? [])
+            .filter((pt) => pt.targetId === id)
+            .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0);
+    const allyWaste = (e: HealPerformed): number =>
+        (e.perTarget ?? [])
+            .filter((pt) => pt.targetId !== CHIMEI_ID)
+            .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0);
+
+    function castFight() {
+        const { events, kit } = runFight({ allies: NO_STEALTH(), aoeHit: 200 });
+        const casts = events.filter(
+            (e): e is HealPerformed => e.type === 'heal-performed' && e.casterId === CHIMEI_ID
+        );
+        // The passive contributes nothing here — no Stealthed ally — so every redirect in the run
+        // is cast-driven. Without this the sizing assertion could be reading a passive redirect.
+        expect(repairsBy(events, kit.passiveRepairId)).toHaveLength(0);
+        expect(casts.length).toBeGreaterThan(0);
+        return { events, kit, cast: casts[0] };
+    }
+
+    it('the active reaches Chimei herself and wastes repair on her', () => {
+        const { cast } = castFight();
+        expect((cast.perTarget ?? []).map((pt) => pt.targetId)).toContain(CHIMEI_ID);
+        expect(wasteOn(cast, CHIMEI_ID)).toBeGreaterThan(0);
+    });
+
+    it('sizes the redirect from ALL heal targets, the caster included', () => {
+        const { events, kit, cast } = castFight();
+
+        const self = wasteOn(cast, CHIMEI_ID);
+        const allies = allyWaste(cast);
+        // Non-emptiness premises: with either at 0 the two candidate answers coincide and the
+        // discriminating assertion below would be vacuous.
+        expect(self).toBeGreaterThan(0);
+        expect(allies).toBeGreaterThan(0);
+
+        const redirects = repairsBy(events, kit.redirectId).filter((r) => r.round === cast.round);
+        expect(redirects).toHaveLength(1);
+        expect(redirects[0].amount).toBe(allies + self);
+        // The pre-#442 answer, stated explicitly so a regression cannot pass by coincidence.
+        expect(redirects[0].amount).not.toBe(allies);
+    });
+
+    it('still never lands the redirect on Chimei herself (R3)', () => {
+        const { events, kit, cast } = castFight();
+        const redirects = repairsBy(events, kit.redirectId).filter((r) => r.round === cast.round);
+        expect(redirects).toHaveLength(1);
+        expect(redirects[0].perTarget.map((pt) => pt.targetId)).not.toContain(CHIMEI_ID);
     });
 });

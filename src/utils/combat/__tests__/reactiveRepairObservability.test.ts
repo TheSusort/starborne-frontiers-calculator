@@ -209,6 +209,10 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(0);
         expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
+        // #442: the SAME event carries the caster's waste on the self-inclusive field, which
+        // Chimei's redirect reads. Non-zero here is what proves the two fields are computed
+        // independently rather than one being derived from the other.
+        expect(intents[0].eventCtx?.overhealAmountAllTargets).toBe(4_000);
     });
 
     it('ignores a reactive repair with no non-self recipient', () => {
@@ -295,6 +299,43 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(0);
         expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
+        // #442, cast arm: same split as the reactive arm above.
+        expect(intents[0].eventCtx?.overhealAmountAllTargets).toBe(4_000);
+    });
+
+    // #442, owner ruling 2026-08-31. The ally-scoped aggregate and the all-targets aggregate must
+    // diverge by exactly the caster's own entry on a cast that wastes on BOTH — the case where a
+    // single shared field would have forced Abundant Renewal and Chimei's redirect to agree.
+    it('splits ally-only from all-targets over-repair on a cast that wastes on both', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [{ ability: fontOfPower(), sourceSlot: 'passive' }],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'heal-performed',
+            casterId: OWNER_ID,
+            targets: [ALLY_ID, OWNER_ID],
+            round: 1,
+            amount: 10_000,
+            overheal: 7_000,
+            perTarget: [
+                { targetId: ALLY_ID, amount: 5_000, overheal: 3_000 },
+                { targetId: OWNER_ID, amount: 5_000, overheal: 4_000 },
+            ],
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(3_000);
+        expect(intents[0].eventCtx?.overhealByAlly).toEqual({ [ALLY_ID]: 3_000 });
+        expect(intents[0].eventCtx?.overhealAmountAllTargets).toBe(7_000);
     });
 });
 

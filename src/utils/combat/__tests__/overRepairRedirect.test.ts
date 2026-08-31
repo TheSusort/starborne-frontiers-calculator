@@ -44,6 +44,13 @@ function run(args: {
     ability: Ability;
     overhealByAlly?: Record<string, number>;
     overhealAmount?: number;
+    /**
+     * #442: the CASTER's own wasted repair on the triggering cast. The listener keeps it out of
+     * `overhealAmount`/`overhealByAlly` (Abundant Renewal's non-self basis) and folds it into
+     * `overhealAmountAllTargets` (Chimei's redirect basis) — this harness mirrors that split so a
+     * test can move one without the other.
+     */
+    casterOverheal?: number;
     lowestHpAllyId?: string | undefined;
 }) {
     const bus = createEventBus();
@@ -70,13 +77,20 @@ function run(args: {
         recipientActor: (id: string) => ({ id }) as unknown as CombatActor,
     } as unknown as IntentExecContext['healing'];
 
+    // The ALLY-only excess, exactly as the listener computes it: the per-ally breakdown's sum
+    // when present, else the legacy single-target aggregate.
+    const allyOverheal = args.overhealByAlly
+        ? Object.values(args.overhealByAlly).reduce((sum, v) => sum + v, 0)
+        : (args.overhealAmount ?? 5_000);
+
     const intent: Intent = {
         ownerId: OWNER_ID,
         ability: args.ability,
         sourceSlot: 'passive',
         eventCtx: {
             repairedAllyIds: [ALLY_A, ALLY_B],
-            overhealAmount: args.overhealAmount ?? 5_000,
+            overhealAmount: allyOverheal,
+            overhealAmountAllTargets: allyOverheal + (args.casterOverheal ?? 0),
             ...(args.overhealByAlly ? { overhealByAlly: args.overhealByAlly } : {}),
         },
     } as unknown as Intent;
@@ -149,7 +163,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         expect(heals[0].raw).toBe(5_000);
     });
 
-    it('falls back to the aggregate overhealAmount when no per-ally breakdown is present', () => {
+    it('sizes from a legacy single-target emit that carries no per-ally breakdown', () => {
         const { heals } = run({
             ability: redirect(),
             overhealAmount: 4_000,
@@ -158,13 +172,42 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         expect(heals).toEqual([{ rid: LOWEST, raw: 4_000 }]);
     });
 
-    // The caster's OWN wasted repair is not an ally over-repair. Guards the aggregate fallback:
-    // an ally repaired without waste + the caster over-repairing herself must redirect NOTHING.
-    // Pre-fix on the Task 2 arm this sized a redirect from her own waste.
-    it('ignores the caster’s own over-repair when no ALLY was over-repaired', () => {
+    // #442, owner ruling 2026-08-31: "Chimei's overheal redirect is fed by all heal targets,
+    // himself included." Her active is `target: 'all-allies'`, so a cast that repairs damaged
+    // allies cleanly and wastes only HER OWN share still redirects, sized by that share.
+    // This INVERTS 94515b6e, whose test asserted exactly the opposite here.
+    it('counts the caster’s OWN over-repair even when no ALLY was over-repaired', () => {
         const { heals } = run({
             ability: redirect(),
             overhealAmount: 0,
+            casterOverheal: 4_000,
+            lowestHpAllyId: LOWEST,
+        });
+        expect(heals).toEqual([{ rid: LOWEST, raw: 4_000 }]);
+    });
+
+    // ... and she is never the RECIPIENT of her own redirect (R3, screenshot-confirmed: Chimei
+    // shows the base heal, the redirect lands on someone else). The engine's `lowest-hp-ally`
+    // selector excludes the owner; asserted here so the sizing inversion above cannot be misread
+    // as making the caster a candidate.
+    it('never redirects onto the caster herself', () => {
+        const { heals } = run({
+            ability: redirect(),
+            overhealAmount: 0,
+            casterOverheal: 4_000,
+            lowestHpAllyId: LOWEST,
+        });
+        expect(heals).toHaveLength(1);
+        expect(heals[0].rid).not.toBe(OWNER_ID);
+    });
+
+    // The R4 zero-sum guard still stands, now over the SELF-INCLUSIVE sum: a repair that wasted
+    // nothing on anyone redirects to nobody rather than healing someone for 0.
+    it('redirects nobody when the triggering repair wasted nothing at all', () => {
+        const { heals } = run({
+            ability: redirect(),
+            overhealAmount: 0,
+            casterOverheal: 0,
             lowestHpAllyId: LOWEST,
         });
         expect(heals).toEqual([]);
@@ -185,6 +228,23 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         const { shields } = run({
             ability: abundantRenewal(),
             overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            lowestHpAllyId: LOWEST,
+        });
+        expect(shields).toEqual([
+            { rid: ALLY_A, raw: 1_500 },
+            { rid: ALLY_B, raw: 1_000 },
+        ]);
+    });
+
+    // #442 is scoped to Chimei's clause. Abundant Renewal's ("when over-repairing a damaged
+    // ally") has NOT been re-ruled, so the caster's own waste must not reach it: same event,
+    // same listener, 4,000 of caster waste on top of the ally excess, and the shields are
+    // byte-identical to the test above — no self shield, no inflated ally shield.
+    it('does not let the caster’s own over-repair reach Abundant Renewal', () => {
+        const { shields } = run({
+            ability: abundantRenewal(),
+            overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            casterOverheal: 4_000,
             lowestHpAllyId: LOWEST,
         });
         expect(shields).toEqual([
