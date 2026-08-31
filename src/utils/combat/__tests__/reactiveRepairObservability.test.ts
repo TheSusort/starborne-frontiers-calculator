@@ -187,7 +187,7 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             sourceAbilityId: 'ab-some-passive-repair',
         });
         expect(intents).toHaveLength(1);
-        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([ALLY_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
         expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [ALLY_ID]: 4_000 });
     });
@@ -197,7 +197,7 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
     // (94515b6e). The owner ruled both consumers the other way — Chimei's redirect "is fed by all
     // heal targets, himself included", and a ship that over-repairs itself while healing the team
     // does earn Abundant Renewal's shield. So the caster's entry now reaches BOTH the aggregate
-    // and the per-recipient map, while `repairedAllyIds` — a different question, who the repair
+    // and the per-recipient map, while `repairedRecipientIds` — a different question, who the repair
     // REACHED — stays non-self.
     it("counts the caster's own over-repair in the overheal aggregate", () => {
         const intents = captureIntentsForReactiveRepair({
@@ -209,12 +209,19 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             ],
         });
         expect(intents).toHaveLength(1);
-        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        // Self-inclusive since #444 — the repair reached the caster too, so Font of Power's grant
+        // list carries it.
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([ALLY_ID, OWNER_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
         expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
     });
 
-    it('ignores a reactive repair with no non-self recipient', () => {
+    // #444, owner ruling 2026-08-31: "font of power procs on all heals, including self heals."
+    // This case used to assert the opposite — a repair reaching only the caster enqueued nothing,
+    // so the implant never rolled. The buff now fans out onto the caster like any other repaired
+    // ship. (The shipped implant text still says "when applying repair to another ally"; the
+    // ruling is from observed play and overrides it.)
+    it('enqueues Font of Power off a repair that reached ONLY the caster', () => {
         const bus = createEventBus();
         const intents: Intent[] = [];
         registerReactiveListeners({
@@ -236,7 +243,8 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             perTarget: [{ targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }],
             sourceAbilityId: 'ab-self-repair',
         });
-        expect(intents).toHaveLength(0);
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([OWNER_ID]);
     });
 
     // The OTHER arm of that gate, re-ruled 2026-08-31. An `overheal`-BASIS reaction is sized by
@@ -251,13 +259,15 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             perTarget: [{ targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }],
         });
         expect(intents).toHaveLength(1);
-        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([]);
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([OWNER_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
         expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
     });
 
     // …and only when that repair wasted something. A caster-only repair absorbed in full has
-    // nothing to redirect, and must not burn an enqueue — one enqueue is one proc-gate roll.
+    // nothing to redirect, and must not burn an enqueue — one enqueue is one proc-gate roll. That
+    // requirement is ENGINEERING, not an owner ruling, and it is scoped to the OVERHEAL shape:
+    // Font of Power is sized by nothing and enqueues off the same event (case above).
     it('does NOT enqueue an overheal-sized reaction off a caster-only repair that wasted nothing', () => {
         const intents = captureIntentsForReactiveRepair({
             abilities: [redirect()],
@@ -265,6 +275,51 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             perTarget: [{ targetId: OWNER_ID, amount: 5_000 }],
         });
         expect(intents).toHaveLength(0);
+    });
+
+    // The other half of #444's ruling — "heal over time excluded" — needs no code, and this is
+    // the tripwire that keeps it that way. A HoT tick emits `hot-ticked`, which has NO subscriber
+    // anywhere in the engine ("a tick is not a performed repair", locked 2026-08-23; see the R2
+    // note in playerTurn.ts). If some future change routed ticks through the repair events, this
+    // reddens instead of silently arming every on-repair implant once per tick per holder.
+    it('is not armed by a heal-over-time tick', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [
+                        { ability: fontOfPower(), sourceSlot: 'passive' },
+                        { ability: redirect(), sourceSlot: 'passive' },
+                    ],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'hot-ticked',
+            holderId: ALLY_ID,
+            applierId: OWNER_ID,
+            amount: 5_000,
+            round: 1,
+        });
+        expect(intents).toHaveLength(0);
+
+        // …and the instrument could have reported the opposite: the SAME bus, with the SAME two
+        // listeners armed, enqueues both of them off a real repair event. Without this arm a
+        // zero above would be indistinguishable from a bus that dropped the emit.
+        bus.emit({
+            type: 'reactive-heal-performed',
+            casterId: OWNER_ID,
+            round: 1,
+            amount: 5_000,
+            perTarget: [{ targetId: ALLY_ID, amount: 5_000, overheal: 4_000 }],
+            sourceAbilityId: 'ab-some-passive-repair',
+        });
+        expect(intents).toHaveLength(2);
     });
 
     it('ignores a reactive repair performed by someone else', () => {
@@ -322,7 +377,9 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             ],
         });
         expect(intents).toHaveLength(1);
-        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        // Self-inclusive since #444 — the repair reached the caster too, so Font of Power's grant
+        // list carries it.
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([ALLY_ID, OWNER_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
         expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
     });
@@ -363,8 +420,8 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             [ALLY_ID]: 3_000,
             [OWNER_ID]: 4_000,
         });
-        // …and the non-self list is untouched by the ruling: the repair reached one ally.
-        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
+        // …and the recipient list carries both, self-inclusive since #444.
+        expect(intents[0].eventCtx?.repairedRecipientIds).toEqual([ALLY_ID, OWNER_ID]);
     });
 });
 

@@ -2948,10 +2948,15 @@ describe('D-PR8 Task 6 integration — Ambush gate via seeded Stealth (start-of-
 // Font of Power (legendary, procChance 0.16): "When applying repair to another ally,
 // there is a 16% chance to grant Power Infused Nanobots for 1 turn." It rides the
 // `on-own-repair-to-ally` reactive trigger — a self-scoped listener on `heal-performed`
-// matching casterId === ownerId with >= 1 NON-self recipient. One enqueue per qualifying
-// repair cast → one proc-gate roll; the grant fans out to every repaired non-self ally
-// via eventCtx.repairedAllyIds. Power Infused Nanobots now grants flat attack = 100% of
+// matching casterId === ownerId with >= 1 recipient. One enqueue per qualifying repair
+// cast → one proc-gate roll; the grant fans out to EVERY repaired ship via
+// eventCtx.repairedRecipientIds. Power Infused Nanobots now grants flat attack = 100% of
 // the caster's attack (snapshotted at grant time, D-PR10); we assert PRESENCE + fan-out.
+//
+// ⚠️ #444, owner ruling 2026-08-31: "font of power procs on all heals, including self
+// heals." The implant's own text says "another ally" and the ruling is from observed play,
+// which overrides it — so the carrier is a recipient of its own team repair, and a repair
+// that reaches only the carrier procs too. These cases asserted the opposite until then.
 //
 // Driven through `simulateBattle` because the carrier must repair an OTHER ally — the
 // engine routes a non-focus team actor's bare ally-repair to the heal target (the focus
@@ -3099,18 +3104,25 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
         const FOCUS = 'attacker';
         const CARRIER = 'p:carrier:1';
 
-        // The repaired non-self ally (the focus) carries the buff at least once.
+        // The repaired ally (the focus) carries the buff at least once.
         expect(buffed.has(FOCUS)).toBe(true);
-        // The carrier (the caster / repairer) is excluded — it is not a repaired non-self ally.
-        expect(buffed.has(CARRIER)).toBe(false);
+        // …and so does the carrier: this repair reaches it too, and a self-heal procs (#444).
+        expect(buffed.has(CARRIER)).toBe(true);
         // No enemy ever received the grant (ally-side only).
         const enemyIds = result.roster.filter((r) => r.side === 'enemy').map((r) => r.actorId);
         for (const id of enemyIds) expect(buffed.has(id)).toBe(false);
     });
 
-    it('pure self-only repair (no other ally repaired) grants NOTHING', () => {
-        // The carrier repairs ITSELF only → heal-performed targets = [carrier] → the
-        // on-own-repair-to-ally listener finds zero non-self recipients → never enqueues.
+    it('pure self-only repair grants the buff to the carrier itself (#444)', () => {
+        // The carrier repairs ITSELF only → heal-performed targets = [carrier]. That used to find
+        // zero non-self recipients and never enqueue; per the 2026-08-31 ruling it procs, and the
+        // only recipient to fan out to is the carrier.
+        //
+        // The RNG is forced here because the assertion changed KIND: "nothing was granted" needed
+        // no proc, "the carrier was granted" needs one, and this fixture's 16 rolls at the fixed
+        // seed are not guaranteed to fire. Forcing, not un-seeding.
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
         const result = simulateBattle(
             {
                 playerTeam: [
@@ -3140,12 +3152,15 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
             getGearPiece
         );
 
-        expect(buffedActors(result).size).toBe(0);
+        const buffedSelfOnly = buffedActors(result);
+        expect(buffedSelfOnly.has('p:carrier:1')).toBe(true);
+        // Nobody else: the repair reached nobody else.
+        expect(buffedSelfOnly.size).toBe(1);
     });
 
-    it('AoE repair reaching multiple OTHER allies grants the buff to all of them (one proc, fan-out)', () => {
-        // The carrier (player[2]) repairs ALL allies → recipients = every player id. The two
-        // OTHER allies (focus + ally1) are repaired non-self → a single proc fan-outs to both.
+    it('AoE repair reaching multiple allies grants the buff to all of them, carrier included (one proc, fan-out)', () => {
+        // The carrier (player[2]) repairs ALL allies → recipients = every player id, itself
+        // included → a single proc fans out to all three.
         // Font of Power's on-own-repair-to-ally proc gate now carries a `${ownerId}:proc`
         // stream key (triggers.ts) — under SP-0's keyed test provider, this specific carrier's
         // `p:carrier:2:proc` sub-stream happens to fail all 16 rolls at the fixed test seed
@@ -3197,10 +3212,11 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
         const ALLY1 = 'p:ally1:1';
         const CARRIER = 'p:carrier:2';
 
-        // Both OTHER allies received the grant; the carrier (caster) did not.
+        // Both other allies received the grant — and so did the carrier, which its own
+        // all-allies repair reaches (#444).
         expect(buffed.has(FOCUS)).toBe(true);
         expect(buffed.has(ALLY1)).toBe(true);
-        expect(buffed.has(CARRIER)).toBe(false);
+        expect(buffed.has(CARRIER)).toBe(true);
     });
 
     // ── D-PR10 Task 4 — caster-attack snapshot into the grant ────────────────

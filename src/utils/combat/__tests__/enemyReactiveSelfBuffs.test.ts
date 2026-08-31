@@ -591,7 +591,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
             });
         };
 
-        it('an enemy carrier that repairs another enemy ally grants Power Infused Nanobots to that ally; carrier excluded; no PLAYER actor gets it', () => {
+        it('an enemy carrier that repairs its own side grants Power Infused Nanobots to that ally AND to itself; no PLAYER actor gets it', () => {
             // ENEMY carrier (support, AoE all-allies repair) + a plain enemy ally that is the
             // repaired NON-self recipient. A plain ship anchors the PLAYER team. The carrier
             // repairs every enemy ally each round → the OTHER enemy ally is a non-self
@@ -627,10 +627,12 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
             const ENEMY_ALLY = 'e:ally:1';
             const playerIds = idsBySide(result, 'player');
 
-            // The repaired non-self ENEMY ally carries the buff at least once.
+            // The repaired ENEMY ally carries the buff at least once.
             expect(buffed.has(ENEMY_ALLY)).toBe(true);
-            // The carrier (the repairer) is excluded — it is not a repaired non-self ally.
-            expect(buffed.has(CARRIER)).toBe(false);
+            // …and so does the carrier: its own all-allies repair reaches itself, and #444 ruled
+            // that a self-heal procs the implant. Team-symmetric with the player-side case in
+            // equipmentAbilities.integration.test.ts.
+            expect(buffed.has(CARRIER)).toBe(true);
             // Non-vacuous: a player actor exists, and NONE received it (ally-side only,
             // and the enemy carrier's own side at that — never leaks to the player team).
             expect(playerIds.length).toBeGreaterThan(0);
