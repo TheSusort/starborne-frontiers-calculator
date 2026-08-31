@@ -301,11 +301,25 @@ function runFight(opts: {
     allies: TeamActorEngineInput[];
     implants?: boolean;
     rounds?: number;
-    /** #442's fixture lowers this so nobody is badly hurt when Chimei casts — see that describe
-     *  block. Every other case in this file relies on the 16,000 default. */
+    /** The cast-arm fixture lowers this so nobody is badly hurt when Chimei casts — see that
+     *  describe block. Every other case in this file relies on the 16,000 default. */
     aoeHit?: number;
+    /** Put a permanent Stealth on CHIMEI, so her Stealth-gated start-of-round repair reaches
+     *  HER — the caster-only-repair fixture. Same self-targeted aura the allies use, appended to
+     *  her own passive slot so the status lands in her own store. */
+    stealthChimei?: boolean;
 }): Fight {
     const kit = chimeiKit({ implants: opts.implants });
+    const skills = opts.stealthChimei
+        ? {
+              ...kit.skills,
+              slots: kit.skills.slots.map((slot) =>
+                  slot.slot === 'passive'
+                      ? { ...slot, abilities: [...slot.abilities, stealthAura(CHIMEI_ID)] }
+                      : slot
+              ),
+          }
+        : kit.skills;
     const bus = createEventBus();
     const events: CombatEvent[] = [];
     const captured: CombatEvent['type'][] = [
@@ -322,7 +336,7 @@ function runFight(opts: {
         critDamage: 0,
         defensePenetration: 0,
         chargeCount: 0,
-        shipSkills: kit.skills,
+        shipSkills: skills,
         numRounds: opts.rounds ?? 2,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -383,12 +397,13 @@ const nanobotRecipients = (events: CombatEvent[]): string[] =>
         .filter((e): e is BuffApplied => e.type === 'buff-applied' && e.buffName === NANOBOTS)
         .map((e) => e.actorId);
 
-/** Summed clipped excess of a repair across its non-caster recipients — what R4 says the redirect
- *  is sized from, read off the engine's own event rather than recomputed. */
-const allyOverheal = (e: ReactiveHeal): number =>
-    e.perTarget
-        .filter((pt) => pt.targetId !== CHIMEI_ID)
-        .reduce((sum, pt) => sum + (pt.overheal ?? 0), 0);
+/** Summed clipped excess of a repair across EVERY recipient, Chimei included — what R4 says the
+ *  redirect is sized from (owner ruling 2026-08-31), read off the engine's own event rather than
+ *  recomputed. In the Stealth-gated fixtures below she is never a recipient of her own passive, so
+ *  this equalled the ally-only sum before the ruling too; the caster-only fixture at the bottom of
+ *  the file is where the difference is measured. */
+const totalOverheal = (e: ReactiveHeal): number =>
+    e.perTarget.reduce((sum, pt) => sum + (pt.overheal ?? 0), 0);
 
 /** One Stealthed ally (over-repaired by the passive) and one un-Stealthed ally (the redirect's
  *  recipient). The Stealthed one is at the FRONT. */
@@ -460,7 +475,7 @@ describe('#435 acceptance — the redirect fires off Chimei’s start-of-round p
             // Nothing consumed: the recipient was already full. The repair still happened.
             { targetId: TOPPED_ID, amount: repair.amount, overheal: repair.amount },
         ]);
-        expect(redirect.amount).toBe(allyOverheal(repair));
+        expect(redirect.amount).toBe(totalOverheal(repair));
     });
 
     // R3, first half — the just-over-repaired ally is ELIGIBLE. Round 1: both allies sit at 100%
@@ -487,10 +502,10 @@ describe('#435 acceptance — the redirect fires off Chimei’s start-of-round p
         const [redirect] = repairsBy(window, kit.redirectId);
         // The repair landed on `topped` and took it to full…
         expect(repair.perTarget.map((pt) => pt.targetId)).toEqual([TOPPED_ID]);
-        expect(allyOverheal(repair)).toBeGreaterThan(0);
+        expect(totalOverheal(repair)).toBeGreaterThan(0);
         // …so the lowest ally, measured after it, is the one the passive never reached.
         expect(redirect.perTarget.map((pt) => pt.targetId)).toEqual([LOW_ID]);
-        expect(redirect.amount).toBe(allyOverheal(repair));
+        expect(redirect.amount).toBe(totalOverheal(repair));
     });
 
     // R4 — an AoE over-repair produces ONE redirect sized by the SUM, not one per ally. Both
@@ -517,7 +532,7 @@ describe('#435 acceptance — the redirect fires off Chimei’s start-of-round p
         const redirects = repairsBy(window, kit.redirectId);
         expect(redirects).toHaveLength(1);
         expect(redirects[0].perTarget).toHaveLength(1);
-        expect(redirects[0].amount).toBe(allyOverheal(repair));
+        expect(redirects[0].amount).toBe(totalOverheal(repair));
     });
 });
 
@@ -566,7 +581,7 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
         const window = startOfRoundWindow(events, 2);
 
         const [repair] = repairsBy(window, kit.passiveRepairId);
-        expect(allyOverheal(repair)).toBeGreaterThan(0);
+        expect(totalOverheal(repair)).toBeGreaterThan(0);
         const onTopped = shields(window).filter((s) => s.recipientIds.includes(TOPPED_ID));
         expect(onTopped).toHaveLength(1);
         expect(onTopped[0].amount).toBeGreaterThan(0);
@@ -593,7 +608,7 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
         expect(redirects).toHaveLength(1);
         const [redirect] = redirects;
         expect(redirect.perTarget.map((pt) => pt.targetId)).toEqual([LOW_ID]);
-        const redirectExcess = allyOverheal(redirect);
+        const redirectExcess = totalOverheal(redirect);
         expect(redirectExcess).toBeGreaterThan(0);
 
         // ARM 1 (R2) — Abundant Renewal converted the redirect's OWN excess to a shield, on the
@@ -606,7 +621,7 @@ describe('#435 acceptance — Font of Power and Abundant Renewal off a PASSIVE r
         const onTopped = shields(window).filter((s) => s.recipientIds.includes(TOPPED_ID));
         expect(onTopped).toHaveLength(1);
         expect(onLow[0].amount).toBeGreaterThan(0);
-        expect(onLow[0].amount * allyOverheal(repair)).toBe(onTopped[0].amount * redirectExcess);
+        expect(onLow[0].amount * totalOverheal(repair)).toBe(onTopped[0].amount * redirectExcess);
 
         // ARM 2 (R-B) — Font of Power rolled its proc off the redirect too: the redirect's
         // recipient carries the grant, which only the redirect could have delivered (the passive
@@ -706,5 +721,101 @@ describe('#442 — the caster’s own over-repair feeds the redirect', () => {
         const redirects = repairsBy(events, kit.redirectId).filter((r) => r.round === cast.round);
         expect(redirects).toHaveLength(1);
         expect(redirects[0].perTarget.map((pt) => pt.targetId)).not.toContain(CHIMEI_ID);
+    });
+});
+
+/**
+ * A repair that reaches ONLY the caster still redirects.
+ *
+ * OWNER RULING 2026-08-31, asked as: *Chimei's start-of-round passive reaches only herself (she is
+ * the only Stealthed ship) and over-repairs — does the redirect fire?* Answer: it should. Before
+ * this, the listener refused to enqueue anything on `on-own-repair-to-ally` unless the repair had
+ * at least one NON-SELF recipient, so this repair produced no redirect at all.
+ *
+ * The gate did not simply go away — it became shape-scoped. An `overheal`-BASIS reaction is sized
+ * by what a repair WASTED, so a caster-only repair qualifies; everything else on the trigger still
+ * needs a non-self recipient, because Font of Power grants to `repairedAllyIds` and an empty list
+ * makes that branch fall through to the whole living side.
+ *
+ * FIXTURE. Chimei carries the Stealth aura and the two allies do not, so her Stealth-gated
+ * start-of-round repair reaches exactly one recipient: herself. Round 1's start-of-round window is
+ * read, where every actor is still at FULL HP — so the repair wastes all of itself, and the window
+ * predates any turn, so nothing in it can have come from a cast.
+ *
+ * Heal modifiers stay neutral, as everywhere in this file — the open heal-modifier ruling is not
+ * decided here.
+ */
+describe('a repair that reaches ONLY the caster still redirects', () => {
+    beforeAll(requireReferenceData);
+
+    const CASTER_ONLY = () => ({
+        allies: [ally({ id: TOPPED_ID, position: 'M4' }), ally({ id: LOW_ID, position: 'M1' })],
+        stealthChimei: true,
+    });
+
+    it('the start-of-round passive reaches Chimei and nobody else', () => {
+        const { events, kit } = runFight(CASTER_ONLY());
+        const window = startOfRoundWindow(events, 1);
+
+        const repairs = repairsBy(window, kit.passiveRepairId);
+        expect(repairs).toHaveLength(1);
+        expect(repairs[0].perTarget.map((pt) => pt.targetId)).toEqual([CHIMEI_ID]);
+        // Round 1: she is at full HP, so the whole repair is wasted. Without this the sizing
+        // assertion below could be comparing two zeroes.
+        expect(repairs[0].perTarget[0].overheal ?? 0).toBeGreaterThan(0);
+    });
+
+    it('redirects that waste to an ally', () => {
+        const { events, kit } = runFight(CASTER_ONLY());
+        const window = startOfRoundWindow(events, 1);
+
+        const [repair] = repairsBy(window, kit.passiveRepairId);
+        const redirects = repairsBy(window, kit.redirectId);
+        expect(redirects).toHaveLength(1);
+        expect(redirects[0].amount).toBe(repair.perTarget[0].overheal);
+        // R3 still holds: she is the source of the waste, never the recipient of the redirect.
+        const recipients = redirects[0].perTarget.map((pt) => pt.targetId);
+        expect(recipients).toHaveLength(1);
+        expect(recipients).not.toContain(CHIMEI_ID);
+    });
+
+    // The other half of the 2026-08-31 rulings, end to end: a ship that over-repairs ITSELF earns
+    // Abundant Renewal's shield. Before the ruling the listener filtered the caster out of the
+    // per-recipient map, so this repair — which wasted on nobody BUT her — shielded no one at all.
+    //
+    // RNG: both streams forced to 0 so Font of Power's 16% proc always fires, mirroring the
+    // implant fixture above. Seeding, not un-seeding (`resetRateGateRng` is the forbidden call).
+    //
+    // ⚠️ PROBE NOTE — this case needs the FULL pre-ruling state to redden, not half of it.
+    // Re-filtering the caster out of the per-recipient map ALONE leaves it green: with the map
+    // empty the executor falls back to the aggregate + `healing.targetId`, and this fixture's heal
+    // target IS Chimei, so the shield lands on her by the other road. Only filtering the caster out
+    // of the aggregate as well — the state 94515b6e actually shipped — reddens it (measured
+    // 2026-08-31, along with the two cases above).
+    it('Abundant Renewal shields the CASTER off its own wasted repair', () => {
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
+        const { events, kit } = runFight({ ...CASTER_ONLY(), implants: true });
+        const window = startOfRoundWindow(events, 1);
+
+        const [repair] = repairsBy(window, kit.passiveRepairId);
+        expect(repair.perTarget.map((pt) => pt.targetId)).toEqual([CHIMEI_ID]);
+        const selfWaste = totalOverheal(repair);
+        expect(selfWaste).toBeGreaterThan(0);
+
+        const onChimei = shields(window).filter((sh) => sh.recipientIds.includes(CHIMEI_ID));
+        expect(onChimei).toHaveLength(1);
+        expect(onChimei[0].amount).toBeGreaterThan(0);
+
+        // Sized RELATIONALLY against the redirect's own excess, which the same implant shielded at
+        // the same rate — so no percentage is baked in and the open heal-modifier ruling stays out
+        // of the fixture.
+        const [redirect] = repairsBy(window, kit.redirectId);
+        const redirectExcess = totalOverheal(redirect);
+        expect(redirectExcess).toBeGreaterThan(0);
+        const recipientId = redirect.perTarget[0].targetId;
+        const onRecipient = shields(window).filter((sh) => sh.recipientIds.includes(recipientId));
+        expect(onRecipient).toHaveLength(1);
+        expect(onChimei[0].amount * redirectExcess).toBe(onRecipient[0].amount * selfWaste);
     });
 });

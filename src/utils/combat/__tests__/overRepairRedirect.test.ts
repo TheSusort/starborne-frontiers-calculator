@@ -1,8 +1,9 @@
 /**
  * #435 Task 3 — an `overheal`-basis HEAL with an explicit `lowest-hp-ally` target.
  *
- * Abundant Renewal's semantics are per-ally fan-out: each over-repaired ally gets its own
- * shield, sized from its OWN clipped excess, and the executor OVERRIDES ability.target to do it.
+ * Abundant Renewal's semantics are per-recipient fan-out: each over-repaired recipient gets its
+ * own shield — the caster included, per the owner ruling of 2026-08-31 — sized from its OWN
+ * clipped excess, and the executor OVERRIDES ability.target to do it.
  * Chimei's redirect is the opposite shape — ONE repair, on the lowest current HP% ally, sized
  * from the SUM of everything the triggering repair wasted (owner ruling R4, 2026-08-30).
  *
@@ -42,15 +43,14 @@ const abundantRenewal = (): Ability => ({
 
 function run(args: {
     ability: Ability;
-    overhealByAlly?: Record<string, number>;
-    overhealAmount?: number;
     /**
-     * #442: the CASTER's own wasted repair on the triggering cast. The listener keeps it out of
-     * `overhealAmount`/`overhealByAlly` (Abundant Renewal's non-self basis) and folds it into
-     * `overhealAmountAllTargets` (Chimei's redirect basis) — this harness mirrors that split so a
-     * test can move one without the other.
+     * Per-recipient clipped over-repair of the triggering repair, keyed by recipient — the map the
+     * listener stamps. Since the owner rulings of 2026-08-31 it INCLUDES the caster's own entry,
+     * so a test models "the caster wasted repair on herself" by keying OWNER_ID here.
      */
-    casterOverheal?: number;
+    overhealByRecipient?: Record<string, number>;
+    /** Legacy single-target emit: no per-recipient breakdown, only the aggregate. */
+    overhealAmount?: number;
     lowestHpAllyId?: string | undefined;
 }) {
     const bus = createEventBus();
@@ -77,10 +77,10 @@ function run(args: {
         recipientActor: (id: string) => ({ id }) as unknown as CombatActor,
     } as unknown as IntentExecContext['healing'];
 
-    // The ALLY-only excess, exactly as the listener computes it: the per-ally breakdown's sum
-    // when present, else the legacy single-target aggregate.
-    const allyOverheal = args.overhealByAlly
-        ? Object.values(args.overhealByAlly).reduce((sum, v) => sum + v, 0)
+    // The aggregate, exactly as the listener computes it: the per-recipient breakdown's sum when
+    // present, else the legacy single-target figure.
+    const aggregate = args.overhealByRecipient
+        ? Object.values(args.overhealByRecipient).reduce((sum, v) => sum + v, 0)
         : (args.overhealAmount ?? 5_000);
 
     const intent: Intent = {
@@ -89,9 +89,8 @@ function run(args: {
         sourceSlot: 'passive',
         eventCtx: {
             repairedAllyIds: [ALLY_A, ALLY_B],
-            overhealAmount: allyOverheal,
-            overhealAmountAllTargets: allyOverheal + (args.casterOverheal ?? 0),
-            ...(args.overhealByAlly ? { overhealByAlly: args.overhealByAlly } : {}),
+            overhealAmount: aggregate,
+            ...(args.overhealByRecipient ? { overhealByRecipient: args.overhealByRecipient } : {}),
         },
     } as unknown as Intent;
 
@@ -147,7 +146,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
     it('repairs ONE ally, the engine-resolved lowest current HP% one (R3)', () => {
         const { heals } = run({
             ability: redirect(),
-            overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(heals.map((h) => h.rid)).toEqual([LOWEST]);
@@ -156,7 +155,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
     it('sizes the repair from the SUM of the cast’s over-repair, not per ally (R4)', () => {
         const { heals } = run({
             ability: redirect(),
-            overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(heals).toHaveLength(1);
@@ -172,15 +171,14 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         expect(heals).toEqual([{ rid: LOWEST, raw: 4_000 }]);
     });
 
-    // #442, owner ruling 2026-08-31: "Chimei's overheal redirect is fed by all heal targets,
-    // himself included." Her active is `target: 'all-allies'`, so a cast that repairs damaged
-    // allies cleanly and wastes only HER OWN share still redirects, sized by that share.
-    // This INVERTS 94515b6e, whose test asserted exactly the opposite here.
+    // Owner ruling 2026-08-31: "Chimei's overheal redirect is fed by all heal targets, himself
+    // included." Her active is `target: 'all-allies'`, so a cast that repairs damaged allies
+    // cleanly and wastes only HER OWN share still redirects, sized by that share. This INVERTS
+    // 94515b6e, whose test asserted exactly the opposite here.
     it('counts the caster’s OWN over-repair even when no ALLY was over-repaired', () => {
         const { heals } = run({
             ability: redirect(),
-            overhealAmount: 0,
-            casterOverheal: 4_000,
+            overhealByRecipient: { [OWNER_ID]: 4_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(heals).toEqual([{ rid: LOWEST, raw: 4_000 }]);
@@ -193,8 +191,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
     it('never redirects onto the caster herself', () => {
         const { heals } = run({
             ability: redirect(),
-            overhealAmount: 0,
-            casterOverheal: 4_000,
+            overhealByRecipient: { [OWNER_ID]: 4_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(heals).toHaveLength(1);
@@ -207,7 +204,6 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         const { heals } = run({
             ability: redirect(),
             overhealAmount: 0,
-            casterOverheal: 0,
             lowestHpAllyId: LOWEST,
         });
         expect(heals).toEqual([]);
@@ -216,7 +212,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
     it('repairs nobody when the caster is alone (the selector resolves to nobody)', () => {
         const { heals } = run({
             ability: redirect(),
-            overhealByAlly: { [ALLY_A]: 3_000 },
+            overhealByRecipient: { [ALLY_A]: 3_000 },
             lowestHpAllyId: undefined,
         });
         expect(heals).toEqual([]);
@@ -227,7 +223,7 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
     it('leaves Abundant Renewal’s per-ally fan-out unchanged', () => {
         const { shields } = run({
             ability: abundantRenewal(),
-            overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(shields).toEqual([
@@ -236,20 +232,21 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
         ]);
     });
 
-    // #442 is scoped to Chimei's clause. Abundant Renewal's ("when over-repairing a damaged
-    // ally") has NOT been re-ruled, so the caster's own waste must not reach it: same event,
-    // same listener, 4,000 of caster waste on top of the ally excess, and the shields are
-    // byte-identical to the test above — no self shield, no inflated ally shield.
-    it('does not let the caster’s own over-repair reach Abundant Renewal', () => {
+    // Owner ruling 2026-08-31, the second half: a ship that over-repairs ITSELF while healing
+    // the team does earn Abundant Renewal's shield. So the caster is a recipient of the fan-out
+    // like any other, sized off its OWN waste — 4,000 wasted on itself becomes a 2,000 shield on
+    // itself, alongside the ally shields, not instead of them. Before this ruling the caster was
+    // filtered out of the map entirely and got nothing (94515b6e).
+    it('shields the CASTER off its own over-repair, alongside the allies', () => {
         const { shields } = run({
             ability: abundantRenewal(),
-            overhealByAlly: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
-            casterOverheal: 4_000,
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000, [OWNER_ID]: 4_000 },
             lowestHpAllyId: LOWEST,
         });
         expect(shields).toEqual([
             { rid: ALLY_A, raw: 1_500 },
             { rid: ALLY_B, raw: 1_000 },
+            { rid: OWNER_ID, raw: 2_000 },
         ]);
     });
 });
