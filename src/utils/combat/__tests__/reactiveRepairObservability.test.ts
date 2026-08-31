@@ -189,14 +189,17 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         expect(intents).toHaveLength(1);
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
         expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
-        expect(intents[0].eventCtx?.overhealByAlly).toEqual({ [ALLY_ID]: 4_000 });
+        expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [ALLY_ID]: 4_000 });
     });
 
-    // R-C: the caster's OWN over-repair must never be counted as ally over-repair, even when the
-    // same reactive repair also lands on a real ally with no waste. Guards the
-    // `.filter((pt) => pt.targetId !== ownerId)` on the aggregate at the listener — without it
-    // this test would read the caster's 4,000 self-overheal instead of 0.
-    it("excludes the caster's own over-repair from the ally overheal aggregate", () => {
+    // R-C, RE-RULED 2026-08-31. This case used to assert the opposite: that a caster's own
+    // wasted repair was not an "ally over-repair" and had to be filtered out of the aggregate
+    // (94515b6e). The owner ruled both consumers the other way — Chimei's redirect "is fed by all
+    // heal targets, himself included", and a ship that over-repairs itself while healing the team
+    // does earn Abundant Renewal's shield. So the caster's entry now reaches BOTH the aggregate
+    // and the per-recipient map, while `repairedAllyIds` — a different question, who the repair
+    // REACHED — stays non-self.
+    it("counts the caster's own over-repair in the overheal aggregate", () => {
         const intents = captureIntentsForReactiveRepair({
             abilities: [fontOfPower()],
             sourceAbilityId: 'ab-mixed-repair',
@@ -207,8 +210,8 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         });
         expect(intents).toHaveLength(1);
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
-        expect(intents[0].eventCtx?.overhealAmount).toBe(0);
-        expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
+        expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
+        expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
     });
 
     it('ignores a reactive repair with no non-self recipient', () => {
@@ -232,6 +235,34 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
             amount: 5_000,
             perTarget: [{ targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }],
             sourceAbilityId: 'ab-self-repair',
+        });
+        expect(intents).toHaveLength(0);
+    });
+
+    // The OTHER arm of that gate, re-ruled 2026-08-31. An `overheal`-BASIS reaction is sized by
+    // what a repair WASTED, not by who received it, and the caster's own waste now counts — so it
+    // fires off a repair that reached only the caster. The in-game case: Chimei's start-of-round
+    // passive repairs allies with Stealth, she is the only Stealthed ship, and it over-repairs
+    // her. The redirect still lands on an ally (the selector excludes her), not on herself.
+    it('DOES enqueue an overheal-sized reaction off a caster-only repair', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [redirect()],
+            sourceAbilityId: 'ab-some-passive-repair',
+            perTarget: [{ targetId: OWNER_ID, amount: 5_000, overheal: 4_000 }],
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([]);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
+        expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
+    });
+
+    // …and only when that repair wasted something. A caster-only repair absorbed in full has
+    // nothing to redirect, and must not burn an enqueue — one enqueue is one proc-gate roll.
+    it('does NOT enqueue an overheal-sized reaction off a caster-only repair that wasted nothing', () => {
+        const intents = captureIntentsForReactiveRepair({
+            abilities: [redirect()],
+            sourceAbilityId: 'ab-some-passive-repair',
+            perTarget: [{ targetId: OWNER_ID, amount: 5_000 }],
         });
         expect(intents).toHaveLength(0);
     });
@@ -261,11 +292,10 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         expect(intents).toHaveLength(0);
     });
 
-    // The CAST arm's mirror of R-C above. `heal-performed` is the emit a `target: 'all-allies'`
-    // cast produces, self INCLUDED (playerTurn.ts). A self-inclusive multi-recipient heal that
-    // over-heals the caster while cleanly repairing an ally must not size an ally-over-repair
-    // reaction off the caster's own waste — the same rule as the reactive arm, on the other event.
-    it("excludes the caster's own over-repair from the ally overheal aggregate on the CAST path", () => {
+    // The CAST arm's mirror of R-C above, and re-ruled with it. `heal-performed` is the emit a
+    // `target: 'all-allies'` cast produces, self INCLUDED (playerTurn.ts) — so the caster's own
+    // wasted share is part of what the cast wasted, on the same terms as the reactive arm.
+    it("counts the caster's own over-repair in the overheal aggregate on the CAST path", () => {
         const bus = createEventBus();
         const intents: Intent[] = [];
         registerReactiveListeners({
@@ -293,8 +323,48 @@ describe('#434 Task 2 — on-own-repair-to-ally sees reactive repairs', () => {
         });
         expect(intents).toHaveLength(1);
         expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
-        expect(intents[0].eventCtx?.overhealAmount).toBe(0);
-        expect(intents[0].eventCtx?.overhealByAlly).toBeUndefined();
+        expect(intents[0].eventCtx?.overhealAmount).toBe(4_000);
+        expect(intents[0].eventCtx?.overhealByRecipient).toEqual({ [OWNER_ID]: 4_000 });
+    });
+
+    // A cast that wastes on BOTH the caster and an ally: every wasted point reaches the
+    // aggregate, and the per-recipient map carries one entry each. The caster's entry appearing
+    // here is the whole 2026-08-31 ruling — it is what Abundant Renewal fans a shield out over and
+    // what Chimei's redirect sums.
+    it('carries every recipient’s waste, the caster’s included, on a cast that wastes on both', () => {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        registerReactiveListeners({
+            bus,
+            perOwner: [
+                {
+                    ownerId: OWNER_ID,
+                    reactiveAbilities: [{ ability: fontOfPower(), sourceSlot: 'passive' }],
+                },
+            ],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy',
+        });
+        bus.emit({
+            type: 'heal-performed',
+            casterId: OWNER_ID,
+            targets: [ALLY_ID, OWNER_ID],
+            round: 1,
+            amount: 10_000,
+            overheal: 7_000,
+            perTarget: [
+                { targetId: ALLY_ID, amount: 5_000, overheal: 3_000 },
+                { targetId: OWNER_ID, amount: 5_000, overheal: 4_000 },
+            ],
+        });
+        expect(intents).toHaveLength(1);
+        expect(intents[0].eventCtx?.overhealAmount).toBe(7_000);
+        expect(intents[0].eventCtx?.overhealByRecipient).toEqual({
+            [ALLY_ID]: 3_000,
+            [OWNER_ID]: 4_000,
+        });
+        // …and the non-self list is untouched by the ruling: the repair reached one ally.
+        expect(intents[0].eventCtx?.repairedAllyIds).toEqual([ALLY_ID]);
     });
 });
 
