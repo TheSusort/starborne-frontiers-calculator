@@ -54,8 +54,12 @@ import {
     parseOnResistHpDamage,
     detectProtectionTransformToDot,
     detectTransformToDot,
+    parseOverRepairRedirect,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
+import { buildShipAbilities } from '../abilities/buildShipAbilities';
+import { partitionReactiveAbilities } from '../combat/triggers';
+import { csvAvailable, loadShipSkillRecords } from '../../../scripts/lib/shipSkillCsv';
 
 describe('parseSkillDamage', () => {
     it('returns 0 for empty string', () => {
@@ -5154,5 +5158,90 @@ describe('detectProtectionTransformToDot', () => {
     });
     it('the existing detector does NOT match Meatshield (detectors stay disjoint)', () => {
         expect(detectTransformToDot(meatshield)).toBeUndefined();
+    });
+});
+
+/**
+ * #435 Task 4 — the over-repair redirect detector.
+ *
+ * Exact-phrase anchored. The kit-audit calibration (docs/kit-audit-tools/HANDOFF.md) is that an
+ * under-anchored rule in this area over-reports immediately: "over-repair", "lowest", and
+ * "repairs an amount" all appear separately across the corpus. Requiring the whole clause is
+ * what keeps every one of those out — the negative cases below are the guard.
+ */
+const CHIMEI_OVER_REPAIR =
+    'At the end of the round, non-defender allies below 40% HP are granted ' +
+    '<unit-skill>Stealth</unit-skill> for 1 turn. <br /><br />At the start of the round, all ' +
+    'allies with <unit-skill>Stealth</unit-skill> <unit-damage>repairs 10%</unit-damage> of ' +
+    "this unit's max HP.<br /><br />When over-repairing a damaged ally, the ally with the " +
+    'lowest current health percentage repairs an amount equivalent to the over-repair.';
+
+describe('parseOverRepairRedirect', () => {
+    it('emits a 100% overheal-basis repair on the lowest-HP ally, on the own-repair trigger', () => {
+        const ability = parseOverRepairRedirect(CHIMEI_OVER_REPAIR);
+        expect(ability).toEqual({
+            id: '',
+            type: 'heal',
+            target: 'lowest-hp-ally',
+            trigger: 'on-own-repair-to-ally',
+            conditions: [],
+            config: { type: 'heal', pct: 100, basis: 'overheal' },
+        });
+    });
+
+    it('returns null for empty input', () => {
+        expect(parseOverRepairRedirect(null)).toBeNull();
+        expect(parseOverRepairRedirect(undefined)).toBeNull();
+        expect(parseOverRepairRedirect('')).toBeNull();
+    });
+
+    it('does not match a bare over-repair mention', () => {
+        expect(
+            parseOverRepairRedirect('When over-repairing an ally, grant that ally a Shield.')
+        ).toBeNull();
+    });
+
+    it('does not match an unrelated lowest-HP repair', () => {
+        expect(
+            parseOverRepairRedirect(
+                'At the start of the round, this Unit repairs 10% of its Max HP to the ally ' +
+                    'with the lowest current health percentage.'
+            )
+        ).toBeNull();
+    });
+
+    it("reaches Chimei's built kit as a REACTIVE ability (not castSkills)", () => {
+        if (!csvAvailable()) {
+            throw new Error(
+                'docs/ship-skills.csv is missing from this worktree (gitignored reference ' +
+                    "data) — this test resolves Chimei's real skill text from it."
+            );
+        }
+        const rec = loadShipSkillRecords().find((r) => r.name.toUpperCase() === 'CHIMEI');
+        if (!rec) throw new Error('docs/ship-skills.csv: no record for "Chimei"');
+        const bundle = buildShipAbilities({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ...({} as any),
+            refits: [{}, {}, {}, {}],
+            activeSkillText: rec.active,
+            chargeSkillText: rec.charge,
+            chargeSkillCharge: rec.chargeCharge,
+            firstPassiveSkillText: rec.passives[0],
+            secondPassiveSkillText: rec.passives[1],
+            thirdPassiveSkillText: rec.passives[2],
+        } as Ship);
+
+        const { reactiveAbilities, castSkills } = partitionReactiveAbilities(bundle);
+        const redirect = reactiveAbilities.find(
+            (ra) => ra.ability.trigger === 'on-own-repair-to-ally' && ra.ability.type === 'heal'
+        );
+        expect(redirect).toBeDefined();
+        expect(redirect!.ability.target).toBe('lowest-hp-ally');
+        expect(redirect!.ability.config).toEqual({ type: 'heal', pct: 100, basis: 'overheal' });
+
+        const inCastSkills = castSkills.slots.some((s) =>
+            s.abilities.some((a) => a.trigger === 'on-own-repair-to-ally' && a.type === 'heal')
+        );
+        expect(inCastSkills).toBe(false);
     });
 });

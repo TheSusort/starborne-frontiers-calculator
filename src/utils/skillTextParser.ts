@@ -3695,6 +3695,44 @@ export function parseEnemyChargedCastReaction(text: string | null | undefined): 
     return out.length ? out : null;
 }
 
+/** Chimei R2: "When over-repairing a damaged ally, the ally with the lowest current health
+ *  percentage repairs an amount equivalent to the over-repair."
+ *
+ *  A STANDALONE ability rather than another `detectXTrigger(text, healPos)` arm in
+ *  buildShipAbilities' heal chain: the clause carries NO percentage tag, so parseHealAbilities
+ *  never produces a heal entry for a trigger detector to attach to. This is why the clause parsed
+ *  to nothing at all before #435.
+ *
+ *  `pct: 100` — the redirect is the WHOLE wasted amount ("equivalent to the over-repair"); the
+ *  executor's `overheal` basis sizes it from the SUM of the triggering repair's clipped excess
+ *  (owner ruling R4, 2026-08-30). `target: 'lowest-hp-ally'` is what opts the executor out of
+ *  Abundant Renewal's per-ally fan-out.
+ *
+ *  Exact-phrase anchored — "over-repair", "lowest", and "repairs an amount" each appear
+ *  separately elsewhere in the corpus, and the HANDOFF calibration is that a looser rule in this
+ *  area over-reports on its first run. Tolerates the hyphen being absent ("overrepairing") and
+ *  arbitrary whitespace, nothing else.
+ *
+ *  ⚠️ The tail is "the OVER-REPAIR". #434/#435/HANDOFF all paraphrase it as "the overflow";
+ *  docs/ship-skills.csv does not say that. Do not widen the rule to match the paraphrase.
+ */
+const OVER_REPAIR_REDIRECT_RE =
+    /when\s+over-?repairing\s+a\s+damaged\s+ally\s*,\s*the\s+ally\s+with\s+the\s+lowest\s+current\s+health\s+percentage\s+repairs\s+an\s+amount\s+equivalent\s+to\s+the\s+over-?repair/i;
+
+export function parseOverRepairRedirect(text: string | null | undefined): Ability | null {
+    if (!text) return null;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    if (!OVER_REPAIR_REDIRECT_RE.test(plain)) return null;
+    return {
+        id: '',
+        type: 'heal',
+        target: 'lowest-hp-ally',
+        trigger: 'on-own-repair-to-ally',
+        conditions: [],
+        config: { type: 'heal', pct: 100, basis: 'overheal' },
+    };
+}
+
 /** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
 export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
     return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));

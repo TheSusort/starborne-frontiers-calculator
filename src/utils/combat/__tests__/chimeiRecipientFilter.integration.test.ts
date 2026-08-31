@@ -194,6 +194,57 @@ const chimeiFight = (
 });
 
 /**
+ * A single heavy pre-round hit, landing on every ally before Chimei's own turn (speed 1000 beats
+ * her 100), that exists ONLY to keep her ACTIVE repair from 100%-overhealing.
+ *
+ * `directHeal` is RAW and unclipped — an ally at full HP still books the full 9,000/10,000 — so an
+ * ally starting at full HP was never the correctness problem for the threshold check below.
+ * The problem is the #435 over-repair redirect: it scales off the CLIPPED overheal
+ * (`heal-performed`/`reactive-heal-performed`'s `overheal`, not `directHeal`), and a full-HP ally
+ * wastes 100% of whatever lands on it. With both allies at full HP, Chimei's active alone (9,000 x
+ * 2 recipients) wastes 18,000, and the redirect lands that entire sum on the lowest-HP ally —
+ * which then clears the 10,000 threshold even though NO passive repair (Stealth-gated) ever fired.
+ * That is exactly the failure this fixture used to have: 'repairs NOBODY when no ally is
+ * Stealthed' measured `['stealthed-ally', 'stealthed-ally']` instead of `[]`.
+ *
+ * Knocking every ally well below full HP first (missing 15,000, comfortably above the active's
+ * 9,000) means the active can no longer waste anything, so the redirect's zero-sum guard (R4:
+ * "a zero-sum redirect... resolves nobody") suppresses it — restoring the threshold check's
+ * ability to isolate the passive. One round only (not `chimeiFight`'s default 2): a second
+ * identical hit on an already-damaged ally risks overkilling it, which is irrelevant to what this
+ * helper measures and would only add fixture-death bookkeeping to reason about.
+ */
+const PRE_DAMAGE_ATTACKER: CombatEngineInput['enemyAttackers'][number] = {
+    id: 'pre-damage',
+    stats: { attack: 15_000, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget('all'),
+    // A genuine AOE shape — `basePattern()`'s `{ shape: 'base', range: 0 }` resolves to a single
+    // primary victim regardless of `target.selection`, which would leave the OTHER ally at full
+    // HP and reintroduce exactly the false-positive this fixture exists to prevent.
+    pattern: { raw: 'all', shape: 'all', range: 'all', modifiers: {} },
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: 'pre-damage-hit',
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 100 },
+                    },
+                ],
+            },
+        ],
+    },
+};
+
+/**
  * Recipients of the PASSIVE 10%-of-max-HP repair.
  *
  * NOT read off `heal-performed`: that is the CAST path's event, and a reactive repair emits none
@@ -203,15 +254,27 @@ const chimeiFight = (
  *
  * Chimei's own ACTIVE repair rides that axis too, so the two are separated by amount: her max HP
  * is 100,000 here, making the passive worth exactly 10,000 per recipient and the active 9,000.
+ * `PRE_DAMAGE_ATTACKER` (see above) keeps that amount-based separation valid in the face of the
+ * #435 over-repair redirect, which would otherwise inflate a plain active-only recipient's total
+ * past the 10,000 line.
  */
 function passiveRepairRecipients(teamActors: TeamActorEngineInput[]): string[] {
-    const result = runCombat(chimeiFight(teamActors, { perRecipientHealApply: true }));
+    const result = runCombat(
+        chimeiFight(teamActors, {
+            perRecipientHealApply: true,
+            // Deliberately narrowed to one round — this helper only needs to isolate WHO the
+            // passive repair reaches, not per-round recurrence. That's covered separately by
+            // chimeiOverRepairRedirect.integration.test.ts's `for (const round of [1, 2])`
+            // cardinality assertions.
+            numRounds: 1,
+            enemyAttackers: [PRE_DAMAGE_ATTACKER],
+        })
+    );
     const out: string[] = [];
     for (const round of result.healing?.rounds ?? []) {
         for (const [id, healing] of round.perRecipient ?? []) {
-            // `directHeal` is the RAW credited amount (these allies sit at full HP, so
-            // `effectiveHeal` is 0 for everyone and would measure nothing). A recipient of the
-            // active alone books 9,000; one that also took the passive books 19,000.
+            // `directHeal` is the RAW credited amount. A recipient of the active alone books
+            // 9,000; one that also took the passive books 19,000.
             if (healing.directHeal >= 10_000) out.push(id);
         }
     }

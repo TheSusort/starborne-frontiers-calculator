@@ -327,7 +327,23 @@ export type CombatEvent =
           casterId: string;
           round: number;
           amount: number;
-          perTarget: { targetId: string; amount: number }[];
+          /** Per-recipient raw repair. `overheal` is that recipient's CLIPPED EXCESS (raw minus
+           *  the HP actually consumed), present only when > 0 — mirroring
+           *  `heal-performed.perTarget.overheal`, and read by the on-own-repair-to-ally listener
+           *  so an `overheal`-basis reaction can scale off a REACTIVE repair (#434). Absent
+           *  outside healing mode, where `applyHealToTarget` never runs. */
+          perTarget: { targetId: string; amount: number; overheal?: number }[];
+          /** `Ability.id` of the intent that produced this repair. The re-entrancy key for the
+           *  on-own-repair-to-ally guard (#434): a listener ignores an event its OWN ability
+           *  emitted, so a redirect cannot redirect itself, while every other observer still
+           *  sees the repair.
+           *
+           *  ⚠️ IN-MEMORY ROUTING KEY ONLY — never serialise it. `nextId()` runs off a
+           *  module-level counter that is never reset (`let counter = 0`, buildShipAbilities.ts:151),
+           *  so an ability's id depends on how many kits were built before it in the process. Put
+           *  this in a golden, a snapshot or a combat-log row and the artefact becomes
+           *  order-dependent. */
+          sourceAbilityId?: string;
       } & ReactiveStamp)
     /** LOG-ONLY: a drain-time REACTIVE cleanse resolved (executeIntent cleanse branch — e.g.
      *  AEGIS's on-ally-shield-destroyed "cleanses all debuffs", Cultivator's on-ally-crit cleanse).
