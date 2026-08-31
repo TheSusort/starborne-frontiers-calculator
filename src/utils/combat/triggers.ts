@@ -364,8 +364,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
  *    repairs an ally"). One enqueue per qualifying cast.
- *  - on-own-repair-to-ally → the OWNER's OWN repair with at least one non-self recipient — the
- *    on-ally-critically-repaired twin WITHOUT the crit filter (Font of Power). Subscribes to
+ *  - on-own-repair-to-ally → the OWNER's OWN repair — the on-ally-critically-repaired twin
+ *    WITHOUT the crit filter (Font of Power). Qualifying is SHAPE-SCOPED: at least one non-self
+ *    recipient, OR (for an `overheal`-basis reaction, which is sized by what the repair wasted)
+ *    any waste at all, the caster's own included — owner rulings 2026-08-31. Subscribes to
  *    BOTH heal-performed (cast repairs) and, since #434, reactive-heal-performed (repairs
  *    performed from a live trigger — a start-of-round passive repair, an on-ally-damaged
  *    reaction repair). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff
@@ -859,9 +861,10 @@ export function registerReactiveListeners(args: {
                     });
                     break;
                 case 'on-own-repair-to-ally': {
-                    // The OWNER's own repair that reached >= 1 OTHER ally (Font of Power).
-                    // One enqueue per qualifying repair -> one proc-gate roll; the grant fans
-                    // out to all repaired non-self allies via eventCtx.repairedAllyIds.
+                    // The OWNER's own repair (Font of Power). One enqueue per qualifying
+                    // repair -> one proc-gate roll; the buff grant fans out to the repaired
+                    // NON-SELF allies via eventCtx.repairedAllyIds. What counts as qualifying is
+                    // shape-scoped — see the gate below.
                     // An `overheal`-BASIS reaction is sized by what a repair WASTED, not by who
                     // received it — and since the 2026-08-31 rulings the caster's own waste counts
                     // for both of them (Abundant Renewal's shield, Chimei's redirect). So those
