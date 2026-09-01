@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createStatusEngine, type RegisteredAbilityStatus } from '../statusEngine';
-import type { ConditionContext } from '../../../types/combat';
+import type { ConditionContext } from '../../abilities/evaluateConditions';
 
 // #436. Two owner rulings (2026-09-01), both posed with real kits:
 //

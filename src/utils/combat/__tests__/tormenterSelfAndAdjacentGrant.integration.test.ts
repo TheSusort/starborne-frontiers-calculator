@@ -224,13 +224,13 @@ describe('Tormenter — "grants Out. Damage Up I to itself and all adjacent alli
 //   • on the neighbour's store it is dead too — `statusEngine.sourceFired` increments
 //     `accumSelfMaps.get('attacker')` ONLY ("legacy semantics", its own comment), so an
 //     accumulating status on any store but the focus actor's never ticks.
-// So Centurion's sim output is unchanged by this commit. Generalising the second bullet is a
-// separate change with a corpus-wide blast radius (every team-actor accumulating buff — Lev's
-// Blast, Butcher's Overload — is dormant for the same reason) and is filed, not built here.
+// So Centurion's sim output was unchanged by THAT commit.
 //
-// What these cases are FOR: pinning that far-ally is never a recipient, and recording the exact
-// two-layer inertness so the session that fixes accumulation knows what should change and what
-// should not.
+// BOTH layers are now fixed (#436, 2026-09-01, on two owner rulings): the accumulating map holds
+// one contribution per GRANTER instead of a single overwritten rate, and a per-slot share ticks
+// on its granter's cast rather than only the focus actor's. Centurion still banks 4 on his own
+// charge; his neighbour now banks 2 on the same cast. The `far-ally` half of the pin is untouched
+// and still the point — a non-adjacent roster member is never a recipient at all.
 describe('Centurion — charged "grants all adjacent allies 2 stacks of Core Charge I"', () => {
     beforeAll(requireReferenceData);
 
@@ -274,12 +274,92 @@ describe('Centurion — charged "grants all adjacent allies 2 stacks of Core Cha
         expect(coreChargeStacks()['attacker']).toBe(4);
     });
 
-    it('neither ally reads any stacks: the far one is no recipient, the near one cannot tick', () => {
+    it("the adjacent ally banks 2 stacks on Centurion's charge; the far ally is no recipient", () => {
         const stacks = coreChargeStacks();
         expect(stacks['far-ally']).toBeUndefined();
-        // The adjacent ally IS a registered recipient now — it just reads nothing, because
-        // accumulation is attacker-only (see the block comment). When that is fixed, THIS is the
-        // assertion that should flip to a real stack count; `far-ally` must stay undefined.
-        expect(stacks['adjacent-ally']).toBeUndefined();
+        // #436: the near ally's grant now ticks on CENTURION's charge (owner ruling 2026-09-01 —
+        // a granted accumulating stack keeps accruing on the GRANTER's cadence). Before #436
+        // this read `undefined`: the entry was registered on his store and visible there, but
+        // only the focus actor's map was ever incremented.
+        expect(stacks['adjacent-ally']).toBe(2);
+    });
+});
+
+// #436 ruling B, on a real board: two same-named accumulating grants on ONE owner both land.
+//
+// Two Centurions side by side at M3 and M4 (each is in the other's neighbour set), both starting
+// charged, both casting their charged skill in round 1. Each one's store then holds TWO shares of
+// Core Charge I — his own 4-stack self grant, and the other's 2-stack adjacent grant — and the
+// owner ruling (2026-09-01, posed as exactly this fight) is that each reads 6.
+//
+// This is the engine-level witness for the summing half of #436. The unit test in
+// accumulatingGranterCadence.test.ts drives statusEngine directly; this one goes through
+// runCombat, so it is what proves the two registrations actually reach one store from the real
+// cast path. Before #436 the second registration `.set()` over the first and each Centurion read
+// 4 — which is why his pre-fix double-registration onto himself was harmless rather than
+// doubling his stacks.
+describe("#436 — two adjacent Centurions each bank their own grant AND the other's", () => {
+    beforeAll(requireReferenceData);
+
+    /** A second Centurion as a team actor: same kit as the caster, starts charged, acts after. */
+    const centurionAtM4 = (): TeamActorEngineInput => ({
+        ...ally('centurion-b', 'M4'),
+        chargeCount: 0,
+        startCharged: true,
+        walk: {
+            shipSkills: skillsFor('Centurion'),
+            stats: {
+                attack: 10_000,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: true,
+        },
+    });
+
+    const stacksAfterBothCharge = (): Record<string, number | undefined> => {
+        const baseCtx: ConditionContext = {
+            selfBuffNames: [],
+            selfDebuffNames: [],
+            enemyBuffNames: [],
+            enemyDebuffCount: 0,
+            effectiveCritRate: 50,
+            adjacentAllyCount: 0,
+            enemyAdjacentCount: 0,
+            enemyDestroyedCount: 0,
+            selfHpPct: 100,
+            enemyHpPct: 100,
+        };
+        let stacksFor: (id: string) => number | undefined = () => undefined;
+        runCombat({
+            ...casterAtM3({
+                shipSkills: skillsFor('Centurion'),
+                hasChargedSkill: true,
+                startCharged: true,
+                teamActors: [centurionAtM4()],
+            }),
+            __testTapStatusEngine: (engine) => {
+                stacksFor = (id: string) =>
+                    engine
+                        .activeAbilityStatuses('self', () => baseCtx, id)
+                        .find((s) => s.active.buffName === 'Core Charge I')?.active.stacks;
+            },
+        });
+        return Object.fromEntries(['attacker', 'centurion-b'].map((id) => [id, stacksFor(id)]));
+    };
+
+    it("each Centurion reads 6 = his own 4 plus his neighbour's 2", () => {
+        const stacks = stacksAfterBothCharge();
+        expect(stacks['attacker']).toBe(6);
+        expect(stacks['centurion-b']).toBe(6);
     });
 });
