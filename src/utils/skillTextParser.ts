@@ -1038,8 +1038,12 @@ function countGateCondition(clause: string): Condition | null {
  * lacks RegExp lookbehind and the production browserslist (`>0.2%`) includes iOS Safari 15.x,
  * so the previous `split(/(?<=[.;])\s+/)` would throw at parse time on those browsers. This is
  * byte-equivalent to that split.
+ *
+ * Exported for `buffClauseSentenceSplit.test.ts` (#438), whose standing guard re-derives the
+ * parse one sentence at a time and must split exactly where `resolveBuffClause` splits — a
+ * copied splitter in the test could drift and silently weaken the guard.
  */
-function splitSentences(text: string): string[] {
+export function splitSentences(text: string): string[] {
     const out: string[] = [];
     const re = /[.;]\s+/g;
     let start = 0;
