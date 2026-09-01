@@ -84,9 +84,34 @@ export interface CombatLogEntry {
 
 export interface CombatLogTarget {
     targetId: string;
-    amount?: number; // damage or heal to THIS target
+    /** Damage, or — for the two GRANT kinds (`heal`, `shield`) — what ACTUALLY LANDED on this
+     *  target: HP restored, or post-cap shield pool growth. Never the gross attempt; the portion
+     *  that went nowhere rides in `overheal`/`overshield` below. */
+    amount?: number;
     didCrit?: boolean;
     didHit?: boolean; // false = miss/dodge
     resultingHpPct?: number;
     shieldWasHit?: boolean;
+    /** The #418 follow-up, `heal` entries only: the portion of this repair wasted on an HP bar
+     *  that was already full (`heal-performed` / `reactive-heal-performed`'s `perTarget.overheal`).
+     *  Present only when > 0.
+     *
+     *  It exists because `amount` alone could not tell the two grant kinds apart. Heal rows used to
+     *  render the GROSS, so a repair onto a full ally read as a full-size heal that had plainly not
+     *  moved the bar; shield rows rendered post-cap growth, so a grant onto a saturated pool read
+     *  as a bare `0` with no hint anything had been attempted. Opposite failures of one missing
+     *  clause. Both kinds now report the landed number and name the waste beside it.
+     *
+     *  ABSENT ON A REVERSED REPAIR (#362): that repair damaged the target rather than being
+     *  clipped, so there is no waste to report and `amount` stays the whole reversed figure. */
+    overheal?: number;
+    /** The shield twin of `overheal`, `shield` entries only: the portion of the grant clipped by
+     *  the max-HP shield cap (`shield-applied`'s `perTarget.overshield`). Present only when > 0.
+     *
+     *  NOT carried by the `shield-applied-log` twins (Lifeline's mid-hit threshold pool and the
+     *  shield converter, both in `engine.ts`) — that log-only event has no clip field, and both of
+     *  its emit sites gate on `granted > 0`, so a fully-clipped threshold grant produces no row at
+     *  all rather than an unannotated `0`. Adding the field there is an engine change, not a log
+     *  one. */
+    overshield?: number;
 }

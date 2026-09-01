@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import RoundEventLog from '../RoundEventLog';
 import type { BattleResult } from '../../../utils/calculators/battleSimulator';
-import type { CombatLogRound } from '../../../utils/combat/log/types';
+import type { CombatLogRound, CombatLogTarget } from '../../../utils/combat/log/types';
 
 const roster: BattleResult['roster'] = [
     { actorId: 'nova', side: 'player', name: 'Nova', position: 'T1' },
@@ -452,5 +452,100 @@ describe('RoundEventLog', () => {
         // Expanding reveals a detail stat (attack) not shown in the collapsed line.
         await userEvent.click(screen.getByRole('button', { name: /stats/i }));
         expect(screen.getByText(/5,000/)).toBeInTheDocument();
+    });
+    // ─── Wasted-portion annotation (the #418 follow-up) ───────────────────────
+    //
+    // The row shows what LANDED and names what did not. A fully-saturated shield used to render as
+    // a bare `0` with nothing to explain it, and an over-repair used to render as a full-size heal
+    // with nothing to say the HP bar had not moved — opposite failures of the same missing clause.
+
+    const wasteRound = (target: CombatLogTarget, kind: 'heal' | 'shield'): CombatLogRound => ({
+        round: 1,
+        startOfRound: [],
+        turns: [
+            {
+                actorId: 'nova',
+                chargeBefore: 0,
+                chargeMax: 0,
+                entries: [{ kind, actorId: 'nova', targets: [target], reactions: [] }],
+            },
+        ],
+        endOfRound: [],
+    });
+
+    it('annotates a fully-clipped shield grant with the reason and the clipped amount', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 0, overshield: 8400 }, 'shield')}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova shields → Graphite: 0 \(pool full, 8,400 clipped\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('annotates a partly-clipped shield grant without the reason clause', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound(
+                    { targetId: 'graphite', amount: 2100, overshield: 3900 },
+                    'shield'
+                )}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova shields → Graphite: 2,100 \(3,900 clipped\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('annotates a fully-wasted repair with the reason and the overhealed amount', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 0, overheal: 5200 }, 'heal')}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova heals → Graphite: 0 \(full HP, 5,200 overhealed\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('annotates a partly-wasted repair without the reason clause', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 1400, overheal: 800 }, 'heal')}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova heals → Graphite: 1,400 \(800 overhealed\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('folds crit and waste into ONE parenthetical, in that order', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound(
+                    { targetId: 'graphite', amount: 1400, overheal: 800, didCrit: true },
+                    'heal'
+                )}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova heals → Graphite: 1,400 \(crit, 800 overhealed\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('leaves a waste-free row exactly as it renders today (crit alone keeps its own parens)', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 1400, didCrit: true }, 'heal')}
+                roster={roster}
+            />
+        );
+        expect(screen.getByText(/Nova heals → Graphite: 1,400 \(crit\)/)).toBeInTheDocument();
     });
 });
