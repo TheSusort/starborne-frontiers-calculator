@@ -1807,6 +1807,7 @@ exports[`kit fingerprints > Magnolia 1`] = `
     "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
   "richEnemy": [
     "attack",
@@ -1816,6 +1817,7 @@ exports[`kit fingerprints > Magnolia 1`] = `
     "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
   "wounded": [
     "attack",
@@ -1825,6 +1827,7 @@ exports[`kit fingerprints > Magnolia 1`] = `
     "debuff-resisted",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
 }
 `;
@@ -3494,18 +3497,21 @@ exports[`kit fingerprints > Valerian 1`] = `
     "charge-changed",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
   "richEnemy": [
     "attack",
     "charge-changed",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
   "wounded": [
     "attack",
     "charge-changed",
     "dot-applied:active",
     "dot-applied:charged",
+    "heal",
   ],
 }
 `;

@@ -3603,6 +3603,30 @@ export function runCombat(rawInput: CombatEngineInput): {
             victimSelfBuffs(statusEngine, id, selfBuffLookup)
         );
 
+    // #447 — the OUTGOING-repair % of the ship PERFORMING a repair, the sibling of
+    // `recipientIncomingHealPct` above. Same helper, same freshness contract, the other channel;
+    // `freshCtx` closes the same mid-turn window (a leech paying out during its own owner's turn
+    // reads that turn's ctx rather than the previous one).
+    //
+    // Owner ruling 2026-08-31: "leech is a full heal so it's affected by inc / outg heal". The
+    // incoming half arrived with #367; this is the outgoing half, which every cast, HoT and
+    // reactive repair already folded (`healing.test.ts`'s "fold order: healModifier ×
+    // outgoingHeal × incomingHeal") and the two leech procs did not.
+    //
+    // UNFLOORED, deliberately — `incomingHealFactor` clamps its channel at 0 and the outgoing
+    // factor is unclamped at every one of its sites (see the ⚠️ note on the helper in
+    // `buffTotals.ts`); clamping one of four would rebuild exactly the partial tripwire #367
+    // removed.
+    const performerOutgoingHealPct = (id: string, freshCtx?: PlayerRoundCtx): number =>
+        liveHealChannelPct(
+            statusEngine,
+            id,
+            'outgoingHealPct',
+            freshCtx ?? lastTurnCtxByActor.get(id),
+            allActorsById.get(id)?.preFight?.outgoingHeal ?? 0,
+            victimSelfBuffs(statusEngine, id, selfBuffLookup)
+        );
+
     // #367 fix wave — THE ACTING TURN'S OWN CTX, for the window in which the map does not have it
     // yet. Set to the acting actor's `turnCtx` the moment `runPlayerTurn` returns, on all three
     // turn branches (focus / walked team / enemy), and cleared at every turn start and round
@@ -4314,6 +4338,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         target: AbilityTarget;
         noCrit: boolean;
         scope: 'all' | 'detonation';
+        /** #447: the producing ability's id, stamped onto the repair event this entry emits so
+         *  the `on-own-repair-to-ally` re-entrancy guard has its key. IN-MEMORY ONLY — never
+         *  serialise it (`nextId()` runs off a never-reset module counter). */
+        abilityId: string;
     }
     const standingLeeches = new Map<string, StandingLeech[]>();
     if (healTarget) {
@@ -4330,6 +4358,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             target: a.target,
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             scope: c.leechScope ?? 'all',
+                            abilityId: a.id,
                         });
                     }
                 }
@@ -4349,6 +4378,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         pct: number;
         noCrit: boolean;
         requiresHpDamage: boolean;
+        /** #447 — see the sibling field on `StandingLeech`. */
+        abilityId: string;
     }
     const takenLeechesByOwner = new Map<string, TakenLeech[]>();
     if (healTarget) {
@@ -4364,6 +4395,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             pct: c.pct,
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             requiresHpDamage: c.requiresHpDamage ?? false,
+                            abilityId: a.id,
                         });
                     }
                 }
@@ -4831,6 +4863,14 @@ export function runCombat(rawInput: CombatEngineInput): {
         const ownerIsEnemy = owner.actor.side === 'enemy';
         // #424: proc-call scope (every entry, every recipient), not per entry — see the emit below.
         const shieldAcc = new ShieldApplyAccumulator();
+        // #447: the HEAL twin of that accumulator, at the SAME scope, so an on-repair reaction sees
+        // a leech repair exactly as `on-shield-applied` sees a leech shield. `healAbilityIds` is a
+        // set because the emit is proc-call scoped while `sourceAbilityId` is per entry: it is
+        // stamped only when one entry produced everything in this emit, which is every shipped
+        // case (no hull carries two standing leeches) and is honest when one ever does.
+        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
+        const healAbilityIds = new Set<string>();
+        let healSum = 0;
         for (const e of entries) {
             // BOTH conjuncts are load-bearing. This copy once kept only the first, which
             // degenerates "a detonation-scoped leech skips non-detonation channels" into "skips
@@ -4841,6 +4881,18 @@ export function runCombat(rawInput: CombatEngineInput): {
             let raw = amount * (e.pct / 100);
             if (e.kind === 'heal') {
                 raw *= 1 + owner.healModifier / 100;
+                // #447 — THE LEECHER'S OUTGOING-REPAIR CHANNEL. Owner ruling 2026-08-31: a leech
+                // is a full heal, so `Out. Repair Up` on the leeching ship raises it exactly as it
+                // raises that ship's cast repairs. Owner-scoped, so it sits here beside
+                // `healModifier` rather than in the per-recipient loop below, where the INCOMING
+                // channel belongs (that one is the recipient's, and an `all-allies` leech lands on
+                // a whole side of differently debuffed ships).
+                //
+                // `actingSelfCtx(sourceId)` closes the same mid-turn freshness window the incoming
+                // fold documents: `lastTurnCtxByActor.set` runs below the positional apply that
+                // procs this leech, so without the override a leecher paying out during its OWN
+                // turn would read its previous turn's self-side total.
+                raw *= 1 + performerOutgoingHealPct(sourceId, actingSelfCtx(sourceId)) / 100;
                 // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
                 if (!e.noCrit && owner.activeHealCritGate(owner.crit / 100)) {
                     raw *= 1 + owner.critDamage / 100;
@@ -4953,7 +5005,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // over three rounds (round 1 blind), and with the same grant lasting 2 turns it
                     // credited 10,000 / 17,500 / 17,500 — the third round a PHANTOM, the status having
                     // already expired. Both profiles now read 17,500 / 17,500 / 17,500 and
-                    // 17,500 / 17,500 / 10,000. `leechIncomingRepair.test.ts` section 6 owns both, on
+                    // 17,500 / 17,500 / 10,000. `leechIsAFullHeal.test.ts` section 6 owns both, on
                     // both sides.
                     //
                     // WHICH CHANNEL A USER ACTUALLY REACHES THIS THROUGH — measured, because the
@@ -4989,6 +5041,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                         : undefined;
                     if (applied === undefined) {
                         healingCtx.credit(sourceId, 'directHeal', scaled);
+                        // #447: an UNRESOLVABLE recipient still credits gross, so the repair
+                        // happened as far as every other accounting surface is concerned — the
+                        // event follows the credit, not the apply.
+                        healPerTarget.push({ targetId: rid, amount: scaled });
+                        healAbilityIds.add(e.abilityId);
+                        healSum += scaled;
                     } else if (!applied.reversed) {
                         healingCtx.credit(sourceId, 'directHeal', scaled);
                         healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
@@ -5006,7 +5064,19 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // landed on. `sourceId`, not `rid`: an `all-allies` leech share repairs an
                         // ally, and the leecher is still the one who did it.
                         creditPerformedRepair(sourceId, scaled);
+                        // #447: same shape as `heal-performed.perTarget` — raw amount, plus the
+                        // CLIPPED EXCESS only when there is one, which is what an `overheal`-basis
+                        // reaction (Abundant Renewal, Chimei's redirect) scales from.
+                        healPerTarget.push({
+                            targetId: rid,
+                            amount: scaled,
+                            ...(applied.overheal > 0 ? { overheal: applied.overheal } : {}),
+                        });
+                        healAbilityIds.add(e.abilityId);
+                        healSum += scaled;
                     }
+                    // A REVERSED repair (#362) accumulates nothing: it restored no HP, it damaged.
+                    // Same rule the credits above follow.
                 } else {
                     healingCtx.credit(sourceId, 'shield', raw);
                     // #424, sibling arm. CORPUS-DEAD TODAY and wired anyway. Measured 2026-08-29
@@ -5031,6 +5101,41 @@ export function runCombat(rawInput: CombatEngineInput): {
                         shieldAcc.add(rid, healingCtx.grantShieldToTarget(raw, recipientActor));
                 }
             }
+        }
+        // #447: ONE repair event per proc call, keyed on the LEECHER. Owner ruling 2026-08-31 —
+        // "leech is a full heal … on heal events etc." — so an on-repair reaction sees a leech.
+        // Gated on `healSum > 0`, the same gate the reactive executor's own emit uses.
+        //
+        // WHY `reactive-heal-performed` AND NOT `heal-performed`: the latter is the CAST event, and
+        // a leech is not a cast (the same line #424 drew for the shield twin, which emits
+        // `shield-applied` with `uncast: true`). The heal twin needs no such flag —
+        // `buildCombatLog`'s handler for this type attaches an entry and does NOT call
+        // `consumePendingSkill`, so a leech row cannot steal the tag a cast row earned.
+        //
+        // TERMINATION. This event's own doc requires every new EMITTER, like every new subscriber,
+        // to re-establish that it cannot loop. Its subscribers are `on-own-repair-to-ally`
+        // (Font of Power, Abundant Renewal, Chimei's redirect) and `on-enemy-repaired` (Ruiner).
+        //  1. A leech emit is driven by DAMAGE, so a cycle needs a path back from this event to
+        //     damage dealt by the same actor.
+        //  2. `on-own-repair-to-ally` carries no `damage` shape in the corpus (buff / shield /
+        //     heal only), so those three reactions cannot deal damage and cannot re-enter here.
+        //  3. `on-enemy-repaired` CAN: Ruiner applies a Bomb. That is the one real edge, and it is
+        //     not synchronous — the bomb detonates on a LATER round, and its detonation damage
+        //     re-enters this proc through the `'detonation'` channel. So the cycle is
+        //     leech → bomb → (next round) detonation → leech, bounded by the fight's round count,
+        //     by Ruiner's `oncePerRoundPerEnemy` cap on the bomb, and by MAX_INTENT_GENERATIONS.
+        //  4. A reaction's own repair emits this event from the EXECUTOR, not from here, and that
+        //     path's guard (an ability never observes its own output, keyed on `sourceAbilityId`)
+        //     is untouched by this emit.
+        if (healSum > 0) {
+            bus.emit({
+                type: 'reactive-heal-performed',
+                casterId: sourceId,
+                round: currentRound,
+                amount: healSum,
+                perTarget: healPerTarget,
+                ...(healAbilityIds.size === 1 ? { sourceAbilityId: [...healAbilityIds][0] } : {}),
+            });
         }
         // ONE event per proc call, keyed on the LEECHER: it is the ship applying the shield, even
         // when an `all-allies` entry lands the pool on someone else. Same gross-attempt gate as
@@ -5098,6 +5203,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // #424: scoped to the whole proc call (all entries), not to one entry — see the emit
         // below for the one-roll-per-attack ruling that fixes this scope.
         const shieldAcc = new ShieldApplyAccumulator();
+        // #447: the heal twin, same scope — see the sibling proc. CORPUS-DEAD like the heal fold
+        // below (no ship repairs off damage TAKEN, measured 2026-08-23) and wired anyway, for the
+        // reason #424 wired its own dead arm: one silent sibling is the hand-copied-divergence
+        // shape that produced this whole class.
+        const healPerTarget: { targetId: string; amount: number; overheal?: number }[] = [];
+        const healAbilityIds = new Set<string>();
+        let healSum = 0;
         for (const e of entries) {
             // requiresHpDamage gate (per victim): shield present at hit start AND HP damage dealt.
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
@@ -5106,6 +5218,17 @@ export function runCombat(rawInput: CombatEngineInput): {
             let raw = damage * (e.pct / 100);
             if (e.kind === 'heal' && rt) {
                 raw *= 1 + rt.healModifier / 100;
+                // #447 — the outgoing-repair channel of the ship performing this repair, the
+                // sibling of the fold in `procStandingLeechesPerVictim`. A damage-TAKEN leech
+                // repairs its own owner, so performer and recipient coincide and both channels
+                // read the same actor — they are still different channels, and a ship can carry
+                // one without the other.
+                //
+                // NO `freshCtx` HERE, and that is the documented limitation, not an oversight:
+                // this proc's owner is the ship being ATTACKED, which is never the actor on turn,
+                // so `actingSelfCtx` would return undefined anyway. The self-side baseline is
+                // stale by one turn exactly as the incoming fold below records.
+                raw *= 1 + performerOutgoingHealPct(victim.id) / 100;
                 // One heal-crit draw PER VICTIM (this proc runs per footprint victim).
                 if (!e.noCrit && rt.activeHealCritGate(rt.crit / 100)) {
                     raw *= 1 + rt.critDamage / 100;
@@ -5140,7 +5263,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `damage-taken` leech is one CSV row away, and the fold has to be here when it
                 // arrives, not discovered missing afterwards. The freshness note in the sibling
                 // block records what is still one turn stale here, and
-                // `leechIncomingRepair.test.ts` section 6 pins that stale profile so it cannot go
+                // `leechIsAFullHeal.test.ts` section 6 pins that stale profile so it cannot go
                 // live unnoticed.
                 //
                 // A SEPARATE LOCAL, not another `raw *=`, for two reasons. (1) Shape parity with
@@ -5170,6 +5293,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Source axis (#383): same coincidence, same distinction — the victim repaired
                     // ITSELF off the damage it took, so it is credited on both axes.
                     creditPerformedRepair(victim.id, scaled);
+                    // #447: accumulate for the repair event below. Reversed repairs (#362) fall
+                    // outside this branch and contribute nothing — they restored no HP.
+                    healPerTarget.push({
+                        targetId: victim.id,
+                        amount: scaled,
+                        ...(applied.overheal > 0 ? { overheal: applied.overheal } : {}),
+                    });
+                    healAbilityIds.add(e.abilityId);
+                    healSum += scaled;
                 }
             } else {
                 healingCtx.credit(victim.id, 'shield', raw);
@@ -5185,6 +5317,21 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // below is its scope.
                 shieldAcc.add(victim.id, healingCtx.grantShieldToTarget(raw, victim));
             }
+        }
+        // #447: the repair event, same proc-call scope, same reasoning as the sibling proc's —
+        // read the termination argument there, which covers this site too (its only extra edge is
+        // that the leecher here is the ship being ATTACKED, and an attack is not something a
+        // repair reaction can produce).
+        if (healSum > 0) {
+            bus.emit({
+                type: 'reactive-heal-performed',
+                // Self-repair: the victim converts the damage it took, so it is the performer.
+                casterId: victim.id,
+                round: currentRound,
+                amount: healSum,
+                perTarget: healPerTarget,
+                ...(healAbilityIds.size === 1 ? { sourceAbilityId: [...healAbilityIds][0] } : {}),
+            });
         }
         // ONE event per proc call, i.e. per attack on this victim — never one per entry. A hull
         // carrying two damage-taken shields converts one hit twice, and that is still a single

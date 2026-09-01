@@ -1,5 +1,14 @@
 /**
- * #367 (task 7) — the INCOMING-REPAIR channel must reach a LEECH self-repair.
+ * "A LEECH IS A FULL HEAL" — the whole ruling family, in one file.
+ *
+ * Two owner rulings, a week apart, that say the same thing about the same seam:
+ *   • 2026-08-23 (#367 task 7) — the INCOMING-repair channel reaches a leech self-repair.
+ *   • 2026-08-31 (#447) — *"leech is a full heal so it's affected by inc / outg heal, on heal
+ *     events etc."* — so the OUTGOING channel reaches it too (§7), and a leech EMITS a repair
+ *     event, which is what makes an on-repair reaction see it at all (§8).
+ *
+ * Sections 1-6 are the incoming half and predate the rename from `leechIncomingRepair.test.ts`;
+ * `engine.ts` cites "section 6" by that old name in two places, updated with the rename.
  *
  * ── THE RULING ────────────────────────────────────────────────────────────────────────────────
  * Asked of the owner on 2026-08-23: "Round 2. Your Iridium has a passive that repairs it for a
@@ -66,6 +75,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput, type TeamActorEngineInput } from '../engine';
 import { parsePattern, parseTarget } from '../../targetingParser';
+import { createEventBus, type CombatEvent } from '../events';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedBuffEffects } from '../../../types/calculator';
 import type { CombatActor } from '../state';
@@ -208,6 +218,14 @@ const preFightIncoming = (incomingHeal: number): PreFightCombatModifiers => ({
     incomingHeal,
 });
 
+/** §7's twin of `preFightIncoming`, on the OTHER channel. Same reasoning for using a pre-fight
+ *  block in a one-round fixture: `preFight.outgoingHeal` is a self-side source
+ *  `liveHealChannelPct` reads without any published ctx, so it is live in round 1. */
+const preFightOutgoing = (outgoingHeal: number): PreFightCombatModifiers => ({
+    ...emptyPreFightModifiers(),
+    outgoingHeal,
+});
+
 // ── Roster builders ───────────────────────────────────────────────────────────────────────────
 
 // ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself: normalizeTeamActorsToWalked
@@ -293,6 +311,9 @@ interface FixtureOpts {
     /** A self-granted status on the leecher (see `selfGrant`). Its presence also gives ZOSIMOS an
      *  attack in the `'dealt'` mode, since the grant rides `on-attacked`. */
     victimSelfGrant?: { name: string; duration: number; incomingHeal?: number };
+    /** §8: extra passive-slot abilities on the LEECHER — an on-repair reaction, to prove the leech
+     *  is visible to one. Appended after the leech itself. */
+    victimExtraPassives?: Ability[];
 }
 
 interface FixtureRun {
@@ -309,6 +330,13 @@ interface FixtureRun {
     /** The leecher's `preFight.incomingHeal` as the ENGINE sees it on the live actor — the
      *  existence check for the self-side sections, which have no status to look up. */
     victimPreFightIncomingHeal: number;
+    /** §7's twin of the above — the existence check for the OUTGOING self-side sections. */
+    victimPreFightOutgoingHeal: number;
+    /** §8: every `reactive-heal-performed` the run emitted, in order. The leech emits one of these
+     *  since #447; before it, a leech emitted no repair event at all. */
+    repairEvents: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[];
+    /** §8: the actors that received the named buff at least once, read off `buff-applied`. */
+    buffedActorIds: (buffName: string) => string[];
     /** The leecher's gross repair credit PER ROUND (index 0 = round 1). Same bucket as
      *  `victimDirectHeal`, which is this array's first element. */
     victimDirectHealByRound: number[];
@@ -357,6 +385,7 @@ function runFixture(opts: FixtureOpts): FixtureRun {
                   ),
               ]
             : []),
+        ...(opts.victimExtraPassives ?? []),
     ];
 
     const victimShape: RoleShape = {
@@ -378,6 +407,11 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         if (victim) victim.currentHp = START_HP;
     };
     let statusEngine: StatusEngine | undefined;
+    const bus = createEventBus();
+    const repairEvents: Extract<CombatEvent, { type: 'reactive-heal-performed' }>[] = [];
+    const buffApplied: Extract<CombatEvent, { type: 'buff-applied' }>[] = [];
+    bus.on('reactive-heal-performed', (e) => repairEvents.push(e));
+    bus.on('buff-applied', (e) => buffApplied.push(e));
 
     const common = {
         numRounds: opts.numRounds ?? 1,
@@ -401,6 +435,10 @@ function runFixture(opts: FixtureOpts): FixtureRun {
         __testTapStatusEngine: (e: StatusEngine) => {
             statusEngine = e;
         },
+        // §8. The bus has to be INJECTED here, at `runCombat` — `simulateBattle` builds its own and
+        // ignores one handed to it, so an emit-capture test driven through the simulator captures
+        // nothing and passes.
+        bus,
     };
 
     const input: CombatEngineInput =
@@ -474,6 +512,10 @@ function runFixture(opts: FixtureOpts): FixtureRun {
             .timedAbilityStatuses('self', VICTIM_ID)
             .map((s) => s.payload.buffName),
         victimPreFightIncomingHeal: victim!.preFight?.incomingHeal ?? 0,
+        victimPreFightOutgoingHeal: victim!.preFight?.outgoingHeal ?? 0,
+        repairEvents,
+        buffedActorIds: (buffName: string) =>
+            buffApplied.filter((e) => e.buffName === buffName).map((e) => e.actorId),
     };
 }
 
@@ -850,6 +892,140 @@ describe('the self-side half of the channel is read from the ACTING turn', () =>
             // Corpus-inert (both `damage-taken` passive leeches in the roster are SHIELDS), and
             // pinned so it cannot become live and unnoticed.
             expect(withUp.victimDirectHealByRound).toEqual([LEECH_RAW, UP_III_RAW, UP_III_RAW]);
+        });
+    }
+});
+
+// ══ 7 — THE OTHER CHANNEL: an Out. Repair Up raises a leech ══════════════════════════════════
+// Owner ruling 2026-08-31 (#447): a leech is a full heal, "affected by inc / outg heal". The
+// incoming half is sections 1-6; this is the outgoing one, and it was simply absent — both engine
+// leech procs folded `healModifier`, a heal-crit draw and the recipient's INCOMING channel, and
+// never the performer's OUTGOING channel that every cast, HoT and reactive repair already folded.
+//
+// The two channels are genuinely different reads even for a SELF leech, where performer and
+// recipient are the same ship: a ship can carry one without the other. §7.2 is what proves the new
+// fold is the outgoing one and not a second incoming read — it moves ONLY the outgoing block and
+// asserts the incoming block stayed at 0.
+
+describe('a leech is raised by an Out. Repair Up on the leeching ship (#447)', () => {
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side leecher: +50% outgoing repair raises the damage-dealt leech by half`, () => {
+            const shared = {
+                victimSide,
+                leechKind: 'dealt' as const,
+                enemyStatuses: [{ name: CONTROL }],
+            };
+            const withUp = runFixture({ ...shared, victimPreFight: preFightOutgoing(50) });
+            // The control carries the block too, at 0 — the only difference is the number in it.
+            const baseline = runFixture({ ...shared, victimPreFight: preFightOutgoing(0) });
+
+            // EXISTENCE: the engine really put the value on the actor, and on the OUTGOING field.
+            expect(withUp.victimPreFightOutgoingHeal).toBe(50);
+            expect(baseline.victimPreFightOutgoingHeal).toBe(0);
+            // …and NOT on the incoming one, which sections 1-6 already own. Without this the
+            // section could be re-measuring the fold it was written to be distinct from.
+            expect(withUp.victimPreFightIncomingHeal).toBe(0);
+
+            // LIVENESS, then the differential.
+            expect(baseline.victimHp - START_HP).toBe(LEECH_RAW);
+            expect(withUp.victimHp - START_HP).toBeCloseTo((baseline.victimHp - START_HP) * 1.5, 5);
+        });
+
+        it(`${victimSide}-side leecher: the same +50% raises the damage-TAKEN leech`, () => {
+            // The second proc. A site missed is the original bug surviving — the same reason
+            // section 4 exists for the incoming channel. Measured on the repair CREDIT, not HP:
+            // this fixture also lands damage ON the leecher, so an HP delta mixes the two.
+            const shared = { victimSide, leechKind: 'taken' as const, enemyStatuses: [] };
+            const withUp = runFixture({ ...shared, victimPreFight: preFightOutgoing(50) });
+            const baseline = runFixture({ ...shared, victimPreFight: preFightOutgoing(0) });
+
+            expect(baseline.victimDirectHeal).toBeGreaterThan(0);
+            expect(withUp.victimDirectHeal).toBeCloseTo(baseline.victimDirectHeal * 1.5, 5);
+        });
+    }
+});
+
+// ══ 8 — ON HEAL EVENTS: a leech emits a repair event, so a reaction can see it ═══════════════
+// The other half of the same ruling — "on heal events etc.". `heal-performed` is the CAST event
+// and the engine leech procs emitted nothing at all, so a leech was invisible to every on-repair
+// trigger: Font of Power never rolled off one, Abundant Renewal never shielded one's overflow, and
+// an enemy's leech never armed Ruiner. The procs now emit `reactive-heal-performed` — the same
+// event a reactive repair emits, and the twin of the `shield-applied` emit #424 gave the leech
+// SHIELD sites.
+//
+// §8.3 is the one that matters: an event nothing observes is not the ruling. It pairs the leech
+// with a real on-repair reaction and asserts the reaction fired ON THE LEECHER — which is also
+// #444's ruling ("procs on all heals, including self heals") reaching the leech channel.
+
+describe('a leech emits a repair event (#447)', () => {
+    /** Font of Power's shape: a buff grant on `on-own-repair-to-ally`, procChance omitted so it
+     *  always fires — the gate is not what is under test. */
+    const onRepairBuff = (buffName: string): Ability => ({
+        id: 'ab-on-repair-buff',
+        type: 'buff',
+        target: 'ally',
+        trigger: 'on-own-repair-to-ally',
+        conditions: [],
+        config: {
+            type: 'buff',
+            buffName,
+            parsedEffects: {},
+            stacks: 1,
+            isStackable: false,
+            duration: 1,
+        },
+    });
+
+    for (const victimSide of SIDES) {
+        it(`${victimSide}-side leecher: the damage-dealt leech emits one repair event, keyed on the leecher`, () => {
+            const run = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [{ name: CONTROL }],
+            });
+
+            // LIVENESS FIRST: the fixture really leeched. Without this a zero-event assertion and
+            // a one-event assertion would be equally green on a fixture that never leeched.
+            expect(run.victimHp - START_HP).toBe(LEECH_RAW);
+
+            const own = run.repairEvents.filter((e) => e.casterId === VICTIM_ID);
+            expect(own).toHaveLength(1);
+            // Self leech: the leecher is both performer and recipient, and the amount is the raw
+            // repair, matching `heal-performed.perTarget`'s shape.
+            expect(own[0].perTarget).toEqual([{ targetId: VICTIM_ID, amount: LEECH_RAW }]);
+            expect(own[0].amount).toBe(LEECH_RAW);
+        });
+
+        it(`${victimSide}-side leecher: the damage-TAKEN leech emits one too`, () => {
+            const run = runFixture({ victimSide, leechKind: 'taken', enemyStatuses: [] });
+
+            expect(run.victimDirectHeal).toBeGreaterThan(0);
+            const own = run.repairEvents.filter((e) => e.casterId === VICTIM_ID);
+            expect(own).toHaveLength(1);
+            expect(own[0].perTarget.map((pt) => pt.targetId)).toEqual([VICTIM_ID]);
+            expect(own[0].amount).toBeCloseTo(run.victimDirectHeal, 5);
+        });
+
+        it(`${victimSide}-side leecher: an on-repair reaction fires off the leech`, () => {
+            const BUFF = 'Leech Witness';
+            const withReaction = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [{ name: CONTROL }],
+                victimExtraPassives: [onRepairBuff(BUFF)],
+            });
+            // The control proves the buff cannot arrive by any route but the reaction: same
+            // fixture, same leech, reaction removed.
+            const withoutReaction = runFixture({
+                victimSide,
+                leechKind: 'dealt',
+                enemyStatuses: [{ name: CONTROL }],
+            });
+
+            expect(withoutReaction.buffedActorIds(BUFF)).toEqual([]);
+            // …and it lands on the LEECHER itself — a self-heal proccing an on-repair reaction,
+            // which is #444's ruling reaching this channel.
+            expect(withReaction.buffedActorIds(BUFF)).toContain(VICTIM_ID);
         });
     }
 });
