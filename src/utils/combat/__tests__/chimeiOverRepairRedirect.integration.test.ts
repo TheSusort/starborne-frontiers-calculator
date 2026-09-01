@@ -818,4 +818,24 @@ describe('a repair that reaches ONLY the caster still redirects', () => {
         expect(onRecipient).toHaveLength(1);
         expect(onChimei[0].amount * redirectExcess).toBe(onRecipient[0].amount * selfWaste);
     });
+
+    // #444, owner ruling 2026-08-31: "font of power procs on all heals, including self heals."
+    // The listener-level test pins the grant LIST; this pins that the grant actually LANDS. The
+    // buff branch runs its recipients through `footprintFilteredRecipients`, so a self-inclusive
+    // list is not by itself proof — if the owner's own support footprint excluded the owner, the
+    // caster would be dropped between the list and the buff and the ruling would never ship.
+    //
+    // The repair here reaches nobody but Chimei, so the grant cannot have come from an ally
+    // recipient, and the start-of-round window predates every turn, so it cannot have come from
+    // her cast either.
+    it('Font of Power procs on the CASTER off a repair that reached only her', () => {
+        setRateGateRng(() => 0);
+        setKeyedRng(() => 0);
+        const { events, kit } = runFight({ ...CASTER_ONLY(), implants: true });
+        const window = startOfRoundWindow(events, 1);
+
+        const [repair] = repairsBy(window, kit.passiveRepairId);
+        expect(repair.perTarget.map((pt) => pt.targetId)).toEqual([CHIMEI_ID]);
+        expect(nanobotRecipients(window)).toContain(CHIMEI_ID);
+    });
 });

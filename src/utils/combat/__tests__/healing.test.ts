@@ -1526,7 +1526,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         };
     };
 
-    it('on-ally-critically-repaired: own crit-repair of a non-self ally enqueues; self-only/no-crit/foreign do not', () => {
+    it('on-ally-critically-repaired: any own crit-repair enqueues, self-repair included; no-crit/foreign do not', () => {
         const handBus = makeHandBus();
         const enqueued: Intent[] = [];
         const ability: Ability = {
@@ -1556,7 +1556,8 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         });
         expect(enqueued).toHaveLength(1);
 
-        // Own cast, crit, but only self recipient → no ally repaired → 0 additional.
+        // Own cast, crit, only the caster repaired → ENQUEUES since #446. Owner ruling
+        // 2026-08-31: a critical SELF-repair procs it. This arm asserted the opposite before.
         handBus.emit({
             type: 'heal-performed',
             casterId: 'attacker',
@@ -1564,18 +1565,21 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             critHits: 1,
             ...base,
         });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
-        // Own cast, non-self recipient, NO crit → 0 additional.
+        // Own cast, non-self recipient, NO crit → 0 additional. The crit requirement is
+        // untouched by #446.
         handBus.emit({
             type: 'heal-performed',
             casterId: 'attacker',
             targets: ['t1'],
             ...base,
         });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
-        // Foreign caster's crit-repair → not THIS unit's repair → 0 additional.
+        // Foreign caster's crit-repair → not THIS unit's repair → 0 additional. `casterId ===
+        // ownerId` is not part of the ruling either, and this arm is what pins that: without it
+        // the self-repair case above could pass under a listener that fired on anyone's repair.
         handBus.emit({
             type: 'heal-performed',
             casterId: 't2',
@@ -1583,7 +1587,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
             critHits: 1,
             ...base,
         });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
     });
 
     it('on-ally-crit (non-charge rider): an ally crit enqueues once PER ATTACK; own/enemy/no-crit do not', () => {

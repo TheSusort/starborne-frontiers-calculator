@@ -191,10 +191,16 @@ export interface Intent {
          *  Sourced at the `attacked` emit and copied here by the on-attacked listener. Nyxen's
          *  counter gates on this (`requireShieldHit`). */
         shieldWasHit?: boolean;
-        /** The actor ids of the allies repaired by an on-own-repair-to-ally event
-         *  (excludes the caster). The buff branch fans an 'ally'-target grant out to
-         *  exactly these recipients (Font of Power -> repaired allies). */
-        repairedAllyIds?: string[];
+        /** The actor ids repaired by an on-own-repair-to-ally event, INCLUDING THE CASTER
+         *  when the repair reached it. The buff branch fans an 'ally'-target grant out to
+         *  exactly these recipients (Font of Power -> every repaired ship).
+         *
+         *  ⚠️ Self-inclusive since #444. Owner, 2026-08-31: *"font of power procs on all heals,
+         *  including self heals"* — so a healer that heals the whole team, itself included, rolls
+         *  the implant for ITSELF too, and a repair that reaches only the caster rolls at all.
+         *  The shipped implant text still reads "when applying repair to another ally"; the
+         *  ruling is from observed play and overrides it. */
+        repairedRecipientIds?: string[];
         /** The repairing actor's id (heal-performed.casterId), captured by the on-enemy-repaired
          *  listener. Used by the charge branch as the per-source key for an `everyNthEvent` gate
          *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). Phase 3 PR-F:
@@ -204,7 +210,7 @@ export interface Intent {
          *  (heal-performed.targets — every healed enemy, unfiltered). Read by a
          *  `repairedRecipientTargeted` debuff (Amartya's "on that defender" Defense Shred),
          *  which fans out to EACH of these instead of routing to the repairer. Mirrors
-         *  repairedAllyIds/shieldRecipientIds but for the OPPOSING side. */
+         *  repairedRecipientIds/shieldRecipientIds but for the OPPOSING side. */
         repairedEnemyIds?: string[];
         /** The DISTINCT enemies an ally's crit-ing attack actually critically hit
          *  (ability-performed.critVictimIds), stamped by the on-ally-crit listener. Read by the
@@ -233,12 +239,12 @@ export interface Intent {
          *  healing.targetId fallback.
          *
          *  Named for RECIPIENTS, not allies, precisely because the caster is one of them. Its
-         *  non-self sibling `repairedAllyIds` is a different question (who did this repair reach?)
+         *  non-self sibling `repairedRecipientIds` is a different question (who did this repair reach?)
          *  with a different, still-non-self answer. */
         overhealByRecipient?: Record<string, number>;
         /** The recipients of an `on-shield-applied` event (shield-applied.recipientIds — the
          *  actors whose pool grew). The reaction's buff/effect targets EXACTLY these, mirroring
-         *  repairedAllyIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
+         *  repairedRecipientIds: an `ally`/`all-allies`-target grant fans out to the shield recipients
          *  rather than the owner/whole team (Resonating Fury — buff every recipient of the cast). */
         shieldRecipientIds?: string[];
         /** True when this intent is the owner's OWN death reaction (a self-scoped
@@ -253,7 +259,7 @@ export interface Intent {
          *  only those with a real removal). The `on-own-cleanse` listener stamps this so an
          *  `ally`-target reactive repair (Cultivator's "that ally") fans out to exactly these ids
          *  via `reactiveRecipients`, instead of the default heal target. Mirrors
-         *  repairedAllyIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
+         *  repairedRecipientIds/shieldRecipientIds. A `self`-target reaction (Morao) ignores it. */
         cleansedAllyIds?: string[];
         /** Ship-kit W3 (Pestilence): the enemy ids ACTUALLY cleansed by an OPPOSING actor's
          *  cleanse-performed event (cleanse-performed.targets — the recipients whose debuffs were
@@ -362,16 +368,19 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
  *    excluded, own casts excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
- *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
- *    repairs an ally"). One enqueue per qualifying cast.
+ *    >= 1 critting draw (Pallas). The recipient may be the owner itself — owner ruling
+ *    2026-08-31, #446. One enqueue per qualifying cast.
  *  - on-own-repair-to-ally → the OWNER's OWN repair — the on-ally-critically-repaired twin
- *    WITHOUT the crit filter (Font of Power). Qualifying is SHAPE-SCOPED: at least one non-self
- *    recipient, OR (for an `overheal`-basis reaction, which is sized by what the repair wasted)
- *    any waste at all, the caster's own included — owner rulings 2026-08-31. Subscribes to
+ *    WITHOUT the crit filter (Font of Power). NAME IS A MISNOMER since #444 (kept because the
+ *    string is a persisted `Ability.trigger` value). Qualifying is SHAPE-SCOPED: a buff reaction
+ *    on ANY recipient including the caster alone; an `overheal`-basis reaction on any waste,
+ *    the caster's own included; anything else on >= 1 non-self recipient — owner rulings
+ *    2026-08-31. Subscribes to
  *    BOTH heal-performed (cast repairs) and, since #434, reactive-heal-performed (repairs
  *    performed from a live trigger — a start-of-round passive repair, an on-ally-damaged
- *    reaction repair). Stamps eventCtx.repairedAllyIds (the non-self recipients) so the buff
- *    branch fans the grant out to exactly those allies, plus overhealAmount/overhealByRecipient for
+ *    reaction repair). Stamps eventCtx.repairedRecipientIds (every recipient, caster included)
+ *    so the buff branch fans the grant out to exactly those ships, plus
+ *    overhealAmount/overhealByRecipient for
  *    an `overheal`-basis reaction. One enqueue per qualifying repair. On the reactive arm an
  *    ability never observes its OWN output (the #435 redirect must not redirect itself); every
  *    other observer still does.
@@ -848,30 +857,45 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-critically-repaired':
                     bus.on('heal-performed', (e) => {
-                        // The OWNER's own crit repair of an ALLY (Pallas: "when this unit
-                        // critically repairs an ally"): own cast, >= 1 critting draw, and
-                        // at least one non-self recipient. One enqueue per qualifying cast.
-                        if (
-                            e.casterId === ownerId &&
-                            (e.critHits ?? 0) >= 1 &&
-                            e.targets.some((t) => t !== ownerId)
-                        ) {
+                        // The OWNER's own crit repair (Pallas: "after an ally is critically
+                        // repaired"): own cast and >= 1 critting draw. One enqueue per qualifying
+                        // cast.
+                        //
+                        // #446, owner ruling 2026-08-31: a critical SELF-repair procs it too. The
+                        // non-self recipient requirement that used to sit here is gone — same
+                        // ruling as Font of Power's (#444), asked separately rather than induced
+                        // from it. `casterId === ownerId` is NOT part of that ruling and stays:
+                        // this is the owner's OWN repair, not any ally's.
+                        if (e.casterId === ownerId && (e.critHits ?? 0) >= 1) {
                             enqueue(intent);
                         }
                     });
                     break;
                 case 'on-own-repair-to-ally': {
                     // The OWNER's own repair (Font of Power). One enqueue per qualifying
-                    // repair -> one proc-gate roll; the buff grant fans out to the repaired
-                    // NON-SELF allies via eventCtx.repairedAllyIds. What counts as qualifying is
-                    // shape-scoped — see the gate below.
-                    // An `overheal`-BASIS reaction is sized by what a repair WASTED, not by who
-                    // received it — and since the 2026-08-31 rulings the caster's own waste counts
-                    // for both of them (Abundant Renewal's shield, Chimei's redirect). So those
-                    // two fire off a repair that reached ONLY the caster.
+                    // repair -> one proc-gate roll; the buff grant fans out to every repaired
+                    // recipient via eventCtx.repairedRecipientIds, the caster included.
+                    //
+                    // ⚠️ The trigger's NAME is a misnomer since #444 — "to-ally" no longer
+                    // qualifies anything. It is deliberately NOT renamed: the string is an
+                    // `Ability.trigger` value and ability configs can be persisted, where a
+                    // renamed key would read back as an unmatched trigger and fail SILENTLY.
+                    //
+                    // WHAT QUALIFIES IS SHAPE-SCOPED, and each shape's rule is a different kind of
+                    // claim — do not "harmonize" them:
+                    //  - buff (Font of Power): ANY recipient, the caster alone included. Owner
+                    //    ruling 2026-08-31, "procs on all heals, including self heals" (#444).
+                    //  - `overheal` basis (Abundant Renewal, Chimei's redirect): sized by what the
+                    //    repair WASTED, so it needs waste — the caster's own included (#442). An
+                    //    enqueue is a proc-gate roll, so a repair that wasted nothing must not
+                    //    burn one. That requirement is ENGINEERING, not a ruling.
+                    //  - anything else (none exists today): the original rule, >= 1 non-self
+                    //    recipient.
+                    // The gate is ADDITIVE throughout: every enqueue that happened before one of
+                    // these rulings still happens.
+                    const cfgType = intent.ability.config.type;
                     const sizedByOverheal =
-                        (intent.ability.config.type === 'heal' ||
-                            intent.ability.config.type === 'shield') &&
+                        (cfgType === 'heal' || cfgType === 'shield') &&
                         intent.ability.config.basis === 'overheal';
                     const enqueueForOwnRepair = (
                         casterId: string,
@@ -879,19 +903,17 @@ export function registerReactiveListeners(args: {
                         aggregateOverheal: number
                     ) => {
                         if (casterId !== ownerId) return;
-                        const repaired = perTarget
-                            .map((pt) => pt.targetId)
-                            .filter((t) => t !== ownerId);
-                        // The gate is ADDITIVE on the pre-existing one: a non-self recipient still
-                        // qualifies exactly as before (no golden drift), and an overheal-sized
-                        // reaction ALSO qualifies on waste alone.
-                        //
-                        // ⚠️ Do NOT widen this to every ability on the trigger. Font of Power
-                        // grants to `repairedAllyIds`, and with that list empty the buff branch
-                        // falls through to `ctx.playerIds` (the whole living side) or
-                        // `[ownerId]` — see the NOTE at that branch. Both are wrong and neither
-                        // is ruled; the shape gate above is what keeps it out of here.
-                        if (repaired.length === 0 && !(sizedByOverheal && aggregateOverheal > 0)) {
+                        // Every recipient, the caster included (#444). Non-empty whenever the
+                        // repair landed on anyone, which is what keeps the buff branch off its
+                        // no-recipients fallthrough to `ctx.playerIds` — see the NOTE there.
+                        const repaired = perTarget.map((pt) => pt.targetId);
+                        const reachedAnAlly = repaired.some((t) => t !== ownerId);
+                        if (
+                            repaired.length === 0 ||
+                            (!reachedAnAlly &&
+                                !(cfgType === 'buff') &&
+                                !(sizedByOverheal && aggregateOverheal > 0))
+                        ) {
                             return;
                         }
                         // Per-recipient clipped over-repair, THE CASTER INCLUDED (owner ruling
@@ -909,9 +931,10 @@ export function registerReactiveListeners(args: {
                             ...intent,
                             eventCtx: {
                                 ...intent.eventCtx,
-                                // Still NON-SELF, and still a different question: this is who the
-                                // repair REACHED (Font of Power's grant list), not what it wasted.
-                                repairedAllyIds: repaired,
+                                // Who the repair REACHED — a different question from what it
+                                // wasted, and self-inclusive since #444. Font of Power's grant
+                                // list.
+                                repairedRecipientIds: repaired,
                                 overhealAmount: aggregateOverheal,
                                 ...(Object.keys(overhealByRecipient).length > 0
                                     ? { overhealByRecipient }
@@ -975,7 +998,7 @@ export function registerReactiveListeners(args: {
                         // Granter-scoped (H3.6 keys the event on the acting granter): THIS owner
                         // applied a shield (Resonating Fury). One enqueue per CAST -> one proc-gate
                         // roll; the grant fans out to every RESOLVED recipient via
-                        // eventCtx.shieldRecipientIds (mirrors on-own-repair-to-ally/repairedAllyIds).
+                        // eventCtx.shieldRecipientIds (mirrors on-own-repair-to-ally/repairedRecipientIds).
                         //
                         // #418: "every recipient whose pool GREW" is no longer the rule — a grant
                         // onto a saturated pool resolves onto its recipient and lists it, so this
@@ -3980,19 +4003,19 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                           ? (ctx.adjacentAllyIdsFor?.(intent.ownerId) ?? ctx.playerIds)
                           : // H3.7: an on-shield-applied reaction (Resonating Fury) fans an ally/all-allies
                             // grant out to EXACTLY the recipients of the triggering shield cast — the same
-                            // event-derived recipient routing as repairedAllyIds (Font of Power), keyed on
+                            // event-derived recipient routing as repairedRecipientIds (Font of Power), keyed on
                             // eventCtx.shieldRecipientIds. The recipients are same-side by construction (a
                             // shield to oneself or an ally), so the granter itself appears here iff it
                             // self-shielded — no extra ally filtering needed.
                             isAllyTarget && intent.eventCtx?.shieldRecipientIds?.length
                             ? intent.eventCtx.shieldRecipientIds
-                            : // NOTE: repairedAllyIds/damagedAllyId stay scoped to target === 'ally'
+                            : // NOTE: repairedRecipientIds/damagedAllyId stay scoped to target === 'ally'
                               // (NOT isAllyTarget) on purpose — only shield routing accepts all-allies.
                               // Do not "harmonize" these to isAllyTarget; it would broaden Font of Power /
                               // on-ally-attacked recipients and drift goldens.
                               intent.ability.target === 'ally' &&
-                                intent.eventCtx?.repairedAllyIds?.length
-                              ? intent.eventCtx.repairedAllyIds
+                                intent.eventCtx?.repairedRecipientIds?.length
+                              ? intent.eventCtx.repairedRecipientIds
                               : intent.ability.target === 'ally' && intent.eventCtx?.damagedAllyId
                                 ? [intent.eventCtx.damagedAllyId]
                                 : isAllyTarget
@@ -4182,7 +4205,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             return;
         // Phase 3 PR-F: Amartya's recipient-targeted repair reaction fans the debuff out to
         // EVERY repaired enemy from the triggering heal-performed event ("that defender"
-        // distributes across a multi-target heal) — mirrors the buff branch's repairedAllyIds
+        // distributes across a multi-target heal) — mirrors the buff branch's repairedRecipientIds
         // fan-out, but for enemy-side recipients. Distinct from Ruiner's REPAIRER-targeted Bomb
         // (same on-enemy-repaired trigger, same event), which stays on the singular
         // counterTargetId route below (an empty list falls back to it defensively).
