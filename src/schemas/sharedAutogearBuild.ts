@@ -33,11 +33,36 @@ const shipRoleSchema = z
     .string()
     .refine((v) => isKeyOf(SHIP_TYPES, v), { message: 'Unknown ship role' });
 
+// Magnitude guard on every number that crosses this trust boundary. A bare
+// `z.number()` admits Number.MAX_VALUE, and Postgres stores jsonb numbers as
+// `numeric` whose text output NEVER uses exponent notation: 1.7976931348623157e+308
+// arrives as 23 characters and is served back to every viewer as 309, and 1e-308
+// expands to ~326 characters of zeros. So an extreme-magnitude number is a payload
+// amplifier — 250 of them (the array bounds below allow that) turn a ~20 KB build
+// into ~90 KB on the wire.
+//
+// This window keeps the client's byte measurement and the database's within a
+// hair of each other, which is what lets both layers share one 64 KB bound (see
+// MAX_ARRAY_LENGTH below). 1e12 is a thousand times any real effectiveHp limit,
+// and 1e-6 is far below any weight the UI can express, so nothing legitimate is
+// near either edge. `.finite()` additionally rejects Infinity, which plain
+// `z.number()` lets through (NaN it already rejects).
+const MAX_NUMBER_MAGNITUDE = 1e12;
+const MIN_NUMBER_MAGNITUDE = 1e-6;
+
+const boundedNumberSchema = z
+    .number()
+    .finite()
+    .refine((v) => Math.abs(v) <= MAX_NUMBER_MAGNITUDE, { message: 'Number magnitude too large' })
+    .refine((v) => v === 0 || Math.abs(v) >= MIN_NUMBER_MAGNITUDE, {
+        message: 'Number magnitude too small',
+    });
+
 const statPrioritySchema = z.object({
     stat: limitableStatSchema,
-    weight: z.number().optional(),
-    minLimit: z.number().optional(),
-    maxLimit: z.number().optional(),
+    weight: boundedNumberSchema.optional(),
+    minLimit: boundedNumberSchema.optional(),
+    maxLimit: boundedNumberSchema.optional(),
     hardRequirement: z.boolean().optional(),
 });
 
@@ -69,13 +94,13 @@ const setPrioritySchema = z.union([
 
 const statBonusSchema = z.object({
     stat: statNameSchema,
-    percentage: z.number(),
+    percentage: boundedNumberSchema,
     mode: z.enum(['additive', 'multiplier']).optional(),
 });
 
 const fleetBuffSchema = z.object({
     stat: statNameSchema,
-    percentage: z.number(),
+    percentage: boundedNumberSchema,
 });
 
 // Cardinality guard, not a business rule: this table's INSERT policy admits any
@@ -87,6 +112,18 @@ const fleetBuffSchema = z.object({
 // duplicate-stat buffs from stacking sources are legitimate) — it exists only
 // to cap the row size any viewer has to validate and render, not to reject a
 // real build.
+//
+// Paired with a database-side size bound (issue #431):
+// 20260901000001_bound_community_recommendation_payload_size.sql CHECKs
+// octet_length(col::text) <= 65536 on shared_config and the three legacy jsonb
+// columns, because this bound protects the DOM while `select('*')` still
+// transfers a hostile row to every viewer.
+//
+// Both layers count the same thing — bytes of JSON text — which is only true
+// because MAX_NUMBER_MAGNITUDE keeps Postgres' exponent-free numeric rendering
+// from inflating the payload. Do not raise MAX_ARRAY_LENGTH or loosen the number
+// window without re-measuring against that bound: sharedAutogearBuild.test.ts
+// fails if the largest payload this schema admits creeps past half of it.
 const MAX_ARRAY_LENGTH = 50;
 
 // Object schemas strip unknown keys by default (zod's .strip()), which is what
