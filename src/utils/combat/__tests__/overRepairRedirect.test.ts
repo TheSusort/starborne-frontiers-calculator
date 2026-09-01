@@ -52,6 +52,12 @@ function run(args: {
     /** Legacy single-target emit: no per-recipient breakdown, only the aggregate. */
     overhealAmount?: number;
     lowestHpAllyId?: string | undefined;
+    /** §Modifiers: the CASTER's own repair channels. Default 0/0 — every case that is not about
+     *  #449 keeps them neutral, so no sizing assertion elsewhere in this file depends on them. */
+    healModifier?: number;
+    outgoingHeal?: number;
+    /** The RECIPIENT's incoming-repair channel, in percentage points. */
+    recipientIncomingPct?: number;
 }) {
     const bus = createEventBus();
     const se = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -73,7 +79,7 @@ function run(args: {
             return { applied: raw, overshield: 0 };
         },
         recipientMaxHp: () => MAX_HP,
-        recipientIncomingHealPct: () => 0,
+        recipientIncomingHealPct: () => args.recipientIncomingPct ?? 0,
         recipientActor: (id: string) => ({ id }) as unknown as CombatActor,
     } as unknown as IntentExecContext['healing'];
 
@@ -88,7 +94,9 @@ function run(args: {
         ability: args.ability,
         sourceSlot: 'passive',
         eventCtx: {
-            repairedAllyIds: [ALLY_A, ALLY_B],
+            // Renamed in #444 — the list is self-inclusive now, and this fixture's abilities
+            // never read it (they route by selector / per-recipient map).
+            repairedRecipientIds: [ALLY_A, ALLY_B],
             overhealAmount: aggregate,
             ...(args.overhealByRecipient ? { overhealByRecipient: args.overhealByRecipient } : {}),
         },
@@ -98,8 +106,10 @@ function run(args: {
     // cast covered — `executeIntent` throws on a missing owner runtime, and reads
     // corrosionEntries/infernoEntries/pendingBombs/lastTurnCtxByActor unconditionally. The
     // owner runtime shape is copied from `reactiveOverhealShield.test.ts`'s `makeShieldCtx`,
-    // with every modifier field left at its neutral (0 / 100) value — the open heal-modifier
-    // ruling (R-open) must not be smuggled into this fixture as a decided answer.
+    // with every modifier field left at its neutral (0 / 100) value by DEFAULT. That default used
+    // to be load-bearing because the heal-modifier ruling was open; #449 closed it, and the
+    // `healModifier` / `outgoingHeal` options exist so the section at the bottom can move the
+    // caster's channels and assert they do NOT reach an over-repair basis.
     const ctx = {
         bus,
         round: 1,
@@ -117,11 +127,14 @@ function run(args: {
                         currentHp: MAX_HP,
                         chargeCount: 0,
                         charges: 0,
+                        ...(args.outgoingHeal !== undefined
+                            ? { preFight: { outgoingHeal: args.outgoingHeal } }
+                            : {}),
                     } as unknown as CombatActor,
                     attack: 10000,
                     defence: 0,
                     hp: MAX_HP,
-                    healModifier: 0,
+                    healModifier: args.healModifier ?? 0,
                     selfDotModifier: 0,
                     defensePenetrationBuff: 0,
                     affinityDamageModifier: 0,
@@ -248,5 +261,101 @@ describe('#435 Task 3 — explicit lowest-hp-ally on an overheal basis', () => {
             { rid: ALLY_B, raw: 1_000 },
             { rid: OWNER_ID, raw: 2_000 },
         ]);
+    });
+});
+
+// ══ #449 — an over-repair redirect does not scale a SECOND time ══════════════════════════════
+// Owner ruling 2026-09-01, closing the epic's last open question: *"since it's baked into the heal
+// cast itself in game, i think it's safe to assume it doesn't scale a second time, as the original
+// cast will be affected by heal modifier."*
+//
+// An `overheal` basis is the clipped excess of a repair the caster's own channels ALREADY scaled,
+// so folding them again is a double-count: a +50% healer inflates the waste by half, and the
+// executor used to inflate the transfer by another half — 2.25× the clause's transfer.
+//
+// Every other case in this file runs with the caster's channels at 0, which is why the whole suite
+// stayed green through this change. That is exactly why these cases exist: a fix nothing observes
+// is not a fix.
+
+describe('#449 — the caster’s own repair channels do not reach an over-repair basis', () => {
+    /** A NON-overheal reactive heal, for the control arm: `hp` basis, so `nonTargetHpBasis` is the
+     *  owner's max HP and the caster's channels legitimately apply. */
+    const plainHeal = (): Ability => ({
+        id: 'ab-plain-heal',
+        type: 'heal',
+        target: 'lowest-hp-ally',
+        trigger: 'on-own-repair-to-ally',
+        conditions: [],
+        config: { type: 'heal', pct: 10, basis: 'hp' },
+    });
+
+    it('a +50% healModifier does NOT inflate the redirect', () => {
+        const shared = {
+            ability: redirect(),
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            lowestHpAllyId: LOWEST,
+        };
+        const boosted = run({ ...shared, healModifier: 50 });
+        const neutral = run(shared);
+
+        // The transfer is the over-repair, full stop — the same number with and without the buff.
+        expect(neutral).toEqual({ heals: [{ rid: LOWEST, raw: 5_000 }], shields: [] });
+        expect(boosted.heals).toEqual([{ rid: LOWEST, raw: 5_000 }]);
+    });
+
+    it('a +50% outgoing-repair channel does NOT inflate the redirect either', () => {
+        // The second caster-side factor. Dropping only one of the two would leave a healer with an
+        // `Out. Repair Up` still double-counting, and the case above could not see it.
+        const boosted = run({
+            ability: redirect(),
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            lowestHpAllyId: LOWEST,
+            outgoingHeal: 50,
+        });
+        expect(boosted.heals).toEqual([{ rid: LOWEST, raw: 5_000 }]);
+    });
+
+    // THE INSTRUMENT. Both cases above assert a number did NOT move, which a fixture that never
+    // read the channel at all would also satisfy. This is the same harness, the same +50%, on a
+    // heal whose basis is NOT an over-repair — and there the channels must still apply. Without
+    // this arm, deleting the fold outright would pass every assertion above.
+    it('…but they still scale a heal whose basis is not an over-repair', () => {
+        const shared = { ability: plainHeal(), lowestHpAllyId: LOWEST };
+        const neutral = run(shared);
+        const boosted = run({ ...shared, healModifier: 50 });
+        const outgoing = run({ ...shared, outgoingHeal: 50 });
+
+        // 10% of the owner's 50,000 max HP.
+        expect(neutral.heals).toEqual([{ rid: LOWEST, raw: 5_000 }]);
+        expect(boosted.heals).toEqual([{ rid: LOWEST, raw: 7_500 }]);
+        expect(outgoing.heals).toEqual([{ rid: LOWEST, raw: 7_500 }]);
+    });
+
+    // WHAT THE RULING DOES NOT COVER, asserted so the scope is legible. The RECIPIENT's incoming
+    // channel is not a second application of anything: it belongs to the ship receiving the
+    // redirect, which is not the ship whose over-repair supplied the basis, and it has never
+    // touched this amount. Every other repair channel in the engine is subject to it.
+    it('the RECIPIENT’s incoming-repair channel still applies to the redirect', () => {
+        const halved = run({
+            ability: redirect(),
+            overhealByRecipient: { [ALLY_A]: 3_000, [ALLY_B]: 2_000 },
+            lowestHpAllyId: LOWEST,
+            recipientIncomingPct: -50,
+        });
+        expect(halved.heals).toEqual([{ rid: LOWEST, raw: 2_500 }]);
+    });
+
+    // Abundant Renewal never had the double-count — the shield arm folds nothing — and this pins
+    // that the fix did not accidentally give it one.
+    it('Abundant Renewal’s shield is unmoved by either caster channel', () => {
+        const shared = {
+            ability: abundantRenewal(),
+            overhealByRecipient: { [ALLY_A]: 3_000 },
+            lowestHpAllyId: LOWEST,
+        };
+        const expected = [{ rid: ALLY_A, raw: 1_500 }];
+        expect(run(shared).shields).toEqual(expected);
+        expect(run({ ...shared, healModifier: 50 }).shields).toEqual(expected);
+        expect(run({ ...shared, outgoingHeal: 50 }).shields).toEqual(expected);
     });
 });

@@ -4873,12 +4873,31 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // reach an unclamped factor. The OUTGOING factor is deliberately left unfloored — it is
             // unfloored at every one of its sites, and clamping one of three would rebuild exactly
             // the partial tripwire this change removes (see the helper's ⚠️ note).
+            // #449, owner ruling 2026-09-01, closing the epic's last open question: an
+            // over-repair redirect "doesn't scale a second time, as the original cast will be
+            // affected by heal modifier".
+            //
+            // An `overheal` basis is the CLIPPED EXCESS of a repair that had already been scaled
+            // by its caster's channels — so folding them again here is a double-count, not a
+            // fold: a +30% healer inflated the waste by 30%, and this line inflated the transfer
+            // by another 30%. The two CASTER-side factors are therefore skipped for that basis.
+            //
+            // Scoped by BASIS, not by target: the argument is about where the basis came from, so
+            // it holds for any repair sized off an over-repair, not only the `lowest-hp-ally`
+            // shape. Abundant Renewal never had the problem — it is a `shield`, and the shield arm
+            // below folds nothing at all.
+            //
+            // THE RECIPIENT-SIDE FACTORS STAY, and that is not an oversight. `incomingHealFactor`
+            // and Exuberance's amp belong to the ship RECEIVING this repair, which is a different
+            // ship from the one whose over-repair supplied the basis — its own incoming channel
+            // has never touched this amount, so applying it is a first application, not a second.
+            const sizedFromAnOverRepair = cfg.basis === 'overheal';
             let raw =
                 cfg.type === 'heal'
                     ? basisValue *
                       (effectivePct / 100) *
-                      (1 + owner.healModifier / 100) *
-                      (1 + ownerOutgoing / 100) *
+                      (sizedFromAnOverRepair ? 1 : 1 + owner.healModifier / 100) *
+                      (sizedFromAnOverRepair ? 1 : 1 + ownerOutgoing / 100) *
                       incomingHealFactor(incomingPctFor(rid))
                     : basisValue * (effectivePct / 100);
             // D-PR6: recipient-side incoming-heal amplification (Exuberance) — HEAL case ONLY (NOT
