@@ -34,8 +34,14 @@
  * of them a verb — or adds a ship written that way — turns this red. That is the point: the
  * resolver fix is deferred, so this converts the deferral into a tripwire.
  *
- * If it fails, the choice is to make clause selection occurrence-aware (threading through all
- * four consumers) — not to relax this test.
+ * READING A RED. The differential is deliberately CONSERVATIVE, so confirm which shape arrived
+ * before acting. The divergent-grant shape this guards against is one cause; the other is a grant
+ * verb in sentence one governing a tag in sentence TWO ("grants X and, for 2 turns, Y."), where
+ * the per-sentence walk loses the backward verb scan and under-emits. That is a false positive of
+ * this instrument, not a resolver defect — the whole-row parse is right there.
+ *
+ * For a genuine divergent grant the choice is to make clause selection occurrence-aware (threading
+ * through all four consumers) — not to relax this test.
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
