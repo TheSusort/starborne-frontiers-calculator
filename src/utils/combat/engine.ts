@@ -228,10 +228,9 @@ export function foldSpeedBuffPct(
 // casterId. Timed statuses are NOT registered here — they apply lazily per recipient via
 // applyTimedAbilityStatus at the firing site (playerTurn loops `status.recipients`).
 //
-// KNOWN APPROXIMATION (documented, not fixed this task): a team-cast all-allies ACCUMULATING
-// status registered onto the attacker's store ticks per-active/per-charge on the ATTACKER's
-// cadence (sourceFired increments only the 'attacker' map for per-slot triggers). Per-caster
-// cadence tracking is out of scope here; per-round increments tick every owner's map already.
+// Per-caster cadence for ACCUMULATING statuses landed in #436: a share ticks on its GRANTER's
+// casts, on whatever recipient's store it lives, and two granters of one buff on one recipient
+// both accrue instead of the later registration replacing the earlier.
 //
 // Zero-churn: for an attacker-only run playerIds = ['attacker'], so self and ally/all-allies
 // both yield recipients ['attacker'] and casterId 'attacker' — identical to the pre-Task-5
