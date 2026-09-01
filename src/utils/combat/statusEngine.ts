@@ -182,9 +182,12 @@ export interface StatusEngine {
      *  covers the attacker's own cadence AND all legacy/merged scheduled buffs
      *  (per-buff sourceChargeCount/sourceStartCharged are IGNORED — superseded by
      *  per-team-actor cadence); team actor ids carry their own timed sets via
-     *  `teamSources`; unregistered ids no-op. Applies timed scheduled buffs keyed
-     *  to (sourceId, slot) and increments per-active/per-charge accumulating
-     *  stacks when sourceId === 'attacker'. Returns:
+     *  `teamSources`; unregistered ids no-op for the TIMED half. Applies timed
+     *  scheduled buffs keyed to (sourceId, slot) and increments per-active/per-charge
+     *  accumulating stacks whose GRANTER is this source — on every owner's store, not
+     *  just the focus actor's (#436, owner ruling 2026-09-01). The accumulating half
+     *  runs even for a source with no registered timed sets: a granter's cadence is
+     *  its casts, not its timed-buff list. Returns:
      *  - `resistedEnemy`: buffNames of TIMED enemy upserts the landing hook rejected
      *    (so the engine can emit debuff-resisted and record them in the resisted list).
      *  - `appliedEnemy`: buffNames of TIMED enemy upserts that LANDED this call,
@@ -472,12 +475,33 @@ interface BuffState {
     stacks?: number;
 }
 
+/** One granter's contribution to an accumulating status on one owner. Two ships can grant the
+ *  SAME accumulating buff to one owner, and both grants land (owner ruling, 2026-09-01, #436:
+ *  two adjacent Centurions each read 6 = their own 4-stack self grant plus the other's 2-stack
+ *  adjacent grant). The contributions cannot be merged into a single rate, for two reasons the
+ *  corpus actually exhibits:
+ *    • they tick on DIFFERENT casts — Centurion B's rate-4 share rides B's charge, A's rate-2
+ *      share rides A's charge, so one merged rate of 6 would grant 6 on EACH of the two casts;
+ *    • they can carry DIFFERENT TRIGGERS — a Nuqtu adjacent to a Centurion holds his own
+ *      per-round rate-1 share and Centurion's per-charge rate-2 share under one buffName.
+ *  Measured corpus-wide 2026-09-01 (all 149 ships): the reachable collisions are Core Charge I
+ *  and Blast, every accumulating grant carries `conditions: []`, and the declared cap agrees
+ *  within every buffName — so the entry keeps ONE payload, ONE gate and ONE cap, and only the
+ *  accrual is per-granter. */
+interface AccumulatingContribution {
+    /** The actor whose cadence this share rides — the GRANTER, not the holder. `'attacker'` for
+     *  scheduled entries, which have no caster (that reproduces the pre-#436 cadence exactly). */
+    granterId: string;
+    rate: number;
+    trigger: StackTrigger;
+}
+
 interface AccumulatingState {
     buffName: string;
     stacks: number;
     maxStacks: number | undefined;
-    rate: number;
-    trigger: 'per-round' | 'per-active' | 'per-charge';
+    /** One share per granter (see AccumulatingContribution). Never empty. */
+    contributions: AccumulatingContribution[];
     /** Present for ability-sourced accumulating statuses (payload + aura-gate conditions). */
     payload?: AbilityStatusPayload;
     conditions?: Condition[];
@@ -642,8 +666,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             buffName: b.buffName,
             stacks: 0,
             maxStacks: b.maxStacks,
-            rate: b.stacks,
-            trigger: b.stackTrigger!,
+            // Scheduled entries have no caster — they are attacker-owned grants, so the attacker
+            // is the granter whose cadence they ride (pre-#436 semantics, unchanged).
+            contributions: [{ granterId: 'attacker', rate: b.stacks, trigger: b.stackTrigger! }],
         });
     }
 
@@ -670,8 +695,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             buffName: b.buffName,
             stacks: 0,
             maxStacks: b.maxStacks,
-            rate: b.stacks,
-            trigger: b.stackTrigger!,
+            // Scheduled enemy debuffs ride the attacker's cadence (pre-#436 semantics). Under the
+            // uniform granter rule this is byte-identical: the old code ticked EVERY enemy map
+            // when sourceId === 'attacker', and only this map is ever seeded.
+            contributions: [{ granterId: 'attacker', rate: b.stacks, trigger: b.stackTrigger! }],
         });
     }
 
@@ -812,6 +839,23 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     let appliedSeqCounter = 0;
     const nextAppliedSeq = (): number => ++appliedSeqCounter;
 
+    /** Add `amount` stacks to an accumulating entry, clamped to its cap, stamping `appliedSeq` on
+     *  the 0→positive transition (the first time the status becomes active). Later gains do not
+     *  re-stamp — the first-active order is what cleanse/purge needs for newest-first ordering.
+     *  `amount` is the SUM of the contributions that matched this tick (#436), so the cap clamps
+     *  the TOTAL rather than each granter's share (owner ruling: two adjacent Centurions each
+     *  read 6, and a Core Charge I total still stops at 10). A non-positive amount is a no-op —
+     *  it cannot move `stacks`, so it must not consume an appliedSeq either. */
+    const addAccumStacks = (state: AccumulatingState, amount: number): void => {
+        if (amount <= 0) return;
+        const before = state.stacks;
+        state.stacks =
+            state.maxStacks !== undefined
+                ? Math.min(state.stacks + amount, state.maxStacks)
+                : state.stacks + amount;
+        if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
+    };
+
     // The actor whose turn is currently executing (set at each turn-started via beginTurn).
     // Self-side timed writes stamp appliedThisTurn when the carrier id matches this — the
     // own-turn reprieve. Undefined before the first beginTurn → no reprieve (safe default).
@@ -842,16 +886,15 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
 
         const incrementPerRound = (map: Map<string, AccumulatingState>) => {
             for (const state of map.values()) {
-                if (state.trigger !== 'per-round') continue;
-                const before = state.stacks;
-                state.stacks =
-                    state.maxStacks !== undefined
-                        ? Math.min(state.stacks + state.rate, state.maxStacks)
-                        : state.stacks + state.rate;
-                // Stamp appliedSeq at the 0→positive transition (first time the status
-                // becomes active). Later stack gains do not re-stamp — the first-active
-                // order is what cleanse/purge needs for newest-first ordering.
-                if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
+                // #436: sum EVERY granter's per-round share. Two granters of one buff on one
+                // owner both accrue — Howler's `ally`-scoped Blast landing on a Lev who also
+                // self-grants Blast reads 2 per round, capped at 4. Pre-#436 the second
+                // registration REPLACED the first, so only one share existed.
+                let amount = 0;
+                for (const c of state.contributions) {
+                    if (c.trigger === 'per-round') amount += c.rate;
+                }
+                addAccumStacks(state, amount);
             }
         };
         // Iterate EVERY owner's accum map so per-round stacks tick for all owners. Today only
@@ -920,39 +963,51 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
             );
         }
-        const sets = timedBySource.get(sourceId);
-        if (!sets) return { resistedEnemy: [], appliedEnemy: [] };
-
-        // Per-active/per-charge accumulating stacks tick on the matching slot — ATTACKER
-        // only (these track the attacker's own cadence; later tasks may generalise this per
-        // team actor). Reads the 'attacker' owner's map; no-op if not yet populated.
-        if (sourceId === 'attacker') {
-            const incrementSlot = (map: Map<string, AccumulatingState>) => {
-                for (const state of map.values()) {
-                    const fires =
-                        (state.trigger === 'per-active' && slot === 'active') ||
-                        (state.trigger === 'per-charge' && slot === 'charge');
-                    if (fires) {
-                        const before = state.stacks;
-                        state.stacks =
-                            state.maxStacks !== undefined
-                                ? Math.min(state.stacks + state.rate, state.maxStacks)
-                                : state.stacks + state.rate;
-                        // Stamp appliedSeq at the 0→positive transition — identical rule to
-                        // incrementPerRound. Later stack gains do not re-stamp.
-                        if (before === 0 && state.stacks > 0) state.appliedSeq = nextAppliedSeq();
-                    }
+        // Per-active/per-charge accumulating stacks tick on the GRANTER's cadence (owner ruling
+        // 2026-09-01, #436): a stack granted BY another ship keeps accruing every time THAT ship
+        // casts, so the share that ticks is the one naming this source as its granter — on
+        // whatever owner's store it lives, not only the focus actor's. Centurion standing next to
+        // an idle ally, charging and casting on rounds 2 and 4, leaves the ally on 4 stacks of
+        // Core Charge I; pre-#436 the ally banked nothing at all, because only accumSelfMaps
+        // under 'attacker' was ever incremented.
+        //
+        // The same rule runs on the enemy side, where it is provably a no-op today: the corpus
+        // holds exactly ONE enemy-side accumulating entry (Amartya's Defense Shred) and it is
+        // per-round, and scheduled enemy entries carry granterId 'attacker' — which reproduces
+        // the old "tick every enemy map when the attacker fires" exactly, since only the
+        // DEFAULT_ENEMY_TARGET map is ever seeded. Measured corpus-wide 2026-09-01.
+        //
+        // Deliberately ABOVE the `if (!sets) return` early return below: a granter's cadence is
+        // its CASTS, which has nothing to do with whether it also registered timed buffs. A ship
+        // whose kit carries an accumulating grant but no timed self/enemy buff has no
+        // `timedBySource` entry at all, and gating the accrual on one would leave exactly the
+        // dead channel this repairs.
+        const slotAmount = (state: AccumulatingState): number => {
+            let amount = 0;
+            for (const c of state.contributions) {
+                if (c.granterId !== sourceId) continue;
+                if (
+                    (c.trigger === 'per-active' && slot === 'active') ||
+                    (c.trigger === 'per-charge' && slot === 'charge')
+                ) {
+                    amount += c.rate;
                 }
-            };
-            // Only increment the attacker's own accum map (legacy semantics).
-            const attackerAccum = accumSelfMaps.get('attacker');
-            if (attackerAccum) incrementSlot(attackerAccum);
-            // Increment ALL enemy target accum maps — per-active/per-charge enemy stacks
-            // ride the attacker's cadence regardless of target id (legacy semantics).
-            for (const targetAccum of accumEnemyMaps.values()) {
-                incrementSlot(targetAccum);
+            }
+            return amount;
+        };
+        for (const ownerAccum of accumSelfMaps.values()) {
+            for (const state of ownerAccum.values()) {
+                addAccumStacks(state, slotAmount(state));
             }
         }
+        for (const targetAccum of accumEnemyMaps.values()) {
+            for (const state of targetAccum.values()) {
+                addAccumStacks(state, slotAmount(state));
+            }
+        }
+
+        const sets = timedBySource.get(sourceId);
+        if (!sets) return { resistedEnemy: [], appliedEnemy: [] };
 
         // Timed scheduled buffs (this source's) whose skillSource matches the fired slot.
         for (const buff of sets.timedSelf) {
@@ -1572,16 +1627,48 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // Ability accumulating statuses join the accumulating machinery with a
                 // payload + (live-gated) conditions for per-round aura gating of effects.
                 // s.stackTrigger is non-optional on the accumulating variant — no ! needed.
-                map.set(s.payload.buffName, {
-                    buffName: s.payload.buffName,
-                    stacks: 0,
-                    maxStacks: s.maxStacks,
+                //
+                // The GRANTER whose cadence this share rides. `casterId` is stamped by the
+                // engine's fan-out on every ability-sourced status; a fixture that omits it falls
+                // back to the attacker, i.e. the pre-#436 cadence.
+                const contribution: AccumulatingContribution = {
+                    granterId: s.casterId ?? 'attacker',
                     rate: s.payload.stacks,
                     trigger: s.stackTrigger,
-                    payload: s.payload,
-                    conditions: s.conditions,
-                    casterId: s.casterId,
-                });
+                };
+                const existing = map.get(s.payload.buffName);
+                if (existing) {
+                    // #436 ruling B: a second grant of the same buff onto this owner ADDS a
+                    // share; it does not replace the first. Pre-#436 this was a `.set()`, so
+                    // Centurion's own 4-stack self grant and a neighbouring Centurion's 2-stack
+                    // adjacent grant collapsed to whichever registered last — which is why his
+                    // pre-fix double-registration onto himself was harmless rather than doubling.
+                    //
+                    // No de-duplication by granter: registration happens ONCE per actor per fight
+                    // (engine.ts's registerActorAbilityStatuses runs at actor construction and is
+                    // never revisited), so a repeat registration onto one owner is two genuine
+                    // grants, and a dedupe key would silently swallow one of them — the very bug
+                    // this repairs.
+                    //
+                    // `payload`, `conditions`, `casterId` and `maxStacks` stay the FIRST
+                    // registration's. Measured corpus-wide 2026-09-01 (all 149 ships): every
+                    // accumulating grant carries `conditions: []` and the declared cap agrees
+                    // within every buffName, so there is nothing for a second registration to
+                    // disagree about. A future kit that breaks either invariant needs a real
+                    // decision here rather than a silent first-wins; the census that measured it
+                    // is in the #436 plan under docs/superpowers/plans/.
+                    existing.contributions.push(contribution);
+                } else {
+                    map.set(s.payload.buffName, {
+                        buffName: s.payload.buffName,
+                        stacks: 0,
+                        maxStacks: s.maxStacks,
+                        contributions: [contribution],
+                        payload: s.payload,
+                        conditions: s.conditions,
+                        casterId: s.casterId,
+                    });
+                }
             } else if (s.kind === 'aura') {
                 // Self-side auras are per-owner; enemy-side auras are per-target.
                 (s.side === 'self' ? getAuraSelf(ownerId) : getAuraEnemy(enemyTargetId)).push(s);
