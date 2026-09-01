@@ -3328,9 +3328,14 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             pushToSlot(bySlot, slot, [{ ability, pos: convertPos >= 0 ? convertPos : MAX_POS }]);
             return;
         }
+        // #438: which occurrence of this buff name in the row this grant is. Every clause
+        // detector below takes it, so a grant written in the row's SECOND sentence reads its own
+        // conditions, faction scope, recipient filter and trigger instead of the first sentence's.
+        // 0 for manual picks, for pre-#438 persisted records, and for every single-grant name.
+        const occurrence = buff.skillOccurrenceIndex ?? 0;
         // Attach a gating condition parsed from the buff's clause (e.g. Thresh's
         // "When targeting a Defender, … gains Crit Power Up II" → enemy-type Defender).
-        const conditions = rowText ? detectGrantConditions(rowText, buff.buffName) : [];
+        const conditions = rowText ? detectGrantConditions(rowText, buff.buffName, occurrence) : [];
         if (conditions.length) {
             ability.conditions = conditions;
         }
@@ -3340,13 +3345,12 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // alone). Gated on an ally-scoped target — a self-grant has no recipient set to narrow,
         // and a faction predicate on it would either be a no-op or mute the caster's own buff.
         //
-        // occurrenceIndex is left at its default 0: `mergeBuff` works from a deduped
-        // SelectedGameBuff (keyed name|target|source), so it has no per-<unit-skill>-segment
-        // occurrence to pass. That only matters for a buff name granted TWICE in one clause with
-        // two DIFFERENT faction scopes — no corpus clause does that (Fuying's Stealth appears once
-        // per row), and both grants of such a pair would read the first span's answer.
+        // #438: the occurrence index now arrives on the SelectedGameBuff, so a second-sentence
+        // grant reads its own faction scope. The dedupe key (name|target|source) still collapses
+        // two same-name, same-target, same-slot grants onto the first occurrence — see the
+        // DEDUPE BOUNDARY note in skillBuffAutoFill.
         if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
-            const factionFilter = detectGrantFactionScope(rowText, buff.buffName);
+            const factionFilter = detectGrantFactionScope(rowText, buff.buffName, occurrence);
             if (factionFilter) ability.factionFilter = factionFilter;
         }
         // Recipient STATE filter on an ally-scoped grant ("non-defender allies below 40% HP are
@@ -3355,7 +3359,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // cannot leak onto it. Attached only when the clause names one, so every other ship's
         // ability object stays byte-identical.
         if (rowText && FACTION_FILTERABLE_TARGETS.has(target)) {
-            const recipientFilter = detectGrantRecipientFilter(rowText, buff.buffName);
+            const recipientFilter = detectGrantRecipientFilter(rowText, buff.buffName, occurrence);
             if (recipientFilter) ability.recipientFilter = recipientFilter;
         }
         // Reactive trigger (crit / start-of-round / bomb-detonate) detected on this buff's
@@ -3363,7 +3367,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         // The trigger IS the gate, so drop the now-redundant self-crit condition (start-of-round
         // and bomb-detonate phrasings produce no condition from detectGrantConditions). Any other
         // conditions (e.g. an enemy-type co-gate) are preserved.
-        let reactiveTrigger = rowText ? detectReactiveTrigger(rowText, buff.buffName) : undefined;
+        let reactiveTrigger = rowText
+            ? detectReactiveTrigger(rowText, buff.buffName, occurrence)
+            : undefined;
         // Overload lifecycle guard: a kill never GRANTS a recurring/accumulating buff — it only
         // REMOVES it (the kill phrasing belongs to the remove-self-buff path, parsed separately by
         // parseSelfBuffRemovals). The Marauder "gains <buff> every turn … loses it on kill" shape
@@ -3417,7 +3423,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             ability.config.type === 'buff' &&
             rowText
         ) {
-            reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName);
+            reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName, occurrence);
         }
         // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
@@ -3620,7 +3626,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             !!ability.config.stackTrigger &&
             !!ability.config.isStackable;
         if (ability.trigger === 'on-cast' && rowText && !isAccumulatingBuff) {
-            const preCombatTrigger = detectPreCombatBuffTrigger(rowText, buff.buffName);
+            const preCombatTrigger = detectPreCombatBuffTrigger(rowText, buff.buffName, occurrence);
             if (preCombatTrigger) ability.trigger = preCombatTrigger;
             // Meiying p2: "At the start of combat and every turn, this Unit gains Stealth for 2
             // turns" — detectPreCombatBuffTrigger already excludes this clause from the one-time

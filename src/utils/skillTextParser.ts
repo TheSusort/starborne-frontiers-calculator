@@ -1088,13 +1088,81 @@ export function findBuffNamePos(text: string, buffName: string): number {
     return m ? m.index + m[1].length : -1;
 }
 
-function resolveBuffClause(skillText: string, buffName: string): string {
+/** Word-boundary occurrence count, the same matcher clause selection anchors on. */
+function countBuffNameOccurrences(text: string, buffName: string): number {
+    let n = 0;
+    let rest = text;
+    for (;;) {
+        const i = findBuffNamePos(rest, buffName);
+        if (i === -1) return n;
+        n++;
+        rest = rest.slice(i + buffName.length);
+    }
+}
+
+/**
+ * A buff name's granting clause, plus where in THAT clause the requested occurrence sits.
+ *
+ * `localIndex` is the occurrence's index WITHIN `clause`, which is what `findNthOccurrencePos`
+ * needs — the caller counts occurrences across the whole row, so passing its global index into a
+ * single-sentence clause would over-run it.
+ */
+interface ResolvedBuffClause {
+    clause: string;
+    localIndex: number;
+}
+
+/**
+ * Resolves the sentence that OWNS the `occurrenceIndex`-th occurrence of `buffName` (#438).
+ *
+ * Before this took an index it was a plain first-match, so a second SENTENCE mentioning the same
+ * name was unreachable: every occurrence resolved from sentence one and `findNthOccurrencePos`
+ * degraded to its LAST match there rather than failing, so a second grant silently inherited the
+ * first clause's receiver ("grants X to itself. grants X to all allies." emitted both as `self`).
+ *
+ * OCCURRENCE BASIS. The caller's index counts `<unit-skill>` TAGGED occurrences in the raw row;
+ * this counts WORD-BOUNDARY matches over the tag-stripped text. Those are different countings, so
+ * the mapping is only sound while they agree. Measured 2026-09-01 over docs/ship-skills.csv: of
+ * the 33 name/row pairs with two or more tagged occurrences — the only ones that ever receive an
+ * index above 0 — all 33 agree. (Seven pairs corpus-wide DISagree, all of them tagged exactly
+ * once: untagged prose mentions, e.g. Panon's `Barrier`. Index 0 resolves to the first sentence
+ * holding the name either way, so they are unaffected.) `buffClauseSentenceSplit.test.ts` asserts
+ * the multi-tagged agreement so a ship-data refresh that breaks the basis reddens rather than
+ * silently mis-ordering. Word boundaries also matter for the counting itself: plain `indexOf`
+ * counts "Stealth" inside "Stealthed" (Panguan), inflating the ordinal.
+ *
+ * Out-of-range indices keep the old defensive behaviour — the LAST sentence holding the name, at
+ * its last occurrence — rather than losing the clause entirely.
+ */
+function resolveBuffClauseAt(
+    skillText: string,
+    buffName: string,
+    occurrenceIndex = 0
+): ResolvedBuffClause {
     const plain = maskAbbrev(stripUnitTags(skillText).replace(/<br\s*\/?>/gi, '. '));
     const maskedName = maskAbbrev(buffName).toLowerCase();
+    const unmask = (s: string) => s.split(ABBR_MARK).join(' ');
     const sentences = splitSentences(plain);
-    const clauseMasked =
-        sentences.find((s) => findBuffNamePos(s.toLowerCase(), maskedName) >= 0) ?? plain;
-    return clauseMasked.split(ABBR_MARK).join(' ');
+
+    let seen = 0;
+    let lastHolder: ResolvedBuffClause | null = null;
+    for (const sentence of sentences) {
+        const here = countBuffNameOccurrences(sentence.toLowerCase(), maskedName);
+        if (here === 0) continue;
+        if (occurrenceIndex < seen + here) {
+            return { clause: unmask(sentence), localIndex: occurrenceIndex - seen };
+        }
+        seen += here;
+        lastHolder = { clause: unmask(sentence), localIndex: here - 1 };
+    }
+    // Index past the last occurrence → the last sentence that holds the name. No sentence holds
+    // it at all → the whole text, as before (leaks sibling gates, but loses nothing).
+    return lastHolder ?? { clause: unmask(plain), localIndex: 0 };
+}
+
+/** `resolveBuffClauseAt`'s clause alone, for the detectors that test the whole sentence. */
+function resolveBuffClause(skillText: string, buffName: string, occurrenceIndex = 0): string {
+    return resolveBuffClauseAt(skillText, buffName, occurrenceIndex).clause;
 }
 
 /**
@@ -1149,10 +1217,11 @@ function hitCountConditionFromClause(low: string): Condition | null {
 
 export function detectGrantConditions(
     skillText: string | null | undefined,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): Condition[] {
     if (!skillText || !buffName) return [];
-    const clause = resolveBuffClause(skillText, buffName);
+    const clause = resolveBuffClause(skillText, buffName, occurrenceIndex);
     const low = clause.toLowerCase();
     // "when/on/upon applying|inflicting a debuff" is a trigger gate (the unit applies a debuff).
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
@@ -1571,10 +1640,11 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  */
 export function detectReactiveTrigger(
     skillText: string | null | undefined,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): AbilityTrigger | undefined {
     if (!skillText || !buffName) return undefined;
-    const clause = resolveBuffClause(skillText, buffName);
+    const clause = resolveBuffClause(skillText, buffName, occurrenceIndex);
     // "when an ally critically hits" → on-ally-crit (Pallas's Everliving Regeneration buff grant).
     // Checked BEFORE the self-crit rule: matchesActiveSelfCrit would also match "critically hits"
     // here, but the ally subject makes this an ally-scoped trigger, not a self-crit.
@@ -1677,10 +1747,11 @@ export function detectReactiveTrigger(
  *  stays on-cast. */
 export function detectAllyInflictsGrantTrigger(
     text: string | null | undefined,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): AbilityTrigger | undefined {
     if (!text || !buffName) return undefined;
-    return ALLY_INFLICTS_DEBUFF_RE.test(resolveBuffClause(text, buffName))
+    return ALLY_INFLICTS_DEBUFF_RE.test(resolveBuffClause(text, buffName, occurrenceIndex))
         ? 'on-ally-debuff-inflicted'
         : undefined;
 }
@@ -1702,10 +1773,11 @@ const START_OF_COMBAT_GRANT_RE = /\bat the start of combat\b/i;
  */
 export function detectPreCombatBuffTrigger(
     text: string | null | undefined,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): AbilityTrigger | undefined {
     if (!text || !buffName) return undefined;
-    const clause = resolveBuffClause(text, buffName);
+    const clause = resolveBuffClause(text, buffName, occurrenceIndex);
     // Meiying p2 exclusion: "At the start of combat AND EVERY TURN, this Unit gains Stealth for
     // 2 turns" is a RECURRING grant, not a one-time one — the "every turn" rider disqualifies
     // the pre-combat relabel (the grant must keep its per-turn refresh semantics).
@@ -5312,6 +5384,15 @@ export interface SkillEffect {
     duration: number | 'recurring' | null;
     stacks?: number;
     source: SkillSource;
+    /**
+     * #438: which occurrence of `buffName` in the row this effect came from (0-based, counting
+     * `<unit-skill>` tags). Carried so the ability builder's clause detectors — conditions,
+     * faction scope, recipient filter, triggers — read THIS grant's sentence rather than the
+     * first one mentioning the name. Absent on hand-built effects and on the untagged
+     * supplementary passes below (conjoined self-grants, bare Stasis) — those have no ordinal to
+     * count, and index 0 is the first sentence holding the name either way. Read as `?? 0`.
+     */
+    occurrenceIndex?: number;
     stackTrigger?: StackTrigger;
     // Enemy debuffs only: 'inflict' verbs are resistible, 'apply' verbs are guaranteed.
     application?: 'inflict' | 'apply';
@@ -5785,11 +5866,12 @@ function detectGrantScopes(
     buffName: string,
     occurrenceIndex = 0
 ): readonly AllyGrantScope[] {
-    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    const at = resolveBuffClauseAt(skillText, buffName, occurrenceIndex);
+    const resolved = at.clause.toLowerCase();
     // Strip trigger/condition sub-clauses so an ally mentioned only as the TRIGGER ("after an
     // ally is critically repaired") doesn't leak ally-scope onto a buff the caster grants itself.
     const clause = stripConditionClauses(resolved);
-    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), at.localIndex);
     const { verb, subject, object } = buffGrantSpan(
         clause,
         buffStart === -1 ? clause.length : buffStart
@@ -5895,9 +5977,10 @@ export function detectRecipientFilter(clause: string): RecipientFilter | undefin
  */
 export function detectGrantRecipientFilter(
     skillText: string,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): RecipientFilter | undefined {
-    return detectRecipientFilter(resolveBuffClause(skillText, buffName));
+    return detectRecipientFilter(resolveBuffClause(skillText, buffName, occurrenceIndex));
 }
 
 // #363 (Fuying): faction words appear in the corpus in TWO roles, and only one is a recipient
@@ -5929,9 +6012,9 @@ export function detectGrantFactionScope(
     buffName: string,
     occurrenceIndex = 0
 ): FactionKey[] | undefined {
-    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
-    const clause = stripConditionClauses(resolved);
-    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), occurrenceIndex);
+    const at = resolveBuffClauseAt(skillText, buffName, occurrenceIndex);
+    const clause = stripConditionClauses(at.clause.toLowerCase());
+    const buffStart = findNthOccurrencePos(clause, buffName.toLowerCase(), at.localIndex);
     const { subject, object } = buffGrantSpan(clause, buffStart === -1 ? clause.length : buffStart);
     // A bestowing verb names its receiver in the OBJECT; a receiving verb ("gains") in the
     // SUBJECT. Scan both — which one carries it is the verb's business, not ours.
@@ -6035,9 +6118,10 @@ export function adjacentEnemyScopeAtPos(
  */
 export function detectEnemyGrantScope(
     skillText: string,
-    buffName: string
+    buffName: string,
+    occurrenceIndex = 0
 ): 'enemy' | 'all-enemies' | 'adjacent-enemies' | 'target-and-adjacent-enemies' {
-    const resolved = resolveBuffClause(skillText, buffName).toLowerCase();
+    const resolved = resolveBuffClause(skillText, buffName, occurrenceIndex).toLowerCase();
     const scoped = narrowToBuffSubClause(resolved, buffName);
     const adjacent = detectAdjacentEnemyScope(scoped);
     if (adjacent) return adjacent;
@@ -6099,7 +6183,7 @@ export function parseSkillEffects(
         const targets: readonly SkillEffect['target'][] =
             side === 'self'
                 ? detectGrantScopes(skillText, buffName, occurrenceIndex)
-                : [detectEnemyGrantScope(skillText, buffName)];
+                : [detectEnemyGrantScope(skillText, buffName, occurrenceIndex)];
         const application = side === 'enemy' ? verbToApplication(verb) : undefined;
 
         // Step 3: Duration from immediately following text segment
@@ -6190,6 +6274,10 @@ export function parseSkillEffects(
                 ...(application !== undefined ? { application } : {}),
                 ...(isConsumableProtection && stacks !== undefined ? { maxStacks: stacks } : {}),
                 ...(isConsumableProtection ? { clearAllOnRedirect: true } : {}),
+                // Omitted at 0 — the overwhelming majority — so every single-occurrence effect
+                // object stays byte-identical, matching how every other optional field here is
+                // spread. Consumers read `?? 0`.
+                ...(occurrenceIndex > 0 ? { occurrenceIndex } : {}),
                 source,
             });
         }

@@ -169,6 +169,14 @@ export interface SelectedGameBuff {
     stackTrigger?: StackTrigger;
     // For enemy debuffs: 'inflict' (resistible) vs 'apply' (guaranteed), parsed from the skill verb.
     application?: 'inflict' | 'apply';
+    /**
+     * #438: which occurrence of `buffName` in its skill row this grant came from (0-based, over
+     * `<unit-skill>` tags). The ability builder passes it to the clause detectors so a grant in
+     * the row's SECOND sentence reads its own conditions/faction/recipient-filter/trigger rather
+     * than the first sentence's. Absent on manual picks and on pre-#438 persisted records; read
+     * as `?? 0`.
+     */
+    skillOccurrenceIndex?: number;
     /** Parser ally/enemy-scope (team walk): granular target of the granting clause; absent on manual picks. */
     effectTarget?:
         | 'self'

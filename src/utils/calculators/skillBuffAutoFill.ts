@@ -110,6 +110,14 @@ function toSelectedBuffs(
             ...(effect.application !== undefined ? { application: effect.application } : {}),
             // Carry the granular ally-scope so the builder can stamp the right ability target.
             effectTarget: effect.target,
+            // #438: carry which occurrence of the name this grant is, so the builder's clause
+            // detectors resolve THIS grant's sentence. Omitted at 0 so every existing entry stays
+            // byte-identical. DEDUPE BOUNDARY: the key is name|target|source, so two grants of one
+            // name in two sentences survive as separate entries only when they differ on target
+            // (which a divergent-scope pair does, by definition) — same name, same target, same
+            // slot still collapses to the FIRST occurrence, and the second grant's clause is not
+            // read. That is a pre-existing granularity limit of the dedupe, not of #438.
+            ...(effect.occurrenceIndex ? { skillOccurrenceIndex: effect.occurrenceIndex } : {}),
             ...(effect.clearAllOnRedirect ? { clearAllOnRedirect: true } : {}),
         });
     }
