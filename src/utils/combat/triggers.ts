@@ -368,8 +368,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
  *    excluded, own casts excluded)
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
- *    >= 1 critting draw AND at least one non-self recipient (Pallas: "when THIS UNIT critically
- *    repairs an ally"). One enqueue per qualifying cast.
+ *    >= 1 critting draw (Pallas). The recipient may be the owner itself — owner ruling
+ *    2026-08-31, #446. One enqueue per qualifying cast.
  *  - on-own-repair-to-ally → the OWNER's OWN repair — the on-ally-critically-repaired twin
  *    WITHOUT the crit filter (Font of Power). NAME IS A MISNOMER since #444 (kept because the
  *    string is a persisted `Ability.trigger` value). Qualifying is SHAPE-SCOPED: a buff reaction
@@ -857,14 +857,16 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-critically-repaired':
                     bus.on('heal-performed', (e) => {
-                        // The OWNER's own crit repair of an ALLY (Pallas: "when this unit
-                        // critically repairs an ally"): own cast, >= 1 critting draw, and
-                        // at least one non-self recipient. One enqueue per qualifying cast.
-                        if (
-                            e.casterId === ownerId &&
-                            (e.critHits ?? 0) >= 1 &&
-                            e.targets.some((t) => t !== ownerId)
-                        ) {
+                        // The OWNER's own crit repair (Pallas: "after an ally is critically
+                        // repaired"): own cast and >= 1 critting draw. One enqueue per qualifying
+                        // cast.
+                        //
+                        // #446, owner ruling 2026-08-31: a critical SELF-repair procs it too. The
+                        // non-self recipient requirement that used to sit here is gone — same
+                        // ruling as Font of Power's (#444), asked separately rather than induced
+                        // from it. `casterId === ownerId` is NOT part of that ruling and stays:
+                        // this is the owner's OWN repair, not any ally's.
+                        if (e.casterId === ownerId && (e.critHits ?? 0) >= 1) {
                             enqueue(intent);
                         }
                     });
