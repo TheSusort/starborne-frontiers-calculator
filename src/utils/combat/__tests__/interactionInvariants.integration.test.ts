@@ -8,7 +8,7 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords, csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
-// Permanent regression gate for the interaction-audit harness (Task 11). Fuzzes a FIXED small
+// Permanent regression gate for the interaction-audit harness. Fuzzes a FIXED small
 // seed set (1..25) over the real tagged corpus and asserts the pure result invariants
 // (hp-bounds, no-dead-acts, damage-conservation — see audit/invariants.ts) hold for every
 // composition, so a future change that reintroduces an interaction bug fails `npm test`.

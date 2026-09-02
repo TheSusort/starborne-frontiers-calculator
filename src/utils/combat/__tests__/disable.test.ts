@@ -155,7 +155,7 @@ const POS_ENEMY_FRONT: Position = 'M4';
 const POS_ENEMY_BACK: Position = 'M1';
 
 /**
- * SP-4c-1: an inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
+ * An inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
  *
  * The cases below kill their sole enemy on purpose — a 1-HP disable-bot that must not live to
  * re-apply its debuff. Since SP-4c-1 that kill WIPES the enemy side and ends the match, cutting the
@@ -331,7 +331,7 @@ describe('D-PR13 Task 2 — Disable turn-skip: (ii) Disable(2) decrements on ski
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
@@ -852,7 +852,7 @@ describe('D-PR13 Task 4 — cleanse-resume: a cleansed Disable restores the focu
                 teamCleanserAt('cleanser', POS_TEAM, 200),
             ],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {

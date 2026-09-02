@@ -1,5 +1,5 @@
 /**
- * Integration: enemy-targeted charge REMOVAL (Phase 0 Task 7).
+ * Integration: enemy-targeted charge REMOVAL.
  *
  * A `charge` ability whose target is an ENEMY ('enemy' | 'all-enemies') SUBTRACTS charges from
  * each opposing actor (floored at 0), skipping actors that are `chargeLossImmune`. Self/ally
@@ -260,7 +260,7 @@ describe('enemy charge removal — cast path (on-cast all-enemies)', () => {
 
 // ─── Phase 1: direct post-event charge assertions ────────────────────────────────
 //
-// These mirror the parsed charge-removal ABILITIES the orchestrator emits (Task 3):
+// These mirror the parsed charge-removal ABILITIES the orchestrator emits:
 //   { type:'charge', target:'enemy', trigger, config:{ amount }, everyNthEvent? }
 // and assert the enemy's `charges` directly after the run (via the actor tap).
 //

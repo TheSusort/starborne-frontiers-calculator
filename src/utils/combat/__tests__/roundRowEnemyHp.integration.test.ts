@@ -85,7 +85,7 @@ describe('#341: the round row reports the enemy roster HP, on every row', () => 
     });
 
     it('is read off the ROSTER, so a focus that struck nobody still reports it', () => {
-        // An ally-targeted focus cast binds no victim at all (SP-4c-2b), which is the OTHER row
+        // An ally-targeted focus cast binds no victim at all, which is the OTHER row
         // shape that used to take the 100 stand-in. The enemy still damages itself into view here:
         // it attacks the focus, and its own HP is untouched — so the honest answer is 100, and the
         // proof that this is a real reading rather than the old constant is the row above, where

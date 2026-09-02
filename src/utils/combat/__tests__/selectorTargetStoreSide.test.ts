@@ -1,5 +1,5 @@
 /**
- * #399 — REACHABILITY MEASUREMENT for the store-axis classification at `engine.ts:284`.
+ * #399 — REACHABILITY MEASUREMENT for the store-axis classification at `engine.ts`.
  *
  * `registerActorAbilityStatuses` picks the store a buff/debuff status lands in from a hand-written
  * list of enemy-side targets. The three SELECTOR targets ('enemy-most-buffs',
@@ -19,7 +19,7 @@
  *              trigger:'start-of-round', which is in LIVE_TRIGGERS, so partitionReactiveAbilities
  *              pulls it out of castSkills before registerActorAbilityStatuses ever sees it. Its
  *              real route is the reactive intent path, which resolves the selector at
- *              triggers.ts:3832.
+ *              triggers.ts.
  *
  * The SELECTOR arm is only reachable by a HAND-AUTHORED ability: no corpus ship pairs a
  * buff/debuff config with a selector target and a non-live trigger, and AbilityCard.tsx's
@@ -113,8 +113,8 @@ interface ProbeEnemy {
 }
 
 /** The focus casts the debuff under test from its ACTIVE slot. Field-for-field the minimal
- *  `runCombat` input from `enemyChargeRemoval.integration.test.ts:118-145`, with the healing-mode
- *  keys dropped (`mode` is optional — `engine.ts:1398`) and `numRounds` cut to 2: this probe reads
+ *  `runCombat` input from `enemyChargeRemoval.integration.test.ts`, with the healing-mode
+ *  keys dropped (`mode` is optional — `engine.ts`) and `numRounds` cut to 2: this probe reads
  *  a store, not an outcome. Speed 100 vs every enemy's 10 so the caster acts first, every round. */
 function runProbe(casterSkills: ShipSkills, enemies: ProbeEnemy[]): Stores {
     let statusEngine: StatusEngine | undefined;
@@ -369,7 +369,7 @@ describe('#399 — the real Selenite kit', () => {
     beforeAll(requireCsv);
 
     it("Concentrate Fire reaches the enemy store: the issue's stated symptom does NOT reproduce", () => {
-        // Selenite's CF is resolved through the REACTIVE intent path (triggers.ts:3832), which
+        // Selenite's CF is resolved through the REACTIVE intent path (triggers.ts), which
         // already carries its own live selector resolution — unlike the hand-authored SELECTOR arm
         // above, this real kit correctly lands on the true highest-attack enemy. Single-enemy
         // roster is sufficient here: this arm asks "does CF reach the enemy store at all", not

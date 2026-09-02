@@ -1,5 +1,5 @@
 /**
- * End-to-end log visibility for shield-destroyed (Task 3) and cheat-death-activated (Task 4)
+ * End-to-end log visibility for shield-destroyed and cheat-death-activated
  * through the REAL positional sim path (planPlacement -> simulateBattle -> buildCombatLog).
  * These events fire inside applyVictimDamage; the engine buffers them (defer-flush) so they
  * surface nested under the triggering attack rather than out of order.

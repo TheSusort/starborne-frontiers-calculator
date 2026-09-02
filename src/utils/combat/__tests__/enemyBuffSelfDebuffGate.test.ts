@@ -235,7 +235,7 @@ describe('self-debuff gate in runPlayerTurn (Task 7)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real, TARGETABLE opponent (non-zero max HP). 0 lives on its own stats.defence
+    // A real, TARGETABLE opponent (non-zero max HP). 0 lives on its own stats.defence
     // (the fight-wide `enemyDefense` scalar it used to be kept in step with was deleted in SP-4d)
     // so the 10000/20000 figures below are unchanged. Every test that needs a Provoke/Taunt-
     // carrying enemy overrides this with its own.
@@ -272,7 +272,7 @@ const GRANT_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInp
  * `directDamage` in the four `GRANT_BASE`-default tests below would have compared 0 to 0 — green,
  * and blind to the buff-to-damage coupling that is the whole instrument here.
  *
- * ⭐ HAND-OFF CLOSED (SP-4c-2a). The note used to live here read: the tests further down that pass
+ * ⭐ HAND-OFF CLOSED. The note used to live here read: the tests further down that pass
  * their OWN `enemyAttackers` (via `provokeEnemy`/`tauntEnemy`, all built through an
  * `as EnemyAttacker` cast that omits `stats.hp`) stayed on the NON-positional scalar channel,
  * because the roster had no TARGETABLE member (`resolvesPositionalVictim`, keyed on MAX hp) — and

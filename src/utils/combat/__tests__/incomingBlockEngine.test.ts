@@ -192,7 +192,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [stealthSelfBuff('focus-stealth')] }] },
-    // SP-4b-1: the focus is pinned to the back of the middle row AND cloaked.
+    // The focus is pinned to the back of the middle row AND cloaked.
     //
     // It used to be off the board entirely, and that is what kept the enemy's targeting on the
     // stealthed victim: `resolvePositionalTarget` drops stealthed cells UNLESS every candidate is

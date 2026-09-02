@@ -29,7 +29,7 @@ import type { StatusEngine } from '../statusEngine';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-// SP-D Anemone triage probe / enemyDotCount.test.ts parser block.
+// Anemone triage probe / enemyDotCount.test.ts parser block.
 const ANEMONE_CHARGE =
     'This Unit deals <unit-damage>200% damage</unit-damage> and inflicts <unit-skill>Corrosion III</unit-skill> for 2 turns. If the primary enemy has 3 or more Damage over Time effects, this Unit gains <unit-skill>Taunt</unit-skill> for 1 turn.';
 
@@ -78,7 +78,7 @@ describe('enemy-dot-count engine gate — Anemone charged-skill Taunt (player si
         idc = 0;
         let engine: StatusEngine | undefined;
         runCombat({
-            // SP-4b-2b: a real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
+            // A real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
             // 1000-attack focus cannot kill it across the two rounds the gate needs.
             enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
             attack: 1000,
@@ -224,7 +224,7 @@ describe('enemy-dot-count engine gate — Belladonna charged-skill Stasis (runti
     it('even with 3 pre-existing generic DoT entries, Stasis does NOT land (Acidic Decay family count is 0 today)', () => {
         idc = 0;
         const result = runCombat({
-            // SP-4b-2b: a real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
+            // A real opponent for the seeded DoTs to accrue on. Inert and huge-HP so the
             // 1000-attack focus cannot kill it across the two rounds the gate needs.
             enemyAttackers: bareEnemy({ stats: { hp: 1_000_000_000 } }),
             attack: 1000,

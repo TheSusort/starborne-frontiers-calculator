@@ -1,5 +1,5 @@
 /**
- * Group D (Task 6): Burner + Decimation gear-set DoT pair — mutation-resistant engine
+ * Group D: Burner + Decimation gear-set DoT pair — mutation-resistant engine
  * integration tests.
  *
  * These tests route through the REAL equipment-ability registry: the ship's abilities are
@@ -93,7 +93,7 @@ const activeInferno: Ability = {
 
 /** Base engine input: neutral stats, enemy never dies, no crit/affinity variance. */
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real opponent. DAMAGE fixture (5000 attack over 5 rounds plus DoT ticks) so it
+    // A real opponent. DAMAGE fixture (5000 attack over 5 rounds plus DoT ticks) so it
     // takes the 10M-HP form — "enemy never dies" is load-bearing here, since a mid-sim death would
     // silently drop tick rounds out of every total this file sums. 0 lives on the roster entry's
     // own stats.defence (the fight-wide `enemyDefense` scalar it used to be kept in step with,

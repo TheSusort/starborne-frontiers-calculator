@@ -1,5 +1,5 @@
 /**
- * Tank-side `hp-changed` emission tests (Phase 4c PR 3, Task 2).
+ * Tank-side `hp-changed` emission tests.
  *
  * The engine emits a tank-side `hp-changed` event ONCE per HP-intake event inside
  * `applyIncomingToTarget`, which is called at TWO sites: per enemy ATTACK (aggregate
@@ -10,7 +10,7 @@
  * ship-destroyed, never a posthumous hp-changed. No consumers yet (Task 3 adds the
  * listener) — these tests assert emission shape only.
  *
- * Mirrors the healing-mode harness in engine.events.test.ts (Phase 4c Task 3): a
+ * Mirrors the healing-mode harness in engine.events.test.ts: a
  * focus attacker that IS the heal target, ship-/manual-backed enemy attackers, and
  * event collection off the bus.
  */
@@ -69,7 +69,7 @@ const cheatDeathBuff = () => ({
  * damaging (empty skills) so the only HP-intake is the enemy attacks / DoT ticks.
  */
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent. Every case that measures HP intake overrides this with
+    // A run needs an opponent. Every case that measures HP intake overrides this with
     // its own `manualEnemy`; the inert default just satisfies the contract for the cases that do
     // not (0 attack, so it changes nobody's HP).
     enemyAttackers: bareEnemy(),
@@ -218,7 +218,7 @@ describe('Phase 4c PR 3 Task 2 — tank-side hp-changed emission', () => {
         // No attacked events at all: a dot-only enemy with no direct damage has its
         // synthesized basic suppressed (DoTs are not "directly damaged").
         // Note: the 0 here is incidental to this test's purpose — it is a side-effect of
-        // the synthesized-basic-suppression feature (PR 1), not part of the DoT-batch
+        // the synthesized-basic-suppression feature, not part of the DoT-batch
         // hp-changed assertion being tested. If that feature ever changes, update accordingly.
         expect(attacked).toHaveLength(0);
 
@@ -539,7 +539,7 @@ describe('Phase 4c PR 3 Task 3 — executor: buff oncePerCombat + threshold scru
 // Phase 4c PR 3 Task 4 — END-TO-END engine integration (runCombat, healing mode).
 //
 // Drives the FULL engine and asserts the crossing reactives behave correctly through
-// the whole loop — emission (Task 2) → listener (Task 3) → executor → applied status →
+// the whole loop — emission → listener → executor → applied status →
 // `buff-applied` + healTargetBuffs round overview. No production code is exercised that
 // Tasks 2–3 didn't already carry; these are pure integration scenarios.
 //
@@ -798,7 +798,7 @@ describe('Phase 4c PR 3 Task 4 — on-hp-threshold-crossed end-to-end (runCombat
     });
 
     // ── DPS-mode: a REAL crossing DOES fire the reaction ─────────────────────────────────────
-    // SP-4b-2b FINDING. The case above used to double as a claim that the crossing trigger is
+    // FINDING. The case above used to double as a claim that the crossing trigger is
     // "fully dormant in DPS mode" because "there is no tank-side hp-changed in DPS mode". That
     // premise was never tested — it was masked by the fixture running with NO enemy attackers, so
     // nothing was hitting the focus. Facing the SAME 6500-attack enemy as the Tycho/Kafa cases
@@ -934,7 +934,7 @@ const tankActor = (id: string, hp: number, speed = 30): TeamActorEngineInput => 
     startCharged: false,
     selfBuffs: [],
     enemyDebuffs: [],
-    // SP-4b-1: the tank is the actor every scenario below needs the enemy to hit. The
+    // The tank is the actor every scenario below needs the enemy to hit. The
     // normalization boundary places every actor and synthesizes the enemy's `front enemy`
     // targeting, so the victim is now chosen by board geometry — and an index-derived team default
     // (`M3`) sits BEHIND the focus's front-middle anchor (`M4`), which would make the HEALER the

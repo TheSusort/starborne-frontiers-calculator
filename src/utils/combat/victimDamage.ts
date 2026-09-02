@@ -7,7 +7,7 @@ import { computeAffinityModifiers } from '../calculators/affinityUtils';
  *
  * AoE / re-resolution hits land on victims with DIFFERENT defense and affinity,
  * so per-victim damage cannot be derived from the single aggregate the engine
- * computes today (playerTurn.ts:1080-1282). This module recomputes one hit's
+ * computes in `runPlayerTurn`. This module recomputes one hit's
  * contribution against a single victim's defensive profile.
  *
  * The decomposition (proven algebraically identical to the engine aggregate in
@@ -50,7 +50,7 @@ export interface AttackerDamageScalars {
     /** Attacker affinity; matched against the victim's affinity via computeAffinityModifiers. */
     attackerAffinity: AffinityName;
     /**
-     * SP-F F4: forced-affinity override (offensive). When true, this cast's outgoing hits are
+     * Forced-affinity override (offensive). When true, this cast's outgoing hits are
      * forced to affinity ADVANTAGE (+25% damage) against EVERY victim, superseding the real
      * matchup — Wusheng's charged "deals 220% damage with affinity advantage" and the
      * Isha/Nayra 'Offensive Affinity Override' self-buff. Takes precedence over a victim's
@@ -64,10 +64,10 @@ export interface VictimDefenseProfile {
     /** enemyDefenseModifier — percent. */
     defenceModifierPct: number;
     affinity: AffinityName;
-    /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar — B1/PR7b */
+    /** per-victim incoming-damage debuff; when present, overrides the attacker-fixed scalar */
     incomingDamageModifierPct?: number;
     /**
-     * #358 ADDENDUM 3 (C2/C3) — THE VICTIM-SIDE SLICE OF A MIXED CHANNEL.
+     * THE VICTIM-SIDE SLICE OF A MIXED CHANNEL (#358).
      *
      * `incomingDamageModifierPct` is NOT one thing. The engine sums FOUR contributions into it
      * (`victimIncomingModifiers`):
@@ -84,19 +84,19 @@ export interface VictimDefenseProfile {
      * the summed channel (negative = the victim takes less). `preMitigation` below subtracts it
      * back out; `damage` is untouched by it.
      *
-     * WHY IT MUST BE THREADED AND NOT DERIVED. The previous iteration (#358 addendum 2) treated
-     * `incomingDamageModifierPct` as ATOMIC and left the whole term on the pre-defence axis, so a
-     * defender with 'Inc. Damage Down II' survived an EXTRA round and reported a LOWER figure
-     * (252,000 over 6 rounds vs 300,000 over 5). Dropping the term wholesale instead would have
-     * stripped the attacker's own amplification, which is equally wrong. Nothing downstream can
-     * recover the split from the sum, so the split travels with the profile.
+     * WHY IT MUST BE THREADED AND NOT DERIVED. Treating `incomingDamageModifierPct` as ATOMIC and
+     * leaving the whole term on the pre-defence axis makes a defender with 'Inc. Damage Down II'
+     * survive an EXTRA round and report a LOWER figure (252,000 over 6 rounds vs 300,000 over 5).
+     * Dropping the term wholesale instead strips the attacker's own amplification, which is
+     * equally wrong. Nothing downstream can recover the split from the sum, so the split travels
+     * with the profile.
      *
-     * Defaults to 0 → pre-ADDENDUM-3 behaviour, byte-identical for any victim with no self-sourced
-     * incoming modifier and no pre-fight incoming baseline.
+     * Defaults to 0 → inert for any victim with no self-sourced incoming modifier and no
+     * pre-fight incoming baseline.
      */
     victimSideIncomingPct?: number;
     /**
-     * Sub-project I, PR I2 (Layer 3) — this victim's outgoing-damage-modifier DELTA vs the
+     * This victim's outgoing-damage-modifier DELTA vs the
      * attacker-fixed `s.outgoingDamageBuffPct`. `s.outgoingDamageBuffPct` is folded ONCE per
      * turn against the primary (bound) target's enemy-status; an enemy-status-gated modifier
      * (Tygr's "+30% to enemies with Stasis/Disable", Incinerator's "+30% to Inferno enemies",
@@ -110,7 +110,7 @@ export interface VictimDefenseProfile {
      */
     outgoingDamageDeltaPct?: number;
     /**
-     * SP-F F4: forced-affinity override (defensive, victim-side). When true, THIS victim carries
+     * Forced-affinity override (defensive, victim-side). When true, THIS victim carries
      * an 'Defensive Affinity Override' buff (Isha/Nayra) that forces the incoming attacker to
      * affinity DISADVANTAGE (−25% damage) against this victim, superseding the real matchup.
      * An attacker's `s.forceAffinityAdvantage` still wins over this (mirrors playerTurn's
@@ -158,9 +158,9 @@ export function victimDefenceMitigation(
  * @param v        this victim's defensive profile
  * @param didCrit  the per-hit crit outcome (hitCrits[h])
  * @param roleScale 1 (origin) | 0.5 (covered) positional split factor
- * @param equipReductionPct  D-PR3 VICTIM-side incoming %-reduction (percentage points),
- *        folded ADDITIVELY into the incoming term. Default 0 → byte-identical to the
- *        pre-D-PR3 behavior (inert for victims without an incoming-reduction ability).
+ * @param equipReductionPct  VICTIM-side gear/kit incoming %-reduction (percentage points),
+ *        folded ADDITIVELY into the incoming term. Default 0 → inert for victims without an
+ *        incoming-reduction ability.
  * @param attackerSideReductionPct  the ATTACKER-side half of the same channel — today the
  *        attacker's own squad-leader `outgoingCritDamage` penalty. Same units and same sign
  *        convention, but it belongs to the attack AS THROWN, so it rides BOTH axes. Default 0.
@@ -195,15 +195,15 @@ export function victimHitDamageParts(
     const preCritDamage = s.effectiveAttack * (s.multiplierPct / 100) + s.secondaryStatValue;
     const perHitShare = s.hits > 0 ? preCritDamage / s.hits : 0;
 
-    // Per-VICTIM defense (mirrors playerTurn.ts:1115-1117). Delegated to victimDefenceMitigation
+    // Per-VICTIM defense (mirrors `runPlayerTurn`'s aggregate). Delegated to victimDefenceMitigation
     // so the engine's Protection cascade can divide by the SAME factor this applies.
     const defenceMitigation = victimDefenceMitigation(v, s.defensePenetrationPct);
 
     // Per-VICTIM affinity (attacker vs this victim), matching computeAffinityModifiers.
-    // SP-F F4: a forced-affinity override supersedes the real matchup — offensive advantage
-    // (attacker-fixed) wins over this victim's defensive disadvantage, both wins over the real
+    // A forced-affinity override supersedes the real matchup — offensive advantage
+    // (attacker-fixed) wins over this victim's defensive disadvantage, both win over the real
     // matchup. Mirrors playerTurn's `affinityModsVsVictim` precedence so the aggregate and
-    // positional paths agree. No override → real matchup → byte-identical default.
+    // positional paths agree. No override → real matchup.
     const affinityDamageModifier = s.forceAffinityAdvantage
         ? 25
         : v.forceAffinityDisadvantage
@@ -212,7 +212,7 @@ export function victimHitDamageParts(
     const affinityMult = 1 + affinityDamageModifier / 100;
 
     // Prefer the per-victim incoming-damage debuff when present; fall back to the
-    // attacker-fixed scalar (B1/PR7b). The engine-wired path always passes an explicit
+    // attacker-fixed scalar. The engine-wired path always passes an explicit
     // value; the `??` fallback serves direct-call callers (e.g. positionalApply unit tests).
     const incomingChannel = v.incomingDamageModifierPct ?? s.incomingDamageModifierPct;
     // BYTE-IDENTITY: the two halves are re-SUMMED before the subtraction, in the same
@@ -220,23 +220,23 @@ export function victimHitDamageParts(
     // (`(equip + victimCritTerm) + attackerCritTerm`). `a - (b + c)` and `a - b - c` are not the
     // same double, and splitting the channel must not move a single existing damage figure.
     const incoming = incomingChannel - (equipReductionPct + attackerSideReductionPct);
-    // #358 ADDENDUM 3 (C2): the SAME channel with every victim-side reduction removed, and ONLY
+    // #358: the SAME channel with every victim-side reduction removed, and ONLY
     // those. Three things come off / stay on:
     //   • OFF — the victim's own `Inc. Damage Down` family and its pre-fight incoming baseline,
     //     both carried in `victimSideIncomingPct`;
-    //   • OFF — `equipReductionPct`, the D-PR3 gear/kit incoming reduction, which is simply not
+    //   • OFF — `equipReductionPct`, the gear/kit incoming reduction, which is simply not
     //     added to this axis;
     //   • ON  — `attackerSideReductionPct`, subtracted here as well as above. It is the ATTACKER's
     //     own squad-leader `outgoingCritDamage` penalty: it makes the attack smaller AS THROWN, so
-    //     excluding it would over-report. This term used to arrive fused into `equipReductionPct`
-    //     and came off the thrown axis as collateral — a MIXED channel treated as atomic, which is
-    //     the exact defect shape C3 exists to end, one layer further down.
+    //     excluding it would over-report. It rides its own parameter for that reason: fused into
+    //     `equipReductionPct` it comes off the thrown axis as collateral — a MIXED channel treated
+    //     as atomic, the same defect shape one layer further down.
     // What survives is the attack as thrown, including attacker-APPLIED amplification
     // (`Out. Damage Up`, `Exposed`). See `victimSideIncomingPct` for why the split is threaded.
     const incomingAsThrown =
         incomingChannel - (v.victimSideIncomingPct ?? 0) - attackerSideReductionPct;
 
-    // PR I2: fold the per-victim enemy-status-gated delta additively into the same
+    // Fold the per-victim enemy-status-gated delta additively into the same
     // percentage term as the attacker-fixed outgoing buff — both are additive-percentage
     // contributions to the SAME `(1 + x/100)` multiplier, so there is no rounding
     // divergence from a single-victim (delta === 0) evaluation.

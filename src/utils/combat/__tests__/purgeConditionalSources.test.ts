@@ -276,7 +276,7 @@ describe('C2b-2 T2: round-ended event fires once per round', () => {
 // Drives a purge intent through executeIntent directly (mirrors the
 // purgeReactive.test.ts executor harness) and asserts target selection:
 //   - target:'enemy-most-buffs' → ctx.enemyWithMostBuffs(ownerId) (NOT counterTargetId)
-//   - target:'enemy'            → counterTargetId; NO-OP when absent (SP-4c-2d)
+//   - target:'enemy'            → counterTargetId; NO-OP when absent
 //   - target:'enemy-most-buffs' with delegate returning undefined → NO-OP (SP-4c-2d; this was
 //     the ctx.enemyId fallback, and Rhodium's shipped shape)
 // ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 /**
  * Integration: an enemy whose CHARGED slot is pure support banks charges and casts it.
  *
- * `hasChargedSkill` gates the whole charge cadence (`advanceChargeCadence`, state.ts:401 —
+ * `hasChargedSkill` gates the whole charge cadence (`advanceChargeCadence`, state.ts —
  * no-op when the flag is false). It is derived on THREE actor paths — player focus, walked
  * 'team' and enemy — and the enemy path used to ask a different question than the other two:
  * where the player paths accept ANY ability in the charged slot, the enemy path additionally

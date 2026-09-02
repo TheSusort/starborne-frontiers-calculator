@@ -16,7 +16,7 @@ import type { ActiveDoTStack, PendingBomb } from './state';
 //          — per-bomb snapshots ONLY (NO dotMult/affinityMult/detonationMult).
 
 export interface DetonationRecipe {
-    // SP-E: widened to the full DoTType (generic never enters `dets` — no detonation ability
+    // Widened to the full DoTType (generic never enters `dets` — no detonation ability
     // targets it — but the config it's built from carries DoTType, so this must accept it too;
     // the if/else-if chain below correctly no-ops for 'generic', same as it already does for any
     // dotType it doesn't explicitly branch on).

@@ -8,16 +8,16 @@ export interface CombatLogRound {
 
 export interface CombatLogTurn {
     actorId: string;
-    chargeBefore: number; // charge level at turn start (filled by a later task; 0 for now)
-    chargeMax: number; // 0 = no charge skill (filled by a later task)
+    chargeBefore: number; // charge level at turn start, seeded from `initialCharge`
+    chargeMax: number; // 0 = no charge skill
     entries: CombatLogEntry[]; // chronological within the turn
-    /** Task 6: a snapshot of the acting actor's live modelled stats, taken immediately after
+    /** A snapshot of the acting actor's live modelled stats, taken immediately after
      *  turn-started (see the `stats-snapshot` CombatEvent). Optional — absent on any turn built
      *  from an event stream that predates/omits the emission (e.g. hand-crafted test fixtures). */
     statsSnapshot?: StatsSnapshot;
 }
 
-/** Task 6: per-turn modelled stat snapshot for the acting actor (mirrors the `stats-snapshot`
+/** Per-turn modelled stat snapshot for the acting actor (mirrors the `stats-snapshot`
  *  CombatEvent's `stats` payload). */
 export interface StatsSnapshot {
     attack: number;
@@ -70,12 +70,11 @@ export interface CombatLogEntry {
      *  attribution weight: `actorId` is the debuff's APPLIER and stays the entry's sole credited
      *  actor (R7′).
      *
-     *  PRESENT ON EVERY PRODUCED `reversed-repair` ENTRY (#362 fix-wave-2, I-2). An earlier
-     *  revision of this doc said it was "absent when the applier is unknown (scheduled channel)",
-     *  which was simply false in two ways: `engine.ts` sets `healerId` unconditionally (the repair
-     *  source is a REQUIRED parameter at every `applyHealToTarget` call site, so there is always
-     *  one), and `buildCombatLog` copies it independently of `applierId` — the two ids are on
-     *  different axes and an absent applier does not suppress the healer. Optional here only
+     *  PRESENT ON EVERY PRODUCED `reversed-repair` ENTRY (#362). It is NOT "absent when the
+     *  applier is unknown": `engine.ts` sets `healerId` unconditionally (the repair source is a
+     *  REQUIRED parameter of `applyHealToTarget`, so there is always one), and `buildCombatLog`
+     *  copies it independently of `applierId` — the two ids are on different axes and an absent
+     *  applier does not suppress the healer. Optional here only
      *  because the field lives on the shared `CombatLogEntry`, which every OTHER entry kind
      *  leaves unset; the formatter's healer-less fallback string is therefore defensive, not a
      *  shape production reaches. Never falls back to the applier. */

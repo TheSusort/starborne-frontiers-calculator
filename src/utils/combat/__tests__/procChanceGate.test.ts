@@ -1,5 +1,5 @@
 /**
- * D-PR1: procChance gate — per-proc rate gate for equipment reactive procs.
+ * procChance gate — per-proc rate gate for equipment reactive procs.
  *
  * A passive on-crit reactive heal with procChance 0.5 over 10 rounds fires a real Bernoulli(0.5)
  * count of times. The rate gate draws from a random RNG (rng() < rate); under SP-0's keyed

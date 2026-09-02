@@ -5,7 +5,7 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// D-PR4 Task 7: engine wiring of outgoing amplification through buildTurnArgs.
+// Engine wiring of outgoing amplification through buildTurnArgs.
 // The engine supplies runPlayerTurn with `targetEffectiveAttack` and a
 // `rollOutgoingProc` closure (a per-(owner,ability) rate gate). A passive-slot
 // Menace `outgoing-amplification` ability (condition 'amplify-on-crit') therefore

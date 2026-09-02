@@ -16,7 +16,7 @@
  *      gate (legendary 0.16) accumulates and fires → the team carries Buff Protection.
  *
  *   2. SYNERGY (headline — chains off D-PR15's Block-Debuff auto-resist): the carrier holds
- *      a recurring `Block Debuff` self-buff (D-PR15). A high-hacking enemy WOULD land its
+ *      a recurring `Block Debuff` self-buff. A high-hacking enemy WOULD land its
  *      timed debuff, but the Block-Debuff immunity fold auto-resists it and emits
  *      `debuff-resisted` from `debuffImmunity.ts`. That same event drives Lockdown → the
  *      team gains Buff Protection. Proves the full Block-Debuff → resist → Lockdown chain.
@@ -135,7 +135,7 @@ const noopActive: ShipSkills['slots'][number] = {
     ],
 };
 
-/** A recurring `Block Debuff` self-buff on the focus actor (D-PR15) — drives the synergy path. */
+/** A recurring `Block Debuff` self-buff on the focus actor — drives the synergy path. */
 const blockDebuffPassive: ShipSkills['slots'][number] = {
     slot: 'passive',
     abilities: [

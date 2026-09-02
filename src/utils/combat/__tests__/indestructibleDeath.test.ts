@@ -167,7 +167,7 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         // so they are 0 across the board, pinned so a future regression that starts double-booking
         // through BOTH channels is caught here.
         //
-        // ⚠️ CORRECTION (SP-4c-2d): an earlier note here predicted `rawTotals` would "go with the
+        // ⚠️ CORRECTION: an earlier note here predicted `rawTotals` would "go with the
         // dummy" and told a future rung to DELETE this assertion. That prediction was wrong.
         // `rawTotals` is the report's scalar damage summary and it survives the dummy's deletion
         // intact; what went is the dummy's own HP ledger and `enemyOutcome`. So this block stays —
@@ -191,7 +191,7 @@ describe('SP-U U5 — the real positioned DPS enemy is destructible', () => {
         // The same three claims the deleted `result.enemyOutcome` field made, read off the real
         // enemy instead of the immortal sink: it DID die (not survived), in round 3
         // (rounds-to-kill), and its intake covered its whole pool (0% HP left). These ARE the
-        // property now — there is no scalar block left to compare them against (SP-4c-2d).
+        // property now — there is no scalar block left to compare them against.
         idCounter = 0;
         const bus = createEventBus();
         const destroyed: { actorId: string; round: number }[] = [];

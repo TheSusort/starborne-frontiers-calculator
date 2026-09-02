@@ -330,7 +330,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
     // 4c-2d can delete it safely.
     // The OTHER way the premise could return, which this HP assertion would NOT notice:
     // `isTargetableRosterMember` being re-keyed from STATIC `stats.hp` to live `currentHp`
-    // (positionalBinding.ts:45). A corpse would then read as untargetable, `resolvesPositionalVictim`
+    // (positionalBinding.ts). A corpse would then read as untargetable, `resolvesPositionalVictim`
     // would go false mid-run, and the cast would fall back to the position-less dummy sink again.
     it('TRIPWIRE: the "position-undefined splash victim" premise is gone — the floor arrives already targetable', () => {
         const input: CombatEngineInput = {
@@ -359,7 +359,7 @@ describe('bomb-splash-on-death (positional core mechanic)', () => {
 
         const floored = normalizeCombatRoster(input);
         expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
-        // Every enemy attacker is auto-placed regardless of hp (SP-4b-1); the floor is what makes
+        // Every enemy attacker is auto-placed regardless of hp; the floor is what makes
         // it TARGETABLE, which is what keeps `resolvesPositionalVictim` from ever falling back to
         // the position-less dummy as a splash victim.
         expect(floored.enemyAttackers[0].position).toBeDefined();

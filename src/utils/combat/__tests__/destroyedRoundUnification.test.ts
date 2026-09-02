@@ -12,7 +12,7 @@
  *   2. The post-round BACKSTOP (~3936): `if (destroyedRound === undefined && currentHp <= 0)`
  *      — sets ONLY the local scalar, with NO actor mutation and NO event emit.
  *
- * A future task (Task 2) will replace the scalar with reads of `healTarget.destroyedRound`.
+ * A future task will replace the scalar with reads of `healTarget.destroyedRound`.
  * This file LOCKS the current observable behavior AND determines whether the backstop is
  * reachable (can `currentHp <= 0` hold at round end WITHOUT recordDestroyed having stamped
  * `destroyedRound`?).
@@ -58,7 +58,7 @@ const manualEnemy = (
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: the default opponent is the shared INERT one (0 attack, no skills). That matters
+    // The default opponent is the shared INERT one (0 attack, no skills). That matters
     // for the hp:0 backstop test, whose premise is "no incoming damage ever reaches the heal
     // target, so recordDestroyed never runs" — an opponent that attacked would route the death
     // through recordDestroyed and destroy the very distinction that test draws. Every other test

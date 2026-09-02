@@ -398,7 +398,7 @@ describe('Phase 3 reactive triggers', () => {
                 },
             ],
         };
-        // SP-U U5: the DPS enemy is real & destructible now — this scenario's heavy direct +
+        // The DPS enemy is real & destructible now — this scenario's heavy direct +
         // corrosion damage would wipe the default 400k pool mid-window and terminate the run,
         // truncating the cadence this test measures. `enemyHp` no longer has any engine reader
         // (SP-4d deleted the field); the enemy's real HP comes from the `enemyAttackers` roster
@@ -819,7 +819,7 @@ describe('Phase 3 reactive triggers', () => {
     });
 
     // ----------------------------------------------------------------------
-    // Scenario 11 — self-chain guard (Ship-kit W7): an on-debuff-inflicted DEBUFF whose own
+    // Scenario 11 — self-chain guard: an on-debuff-inflicted DEBUFF whose own
     // application would re-trigger itself (Warden's Out. Damage Down II shape). BEFORE W7 this
     // was an unbounded chain that threw MAX_INTENT_GENERATIONS; the guard now brands the reaction's
     // own debuff-applied (`viaDebuffInflictedReaction`) so the on-debuff-inflicted listener skips
@@ -1413,7 +1413,7 @@ describe('Phase 3 reactive triggers', () => {
     // comparator switch — unresolvable rather than evaluated against a stale constant, but the
     // shape is exactly as dead as it always was.
     //
-    // The dead predicate is `hpSubject !== 'self'` (`triggers.ts:2581`, `triggers.ts:2652`) —
+    // The dead predicate is `hpSubject !== 'self'` (`triggers.ts`, `triggers.ts`) —
     // which INCLUDES an UNDEFINED `hpSubject`, not just `'enemy'`: `evaluateConditions.ts`'s
     // `evalHpThreshold` (l.252-258) routes anything that isn't `'self'` or `'target'` to
     // `ctx.enemyHpPct`, so a condition with no `hpSubject` field at all is gated exactly the
@@ -1423,27 +1423,27 @@ describe('Phase 3 reactive triggers', () => {
     // against the victim's live HP (`resolveAoEReactiveDamageVictims` →
     // `buildPerVictimConditionCtx`) — for exactly one ability shape: `type:'damage' &&
     // target:'all-enemies'`. Corpus scan against `docs/ship-skills.csv` (via
-    // `DAMAGE_HP_GATE_RE`, `skillTextParser.ts:731-732`) finds exactly ONE ship that matches:
+    // `DAMAGE_HP_GATE_RE`, `skillTextParser.ts`) finds exactly ONE ship that matches:
     // Judge. Its condition does NOT come from `hpThresholdFromSentence` — it comes from
-    // `parseHpThresholdCondition` → `buildShipAbilities.ts:1627-1637`, which emits the
+    // `parseHpThresholdCondition` → `buildShipAbilities.ts`, which emits the
     // condition with NO `hpSubject` field at all (the engine comment at
-    // `buildShipAbilities.ts:1670-1672` attributes it to `hpThresholdFromSentence`; that
+    // `buildShipAbilities.ts` attributes it to `hpThresholdFromSentence`; that
     // attribution is itself wrong, but pre-existing — left alone here, not propagated). Judge
     // is safe because it is start-of-round, gets re-targeted to `all-enemies` at
-    // `buildShipAbilities.ts:1670-1684`, and is then scrubbed and per-victim re-checked at
-    // `triggers.ts:2577-2593` — the one live path. `hpThresholdFromSentence`'s three call
-    // sites (`buildShipAbilities.ts:522, 554, 685`) all emit STAT MODIFIERS (`out.push({
+    // `buildShipAbilities.ts`, and is then scrubbed and per-victim re-checked at
+    // `triggers.ts` — the one live path. `hpThresholdFromSentence`'s three call
+    // sites (`buildShipAbilities.ts, 554, 685`) all emit STAT MODIFIERS (`out.push({
     // channel: 'outgoingDamage' | 'critDamage', … })`), never abilities, so they cannot reach
     // this gate either way. The parser side of this gap is therefore corpus-UNREACHABLE: no
     // parsed ship kit can produce a non-`all-enemies` ability with a non-self hp-threshold at
     // drain time.
     //
     // The single-target debuff shape this test used to use is NOT synthetic, though — it is
-    // exactly what the in-app ability editor produces: `ConditionRow.tsx:182-193` offers
+    // exactly what the in-app ability editor produces: `ConditionRow.tsx` offers
     // "Whose HP" → `enemy` on ANY `hp-threshold` condition regardless of ability type, and
-    // `AbilityCard.tsx:964-965` offers every trigger (including on-crit and every other
+    // `AbilityCard.tsx` offers every trigger (including on-crit and every other
     // reactive) on every ability type. That editor tree feeds `config.shipSkills` straight
-    // into the DPS calculator (`ShipConfigCard.tsx:299-305` → `SkillSlotList` →
+    // into the DPS calculator (`ShipConfigCard.tsx` → `SkillSlotList` →
     // `SkillEditorModal` → `AbilityCard`). So a USER-AUTHORED on-crit reactive gated on
     // "enemy below 50% HP" silently never fires today — this is a live silent failure for
     // user-authored abilities, even though no shipped, parsed ship kit hits it. This test now
@@ -2088,7 +2088,7 @@ describe('on-attacked live trigger (Task 4)', () => {
     });
 
     // ------------------------------------------------------------------
-    // Task 4 (Phase 4c PR 1): crit filter + per-event eventCtx
+    // Task 4: crit filter + per-event eventCtx
     // ------------------------------------------------------------------
 
     // (a) triggerCritFilter 'crit' fires only on critting hits
@@ -2269,7 +2269,7 @@ describe('on-attacked live trigger (Task 4)', () => {
 });
 
 // ----------------------------------------------------------------------
-// on-ally-attacked listener (Phase 4c PR 2 Task 3): fires when ANOTHER player
+// on-ally-attacked listener: fires when ANOTHER player
 // actor takes a direct hit. Unit-level harness mirroring the on-attacked
 // crit-filter tests: bare bus + registerReactiveListeners + manual emits.
 // Owner is 'graphite' (the reacting ship); 'tank' is another player actor;
@@ -2459,7 +2459,7 @@ describe('on-ally-attacked listener', () => {
 });
 
 // ----------------------------------------------------------------------
-// Death-trigger live listeners (Task 5): on-destroyed / on-ally-destroyed /
+// Death-trigger live listeners: on-destroyed / on-ally-destroyed /
 // on-enemy-destroyed. Unit-level tests driving registerReactiveListeners +
 // createEventBus directly. Owner is always 'A' (a player actor); 'B' is
 // another player actor; 'enemy' is enemy-side per the isOpposing predicate.
@@ -2637,7 +2637,7 @@ describe('death-trigger live listeners (Task 5)', () => {
 });
 
 // ----------------------------------------------------------------------
-// on-cheat-death-activated live listener (Task 8): the engine emits
+// on-cheat-death-activated live listener: the engine emits
 // `cheat-death-activated{actorId, round}` when a Cheat Death intercept saves
 // an actor; the owner-scoped listener enqueues that owner's activated abilities.
 // ----------------------------------------------------------------------
@@ -2696,7 +2696,7 @@ describe('on-cheat-death-activated live listener (Task 8)', () => {
 });
 
 // ----------------------------------------------------------------------
-// Once-per-combat repair cap (Task 8): a heal ability flagged oncePerCombat
+// Once-per-combat repair cap: a heal ability flagged oncePerCombat
 // fires its consumption at most ONCE across the whole combat — even if its
 // intent is executed twice. The cap is a combat-lifetime Set keyed
 // `${ownerId}:${abilityId}`, threaded into the executor via IntentExecContext.
@@ -2742,7 +2742,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
             grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: ['A'],
             enemyIds: [],
-            // SP-4e: the reactive heal branch now applies to the RESOLVED recipient's own pool
+            // The reactive heal branch now applies to the RESOLVED recipient's own pool
             // (previously only to `targetId`), so this double must model production, where
             // `recipientActor` resolves every roster id. A blanket `() => undefined` here would
             // make the repair land nowhere and this suite would stop observing consumption at all.
@@ -2794,7 +2794,7 @@ describe('once-per-combat repair cap in executeIntent (Task 8)', () => {
 });
 
 // ----------------------------------------------------------------------
-// Scenario 15 — on-attacked engine integration (Task 8): the engine emits
+// Scenario 15 — on-attacked engine integration: the engine emits
 // the `attacked` event from the enemy intake so `on-attacked` reactive
 // abilities on the heal target actually fire during a real run.
 // ----------------------------------------------------------------------
@@ -2985,7 +2985,7 @@ describe('Phase 4b: death/revive triggers in LIVE_TRIGGERS', () => {
 });
 
 // ----------------------------------------------------------------------
-// Task 1 (Phase 4c): type-layer additions
+// Task 1: type-layer additions
 //   - Ability.triggerCritFilter?: 'crit' | 'non-crit'
 //   - Intent.eventCtx?: { counterTargetId?: string }
 // These are structural tests: construct typed literals with the new fields
@@ -3109,7 +3109,7 @@ describe('Phase 4c Task 1: triggerCritFilter and eventCtx type additions', () =>
 });
 
 // ----------------------------------------------------------------------
-// Task 5 (Phase 4c PR 1): counter-debuff routing to the attacker's store
+// Task 5: counter-debuff routing to the attacker's store
 //
 // A debuff intent carrying eventCtx.counterTargetId must:
 //   - apply the timed status to THAT enemy's per-target store
@@ -3208,7 +3208,7 @@ describe('Phase 4c Task 5: counter-debuff routing via eventCtx.counterTargetId',
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c Task 6: live drain-time selfHpPct
+// Live drain-time selfHpPct
 //
 // buildDrainContext must forward the owner's REAL HP% to the condition gate
 // via ctx.selfHpPctFor?(ownerId). A heal intent gated on below-40% HP:
@@ -3266,7 +3266,7 @@ describe('Phase 4c Task 6: live drain-time selfHpPct', () => {
             grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: ['A'],
             enemyIds: [],
-            // SP-4e: see the identical note on the once-per-combat double above — the reactive
+            // See the identical note on the once-per-combat double above — the reactive
             // heal branch resolves `recipientActor` now, so an always-undefined stub would make
             // this suite's `applied` array permanently empty and its gate assertions vacuous.
             recipientActor: (id) => (id === 'A' ? ({ id: 'A' } as CombatActor) : undefined),
@@ -3394,7 +3394,7 @@ describe('debuff-resisted reports the resolved counter target (combat-log fideli
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 2 Task 4: ally-target payload routing via eventCtx.damagedAllyId
+// Ally-target payload routing via eventCtx.damagedAllyId
 //
 // An on-ally-attacked reaction grant ('ally' target + eventCtx naming the
 // damaged ally — Graphite's "grants the ally Repair Over Time III") must land
@@ -3538,7 +3538,7 @@ describe('Phase 4c PR 2 Task 4: damagedAllyId recipient routing', () => {
             grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: PLAYER_IDS,
             enemyIds: [],
-            // SP-4e: production resolves every roster id here (`allActorsById.get`), and the
+            // Production resolves every roster id here (`allActorsById.get`), and the
             // reactive heal branch now reads it to pick whose pool to repair. Model that.
             recipientActor: (id) => (PLAYER_IDS.includes(id) ? ({ id } as CombatActor) : undefined),
         };
@@ -3699,7 +3699,7 @@ describe('Overload lifecycle Task 3: remove-self-buff partition guard (on-enemy-
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 2 Task 5: on-ally-attacked ENGINE integration (scenario 16).
+// On-ally-attacked ENGINE integration (scenario 16).
 // Full runCombat in healing mode: a walked TEAM owner carries the reactive
 // ability; the heal target is a walked team 'tank' the enemy attacker hits.
 // Locks the engine-level threading: per-hit attacked events feed the owner's
@@ -3811,7 +3811,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                 bus,
                 teamActors: [
                     teamWalk('graphite', 120, 50_000, opts.ownerSkills),
-                    // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization
+                    // The tank claims the front-middle cell EXPLICITLY. The normalization
                     // boundary places every actor and synthesizes the enemy's `front enemy`
                     // targeting, so the victim is decided by board geometry now — and on its
                     // index-derived default (M2) the tank sits behind the auto-placed FOCUS at the
@@ -3903,7 +3903,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
             ],
         });
 
-        // SP-4b-1: Provoke's OWN forced targeting is now live, and it feeds back into who gets
+        // Provoke's OWN forced targeting is now live, and it feeds back into who gets
         // hit. The boundary makes the run positional, so `resolvePositionalTarget` honours the
         // `provokedBy` override that the legacy non-positional route ignored entirely. The 3-round
         // ladder that follows is fully determined:
@@ -3974,7 +3974,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
 });
 
 // ----------------------------------------------------------------------
-// D-PR11: start-of-turn trigger — self-scoped on turn-started.
+// Start-of-turn trigger — self-scoped on turn-started.
 //
 // Fortifying Shroud fires once at the START of the owner's OWN turn
 // (not every actor's turn). The engine emits `turn-started` once per actor
@@ -4342,7 +4342,7 @@ describe('on-deal-damage live trigger', () => {
         // once-per-turn guard — it enqueues once per `ability-performed` event, full stop.
         // Two halves follow, and a future reader must not collapse either into the other:
         //   - A `hits: N` skill is N consecutive full-walk attacks (locked rule), each its own
-        //     event (PR2/PR5) → N events must fire the rider N times, not once per turn.
+        //     event → N events must fire the rider N times, not once per turn.
         //   - One event can still cover an AoE footprint of many victims → that is ONE event
         //     and must fire only ONCE, however many victims it hit. Multi-hit is NOT AoE; this
         //     is the collapse the old (misleadingly-named) version of this test was protecting.
@@ -4506,7 +4506,7 @@ describe('on-debuff-resisted listener — source routing', () => {
 });
 
 // ----------------------------------------------------------------------
-// Task 4: the `cfg.type === 'damage'` executor branch for an hpBasisPct-flagged
+// The `cfg.type === 'damage'` executor branch for an hpBasisPct-flagged
 // ability (Vindicator on-resist). Requires a routed source (never falls back to
 // ctx.enemy), dedups per (owner, ability, source, sub-attack) via counterFiredThisTurn,
 // and passes hpBasisPct through to ctx.applyReactiveDamage as the 7th arg.

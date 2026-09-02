@@ -23,12 +23,12 @@ export function resolveSupportRecipients(args: {
      *  is the same conservative answer. */
     factionOf?: (id: string) => FactionKey | undefined;
 }): string[] {
-    // SP-4e: a named single-recipient selector is resolved by the CALLER (it needs live HP, which
+    // A named single-recipient selector is resolved by the CALLER (it needs live HP, which
     // this helper has no access to) via `lowestHpAllyRecipients` below, and the caller USES that
     // result directly rather than routing it back through this function — this helper has no way
     // to verify a `baseRecipients` it receives was actually produced that way. This is a BACKSTOP,
     // not the routing rule: the routing rule is that each caller resolves the selector itself (see
-    // `lowestHpAllyRecipients` and its call sites). Reaching this branch AT ALL means a caller
+    // `lowestHpAllyRecipients`). Reaching this branch AT ALL means a caller
     // forgot that and handed this function an unresolved base — fail loudly rather than guess.
     //
     // A silent clamp (`slice(0, 1)`) would fail exactly the way this variant must never fail: on a
@@ -51,14 +51,13 @@ export function resolveSupportRecipients(args: {
     // reaches no ally" from "no pattern was threaded here". Kept as-is by owner ruling 2026-08-21;
     // do not split it into two outcomes.
     //
-    // Since SP-4e Task 4 that fallback is much wider than it looks. `recipientsFor` (playerTurn.ts)
-    // now hands a plain `'ally'` clause the caster's whole own side as `baseRecipients`, where it
-    // used to hand a single id (the heal anchor / the lowest-HP ally). So on any caster with a
-    // non-support pattern — most visibly the healing calculator's TEAM actors, which are threaded
-    // no pattern at all and therefore run on `DEFAULT_BASE_PATTERN` (see HealingCalculatorPage's
-    // placement-warning block) — an ally-targeted support clause reaches EVERY same-side actor,
-    // the caster included. Intended for now; it narrows on its own once real team-actor patterns
-    // are threaded into the adapter.
+    // That fallback is much wider than it looks. `recipientsFor` (playerTurn.ts) hands a plain
+    // `'ally'` clause the caster's WHOLE OWN SIDE as `baseRecipients`, not a single id. So on any
+    // caster with a non-support pattern — most visibly the healing calculator's TEAM actors,
+    // which are threaded no pattern at all and therefore run on `DEFAULT_BASE_PATTERN` (see
+    // HealingCalculatorPage's placement-warning block) — an ally-targeted support clause reaches
+    // EVERY same-side actor, the caster included. It narrows on its own once real team-actor
+    // patterns are threaded into the adapter.
     const afterFootprint =
         footprintAllyIds === undefined
             ? baseRecipients
@@ -156,7 +155,7 @@ export function narrowByRecipientFilter(
 }
 
 /**
- * SP-4e: resolve the `'lowest-hp-ally'` selector — the living same-side ally with the lowest
+ * Resolve the `'lowest-hp-ally'` selector — the living same-side ally with the lowest
  * currentHp/maxHp, CASTER EXCLUDED, ties broken by source order.
  *
  * Returns an EMPTY array when the caster is the only living candidate: "the OTHER ally" means
@@ -195,10 +194,10 @@ export function lowestHpAllyRecipients(args: {
 }
 
 /**
- * SP-4e: shared buff-aware live-HP-fraction reader for `lowestHpAllyRecipients.hpFractionOf` —
- * lifted out of `runPlayerTurn` (originally a local closure there) so every caller reads maxHp
- * through the same accessor rather than each hand-rolling its own (the divergence risk: a
- * hand-rolled reader silently falling back to raw `stats.hp` and missing buff-aware max HP).
+ * Shared buff-aware live-HP-fraction reader for `lowestHpAllyRecipients.hpFractionOf`, so every
+ * caller reads maxHp through the same accessor rather than each hand-rolling its own (the
+ * divergence risk: a hand-rolled reader silently falling back to raw `stats.hp` and missing
+ * buff-aware max HP).
  *
  * Reads `healing.recipientActor`/`recipientMaxHp` (buff-aware, authoritative) when a healing
  * runtime ctx is supplied; falls back to the live `sameSideLiving` roster (raw `stats.hp`)

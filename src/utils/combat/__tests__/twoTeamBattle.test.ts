@@ -1,7 +1,7 @@
 /**
  * Combat Simulator Phase 5 — PR 1, Task 1: CHARACTERIZATION SPIKE (tests only).
  *
- * Goal: before building the battle-result assembler (Task 2), PROVE the data source.
+ * Goal: before building the battle-result assembler, PROVE the data source.
  * A tiny 2v2 POSITIONED battle through `runCombat` must emit usable damage data for BOTH
  * directions (player→enemy AND enemy→player), so the assembler can attribute per-attacker
  * dealt damage and per-victim taken damage symmetrically. This test pins exactly which
@@ -335,7 +335,7 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
         expect(playerToEnemy.length).toBeGreaterThan(0); // player→enemy (the new symmetric emit)
         // Every attacked event is one of those two cross-team directions (no same-side / stray ids).
         expect(attacked.length).toBe(enemyToPlayer.length + playerToEnemy.length);
-        // CONTRACT (D-PR16): `attacked` carries the per-ATTACK aggregate damage (5000 here — both
+        // CONTRACT: `attacked` carries the per-ATTACK aggregate damage (5000 here — both
         // sides have attack 5000 vs the victim's defence 0) so Tenacity's >25%-max-HP filter can
         // read it. Added via conditional spread → present only when damage > 0 (healing-mode
         // 0-damage events stay byte-identical).
@@ -503,7 +503,7 @@ describe('Two-team positional battle — characterization spike (Phase 5 PR 1, T
 });
 
 // ===========================================================================
-// Phase 5 PR 1, Task 3: end-to-end `simulateBattle` adapter (positioned squads →
+// End-to-end `simulateBattle` adapter (positioned squads →
 // runCombat → symmetric BattleResult). Driven through `simulateBattle`, not raw runCombat.
 // ===========================================================================
 
@@ -747,7 +747,7 @@ describe('simulateBattle adapter — input validation (review fix)', () => {
 });
 
 // ===========================================================================
-// Phase 5 PR 1, Task 4: HARDEN the two-team harness with edge cases the PR2 page +
+// HARDEN the two-team harness with edge cases the PR2 page +
 // the deferred unify will rely on — win/loss/draw outcomes, death-round correctness,
 // healing attribution, AoE per-victim accounting, and the per-round event log.
 // Driven through `simulateBattle` (the Task 3 adapter), reusing the makeShip /
@@ -1762,7 +1762,7 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         // `resolvePositionalTarget` to null regardless of whether focus is alive, so this is a
         // no-victim turn (SP-4c-2b/4d) even though nobody died here — no `attacked` event
         // follows, and the combat log's now-empty attack entry is correctly pruned as a phantom
-        // row (Task 4) — the SAME no-victim shape round 4 lands in below, for a different reason
+        // row — the SAME no-victim shape round 4 lands in below, for a different reason
         // (there, focus really is dead).
         // SP-F F1 note: pre-F1, `damageDealt` (then `ability-performed.damage` summed by
         // actorId) was the one signal that still told the two cases apart, because it didn't
@@ -1804,7 +1804,7 @@ describe('bug repro: enemy supporter turn skipped after the focus player dies', 
         // R2 active(bank→2, focus now dead), R3 charged-would-fire → NO BUFF AND NO DAMAGE,
         // R4 active again (the cadence consumed the bank at cap and reset it).
         //
-        // SP-4e: as with the sibling case above, the ROUTE changed and the outcome did not.
+        // As with the sibling case above, the ROUTE changed and the outcome did not.
         // Pre-rung, R3 took the dead-target skip (the charged nuke needs a victim and the
         // fabricated anchor was a corpse) and the cadence advanced manually. Now the actor
         // resolves NO victim, `runPlayerTurn` runs and advances the same cadence internally,

@@ -30,9 +30,8 @@ import { victimOwnEnemyFamilies } from './triggers';
 //     must stay in the turn loop (it cannot re-resolve them here). `hp` IS folded
 //     (hp * (1 + hpBuff/100)); `crit` is still UNCAPPED (consumer caps it).
 //
-// Both share the arithmetic in calculateBuffTotals (buffTotals.ts). See the A1b
-// plan's "Design decisions" for the full rationale. (A2 extends this module with
-// the hacking/security fold pipeline.)
+// Both share the arithmetic in calculateBuffTotals (buffTotals.ts). The
+// hacking/security fold pipeline lives here too — see `liveDebuffLandingChance`.
 // ---------------------------------------------------------------------------
 
 export interface EffectiveStats {
@@ -49,8 +48,8 @@ export interface EffectiveStats {
      *  in-fight HP changes track via currentHp, not the base stat. */
     hp: number;
     speed: number;
-    hacking: number; // base + hackingBuff (flat-additive); fold wired in A2
-    security: number; // base + securityBuff (flat-additive); fold wired in A2
+    hacking: number; // base + hackingBuff (flat-additive)
+    security: number; // base + securityBuff (flat-additive)
 }
 
 /**
@@ -100,16 +99,16 @@ export function foldActorBuffTotals(
     const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
     const timed = calculateBuffTotals(toSimBuffs(timedEffects));
     // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
-    // side applied TO it. Until this existed, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
-    // `Hacking Down` and `Security Down` (17 corpus ships) landed in that store, displayed, ticked
-    // down and changed NOTHING, because the only two sources here were self-sided.
+    // side applied TO it. Without it, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
+    // `Hacking Down` and `Security Down` land in that store, display, tick down and change
+    // NOTHING, because the other two sources here are both self-sided.
     //
     // FIVE CHANNELS ONLY (`FOLD_SHADOW_CHANNELS`), and the narrowness is the whole safety
     // argument: those five are the ones that had NO enemy-store reader anywhere. Every other
     // channel already has one (`victimOwnEnemyFamilies` on the outgoing pair,
     // `toEnemyModifiers` on defense/incomingDamage, `victimOwnEnemyHealModifiers` on the heal
     // pair), so projecting any of them here would DOUBLE-COUNT — and
-    // `effectiveStatsOf(...).attack`/`.defence` alone are read at ~20 sites in engine.ts, where a
+    // `effectiveStatsOf(...).attack`/`.defence` are read all over engine.ts, where a
     // silent doubling would be near-impossible to attribute.
     //
     // SHADOWED, NOT SUMMED. The locked rule is highest tier wins per named family REGARDLESS of
@@ -153,7 +152,7 @@ export function effectiveStatsOf(
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
     const s = actor.stats;
     return {
-        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
+        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
         defence: s.defence * (1 + t.defenceBuff / 100),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -238,14 +237,14 @@ export function effectiveOutgoingStatsOf(
 
 /**
  * Live debuff-LANDING chance (0..1) for one acting actor against one target, recomputed
- * from current effective stats (A2 Task 4). Mirrors the dpsSimulator setup formula exactly,
+ * from current effective stats. Mirrors the dpsSimulator setup formula exactly,
  * but live + with the affinity modifier applied IN the engine:
  *
  *   effHacking = (hacking + hackingBuff) * (1 + affinityDamageModifier / 100)
  *   effSec     = security + securityBuff        // NO affinity on security
  *   chance     = clamp(effHacking - effSec, 0, 100) / 100
  *
- * This is the SINGLE landing-chance producer (A-sweep A.2): self-sufficient for base-less
+ * This is the SINGLE landing-chance producer: self-sufficient for base-less
  * actors. A missing hacking base defaults to 200 and a missing security base to 100 — the
  * values the old static formula (dpsSimulator) baked — so no caller needs a base-presence
  * ternary. The fold is reproduced directly via foldActorBuffTotals (NOT effectiveStatsOf,
@@ -347,7 +346,7 @@ export function effectiveDamageStatsOf(args: {
     };
 
     return {
-        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
+        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
         defence: base.defence * (1 + totals.defenceBuff / 100),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,

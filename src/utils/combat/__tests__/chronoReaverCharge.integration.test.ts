@@ -54,7 +54,7 @@ type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 // ─── Real implant resolution ──────────────────────────────────────────────────────
 // Resolve the Chrono Reaver ability from the SAME path simulateBattle uses: a Ship with a
 // CHRONO_REAVER implant gear piece, through buildEquipmentAbilities. This is the genuine
-// implant→ability output (Task 1), not a hand-rolled duplicate.
+// implant→ability output, not a hand-rolled duplicate.
 
 function makeShip(over: Partial<Ship>): Ship {
     return {
@@ -489,7 +489,7 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
     const basePattern: ParsedPattern = { raw: 'base', shape: 'base', range: 0, modifiers: {} };
 
     /**
-     * SP-4c-1: an inert SURVIVOR. `stasisBot` is killed in round 1 by design so Stasis is never
+     * An inert SURVIVOR. `stasisBot` is killed in round 1 by design so Stasis is never
      * re-applied; since SP-4c-1 that kill WIPES the enemy side and ends the match at round 1,
      * which would cut this 8-round charge ledger to a single row. 0 attack + no skills make this
      * RNG-stream-inert, and speed 1 puts it last in every turn order.
@@ -653,7 +653,7 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
         //            next actor's post-action drain, or the round-end drain) — at that point Stasis has
         //            already decremented (3→2→1 here) but is still ≥1, so the owner remains
         //            turn-blocked and the §4.4 filter drops it.
-        //            // ~engine.ts:3403
+        //            // ~engine.ts
         //            Post-Turn: 2→1.
         //                                                                              → charges 0  ← proc SUPPRESSED
         //   R3 (t3): turnsTaken 2→3. Stasis(1) → turn-blocked → SKIP. Not a proc turn.

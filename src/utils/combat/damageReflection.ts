@@ -27,14 +27,14 @@ export function reflectedDamageForHit(args: {
     attackerDefenceReductionPct: number;
     /**
      * Incoming-reduction % on the RECIPIENT of the bounce-back (default 0) — i.e. the ship that
-     * threw the original hit and is now the VICTIM of the thorns. The D-PR3 channel, resolved at
+     * threw the original hit and is now the VICTIM of the thorns. The incoming-reduction channel, resolved at
      * `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
      *
-     * ⚠️ IT WAS CALLED `attackerIncomingReductionPct`, and that misnomer let a Critical survive a
-     * full review: "attacker" was POSITIONAL (who threw the original hit) where every reader took
-     * it as CAUSAL (attacker-side, therefore not a victim-side reduction to strip). The rename is
-     * not cosmetic — this branch added `attackerSideReductionPct` in `victimDamage.ts`, ONE call
-     * away, where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
+     * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. That name let a Critical survive a
+     * full review: "attacker" reads as POSITIONAL here (who threw the original hit) where every
+     * reader took it as CAUSAL (attacker-side, therefore not a victim-side reduction to strip).
+     * The distinction is not cosmetic — `attackerSideReductionPct` in `victimDamage.ts`, ONE call
+     * away, is where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
      * adjacent parameters with the same prefix and opposite meanings is exactly the shape that
      * produced the defect, so the positional one no longer carries the prefix.
      * (`attackerDefenceReductionPct` below is positional in the same way and keeps its name only

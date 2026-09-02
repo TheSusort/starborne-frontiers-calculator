@@ -6,7 +6,7 @@ import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
 
 // ---------------------------------------------------------------------------
-// PR10: cast-path BUFF STEAL moves the target's newest buff onto the caster,
+// Cast-path BUFF STEAL moves the target's newest buff onto the caster,
 // remaining duration intact — statusEngine.steal wired into the on-cast loop in
 // playerTurn.ts (mirrors the purge on-cast loop it's modeled after).
 //

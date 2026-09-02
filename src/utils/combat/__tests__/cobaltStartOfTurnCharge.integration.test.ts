@@ -23,7 +23,7 @@
  * ─── CRITICAL TIMING (baked into the Part 1 ledger) ───────────────────────────────────────────
  * There is NO pre-action drain between the focus's `turn-started` and its action body. The
  * `start-of-turn` charge intent is ENQUEUED on `turn-started` (triggers.ts) but DRAINS at the
- * post-action point (~engine.ts:4648 / round-end). So Cobalt's +1 proc lands AFTER its own turn's
+ * post-action point (~engine.ts / round-end). So Cobalt's +1 proc lands AFTER its own turn's
  * cast decision (one-turn alignment) — within the SAME round, reflected in that round's reported
  * `charges`. Charges carry forward across rounds, so accrual is correct. Net effect at full HP: the
  * bar advances by +2 each active turn (baseline +1 from advanceChargeCadence, plus Cobalt's +1
@@ -379,7 +379,7 @@ describe('Cobalt second passive — charge AND Out. Damage Up II coexist (no cla
 
 // ─── SP-G G2: the start-of-turn grant now precedes the owner's cast ──────────────────────────
 //
-// FIXED (SP-G G2): a pre-cast drain of the acting owner's start-of-turn GRANT intents runs
+// FIXED: a pre-cast drain of the acting owner's start-of-turn GRANT intents runs
 // between the turn-started emit and the cast, so the Out. Damage Up II buff boosts the SAME turn
 // it is granted — every turn, not every other turn. (The CHARGE half is excluded from this drain
 // and still banks post-cast, so the Part 1/Part 2 charge ledgers are unchanged.)

@@ -3,7 +3,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { Ability } from '../../../types/abilities';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task R3: capture resisted enemy→tank DoTs into EnemyRoundEffects.
+// Capture resisted enemy→tank DoTs into EnemyRoundEffects.
 //
 // PR 5 item 12 routes an enemy attacker's DoT infliction through the same
 // hacking-vs-security landing roll (per-enemy `debuffLandingChance`). When the

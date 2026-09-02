@@ -73,7 +73,7 @@ const attackSkill = (hits: number): ShipSkills['slots'][number] => ({
 const HEAL_PCT = 20;
 
 /**
- * Bloodthirst's shape, copied from `buildEquipmentAbilities.ts:628-645`: a passive-slot on-crit
+ * Bloodthirst's shape, copied from `buildEquipmentAbilities.ts`: a passive-slot on-crit
  * SELF heal scaling off damage dealt. The real implant also carries a top-level `procChance`; it is
  * DELIBERATELY OMITTED here so the heal fires unconditionally. PR7 is about the basis and the
  * count, not the gate — and `passesProcChanceGate` returns early when `procChance` is undefined, so
@@ -336,7 +336,7 @@ describe('Bloodthirst damage-dealt basis (PR7)', () => {
  * sub-attack 0 of a 3-hit cast is diverted and sub-attacks 1-2 land normally — the asymmetry that
  * makes the diverted sub-attack's silence observable against non-zero siblings in the SAME run.
  *
- * PR6 UPDATE (this file's assertion moved with it): a repair whose gross is 0 no longer emits
+ * UPDATE (this file's assertion moved with it): a repair whose gross is 0 no longer emits
  * `reactive-heal-performed` at all, because a repair that repaired nothing must not open a
  * combat-log row (`triggers.ts`, symmetric with the shield branch's `shieldRecipientIds.length > 0`).
  * So rule 2's observable is now the ABSENCE of the diverted sub-attack's event, not an `amount: 0`

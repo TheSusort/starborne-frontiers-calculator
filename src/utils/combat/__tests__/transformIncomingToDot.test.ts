@@ -50,7 +50,7 @@ const voronTransform: Ability = {
     conditions: [],
     config: { type: 'transform-incoming-to-dot', turns: TURNS, condition: 'always' },
 };
-// SP-A: Voron's OWN "takes 20% less damage from Damage over Time effects" — the transform's
+// Voron's OWN "takes 20% less damage from Damage over Time effects" — the transform's
 // generic ticks must still respect this existing, already-shipped reduction (coupling check).
 const voronDotReduction: Ability = {
     id: 'voron-dot-reduction',

@@ -64,7 +64,7 @@ function noDeadActs(result: BattleResult): InvariantViolation[] {
  * `perTargetDealt` at all, shorting the sum the other way). There is no protection/redirect entry
  * kind in the combat log, so the only pure, result-only signal for "Protection was active this
  * round" is `activeBuffs` — Protection is a buff named exactly `'Protection'`
- * (protectionTransfer.ts:65-67). Skip any round where ANY ship carries it.
+ * (see `protectionTransfer.ts`). Skip any round where ANY ship carries it.
  */
 function damageConservation(result: BattleResult): InvariantViolation[] {
     const out: InvariantViolation[] = [];

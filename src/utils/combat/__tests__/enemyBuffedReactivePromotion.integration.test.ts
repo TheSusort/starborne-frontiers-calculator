@@ -1,5 +1,5 @@
 /**
- * Phase 3 PR-I — combat-integration tests for the NEW `on-enemy-buffed` reactive trigger:
+ * PR-I — combat-integration tests for the NEW `on-enemy-buffed` reactive trigger:
  *   - Nuqtu (1st passive): "This Unit Cleanses 1 debuff from itself (once per round) and gains
  *     Terran Bolster III for 1 turn when an enemy gets buffed" (docs/ship-skills.csv, verbatim).
  *     Both effects are SELF-target — no actor capture needed. The cleanse is capped at once per

@@ -230,7 +230,7 @@ describe('SP-4b-2 D1 — accumulate-detonate gathers real direct damage on a pos
     // (positionalBinding.ts) and the cast fell back to the legacy scalar `enemy` sink. The
     // targetable-HP floor (`normalizeRoster.ts`, MIN_TARGETABLE_MAX_HP) now raises that enemy to
     // 1,000,000 HP unconditionally, so it is a real, hittable roster member and the run IS
-    // positional — the non-positional shape this test used to pin is gone (SP-4c-2a Task 1). The
+    // positional — the non-positional shape this test used to pin is gone. The
     // legacy `'enemy'` dummy actor still exists (engine.ts still creates it unconditionally) but is
     // inert on a positional run — dropped from the turn order and never credited — so the tap moves
     // onto the real enemy (`BARE_ENEMY_ID`) instead. The dummy's deletion is rung 4c-2d's job. The

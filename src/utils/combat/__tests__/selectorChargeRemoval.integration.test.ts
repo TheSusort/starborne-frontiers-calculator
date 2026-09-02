@@ -28,7 +28,7 @@ import type { CombatActor } from '../state';
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // ─── Direct-charge harness ────────────────────────────────────────────────────────
-// Copied verbatim from enemyChargeRemoval.integration.test.ts:32-110 — the smallest working
+// Copied verbatim from enemyChargeRemoval.integration.test.ts — the smallest working
 // `runCombat` charge harness in the repo. Deliberately duplicated (not extracted into a shared
 // module) so the two integration files can drift independently, matching wave8Targets.test.ts's
 // precedent for copying its own harness rather than sharing one.
@@ -110,7 +110,7 @@ const board = () => [
 
 /** The focus carries the charge ability under test on its PASSIVE slot (a `start-of-round`
  *  trigger is partitioned to the reactive drain regardless of slot). Field-for-field the input
- *  from `enemyChargeRemoval.integration.test.ts:118-145`; `enemyAttackers` is supplied by each
+ *  from `enemyChargeRemoval.integration.test.ts`; `enemyAttackers` is supplied by each
  *  arm via spread. */
 const playerInput = (chargeAbilityUnderTest: Ability): CombatEngineInput => ({
     attack: 1000,

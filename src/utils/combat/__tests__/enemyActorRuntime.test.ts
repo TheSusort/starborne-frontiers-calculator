@@ -1,5 +1,5 @@
 /**
- * Task 5: buildEnemyPlayerActorRuntime — enemy PlayerActorRuntime construction.
+ * buildEnemyPlayerActorRuntime — enemy PlayerActorRuntime construction.
  *
  * Verifies that an enemy attacker gets a full PlayerActorRuntime (partitioned skills,
  * own gate instances, neutral affinity placeholder, correct side/kind, real stats).

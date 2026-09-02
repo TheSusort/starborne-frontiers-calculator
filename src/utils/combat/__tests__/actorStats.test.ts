@@ -57,7 +57,7 @@ describe('ActorStats — hacking/security', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// A2 Task 2: base hacking/security plumbed onto every combat actor.
+// Base hacking/security plumbed onto every combat actor.
 // These bases flow ONLY into effectiveStatsOf.hacking/.security (no production
 // reader until Task 4) — verified here at construction, never via goldens.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. 5000 lives on the roster entry's own
+    // Every run needs a real opponent. 5000 lives on the roster entry's own
     // `stats.defence` (the fight-wide `enemyDefense` scalar it used to be kept in step with,
     // always inert positionally M6/#11, was deleted in SP-4d) and the HP is raised to 10M so a
     // damaging team ship cannot kill it mid-sim. Nothing in this file asserts a damage magnitude —
@@ -207,7 +207,7 @@ describe('A2 Task 2 — base hacking/security on every actor', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Phase 0 Task 1: turnsTaken + chargeLossImmune on CombatActor
+// turnsTaken + chargeLossImmune on CombatActor
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('Phase 0 Task 1 — turnsTaken + chargeLossImmune on CombatActor', () => {

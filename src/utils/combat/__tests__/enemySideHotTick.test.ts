@@ -522,8 +522,8 @@ describe('#369 — a HoT on each side stays scoped to its own holder', () => {
 // opposite outright. R2 says a HoT tick fires no on-repaired
 // TRIGGER and emits no `heal-performed` — asserted above, on both sides. It says nothing about
 // `repairedThisRound`, which is a DIFFERENT channel: `applyHealToTarget` adds its victim to that
-// set whenever `consumed > 0` (engine.ts:3756), the engine reads it back as
-// `targetRepairedThisRound` while building each actor's turn args (engine.ts:8310), and that flag
+// set whenever `consumed > 0` (engine.ts), the engine reads it back as
+// `targetRepairedThisRound` while building each actor's turn args (engine.ts), and that flag
 // gates the `'target-repaired-this-round'` ability CONDITION (Nayra's charged purge and its
 // Stasis/Exposed inflicts).
 //

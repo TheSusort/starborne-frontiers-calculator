@@ -196,7 +196,7 @@ describe('aggregate-path incoming %-reduction fold', () => {
         expect(runPlayerTurn(makeArgs(makeRuntime(false))).directDamage).toBe(30000);
     });
 
-    // PARITY (D-PR3): crit-family reduction must fold ADDITIVELY into the incoming channel —
+    // PARITY: crit-family reduction must fold ADDITIVELY into the incoming channel —
     // matching the positional path (victimHitDamage) — when an enemy "+N% damage taken" debuff
     // (incomingDamageModifier != 0) co-occurs with a crit-family reduction R on the SAME victim.
     // The crit hit's incoming channel = (incomingDamageModifier - R), NOT a multiplicative split.

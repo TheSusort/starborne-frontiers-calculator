@@ -18,7 +18,7 @@ export interface ActiveBuff {
 export interface StatusEngineInput {
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
-    /** Team-actor scheduled sources (Phase 2 Task 8). Each source's TIMED entries key
+    /** Team-actor scheduled sources. Each source's TIMED entries key
      *  off that source's own id (matched in sourceFired by sourceId), so they apply on
      *  the team actor's real turns rather than the attacker's cadence. ALWAYS-ACTIVE and
      *  ACCUMULATING entries from these sources join the same global always/accum sets as
@@ -29,7 +29,7 @@ export interface StatusEngineInput {
         enemyDebuffs: SelectedGameBuff[];
     }[];
     /** Landing decision for a TIMED enemy upsert, drawn ONCE at application time
-     *  (Task 7). The engine owns the gate + affinity rule and threads it here. When
+     *  The engine owns the gate + affinity rule and threads it here. When
      *  it returns false the upsert is SKIPPED (no status stored, the existing one is
      *  not cleared) and the buffName is collected into sourceFired's `resistedEnemy`.
      *  Optional — defaulting to "always lands" keeps the unit tests gate-free. */
@@ -46,7 +46,7 @@ export interface AbilityStatusPayload {
     stacks: number;
     parsedEffects: ParsedBuffEffects;
     application?: 'inflict' | 'apply';
-    /** SP-G G1b: mirrors the ability config's `isStackable` flag. `stacks` is populated on
+    /** Mirrors the ability config's `isStackable` flag. `stacks` is populated on
      *  EVERY buff/debuff payload (even non-stackable ones default to 1) — this flag lets a
      *  consumer (the aura branch of activeAbilityStatuses) distinguish "genuinely stackable,
      *  report the count" from "stacks:1 is just the structural default, no count to report".
@@ -60,14 +60,14 @@ interface AbilityStatusBase {
     sourceSlot: SkillSlot;
     /** Already live-gated by the caller (see abilityStatusGating.liveGateConditions). */
     conditions: Condition[];
-    /** The actor that CAST this ability (Task 5 ally routing). Conditions evaluate against the
+    /** The actor that CAST this ability (ally routing). Conditions evaluate against the
      *  caster's context even when the status lives on a different recipient (an ally-cast aura's
      *  gate is the caster's). The ENGINE always sets this (casterId = the registering owner);
      *  it is OPTIONAL only so the statusEngine's own unit-test fixtures need not restate it —
      *  read sites default it to 'attacker'. Historical/attacker-only statuses are casterId
      *  'attacker' → identical to today (the resolver returns the local ctx for the caster). */
     casterId?: string;
-    /** Player-side RECIPIENTS that receive this status (Task 5 ally routing): `self` → [casterId];
+    /** Player-side RECIPIENTS that receive this status (ally routing): `self` → [casterId];
      *  `ally`/`all-allies` → every player actor id (fixed source order). Enemy-side statuses ignore
      *  this (enemy maps are singular). The ENGINE always sets this on the timed-by-slot statuses it
      *  threads into playerTurn (the per-recipient application loop reads it); OPTIONAL only so the
@@ -146,12 +146,10 @@ export type RegisteredAbilityStatus =
           /** Cap for the LIVE stack count when a stackable timed status is re-applied onto a
            *  victim that still holds it (see applyTimedAbilityStatus's stack-accumulation rule).
            *  Only consulted on that add-and-cap branch — a first application always stores the
-           *  declared `payload.stacks`, uncapped, exactly as before. Absent → uncapped.
-           *  NOTE: no production registration site populates this yet (the two corpus Exposed
-           *  appliers both carry `isStackable` falsy, so they REFRESH rather than add); it exists
-           *  so the accumulation rule has a bound to obey the moment one does, and the
-           *  statusEngine unit test is what holds that bound. Same shape as `hits` before
-           *  Quixilver R2 gave it a caller. */
+           *  declared `payload.stacks`, uncapped. Absent → uncapped.
+           *  An applier only reaches the add-and-cap branch when its config is `isStackable`;
+           *  a REFRESHING applier never consults this. The statusEngine unit test is what
+           *  holds the bound. */
           maxStacks?: number;
       })
     | (AbilityStatusBase & { kind: 'aura' })
@@ -165,7 +163,7 @@ export type RegisteredAbilityStatus =
 export interface ActiveAbilityStatus {
     payload: AbilityStatusPayload;
     active: ActiveBuff;
-    /** The actor that CAST this status (Task 7 HoT attribution). Present whenever the
+    /** The actor that CAST this status (HoT attribution). Present whenever the
      *  registered status/state carried it; for TIMED statuses it is stamped on BuffState at
      *  application from `status.casterId`. Undefined for statuses applied without caster
      *  identity (e.g. scheduled timed upserts, or statusEngine unit-test fixtures that omit
@@ -194,13 +192,13 @@ export interface StatusEngine {
      *    collected BEFORE the family-rule upsert (so family-absorbed applications
      *    still count as inflicted — the unit did inflict; family absorption is an
      *    internal map rule). The engine emits `debuff-applied` once per name here
-     *    (the discrete-infliction event, Phase 3 retiming). */
+     *    (the discrete-infliction event). */
     sourceFired(
         sourceId: string,
         slot: 'active' | 'charge',
         round: number
     ): { resistedEnemy: string[]; appliedEnemy: string[] };
-    /** Swap the TIMED-enemy landing hook used by `sourceFired` (A2 Task 4). The engine resets
+    /** Swap the TIMED-enemy landing hook used by `sourceFired`. The engine resets
      *  this per turn to the ACTING actor's live landing closure (live hacking-vs-target-security
      *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
      *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
@@ -279,7 +277,7 @@ export interface StatusEngine {
      *  eligible; 'recurring'/'permanent' and UNREMOVABLE_STATUSES are skipped (consistent with
      *  cleanse). Returns 1 if a debuff was affected, else 0. Unknown id → 0. */
     reduceNewestDebuffDuration(actorId: string, turns: number): number;
-    /** PR11: reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` —
+    /** Reduce the duration of EVERY eligible timed debuff on `actorId` by `turns` —
      *  the ALL-scoped sibling of reduceNewestDebuffDuration (Heliodor/Pestilence's "reduces the
      *  duration of all active Debuffs … by 1 turn", vs Warpstrike's single-newest reduce).
      *  Same eligibility rules as reduceNewestDebuffDuration (timed only; skips 'recurring'/
@@ -304,7 +302,7 @@ export interface StatusEngine {
     /** Remove up to `count` removable BUFFS from `actorId`'s self store, newest first;
      *  `'all'` = all; respects UNREMOVABLE_STATUSES + 'permanent'; returns count removed. */
     purge(actorId: string, count: number | 'all'): number;
-    /** PR10 (buff steal): move up to `count` removable TIMED self-buffs from `sourceId` to
+    /** Buff steal: move up to `count` removable TIMED self-buffs from `sourceId` to
      *  EVERY id in `recipientIds`, newest-applied first (same ordering as purge). The REMAINING
      *  duration travels with each moved buff — NOT reset to a fresh window. Skips the same
      *  per-buff-name exclusions purge does (UNREMOVABLE_STATUSES + 'permanent' sentinels) but
@@ -344,7 +342,7 @@ export interface StatusEngine {
     /** Aura + accumulating ability statuses whose conditions pass THIS ROUND, with payloads,
      *  for effect folding and snapshot inclusion. `ownerId` selects the player-side carrier
      *  (defaults to 'attacker'). Each status's gate evaluates against ITS CASTER's context —
-     *  `resolveCtx(casterId)` returns the ConditionContext for that caster (Task 5: an ally-cast
+     *  `resolveCtx(casterId)` returns the ConditionContext for that caster (an ally-cast
      *  aura sitting on a recipient is still gated by the caster's buffs/state). For attacker-only
      *  runs every casterId is 'attacker' and the resolver returns the local ctx → zero churn.
      *  `enemyTargetId` selects which enemy target's accum/aura maps to read for enemy-side
@@ -444,7 +442,7 @@ interface BuffState {
     tier: number;
     /** Present for ability-sourced timed statuses; folded into round totals by the engine. */
     payload?: AbilityStatusPayload;
-    /** The caster of an ability-sourced timed status (Task 7 HoT attribution). Stamped at
+    /** The caster of an ability-sourced timed status (HoT attribution). Stamped at
      *  application from `status.casterId`. Undefined for scheduled timed upserts (no caster
      *  identity) and for timed statuses whose registered status omitted casterId. */
     casterId?: string;
@@ -506,7 +504,7 @@ interface AccumulatingState {
     payload?: AbilityStatusPayload;
     conditions?: Condition[];
     /** The caster of an ability-sourced accumulating status — its gate evaluates against the
-     *  caster's ctx (Task 5). Undefined for scheduled accum entries (no conditions → no gate). */
+     *  caster's ctx. Undefined for scheduled accum entries (no conditions → no gate). */
     casterId?: string;
     /** Application order, stamped at the 0→positive stack transition (when the status first
      *  becomes active). Undefined while seeded-but-inert (stacks === 0). Drives cleanse/purge
@@ -594,7 +592,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Default: every timed enemy application lands (no gate) — keeps statusEngine unit
     // tests simple. The engine supplies the real hacking/affinity decision.
     // Mutable so the engine can swap it per turn to the ACTING actor's live landing closure
-    // (A2 Task 4). Default: every timed enemy application lands (no gate).
     let landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
     const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
         landsTimedEnemyApplication = fn;
@@ -602,7 +599,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const buffDurationExtensionFor = input.buffDurationExtensionFor ?? (() => 0);
 
     // Categorized collections — kept as named closure variables (not inlined) so
-    // Task 6 can append ability-sourced statuses to them later.
+    // the engine can append ability-sourced statuses to them later.
     //
     // ALWAYS-ACTIVE and ACCUMULATING entries are cadence-independent: an always-active
     // buff is on every round regardless of whose turn applies it, and accumulating
@@ -1013,13 +1010,13 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const buff of sets.timedSelf) {
             if (buff.skillSource === slot) upsertBuff(buff, 'self', sourceId);
         }
-        // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
+        // Timed ENEMY upserts draw the landing decision ONCE here. A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
         // its buffName is collected so the engine can emit debuff-resisted + record it.
         // A landed application's buffName is collected BEFORE the family-rule upsert so
         // family-absorbed applications still count as inflicted (the unit did inflict; the
         // family rule is an internal map rule). The engine emits `debuff-applied` once per
-        // name in appliedEnemy (the discrete-infliction event — Phase 3 retiming).
+        // name in appliedEnemy (the discrete-infliction event).
         const resistedEnemy: string[] = [];
         const appliedEnemy: string[] = [];
         for (const buff of sets.timedEnemy) {
@@ -1442,7 +1439,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return 1;
     };
 
-    /** PR11: ALL-scoped sibling of reduceNewestDebuffDuration — shrinks EVERY eligible timed
+    /** ALL-scoped sibling of reduceNewestDebuffDuration — shrinks EVERY eligible timed
      *  debuff on `actorId` by `turns` rather than just the newest. Same store (per-victim
      *  `enemyMaps`) and eligibility rules (numeric turnsRemaining only, skip
      *  isUnremovable(name, turnsRemaining)); a reduced entry <= 0 is deleted (expired). Collects
@@ -1528,7 +1525,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return removeNewestFirst(actorId, 'buffs', count);
     };
 
-    /** PR10: move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
+    /** Move up to `count` removable TIMED self-buffs from `sourceId` to EVERY id in
      *  `recipientIds`, newest-applied first (mirrors removeNewestFirst's ordering, but
      *  restricted to the TIMED map only — accumulating/persistent statuses have no finite
      *  duration to carry over). Deliberately does NOT consult the Buff Protection holder-guard
@@ -1606,7 +1603,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return stolen.map((s) => s.buffName);
     };
 
-    // --- Ability-status API (Task 6) ---
+    // --- Ability-status API ---
 
     const registerAbilityStatuses = (
         statuses: RegisteredAbilityStatus[],
@@ -1805,7 +1802,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     ): ActiveAbilityStatus[] => {
         const out: ActiveAbilityStatus[] = [];
         // Auras: effect included only when their (live-gated) conditions pass this round, gated
-        // against the CASTER's ctx (Task 5: an ally-cast aura sitting on this recipient owner is
+        // against the CASTER's ctx (an ally-cast aura sitting on this recipient owner is
         // still gated by the caster's buffs/state — resolveCtx maps casterId → that ctx).
         // Self-side auras are per-owner — only the requested owner's list is read so a team
         // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
@@ -1834,7 +1831,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 active: {
                     buffName: a.payload.buffName,
                     turnsRemaining: 'recurring',
-                    // SP-G G1b: a one-time "N stacks" grant (Meatshield's Protection) rides the
+                    // A one-time "N stacks" grant (Meatshield's Protection) rides the
                     // aura branch once its per-round stackTrigger cadence is suppressed (a stackable,
                     // non-accumulating buff — see skillTextParser's startOfCombatOneShot carve-out).
                     // Without this, the aura's reported stack count silently dropped (undefined),

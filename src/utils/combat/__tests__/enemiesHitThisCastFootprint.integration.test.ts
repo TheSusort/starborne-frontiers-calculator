@@ -5,7 +5,7 @@
  * (`engine.ts`'s three `enemiesHitThisCastByActor.set(...)` sites, consumed at drain time via
  * `enemiesHitThisCastFor`).
  *
- * Root cause: `aoeVictimIds` is populated ONLY for a positional AoE cast (`playerTurn.ts:1134` —
+ * Root cause: `aoeVictimIds` is populated ONLY for a positional AoE cast (`playerTurn.ts` —
  * `undefined` for a single-target cast AND for a no-victim cast alike). Both sites used to
  * conflate those two `undefined` cases with a single fallback:
  *   - the cast-path ctx read `aoeVictimIds?.length` with NO fallback at all, so a genuine
@@ -36,10 +36,10 @@
  * (a real victim) without `aoeVictimIds` (no AoE footprint was computed for it), which
  * `runPlayerTurn`'s own type (`aoeVictimIds?: string[]`) explicitly allows and `runCombat` happens
  * to never exercise post-normalization. Testing it there — the exact site named in the brief — is
- * what actually exercises playerTurn.ts:2681, mirroring `selfHpGate.test.ts`'s established
+ * what actually exercises playerTurn.ts, mirroring `selfHpGate.test.ts`'s established
  * direct-`runPlayerTurn` pattern. The self-charge-gain mechanism (`chargeGainFromSkill`,
  * playerTurn.ts ~2843) mutates `runtime.actor.charges` INSIDE `runPlayerTurn` itself, but so does
- * `advanceChargeCadence`'s own +1-per-active-turn baseline (playerTurn.ts:1311 — it is called from
+ * `advanceChargeCadence`'s own +1-per-active-turn baseline (playerTurn.ts — it is called from
  * BOTH playerTurn.ts, for the player's own turn, and engine.ts, for the enemy side; an earlier
  * draft of this file wrongly assumed engine.ts-only). So `chargesAfter` below carries the same
  * `BASELINE_CADENCE` confound as `enemiesHitGate.integration.test.ts`'s Tygr harness, and the
@@ -66,7 +66,7 @@ const ALLY_TARGET = { raw: 'ally-team', side: 'ally' as const, selection: 'team'
 const BASE_PATTERN = { raw: 'base', shape: 'base' as const, range: 0, modifiers: {} };
 
 // ---------------------------------------------------------------------------
-// CAST PATH — playerTurn.ts:2681's ctx, read by gateFiringAbilities for the firing skill's own
+// CAST PATH — playerTurn.ts's ctx, read by gateFiringAbilities for the firing skill's own
 // on-cast abilities (Tygr's self-charge-gain is the real corpus shape this seam serves). Direct
 // `runPlayerTurn` unit harness — see the file header for why `runCombat` cannot express the
 // single-target "no AoE footprint" shape.
@@ -188,7 +188,7 @@ const chargeKit = (gate: Condition): ShipSkills => ({
  * Runs one turn and returns the caster's `charges` afterward.
  *
  * NOT confound-free: `advanceChargeCadence` (state.ts) is called directly inside `runPlayerTurn`
- * itself (playerTurn.ts:1311, `hasChargedSkill && actor.charges < chargeCount` → +1), not only
+ * itself (playerTurn.ts, `hasChargedSkill && actor.charges < chargeCount` → +1), not only
  * from engine.ts as an earlier draft of this file assumed (verified by grepping call sites — there
  * are two, one inside playerTurn.ts for the player's own turn, one in engine.ts for the enemy
  * side). So every call here — met gate or not — carries a `+1` baseline on top of the ability's
@@ -407,7 +407,7 @@ describe('SP-4d Task 8 — enemies-hit-this-cast, drain booking (engine.ts enemi
                 // 'battle' mode anchors `healTarget` to the focus actor, unlocking healingCtx —
                 // the shield executor is a no-op without it (Task 9 note in triggers.ts:
                 // "heal/shield/cleanse ... only DO anything in healing mode"). NOTE:
-                // `normalizeCombatRoster` (SP-4b-1) fills a default position/target/pattern for
+                // `normalizeCombatRoster` fills a default position/target/pattern for
                 // every actor regardless, so `aoeVictimIds` is actually `['enemy-id']` (length 1)
                 // here too, not undefined — this row is genuinely unaffected by the fix either
                 // way (both `?? 1` and `?? (tgt !== undefined ? 1 : 0)` read 1 once `tgt` is

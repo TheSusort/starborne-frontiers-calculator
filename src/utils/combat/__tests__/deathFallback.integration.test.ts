@@ -347,7 +347,7 @@ const offensiveEnemyAt = (
     target: parsedTarget(selection),
     pattern,
     // A real basic-attack damage ability — REQUIRED for the firing hit to produce
-    // `positionalScalars` so the enemy-site positional apply (Task 9) lands on the player roster.
+    // `positionalScalars` so the enemy-site positional apply lands on the player roster.
     shipSkills: { slots: [basicAttack()] },
 });
 

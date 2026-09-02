@@ -26,7 +26,7 @@
  * parses the verbatim CSV passive text
  * into the `on-enemy-debuff-resisted` damage ability (`shieldBasisPct: 115`) AND the `start-of-turn`
  * shield ability (`pct: 20`, `basis: 'hp'`) → the engine drains the shield grant BEFORE the acting
- * owner's cast each round (SP-G G2), then the reactive damage executor reads the live
+ * owner's cast each round, then the reactive damage executor reads the live
  * `shieldPool` when the owner's OWN inflicted debuff (Speed Down II / Stasis) is resisted.
  *
  * Deterministic resist: Xcellence's hacking is forced to 0 while the target's security defaults

@@ -218,7 +218,7 @@ describe('patternScoped is set from the skill text, not the slot', () => {
     it("Volk's passive repair carries NO patternScoped flag (its clause never names the pattern)", () => {
         const heal = passiveAbilities(VOLK_P1, 0).find((a) => a.type === 'heal');
         expect(heal).toBeDefined();
-        // SP-4e Task 3: Volk's clause NAMES its recipient ("the ally with the most missing
+        // Volk's clause NAMES its recipient ("the ally with the most missing
         // health"), so it carries the 'lowest-hp-ally' selector. Orthogonal to patternScoped —
         // and doubly unscoped, since a named selector is never footprint-narrowed either.
         expect(heal!.target).toBe('lowest-hp-ally');

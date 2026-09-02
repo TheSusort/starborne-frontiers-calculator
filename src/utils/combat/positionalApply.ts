@@ -41,7 +41,7 @@ export interface VictimDamageOutcome {
      *  TRUE whenever the victim already held ANY shield before the conversion — its normal state for
      *  a unit that grants itself shield every turn (e.g. Quixilver). Absent/false for every other hit. */
     converted?: boolean;
-    /** SP-E Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
+    /** Voron/Orel: the portion of this hit that was CONVERTED into a Damage-over-Time
      *  effect instead of landing as damage this turn (the converted amount arrives over time via
      *  DoT ticks, which book their own per-victim increments). Absent/0 for every normal hit.
      *
@@ -68,7 +68,7 @@ export interface VictimDamageOutcome {
      *  Absent only on outcomes from callers that don't set it (test stubs of `applyToVictim`);
      *  `applyVictimDamage` always sets it — see {@link AppliedVictimDamage}. */
     incomingBooked?: number;
-    /** PR7 (multi-hit full-walk epic): the portion of this hit a Protection cascade diverted to
+    /** The portion of this hit a Protection cascade diverted to
      *  protecting allies, summed across protectors and measured as the intake the funnel actually
      *  RECORDED on each (`incomingBooked` per sub-hit), so a protector's own incoming-block or
      *  DoT-transform is already netted out.
@@ -100,7 +100,7 @@ export type AppliedVictimDamage = VictimDamageOutcome & { incomingBooked: number
  * Emitted for EVERY iteration including whiffs, so `subAttacks[h]` always corresponds to loop
  * iteration `h`.
  *
- * PR2 turns each NON-EMPTY entry into its own `ability-performed`.
+ * The engine turns each NON-EMPTY entry into its own `ability-performed`.
  * See docs/superpowers/specs/2026-08-07-multi-hit-full-walk-attacks-design.md.
  */
 export interface SubAttackOutcome {
@@ -134,7 +134,7 @@ export interface SubAttackOutcome {
      * unconditionally. A future PR may need to reverse this if that verification lands otherwise.
      *
      * NOT the combat log's number: the log's primary-target amount reads `ability-performed.damage`
-     * (the cast's pre-funnel `directDamage`), which PR7 leaves untouched.
+     * (the cast's pre-funnel `directDamage`), which this field leaves untouched.
      */
     deliveredDamage: number;
     /** Victims struck by this sub-attack, in footprint order. */
@@ -145,7 +145,7 @@ export interface SubAttackOutcome {
      * The per-sub-attack slice of the cast-wide `critVictimIds`/`critPairs` pair: a victim appears
      * at most once per sub-attack (one footprint cell each), so this list's LENGTH is also this
      * sub-attack's critting-(victim) count and Σ over the cast reproduces `critPairs` exactly.
-     * PR2 carries it on each sub-attack's own `ability-performed` as `critHits`/`critVictimIds`,
+     * The engine carries it on each sub-attack's own `ability-performed` as `critHits`/`critVictimIds`,
      * so `on-crit` counts one attack's crits rather than the whole cast's.
      */
     critVictimIds: string[];
@@ -203,8 +203,8 @@ export function footprintVictims(
  * opposing actor resolvable — e.g. everything died), that hit lands nothing: no
  * `applyToVictim`, no `emitHit`.
  *
- * PURE module: `applyToVictim` / `emitHit` are injected callbacks (engine wiring lives in
- * Task 8); this file imports no engine state.
+ * PURE module: `applyToVictim` / `emitHit` are injected callbacks; this file imports no
+ * engine state.
  *
  * @returns `anyCrit` — true if at least one (hit, victim) pair critted this call;
  *          `critPairs` — the count of critting (hit, victim) pairs;
@@ -214,7 +214,7 @@ export function footprintVictims(
  *          enemies actually crit rather than the cast's selected anchor;
  *          `subAttacks` — one {@link SubAttackOutcome} per loop iteration, in order, including
  *          whiffs. Carries the SUB-ATTACK identity that `critPairs` also throws away (it
- *          multiplies hits × victims into one number). Consumed since PR2: the engine emits one
+ *          multiplies hits × victims into one number). The engine emits one
  *          `ability-performed` per non-empty sub-attack off these entries.
  */
 export function applyPositionalDamage(args: {
@@ -229,7 +229,7 @@ export function applyPositionalDamage(args: {
     acting?: { ignoresForcedTargeting?: boolean; ignoresStealth?: boolean; provokedBy?: string };
     defenseProfileOf: (v: CombatActor) => VictimDefenseProfile;
     /**
-     * SUB-ATTACK INDEX (epic: multi-hit full-walk attacks, PR1). Every per-victim callback below
+     * SUB-ATTACK INDEX. Every per-victim callback below
      * takes a trailing optional `subAttackIndex` — the 0-based index of the sub-attack currently
      * resolving. Trailing and optional so existing engine call sites compile unchanged and JS
      * drops the extra argument, exactly as `isAnchor` was introduced. Every footprint victim of
@@ -237,12 +237,12 @@ export function applyPositionalDamage(args: {
      * multi-hit sub-attack is a separate attack.
      */
     /**
-     * Engine wrapper — decrements the victim's currentHp (Task 8 passes applyOutgoingToEnemy)
+     * Engine wrapper — decrements the victim's currentHp (the engine passes applyOutgoingToEnemy)
      * and returns the resolved {@link VictimDamageOutcome} (shield-before / HP-damage / barriered).
-     * Epic PR12 (A): the third param is `isAnchor` — true when this victim IS the attacker's
+     * The third param is `isAnchor` — true when this victim IS the attacker's
      * resolved anchor/primary target, false for a covered/splash footprint victim (Nosorog's
      * "reflects damage taken … as a PRIMARY TARGET" requirePrimaryTarget gate). Optional so
-     * every pre-PR12 caller keeps compiling unchanged (JS simply drops the extra arg).
+     * a caller that omits it keeps compiling unchanged (JS simply drops the extra arg).
      */
     applyToVictim: (
         victim: CombatActor,
@@ -287,7 +287,7 @@ export function applyPositionalDamage(args: {
         subAttackIndex?: number
     ) => void;
     /**
-     * OPTIONAL per-sub-hit incoming %-reduction hook (D-PR3). Invoked per footprint victim with
+     * OPTIONAL per-sub-hit incoming %-reduction hook. Invoked per footprint victim with
      * that victim's per-hit crit outcome; the returned percentage points are folded additively
      * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical (inert
      * for victims without an incoming-reduction ability).
@@ -305,7 +305,7 @@ export function applyPositionalDamage(args: {
         subAttackIndex?: number
     ) => number | { victimSidePct: number; attackerSidePct: number };
     /**
-     * OPTIONAL per-hit attacker-side outgoing amplification % hook (D-PR4 — Menace/Giant Slayer).
+     * OPTIONAL per-hit attacker-side outgoing amplification % hook (Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
      * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0 →
      * byte-identical (inert for attackers without an outgoing-amplification ability).
@@ -323,7 +323,7 @@ export function applyPositionalDamage(args: {
      */
     rollVictimCrit?: (victim: CombatActor, subAttackIndex?: number) => boolean;
     /**
-     * Boundary hooks for ONE sub-attack (multi-hit full-walk epic, PR8 Task 2). `onSubAttackStart`
+     * Boundary hooks for ONE sub-attack. `onSubAttackStart`
      * runs after the anchor resolves and BEFORE any of that sub-attack's damage; `onSubAttackEnd`
      * runs after ALL of it. A WHIFF (no living anchor) calls neither — there is no attack to hang a
      * clause on — but still consumes its loop index, so `subAttacks[h]` stays aligned.
@@ -333,7 +333,7 @@ export function applyPositionalDamage(args: {
      * `defenseProfileOf` read. Both optional: an unsupplied hook makes the loop byte-identical.
      *
      * `victimIds` is this sub-attack's footprint in hit order — the anchor plus every covered
-     * cell — and is the set PR8 re-rolls the landing against. Overkill retargeting is correct for
+     * cell — and is the set the engine re-rolls the landing against. Overkill retargeting is correct for
      * free: the anchor is re-resolved against the live roster at the top of every iteration, so a
      * victim killed on an earlier sub-attack simply is not here.
      */
@@ -425,8 +425,8 @@ export function applyPositionalDamage(args: {
                 subDidCrit = true;
                 subCritVictimIds.push(victim.id);
             }
-            // #358 ADDENDUM 3: unpack the (possibly split) reduction. A bare number is 100%
-            // victim-side — the pre-split contract, preserved for every direct-call site.
+            // #358: unpack the (possibly split) reduction. A bare number is 100% victim-side,
+            // which is what a direct-call site that supplies no split means.
             const reductionParts = incomingReductionFor?.(victim, didCrit, h) ?? 0;
             const equipReductionPct =
                 typeof reductionParts === 'number' ? reductionParts : reductionParts.victimSidePct;
@@ -435,12 +435,10 @@ export function applyPositionalDamage(args: {
             // Read the profile ONCE and derive both the hit and the mitigation factor from it, so
             // the factor handed to `applyToVictim` is provably the one baked into `dmg`.
             const defenseProfile = defenseProfileOf(victim);
-            // ONE call, both figures. This ran `victimHitDamageParts` TWICE (once through
-            // `victimHitDamage`, once through `victimHitDamagePreMitigation`) — the same
-            // assembly, the same profile read, the same affinity resolve, on a path measured at
-            // 182,548 calls. The three engine call sites already destructure the parts helper;
-            // this one now matches them, and the two figures are provably the same evaluation
-            // rather than two that merely ought to agree.
+            // ONE call, both figures. Calling `victimHitDamage` and a separate pre-mitigation
+            // helper would repeat the whole assembly — the same profile read, the same affinity
+            // resolve — on the hottest path in the engine, and would leave the two figures as
+            // numbers that merely ought to agree rather than one evaluation.
             const { damage: dmgBase, preMitigation: rawBase } = victimHitDamageParts(
                 scalars,
                 defenseProfile,
@@ -474,7 +472,7 @@ export function applyPositionalDamage(args: {
             emitHit?.(victim, booked, didCrit, h);
             onVictimResolved?.(victim, dmg, outcome, didCrit, h);
             subDamage += booked;
-            // PR7: the FULL amount this hit delivered. `booked` is the victim's own intake, which
+            // The FULL amount this hit delivered. `booked` is the victim's own intake, which
             // excludes anything a Protection cascade diverted to protectors; the ruled basis counts
             // both. A DoT-transformed portion is already netted out of `booked` and is correctly
             // absent here too.

@@ -7,7 +7,7 @@ import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
-// Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
+// Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts).
 // So: healer at M3, ON-footprint ally at M4, OFF-footprint ally at M1.
 // The OFF-footprint ally is deliberately given much lower HP so that lowest-HP routing,
 // if it ever leaked in, would heal IT and fail this test.
@@ -49,11 +49,11 @@ const healerSkills = (): ShipSkills => ({
 });
 
 // ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself.
-// `normalizeTeamActorsToWalked` (teamActorWalk.ts:47) synthesizes NEUTRAL_WALK_STATS with
+// `normalizeTeamActorsToWalked` (teamActorWalk.ts) synthesizes NEUTRAL_WALK_STATS with
 // **hp: 1** for any team actor arriving without one, silently DISCARDING a bare `stats.hp` —
 // so a fixture that sets `stats: { hp: 50_000 }` and no `walk` gets a 1-HP ally that dies
 // instantly. Only the ADAPTER builds walk bundles (`deriveTeamEngineActors`); `runCombat` does
-// not. Established pattern: `healing.test.ts:388-405`.
+// not. Established pattern: `healing.test.ts`.
 const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
     id,
     speed: 10,
@@ -83,7 +83,7 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. `attack: 0` + heal-only kit means the inert
+    // Every run needs a real opponent. `attack: 0` + heal-only kit means the inert
     // 500k-HP default survives the whole sim. The fight-wide `enemyDefense`/`enemyHp` scalars
     // this used to keep in step (M6, always inert positionally) were deleted in SP-4d.
     enemyAttackers: bareEnemy(),
@@ -201,15 +201,15 @@ describe('SP-3a: recipient-keyed healing aggregate', () => {
     });
 });
 
-// ── Review fix (SP-3b Task 7): the flag-off fence must cover EVERY credit site ─────────────
+// ── Review fix: the flag-off fence must cover EVERY credit site ─────────────
 // `perRecipient` must stay EMPTY when per-recipient application is off — every legacy healing
 // golden's byte-identity depends on that emptiness. Six sites credit the axis: the direct
 // cast-repair site (already exercised by the `BASE()` fixture above, an `all-allies` heal),
 // four via `creditLandedRepair` (engine.ts, one shared early-return gate), and two inline
 // gates that CANNOT reach `creditLandedRepair` — it is a `runCombat`-local closure, not an
 // export — so they duplicate the gate check themselves: playerTurn.ts's HoT tick
-// (`if (healing.perRecipientApply)`, ~:3474) and triggers.ts's reactive executor
-// (`if (ctx.healing.perRecipientApply)`, ~:3441). The `BASE()` fixture above is cast-only (one
+// (`if (healing.perRecipientApply)`) and triggers.ts's reactive executor
+// (`if (ctx.healing.perRecipientApply)`). The `BASE()` fixture above is cast-only (one
 // `all-allies` heal, no HoT/leech/reactive), so deleting either inline gate — or the shared
 // `creditLandedRepair` early return — left the WHOLE suite green. This fixture is deliberately
 // NON-positional (no position/target/pattern), mirroring `healing.test.ts`'s BASE: the
@@ -241,7 +241,7 @@ describe('SP-3b Task 7 (review fix): flag-off fence covers HoT + leech + reactiv
         });
 
     const HOT_LEECH_REACTIVE_BASE = (): CombatEngineInput => ({
-        // SP-4b-2b: this focus DOES deal damage (5000 attack, `damageAb` every round), so it gets
+        // This focus DOES deal damage (5000 attack, `damageAb` every round), so it gets
         // the 10M-HP form — the 500k default is not a survival guarantee and a mid-sim death
         // reshapes the run. 0 lives on the roster entry's own `stats.defence` so damage
         // magnitudes stay what they were (the fight-wide `enemyDefense` scalar it used to be kept

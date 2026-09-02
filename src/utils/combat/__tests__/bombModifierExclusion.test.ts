@@ -220,7 +220,7 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
     // ────────────────────────────────────────────────────────────────────────────
     // Case 2 — processBombs bypasses the enemy-debuff modifier
     //
-    // SP-4b-2b: this used to run with NO enemy roster, so the bomb sat on the vestigial `enemy`
+    // This used to run with NO enemy roster, so the bomb sat on the vestigial `enemy`
     // sink and the run was non-positional by construction. A roster is now required, and merely
     // omitting `target`/`pattern` was not enough to stay non-positional — `normalizeCombatRoster`
     // FILLS both with defaults — so this case used the "pressure source" roster (every opposing
@@ -259,7 +259,7 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
         // countdown decrements: round 1 → 1 (no burst), round 2 → 0 (BURST). Raw burst = 3000.
         // IF the +50% incoming modifier leaked into processBombs the burst would be 4500. Lock 3000.
         const result = runCombat({
-            // 0 MAX hp is now floored to MIN_TARGETABLE_MAX_HP (SP-4c-2a) — this enemy IS
+            // 0 MAX hp is now floored to MIN_TARGETABLE_MAX_HP — this enemy IS
             // targetable, so the run is positional (see comment above).
             enemyAttackers: bareEnemy({ stats: { hp: 0 } }),
             attack: 0,
@@ -291,7 +291,7 @@ describe('PR7 Task 8 — bombs bypass incoming/outgoing damage modifiers (DIRECT
             },
         });
 
-        // ANTI-VACUITY (SP-4b-2b): the whole test is "the modifier does not apply", which is
+        // ANTI-VACUITY: the whole test is "the modifier does not apply", which is
         // trivially true if the modifier was never live on the bomb holder in the first place.
         // Pin that it IS live, on both rounds, before reading the burst.
         expect(result.rounds[0].activeEnemyDebuffs.map((d) => d.buffName)).toContain(

@@ -343,7 +343,7 @@ describe('per-victim skill-triggered detonation (positional ENEMY → player)', 
         ).toBe(100 + 2000 + 50 + 2000);
     });
 
-    // SP-4b: 'REGRESSION: a NON-positional enemy detonate still drains via the legacy single-apply
+    // 'REGRESSION: a NON-positional enemy detonate still drains via the legacy single-apply
     // path' lived here. It pinned an enemy attacker with NO position/target/pattern draining the
     // heal target through `applyIncomingToTarget(damage, tgt, {bombPortion})` — i.e. the legacy
     // single-anchor sink (`TurnBindings.legacyVictim`) itself, plus the two positional-only

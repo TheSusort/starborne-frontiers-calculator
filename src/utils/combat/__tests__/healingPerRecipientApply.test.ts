@@ -7,7 +7,7 @@ import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
-// Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
+// Pattern-Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts).
 // So: healer at M3, ON-footprint ally at M4, OFF-footprint ally at M1.
 // The OFF-footprint ally is deliberately given much lower HP so that lowest-HP routing,
 // if it ever leaked in, would heal IT and fail this test.
@@ -73,11 +73,11 @@ const lowestHpAllyHealerSkills = (): ShipSkills => ({
 });
 
 // ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself.
-// `normalizeTeamActorsToWalked` (teamActorWalk.ts:47) synthesizes NEUTRAL_WALK_STATS with
+// `normalizeTeamActorsToWalked` (teamActorWalk.ts) synthesizes NEUTRAL_WALK_STATS with
 // **hp: 1** for any team actor arriving without one, silently DISCARDING a bare `stats.hp` —
 // so a fixture that sets `stats: { hp: 50_000 }` and no `walk` gets a 1-HP ally that dies
 // instantly. Only the ADAPTER builds walk bundles (`deriveTeamEngineActors`); `runCombat` does
-// not. Established pattern: `healing.test.ts:388-405`.
+// not. Established pattern: `healing.test.ts`.
 const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
     id,
     speed: 10,
@@ -107,7 +107,7 @@ const teamAlly = (id: string, position: Position, hp: number): TeamActorEngineIn
 });
 
 const BASE = (): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. This fixture's focus has `attack: 0` and casts
+    // Every run needs a real opponent. This fixture's focus has `attack: 0` and casts
     // only heals, so the inert 500k-HP default never dies and the run shape is unchanged.
     // `enemyDefense`/`enemyHp` below describe the vestigial dummy and are INERT positionally (M6);
     // they are left in place because nothing here derives a number from them.
@@ -208,7 +208,7 @@ describe('SP-3a: per-recipient heal application is separable from recipient ROUT
 });
 
 // ── Fixture B: the routing fence ────────────────────────────────────────────
-// Pattern-Line-Support-Range-3 @ M1 covers {M1, M2, M3, M4} (resolvePattern.test.ts:91-95),
+// Pattern-Line-Support-Range-3 @ M1 covers {M1, M2, M3, M4} (resolvePattern.test.ts),
 // so BOTH allies are on-footprint and only the ROUTING rule can distinguish them.
 //
 // SP-4e Task 4 rewrote what this fence guards. It used to guard a two-axis split: routing was

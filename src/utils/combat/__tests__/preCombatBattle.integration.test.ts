@@ -1,5 +1,5 @@
 /**
- * Sub-project F, PR F5: pre-fight ship passives + Chimei charged start THROUGH
+ * Pre-fight ship passives + Chimei charged start THROUGH
  * `simulateBattle` (positioned squads → runCombat → BattleResult).
  *
  * Fixture style copied from calculators/__tests__/battleSimulatorSquadLeaders.test.ts

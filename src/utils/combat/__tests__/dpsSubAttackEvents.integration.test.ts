@@ -20,7 +20,7 @@
  *     positional meaning is what lets `triggers.ts` drop its second `on-crit` branch (Task 2 —
  *     see the `non-positional outgoing riders` describe block below).
  *  3. DAMAGE EQUIVALENCE — Σ of the N events' `damage`, and the round total, are UNCHANGED.
- *     `victimDamage.ts:16-30` proves the fold is algebraically identical to N separate hits;
+ *     `victimDamage.ts` proves the fold is algebraically identical to N separate hits;
  *     this asserts it rather than trusting the comment. Looping buys zero damage accuracy — it
  *     buys ONE derivation of "a sub-attack" instead of two that can drift.
  *  4. RIDER FAN-OUT (`non-positional outgoing riders` describe block) — the actual user-visible
@@ -102,7 +102,7 @@ const FOCUS = 'attacker';
  *
  * The `actorId === FOCUS` filter is load-bearing since SP-4b-2a: a scalar-only `simulateDPS` run
  * now fights a real, positioned enemy (`enemy-1`), and an enemy supplied without `shipSkills` gets
- * the engine's synthesized flat-card basic attack (engine.ts:618-638). With `hp: 30000` on the
+ * the engine's synthesized flat-card basic attack (engine.ts). With `hp: 30000` on the
  * attacker (BASE below) that enemy has a living target, so it casts once per round and emits one
  * extra `ability-performed { actorId: 'enemy-1', damage: 0 }` per round — zero damage, because the
  * synthesized enemy carries `attack: 0`. That event is the OTHER actor's cast and has nothing to
@@ -168,7 +168,7 @@ describe('non-positional ability-performed — one event per sub-attack', () => 
     });
 
     /**
-     * THE EQUIVALENCE GATE (epic spec PR5 section 6). victimDamage.ts:16-30 proves
+     * THE EQUIVALENCE GATE (epic spec PR5 section 6). victimDamage.ts proves
      *   sum_h [1 + (hitCrits[h]?1:0) * cd/100] = hits * damageCritMultiplier
      * i.e. splitting the cast N ways and critting each hit is algebraically identical to the
      * blended fold. That identity is a comment in production; here it is an assertion.
@@ -226,7 +226,7 @@ describe('non-positional ability-performed — one event per sub-attack', () => 
      * constructs one.
      *
      * CORRECTION (verified against source before writing the assertion): `hits: 0` also zeroes
-     * the ability's OWN `effectiveMultiplier` (`rawMultiplier * hits`, playerTurn.ts:2212), so the
+     * the ability's OWN `effectiveMultiplier` (`rawMultiplier * hits`, playerTurn.ts), so the
      * true damage for this degenerate config is 0 — not the hits:1 undivided value. The clamp's
      * job is CARDINALITY (still emit exactly one event) and avoiding a `0 / 0` NaN in the damage
      * divisor (`directDamage / emitHits`), not preserving a nonzero amount.

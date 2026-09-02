@@ -26,7 +26,7 @@ import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // Verbatim-shaped phrasing (matches Asphyxiator's real active Inferno III sentence structure:
 // "... then inflicts Inferno III for 3 turns on the targeted enemy and all enemies adjacent to
-// it."). Parsed via `adjacentEnemyScopeForName` (Task B1) into `target: 'target-and-adjacent-
+// it."). Parsed via `adjacentEnemyScopeForName` into `target: 'target-and-adjacent-
 // enemies'` on the `dot` ability, which `dotsFromSkill` (Task B2 Step 1) turns into
 // `splashTarget: 'target-and-adjacent-enemies'` on the DoT application entry.
 const SPLASH_INFERNO_TEXT =
@@ -268,19 +268,19 @@ describe('Ship-kit W5 Task B2: team symmetry — an ENEMY-side caster splashes o
 /**
  * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
  * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
- * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
- * this run IS positional (engine.ts:9113's `const positional =` gate calls `resolvesPositionalVictim`,
+ * (normalizeRoster.ts) fills BOTH targeting axes for every run through the boundary — so
+ * this run IS positional (engine.ts's `const positional =` gate calls `resolvesPositionalVictim`,
  * satisfied here since the roster's one member has max hp > 0). `targetId` IS threaded (as
- * `BARE_ENEMY_ID`), and `adjacentEnemyIdsFor` IS supplied unconditionally (engine.ts:7170).
+ * `BARE_ENEMY_ID`), and `adjacentEnemyIdsFor` IS supplied unconditionally (engine.ts).
  *
  * The splash fan-out's guard (`targetId !== undefined && adjacentEnemyIdsFor`,
- * playerTurn.ts:3160) therefore DOES fire — it just finds no OTHER roster member to return as a
+ * playerTurn.ts) therefore DOES fire — it just finds no OTHER roster member to return as a
  * neighbour, since this roster has only one opposing actor. That is why a
  * `target-and-adjacent-enemies` Inferno DoT still produces BYTE-IDENTICAL `dot-applied` events to
  * the same DoT with plain `target: 'enemy'`: the splash loop runs zero iterations, not because it
  * "can never fire" here.
  *
- * SP-4b-2b: this block used to exercise the DPS calculator's real NON-positional single-opponent
+ * This block used to exercise the DPS calculator's real NON-positional single-opponent
  * shape — no `enemyAttackers` at all, `targetId` never threaded, `adjacentEnemyIdsFor` never
  * supplied. An empty roster is now a validation error at the boundary, and the fixture's
  * replacement roster (one targetable member) makes the run positional instead of reproducing the

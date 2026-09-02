@@ -222,7 +222,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     chargeCount: 0,
     // Focus is a passive bystander pinned to the back of the middle row.
     //
-    // SP-4b-1: it used to be off the board entirely, and that is what made the enemy's targeting
+    // It used to be off the board entirely, and that is what made the enemy's targeting
     // land on the stealthed victim — `resolvePositionalTarget` drops stealthed cells UNLESS every
     // candidate is stealthed, and with the victim the only placed player actor that "restore all"
     // branch always fired. The normalization boundary places the focus too, so an un-stealthed

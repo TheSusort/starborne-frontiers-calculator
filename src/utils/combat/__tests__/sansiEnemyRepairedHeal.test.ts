@@ -1,5 +1,5 @@
 /**
- * ship-kit W3 (Task 5) — combat-integration tests for Sansi's on-enemy-repaired self-heal with
+ * ship-kit W3 — combat-integration tests for Sansi's on-enemy-repaired self-heal with
  * reactive event-count scaling and a numeric per-round cap:
  *
  *   Sansi (2nd passive): "…when an enemy is directly repaired, limited to 3 times per Round, this

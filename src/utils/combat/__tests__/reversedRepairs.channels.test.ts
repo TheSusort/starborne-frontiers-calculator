@@ -8,7 +8,7 @@
  *    the branch's position (`applyHealToTarget` is the only line in the engine where HP goes up).
  *    A structural argument is not a measurement: this file drives each channel for real.
  *  - **R5** — *nothing* reacts to the resulting damage. Structurally this holds because all four
- *    reactions subscribe to the `attacked` event (`triggers.ts:1036` for `on-attacked`, `:1157`
+ *    reactions subscribe to the `attacked` event (`triggers.ts` for `on-attacked`,
  *    for `on-ally-attacked`) which is emitted only by `emitAttacked` / `emitPerVictimAttacked`,
  *    and by `perActorReflected`/`takenLeechesByOwner` reads that live *inside* `applyVictimDamage`
  *    — none of which the reversal branch touches. Again: verified here, not assumed.
@@ -974,7 +974,7 @@ describe('R5 reaction 4 — an on-damaged passive does not fire on a reversed re
 describe('R5 root cause — a reversed repair emits no `attacked` event', () => {
     for (const victimSide of SIDES) {
         // The single fact all four reactions above rest on: `on-attacked` / `on-ally-attacked`
-        // subscribe to `attacked` (triggers.ts :1036 / :1157), which only `emitAttacked` /
+        // subscribe to `attacked` (triggers.ts :1036), which only `emitAttacked` /
         // `emitPerVictimAttacked` produce — both inside the damage funnel the reversal skips.
         // Pinning it here means a future change that started routing the burn through the funnel
         // fails HERE, at the cause, rather than only in whichever reaction happened to be covered.

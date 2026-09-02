@@ -1,11 +1,11 @@
 /**
  * PR2 — TIMED bomb / accumulator detonation per POSITIONED enemy (player → enemy).
  *
- * Today `processBombs` / `processAccumulators` (`engine.ts:700` / `:727`) run ONLY on the focus
- * dummy enemy's turn (`actor.kind === 'enemy' && actor.id === enemy.id`, `engine.ts:4794`) against
+ * Today `processBombs` / `processAccumulators` (`engine.ts` /) run ONLY on the focus
+ * dummy enemy's turn (`actor.kind === 'enemy' && actor.id === enemy.id`, `engine.ts`) against
  * the focus dummy's OWN containers. In positional mode the real enemy victims are the
  * `enemyAttackerActors` — each its own turn-taking actor with its own per-actor containers — and
- * their turn body (the `else if (actor.kind === 'enemy')` branch, `engine.ts:4851`) never bursts
+ * their turn body (the `else if (actor.kind === 'enemy')` branch, `engine.ts`) never bursts
  * their own timed containers. So a timed bomb stored on a positioned enemy NEVER fires.
  *
  * PR2 (NOT yet implemented — Task 3) adds a per-positioned-enemy timed-burst step at the START of
@@ -16,7 +16,7 @@
  *
  * THIS suite pins that behaviour. The POSITIONAL cases (1–3) MUST FAIL today (timed bursts on
  * positioned enemies do not fire). The NON-positional regression pin (case 4) MUST PASS today —
- * it guards that PR2 does not disturb the existing `:4794` focus-dummy timed path.
+ * it guards that PR2 does not disturb the existing focus-dummy timed path.
  *
  * Crit 0 keeps every credited value an exact integer.
  *
@@ -160,7 +160,7 @@ const POSITIONAL_BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngi
 // Formerly-non-positional BASE: a single enemy, NO position/target/pattern given explicitly —
 // SP-4b-2b's `normalizeCombatRoster` auto-fills both, and SP-4c-2a's targetable-HP floor now
 // raises this 0-max-HP "pressure-source" enemy to MIN_TARGETABLE_MAX_HP, so this run is
-// positional too (it used to reach the legacy `:4794` focus-dummy timed path instead). Timed
+// positional too (it used to reach the legacy focus-dummy timed path instead). Timed
 // containers are seeded on this real, now-floored enemy ('pressure-source') rather than the
 // dummy. The id is deliberately distinct from the shared fixture's default so it cannot be
 // confused with a positioned carrier elsewhere in this file.
@@ -252,7 +252,7 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         // enemy-mid carries a pre-loaded accumulator: accumulated 5000, pct 50, roundsRemaining 1.
         // On its FIRST own turn (round 1): accumulated += gatheredDirect → 5000 + 150,
         // roundsRemaining → 0 → BURST = 5150 × 50/100 = 2575. Lands on enemy-mid's OWN HP.
-        // SP-4b-2 D1: the 150 is the focus's own firing hit THIS round (origin 100 on enemy-front
+        // The 150 is the focus's own firing hit THIS round (origin 100 on enemy-front
         // + covered 50 on enemy-mid), which lands before enemy-mid takes its turn. Before D1 this
         // read 0 and the burst was 2500 — the gather was structurally empty on any positional run.
         const { result } = collect(
@@ -320,7 +320,7 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
 
     it('REGRESSION: a timed bomb on the (now-floored, positional) sole enemy bursts EXACTLY as today', () => {
         idc = 0;
-        // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
+        // `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
         // MIN_TARGETABLE_MAX_HP (normalizeRoster.ts), so this run is positional too — the tap
         // targets the real, now-floored enemy (its real id, 'pressure-source') rather than the
         // legacy 'enemy' dummy sink. That dummy still exists (engine.ts still creates it
@@ -358,7 +358,7 @@ describe('per-positioned-enemy timed detonation (PR2, player → enemy)', () => 
         });
     });
 
-    // SP-4b: 'a NON-positional enemy attacker with a timed bomb does NOT burst via the
+    // 'a NON-positional enemy attacker with a timed bomb does NOT burst via the
     // per-positioned-enemy path' lived here. It was a pure GATE PIN on the second conjunct of
     // `enemyHasTimedContainers && isPositional(actor.position, allPlayerActors)` — it forced
     // `allPlayerActors.some(a => a.position !== undefined)` false by leaving the focus unplaced.

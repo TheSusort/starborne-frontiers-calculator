@@ -90,7 +90,7 @@ describe('normalizeCombatRoster — auto-placement', () => {
         expect(out.enemyAttackers?.[0].position).toBe('M4');
     });
 
-    // SP-4b-2b: this test used to read "leaves an empty enemy roster empty — it never invents an
+    // This test used to read "leaves an empty enemy roster empty — it never invents an
     // enemy", asserting `out.enemyAttackers ?? []` came back `[]`. That was the OLD contract, and
     // this PR reverses it: the boundary is the one place that could accommodate an
     // under-specified caller, and accommodating it is exactly what kept the dummy sink alive. So

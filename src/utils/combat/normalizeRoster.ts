@@ -1,10 +1,10 @@
 /**
- * The engine's ONE accommodation boundary (SP-4b).
+ * The engine's ONE accommodation boundary.
  *
  * `runCombat` calls this on its first line, so everything below it sees a fully positional world:
  * every actor carries a board slot, and every actor carries offensive targeting. Nothing else in
  * the engine may accommodate an under-specified input — that is the whole point of having a
- * boundary, and it is what let SP-4c-2d delete the dummy and its seven clusters of fallbacks.
+ * boundary, and it is what allows the engine to carry no dummy-actor fallbacks at all.
  *
  * Four responsibilities, and deliberately no fifth:
  *   (a) auto-placement       — a deterministic slot for any actor with `position == null`
@@ -66,9 +66,8 @@ function placeSide(
  * Fill the ACTIVE targeting axes when the caller supplied none.
  *
  * Both are load-bearing and independently required: `selectTurnTarget` needs
- * `resolvesPositionalVictim(...) && target` (no target → the selection short-circuits; before
- * SP-4c-2d that fell back to the dummy on the player side and to the heal target on the enemy one,
- * and since SP-4e BOTH sides answer with NO victim), and the
+ * `resolvesPositionalVictim(...) && target` (no target → the selection short-circuits, and BOTH
+ * sides answer with NO victim — there is no dummy-actor or heal-target fallback), and the
  * positional APPLY gate additionally needs `pattern != null`. With a target but no pattern the cast
  * resolves onto the real enemy and still credits `cumulativeDamage` through the legacy single-apply
  * (the credit is suppressed only when the POSITIONAL branch is taken), but never runs the
@@ -111,8 +110,8 @@ export const MIN_TARGETABLE_MAX_HP = 1_000_000;
  * `isTargetableRosterMember` (positional + max hp > 0) was what the engine's now-deleted
  * `hasPositionedEnemyRoster` was built from, and a roster holding no targetable member was the ONE
  * shape that still reached the vestigial dummy's scalar sink — measured at 412 credits across 26
- * files on `main` @ `8d2c2a61`, every one of them this shape. Flooring here made that predicate
- * constant `true` below the boundary, which is what let SP-4c-2d delete it (and the dummy) outright:
+ * files on `main` @ `8d2c2a61`, every one of them this shape. Flooring here makes that predicate
+ * constant `true` below the boundary, which is what allowed both it and the dummy to be deleted:
  * the positional path is taken on every run and player damage books per-victim. The predicate itself
  * is still live for the PLAYER side — see `resolvesPositionalVictim` and reason 2 below.
  *
@@ -124,10 +123,10 @@ export const MIN_TARGETABLE_MAX_HP = 1_000_000;
  * ENEMY SIDE ONLY, for two independent reasons.
  *  1. The focus attacker's `hp` is legitimately 0: most direct-engine fixtures omit it, so the focus
  *     starts at `currentHp === 0` having never been destroyed. Reading that as a corpse is the
- *     mistake that failed 346 tests during 4c-1 (spec §3.3).
+ *     NEVER-ALIVE-vs-KILLED mistake, and it fails the suite broadly rather than in one place.
  *  2. `isTargetableRosterMember` IS asked about player actors, so flooring them would close a
  *     divergence that must stay open. `resolvesPositionalVictim` calls
- *     `opposingLiving.some(isTargetableRosterMember)` (`positionalBinding.ts:102`), and for an
+ *     `opposingLiving.some(isTargetableRosterMember)` (in `positionalBinding.ts`), and for an
  *     ENEMY-side actor `opposingLiving` is the PLAYER roster — so a 0-max-HP focus plus 0-max-HP
  *     allies is still `isPositional` true / `resolvesPositionalVictim` false. That mirror is what
  *     `perVictimDotTick.integration.test.ts`'s GATE RETENTION case pins, and it is why the two
@@ -142,7 +141,7 @@ function withTargetableHp<T extends { stats: { hp?: number } }>(actor: T): T {
 }
 
 export function normalizeCombatRoster(input: CombatEngineInput): CombatEngineInput {
-    // The contract (SP-4b-2b): every run has at least one opponent. This is a validation guard
+    // The contract: every run has at least one opponent. This is a validation guard
     // rather than an accommodation on purpose — the boundary is the ONE place that accommodates an
     // under-specified input, and synthesizing a sink here is what kept the dummy alive.
     // `enemyAttackers` is typed as required on `CombatEngineInput`, but an `as CombatEngineInput`

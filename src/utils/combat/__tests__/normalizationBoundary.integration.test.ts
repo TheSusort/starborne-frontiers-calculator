@@ -1,5 +1,5 @@
 /**
- * SP-4b-1: the boundary is live — a caller that supplies NO positions and NO targeting still gets
+ * The boundary is live — a caller that supplies NO positions and NO targeting still gets
  * a fully positional run. Pre-boundary, this fixture routed the focus's cast into the dummy sink:
  * `perTargetDealt` came back empty while `rawTotals.cumulative` looked plausible.
  */

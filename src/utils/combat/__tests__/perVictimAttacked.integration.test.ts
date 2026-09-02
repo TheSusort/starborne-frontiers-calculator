@@ -451,7 +451,7 @@ describe('PR7 Task 4 — ENEMY→player per-victim attacked is E5-symmetric with
 });
 
 // ---------------------------------------------------------------------------------------------
-// PR7 CodeRabbit fix — per-victim hitOutcomes. emitPerVictimAttacked previously replayed the
+// CodeRabbit fix — per-victim hitOutcomes. emitPerVictimAttacked previously replayed the
 // attack-wide hitOutcomes for EVERY victim. But a victim killed on an earlier hit drops out of
 // later hits (positionalApply re-resolves the LIVE roster each hit), so a victim hit fewer times
 // than the attack's hit count was OVER-emitted `attacked` (over-firing its on-hit reactives).

@@ -20,16 +20,15 @@ export function emitAttacked(args: {
      * The damage this victim took from the ONE attack these events belong to (Tenacity's
      * >25%-maxHP gate reads it).
      *
-     * Multi-hit full-walk epic, PR2: on the positional path the engine now groups its signals by
-     * SUB-ATTACK and calls this once per sub-attack, so for a `hits: N` cast this is that
-     * sub-attack's slice, not the victim's cast-wide aggregate. That is the corrected basis — a
-     * gate phrased "in one hit" was previously fed N hits' worth. N=1 is unchanged, and the
-     * non-positional call sites (one attack per call) were never affected.
+     * On the positional path the engine groups its signals by SUB-ATTACK and calls this once per
+     * sub-attack, so for a `hits: N` cast this is that sub-attack's slice, not the victim's
+     * cast-wide aggregate — which is what a gate phrased "in one hit" must read. N=1 is the same
+     * either way, and the non-positional call sites pass one attack per call.
      */
     damage: number;
     /**
-     * Which sub-attack of the attacker's cast these events belong to (multi-hit full-walk epic,
-     * PR4). Carried on the event so a victim-side once-per-attack rider guard can reset between the
+     * Which sub-attack of the attacker's cast these events belong to.
+     * Carried on the event so a victim-side once-per-attack rider guard can reset between the
      * attacker's consecutive attacks instead of collapsing all N into one grant.
      *
      * Supplied by the POSITIONAL callers, where the engine has already grouped signals by

@@ -149,7 +149,7 @@ const protectionAccum = (stacks: number): SelectedGameBuff => ({
 
 /** A passive slot that grants SELF `Protection` the PRODUCTION way — an AURA (buff config with an
  *  undefined duration + isStackable), the same classification a real Meatshield's start-of-combat
- *  "gains N stacks of Protection" passive parses to (SP-G G1b). It flows through
+ *  "gains N stacks of Protection" passive parses to. It flows through
  *  `activeAbilityStatuses`, NOT `snapshot().activeSelfBuffs` — so it exercises the exact source the
  *  old `snapshot()`-only read missed. */
 const protectionAuraPassive = (stacks: number): ShipSkills['slots'][number] => {
@@ -243,7 +243,7 @@ const BASE_INPUT = (overrides: Partial<CombatEngineInput>): CombatEngineInput =>
     hp: 1_000_000_000,
     healTargetId: 'ally-1',
     mode: 'healing',
-    // SP-4b-1: the normalization boundary places EVERY actor, so the focus can no longer sit off
+    // The normalization boundary places EVERY actor, so the focus can no longer sit off
     // the board as a pure bystander. Left unplaced it would be auto-placed on the front-middle
     // anchor `M4`, win the enemy's `front` selection outright, and become the direct-hit victim
     // instead of `ally-1` — which is the one thing every test in this file needs `ally-1` to be.
@@ -665,7 +665,7 @@ describe('Protection damage transfer (integration)', () => {
         // would be excluded from `protectorsFor`; Protection's confirmed model (coverage = ALL
         // living same-side allies, independent of board adjacency) must still redirect to it.
         //
-        // Targeting geometry (SP-4b-1): `front` selection scans ROWS from the caster's own row and
+        // Targeting geometry: `front` selection scans ROWS from the caster's own row and
         // only then picks the front-most column WITHIN that row (selectTargets). Pinning the enemy
         // to T1 makes row T the scan row, and `ally-1` is the sole player actor there — so the hit
         // lands on the victim rather than on the protector or the (row-M) focus. The protector
@@ -694,7 +694,7 @@ describe('Protection damage transfer (integration)', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────────────────
-// Task 6 — composition with `defense-substitution` (Meatshield R4, engine.ts:2907-2925).
+// Task 6 — composition with `defense-substitution` (Meatshield R4, engine.ts).
 //
 // A carrier that BOTH substitutes its (high) defence for non-defender allies' incoming damage
 // AND holds Protection stacks. Design doc §6: because transfer peels off P BEFORE the defence
@@ -1200,7 +1200,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             hp: 1_000_000_000,
             healTargetId: 'ally-1',
             mode: 'healing',
-            // SP-4b-1: the focus is an inert bystander, but the normalization boundary places every
+            // The focus is an inert bystander, but the normalization boundary places every
             // actor — so it has to be told where to stand. Left unplaced it takes the front-middle
             // anchor, wins the enemy's `front` selection and becomes the direct-hit victim itself,
             // and then nothing is ever redirected to `prot-1`. `M2` sits in the same row as the
@@ -1271,7 +1271,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
                 },
             ] as TeamActorEngineInput[],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so the kill-switch death below is not a WIPE, which
+                // An inert survivor so the kill-switch death below is not a WIPE, which
                 // would end the match before the 2-turn DoT can tick.
                 {
                     id: 'bystander-enemy',
@@ -1359,7 +1359,7 @@ describe('Protection transfer × transform-incoming-to-dot composition (Task 4, 
             position: 'M4',
             target: targetFront,
             pattern: basicPattern,
-            // SP-4c-1: the focus dies to the kill-switch reflection, and alone it IS the whole
+            // The focus dies to the kill-switch reflection, and alone it IS the whole
             // player side — that wipe now ends the match before the DoT can tick. An inert ally
             // (0 attack, no skills, speed 1) keeps the side alive and draws nothing.
             teamActors: [

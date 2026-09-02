@@ -60,7 +60,7 @@ describe('toSimBuffs — speed channel', () => {
     });
 });
 
-// Task 2: foldSpeedBuffPct is the live-speed authority behind effectiveSpeedOf — it reads the
+// foldSpeedBuffPct is the live-speed authority behind effectiveSpeedOf — it reads the
 // status engine's two timed sources (scheduled self-buffs + timed ability statuses) for an
 // owner and sums only the speed channel. Exercised against a real status engine (no mocks).
 // effectiveSpeedOf itself = base × (1 + foldSpeedBuffPct / 100); the multiply is trivial and

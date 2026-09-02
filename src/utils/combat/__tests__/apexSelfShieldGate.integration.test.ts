@@ -4,13 +4,13 @@
  * APEX's charged skill (docs/ship-skills.csv, charge_skill_text): "...If this Unit has Shield,
  * the primary target is inflicted with Disable for 2 turns." Previously `detectGrantConditions`
  * had no `self-shield` subject, so the Disable debuff (and its control twin, which inherits the
- * debuff's conditions per buildShipAbilities.ts:3237-3238) built with NO conditions — Disable
+ * debuff's conditions per buildShipAbilities.ts) built with NO conditions — Disable
  * inflicted on every charged cast regardless of whether APEX actually held a shield.
  *
  * The fix has two pieces: (a) a new `self-shield` rule in `detectGrantConditions`
  * (skillTextParser.ts); (b) `'self-shield'` added to `LIVE_SUBJECTS` (abilityStatusGating.ts) —
  * REQUIRED because the named Disable timed debuff is gated via
- * `liveGateConditions(ability.conditions)` (engine.ts:260), which neutralizes any derivable
+ * `liveGateConditions(ability.conditions)` (engine.ts), which neutralizes any derivable
  * subject NOT in LIVE_SUBJECTS to `'always'`; without (b), (a) alone would still let Disable
  * fire unconditionally.
  *
@@ -88,7 +88,7 @@ const apexShipSkills = (includeSelfShield: boolean): ShipSkills => ({
 
 describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 4, Task 3)', () => {
     const makeInput = (includeSelfShield: boolean): CombatEngineInput => ({
-        // SP-4b-2b: a real opponent for the Disable/Attack Down II debuffs to land on. Inert and
+        // A real opponent for the Disable/Attack Down II debuffs to land on. Inert and
         // unkillable here — the focus deals 1000/round (10% of 10000 attack) for two rounds.
         enemyAttackers: bareEnemy(),
         attack: 10000,
@@ -116,7 +116,7 @@ describe('APEX charged Disable — self-shield gate, player-side (ship-kit Wave 
 
     // Counts the `control-applied` reaction event (effect:'disable') fired by APEX's charged
     // control-twin ability — the OTHER half of the self-shield-gated Disable model
-    // (buildShipAbilities.ts:3237-3238 makes the control ability inherit the named debuff's
+    // (buildShipAbilities.ts makes the control ability inherit the named debuff's
     // self-shield condition, but that inherited condition is only meaningful if the ctx
     // gateFiringAbilities evaluates it against actually carries `selfShielded` — playerTurn.ts's
     // `ctx` at ~1900, review follow-up to this task). The combat log's kind:'control' Disable

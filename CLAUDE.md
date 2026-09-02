@@ -127,6 +127,38 @@ When building or changing user-facing features, update `src/pages/DocumentationP
 
 The project uses a weekly release cycle. Features ship continuously but changelog entries are batched. When making a `feat:` or `fix:` commit for something user-facing, add a plain-English description to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
 
+### Code Comments
+
+Comments are the only channel that survives a context reset, so an agent reads them literally and
+follows their pointers. **The test: would this comment be true and comprehensible to an agent with
+zero knowledge of the PR that wrote it?** If it needs the PR to parse, it belongs in the PR.
+
+Keep:
+
+- **Present-tense behaviour contracts** — what the code does and which rule forces it
+  ("a finite-duration passive buff is timed, NOT an aura"). Verifiable against nearby code.
+- **Bare issue refs as rationale pointers** (`#436`, `#363`) — git-stable and resolvable.
+- **Pointers to the one place a rule lives** ("read `buffTotals`' doc for why a channel clamped at
+  some sites is worse than one clamped nowhere").
+
+Do not write:
+
+1. **Change history or diff justification.** "Extracted from the inline loop (Task 4)",
+   "Task 5 makes the routing real", "Epic PR12 (C)", "Zero-churn: identical to the pre-Task-5
+   behaviour". These are review arguments — put them in the commit body. Archaeology is
+   `git log -L :<symbol>:<file>`. Task/epic/phase numbers are meaningless a week later and read as
+   pending work.
+2. **Counts and site enumerations.** "the fifth and sixth call sites", "site 3 of the four-site
+   sweep", "every fixture that omits it". Stale by construction — nobody updates the count when
+   they add the seventh, and a later agent trusts it instead of re-measuring.
+3. **A rule restated at N call sites.** That is N−1 future contradictions. The rule lives once at
+   the definition; call sites get a one-line pointer.
+4. **A warning where a test belongs.** "must stay in sync with X", "do not clamp here" — a comment
+   is a wish, a test fails. Write the tripwire (see `b2678b82`) and let the comment name it.
+
+When editing code that carries a comment from class 1–4, delete or rewrite it rather than working
+around it. A comment that no longer matches the code is worse than no comment: agents believe it.
+
 ## Testing
 
 **Framework:** Vitest + React Testing Library. Focus on utility functions (autogear scoring, stat calculations) and data transformations (import pipeline).

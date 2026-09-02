@@ -53,7 +53,7 @@ describe('the side-wide scheduled-debuff decrement, after the dummy turn was ret
         // both a double-decrement and a dropped decrement. The ORDER assertion — the expiry lands
         // after every `turn-started` of its round — is the only half that witnesses THIS rung.
         //
-        // WHY THIS SHAPE. The rung this case was written for (SP-4c-2c) was differential only where
+        // WHY THIS SHAPE. The rung this case was written for was differential only where
         // the dummy USED to keep its turn, i.e. where the retired `dummyEnemyIsVestigial` gate read
         // false, and the bucket has to actually populate:
         //  • the FOCUS carries an ENEMY-side target and a position, so its cast resolves a victim

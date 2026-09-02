@@ -1,5 +1,5 @@
 /**
- * Sub-project F, PR F5: `applyPreCombatShipPassives` — unit tests over hand-built plans
+ * `applyPreCombatShipPassives` — unit tests over hand-built plans
  * whose abilities come from the REAL parser path (`buildShipAbilities` on synthetic ships
  * with exact docs/ship-skills.csv passive texts), so the shapes under test are the
  * production `pre-combat-stat` abilities, not hand-written copies.

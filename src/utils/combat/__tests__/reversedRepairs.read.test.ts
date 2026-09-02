@@ -5,7 +5,7 @@
  * has no standing value to model), a 1-turn duration debuff DOES have a standing value — so a
  * hand-selected Reversed Repairs in the simulator must work.
  *
- * The TIMED channel is covered in `reversedRepairs.engine.test.ts` (Task 5) instead, through the
+ * The TIMED channel is covered in `reversedRepairs.engine.test.ts` instead, through the
  * real production seam — a `debuff` ability on a firing slot. A unit test that hand-builds a
  * `RegisteredAbilityStatus` payload proves the mapping, not that the engine feeds it the right
  * input; and a wrong hand-built shape yields a vacuous red that turns green once you "fix"

@@ -1,5 +1,5 @@
 /**
- * Phase 3 PR-F — combat-integration tests for the `on-enemy-repaired` recipient + Ruiner
+ * PR-F — combat-integration tests for the `on-enemy-repaired` recipient + Ruiner
  * promotions:
  *   - Ruiner (1st passive): "This Unit inflicts Bomb II for 2 turns on any enemy performing a
  *     repair, once per round per enemy" — on-enemy-repaired, REPAIRER-routed via

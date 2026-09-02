@@ -1,5 +1,5 @@
 /**
- * SP-M M1: reactive-damage procs REDUCE the resolved victim's real HP in a positioned two-team
+ * Reactive-damage procs REDUCE the resolved victim's real HP in a positioned two-team
  * battle (simulateBattle → mode: 'battle'), surface on the victim's damageTaken, and
  * are attributed to the owner via damageDealt (perTargetDealt).
  *
@@ -43,7 +43,7 @@ export const place = (
     position: Position,
     attack: number,
     hp: number,
-    // SP-M Task 3: optional extra statOverrides (e.g. `security`, or a `hacking` override for
+    // Optional extra statOverrides (e.g. `security`, or a `hacking` override for
     // the Vindicator on-resist fixture) merged over the defaults below. Backward-compatible —
     // every pre-existing 4-arg call site is byte-identical (extra defaults to {}).
     extra: Partial<BattlePlacement['statOverrides']> = {}
@@ -120,7 +120,7 @@ describe('SP-M M1: FrontLine reactive damage reduces the charging enemy HP (posi
 });
 
 /**
- * SP-M Task 3: the hpBasisPct reactive-damage path (Vindicator on-resist, Paracelsus
+ * The hpBasisPct reactive-damage path (Vindicator on-resist, Paracelsus
  * on-destroyed) shares the SAME applyReactiveDamage executor tail Task 2 gated on the
  * then-named `positionalTeamBattle` input field — later replaced by the derived
  * `hasPositionedEnemyRoster` check (per the SP-1 follow-up), and both of those are now deleted
@@ -220,7 +220,7 @@ describe('SP-M M1: Paracelsus on-destroyed reactive HP retaliation reduces the k
 });
 
 /**
- * SP-M M1 Task 4: Grif's on-enemy-cleansed reactive (triggers.ts's `cfg.type === 'damage'`
+ * Grif's on-enemy-cleansed reactive (triggers.ts's `cfg.type === 'damage'`
  * branch, `targetId = intent.eventCtx?.counterTargetId ?? ctx.enemy.id`) must land on the REAL
  * cleansing enemy in positional mode, not the vestigial dummy `enemy` — the on-enemy-cleansed
  * listener (triggers.ts ~846) did not stamp `counterTargetId`, so `targetId` fell back to
@@ -292,7 +292,7 @@ describe("SP-M M1 Task 4: Grif's on-enemy-cleansed reactive lands on the real cl
 });
 
 /**
- * SP-M M1 Task 5: Rhodium's end-of-round co-located purge+damage sentence ("At the end of the
+ * Rhodium's end-of-round co-located purge+damage sentence ("At the end of the
  * round, this Unit purges 2 buffs from the enemy with the most buffs and deals 80% damage that
  * cannot critically hit.") must route the DAMAGE clause to the SAME enemy-most-buffs selector the
  * purge clause already resolves (ctx.enemyWithMostBuffs), not the co-located `target:'enemy'`
@@ -438,7 +438,7 @@ describe('SP-M M1 Task 5 review fix: two same-side Rhodiums re-resolve enemy-mos
 });
 
 /**
- * SP-M M1 Task 6: Chakara's start-of-round continuation sentence ("This Unit starts each round
+ * Chakara's start-of-round continuation sentence ("This Unit starts each round
  * with Attack Up II and Defense Up II for 1 turn if it has the lowest speed among all Allies.
  * Then, deals 60% damage to the highest Speed Enemy.") must route the damage clause to the LIVE
  * highest-Speed opposing actor (ctx.enemyWithHighestSpeed), not the co-located `target:'enemy'`
@@ -512,7 +512,7 @@ describe("SP-M M1 Task 6: Chakara's start-of-round damage lands on the highest-S
 });
 
 /**
- * SP-M M1 Task 7: Judge's start-of-round passive ("At the start of the round, this Unit deals 60%
+ * Judge's start-of-round passive ("At the start of the round, this Unit deals 60%
  * damage to all enemies with less than 50% HP.") is a per-victim-CONDITIONAL AoE — it must hit
  * EVERY living enemy below 50% HP (not one, not the vestigial dummy) with real HP loss, and skip
  * the enemies above 50%. Pre-fix (target:'enemy', single-victim → dummy fallback) no real enemy
@@ -616,7 +616,7 @@ describe("SP-M M1 Task 7: Judge's start-of-round damage hits ALL <50%-HP enemies
 });
 
 /**
- * SP-M M1 Task 7: Incinerator's end-of-round passive ("At the end of the round, this unit deals
+ * Incinerator's end-of-round passive ("At the end of the round, this unit deals
  * 100% damage to all enemies with Inferno.") is a per-victim-CONDITIONAL AoE gated on the enemy-
  * debuff name 'Inferno'. Incinerator's active inflicts Inferno III on the FRONT enemy only (single-
  * target Pattern-Base); the back enemy never receives it. Only the Inferno-afflicted enemy may take
@@ -685,7 +685,7 @@ describe("SP-M M1 Task 7: Incinerator's end-of-round damage hits ONLY the Infern
 });
 
 /**
- * SP-M M1 Task 8: team-symmetry sweep. All 8 reactive-damage mechanics above were exercised with
+ * Team-symmetry sweep. All 8 reactive-damage mechanics above were exercised with
  * the reactive ship on the PLAYER side and a victim on `enemyTeam` (`e:<id>:<idx>` actor ids). The
  * engine is team-agnostic post-bySide unification — `playerDrainCtx`/`enemyDrainCtx` bind mirror
  * rosters (engine.ts's `bySide('player')`/`bySide('enemy')`), and Task 6/7's new resolvers
@@ -945,7 +945,7 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
 });
 
 /**
- * SP-M M1 Task 9b: correctness-bug regression. The then-live `dummyEnemyIsVestigial` gate (deleted
+ * Correctness-bug regression. The then-live `dummyEnemyIsVestigial` gate (deleted
  * in SP-4c-2c) required EVERY player actor's parsed target to be enemy-side — false the instant the
  * player team included an ally-targeting ship (e.g. a healer), even in a fully positional
  * `simulateBattle`.

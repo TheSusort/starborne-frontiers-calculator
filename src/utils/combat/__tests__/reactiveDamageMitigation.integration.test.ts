@@ -134,7 +134,7 @@ const creditedDirectDamageFor = (sourceId: string, input: CombatEngineInput): nu
 /**
  * Sums the PER-VICTIM dealt credit attributed to `sourceId` across the whole run.
  *
- * SP-4b-1: this is where every reactive proc below now books. The normalization boundary places
+ * This is where every reactive proc below now books. The normalization boundary places
  * every actor and synthesizes the missing `target`/`pattern`, so the proc resolves onto the real,
  * placed opposing actor and `applyReactiveDamage` takes its per-victim branch — lowering that
  * actor's real HP and crediting through `creditDealt` (→ `RoundData.perTargetDealt`). The

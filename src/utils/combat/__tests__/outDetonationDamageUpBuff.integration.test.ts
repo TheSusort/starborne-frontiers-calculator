@@ -13,7 +13,7 @@
  * nothing about either.
  *
  * TWO DETONATION PATHS, both fed by the same `EffectiveDamageStats.detonationDamageModifier`
- * (effectiveStats.ts:221), but consumed differently:
+ * (effectiveStats.ts), but consumed differently:
  *   - corrosion (LIVE path): `detonate()`'s non-bomb branch reads the DETONATING actor's
  *     CURRENT-round modifier (`recipe.detonationMult`) — container detonation by the buff
  *     holder.
@@ -25,7 +25,7 @@
  * `result.rawTotals.detonation`, which is what this file measures — one channel, no double-count,
  * and byte-identical to the pre-branch numbers on both paths.
  *
- * SP-4b-2b: the run now fights a real, positioned enemy, which makes every cast here carry a
+ * The run now fights a real, positioned enemy, which makes every cast here carry a
  * plain 100%-damage clause (`basicDamage()`). That is not decoration — a DETONATE-ONLY cast
  * resolves nobody on a positional run and its detonation is dropped entirely, so without the
  * damage clause all three cases measure 0 (a green-and-vacuous trap the ratio assertions would
@@ -157,7 +157,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
 
 /** Total detonation damage credited across the run.
  *
- *  SP-4b-2b: this used to sum the aggregate `dot-detonated` event, on the reasoning that engine.ts
+ *  This used to sum the aggregate `dot-detonated` event, on the reasoning that engine.ts
  *  folds `bomb + inferno + corrosion` into it. That is a NON-positional property. On a positional
  *  run a bomb burst emits `bomb-detonated` and no `dot-detonated` at all, so the old listener read
  *  0 for the whole snapshot-path case. `rawTotals.detonation` is the one channel both paths fold

@@ -1,5 +1,5 @@
 /**
- * Overload lifecycle — END-TO-END engine fixtures (Task 8).
+ * Overload lifecycle — END-TO-END engine fixtures.
  *
  * Proves the full Marauder Overload lifecycle resolves in the combat sim, on BOTH sides:
  *   - Overload "gains every turn" accrues in the accumulating self store (per-round +1 stack).

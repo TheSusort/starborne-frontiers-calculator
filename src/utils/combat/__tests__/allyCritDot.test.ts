@@ -99,7 +99,7 @@ describe('allyCritDot – Task 1: viaCrit on dot-applied', () => {
     // carry viaCrit, even at crit=100 — the executor emission deliberately omits it
     // (drain-time has no crit outcome).
     //
-    // SP-4c-2d: the trigger is `on-deal-damage`, not `start-of-round`. A start-of-round
+    // The trigger is `on-deal-damage`, not `start-of-round`. A start-of-round
     // reactive threads NO victim, and a victimless reactive infliction is now a no-op —
     // so it emits nothing at all and this case would have gone vacuous (its `> 0` guard
     // is what catches that). `on-deal-damage` stamps `eventCtx.victimId` (the enemy the

@@ -126,7 +126,7 @@ describe('Phase 4c PR 4 — enemy-action triggers', () => {
 });
 
 // ----------------------------------------------------------------------
-// PR4b: reactive direct-damage executor branch (Grif/FrontLine/Judge/Chakara/
+// Reactive direct-damage executor branch (Grif/FrontLine/Judge/Chakara/
 // Incinerator/Rhodium) — WIRING only. The branch now delegates the actual
 // mitigation/crit math to ctx.applyReactiveDamage (mirrors the `counter`
 // branch's applyCounterAttack delegate); this suite pins the ARGUMENTS the
@@ -272,7 +272,7 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
             },
         });
 
-        // SP-4c-2d: a routed victim is now REQUIRED to reach the wiring this case is about —
+        // A routed victim is now REQUIRED to reach the wiring this case is about —
         // without one the executor no-ops and `calls[0]` would be undefined.
         executeIntent(
             makeDamageIntent('grif', { multiplier: 60 }, { counterTargetId: 'caster-x' }),
@@ -284,7 +284,7 @@ describe('PR4b: damage reactive executor branch — applyReactiveDamage wiring',
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 4 Task 5a: event-only enemy heal/cleanse EMISSION.
+// Event-only enemy heal/cleanse EMISSION.
 //
 // When runPlayerTurn is called with `healEventOnly: true` (the enemy walk),
 // a CAST skill carrying heal/cleanse abilities must EMIT `heal-performed` /
@@ -807,7 +807,7 @@ describe('#369: HoT ticking applies on both sides, and only credits behind healE
 });
 
 // ----------------------------------------------------------------------
-// Phase 4c PR 4 Task 5b: integration — a ship-backed enemy attacker whose
+// Integration — a ship-backed enemy attacker whose
 // cast cleanses with NOTHING to remove now emits NO cleanse-performed and
 // credits NO player healing buckets under the enemy id (symmetric cadence
 // after the enemy cleanse lift). A no-op enemy cleanse no longer drives a

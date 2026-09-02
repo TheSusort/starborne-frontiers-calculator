@@ -1,5 +1,5 @@
 /**
- * ship-kit W3 (Task 9) — ENGINE integration for the Toxic Overflow end-of-round Corrosion-spread
+ * ship-kit W3 — ENGINE integration for the Toxic Overflow end-of-round Corrosion-spread
  * mechanic (ledger #49) + Hemlock's `on-corrosion-spread` count-scaled self-heal.
  *
  * Game rule (src/constants/buffs.ts): "At the end of the round if a unit has Toxic Overflow and at

@@ -1,5 +1,5 @@
 /**
- * SP-4d Fix wave 1 — pins the DELEGATE half of the `enemies-hit-this-cast` fix, not just the
+ * Fix wave 1 — pins the DELEGATE half of the `enemies-hit-this-cast` fix, not just the
  * consumer half.
  *
  * Context: the SP-4d rung's job was to make `enemies-hit-this-cast` answer "unknown" instead of

@@ -6,7 +6,7 @@ import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
 
 // ---------------------------------------------------------------------------
-// C2a Task 3: cast-path PURGE removes an enemy's self-buffs (enemy side).
+// Cast-path PURGE removes an enemy's self-buffs (enemy side).
 //
 // Positional two-team battle-sim harness (mirrors twoTeamBattle.test.ts —
 // healTargetId MUST be set, which unlocks the enemy roster; the focus needs a

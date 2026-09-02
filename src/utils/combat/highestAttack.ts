@@ -1,5 +1,5 @@
 /**
- * D-PR14: pick the actor id with the greatest (live, effective) attack from `ids`.
+ * Pick the actor id with the greatest (live, effective) attack from `ids`.
  * Ties resolve to the FIRST in `ids` order (deterministic for goldens). Returns undefined
  * when `ids` is empty. Pure — the caller supplies live attack, so the engine wires
  * effectiveStatsOf and this stays unit-testable (mirrors incomingEffects.ts / outgoingEffects.ts).

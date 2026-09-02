@@ -114,7 +114,7 @@ const damageKit = (multiplier: number): ShipSkills => ({
 /** Focus attacker with no damage skill: the row's DoT-state fields are the only thing under test,
  *  and a zero-damage focus keeps every enemy alive for the whole window. */
 const BASE: Omit<CombatEngineInput, 'shipSkills'> = {
-    // SP-4b-2b: a run needs an opponent. Every positional case overrides this with its own
+    // A run needs an opponent. Every positional case overrides this with its own
     // `inertEnemy` roster. The default was written as the documented 0-MAX-HP "pressure source",
     // which is how the dummy-sink case below used to stay non-positional; SP-4c-2a's floor
     // (`withTargetableHp` in normalizeRoster.ts) raises it to MIN_TARGETABLE_MAX_HP, so that case
@@ -211,7 +211,7 @@ describe('SP-4b-2 D3: DoT-state reporting follows the real enemy carriers', () =
         ]);
     });
 
-    // SP-4c-2d DELETED A CASE HERE, and the deletion is the record of what it removed. It was
+    // DELETED A CASE HERE, and the deletion is the record of what it removed. It was
     // titled "the dummy sink still REPORTS its containers, but no longer TICKS them" and it seeded
     // the dummy `enemy` actor's own containers through `__testTapActors`, then asserted the D3
     // reporting fields still counted them. That was the STRAND: SP-4c-2c had retired the dummy's

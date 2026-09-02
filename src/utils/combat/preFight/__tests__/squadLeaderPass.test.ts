@@ -1,5 +1,5 @@
 /**
- * Sub-project F, PR F1: squad-leader pre-fight pass — unit tests on hand-built
+ * Squad-leader pre-fight pass — unit tests on hand-built
  * PreFightUnits (no engine involved).
  *
  * Real SQUAD_LEADERS data drives the stage-additivity / gating / math / symmetry cases.

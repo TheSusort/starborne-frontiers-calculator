@@ -34,7 +34,7 @@
  * combats (HP = lo → must die; HP = hi → must survive) to bracket the firing-hit damage to
  * `[lo, hi)`.
  *
- * SP-4b: the two NON-positional counterparts this suite used to carry (a position-less focus
+ * The two NON-positional counterparts this suite used to carry (a position-less focus
  * landing NO enemy HP damage, and a pattern-less enemy leaving `perTargetDamage` absent) are gone —
  * `normalizeCombatRoster` places and targets every actor at `runCombat`'s door, so neither premise
  * is expressible any more. See the notes at each removal site.
@@ -194,7 +194,7 @@ describe('Task 8b — positional AoE damage apply at the focus site', () => {
         expect(hi.has('enemy-mid')).toBe(false); // survives at 2501 → took < 2501 → exactly 2500 (half)
     });
 
-    // SP-4b: 'byte-identical sanity: a NON-positional run lands NO enemy HP damage (legacy dummy
+    // 'byte-identical sanity: a NON-positional run lands NO enemy HP damage (legacy dummy
     // sink)' lived here. Its subject was the dummy sink itself — a position-less focus draining
     // `TurnBindings.legacyVictim` while two HP-1 real enemies stayed untouched. That is exactly
     // the actor SP-4c/4d delete, and `normalizeCombatRoster` already places the focus on
@@ -374,7 +374,7 @@ describe('Task 9 — positional AoE damage apply at the enemy site (enemy→play
         expect(hi.has('player-mid')).toBe(false);
     });
 
-    // SP-4b: this case used to carry a second half — a pattern-less enemy re-run asserting
+    // This case used to carry a second half — a pattern-less enemy re-run asserting
     // `perTargetDamage` came back UNDEFINED on the legacy single-apply path. `normalizeCombatRoster`
     // synthesizes DEFAULT_BASE_PATTERN, so that branch is unreachable through `runCombat` and the
     // gate can no longer be closed; re-pinning it onto the positional map would have turned a

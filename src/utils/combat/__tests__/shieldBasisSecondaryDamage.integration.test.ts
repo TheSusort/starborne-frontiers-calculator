@@ -2,7 +2,7 @@
  * shieldBasisSecondaryDamage.integration.test.ts — PR9(a).
  *
  * "additional damage equal to X% of its/their current Shield" (Malvex, Quixilver, FrontLine —
- * see skillTextParser.test.ts's "shield-basis secondary damage (PR9a)" for the text-parsing
+ * see skillTextParser.test.ts's "shield-basis secondary damage" for the text-parsing
  * coverage and buildShipAbilities.test.ts's "PR9a shield-basis additional-damage" for the
  * ability-build coverage). Modeled as `{ type:'additional-damage', stat:'shield', pct }`,
  * consumed in playerTurn.ts (~line 1680) by reading the CASTER's own LIVE `actor.shieldPool`
@@ -71,7 +71,7 @@ const selfShield = (pct: number): Ability =>
 // no buffs — postDefenseFactor collapses to 1, so the credited damage is
 // effectiveAttack*(mult/100) + secondaryStatValue exactly (no cross-term arithmetic to untangle).
 //
-// SP-4b-2b: `satisfies` replaces the old `: Partial<CombatEngineInput>` annotation, and every
+// `satisfies` replaces the old `: Partial<CombatEngineInput>` annotation, and every
 // `runCombat` call below drops its `as CombatEngineInput` cast. That cast is why this file was in
 // the missing-roster population at all: `enemyAttackers` is a REQUIRED field on
 // `CombatEngineInput`, and an `as` cast over a spread of a `Partial` told the compiler to stop
@@ -116,7 +116,7 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
         };
         const result = runCombat({
             ...CLEAN_MATH,
-            // SP-4b-2b: a real opponent. 10 000 + 20 000 = 30 000 total against 10 000 000 HP, so it
+            // A real opponent. 10 000 + 20 000 = 30 000 total against 10 000 000 HP, so it
             // survives both rounds and the run's shape is constant (a mid-run kill would drop the
             // round-2 cast entirely, which is exactly what this test measures).
             enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
@@ -125,7 +125,7 @@ describe('PR9a: shield-basis additional damage reads the LIVE caster shieldPool 
             healTargetId: 'attacker', // self-heal-target: activates the self-shield-grant block
             mode: 'healing',
         });
-        // M3 (SP-4b-2b): the focus's credit now lands in the per-victim channel, so these read
+        // M3: the focus's credit now lands in the per-victim channel, so these read
         // `perTargetDealt` instead of the scalar `directDamage` — which is 0 on every positional
         // direct `runCombat` and would have made both assertions vacuous. The MAGNITUDES are
         // unchanged from the pre-branch `directDamage` readings (10 000 / 20 000), which is the point:

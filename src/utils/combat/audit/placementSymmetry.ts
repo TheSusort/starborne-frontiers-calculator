@@ -17,7 +17,7 @@ import { PLACEMENT_PAIRS, type Placement, type PlacementDiff } from './types';
 
 /** What a correctly-resolved subject id looks like per placement. `playerTeam[0]` mints the
  *  reserved `'attacker'`; the rest mint `p:<shipId>:<idx>` / `e:<shipId>:<idx>`
- *  (battleSimulator.ts:842-845). Checked rather than assumed: a mis-resolved id fingerprints an
+ *  (in `battleSimulator`). Checked rather than assumed: a mis-resolved id fingerprints an
  *  EMPTY set, so every kind reads as "missing in that placement" and the sweep reports confident
  *  nonsense. This is the #298 fixture-vacuity failure mode. */
 const EXPECTED_ID_SHAPE: Record<Placement, (id: string) => boolean> = {

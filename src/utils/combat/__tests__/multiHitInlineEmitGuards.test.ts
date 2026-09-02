@@ -152,7 +152,7 @@ describe('R5 whiff guard on the inline ability-performed loop', () => {
 
         const args = makeArgs(makeRuntime(damageSkill(3)), bus);
         // The guard's exact condition. `destroyedRound` is the real death stamp on CombatActor
-        // (state.ts:151), written once by `recordDestroyed`; set directly here. HP is left ALONE
+        // (state.ts), written once by `recordDestroyed`; set directly here. HP is left ALONE
         // on purpose — the guard must key on death, not on the HP floor (playerTurn.ts's WHICH
         // SIGNAL note), and a fixture that zeroed `currentHp` too would pass under both readings.
         args.enemy.destroyedRound = 1;
@@ -167,7 +167,7 @@ describe('R5 whiff guard on the inline ability-performed loop', () => {
         expect(performed).toHaveLength(0);
     });
 
-    /** Control: the SAME cast against a living target still emits one event per sub-attack (PR5). */
+    /** Control: the SAME cast against a living target still emits one event per sub-attack. */
     it('still emits one event per sub-attack when the bound target is alive', () => {
         const bus = createEventBus();
         const performed: unknown[] = [];
@@ -286,7 +286,7 @@ describe('R5 whiff guard — runCombat-level regression (the sink is clamped, no
      * of failure: it constructs its own `enemy` actor, so it never exercises the engine's
      * VESTIGIAL SINK — the huge-HP dummy a non-positional cast binds, whose `currentHp` engine.ts
      * (~9513) CLAMPS to `Math.max(0, enemyHp - cumulativeDamage)` and which is documented as never
-     * dying (engine.ts:2909). A guard reading `currentHp <= 0` therefore latches permanently once
+     * dying (engine.ts). A guard reading `currentHp <= 0` therefore latches permanently once
      * cumulative damage crosses `enemyHp`, silencing the focus's ENTIRE event stream — every
      * combat-log row and every outgoing rider — for the rest of the run.
      */

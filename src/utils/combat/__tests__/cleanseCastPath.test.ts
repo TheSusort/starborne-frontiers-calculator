@@ -6,7 +6,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
 
 // ---------------------------------------------------------------------------
-// C1 Task 3: cast-path cleanse REMOVES debuffs (player-side).
+// Cast-path cleanse REMOVES debuffs (player-side).
 //
 // Two-team battle-sim harness (mirrors enemyActions.test.ts Task 5b): a player
 // healer (focus = the heal target) carries a cleanse ability; a FASTER enemy

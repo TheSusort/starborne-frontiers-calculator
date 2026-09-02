@@ -32,7 +32,7 @@
  * so the whole AND read false even with a real, hittable, positioned enemy on the board — and the
  * dummy KEPT its turn. That was the last shape in which the dummy acted at all. It survives the
  * normalization boundary by design (`withTargeting` FILLS an absent target but never SUBSTITUTES an
- * ally-side one — "FILL, never SUBSTITUTE", `normalizeRoster.ts:79-81`), which is what makes it a
+ * ally-side one — "FILL, never SUBSTITUTE", `normalizeRoster.ts`), which is what makes it a
  * usable fixture even now that it changes nothing.
  *
  * SO THE TWO CASES ARE A MATCHED PAIR reading the SAME answer — the dummy is absent — off the two
@@ -111,7 +111,7 @@ const BASE = (over: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
     // retired `dummyEnemyIsVestigial`'s first conjunct read false and the dummy stayed in the turn
     // order). SP-4c-2a's floor retired the idiom — this member now arrives at the engine at
     // MIN_TARGETABLE_MAX_HP, and the TRIPWIRE case below is the only thing that still cares. NOTHING
-    // puts the dummy in the turn order any more (SP-4c-2c); the two cases below both override this
+    // puts the dummy in the turn order any more; the two cases below both override this
     // roster with a genuinely hittable enemy and differ only in which branch of the DEAD gate their
     // target side would have selected.
     enemyAttackers: bareEnemy({ id: 'pressure-source', stats: { hp: 0 } }),
@@ -168,7 +168,7 @@ describe('dummy enemy turn gate', () => {
     // is a tripwire against the gate being reintroduced, not a distinction between two behaviours.
     it('a player actor with an ALLY-side target: the dummy STILL takes no turn', () => {
         idc = 0;
-        // SP-4c-2c INVERTED THIS CASE, and it is now the file's most load-bearing one.
+        // INVERTED THIS CASE, and it is now the file's most load-bearing one.
         //
         // Until this rung the reading was `> 0`: the focus is a support ship (positioned at M4,
         // active target ALLY-side), so conjunct 2 of the retired `dummyEnemyIsVestigial`
@@ -233,7 +233,7 @@ describe('dummy enemy turn gate', () => {
     //   • the floor is removed or gains an escape hatch (`withTargetableHp` in normalizeRoster.ts,
     //     which today floors unconditionally); or
     //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
-    //     (positionalBinding.ts:45) — a corpse would then read as untargetable and reopen the
+    //     (positionalBinding.ts) — a corpse would then read as untargetable and reopen the
     //     shape from the other end, which the HP assertion here would not otherwise notice.
     it('TRIPWIRE: the 0-max-HP route into the not-fully-positional branch is gone — the floor arrives already hittable', () => {
         const floored = normalizeCombatRoster(BASE());
