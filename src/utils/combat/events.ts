@@ -2,12 +2,11 @@ import { AbilityType, ControlEffect } from '../../types/abilities';
 import { DoTType } from '../../types/calculator';
 
 /**
- * Engine-emitted combat events. Phase 1 is emit-only (the DPS adapter is the sole
- * consumer); Phase 3 maps reactive Ability.trigger values onto these. Contract:
- * listeners are synchronous, run in registration order, and never mutate combat
- * state — they produce intents (e.g. enqueued follow-up executions) only.
+ * Engine-emitted combat events. Reactive `Ability.trigger` values map onto these.
+ * Contract: listeners are synchronous, run in registration order, and never mutate
+ * combat state — they produce intents (e.g. enqueued follow-up executions) only.
  *
- * Phase 3 deviations from the Phase 1 contract:
+ * Per-event deviations from that contract:
  *  - `round-started`: the start-of-round trigger key. Fires once per round, before
  *    any `turn-started`. NOTE: `turn-started` fires multiple times per round in a
  *    multi-actor setup (once per actor), so `round-started` is the canonical
@@ -21,12 +20,12 @@ import { DoTType } from '../../types/calculator';
  *  - `bomb-detonated`: asymmetric paths — `processBombs` (enemy turn) emits one event
  *    per pending bomb that detonates; `detonate()` bomb branch (attacker turn) emits one
  *    aggregate event for all consumed bombs. `actorId` = the bomb's ORIGINAL applier
- *    (`PendingBomb.sourceId`) for `processBombs` AND for SP-F F3/Lingshe's forced early
+ *    (`PendingBomb.sourceId`) for `processBombs` AND for Lingshe's forced early
  *    detonation via `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate
  *    branch instead emits the casting `actor.id`. Either way — any actor, not always
  *    'attacker'. `actorId` feeds log/attribution; the VICTIM-scoped `on-bomb-detonated`
  *    listener is global over `actorId` (keys off `victimId` being opposing). The separate
- *    DETONATOR-scoped `on-self-bomb-detonated` listener (Ship-kit W7/Lingshe) keys off the
+ *    DETONATOR-scoped `on-self-bomb-detonated` listener (Lingshe) keys off the
  *    additive `detonatorId` field (who actively caused the burst; undefined for natural expiry).
  *  - `control-applied`: emitted on the CAST path when the firing skill carries a `control`
  *    ability (e.g. Defiant's charged Stasis inflict). `casterId` is the applying actor;
@@ -87,7 +86,7 @@ export type CombatEvent =
            *  victims but not the selected anchor, `targetId` names a victim that never crit, so a
            *  "deals X to that enemy" reactive routed off `targetId` hits the wrong ship. */
           critVictimIds?: string[];
-          /** PR7: what this sub-attack actually DELIVERED — post-crit, post-amplification,
+          /** What this sub-attack actually DELIVERED — post-crit, post-amplification,
            *  post-victim-defence, INCLUDING damage a Protection cascade diverted to protectors and
            *  EXCLUDING damage deferred into a DoT. The locked basis for damage-proportional outgoing
            *  effects (Bloodthirst).
@@ -98,9 +97,9 @@ export type CombatEvent =
            *  the interleaved positional path — consumers MUST fall back to `damage` for the
            *  non-positional and DPS paths. */
           deliveredDamage?: number;
-          /** The 0-based sub-attack this event belongs to (multi-hit full-walk epic, PR4). A
-           *  multi-hit skill is N consecutive full-walk attacks and PR2 emits one event per
-           *  sub-attack; this names which one. Since PR5 BOTH emitters stamp it — the positional
+          /** The 0-based sub-attack this event belongs to. A multi-hit skill is N consecutive
+           *  full-walk attacks and the engine emits one event per sub-attack; this names which
+           *  one. BOTH emitters stamp it — the positional
            *  interleaved emit and runPlayerTurn's non-positional inline loop — so it is present on
            *  every event a real cast produces. It is still optional because the two cast-scoped
            *  engine fallbacks (nothing-landed, enemy 0-damage) omit it; consumers must read absent
@@ -136,7 +135,7 @@ export type CombatEvent =
     /** Discrete infliction events ONLY — emitted once at the round of application.
      *  `sourceId` is the actor that inflicted the debuff (e.g. 'attacker' or a team
      *  actor id). NOT emitted for recurring/aura per-round re-applications.
-     *  `viaDebuffInflictedReaction` (Ship-kit W7): set when this debuff was applied BY an
+     *  `viaDebuffInflictedReaction`: set when this debuff was applied BY an
      *  `on-debuff-inflicted`-triggered ability (Warden's Out. Damage Down II). The
      *  `on-debuff-inflicted` listener ignores such events so a debuff-inflicted reaction whose
      *  own follow-up is itself a debuff cannot re-trigger ITSELF (an unbounded self-chain that
@@ -315,7 +314,7 @@ export type CombatEvent =
      *  no on-enemy-repaired rider heals, so it cannot re-enter this emit — any NEW subscriber must
      *  re-establish that argument for itself rather than assume this event is inert.
      *
-     *  NOT EMITTED FOR A ZERO-GROSS REPAIR (multi-hit full-walk epic, PR6). The executor gates this
+     *  NOT EMITTED FOR A ZERO-GROSS REPAIR. The executor gates this
      *  emit on `healSum > 0` (triggers.ts heal branch), so a reactive repair that resolved to
      *  nothing — a `damage-dealt` basis on a sub-attack that delivered nothing, a zero-count
      *  event-scaled repair — produces no event at all. A repair that lands and then fully
@@ -339,7 +338,7 @@ export type CombatEvent =
            *  sees the repair.
            *
            *  ⚠️ IN-MEMORY ROUTING KEY ONLY — never serialise it. `nextId()` runs off a
-           *  module-level counter that is never reset (`let counter = 0`, buildShipAbilities.ts:151),
+           *  module-level counter that is never reset (`let counter = 0` in buildShipAbilities),
            *  so an ability's id depends on how many kits were built before it in the process. Put
            *  this in a golden, a snapshot or a combat-log row and the artefact becomes
            *  order-dependent. */
@@ -349,7 +348,7 @@ export type CombatEvent =
      *  AEGIS's on-ally-shield-destroyed "cleanses all debuffs", Cultivator's on-ally-crit cleanse).
      *  The reactive cleanse credits `cleanseCount` but emits NO `cleanse-performed` (chain guard —
      *  that event drives on-enemy-cleansed / on-own-cleanse listeners). This event exists SOLELY so
-     *  buildCombatLog can surface the reaction (previously the reactive cleanse was invisible in the
+     *  buildCombatLog can surface the reaction (without it the reactive cleanse is invisible in the
      *  log): NO combat listener subscribes to it, so it can never chain. `casterId` = the reacting
      *  owner; `perTarget` = per-recipient count of debuffs ACTUALLY removed (only recipients with
      *  >= 1 removal are listed). */
@@ -431,14 +430,14 @@ export type CombatEvent =
      *  player path and the enemy (event-only) path perform REAL removal via the side-agnostic
      *  `statusEngine.cleanse` over `recipientsFor`'s side-aware recipients, and the event is
      *  suppressed on both sides when 0 debuffs were removed. The `on-enemy-cleansed` listener
-     *  filters by `isOpposing(casterId)`; the `on-own-cleanse` listener (Phase 3 PR-H) filters by
+     *  filters by `isOpposing(casterId)`; the `on-own-cleanse` listener filters by
      *  `casterId === ownerId`. */
     | ({
           type: 'cleanse-performed';
           casterId: string;
           count: number;
           round: number;
-          /** Phase 3 PR-H: the recipient ids that ACTUALLY had >= 1 debuff removed (a subset of
+          /** The recipient ids that ACTUALLY had >= 1 debuff removed (a subset of
            *  the cleanse ability's targeted recipients — e.g. an `all-allies` cleanse where only
            *  some allies carried a debuff), in application order. Read by the `on-own-cleanse`
            *  listener to stamp `eventCtx.cleansedAllyIds`, routing an `ally`-target reactive
@@ -465,7 +464,7 @@ export type CombatEvent =
           type: 'dot-ticked';
           targetId: string;
           round: number;
-          // SP-E: widened to DoTType (was 'corrosion' | 'inferno') — a generic-DoT tick emits
+          // Widened to the full DoTType — a generic-DoT tick emits
           // this event too. 'bomb' never appears here (bombs burst via 'bomb-detonated').
           dotType: DoTType;
           damage: number;
@@ -487,13 +486,13 @@ export type CombatEvent =
      *    where pct is the detonation skill's power multiplier.
      *  In both cases `damage` is the realized payout under that path's scaling, not a
      *  normalized value. `actorId` = the bomb's ORIGINAL applier (`PendingBomb.sourceId`)
-     *  for `processBombs` and for SP-F F3/Lingshe's forced early detonation via
+     *  for `processBombs` and for Lingshe's forced early detonation via
      *  `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate branch emits the
      *  casting `actor.id` instead. Any actor, not always 'attacker'. `victimId` = the actor
      *  the bomb detonated ON (the bomb's holder) — distinct from `actorId`, which stays the
      *  applier/caster per the above. Added for Wave 5 C2 (Demolisher adjacent-enemy splash
      *  anchoring, consumed by C3); purely additive, no behaviour change.
-     *  `detonatorId` (Ship-kit W7/Lingshe) = the actor who ACTIVELY caused this burst — the
+     *  `detonatorId` (Lingshe) = the actor who ACTIVELY caused this burst — the
      *  caster of the detonating skill (`detonate()`/positional detonate) or the
      *  `bomb-countdown-reduce` caster (Lingshe's charge). UNDEFINED for a natural countdown-0
      *  expiry (`processBombs`), which nobody "detonates". Distinct from `actorId` (the applier)
@@ -547,14 +546,14 @@ export type CombatEvent =
           effect: ControlEffect;
           round: number;
       } & ReactiveStamp)
-    /** Ship-kit Wave 3 (Task 7, Laika): a caster's ability actually reduced a victim's shield
+    /** A caster's ability actually reduced a victim's shield
      *  pool via `stripShieldPct` (playerTurn.ts) — EITHER the I6 (Lodolite) purge-coupled 100%
-     *  strip, OR the standalone PR9(b) `type:'shield-strip'` ability (APEX/Laika/Malvex).
+     *  strip, OR a standalone `type:'shield-strip'` ability (APEX/Laika/Malvex).
      *  Emitted ONLY when the pool was > 0 immediately before the strip (a strip attempt against
      *  an already-empty pool removes nothing and is suppressed) — mirrors `purge-performed`'s
      *  0-removed suppression. `casterId` = the stripping actor; `targetId` = the victim whose
      *  shield was reduced; `pct` = the percentage of the CURRENT pool removed (the same `pct`
-     *  argument passed to `stripShieldPct` — 100 for the I6 branch, `ab.config.pct` for PR9(b)).
+     *  argument passed to `stripShieldPct` — 100 for the purge-coupled branch, `ab.config.pct` otherwise).
      *  The `on-own-shield-strip` listener (triggers.ts) filters `casterId === ownerId`. */
     | ({
           type: 'shield-stripped';
@@ -563,7 +562,7 @@ export type CombatEvent =
           round: number;
           pct: number;
       } & ReactiveStamp)
-    /** Ship-kit Wave 3 (Task 9, Hemlock/ledger #49): Corrosion SPREAD at the end of a round. The
+    /** Corrosion SPREAD (Hemlock) at the end of a round. The
      *  engine's end-of-round Toxic Overflow mechanic (engine.ts) emits this for each unit that held
      *  Toxic Overflow AND ≥1 stack of Corrosion: it inflicted Corrosion I (3 turns) on that unit's
      *  adjacent allies and removed its Toxic Overflow. `sourceId` = the unit that held Toxic
@@ -578,7 +577,7 @@ export type CombatEvent =
           affectedIds: string[];
           round: number;
       } & ReactiveStamp)
-    /** A victim's shield pool was fully depleted by a DIRECT hit (SP-F F2, AEGIS). Emitted from
+    /** A victim's shield pool was fully depleted by a DIRECT hit (AEGIS). Emitted from
      *  the shared `applyVictimDamage` immediately after the shield-drain line, ONLY when the pool
      *  was > 0 immediately before this hit's absorb and reaches exactly 0 after it, AND the hit
      *  is direct (`byDirectDamage`) — a DoT TICK that zeroes a lingering shield (`byDirectDamage:
@@ -616,7 +615,7 @@ export type CombatEvent =
       } & ReactiveStamp)
     /** A target's HP fraction changed. Emitted on TWO distinct paths with intended
      *  granularity asymmetry:
-     *   - Tank-side (Phase 4c PR 3, LIVE): once per HP-INTAKE EVENT inside
+     *   - Tank-side: once per HP-INTAKE EVENT inside
      *     `applyIncomingToTarget` — i.e. per enemy attack (aggregate shield-first drain)
      *     AND per tank turn-start DoT batch (the emission covers both deliberately,
      *     since in-game "when HP drops below N%" includes DoT damage). `oldPct`/`newPct`
@@ -694,7 +693,7 @@ export type CombatEvent =
      *  `reactive-damage-performed`/`reactive-heal-performed` log-only contract). Two
      *  display-only consumers: `buildCombatLog` attaches it to the turn view-model, and
      *  `simulateDPS`'s emit-only collector turn-weights it into the DPS summary's buffed-stat
-     *  average (SP-2). Aggregating it for DISPLAY is fine. What would be a bug is subscribing a
+     *  average. Aggregating it for DISPLAY is fine. What would be a bug is subscribing a
      *  combat listener to it, or letting a consumer feed anything back into combat state — the
      *  log-only contract is about influence, not about arithmetic. `stats` reflects the same
      *  `effectiveStatsOf(statusEngine, selfBuffLookup, actor)` fold every other live-stat read
@@ -791,7 +790,7 @@ export type CombatEvent =
      *  authoritative for the actors it names — the assembler prefers it over accumulation — so
      *  removal is reflected without needing a name-carrying event on every removal seam.
      *
-     *  `simulateDPS` reads the same event for the DPS calculator's per-round chips (SP-2), filtered to
+     *  `simulateDPS` reads the same event for the DPS calculator's per-round chips, filtered to
      *  the focus actor and the REAL enemy roster — the vestigial dummy also emits here, but it keys its
      *  debuffs under the `__enemy__` sentinel rather than its actor id, so its lists are always empty. */
     | {
@@ -804,11 +803,11 @@ export type CombatEvent =
     /** Emitted when a player actor is attacked. `targetId` is the attacked actor;
      *  `attackerId` is the attacker. `didCrit` is the individual hit's crit outcome
      *  (present only when that hit critted). Emitted once PER HIT of the enemy's
-     *  fired damage ability (Phase 4c PR 1), after the aggregate shield-first drain
+     *  fired damage ability, after the aggregate shield-first drain
      *  so all events observe the same post-drain HP/shield state. A manual flat enemy
      *  or a noCrit damage ability falls back to one event per attack turn (the pre-4c
      *  contract). DoT ticks, bomb detonations, and accumulators never emit it — only
-     *  direct weapon hits. The tank-side `hp-changed` event (PR 3) is per-HP-intake-event
+     *  direct weapon hits. The tank-side `hp-changed` event is per-HP-intake-event
      *  (attacks AND DoT batches), so a 3-hit attack emits 3 `attacked` but a single
      *  `hp-changed`; the granularity asymmetry is intended. */
     | {
@@ -817,26 +816,24 @@ export type CombatEvent =
           attackerId: string;
           round: number;
           didCrit?: boolean;
-          /** D-PR16: direct damage this SUB-ATTACK dealt to this victim (multi-hit full-walk epic,
-           *  PR2 — previously the per-TURN aggregate, repeated identically on every per-hit event).
+          /** Direct damage this SUB-ATTACK dealt to this victim — NOT the per-TURN aggregate.
            *  Present only when a damage aggregate is in scope. Tenacity's >25%-max-HP filter reads
            *  this, and it needs ONE hit's damage rather than the cast's. */
           damage?: number;
-          /** G PR1: true when the victim was the directly-targeted (primary) target of the
-           *  attack, false/absent for splash/covered AoE victims. Today the sole emit is the
-           *  focus victim (`tgt`) → always true; positional per-victim emission (future) sets
-           *  false for covered cells. Stalwart's counter gates on this. */
+          /** True when the victim was the directly-targeted (primary) target of the
+           *  attack, false/absent for splash/covered AoE victims. The non-positional emit only
+           *  ever sees the focus victim, so it is always true there; `emitPerVictimAttacked`
+           *  sets it false for covered cells. Stalwart's counter gates on this. */
           isPrimaryTarget?: boolean;
-          /** G PR2: true when this hit actually reduced the victim's shield pool
+          /** True when this hit actually reduced the victim's shield pool
            *  (absorbed > 0). Sourced from the shield-first drain at the emit
            *  (shieldBefore > 0 && hpDamage < damage && !barriered && !converted). Nyxen's counter
            *  gates on this. False/absent when no shield was present, the hit fully
            *  penetrated to HP, a Barrier blocked it (shield untouched), or Shield Converter
            *  converted the hit (shield gained, not drained). */
           shieldWasHit?: boolean;
-          /** The 0-based sub-attack of the ATTACKER's cast that produced this hit (multi-hit
-           *  full-walk epic, PR4). PR2 already emits one `attacked` per (sub-attack, victim); this
-           *  names which sub-attack, so a victim-side once-per-attack guard can reset between the
+          /** The 0-based sub-attack of the ATTACKER's cast that produced this hit. The engine emits
+           *  one `attacked` per (sub-attack, victim); this names which sub-attack, so a victim-side once-per-attack guard can reset between the
            *  attacker's consecutive attacks instead of collapsing all N into one. ALWAYS present
            *  on a real `attacked` event, positional or not: `emitAttacked` stamps
            *  `subAttackIndex ?? hitIndex` unconditionally on every path, falling back to the

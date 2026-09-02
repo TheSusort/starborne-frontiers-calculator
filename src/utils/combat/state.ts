@@ -14,7 +14,7 @@ export interface ActorDamage {
     corrosion: number;
     inferno: number;
     detonation: number;
-    /** SP-E: absolute-per-tick generic DoT channel (Voron/Orel damage-transform, Acidic Decay
+    /** Absolute-per-tick generic DoT channel (Voron/Orel damage-transform, Acidic Decay
      *  family). Mirrors corrosion/inferno — an enemy-turn DoT-tick channel attributed to the
      *  entry's applier. */
     generic: number;
@@ -56,7 +56,7 @@ export function emptyActorHealing(): ActorHealing {
 }
 
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
- *  `sourceId` is the applier (per-actor attribution — Task 4): inferno ticks resolve the
+ *  `sourceId` is the applier (per-actor attribution): inferno ticks resolve the
  *  applier's current-round effective attack/dotMult/affinityMult, and the damage attributes
  *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage). */
 export interface ActiveDoTStack {
@@ -64,7 +64,7 @@ export interface ActiveDoTStack {
     tier: number;
     remainingRounds: number;
     sourceId: string;
-    /** SP-E generic DoT (Voron/Orel damage-transform): absolute damage per tick, independent
+    /** Generic DoT (Voron/Orel damage-transform): absolute damage per tick, independent
      *  of stats/HP. Set only on 'generic'-type entries; corrosion/inferno compute from stats. */
     perTickAmount?: number;
     /**
@@ -84,9 +84,9 @@ export interface ActiveDoTStack {
      * tick identically on both axes, which is what `?? perTickAmount` downstream means.
      */
     perTickPreMitigation?: number;
-    /** SP-E: named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
+    /** Named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
     family?: string;
-    /** SP-E: survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */
+    /** Survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */
     unremovable?: boolean;
 }
 
@@ -95,7 +95,7 @@ export interface PendingBomb {
     damagePerStack: number;
     stacks: number;
     tier: number;
-    /** The applier (per-actor attribution — Task 4). */
+    /** The applier (per-actor attribution). */
     sourceId: string;
     /** Affinity multiplier snapshotted at application from the applier's affinity matchup,
      *  so the burst on detonation uses the APPLIER's affinity, not the focus actor's. */
@@ -114,7 +114,7 @@ export interface PendingAccumulator {
     roundsRemaining: number;
     pct: number;
     accumulated: number;
-    /** The applier (per-actor attribution — Task 4); the burst lands in this actor's
+    /** The applier (per-actor attribution); the burst lands in this actor's
      *  detonation channel. The accumulation INPUT gathers all players' direct damage. */
     sourceId: string;
 }
@@ -125,31 +125,31 @@ export interface ActorStats {
     critDamage: number;
     defensePenetration: number;
     /** Fraction of the target's shield pool bypassed before absorption (0–100 range,
-     *  matches defensePenetration units). Read at the damage-apply site in later tasks.
-     *  Static — no buff folding; defaults to 0 for all existing actors and fixtures. */
+     *  matches defensePenetration units). Read at the damage-apply site as `shieldAbsorb`'s
+     *  `penPct`, on DIRECT hits only. Static — no buff folding; defaults to 0. */
     shieldPenetration: number;
     defence: number;
     hp: number;
     speed: number;
-    /** Live debuff-landing stat. Optional — undefined treated as 0. Buff-fold + dynamic landing land in A2. */
+    /** Live debuff-landing stat. Optional — undefined treated as 0 by effectiveStatsOf;
+     *  `liveDebuffLandingChance` defaults a missing base to 200 instead. */
     hacking?: number;
-    /** Live debuff-resist stat. Optional — undefined treated as 0 by effectiveStatsOf. Buff-fold + dynamic landing land in A2. */
+    /** Live debuff-resist stat. Optional — undefined treated as 0 by effectiveStatsOf;
+     *  `liveDebuffLandingChance` defaults a missing base to 100 instead. */
     security?: number;
 }
 
 /**
- * A combat participant. Phase 1: exactly two actors — the attacker (acts every
- * turn) and the enemy dummy (speed 0, never acts; carries the DoT containers
- * that used to be loop-locals in runSinglePass). Phase 2 makes team ships and
- * the enemy real actors.
+ * A combat participant. Team ships and enemy attackers are real actors alongside the focus
+ * attacker; each carries its own DoT containers.
  */
 export interface CombatActor {
     id: string;
     side: 'player' | 'enemy';
-    /** Dispatch role in the Phase 2 turn loop. */
+    /** Dispatch role in the turn loop. */
     kind: 'attacker' | 'team' | 'enemy';
     stats: ActorStats;
-    /** Remaining HP. Phase 1: meaningful for the enemy only (pool − cumulative damage, floored at 0 for HP%-derivation; the sim keeps hitting the dead dummy). */
+    /** Remaining HP (pool − cumulative damage, floored at 0 for HP%-derivation). */
     currentHp: number;
     /** Absorption pool (healing mode): additive, capped at max HP, drains before HP. */
     shieldPool: number;
@@ -160,7 +160,7 @@ export interface CombatActor {
     chargeCount: number;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
-    /** SP-E: generic (absolute per-tick) DoT entries — Voron/Orel transform, Acidic Decay family. */
+    /** Generic (absolute per-tick) DoT entries — Voron/Orel transform, Acidic Decay family. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     pendingAccumulators: PendingAccumulator[];
@@ -182,9 +182,9 @@ export interface CombatActor {
      *  site in engine.ts (§4.5 Akula exception) — if true, the victim is never recorded into
      *  turnStasisHitVictims and stasisBreakPending is never set. */
     doesntBreakStasis?: boolean;
-    /** RAW affinity of this actor (positional plumbing — set at construction, not yet consumed
-     *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
-     *  for per-victim affinity re-resolution. Absent → treated as neutral downstream. */
+    /** RAW affinity of this actor, set at construction. The positional damage calculator's
+     *  `defenseProfileOf(victim)` reads it for per-victim affinity re-resolution.
+     *  Absent → treated as neutral downstream. */
     affinity?: AffinityName;
     // Unlike the optional plumbing flags above (doesntBreakStasis/affinity/…),
     // the next two always carry a defined value: createActor seeds them on every actor, so they
@@ -273,8 +273,7 @@ export const MAX_SELECTION_TICKS = 10000;
 /**
  * Turn-meter selection per docs/combat-system.md section 1: tick every actor's
  * meter by its speed until someone reaches TURN_METER_THRESHOLD; highest meter
- * acts. Phase 1 degenerates to "attacker acts every round" (enemy speed 0) — the
- * scaffolding exists so Phase 2 only has to add actors, not restructure the loop.
+ * acts. With a single speed > 0 actor it degenerates to "that actor acts every round".
  *
  * Callers must include at least one actor with speed > 0; otherwise no actor's
  * meter ever advances. The MAX_SELECTION_TICKS cap converts that all-zero-speed
@@ -302,7 +301,7 @@ export function selectNextActor(actors: CombatActor[]): CombatActor {
 }
 
 /**
- * Phase 2 turn order: each game round every living actor acts exactly once,
+ * Turn order: each game round every living actor acts exactly once,
  * sorted by speed DESC, then by the game's tiebreak chain — board position, then side
  * (see `orderByTurnPriority`). Input order is only consulted between two actors equal on all
  * three, i.e. two position-less actors on the same side (DPS/healing-mode fixtures), where the
@@ -325,10 +324,9 @@ export function buildTurnQueue(actors: CombatActor[]): CombatActor[] {
  * position, so this fully decides every intra-team tie; a cross-team tie (both sides hold the
  * mirrored cell) falls through to the side rank below.
  *
- * A position-less actor (a bare enemy attacker in DPS/healing mode; historically the DPS dummy
- * sink, deleted in SP-4c-2d) ranks LAST, so it never displaces a positioned actor. When NO actor
- * in a tie group has a position the ranks are all equal and ordering falls through to side +
- * input order exactly as before.
+ * A position-less actor (a bare enemy attacker in DPS/healing mode) ranks LAST, so it never
+ * displaces a positioned actor. When NO actor in a tie group has a position the ranks are all
+ * equal and ordering falls through to side + input order.
  */
 export function positionTurnRank(position?: Position): number {
     if (!position) return Number.POSITIVE_INFINITY;
@@ -364,7 +362,7 @@ export function orderByTurnPriority<
 }
 
 /**
- * Pick the next actor to act by CURRENT effective speed (dynamic-speed turn order, Task 2).
+ * Pick the next actor to act by CURRENT effective speed (dynamic-speed turn order).
  *
  * Side-agnostic and pure: among `actors` with `pendingOf(id) > 0`, returns the one with the
  * highest effective speed (per the `effectiveSpeedOf` callback), tiebroken by board position then
@@ -375,7 +373,7 @@ export function orderByTurnPriority<
  * Filtering is stable so input order is preserved into the comparator.
  *
  * Effective speed is read live via the callback (NOT `actor.stats.speed`), so a Speed Up/Down
- * applied mid-combat changes the ordering. This helper is UNWIRED in Task 2 — Task 3 calls it.
+ * applied mid-combat changes the ordering. The engine's round loop drives every turn through it.
  */
 export function selectNextBySpeed(
     actors: CombatActor[],

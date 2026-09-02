@@ -30,9 +30,8 @@ import { victimOwnEnemyFamilies } from './triggers';
 //     must stay in the turn loop (it cannot re-resolve them here). `hp` IS folded
 //     (hp * (1 + hpBuff/100)); `crit` is still UNCAPPED (consumer caps it).
 //
-// Both share the arithmetic in calculateBuffTotals (buffTotals.ts). See the A1b
-// plan's "Design decisions" for the full rationale. (A2 extends this module with
-// the hacking/security fold pipeline.)
+// Both share the arithmetic in calculateBuffTotals (buffTotals.ts). The
+// hacking/security fold pipeline lives here too — see `liveDebuffLandingChance`.
 // ---------------------------------------------------------------------------
 
 export interface EffectiveStats {
@@ -49,8 +48,8 @@ export interface EffectiveStats {
      *  in-fight HP changes track via currentHp, not the base stat. */
     hp: number;
     speed: number;
-    hacking: number; // base + hackingBuff (flat-additive); fold wired in A2
-    security: number; // base + securityBuff (flat-additive); fold wired in A2
+    hacking: number; // base + hackingBuff (flat-additive)
+    security: number; // base + securityBuff (flat-additive)
 }
 
 /**
@@ -109,7 +108,7 @@ export function foldActorBuffTotals(
     // channel already has one (`victimOwnEnemyFamilies` on the outgoing pair,
     // `toEnemyModifiers` on defense/incomingDamage, `victimOwnEnemyHealModifiers` on the heal
     // pair), so projecting any of them here would DOUBLE-COUNT — and
-    // `effectiveStatsOf(...).attack`/`.defence` alone are read at ~20 sites in engine.ts, where a
+    // `effectiveStatsOf(...).attack`/`.defence` are read all over engine.ts, where a
     // silent doubling would be near-impossible to attribute.
     //
     // SHADOWED, NOT SUMMED. The locked rule is highest tier wins per named family REGARDLESS of
@@ -245,7 +244,7 @@ export function effectiveOutgoingStatsOf(
  *   effSec     = security + securityBuff        // NO affinity on security
  *   chance     = clamp(effHacking - effSec, 0, 100) / 100
  *
- * This is the SINGLE landing-chance producer (A-sweep A.2): self-sufficient for base-less
+ * This is the SINGLE landing-chance producer: self-sufficient for base-less
  * actors. A missing hacking base defaults to 200 and a missing security base to 100 — the
  * values the old static formula (dpsSimulator) baked — so no caller needs a base-presence
  * ternary. The fold is reproduced directly via foldActorBuffTotals (NOT effectiveStatsOf,
