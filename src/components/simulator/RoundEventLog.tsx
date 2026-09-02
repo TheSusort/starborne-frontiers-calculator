@@ -75,15 +75,20 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
 const targetOutcome = (t: CombatLogTarget): string => {
     if (t.didHit === false) return 'miss';
     const parts: string[] = [];
-    if (t.amount !== undefined) parts.push(fmt(t.amount));
+    // ONE normalized number drives both the display and the "did anything land" test. `fmt`
+    // rounds, so gating on the raw `t.amount` let a fractional 0.3 HP render as a bare, unexplained
+    // `0` — the very row this clause exists to remove. Whatever the reader sees as zero is what
+    // gets the reason.
+    const shown = t.amount !== undefined ? Math.round(t.amount) : undefined;
+    if (shown !== undefined) parts.push(fmt(shown));
     const notes: string[] = [];
     if (t.didCrit) notes.push('crit');
     if (t.overshield !== undefined) {
-        if (t.amount === 0) notes.push('pool full');
+        if (shown === 0) notes.push('pool full');
         notes.push(`${fmt(t.overshield)} clipped`);
     }
     if (t.overheal !== undefined) {
-        if (t.amount === 0) notes.push('full HP');
+        if (shown === 0) notes.push('full HP');
         notes.push(`${fmt(t.overheal)} overhealed`);
     }
     if (notes.length > 0) parts.push(`(${notes.join(', ')})`);

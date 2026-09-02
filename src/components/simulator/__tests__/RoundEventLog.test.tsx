@@ -524,6 +524,51 @@ describe('RoundEventLog', () => {
         ).toBeInTheDocument();
     });
 
+    // CodeRabbit on #456: `fmt` rounds, so the reason clause has to be gated on the DISPLAYED
+    // number. A repair that lands a fractional 0.3 HP renders as "0" while `amount === 0` is
+    // false — which reproduced the exact bare, unexplained `0` the clause exists to remove.
+    // Reachable: heal and shield amounts are `basis × pct/100 × modifiers`, i.e. fractional.
+
+    it('gates the repair reason clause on the DISPLAYED amount, not the raw one', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 0.3, overheal: 5200 }, 'heal')}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova heals → Graphite: 0 \(full HP, 5,200 overhealed\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('gates the shield reason clause on the DISPLAYED amount too', () => {
+        render(
+            <RoundEventLog
+                round={wasteRound(
+                    { targetId: 'graphite', amount: 0.4, overshield: 8400 },
+                    'shield'
+                )}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova shields → Graphite: 0 \(pool full, 8,400 clipped\)/)
+        ).toBeInTheDocument();
+    });
+
+    it('keeps the reason clause OFF once the displayed amount rounds to something', () => {
+        // 0.6 rounds to 1 — something landed, so the row is self-explanatory without a reason.
+        render(
+            <RoundEventLog
+                round={wasteRound({ targetId: 'graphite', amount: 0.6, overheal: 5200 }, 'heal')}
+                roster={roster}
+            />
+        );
+        expect(
+            screen.getByText(/Nova heals → Graphite: 1 \(5,200 overhealed\)/)
+        ).toBeInTheDocument();
+    });
+
     it('folds crit and waste into ONE parenthetical, in that order', () => {
         render(
             <RoundEventLog
