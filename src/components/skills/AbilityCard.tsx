@@ -151,6 +151,11 @@ const EXTEND_STATUS_KIND_OPTIONS: { value: 'buff' | 'debuff'; label: string }[] 
     { value: 'debuff', label: 'Debuffs' },
 ];
 
+const EXTEND_STATUS_SCOPE_OPTIONS: { value: 'active' | 'inflicted'; label: string }[] = [
+    { value: 'active', label: 'All active statuses' },
+    { value: 'inflicted', label: 'Only statuses from this cast' },
+];
+
 const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
     { value: 'ATTACKER', label: 'Attacker' },
     { value: 'DEFENDER', label: 'Defender' },
@@ -577,12 +582,24 @@ export const AbilityCard: React.FC<Props> = ({
                         />
                         <Input
                             label="Extend by (turns)"
-                            helpLabel="Adds this many turns to every eligible active Buff/Debuff on the recipient when the skill fires. Permanent (stacking) buffs and recurring auras are unaffected."
+                            helpLabel="Adds this many turns to each eligible Buff/Debuff in the chosen scope when the skill fires. Permanent (stacking) buffs and recurring auras are unaffected."
                             type="number"
                             min={1}
                             value={config.turns}
                             onChange={(e) =>
                                 updateConfig({ ...config, turns: toNumber(e.target.value) })
+                            }
+                        />
+                        <Select
+                            label="Scope"
+                            helpLabel="All active grows every standing Buff/Debuff on the recipient; Only from this cast grows just the ones this skill applies this turn, its DoTs included (e.g. Asphyxiator's newly applied Debuff on a critical hit)."
+                            value={config.scope ?? 'active'}
+                            options={EXTEND_STATUS_SCOPE_OPTIONS}
+                            onChange={(value) =>
+                                updateConfig({
+                                    ...config,
+                                    scope: value as 'active' | 'inflicted',
+                                })
                             }
                         />
                     </div>

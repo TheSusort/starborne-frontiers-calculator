@@ -1854,14 +1854,26 @@ function abilitiesFromText(
         // matching Ripper's explicit "All allies extend..." semantics and letting the runtime's
         // existing allyRoster + supportRecipients pattern-scoping apply. A DEBUFF-kind
         // extension's no-subject fallback stays 'enemy' (Sokol, unchanged: a single hit target).
+        // An INFLICTED-scope extension (Asphyxiator) names no scope word at all — its object is
+        // "the debuffs this cast inflicted", which spans every enemy the cast landed one on, not
+        // just the anchor. Owner ruling 2026-09-02: a crit on the main target extends the
+        // adjacent enemies' freshly applied debuffs too. So it takes the cast's whole hit
+        // footprint, which is what 'all-enemies' resolves to at the seam (aoeVictimIds).
         const extendTarget: AbilityTarget = /\ball\s+allies\b/i.test(extendSubjectPrefix)
             ? 'all-allies'
             : /\ball\s+(?:hit\s+)?enemies\b/i.test(extendSubjectPrefix)
               ? 'all-enemies'
-              : extendStatus.statusKind === 'buff'
-                ? 'all-allies'
-                : 'enemy';
-        const extendCritGated = /\bcritical\s+hit\s+occurs\b/i.test(extendSentence);
+              : extendStatus.scope === 'inflicted'
+                ? 'all-enemies'
+                : extendStatus.statusKind === 'buff'
+                  ? 'all-allies'
+                  : 'enemy';
+        // Two corpus wordings for the same self-crit gate: Lev's "if a critical hit occurs" and
+        // Asphyxiator's "applies a Debuff with a Critical hit". Both mean THIS cast crit, which
+        // is what the live-derivable 'self-crit' condition reads (ctx.roundCrit).
+        const extendCritGated =
+            /\bcritical\s+hit\s+occurs\b/i.test(extendSentence) ||
+            /\bwith\s+a\s+critical\s+hit\b/i.test(extendSentence);
         const extendStatusPos = text.search(/extend/i);
         out.push({
             ability: {
@@ -1875,6 +1887,7 @@ function abilitiesFromText(
                     statusKind: extendStatus.statusKind,
                     turns: extendStatus.turns,
                     ...(extendStatus.buffName ? { buffName: extendStatus.buffName } : {}),
+                    ...(extendStatus.scope ? { scope: extendStatus.scope } : {}),
                 },
                 autoFilled: true,
             },

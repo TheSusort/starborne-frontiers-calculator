@@ -1322,6 +1322,37 @@ describe('parseExtendStatus', () => {
         expect(parseExtendStatus('extends damage over time effects by 1 turn')).toBeNull();
     });
 
+    // Asphyxiator's refit passive. Unlike Sokol/Ripper/Lev — which grow every status already
+    // standing on the target — this one grows only what the cast just inflicted, so it carries
+    // scope 'inflicted' (the same axis extend-dot uses for Valerian's twin wording).
+    it("parses Asphyxiator's 'the newly applied Debuff is extended' as inflicted-scope", () => {
+        expect(
+            parseExtendStatus(
+                'After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.'
+            )
+        ).toEqual({ turns: 1, statusKind: 'debuff', scope: 'inflicted' });
+    });
+
+    it('leaves the standing-status extends unscoped (Sokol/Ripper/Lev keep extending everything)', () => {
+        expect(
+            parseExtendStatus('extends active <unit-aid>Debuffs</unit-aid> by 1 turn')?.scope
+        ).toBeUndefined();
+        expect(
+            parseExtendStatus('all hit enemies have their debuffs extended by 1 turn')?.scope
+        ).toBeUndefined();
+    });
+
+    // Valerian's crit-POWER-chance wording is parseCritPowerExtend's (it builds an extend-dot with
+    // its own chance gate); this detector must not also claim it and emit a second, always-on
+    // ability for the same clause.
+    it("does NOT claim Valerian's crit-power-chance extension", () => {
+        expect(
+            parseExtendStatus(
+                'After inflicting <unit-skill>Corrosion</unit-skill> with a Critical hit, the duration of the newly applied <unit-skill>Corrosion</unit-skill> is extended by 1 turn, with the extension chance equal to the Critical Power.'
+            )
+        ).toBeNull();
+    });
+
     it('returns null for absent/empty text', () => {
         expect(parseExtendStatus('')).toBeNull();
         expect(parseExtendStatus(null)).toBeNull();

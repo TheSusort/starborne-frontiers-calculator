@@ -872,6 +872,13 @@ export type AbilityConfig =
            *  ("extends Stealth by 1 turn"). Absent → extend EVERY eligible timed status of
            *  `statusKind`, which is what Sokol/Ripper/Lev do. */
           buffName?: string;
+          /** Asphyxiator: 'inflicted' extends ONLY the statuses THIS cast just applied
+           *  ("the newly applied Debuff is extended by 1 turn") — a status already standing
+           *  from an earlier round is left alone. Absent → extend every eligible standing
+           *  status, which is what Sokol/Ripper/Lev do. Same axis as `extend-dot`'s `scope`,
+           *  and an inflicted-scope debuff extension covers the cast's DoT applications too:
+           *  the game counts a DoT as one of the debuffs it inflicted. */
+          scope?: 'active' | 'inflicted';
       }
     | { type: 'detonate-dot'; dotType: DoTType; powerPct: number }
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
