@@ -100,9 +100,9 @@ export function foldActorBuffTotals(
     const scheduled = calculateBuffTotals(toSimBuffs(scheduledSelfBuffs));
     const timed = calculateBuffTotals(toSimBuffs(timedEffects));
     // #398 — THIRD SOURCE: this actor's OWN per-victim ENEMY store, i.e. the debuffs the opposing
-    // side applied TO it. Until this existed, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
-    // `Hacking Down` and `Security Down` (17 corpus ships) landed in that store, displayed, ticked
-    // down and changed NOTHING, because the only two sources here were self-sided.
+    // side applied TO it. Without it, `Crit Rate Down`, `Crit Power Down`, `Speed Down`,
+    // `Hacking Down` and `Security Down` land in that store, display, tick down and change
+    // NOTHING, because the other two sources here are both self-sided.
     //
     // FIVE CHANNELS ONLY (`FOLD_SHADOW_CHANNELS`), and the narrowness is the whole safety
     // argument: those five are the ones that had NO enemy-store reader anywhere. Every other
@@ -153,7 +153,7 @@ export function effectiveStatsOf(
     const t = foldActorBuffTotals(statusEngine, selfBuffLookup, actor.id);
     const s = actor.stats;
     return {
-        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
+        attack: s.attack * (1 + t.attackBuff / 100) + t.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
         defence: s.defence * (1 + t.defenceBuff / 100),
         crit: s.crit + t.critBuff,
         critDamage: s.critDamage + t.critDamageBuff,
@@ -347,7 +347,7 @@ export function effectiveDamageStatsOf(args: {
     };
 
     return {
-        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute-units, D-PR10)
+        attack: base.attack * (1 + totals.attackBuff / 100) + totals.attackFlatBuff, // base × (1+%) + attackFlatBuff (absolute units)
         defence: base.defence * (1 + totals.defenceBuff / 100),
         crit: base.crit + totals.critBuff,
         critDamage: base.critDamage + totals.critDamageBuff,

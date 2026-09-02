@@ -24,10 +24,10 @@ const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): st
  * Why a display sort rather than reordering the engine's emissions: the log renders events in
  * emission order, and for a POSITIONAL cast the engine deliberately defers its
  * `ability-performed` until AFTER the per-victim apply (engine.ts `emitDeferredAbilityPerformed`),
- * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. (Since the
- * multi-hit full-walk epic, PR2, there is one such event per SUB-ATTACK rather than one per cast —
- * a `hits: N` skill produces N attack rows, all carrying the same sticky skill tag. The deferral,
- * and therefore this sort, is unchanged.) That is why the attack line landed last, under its own
+ * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. (There is
+ * one such event per SUB-ATTACK, not one per cast — a `hits: N` skill produces N attack rows, all
+ * carrying the same sticky skill tag; the deferral, and therefore this sort, applies to each.)
+ * That is why the attack line landed last, under its own
  * consequences:
  *
  *     Butcher: charge 0→1
@@ -287,7 +287,7 @@ function createBuildContext(
                 trigger.reactions.push(entry);
             } else if (triggerTurn) {
                 // The stamped turn EXISTS but has produced no non-reactive entry yet, so there is
-                // nothing to nest under. This is the `start-of-turn` grant window (SP-G G2 drains
+                // nothing to nest under. This is the `start-of-turn` grant window (the drain runs
                 // buff/shield/heal grants BEFORE the acting owner casts — the SHIELD gear set's
                 // 4%-max-HP pool, Fortifying Shroud's Defense Up): the effect genuinely belongs to
                 // THIS actor's turn. Attach it as a top-level entry of that turn rather than
@@ -345,8 +345,8 @@ function createBuildContext(
             // event and was NOT a miss (buff/heal/utility-only cast). Remove it from the current
             // turn's entries if present (the only container an on-turn attack entry lands in).
             //
-            // WHY THAT IS THE ONLY CONTAINER (asked in review of PR6 — `attachEntry` has three
-            // arms, and the `.reactions[]` arm is not swept here). `attachEntry` routes to
+            // WHY THAT IS THE ONLY CONTAINER — `attachEntry` has three arms, and the
+            // `.reactions[]` arm is not swept here. `attachEntry` routes to
             // `routeReaction` — the arm that would bury this entry inside some other entry's
             // `.reactions[]` — if and only if `ctx.currentStamp` is set, and `currentStamp` is
             // read off the DISPATCHED EVENT's own `duringTurnOf` (dispatch loop, below). The type
@@ -379,7 +379,7 @@ function createBuildContext(
             // silently discard that nested reaction along with it, so a non-empty `.reactions[]`
             // keeps the (now target-less) parent row so its children stay visible in the log.
             //
-            // UNNAMEABLE TARGET (multi-hit full-walk epic, PR6) overrides that reprieve. When the
+            // UNNAMEABLE TARGET overrides that reprieve. When the
             // ability named a target OUTSIDE the roster, keeping the row is not a trade worth
             // making: `roster` is the only id→name map the renderer has, so the parent renders as
             // an attack on nobody. The reactions are re-parented in its place (spliced INTO the
@@ -389,9 +389,9 @@ function createBuildContext(
             //
             // Roster membership is the right discriminator because it is precisely the question
             // the log layer has to answer, and the only id the engine produces outside the roster
-            // is its vestigial `enemy` sink (engine.ts:1756) — the actor a cast binds when it has
+            // is its vestigial `enemy` sink — the actor a cast binds when it has
             // no positioned victim, carrying no `position` and never appearing in battleSimulator's
-            // roster (built from placed ships only, battleSimulator.ts:1127). What it EXCLUDES: any
+            // roster (built from placed ships only). What it EXCLUDES: any
             // row that collected a target (a real hit always emits `attacked`, so the arm is
             // unreachable for it), and any miss row (the branch above returns first, having
             // synthesized a target). Event cardinality is untouched — a `hits: N` cast still emits
@@ -491,7 +491,7 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         ctx.openTurn(e.actorId);
     },
 
-    // Task 6c: decorates the current turn with its live modelled stats — creates NO entry.
+    // Decorates the current turn with its live modelled stats — creates NO entry.
     'stats-snapshot': (e, ctx) => {
         if (ctx.currentTurn && ctx.currentTurn.actorId === e.actorId) {
             ctx.currentTurn.statsSnapshot = e.stats;
@@ -720,9 +720,9 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         // its recipient, which made an ally-only support kit invisible to any actor-scoped
         // reader. Falls back to the receiver when no granter is carried (self-grant).
         //
-        // Giving this entry a non-empty `targets` puts it into setHp's reverse fallback scan for
-        // the first time (previously `targets: []` made it structurally invisible there).
-        // Currently harmless because in playerTurn.ts the buff-grant loop runs BEFORE
+        // This entry's non-empty `targets` puts it into setHp's reverse fallback scan (a
+        // `targets: []` entry is structurally invisible there).
+        // Harmless because in playerTurn.ts the buff-grant loop runs BEFORE
         // shield-applied/heal-performed, so those more-recent entries win the reverse scan first —
         // but reordering those emissions would silently let a buff entry's target get stamped with
         // a stale resultingHpPct instead.

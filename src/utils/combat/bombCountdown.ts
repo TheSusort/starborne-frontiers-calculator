@@ -2,7 +2,7 @@ import type { CombatEventBus } from './events';
 import type { CombatActor } from './state';
 
 /**
- * SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
+ * Lingshe's charged skill: "reduces all Bombs on the enemy targets by N turn(s), Bombs
  * reduced to 0 turns by this skill will detonate." Decrements EVERY pending bomb on `victim` by
  * `turns`; any bomb reaching <= 0 detonates IMMEDIATELY using the EXACT `processBombs` burst
  * formula (engine.ts) — stacks * damagePerStack * affinityMult * (1 + detonationDamageModifier

@@ -18,7 +18,7 @@ function isReactive(ability: Ability): boolean {
 }
 
 /** Buff/debuff names an ability grants, including 'buff' config's optional additionalBuffs
- *  (D-PR16 multi-grant). Empty for every other AbilityConfig variant. */
+ *  (multi-grant). Empty for every other AbilityConfig variant. */
 function grantedBuffNames(config: AbilityConfig): string[] {
     if (config.type === 'buff') {
         return [config.buffName, ...(config.additionalBuffs?.map((b) => b.buffName) ?? [])];

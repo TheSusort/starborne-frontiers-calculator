@@ -57,16 +57,12 @@ export const HIT_MITIGATION_DOT_ROUNDS = 3;
  * DOES carry a turn count is written into the same `selfMaps` this read walks, but with no
  * `payload` (statusEngine's scheduled `upsertBuff`), and `timedAbilityStatuses` skips payload-less
  * entries — whereas `removeSelfBuffByName` deletes by family key regardless of payload and so could
- * have spent it. A scheduled TIMED Hit Mitigation is therefore inert today although it was
- * previously consumed correctly.
+ * have spent it. A scheduled TIMED Hit Mitigation is therefore inert.
  *
- * RE-GROUNDED (task-0 scout, at `7f8922cd`): the OLD REACHABILITY ARGUMENT here used to read "no
- * production path reaches it — `battleSimulator` passes `selfBuffs: []` on both runs that supply
- * `enemyAttackers`, and the only caller pairing a non-empty `selfBuffs` with `enemyAttackers` is the
- * healing calculator's engine adapter, whose picker emits no `skillSource`/`skillDuration`". That
- * leaned on `enemyAttackers` distinguishing callers, which SP-4b-2a/SP-4b-2b ended: EVERY caller now
- * supplies a roster, so the qualifier narrowed nothing. The conclusion still holds, but on a premise
- * that never depended on `enemyAttackers` at all: `upsertBuff` — what `sourceFired` calls for every
+ * WHY IT IS UNREACHABLE — and NOT for the reason it looks like. A reachability argument phrased
+ * over which callers supply `enemyAttackers` proves nothing: EVERY caller supplies a roster, so
+ * that qualifier narrows nothing. The real premise never involved `enemyAttackers` at all:
+ * `upsertBuff` — what `sourceFired` calls for every
  * entry in the SCHEDULED `selfBuffs`/`enemyDebuffs` input, manual picker picks and auto-filled
  * `SelectedGameBuff`s alike, on every caller — writes a `BuffState` with no `payload` field, full
  * stop (see its `map.set(familyKey, {...})` literal: buffName/turnsRemaining/tier/appliedSeq/

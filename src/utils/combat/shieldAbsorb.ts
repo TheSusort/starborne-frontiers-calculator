@@ -1,5 +1,5 @@
 /**
- * Damage-kind aware shield absorption (Shield System H1, Task 3).
+ * Damage-kind aware shield absorption.
  *
  * Locked game rules (spec 2026-06-25):
  * - Direct hit: shieldEligible = D × (1 − pen/100); absorbed = min(pool, eligible); hp = D − absorbed.

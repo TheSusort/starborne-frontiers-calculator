@@ -396,7 +396,7 @@ export function buildScenarioBattle(
         }
         case 'enemy':
             // Exact geometric mirror: selectTargets works in the acting side's own frame
-            // (selectTargets.ts:9) and rowScanOrder is side-agnostic, so every cell keeps its
+            // (see `selectTargets`) and rowScanOrder is side-agnostic, so every cell keeps its
             // meaning. The subject's allies and opponents are physically unchanged.
             return {
                 playerTeam: enemyFillers,

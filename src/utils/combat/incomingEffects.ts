@@ -110,7 +110,7 @@ export function withLiveAllyScopedOwners(
     });
 }
 
-/** True when an incoming condition is satisfied by the hit context. Exported (SP-E) so the
+/** True when an incoming condition is satisfied by the hit context. Exported so the
  *  engine's applyVictimDamage transform hook can gate a 'transform-incoming-to-dot' ability's
  *  `condition` the same way incomingReductionForHit/incomingBlockForIntake do internally. */
 export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): boolean {
@@ -143,7 +143,7 @@ export function conditionMet(cond: IncomingCondition, ctx: IncomingHitContext): 
 }
 
 /**
- * Total incoming %-reduction for one hit (D-PR3 composition):
+ * Total incoming %-reduction for one hit:
  *   max(applicable crit-family entries) + sum(applicable non-crit-family entries).
  * `scope` must match the hit: 'dot' entries apply only when ctx.dotType is set; 'direct'
  * entries only when it is not. Returns 0 when nothing applies.
@@ -160,7 +160,7 @@ export function incomingReductionForHit(
         const { scope, condition, pct, critFamily, hpScaling } = a.config;
         if ((scope === 'dot') !== isDot) continue;
         if (!conditionMet(condition, ctx)) continue;
-        // Epic PR12 (C): hpScaling REPLACES the flat pct with a continuous HP-proportional
+        // hpScaling REPLACES the flat pct with a continuous HP-proportional
         // value (Tormenter) — perUnit per missing-HP-point, capped.
         const effectivePct = hpScaling
             ? Math.min(hpScaling.cap, hpScaling.perUnit * (100 - ctx.selfHpPct))

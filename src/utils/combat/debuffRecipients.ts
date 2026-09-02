@@ -3,10 +3,9 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
 
 /**
  * Which actors a direct enemy-debuff clause lands on, given the ability's `target` and a RESOLVED
- * anchor. Extracted verbatim from playerTurn.ts's cast-time ternary (multi-hit full-walk epic,
- * PR8 Task 1) so the cast-time path and the per-sub-attack path cannot drift — PR8 calls this
- * once per cast for sub-attack 0 and again per later sub-attack, with THAT sub-attack's live
- * anchor and footprint.
+ * anchor. The ONE place this is decided, so the cast-time path and the per-sub-attack path cannot
+ * drift — the per-sub-attack path calls it once per cast for sub-attack 0 and again per later
+ * sub-attack, with THAT sub-attack's live anchor and footprint.
  *
  * `undefined` in the result means "resolve to the turn's own bound victim" — the non-positional
  * single-target answer, where the clause carries no victim id of its own and the caller lands it on
@@ -15,7 +14,7 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
  * inventing a stand-in there would record a debuff on a target that does not exist.
  *
  * #343: this used to be called "the dummy sink", after the immortal placeholder enemy actor that
- * `undefined` resolved to before SP-4c-2d (#339) deleted it. The MECHANISM is unchanged and still
+ * `undefined` resolved to before #339 deleted it. The MECHANISM is unchanged and still
  * live — a non-positional single-target clause still routes through `undefined` — but the actor it
  * was named for is gone, so the name misled about what the thing IS while the behaviour it
  * described stayed correct. Nothing here changes; only the vocabulary. Keeping past-tense
@@ -27,7 +26,7 @@ import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityT
  * @param anchorId          the resolved victim id this clause hangs off — the cast's `targetId` at
  *                          cast time, or the sub-attack's own re-resolved anchor.
  * @param aoeVictimIds      the footprint to fan `all-enemies` over. Cast time passes the cast's
- *                          splash footprint; PR8's per-sub-attack path passes the victims THAT
+ *                          splash footprint; the per-sub-attack path passes the victims THAT
  *                          sub-attack actually struck, which is what makes overkill retargeting
  *                          correct for free.
  * @param positionalLanding `deferAbilityPerformedToEngine` — true when the engine resolves this

@@ -52,9 +52,8 @@ export interface Finding {
 }
 
 /** Which of the engine's three actor paths runs the subject. `playerTeam[0]` becomes the
- *  `'attacker'` focus by ARRAY INDEX (battleSimulator.ts:842), `playerTeam[1..3]` become `'team'`
- *  walked actors, and the enemy side is `'enemy'` — three distinct code paths for the same kit
- *  (state.ts:133). */
+ *  `'attacker'` focus by ARRAY INDEX (in `battleSimulator`), `playerTeam[1..3]` become `'team'`
+ *  walked actors, and the enemy side is `'enemy'` — three distinct code paths for the same kit. */
 export type Placement = 'focus' | 'team' | 'enemy';
 
 export const PLACEMENTS: readonly Placement[] = ['focus', 'team', 'enemy'] as const;

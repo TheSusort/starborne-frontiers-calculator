@@ -61,9 +61,9 @@ export function diffFingerprints(
  *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
  *  `attack`.
  *
- *  ONE handler is no longer among the eight: since the multi-hit full-walk epic the
- *  `ability-performed` handler calls `ctx.currentSkillTag()` instead, which LATCHES the tag for
- *  the rest of the cast so all N of a multi-hit skill's attack rows read as the same named skill.
+ *  ONE handler is not among those: the `ability-performed` handler calls `ctx.currentSkillTag()`
+ *  instead, which LATCHES the tag for the rest of the cast so all N of a multi-hit skill's attack
+ *  rows read as the same named skill.
  *  That does not change the outcome described above — `currentSkillTag` still consumes
  *  `pendingSkill` on its first call, so a handler that ran earlier has already cleared it and the
  *  attack still lands bare (verified: the Malvex snapshot is unmoved). Only the mechanism differs:
@@ -107,7 +107,7 @@ export function fingerprintActorTokens(result: BattleResult, actorId: string): s
 }
 
 /**
- * Consumer-facing differential entry point (Task 10 calls this). Fingerprints `shipName` in
+ * Consumer-facing differential entry point. Fingerprints `shipName` in
  * each already-run `BattleResult` — via its OWN actorId in that result, since a ship's actorId
  * in a composition run need not match its solo-run actorId (roster-assigned) — and diffs them.
  *

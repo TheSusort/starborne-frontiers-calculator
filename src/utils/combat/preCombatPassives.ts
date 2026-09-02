@@ -95,7 +95,7 @@ export function applyPreCombatShipPassives(plans: PreCombatPlanLike[]): AppliedP
                     continue;
                 }
 
-                // SP-4e follow-up (whole-branch review, FIX 1): `'lowest-hp-ally'` cannot be
+                // `'lowest-hp-ally'` cannot be
                 // resolved honestly here. This pass runs pre-fight, BEFORE actor/roster
                 // construction — nothing has taken damage yet, so there is no currentHp/maxHp
                 // view to rank allies against, and `PreFightStatBlock` (this pass's only stat

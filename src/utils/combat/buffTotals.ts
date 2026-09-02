@@ -249,10 +249,10 @@ export const SHADOW_CHANNELS = [
 export type ShadowChannel = (typeof SHADOW_CHANNELS)[number];
 
 /** #398: the channels `foldActorBuffTotals` (status mode) projects from the actor's OWN per-victim
- *  ENEMY store. EXACTLY the five that previously had no enemy-store reader — every other channel
- *  already has one (`victimOwnEnemyFamilies`, `toEnemyModifiers`, `victimOwnEnemyHealModifiers`),
- *  so projecting one of those here would DOUBLE-COUNT; `effectiveStatsOf(...).attack` and
- *  `.defence` alone are read at ~20 sites in engine.ts.
+ *  ENEMY store. EXACTLY the five with no enemy-store reader of their own — every other channel
+ *  has one (`victimOwnEnemyFamilies`, `toEnemyModifiers`, `victimOwnEnemyHealModifiers`),
+ *  so projecting one of those here would DOUBLE-COUNT, and `effectiveStatsOf(...).attack` /
+ *  `.defence` are read all over engine.ts.
  *
  *  `hp` is deliberately absent. It is the sixth channel the #396 audit named dead, but no
  *  `HP Down`/`Max HP Down` family exists anywhere in `docs/ship-skills.csv`, so there is no
