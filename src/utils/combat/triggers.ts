@@ -2251,10 +2251,10 @@ export function buildActorConditionContext(
         noOpposingVictim: shared.noOpposingVictim,
         // NOT populated here: `adjacentAllyCount` / `enemyAdjacentCount` / `enemyDestroyedCount`.
         // Withholding them leaves a reactive-path condition on those subjects on its manual
-        // `manualCount ?? 1` fallback — byte-identical to the behaviour before the counts went
-        // live on the CAST path (playerTurn.ts), and inert today: every corpus reader of the three
-        // (Centurion, Panguan, Judge) is a cast-time damage or modifier ability. A reactive one
-        // would need `shared` to carry the same three readings from engine.ts's buildTurnArgs.
+        // `manualCount ?? 1` fallback — the CAST path (playerTurn.ts) populates all three, this
+        // one does not. The gap is inert today: every corpus reader of the three (Centurion,
+        // Panguan, Judge) is a cast-time damage or modifier ability. A reactive one would need
+        // `shared` to carry the same three readings from engine.ts's buildTurnArgs.
     });
 }
 

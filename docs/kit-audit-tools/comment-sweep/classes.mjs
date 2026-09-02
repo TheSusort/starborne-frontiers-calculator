@@ -29,7 +29,11 @@ export const CLASSES = {
 
     // Diff justification — argues about the CHANGE rather than describing the code. Policy class 1.
     // `byte-identical` / `zero-churn` are review arguments that mean nothing to a later reader.
-    'diff-justification': /\b(byte-identical|zero[- ]churn|no churn|identical to the pre-)/i,
+    // `/i` matters: `Byte-identical` appears capitalised mid-sentence. And match `churn` broadly
+    // rather than enumerating `zero-churn|no churn` — `golden churn` escaped that alternation.
+    // A hit here is NOT automatically a delete: `churn` also appears in genuine present-tense
+    // stability CONTRACTS ("sorted so entry order can never churn a snapshot"), which are keeps.
+    'diff-justification': /\b(byte-identical|churn|identical to the pre-)/i,
 
     // Counts are stale by construction: nobody updates "four" when they add the fifth.
     'count-enum':

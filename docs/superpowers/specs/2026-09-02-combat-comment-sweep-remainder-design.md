@@ -137,18 +137,36 @@ Never `vitest -u`.
 
 ## Execution
 
-Four parallel implementers, each in its own worktree, each owning a disjoint file set — so no two
-agents ever touch the same file:
+Four parallel implementers in **one** worktree, each owning a disjoint file set — so no two agents
+ever touch the same file. (One tree, not four: file ownership is disjoint, so a conflict is
+impossible, and it avoids four `npm ci` installs. The rule that matters — never run a *reviewer*
+beside an implementer in one tree — still holds: the orchestrator only reads diffs and runs the
+global gates after every implementer has finished.)
 
 | Agent | Files | Blocks |
 | --- | --- | --- |
-| A | `engine.ts` | 438 |
+| A1 | `engine.ts` lines 1–4499 | 149 |
+| A2 | `engine.ts` lines 4500–8999 | 113 |
+| A3 | `engine.ts` lines 9000–13494 | 176 |
 | B | `triggers.ts` | 181 |
 | C | `playerTurn.ts` | 153 |
 | D | `statusEngine.ts` + 17 small files | 46 |
 
-Agent A batches `engine.ts` internally by region (type/construction declarations, round loop,
-apply path) with the oracle after each batch.
+`engine.ts` is 13,494 lines and 438 blocks — too much for one agent's context — so it is split
+into three **line-range** batches. Those three run **sequentially** (same file), while B, C and D
+run in parallel alongside them. Each batch runs the oracle when it finishes.
+
+The line ranges were chosen from the measured block distribution, not guessed: blocks cluster in
+the declaration region (1500–3000) and the tail (10500–13494).
+
+Implementers do **not** run `npm test`, `tsc`, or `lint` — the orchestrator runs those once,
+globally, after all batches land. Implementers do not commit; the orchestrator commits after
+reviewing each diff.
+
+**Pre-sweep baseline.** The full suite is run on clean `origin/main` in a separate throwaway
+worktree *before* the sweep lands, so "no golden moved" and "the suite is green" are measurements
+against a known starting point rather than assumptions. Without it, a red post-sweep suite cannot
+be attributed.
 
 Each agent emits a **per-block verification note** — claim → evidence → action — so the
 orchestrator's diff review is reviewing decisions, not re-deriving them. A reviewer is never run

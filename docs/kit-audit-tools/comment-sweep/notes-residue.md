@@ -369,3 +369,155 @@ fixed as a side effect (`healAmplification.ts:16`, 104 chars). No added line exc
 `printWidth: 100`.
 
 > This file is gitignored — it needs `git add -f` to be committed.
+
+---
+
+## engine.ts 1-8999 diff-justification gap
+
+The one block the residue pass could not cover: `engine.ts` was dirty with a parallel agent's work
+and was **never opened**. Two earlier agents swept `engine.ts` 1-8999 BEFORE the finder's regex was
+fixed, so the `diff-justification` class was invisible to them; a later agent swept 9000+ after the
+fix and left zero. This pass closes the difference. Scope: `engine.ts` lines 1-8999 plus one
+`byte-identical` tail the earlier `triggers.ts` pass left at `:2254`.
+
+**42 instances found — 41 in `engine.ts` (38 finder hits + the 3 case-gap catches below) plus the
+one `triggers.ts:2254` tail. Sorted (a)/(b)/(c) before any edit, per the rule above: engine.ts is
+30 × (a) / 11 × (c) / 0 × (b), and `triggers.ts:2254` is (a) — 31 × (a), 11 × (c), 0 × (b)
+overall.** No instance in these two files was a present-tense determinism contract, so the class
+closes at **zero survivors** — `grep -cE 'byte-identical|zero-churn'` is `0` for both files.
+
+### Three instances the finder's own regex cannot see (report these upstream)
+
+The finder is **case-sensitive** and its churn alternation is literal:
+- `engine.ts:7082` and `engine.ts:7989` write **`Byte-identical`** (capital B) — invisible to
+  `byte-identical`.
+- `engine.ts:2435` writes **`golden churn`** — invisible to `zero-churn|no churn`.
+
+All three were found by re-running the search case-insensitively on a bare `churn`, and all three
+are the same class. **The same case-gap plausibly exists in the files the earlier passes swept** —
+worth a case-insensitive re-scan of `triggers.ts` / `playerTurn.ts` / `statusEngine.ts` / the small
+modules before the sweep is called closed. (One `churn` survives in `triggers.ts:2119` —
+"turning it on would change drain gating and churn every locked golden" — which is a present-tense
+consequence claim about a hypothetical change, not diff justification. Left alone.)
+
+### (c) — present-tense equivalence between two LIVE paths, reworded not deleted
+
+`engine.ts:471` — (c) reworded: conditional-spread property, "every other ship's status object
+omits the key entirely" (was "is byte-identical").
+`engine.ts:476` — (c) reworded: same, for `allyScope`.
+`engine.ts:485` — (c) reworded: same, for `enemyScope`; the "(same rule as factionFilter)" pointer
+kept.
+`engine.ts:1856` — (c) reworded: the **empty-otherwise guarantee** the `perRecipient` axis leans
+on. "**empty otherwise**, which is what keeps every legacy healing result byte-identical" →
+"**empty otherwise** — a run without that flag never books a credit on this axis". This is the
+anchor of a **three-site cross-reference**; `:1896` and `:4051` both point at it, so all three were
+edited as one unit (see below).
+`engine.ts:2359` — (c) reworded: "the gated branch never fires and the legacy binding is used".
+`engine.ts:5771` — (c) reworded: the Barrier hoist. The live claim is that a pure read has no
+sequencing consequences — "a pure read of the victim's active self-buffs — no side effects to
+reorder", replacing "moving it earlier is byte-identical".
+`engine.ts:5993` — (c) reworded: the OUTER 1e-9 guard gates the numeric channels on the chunk
+TOTAL, "so the per-row split never changes those totals". The two-guards contrast (the whole point
+of the block) survives intact.
+`engine.ts:7082` — (c) reworded: "For a single-hit counter (hits === 1) the fold is the identity"
+— the `multiplier * hits` / `hits: 1` fold really is the identity at `hits === 1`, a live property.
+`engine.ts:7977` — (c) reworded: **floating-point associativity**, same class as
+`damageReflection.ts:92` / `victimDamage.ts:247` above. "so `damage` is byte-identical to the
+pre-split fused number" → "so the split introduces no floating-point re-association into `damage`".
+The live rule (the two halves are re-summed in this same left-to-right order) is what makes the
+claim true and is kept verbatim.
+`engine.ts:7989` — (c) reworded: the fast path "returns the same 0 the fold would" — an equivalence
+between the guard and the fold it skips, not a diff claim.
+`engine.ts:8533` — (c) reworded: "the reads below resolve to the same number today" — a live
+equivalence between two current expressions, and the sentence's whole purpose is the *anyway*
+clause (routed through the same accessor so the site cannot drift). Kept.
+
+### (a) — change-vs-past diff justification, tail deleted or restated present-tense
+
+Plain tail deletions, each keeping its live "Absent → X" / "Fully inert when Y" contract:
+`engine.ts:779` (`falls back to assume-met`) · `892` (affinity neutral defaults) · `3234`
+(`Undefined → no gate`) · `3459` · `3466` · `3472` (three per-round accumulator "absent when empty"
+docs) · `4457` (`substitutedDefenceFor` no-op) · `5372` · `5387` (`set only when non-empty` ×2) ·
+`5792` (incoming-block inert) · `6089` (transform-to-DoT inert) · `6350` (Barrier charge no-op) ·
+`6404` (Lifeline inert) · `6618` (reflect inert) · `6628` (pure-direct → fraction 1) · `6959`
+(shield-pen default 0) · `7804` (`Unsupplied → every victim uses hitCrits[h]`) · `7809`
+(`short-circuits to 0`) · `7967` (`Absent → 0`) · `7985` (amp returns 0) · `8998` (conditional
+spread omits the key). **ACTION: (a) deleted ×21.**
+
+Needed more than a snip:
+`engine.ts:1234` — (a) reworded. "so crediting is byte-identical to the pre-grouping single-loop
+behaviour; only the log-facing `emitTicked` granularity changes" → "so the grouping changes only
+the log-facing `emitTicked` granularity, never who gets credited or in what order". The IN ENTRY
+ORDER rule is the live contract and is kept; the restatement makes it say what it guarantees
+instead of what it used to equal.
+`engine.ts:1337` — (a) deleted: "(byte-identical to pre-walk behaviour)" off the
+`TeamActorEngineInput.walk` doc; the with/without-`walk` fork is the live contract and stays.
+`engine.ts:1896` — (a) reworded: "break the byte-identical guarantee above" → "break the
+empty-otherwise guarantee above" (points at the reworded `:1856`).
+`engine.ts:4051` — (a) reworded: "break every byte-identical legacy healing result" → "break that
+guarantee" (the preceding sentence already states it: a legacy single-target run leaves the map
+EMPTY). Also fixed a **pre-existing 103-char line** as a side effect of the rewrap.
+`engine.ts:2311` — (a) deleted: "(goldens stay byte-identical; verified)". The live claim
+("runPlayerTurn reads every stat from the RUNTIME, not the actor — so populating real stats here
+changes no DPS behaviour") stands on its own.
+`engine.ts:2435` — (a) deleted: "→ golden churn" off the heal-crit-gate separation rationale. The
+live reason (drawing from the damage gates would shift a heal-carrying ship's damage-crit schedule)
+is kept. **Not a finder hit** — see the case-gap note above.
+`engine.ts:4405` — (a) deleted, **plus a class-2 census**: "— i.e. every actor in the corpus's
+self-scoped incoming families — so that path is byte-identical" went whole. The BY REFERENCE
+contract is verified (`incomingEffects.test.ts:316-317` asserts `.toBe(list)` identity for both the
+`undefined` and empty-map owner cases), so nothing was traded for an unverified claim; the sentence
+simply ends at the contract.
+`engine.ts:6488` — (a) reworded, following the `lethalHp.ts:78` precedent: "Emitting inline keeps
+listener enqueue timing byte-identical to pre-log behavior" → "so the listener fires at this point
+in the sequence". The LOG-ONLY-twin pointer stays.
+`engine.ts:7632` — (a) deleted: "— byte-identical to I1", which also carried a **dead workstream
+label** (`I1`). The live claim (for the PRIMARY target in a single-enemy fight this ctx is
+IDENTICAL to primaryCtx, delta = 0) is kept.
+`triggers.ts:2254` — (a) reworded, **not** a plain snip. "byte-identical to the behaviour before
+the counts went live on the CAST path (playerTurn.ts)" is diff vocabulary wrapped around a live
+fact — *the cast path populates all three of `adjacentAllyCount`/`enemyAdjacentCount`/
+`enemyDestroyedCount`; this reactive path deliberately does not* — and that asymmetry is what the
+block's last sentence ("A reactive one would need `shared` to carry the same three readings")
+depends on. Restated present-tense: "the CAST path (playerTurn.ts) populates all three, this one
+does not". The named Centurion/Panguan/Judge enumeration is kept on the same
+self-enumerated-and-load-bearing grounds as the `supportRecipients.ts` warning above.
+**ACTION: 9 in `engine.ts` — 5 (a) deleted (`1337`, `2311`, `2435`, `4405`, `7632`) and 4 (a)
+reworded (`1234`, `1896`, `4051`, `6488`) — plus `triggers.ts:2254`, (a) reworded.
+`engine.ts` class-(a) total: 21 plain tail deletions + these 9 = 30. Overall class (a) = 31.**
+
+### Kept — class (b)
+
+**None.** No `byte-identical` in either file was a present-tense determinism promise of the
+`audit/compose.ts:165` / `audit/reproducibility.ts:5` shape, so unlike every other file in this
+sweep the class closes at **0 survivors**, not at a list of keeps.
+
+### Deliberately NOT touched (out of this pass's mandate)
+
+`engine.ts:5991` still reads "(`intakeTotal > 1e-9`, **unchanged**)" and `engine.ts:7627` still
+carries the `I2`-scoped workstream label. Both are policy class 1 and both sit in blocks this pass
+edited, but neither is the `byte-identical`/`churn` class this pass was scoped to, and the earlier
+`engine.ts` passes left them. Flagged here rather than swept.
+
+### Oracle negative control (performed on `engine.ts`)
+
+Both files GREEN first (`engine.ts` 37842 tokens, `triggers.ts` 15121). Then
+`export const __probe = 1;` was appended to `engine.ts`: the oracle reported **RED, exit 1**, naming
+the first divergence at token 37842 (`ExportKeyword :: export`, base 37842 → head 37848 tokens) and
+summarising "1 file(s) RED — code bytes moved." The probe was removed **by text edit** (never
+`git checkout`/`restore` — this work is uncommitted) and the oracle returned
+**2 file(s) GREEN, 0 SKIPPED**.
+
+### Prose repairs made while reading the diff
+
+The oracle is blind to comment content, so the full `git diff` was read. Repaired: the double-`so`
+left by the `:5771` rewrite ("…no side effects to reorder) so the block step…"), and the sentence
+fragment left at `triggers.ts:2255` when the tail was cut ("Inert today:" → "The gap is inert
+today:"). Ragged wraps were re-flowed at `:1234`, `:1337`, `:2311`, `:5792`, `:5993`, `:6628`,
+`:6959`, `:7632`, `:7804`, `:8533` and `triggers.ts:2254`. No stranded parentheses (checked every
+edited parenthetical for balance). **No added line exceeds `printWidth: 100`** — verified by
+measuring every `+` line in the diff, at BYTE length, which over-counts the multi-byte `→`/`—` and
+so is strictly conservative.
+
+Files touched (2, both GREEN, 0 skipped): `src/utils/combat/engine.ts` ·
+`src/utils/combat/triggers.ts`. **Zero code bytes changed in either.**
