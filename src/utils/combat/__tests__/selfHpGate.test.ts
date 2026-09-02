@@ -1,5 +1,5 @@
 /**
- * Self-HP-threshold gate tests (Task 3).
+ * Self-HP-threshold gate tests.
  *
  * Verifies that a self-HP-gated modifier ability fires when the acting actor's
  * HP% is below the configured threshold, and does NOT fire at full HP.

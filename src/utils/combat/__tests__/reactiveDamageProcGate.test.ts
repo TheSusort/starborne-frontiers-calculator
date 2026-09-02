@@ -1,5 +1,5 @@
 /**
- * D-PR4 Task 5: reactive damage branch honors procChance (passesProcChanceGate).
+ * Reactive damage branch honors procChance (passesProcChanceGate).
  *
  * Tests that:
  * (a) A reactive `damage` intent with procChance 0.5 over 10 calls fires ctx.applyReactiveDamage
@@ -8,7 +8,7 @@
  * (b) A reactive `damage` intent without procChance fires ctx.applyReactiveDamage on every call
  *     (pass-through — byte-identical to today).
  *
- * PR4b: the branch now delegates to `ctx.applyReactiveDamage` (mitigated/crit walk) instead of
+ * The branch now delegates to `ctx.applyReactiveDamage` (mitigated/crit walk) instead of
  * the old credit-only `ctx.creditReactiveDamage` — updated to spy on the new delegate. The gate
  * behavior under test (procChance) is UNCHANGED (it runs before either delegate is reached).
  */
@@ -104,7 +104,7 @@ function makeCtx(opts?: {
         recordResisted: () => {},
         procChanceGates: opts?.procChanceGates,
         applyReactiveDamage: opts?.applyReactiveDamage,
-        // SP-4c-2d: the damage branch's no-eventCtx arm routes to the first LIVING opposing actor
+        // The damage branch's no-eventCtx arm routes to the first LIVING opposing actor
         // and, since that rung, NO-OPS on an empty roster instead of falling back to the vestigial
         // `enemy` dummy. Without this delegate every case here would no-op before reaching the
         // proc gate it is about — green, and completely vacuous.

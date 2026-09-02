@@ -1,5 +1,5 @@
 /**
- * SP-4c-2b: a REACTIVE infliction's landing roll is measured against the enemy it is actually
+ * A REACTIVE infliction's landing roll is measured against the enemy it is actually
  * inflicting on — the applier's hacking vs THAT ship's security.
  *
  * THE GAME RULE (owner ruling): "An enemy shoots Flamel. Flamel's passive should inflict Speed Down
@@ -120,7 +120,7 @@ const twoEnemiesOfDifferentSecurity = (): CombatEngineInput['enemyAttackers'] =>
 /**
  * FIX 5 (review wave 1): the SUPPORT-ONLY variant of the kit above — same `on-attacked` inflict, but
  * its cast targets ALLIES and carries no damage ability. This is the shape that blocked the task:
- * such a ship resolves NO victim on its own turn (SP-4c-2b), so it is the only shape that can be hit
+ * such a ship resolves NO victim on its own turn, so it is the only shape that can be hit
  * by a poisoned publication or by the reactive roll being priced against a phantom.
  *
  * `target: 'ally'` + `type: 'heal'` reproduces Flamel/Makoli: a pure supporter whose retaliation
@@ -216,7 +216,7 @@ const input = (): CombatEngineInput => ({
 
 /**
  * The support-only run: same board, same passive, but the focus's cast targets its own allies, so
- * `selectTurnTarget` resolves NO victim for it every turn (SP-4c-2b). `target`/`pattern` are what put
+ * `selectTurnTarget` resolves NO victim for it every turn. `target`/`pattern` are what put
  * it on the ally-side axis — the same knobs `dummyReachability`'s LIVENESS case uses.
  */
 const supportInput = (): CombatEngineInput => ({
@@ -289,7 +289,7 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
     it('THE ACUTE SHAPE: an ally-targeting supporter, which resolves NO cast victim, still retaliates', () => {
         // FIX 5 (review wave 1). Every case above gives the focus a damage kit, so it always resolves
         // a cast victim — which means none of them exercises the shape that BLOCKED this rung: a
-        // support ship whose ally-targeted cast resolves nobody (SP-4c-2b), publishes a landing
+        // support ship whose ally-targeted cast resolves nobody, publishes a landing
         // chance of 0 for that turn, and then retaliates against whoever shot it. That is Flamel and
         // Makoli, and until now its only evidence was a manual log dump. The goldens cannot see it:
         // `realKitFingerprints` records a token SET and Flamel already emits both `debuff` and

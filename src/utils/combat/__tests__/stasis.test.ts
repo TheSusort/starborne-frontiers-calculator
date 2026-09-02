@@ -151,7 +151,7 @@ const offensiveEnemyAt = (
 });
 
 /**
- * SP-4c-1: an inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
+ * An inert SURVIVOR for rosters whose only real enemy is deliberately killed mid-fixture.
  *
  * Several cases here kill their sole enemy on purpose — a 1-HP stasis-bot that must not live to
  * re-apply its debuff. Since SP-4c-1 that kill WIPES the enemy side and ends the match, cutting the
@@ -504,7 +504,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iii) Stasis(2) decrements on skipped 
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
@@ -605,7 +605,7 @@ describe('B2 Task 3 — Stasis turn-skip: (iv) other timed statuses still decrem
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
@@ -776,7 +776,7 @@ describe('B2 Task 3 — Stasis turn-skip: (vi) player stasised by enemy — roun
             pattern: basePattern(),
             teamActors: [teamAttackerAt('player-team', POS_TEAM, 150, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 // Fast enemy at POS_ENEMY_FRONT fires `front` (hits the focus at M4).
@@ -1513,7 +1513,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {
@@ -2180,7 +2180,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             pattern: basePattern(),
             teamActors: [teamAttackerAt('killer', POS_TEAM, 200, 10000)],
             enemyAttackers: [
-                // SP-4c-1: an inert survivor so killing the bot below is not a WIPE (which would
+                // An inert survivor so killing the bot below is not a WIPE (which would
                 // end the match and cut this case short of the rounds it is about).
                 bystanderEnemyAt('bystander', POS_ENEMY_BACK),
                 {

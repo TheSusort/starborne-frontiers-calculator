@@ -417,7 +417,7 @@ describe('support-anchor board', () => {
 });
 
 describe('turn-order invariance — why a placement swap cannot reorder turns', () => {
-    // orderByTurnPriority (state.ts:331) is speed DESC -> positionTurnRank -> player-side-first ->
+    // orderByTurnPriority (state.ts) is speed DESC -> positionTurnRank -> player-side-first ->
     // input order. The side tiebreak WOULD be a confound for the placement-symmetry oracle: it is
     // deterministic, so unioning over seeds cannot suppress it, and 33 of 147 corpus ships tie a
     // filler's base speed. It is unreachable only because positionTurnRank is injective over

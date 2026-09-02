@@ -44,7 +44,7 @@ const TEAM_SKILLS = (): ShipSkills => ({
 });
 
 const baseEngineInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent. 5000 lives on the roster entry's own `stats.defence`
+    // A run needs an opponent. 5000 lives on the roster entry's own `stats.defence`
     // (the fight-wide `enemyDefense` scalar it used to be kept in step with was deleted in
     // SP-4d). Nothing here measures damage — this file taps actor construction — but a
     // non-zero defence means a later damage assertion added to this fixture is not silently

@@ -1,5 +1,5 @@
 /**
- * Phase 3 PR-E — combat-integration tests for the ally-debuff reactive promotions:
+ * PR-E — combat-integration tests for the ally-debuff reactive promotions:
  *   - Oleander (2nd passive): "When an ally inflicts a debuff ... once per ally per round,
  *     grants Repair Over Time II to that Ally" — on-ally-debuff-inflicted, source-scoped,
  *     routed to the inflicting ally via eventCtx.damagedAllyId, capped once per ally per round.
@@ -178,7 +178,7 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
     });
 
     const BASE = (): CombatEngineInput => ({
-        // SP-4b-2b: a real opponent for the allies to debuff. Inert (0 attack) and never dies:
+        // A real opponent for the allies to debuff. Inert (0 attack) and never dies:
         // the whole side deals ≤200 over one round against 500,000 HP.
         enemyAttackers: bareEnemy(),
         attack: 100,
@@ -477,7 +477,7 @@ describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, n
 
 describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN debuffed ally', () => {
     it('repairs the ally the PLAYER just debuffed (a real, placed enemy-side ally), scaled off its OWN max HP', () => {
-        // SP-4b-1: the debuffed ally is now a REAL, placed enemy actor rather than the shared
+        // The debuffed ally is now a REAL, placed enemy actor rather than the shared
         // dummy. This test used to lean on "the player's non-positional debuff always lands on the
         // singular dummy `enemy` actor", which was enemy-side and therefore a same-side ally to
         // enemy-hayyan. The normalization boundary places every actor and synthesizes the focus's

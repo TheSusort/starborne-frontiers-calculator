@@ -1,5 +1,5 @@
 /**
- * #363 (Task 9) — "within the active pattern" is enforced on the AFFECTED-ALLY axis, as a FAMILY.
+ * #363 — "within the active pattern" is enforced on the AFFECTED-ALLY axis, as a FAMILY.
  *
  * Four reactive abilities across three corpus supporters gate on an ally being "within the active
  * pattern", and the parser already marks all four `patternScoped`:
@@ -66,7 +66,7 @@ import type { CombatActor } from '../state';
 import type { Ship } from '../../../types/ship';
 
 // `docs/` is gitignored reference data and a fresh worktree does not have it. Without this guard
-// the file fails to COLLECT rather than reporting a readable reason (realKitFingerprints.test.ts:41).
+// the file fails to COLLECT rather than reporting a readable reason (realKitFingerprints.test.ts).
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
         throw new Error(
@@ -252,7 +252,7 @@ function enqueuedFor(opts: ListenerOpts): Intent[] {
     return enqueued;
 }
 
-/** Every ally in `PLAYER_CELLS` holds Stealth — the Stasis reactive's OTHER gate (Task 8), which
+/** Every ally in `PLAYER_CELLS` holds Stealth — the Stasis reactive's OTHER gate, which
  *  must be satisfied for this task's arms to be about the FOOTPRINT and nothing else. */
 const allStealthed = () => (): string[] => ['Stealth'];
 
@@ -556,7 +556,7 @@ describe('#363 on-ally-shield-destroyed — the affected unit must stand in the 
 //   The enemy fires Line-Range-2 from row M and anchors on the front-most M-row player. M4 is
 //     empty, so that is ally-m3, and the line extends back through M2 and M1 — one attack, three
 //     victims, over two rounds.
-//   Every ally holds Stealth for all 99 turns, satisfying the OTHER gate on this reactive (Task 8)
+//   Every ally holds Stealth for all 99 turns, satisfying the OTHER gate on this reactive
 //     so this board measures the FOOTPRINT and nothing else. All-Stealthed (rather than
 //     some-Stealthed) also keeps the positional stealth filter from moving the enemy's anchor.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════

@@ -171,7 +171,7 @@ function debuffApplied(
 }
 
 // ---------------------------------------------------------------------------
-// D-PR14 Bulwark — Provoke on adjacent-ally damage
+// Bulwark — Provoke on adjacent-ally damage
 // ---------------------------------------------------------------------------
 
 describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
@@ -208,7 +208,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
         // Adjacent ally 'ally-T2' at T2 is the heal target → the enemy hits it → owner at M2 is
         // adjacent → Bulwark fires → Provoke lands on the attacking enemy.
         //
-        // SP-4b-1: the enemy must be PINNED to row T. Every actor is placed now, and `front`
+        // The enemy must be PINNED to row T. Every actor is placed now, and `front`
         // selection scans rows from the caster's own row before taking the front-most column within
         // it (selectTargets) — an unpositioned enemy lands on the middle row, finds the OWNER at M2
         // there, and hits the owner itself, which is not an ALLY hit and wakes nothing. From T1 the
@@ -235,7 +235,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
         // rejects it → no Bulwark Provoke. (Adjacent ally-T2 still present so the geometry is
         // positional, not the all-allies fallback — proving the adjacency gate, not vacuity.)
         //
-        // SP-4b-1: the enemy is pinned to row B for the same reason as the positive case above.
+        // The enemy is pinned to row B for the same reason as the positive case above.
         // Left unplaced it would hit the M2 OWNER instead of the non-adjacent ally, and the
         // expected-zero would hold because no ally was ever hit — a vacuous pass.
         const input = BASE({
@@ -286,7 +286,7 @@ describe('D-PR14 Bulwark (Provoke on adjacent-ally damage)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// D-PR14 Doomsayer — Concentrate Fire on the highest-attack enemy at end of round
+// Doomsayer — Concentrate Fire on the highest-attack enemy at end of round
 // ---------------------------------------------------------------------------
 
 describe('D-PR14 Doomsayer (Concentrate Fire on highest-attack enemy at end of round)', () => {

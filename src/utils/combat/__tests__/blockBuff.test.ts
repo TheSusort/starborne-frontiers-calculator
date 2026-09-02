@@ -8,7 +8,7 @@ import type { RegisteredAbilityStatus } from '../statusEngine';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 2: Block Buff primitive + firing-skill self/ally buff guard.
+// Block Buff primitive + firing-skill self/ally buff guard.
 //
 // "Block Buff" is a control status: a unit carrying it is IMMUNE TO RECEIVING
 // BUFFS — any NEW timed buff application targeting it at the firing-skill seam is
@@ -78,7 +78,7 @@ describe('blockBuffBuffs helpers', () => {
 let idCounter = 0;
 
 const blockBuffEngineBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: the default opponent is the shared INERT one — 0 attack, no skills — which is
+    // The default opponent is the shared INERT one — 0 attack, no skills — which is
     // exactly what the control test needs (an opponent that exists but inflicts no Block Buff).
     // Tests that need the debuff override this with `blockBuffEnemy()`.
     enemyAttackers: bareEnemy(),
@@ -239,7 +239,7 @@ describe('Block Buff — firing-skill self-buff guard (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 3: Block Buff guard at the REACTIVE-buff executor (triggers.ts).
+// Block Buff guard at the REACTIVE-buff executor (triggers.ts).
 //
 // The firing-skill seam (Task 2, playerTurn.ts) covers on-cast buffs. This seam
 // covers reactively-granted buffs that flow through the `cfg.type==='buff'` branch

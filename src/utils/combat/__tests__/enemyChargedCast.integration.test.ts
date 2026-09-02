@@ -1,5 +1,5 @@
 /**
- * on-enemy-charged-cast trigger (Phase 4 Task 1).
+ * on-enemy-charged-cast trigger.
  *
  * Opposing-scoped mirror of on-charged-cast: fires when an ENEMY (opposing-side) actor casts
  * its CHARGED skill (a `skill-fired` event with slot:'charged'). The listener captures the

@@ -1,5 +1,5 @@
 /**
- * Task 6: Thread targetId through runPlayerTurn enemy-side status application.
+ * Thread targetId through runPlayerTurn enemy-side status application.
  *
  * Verifies:
  *  1. When `targetId` is UNDEFINED (default), a timed enemy debuff applied via

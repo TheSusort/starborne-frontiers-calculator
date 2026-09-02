@@ -117,7 +117,7 @@ const counterBase = (
  * Reactive hits (counters included) landing on `victimId`, read off the LOG-ONLY
  * `reactive-damage-performed` row `applyCounterAttack` emits via triggers.ts.
  *
- * SP-4b-1: `perTargetDamage[victim]` can no longer express "no counter landed here". The
+ * `perTargetDamage[victim]` can no longer express "no counter landed here". The
  * normalization boundary places every actor, so an enemy's ordinary cast now resolves positionally
  * onto the focus and books the focus's own row through `emitHit` — a channel the legacy dummy-sink
  * route never wrote. A counter and a plain direct hit are indistinguishable once summed there, so
@@ -451,7 +451,7 @@ describe('G PR2 — Centurion self/adjacent-ally counter (executor level)', () =
     });
 
     it('3 attacked events from DIFFERENT sub-attacks each draw their own counter', () => {
-        // PR6: the half of the guard that DID change. Before the key carried `subAttackIndex`
+        // The half of the guard that DID change. Before the key carried `subAttackIndex`
         // these three collapsed to one, which is what made a 3-hit cast draw a single counter.
         const spy = vi.fn();
         const ctx = makeCounterCtx(spy);

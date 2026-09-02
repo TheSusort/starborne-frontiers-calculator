@@ -1,5 +1,5 @@
 /**
- * Phase 3 PR-G — combat-integration tests for Howler's on-ally-crit cleanse + Blast grant.
+ * PR-G — combat-integration tests for Howler's on-ally-crit cleanse + Blast grant.
  *
  * Howler (2nd/refit passive, docs/ship-skills.csv verbatim): "This Unit cleanses 1 debuff from
  * an ally and grants them 1 stack of Blast when that ally crits an enemy." — the cleanse AND the

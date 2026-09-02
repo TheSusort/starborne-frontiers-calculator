@@ -937,7 +937,7 @@ describe('R10′ — a reversed repair books nothing at all on the healer', () =
     // arms assert the HP half.
     //
     // ⚠️ NOT a full team-symmetric test of the CREDIT MOVE (#362 fix-wave-1 review). The enemy-side
-    // arm's repair runs through `playerTurn.ts`'s `healEventOnly` branch (was `:4266`), which per
+    // arm's repair runs through `playerTurn.ts`'s `healEventOnly` branch (was), which per
     // the design brief credits NOTHING even in the control case — "not an oversight, enemy heals
     // are excluded from the player healing buckets by design" — so there is no gross bucket for a
     // reversal to suppress there in the first place. That arm therefore proves R10′'s HP half

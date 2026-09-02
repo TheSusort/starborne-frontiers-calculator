@@ -355,7 +355,7 @@ describe('Phase 3 — Taunt forces the focus attacker to redirect', () => {
 });
 
 // ============================================================================
-// Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to the provoker.
+// Phase 3 — cast-path Provoke redirects the focus attacker to the provoker.
 //
 // A back-most enemy (M1) casts a Provoke debuff onto the focus attacker via its ACTIVE
 // slot. The focus attacker at M4 selects `front` — which WITHOUT the Provoke resolves to
@@ -424,7 +424,7 @@ describe('Phase 3 (Task 6) — cast-path Provoke redirects the focus attacker to
 });
 
 // ============================================================================
-// Phase 3 (Task 7) — REACTIVE Provoke redirects an enemy attacker to the provoker.
+// Phase 3 — REACTIVE Provoke redirects an enemy attacker to the provoker.
 //
 // This exercises the reactive-debuff branch in triggers.ts (`if (cfg.type === 'debuff')`),
 // NOT the cast path (which the Task-6 test above covers). The reactive trigger used is

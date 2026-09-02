@@ -55,7 +55,7 @@ const bombSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real opponent is now required. This is a DAMAGE fixture (15000 attack, 120%
+    // A real opponent is now required. This is a DAMAGE fixture (15000 attack, 120%
     // active + bomb bursts over 4 rounds) so it takes the 10M-HP form — the 500k default is not a
     // survival guarantee and a mid-sim death would cut the bomb cycle short. 8000 lives on the
     // roster entry's own `stats.defence` (the fight-wide `enemyDefense` scalar it used to be kept

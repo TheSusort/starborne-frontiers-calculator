@@ -107,7 +107,7 @@ function makeCtx(opts?: {
         applyReactiveDamage: opts?.applyReactiveDamage,
         oncePerRoundConsumed: opts?.oncePerRoundConsumed,
         healing: opts?.healing,
-        // SP-4c-2d: the damage branch's no-eventCtx arm routes to the first LIVING opposing actor
+        // The damage branch's no-eventCtx arm routes to the first LIVING opposing actor
         // and, since that rung, NO-OPS on an empty roster instead of falling back to the vestigial
         // `enemy` dummy. Without this delegate the damage cases here would no-op before reaching
         // the once-per-round gate they are about — green, and completely vacuous.

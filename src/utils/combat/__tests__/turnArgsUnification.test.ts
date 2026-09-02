@@ -163,7 +163,7 @@ const playerDealt = (round: RoundData): number => {
 /**
  * A given source actor's dealt damage for one round, read off the per-victim channel.
  *
- * SP-4c-2a: the same positional shift applies to a WALKED-TEAM actor's credit — under a
+ * The same positional shift applies to a WALKED-TEAM actor's credit — under a
  * positional run its direct credit goes through `creditPositionalDirect` (the Echoing Burst
  * gather basis), which does NOT fold into the `teamDamage` display scalar (discovered via
  * standalone repro against the real engine: `teamDamage` reads 0 while `perTargetDealt['team1']`

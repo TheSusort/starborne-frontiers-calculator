@@ -29,9 +29,9 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 /**
  * The focus attacker's own actor id. Both event-cardinality tests below filter on it.
  *
- * SP-4b-2a: a scalar-only `simulateDPS` run now fights a real, positioned enemy (`enemy-1`), and
+ * A scalar-only `simulateDPS` run now fights a real, positioned enemy (`enemy-1`), and
  * an enemy supplied without `shipSkills` gets the engine's synthesized flat-card basic attack
- * (engine.ts:618-638). BASE sets `hp: 30000` on the attacker, so that enemy has a living target
+ * (engine.ts). BASE sets `hp: 30000` on the attacker, so that enemy has a living target
  * and casts once per round, emitting one extra `ability-performed { actorId: 'enemy-1',
  * damage: 0 }` per round (zero damage — the synthesized enemy carries `attack: 0`). That is the
  * OTHER actor's cast; the per-sub-attack counts these tests pin are the FOCUS's, so the collectors
@@ -193,7 +193,7 @@ describe('perHitCrit', () => {
     // Reactive charge-on-crit: +1 charge per crit event, chargeCount 6.
     // The damage ability has 3 hits and crit=100, so critHits=3 every active turn.
     //
-    // PATH NOTE (PR5): this rides the NON-POSITIONAL DPS path (`simulateDPS`), which since PR5
+    // PATH NOTE: this rides the NON-POSITIONAL DPS path (`simulateDPS`), which since PR5
     // emits ONE `ability-performed` per SUB-ATTACK — three events per cast, each carrying
     // `critHits: 1`. The three enqueues per turn are therefore produced by event CARDINALITY, the
     // same way the positional path produces them, and the listener enqueues at most once per

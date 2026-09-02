@@ -21,7 +21,7 @@
  * skill deals NO damage (`multiplier: 0`) in every fixture, matching Sentinel's real kit — she has
  * no charged damage ability at all.
  *
- * SP-4b-2b: the harness used to be the NON-positional "team walk" shape (no `enemyAttackers`), which
+ * The harness used to be the NON-positional "team walk" shape (no `enemyAttackers`), which
  * is now illegal — the normalization boundary requires an opposing roster and auto-places it, so
  * every run here is positional. The two consequences, both handled below: `ENEMY_DEFENSE` moves onto
  * the roster entry's own `stats.defence` (keeping every pinned number identical), and the focus's
@@ -155,7 +155,7 @@ const BASE = (
 ): CombatEngineInput => {
     const { chargedMultiplier = 100, activeMultiplier = 100, ...rest } = overrides;
     return {
-        // SP-4b-2b: a real, positioned opponent. ENEMY_DEFENSE lives on its OWN `stats.defence` —
+        // A real, positioned opponent. ENEMY_DEFENSE lives on its OWN `stats.defence` —
         // that is what keeps the pinned damage numbers identical (the fight-wide `enemyDefense`
         // scalar it used to be kept in step with, always inert on a positional run M6/#11, was
         // deleted in SP-4d). HP is the fixture's own 10M so nothing ever dies.

@@ -2093,7 +2093,7 @@ describe('buildCombatLog', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Task 6c: the LOG-ONLY stats-snapshot event decorates the turn it belongs to
+// The LOG-ONLY stats-snapshot event decorates the turn it belongs to
 // (no entry is created — it is a property on CombatLogTurn, not a CombatLogEntry).
 // ---------------------------------------------------------------------------
 

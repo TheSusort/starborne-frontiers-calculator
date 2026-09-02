@@ -5,7 +5,7 @@ import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
 import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
 // NOTE: do NOT call resetRateGateRng() after setupKeyedTestRng() — reset nulls the keyed
-// provider and restores Math.random, un-seeding the test (rateAccumulator.ts:26-29).
+// provider and restores Math.random, un-seeding the test (rateAccumulator.ts).
 
 const FOCUS_ID = 'attacker';
 
@@ -45,7 +45,7 @@ const selfHealSkills = (): ShipSkills => ({
 });
 
 const base = (): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. This file's subject is `mode` — the run-kind
+    // Every run needs a real opponent. This file's subject is `mode` — the run-kind
     // signal — not the roster, so the roster here is the shared inert 0-attack punching bag.
     // 20 000 total focus damage against 500 000 HP means it survives both rounds, so the run's
     // SHAPE is constant across every mode compared below (a mid-run kill would change it).

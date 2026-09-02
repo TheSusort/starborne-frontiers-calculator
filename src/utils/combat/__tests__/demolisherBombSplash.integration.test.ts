@@ -4,7 +4,7 @@
  * victim excluded), ignoring Defense and never critting. The ability is already parsed (Task
  * C1: `{ type:'damage', multiplier:100, target:'adjacent-enemies', trigger:'on-bomb-detonated',
  * config:{ ignoresDefense:true, noCrit:true } }`) and `bomb-detonated` already carries
- * `victimId` (Task C2). This suite wires the reactive EXECUTION (triggers.ts's `adjacent-
+ * `victimId`. This suite wires the reactive EXECUTION (triggers.ts's `adjacent-
  * enemies` victim resolution + engine.ts's flat-basis/defense-bypass `applyReactiveDamage`).
  *
  * Harness: mirrors perVictimTimedDetonation.integration.test.ts (raw `runCombat`, positional
@@ -309,7 +309,7 @@ describe('Ship-kit W5 Task C3: Demolisher reactive bomb-splash to adjacent enemi
         // adjacentAllyIdsFor(it) resolves to the empty set (no OTHER same-side actor exists) —
         // DPS-inert by construction, not by a special-cased guard.
         //
-        // SP-4b-2b: this used to reach a NON-positional dummy-sink path with NO `enemyAttackers`.
+        // This used to reach a NON-positional dummy-sink path with NO `enemyAttackers`.
         // A roster is now required, and omitting `target`/`pattern` is not enough to stay
         // non-positional — `normalizeCombatRoster` FILLS both. This case therefore used the
         // documented "pressure source" (0 MAX hp) to keep `resolvesPositionalVictim` from finding

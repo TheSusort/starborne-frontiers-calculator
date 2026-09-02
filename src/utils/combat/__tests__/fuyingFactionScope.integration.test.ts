@@ -41,7 +41,7 @@ import type { Ship } from '../../../types/ship';
 
 // `docs/` is gitignored reference data and a fresh worktree does not have it. Without this guard
 // the file fails to COLLECT rather than reporting a readable skip reason — copy the pattern from
-// realKitFingerprints.test.ts:41.
+// realKitFingerprints.test.ts.
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
         throw new Error(
@@ -1104,7 +1104,7 @@ const enemyAuraBoard = (opts: { aura: boolean }): CombatEngineInput => ({
     // available here without ALSO stealthing enemy-fuying, which collides with an unrelated
     // engine quirk (an enemy attacker with BOTH a `pattern` and its own active-slot on-cast
     // ability skips that ability's real effect). `ignoresStealth` is the same escape hatch a
-    // stealth-bypassing ship uses in production (Ship-kit W6) and is orthogonal to the aura this
+    // stealth-bypassing ship uses in production and is orthogonal to the aura this
     // section pins — target SELECTION under Stealth is already exhaustively covered above.
     target: { ...frontTarget(), ignoresStealth: true },
     shipSkills: { slots: [{ slot: 'active', abilities: [basicDamageAbility('focus-basic')] }] },

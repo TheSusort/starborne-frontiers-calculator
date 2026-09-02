@@ -1,5 +1,5 @@
 /**
- * Phase 3 PR-H — combat-integration tests for the NEW `on-own-cleanse` reactive trigger:
+ * PR-H — combat-integration tests for the NEW `on-own-cleanse` reactive trigger:
  *   - Morao (3rd passive): "This Unit repairs 5% of its Max HP every turn and, upon Cleansing a
  *     Debuff, repairs an additional 5% of its Max HP while gaining Defense Up II for 2 turns" —
  *     the "every turn" repair now rides start-of-turn (SP-G G1a, 2026-07-09: detectEveryTurnTrigger
@@ -316,7 +316,7 @@ describe('Morao (enemy-side) — team symmetry: an enemy Morao self-cleanses and
         };
         const { buffsApplied } = runAndCollectBuffs(input);
         const result = runCombat(input);
-        // SP-G G1a: the "every turn" repair now rides start-of-turn, so — team-symmetrically with
+        // The "every turn" repair now rides start-of-turn, so — team-symmetrically with
         // the 'attacker'-side test above — BOTH self-heals fire on the enemy actor too (previously
         // only the on-own-cleanse repair fired here; the base repair was dormant on the enemy side
         // since 'on-cast' never applied to a walked enemy attacker). The basis is 'foe's OWN HP
@@ -586,7 +586,7 @@ describe("Cultivator's on-own-cleanse ally-target heal — cleansedAllyIds routi
             grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
             playerIds: PLAYER_IDS,
             enemyIds: [],
-            // SP-4e Task 2: the reactive heal branch resolves `recipientActor` to decide whose
+            // The reactive heal branch resolves `recipientActor` to decide whose
             // pool to repair (it used to repair only `targetId`). Production resolves every roster
             // id via `allActorsById.get`, so a blanket `() => undefined` here would repair nobody
             // and every consumption assertion below would pass vacuously.

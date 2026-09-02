@@ -144,7 +144,7 @@ const ENEMY_BASE = (pattern: ParsedPattern): CombatEngineInput => ({
 // on the player side and no teamActors. SP-U U5: the enemy takes the round's dealt damage through
 // the shared per-victim funnel, so it records its OWN intake into the per-actor map.
 //
-// SP-4b-2b: this used to pass NO enemy roster at all, which made the singular vestigial `enemy`
+// This used to pass NO enemy roster at all, which made the singular vestigial `enemy`
 // the target (`dpsEnemyTarget`) and the bucket key `'enemy'`. An empty roster is now a validation
 // error, and with any roster present the sink is bypassed entirely — measured: the sink records NO
 // per-actor intake at all. (That measurement was taken against the 0-max-HP "pressure source" shape

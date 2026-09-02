@@ -1,10 +1,10 @@
 /**
- * H2/H3 FOUNDATION (Task 0.1) — a REACTIVE shield grant lands on its actual recipient,
+ * FOUNDATION (Task 0.1) — a REACTIVE shield grant lands on its actual recipient,
  * not just the engine's heal target (the battle-sim focus).
  *
  * Background: the cast path (playerTurn.ts) already routes a shield-cast pool to EACH
  * targeted ally's own actor via `healing.recipientActor(rid)` → `grantShieldToTarget(raw,
- * recipientActor)` (H1 Task 5). The REACTIVE heal/shield executor (triggers.ts) did NOT —
+ * recipientActor)`. The REACTIVE heal/shield executor (triggers.ts) did NOT —
  * it only landed a pool when the recipient WAS the heal target (`rid === healing.targetId`).
  * So a reactive self-shield (or ally-shield) on a NON-focus ship granted NOTHING.
  *

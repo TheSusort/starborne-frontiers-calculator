@@ -5,7 +5,7 @@
  * currentHp/maxHp, caster EXCLUDED. Nothing in the parser emits it yet (Task 3 flips that), so
  * this suite is written from the DEFECT rather than from a shipped kit: every consumer that
  * merely *filters* a roster would fan a single-recipient selector out to every ally, and the
- * skill editor (Task 1, Step 10) makes such an ability constructible today.
+ * skill editor makes such an ability constructible today.
  *
  * Two levels are pinned:
  *   1. `resolveSupportRecipients` — the shared helper every support caller funnels through;
@@ -278,7 +278,7 @@ const lowestHpAllyHeal = (pct: number, trigger: Ability['trigger'] = 'on-cast'):
 
 // ⚠️ A DIRECT-ENGINE test MUST supply the `walk` bundle itself: normalizeTeamActorsToWalked
 // synthesizes NEUTRAL_WALK_STATS with **hp: 1** for a team actor arriving without one, silently
-// discarding a bare `stats.hp` (healingPerRecipientApply.test.ts:57-62).
+// discarding a bare `stats.hp` (healingPerRecipientApply.test.ts).
 const walkedAlly = (id: string, position: Position, hp: number): TeamActorEngineInput => ({
     id,
     speed: 10,
@@ -316,7 +316,7 @@ const passiveSlots = (abilities: Ability[]): ShipSkills => ({
 
 /** Focus healer at M1, two walked allies on-footprint, heal ANCHOR = the HIGHER-HP ally. */
 const HEAL_BASE = (): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. The focus has `attack: 0` and casts only heals,
+    // Every run needs a real opponent. The focus has `attack: 0` and casts only heals,
     // so the inert 500k-HP default never dies and the run shape is unchanged.
     enemyAttackers: bareEnemy(),
     attack: 0,
@@ -345,7 +345,7 @@ const HEAL_BASE = (): CombatEngineInput => ({
     perRecipientHealApply: true,
     position: 'M1',
     target: allyParsedTarget(),
-    // Line-Support-Range-3 @ M1 covers {M1, M2, M3, M4} (resolvePattern.test.ts:91-95), so BOTH
+    // Line-Support-Range-3 @ M1 covers {M1, M2, M3, M4} (resolvePattern.test.ts), so BOTH
     // allies are on-footprint and only the ROUTING rule can distinguish them.
     pattern: parsePattern('Pattern-Line-Support-Range-3'),
     teamActors: [
@@ -449,7 +449,7 @@ describe("SP-4e site A: the on-cast heal route ('recipientsFor')", () => {
         let onFootprint: CombatActor | undefined;
         const result = runCombat({
             ...HEAL_BASE(),
-            // Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
+            // Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts).
             position: 'M3',
             pattern: parsePattern('Pattern-Line-Support-Range-1'),
             // The 80% ally is ON the footprint (M4); the 30% ally is OFF it (M1). A named selector
@@ -762,7 +762,7 @@ describe("SP-4e Task 4: a plain 'ally' heal routes over the caster's support foo
         let caster: CombatActor | undefined;
         const result = runCombat({
             ...HEAL_BASE(),
-            // Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts:83-87).
+            // Line-Support-Range-1 @ M3 covers exactly {M3, M4} (resolvePattern.test.ts).
             position: 'M3',
             pattern: parsePattern('Pattern-Line-Support-Range-1'),
             shipSkills: castSlots([plainAllyHeal(10)]),

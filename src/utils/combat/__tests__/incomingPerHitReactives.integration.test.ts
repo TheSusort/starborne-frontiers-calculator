@@ -22,7 +22,7 @@
  * ADAPTATION NOTE 1 (task-1-brief.md's stated assumption vs. the real event shape): the brief
  * assumed `buff-applied` carried `recipientIds: string[]`. The real payload
  * (src/utils/combat/events.ts) is `{ actorId: string; granterId?: string; buffName: string; ... }`
- * where `actorId` is the single actor that RECEIVED the buff (confirmed by playerTurn.ts:1777's
+ * where `actorId` is the single actor that RECEIVED the buff (confirmed by playerTurn.ts's
  * "buff-applied emits ONCE PER RECIPIENT with the recipient's actorId"). `buffGrantsOf` below
  * filters on `e.actorId === recipientId` instead of `(e.recipientIds ?? []).includes(recipientId)`.
  * The quantity pinned (a per-recipient grant COUNT) and every assertion's expected number are

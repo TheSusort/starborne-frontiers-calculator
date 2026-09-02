@@ -597,7 +597,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
             // repairs every enemy ally each round → the OTHER enemy ally is a non-self
             // recipient. Over 16 casts the accumulator fires → that ally carries the buff.
             // PRESENCE only — this test covers the grant mechanic (correct ally, correct side).
-            // Power Infused Nanobots now grants flat attack = 100% of caster's attack (D-PR10);
+            // Power Infused Nanobots now grants flat attack = 100% of caster's attack;
             // magnitude is covered by the dedicated snapshot test in equipmentAbilities.integration.test.ts.
             const result = simulateBattle(
                 {

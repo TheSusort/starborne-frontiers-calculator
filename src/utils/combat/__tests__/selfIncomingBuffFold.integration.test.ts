@@ -8,7 +8,7 @@
  * After the engine change victimIncomingModifiers reads BOTH stores (enemy-debuff + victim's
  * own self buffs), so an Inc. Damage Down self-buff reduces the landed hit.
  *
- * Harness mirrors incomingReductionEngine.test.ts (D-PR3 Task 6):
+ * Harness mirrors incomingReductionEngine.test.ts:
  *   - healingMode (healTargetId = 'attacker') → positioned enemy roster is built.
  *   - playerVictim: speed 1000 → acts BEFORE the enemy, so the self-buff is up when the enemy hits.
  *   - offensiveEnemy: attack 5000, speed 1, 100% multiplier → 5000 direct damage.
@@ -174,7 +174,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [stealthOnlyActive('focus')] },
-    // SP-4b-1: the focus is pinned to the back of the middle row AND cloaked.
+    // The focus is pinned to the back of the middle row AND cloaked.
     //
     // It used to be off the board entirely, and that is what kept the enemy's targeting on the
     // stealthed victim: `resolvePositionalTarget` drops stealthed cells UNLESS every candidate is

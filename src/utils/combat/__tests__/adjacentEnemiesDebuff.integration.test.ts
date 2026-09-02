@@ -2,7 +2,7 @@
  * Ship-kit Wave 5, Task A3 — engine fan-out for the two enemy-adjacency `AbilityTarget` scopes
  * (`adjacent-enemies` / `target-and-adjacent-enemies`) added in Task A1 and parsed in Task A2
  * (Vindicator Provoke / Out. Damage Down I → `adjacent-enemies`; Asphyxiator Stasis →
- * `target-and-adjacent-enemies`). Prior to this task, engine.ts:211's self-vs-enemy
+ * `target-and-adjacent-enemies`). Prior to this task, engine.ts's self-vs-enemy
  * classification does not list either scope, so both fall through to `self` — the applied
  * status is misregistered as a SELF buff on the caster instead of an enemy debuff on the board
  * neighbours. This file drives the fix through a real positional battle (`simulateBattle`) using
@@ -181,8 +181,8 @@ describe('Ship-kit W5 Task A3: team symmetry — an ENEMY-side caster fans out o
 /**
  * Control-path smoke test: buildShipAbilities additively emits a `type:'control'` ability
  * alongside a named control-effect debuff (Stasis/Provoke/…, CONTROL_EFFECT_DISPLAY_NAME —
- * buildShipAbilities.ts:1817) whose `target` is RE-DERIVED from the named twin's
- * `detectEnemyGrantScope` (buildShipAbilities.ts:1811-1819, Task A2) — so a real Vindicator
+ * buildShipAbilities.ts) whose `target` is RE-DERIVED from the named twin's
+ * `detectEnemyGrantScope` (buildShipAbilities.ts, Task A2) — so a real Vindicator
  * Provoke / Asphyxiator Stasis cast carries a control ability with `target:'adjacent-enemies'` /
  * `'target-and-adjacent-enemies'` too. playerTurn.ts's control-applied loop only special-cases
  * `ctrl.target === 'enemy'` (Block-Debuff/resisted-suppression) — a non-'enemy' string just
@@ -243,23 +243,23 @@ describe('Ship-kit W5 Task A3: control-path smoke test (real control-effect buff
 /**
  * Single-entry roster: `bareEnemy({ stats: { hp: 1_000_000_000 } })` gives the run exactly one
  * real, targetable opposing actor, and `normalizeCombatRoster`'s `withTargeting`
- * (normalizeRoster.ts:86-92) fills BOTH targeting axes for every run through the boundary — so
- * this run IS positional. The `positional` gate (engine.ts:9113, `const positional =`) — and its
- * `willApplyPositionally` prediction (engine.ts:9030, `const willApplyPositionally =`) — calls `resolvesPositionalVictim`, which IS satisfied here: the
- * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts:45).
+ * (normalizeRoster.ts) fills BOTH targeting axes for every run through the boundary — so
+ * this run IS positional. The `positional` gate (engine.ts, `const positional =`) — and its
+ * `willApplyPositionally` prediction (engine.ts, `const willApplyPositionally =`) — calls `resolvesPositionalVictim`, which IS satisfied here: the
+ * roster's one member has max hp > 0 (`isTargetableRosterMember`, positionalBinding.ts).
  * `targetId` IS threaded onto the turn args, as `BARE_ENEMY_ID` — not left unset, and not the
  * vestigial `enemy` dummy.
  *
  * Both mechanics still land the same way they did before this correction, but for a different,
  * purely structural reason: `target-and-adjacent-enemies` resolves to exactly one recipient (the
- * anchor itself) because `adjacentEnemyIdsFor` (engine.ts:7170, `adjacentEnemyIdsFor: (anchorId:
+ * anchor itself) because `adjacentEnemyIdsFor` (engine.ts, `adjacentEnemyIdsFor: (anchorId:
  * string): string[] =>`, always supplied on a resolved
  * anchor) finds no OTHER roster member to return as a neighbour — not because of any
  * non-positional "no anchor" fallback (the anchor IS defined). `adjacent-enemies` applies to
  * nobody for the same reason (an empty neighbour set), not because there is no primary-target
  * anchor to resolve neighbours from.
  *
- * SP-4b-2b: this block used to exercise the DPS calculator's real NON-positional single-opponent
+ * This block used to exercise the DPS calculator's real NON-positional single-opponent
  * shape — no `enemyAttackers` at all, `targetId` never threaded, landing via the legacy
  * `targetId === undefined && !positionalLanding → [undefined]` fallback. An empty roster is now a
  * validation error at the boundary, and the fixture's replacement roster (one targetable member)

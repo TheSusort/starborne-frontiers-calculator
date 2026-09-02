@@ -599,7 +599,7 @@ describe('healing mode — heal consumption + heal-performed', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 7: HoT (Repair Over Time) ticking with applier attribution.
+// HoT (Repair Over Time) ticking with applier attribution.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('healing mode — HoT (Repair Over Time) ticking', () => {
     const teamWalk = (
@@ -876,7 +876,7 @@ describe('healing mode — HoT (Repair Over Time) ticking', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 8: enemy attackers (manual + basics walk) and target damage intake.
+// Enemy attackers (manual + basics walk) and target damage intake.
 // ─────────────────────────────────────────────────────────────────────────────
 describe('healing mode — enemy attackers and target intake', () => {
     type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -1021,7 +1021,7 @@ describe('healing mode — enemy attackers and target intake', () => {
                 healTargetId: 't1',
                 mode: 'healing',
                 // t1 walk defence 0 so intake = enemy attack (no reduction): exactly 3000/round.
-                // SP-4b-1: `t1` claims the front-middle cell EXPLICITLY. The normalization
+                // `t1` claims the front-middle cell EXPLICITLY. The normalization
                 // boundary places every actor and synthesizes the enemy's `front enemy` targeting,
                 // so the victim is chosen by board geometry — and on its index-derived default (M3)
                 // `t1` sits behind the auto-placed FOCUS at the M4 anchor, which would soak the
@@ -1132,7 +1132,7 @@ describe('healing mode — enemy attackers and target intake', () => {
         // R1: 5000 − 3000 = 2000. R2: 2000 − 3000 → 0 (destroyed round 2).
         expect(result.healing!.destroyedRound).toBe(2);
         const dpsRounds = result.rounds;
-        // SP-4c-1: TWO rounds, not four. The focus healer is the heal target AND the entire player
+        // TWO rounds, not four. The focus healer is the heal target AND the entire player
         // side here (no teamActors), so its round-2 death wipes that side and the match ends on
         // that turn. The window asked for 4; the fight lasted 2. What this case still guarantees —
         // and what it was really written to guarantee — is that the death round assembles a sane
@@ -1313,7 +1313,7 @@ describe('healing mode — enemy attackers and target intake', () => {
     });
 
     // ── Test 8: DPS-mode inertness re-check ───────────────────────────────────
-    // SP-4b-2b: an EMPTY roster is no longer expressible (the normalization boundary rejects it),
+    // An EMPTY roster is no longer expressible (the normalization boundary rejects it),
     // so "no pressure" is now expressed with BASE's inert 0-attack `bareEnemy()`. The assertion is
     // unchanged and still non-vacuous: a real opponent that cannot deal damage must produce no
     // intake and no shield absorption, and a 0-attack hit is SKIPPED rather than emitted as a 0.
@@ -2091,7 +2091,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
                         },
                     },
                 ],
-                // SP-4b-1: `t1` claims the front-middle cell EXPLICITLY. The normalization
+                // `t1` claims the front-middle cell EXPLICITLY. The normalization
                 // boundary places every actor and synthesizes the enemy's `front enemy` targeting,
                 // so the victim is chosen by board geometry — and on its index-derived default (M3)
                 // `t1` sits behind the auto-placed FOCUS at the M4 anchor, which would soak the
@@ -2276,7 +2276,7 @@ describe('healing — Task 9: reactive trigger integration', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 4: cast-rider damage-dealt basis in the player-turn heal block.
+// Cast-rider damage-dealt basis in the player-turn heal block.
 // Active/charged casts that carry a damage ability AND a leech heal/shield use
 // 'damage-dealt' basis → the rider draws from THIS turn's own cast damage. The
 // slot-partition guard keeps passive-slot damage-dealt (standing leech, engine hook)
@@ -2368,7 +2368,7 @@ describe('healing mode — cast-rider damage-dealt basis', () => {
 
     // ── Test 4: passive-slot damage-dealt → engine credit hook owns it ───────
     // The cast path skips the standing leech (no double-count); the engine's creditDamage
-    // hook (Task 6) procs it against the active's direct damage: 5000 × 0.20 = 1000.
+    // hook procs it against the active's direct damage: 5000 × 0.20 = 1000.
     it('passive-slot damage-dealt heal: engine credit hook produces the leech', () => {
         idCounter = 0;
         const result = runCombat(
@@ -2685,7 +2685,7 @@ describe('healing — emission scoping: enemy crit does not trigger player on-al
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 7 (Phase 4b): Cheat Death intercept — survive at 1 HP, once per combat.
+// Task 7: Cheat Death intercept — survive at 1 HP, once per combat.
 // The heal target is the focus actor ('attacker') so its always-active/'recurring'
 // Cheat Death self-buff surfaces in snapshot('attacker').activeSelfBuffs. Cheat Death
 // is seeded as a no-payload recurring top-level selfBuff (the always-active source list);
@@ -2809,7 +2809,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(cheated[0]).toMatchObject({ actorId: 'attacker', round: 1 });
     });
 
-    // ── Yazid follow-on (Task 8): when Cheat Death activates → 60% repair + Barrier ──
+    // ── Yazid follow-on: when Cheat Death activates → 60% repair + Barrier ──
     // Yazid's REFIT-ACTIVE (R4) passive grants Cheat Death AND, "once per battle, when
     // Cheat Death activates, repairs itself for 60% of its Max HP and gains Barrier for 1
     // turn." Built via buildShipAbilities so the on-cheat-death-activated heal/buff abilities
@@ -2843,7 +2843,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 // Cheat Death is granted by the parsed kit (recurring self-buff ability),
                 // NOT seeded as a top-level input selfBuff.
                 selfBuffs: [],
-                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // An inert SURVIVING ally. The heal target dies for real in R2 (Cheat
                 // Death already spent in R1), and alone it IS the whole player side — that wipe
                 // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
                 // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
@@ -2920,7 +2920,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [],
-                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // An inert SURVIVING ally. The heal target dies for real in R2 (Cheat
                 // Death already spent in R1), and alone it IS the whole player side — that wipe
                 // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
                 // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
@@ -3064,7 +3064,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
         expect(rounds[1].activeSelfBuffs.map((b) => b.buffName)).not.toContain('Fortify');
     });
 
-    // ── Wipe (Task 3): a finite PASSIVE-slot self-buff is wiped AND not re-seeded ──
+    // ── Wipe: a finite PASSIVE-slot self-buff is wiped AND not re-seeded ──
     // A finite-duration passive-slot buff ("gains X for N turns") is seeded ONCE at combat
     // start as a TIMED status (Task 2 reclassification — no longer a permanent aura) and
     // decremented normally. When Cheat Death fires on the R1 lethal hit, clearRemovable wipes
@@ -3078,7 +3078,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
     // (a R1 buff-applied + present in R1's healTargetBuffs at turnsRemaining 9) AND is gone +
     // not re-applied after (no second buff-applied; absent from R2+ healTargetBuffs). The
     // recurring Cheat Death buff survives the wipe (it is always-active, never timed); an
-    // UNREMOVABLE_STATUSES member would also survive (Task 4) — only the timed buff is wiped.
+    // UNREMOVABLE_STATUSES member would also survive — only the timed buff is wiped.
     it('wipes a finite PASSIVE-slot self-buff on Cheat Death and does NOT re-seed it', () => {
         idCounter = 0;
         const bus = createEventBus();
@@ -3105,7 +3105,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [], // granted by the parsed kit, NOT seeded as a top-level input buff
-                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // An inert SURVIVING ally. The heal target dies for real in R2 (Cheat
                 // Death already spent in R1), and alone it IS the whole player side — that wipe
                 // would end the match at R2 and rob this case of the R3 row its no-re-seed claim
                 // needs. 0 attack, no skills, speed 1 → RNG-stream-inert, acts last, draws nothing.
@@ -3197,7 +3197,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
                 mode: 'healing',
                 bus,
                 selfBuffs: [cheatDeathBuff()],
-                // SP-4c-1: an inert SURVIVING ally. The heal target dies for real in R2 (Cheat
+                // An inert SURVIVING ally. The heal target dies for real in R2 (Cheat
                 // Death already spent in R1), and alone it IS the whole player side — that wipe
                 // would end the match at R2 and rob this case of the R3 row its "chip stays
                 // hidden" claim needs. 0 attack, no skills, speed 1 → inert and last in order.
@@ -3381,7 +3381,7 @@ describe('healing mode — Cheat Death intercept (Phase 4b)', () => {
     });
 });
 
-// ── Task 9: Salvation on-destroyed ally-heal (Phase 4b) ───────────────────────
+// ── Task 9: Salvation on-destroyed ally-heal ───────────────────────
 // Salvation's refit-active (R4 / 3rd) passive: "When this Unit is destroyed it repairs 80%
 // of its max HP to all allies." Built via buildShipAbilities so the on-destroyed all-allies
 // heal comes straight from the parser. When Salvation (the heal target) is destroyed, the

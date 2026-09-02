@@ -52,7 +52,7 @@ const ishaSkills = (): ShipSkills => ({
 });
 
 const baseInput = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real opponent. DAMAGE fixture (15000 attack x 120% over 2 rounds) so it takes
+    // A real opponent. DAMAGE fixture (15000 attack x 120% over 2 rounds) so it takes
     // the 10M-HP form; 8000 lives on the roster entry's own stats.defence (the fight-wide
     // `enemyDefense` scalar it used to be kept in step with was deleted in SP-4d). Nothing here
     // reads a damage magnitude — the observable is the `buff-applied` count for the gated grant.

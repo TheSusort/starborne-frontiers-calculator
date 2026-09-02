@@ -345,7 +345,7 @@ describe('Hermes Everliving Regeneration — an AoE footprint is still ONE attac
  * Regression lock — an ALLY-target rider on on-ally-crit (the shape of Howler's Blast grant /
  * Sentinel's ally repair) fires exactly ONCE PER CRITTING ATTACK.
  *
- * The unit of "attack" changed in the multi-hit full-walk epic (PR2): a `hits: N` skill is N
+ * The unit of "attack" changed in the multi-hit full-walk epic: a `hits: N` skill is N
  * consecutive full-walk attacks, so it emits N `ability-performed` events and this rider fires
  * N times — once per critting sub-attack. That is the epic's approved decision ("an ally crits on
  * 2 of 3 sub-attacks → fires twice"), and it is NOT the bug this file locks.

@@ -2,8 +2,8 @@
  * PR-C Task C2 — per-victim DoT TICKS resolve at each positioned ship's turn-start (both sides).
  *
  * Today DoTs (corrosion / inferno) tick only on (a) the focus DUMMY enemy (`engine.ts` ~:4966,
- * legacy aggregate via `creditDamage`) and (b) the heal-target (`~:4380` prologue, healing-mode
- * accounting). Every OTHER positioned victim's DoTs never tick. C2 widens the shared `~:4380`
+ * legacy aggregate via `creditDamage`) and (b) the heal-target ( prologue, healing-mode
+ * accounting). Every OTHER positioned victim's DoTs never tick. C2 widens the shared
  * turn-start prologue so that EVERY positioned non-dummy actor (attacker, walked-team, enemy
  * attacker) ticks its OWN containers against its OWN HP at its turn-start:
  *   - enemy victims drain own HP via `enemySink`, surface in the focus DoT DPS via `perActorDot`
@@ -571,7 +571,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
 
     it('REGRESSION: the (now-floored, positional) sole enemy’s DoT tick still surfaces via the focus corrosion channel', () => {
         idc = 0;
-        // SP-4c-2a: `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
+        // `NONPOS_BASE`'s 0-max-HP 'pressure-source' enemy is now floored to
         // MIN_TARGETABLE_MAX_HP, so it is real and positional — the tap targets its real id rather
         // than the legacy 'enemy' dummy sink. That dummy still exists (engine.ts still creates it
         // unconditionally) but is inert on a positional run — dropped from the turn order and never
@@ -731,10 +731,10 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     });
     // ── The own-HP tick's gate must stay `isPositional`, NOT `resolvesPositionalVictim` ──────
     //
-    // SP-4b-1 §4B split one overloaded predicate into three and moved SEVEN cast/selection gates
+    // §4B split one overloaded predicate into three and moved SEVEN cast/selection gates
     // from `isPositional` to `resolvesPositionalVictim`. Two sites deliberately did NOT move,
     // because they route the actor's OWN state and the opposing roster is only a MODE signal:
-    // `applyPositionedTimedBurst` (engine.ts:7061) and THIS tick (engine.ts:8937). Narrowing the
+    // `applyPositionedTimedBurst` (engine.ts) and THIS tick (engine.ts). Narrowing the
     // burst site was caught by `barrier.test.ts › blocks a bomb detonation`; narrowing this one was
     // caught by NOTHING — it survived as a mutant. This test closes that hole.
     //
@@ -745,13 +745,13 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     // with whether its own DoT containers burn it. Narrowing the gate strands the containers
     // unticked: the same "state routed to nowhere" defect §4B fixed, one layer down.
     //
-    // SP-4c-2a MIRRORED THIS CASE ONTO THE OTHER SIDE, and that is the whole change. The original
+    // MIRRORED THIS CASE ONTO THE OTHER SIDE, and that is the whole change. The original
     // put the divergence zone on the ENEMY roster (an ally ticking while every enemy was a 0-max-HP
     // pressure source). `withTargetableHp` (normalizeRoster.ts) floors every ENEMY attacker's max
     // HP unconditionally, so that half of the zone is gone: no input can produce a positioned
     // enemy that is not a valid victim. But the DoT-tick gate is ONE shared, team-symmetric
     // expression — `const opposing = sideIsPlayer ? enemyAttackerActors : allPlayerActors`
-    // (engine.ts:8932) — and the floor is deliberately ENEMY-SIDE ONLY (see `withTargetableHp`'s
+    // (engine.ts) — and the floor is deliberately ENEMY-SIDE ONLY (see `withTargetableHp`'s
     // "ENEMY SIDE ONLY" note: the focus's `hp` must stay untouched or a never-alive focus reads as
     // a corpse). So for an ENEMY ticker, whose `opposing` is `allPlayerActors`, the divergence zone
     // is fully intact — and this case moves there. Same property, same gate, same arithmetic,
@@ -767,7 +767,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
         // confound — the same isolation trick case C.1 uses.
         //
         // The APPLIER is `team-ally`, not the focus. `tickDoTs` skips any entry whose applier has
-        // no turn ctx yet (`if (!ctx) continue`, engine.ts:1030), and a `hp: 0` focus that is also
+        // no turn ctx yet (`if (!ctx) continue`, engine.ts), and a `hp: 0` focus that is also
         // the heal target is skipped by the dead-target guard and never records one — measured: it
         // emits no `turn-started`, while the ally does. The ally's ctx is neutral (selfDotModifier 0,
         // affinityDamageModifier 0 → dotMult 1, affinityMult 1), so it changes no factor below.
@@ -827,7 +827,7 @@ describe('per-victim DoT ticks at each positioned ship’s turn-start (PR-C C2)'
     //     this epic already closed: "no opt-out flag for legacy fixtures — an escape hatch
     //     preserves the exact fork 4c needs gone"); or
     //   • `isTargetableRosterMember` is re-keyed from STATIC `stats.hp` to live `currentHp`
-    //     (positionalBinding.ts:45) — a corpse would then read as untargetable and reopen the
+    //     (positionalBinding.ts) — a corpse would then read as untargetable and reopen the
     //     shape from the other end, which the max-HP assertion here would not otherwise notice.
     it('TRIPWIRE: the ENEMY-side divergence shape (positioned-but-unhittable enemy) is gone — every positioned enemy arrives already hittable', () => {
         const input = POSITIONAL_BASE({

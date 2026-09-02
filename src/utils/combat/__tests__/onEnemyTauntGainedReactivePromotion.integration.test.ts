@@ -20,7 +20,7 @@
  * harness style (Ruiner/Amartya precedent): a mutation-guard shape check, then a `runCombat`
  * engine test proving POSITIONAL routing — Exposed must land on the SPECIFIC opposing actor that
  * gained Taunt, never on a different opposing actor and never on the DPS dummy sink (`ctx.enemy`,
- * literal id `'enemy'` — engine.ts:1526). This is exactly the dummy-sink failure class documented
+ * literal id `'enemy'` — engine.ts). This is exactly the dummy-sink failure class documented
  * in `project_reactive_dot_routing_and_dummy_gate` (PR #244): a reactive listener that forgets to
  * route via eventCtx is invisible in single-dummy DPS/trace mode but breaks real multi-actor team
  * battles. A control run (no Taunt granted) proves the FIXED trigger is properly conditional —

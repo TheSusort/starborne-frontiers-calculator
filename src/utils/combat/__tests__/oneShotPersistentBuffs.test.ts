@@ -41,7 +41,7 @@ describe('one-shot persistent buff names', () => {
 // Step 6's original sketch called a `createStatusEngine({ selfBuffs, enemyDebuffs, abilities,
 // ownerId })` shape that does not exist on StatusEngineInput. The real engine exposes
 // `applyTimedAbilityStatus(round, status, recipientId?)` directly as a public method (mirrored
-// from src/utils/combat/__tests__/statusEngine.test.ts's "ability statuses (Task 6)" describe
+// from src/utils/combat/__tests__/statusEngine.test.ts's "ability statuses" describe
 // block), and `registerAbilityStatuses` is a no-op for `kind: 'timed'` entries (they are applied
 // lazily via `applyTimedAbilityStatus`, never stored by `registerAbilityStatuses` itself) — so
 // driving the engine through `applyTimedAbilityStatus` directly is both simpler and exactly what

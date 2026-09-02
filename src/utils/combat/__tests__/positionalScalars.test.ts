@@ -1,7 +1,7 @@
 /**
  * Task 7 — integration-boundary parity guard for PlayerTurnResult.positionalScalars.
  *
- * The positional apply path (Task 8) feeds the per-cast attacker-side scalars exposed on
+ * The positional apply path feeds the per-cast attacker-side scalars exposed on
  * PlayerTurnResult.positionalScalars (+ hitCrits) through victimHitDamage for EACH bound
  * victim. This test pins that, for the SINGLE bound enemy the engine already damages, the
  * per-hit sum reproduces the turn's aggregate directDamage EXACTLY.

@@ -6,7 +6,7 @@ import { Ability, ShipSkills } from '../../../types/abilities';
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
 
 // ---------------------------------------------------------------------------
-// C1 Task 5: "cleanse all" REMOVES every removable debuff (player-side cast).
+// "cleanse all" REMOVES every removable debuff (player-side cast).
 //
 // Mirrors cleanseCastPath.test.ts. A player healer (focus = the heal target)
 // carries a `cleanse` ability with count 'all'. A FASTER enemy attacker applies

@@ -1,5 +1,5 @@
 /**
- * Barrier — full damage immunity (Task 1).
+ * Barrier — full damage immunity.
  *
  * "Barrier" = FULL DAMAGE IMMUNITY for the duration of the buff. While a ship carries
  * an active Barrier status, ALL incoming damage to it is blocked — direct attacks, DoT
@@ -424,7 +424,7 @@ describe('Barrier duration semantics (lock)', () => {
         // decremented to expiry by the tank's own same-turn post-turn decrement → it never
         // survives into an intake. barrierAbsorbed is 0 in EVERY round.
         //
-        // SP-4c-1: THREE rounds, not four. The tank is the entire player side here, so the round-3
+        // THREE rounds, not four. The tank is the entire player side here, so the round-3
         // death wipes it and the match ends on that turn — the run no longer reports a fourth,
         // already-dead round. The zero-block claim is unchanged; it now spans the rounds that
         // actually happened.

@@ -64,14 +64,14 @@ describe('emitPerVictimAttacked', () => {
             round: 1,
             isPrimaryTarget: true,
             damage: 50,
-            // PR4: every `attacked` carries a sub-attack index. No `subAttackIndex` was passed
+            // Every `attacked` carries a sub-attack index. No `subAttackIndex` was passed
             // here, so it falls back to the hit's position within the call — 0.
             subAttackIndex: 0,
         });
     });
 
     it('emits per-victim event count from each victim OWN hitOutcomes (drop-out victim under-emits)', () => {
-        // PR7 CodeRabbit fix: a victim killed on an earlier hit drops out of later hits,
+        // CodeRabbit fix: a victim killed on an earlier hit drops out of later hits,
         // so it collects FEWER hitOutcomes than the attack-wide hit count. The primary
         // survives all hits ([true,false] -> 2 events); the covered victim died after hit 1
         // ([true] -> 1 event).

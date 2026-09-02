@@ -10,7 +10,7 @@ import type { CombatActor } from '../state';
 type CleansePerformed = Extract<CombatEvent, { type: 'cleanse-performed' }>;
 
 // ---------------------------------------------------------------------------
-// C1 Task 4: reactive-path cleanse REMOVES debuffs (player-side, side-correct).
+// Reactive-path cleanse REMOVES debuffs (player-side, side-correct).
 //
 // Mirrors cleanseCastPath.test.ts but drives the cleanse through the REACTIVE
 // trigger machinery (executeIntent) instead of the on-cast path. A player healer
@@ -137,7 +137,7 @@ describe('C1 Task 4: reactive-path cleanse removes debuffs (player-side)', () =>
 });
 
 // ---------------------------------------------------------------------------
-// Task 3: reactive cleanse honors procChance + crit-count (Reactive Ward executor)
+// Reactive cleanse honors procChance + crit-count (Reactive Ward executor)
 //
 // These tests drive executeIntent directly (no full runCombat) to isolate the
 // cleanse executor branch. Pattern mirrors reactiveDamageProcGate.test.ts.

@@ -114,7 +114,7 @@ describe('extraActions', () => {
     // Attacker speed < enemy speed → enemy acts first, then attacker acts, gets
     // extra turn (no one remains) → acts again.
     //
-    // SP-4b-2a: the turn-taking opponent is now the REAL, positioned enemy this run synthesizes
+    // The turn-taking opponent is now the REAL, positioned enemy this run synthesizes
     // (`SYNTHESIZED_DPS_ENEMY_ID` === 'enemy-1'), not the vestigial dummy sink (id 'enemy'), which
     // takes no turn at all — SP-4c-2c drops it from `turnOrderActors` unconditionally (the
     // `dummyEnemyIsVestigial` gate that used to decide this is deleted). Only the id moved: the
@@ -272,7 +272,7 @@ describe('extraActions', () => {
             bus,
         });
 
-        // Six ability-performed events: 2 attacker turns x 3 sub-attacks (PR5) in round 1,
+        // Six ability-performed events: 2 attacker turns x 3 sub-attacks in round 1,
         // where pre-PR5 there were two (one folded event per turn).
         expect(performed).toHaveLength(6);
 

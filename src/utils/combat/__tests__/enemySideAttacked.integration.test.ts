@@ -1,7 +1,7 @@
 /**
  * enemySideAttacked.integration.test.ts — enemy-side reactive emission (positional two-team sim).
  *
- * Task 2 (Step 3): POSITIONAL `shieldWasHit` on the enemy→player path so a PLAYER Nyxen counters
+ * POSITIONAL `shieldWasHit` on the enemy→player path so a PLAYER Nyxen counters
  * a POSITIONAL enemy attacker (below). Task 3: the symmetric player→enemy `attacked` emit so
  * ENEMY ships react when the player hits them — enemy Stalwart/Nyxen/Centurion counters + a
  * representative non-counter on-attacked reactive (see the "Task 3" section further down).
@@ -416,7 +416,7 @@ describe('Task 3 — player→enemy attacked emit: enemy COUNTERS fire when the 
 describe('Task 3 — player→enemy attacked emit: a NON-counter enemy reactive (on-attacked self-buff) fires too', () => {
     // The representative NON-counter on-attacked reactive: a crit-filtered self-BUFF grant injected
     // directly into the enemy's passive slot (the reactive executor emits `buff-applied` for it —
-    // unlike reactive heals, which are deliberately silent; triggers.ts:1731). Modeled like Second
+    // unlike reactive heals, which are deliberately silent; triggers.ts). Modeled like Second
     // Wind (on-attacked + crit filter) but as a defensive buff so the fire is event-observable.
     // Proves the player→enemy emit lights up the GENERAL on-attacked path, not only counters.
     const SELF_BUFF = 'Reactive Resolve';

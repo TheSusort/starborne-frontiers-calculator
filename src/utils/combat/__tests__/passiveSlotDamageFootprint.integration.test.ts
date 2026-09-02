@@ -530,7 +530,7 @@ const PASSIVE_INSTANCE_LEECH = PASSIVE_INSTANCE_DAMAGE * 0.2;
  * a standing leech via `creditDamage(…, 'direct', …)`.
  *
  * PRODUCTION-REACHABLE, and the argument does not need one ship to carry both in the same slot:
- * the Leech gear set (`buildEquipmentAbilities.ts:52`, `leechScope:'all'`) is equippable on ANY
+ * the Leech gear set (`buildEquipmentAbilities.ts`, `leechScope:'all'`) is equippable on ANY
  * ship, so Judge + the Leech set reaches it. The fixture co-locates them in one passive slot
  * because that is the smallest shape that exercises the seam.
  *

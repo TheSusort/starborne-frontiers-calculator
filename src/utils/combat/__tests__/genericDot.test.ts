@@ -111,7 +111,7 @@ describe('generic DoT', () => {
         expect(credited).toBe(100);
     });
 
-    // SP-E, Task E2: `family`/`unremovable` are consumed by the Cheat-Death wipe filter
+    // `family`/`unremovable` are consumed by the Cheat-Death wipe filter
     // (engine.ts) and the `dotFamilyCounts` family-count derivation (roundContext.ts) — see
     // enemyDotFamilyCounts.test.ts / enemyDotFamilyCounts.integration.test.ts for those. This
     // locks the plain field shape on a generic entry itself, matching the parallel corrosion/

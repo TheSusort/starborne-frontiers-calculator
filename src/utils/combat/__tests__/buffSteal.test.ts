@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createStatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 
-// PR10: statusEngine.steal — moves the newest stealable buff(s) from a source actor to one or
+// statusEngine.steal — moves the newest stealable buff(s) from a source actor to one or
 // more recipients, remaining duration intact. Mirrors purgeRemoval.test.ts's harness (a minimal
 // timed RegisteredAbilityStatus applied via applyTimedAbilityStatus, then read back via
 // timedAbilityStatuses).

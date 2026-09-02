@@ -1,7 +1,7 @@
 /**
  * The `secondary` / `conditional` display sub-buckets are accumulated inside the same
  * `if (!positional)` guard that suppresses the direct CREDIT — but unlike the credit they feed
- * nothing but `rawTotals` (one write per side, one read at engine.ts:9991-9992). So a positional
+ * nothing but `rawTotals` (one write per side, one read at engine.ts). So a positional
  * run reported 0 for both, and ShipConfigSummary's `> 0`-guarded rows silently vanished.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -12,8 +12,8 @@ import { bareInput } from '../__testutils__/bareRosterFixture';
 
 /**
  * Active slot: a firing hit plus an `additional-damage` ability — that is what
- * `secondaryFromSkill` (applyAbilities.ts:224) maps into `turn.secondaryDamage`. It scales off the
- * CASTER's own stat (`stat: 'hp'` → `effectiveHp`, playerTurn.ts:2402-2418), so the fixture's focus
+ * `secondaryFromSkill` (applyAbilities.ts) maps into `turn.secondaryDamage`. It scales off the
+ * CASTER's own stat (`stat: 'hp'` → `effectiveHp`, playerTurn.ts), so the fixture's focus
  * must carry non-zero HP or the sub-bucket is 0 for a reason that has nothing to do with this fix.
  * `bareInput()` supplies `hp: 1_000_000`.
  */

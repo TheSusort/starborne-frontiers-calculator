@@ -1,5 +1,5 @@
 /**
- * D-PR8 Task 3: reactive buff branch honors procChance (passesProcChanceGate).
+ * Reactive buff branch honors procChance (passesProcChanceGate).
  *
  * Tests that:
  * (a) A reactive `buff` intent with procChance 0.2 over 10 calls does NOT apply the buff
@@ -8,7 +8,7 @@
  * (b) A reactive `buff` intent WITHOUT procChance applies the buff on every call
  *     (pass-through — byte-identical to today).
  *
- * D-PR11 Task 3: `adjacent-allies` buff target recipient resolution.
+ * `adjacent-allies` buff target recipient resolution.
  *
  * Tests that:
  * (c) A buff intent with target `'adjacent-allies'` and a stub

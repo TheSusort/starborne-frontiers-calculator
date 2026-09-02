@@ -80,7 +80,7 @@ describe('F3 — createActor pre-fight shield seeding', () => {
 const emptySkills = (): ShipSkills => ({ slots: [{ slot: 'active', abilities: [] }] });
 
 const BASE_INPUT = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent. Imported ALIASED — this file already owns a local
+    // A run needs an opponent. Imported ALIASED — this file already owns a local
     // `bareEnemy(crit, pf)` further down with a different signature (the crit-family mirror's
     // attacker), and shadowing it would silently retarget those four cases.
     enemyAttackers: inertOpponent(),
@@ -236,7 +236,7 @@ const healerTeamInput = (): TeamActorInput[] => [
 
 /** Run a 2-round healing battle and return the round-order repair landed ON THE FOCUS.
  *
- *  SP-4e Task 4: `HEAL_ALLY_SKILLS` is a plain single-`'ally'` heal, which now routes over the
+ *  `HEAL_ALLY_SKILLS` is a plain single-`'ally'` heal, which now routes over the
  *  caster's target pattern instead of `[healing.targetId]`. This fixture is non-positional, so
  *  `supportFootprintAllyIds` returns undefined and nothing narrows the pattern — the repair
  *  reaches BOTH own-side actors (the focus AND `team1`, the caster itself). `heal-performed.amount`

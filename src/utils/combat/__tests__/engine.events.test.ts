@@ -122,9 +122,9 @@ describe('runCombat event emission', () => {
         const turnEvents = events.filter(
             (e) => e.type === 'turn-started' || e.type === 'turn-ended'
         );
-        // Phase 2: each round runs the attacker turn then the enemy turn, each emitting a
+        // Each round runs the attacker turn then the enemy turn, each emitting a
         // started/ended pair → 4 turn events per round (rounds * 2 turns * 2 events).
-        // SP-4b-2b: the second turn belongs to the REAL enemy (`BARE_ENEMY_ID`) — the vestigial
+        // The second turn belongs to the REAL enemy (`BARE_ENEMY_ID`) — the vestigial
         // dummy `enemy` is dropped from the turn order on a positional run — so the count is
         // unchanged and only the id it reports moved.
         expect(turnEvents.length).toBe(rounds * 4);
@@ -215,7 +215,7 @@ describe('runCombat event emission', () => {
     });
 
     it('emits one ability-performed (damage) per round with the round crit flag', () => {
-        // One event per SUB-ATTACK since the multi-hit full-walk epic (PR2); this fixture's skill
+        // One event per SUB-ATTACK since the multi-hit full-walk epic; this fixture's skill
         // is single-hit, so that is one per round and the count still matches rounds.length.
         const { events, result } = collect(baseInput());
         const performed = events.filter(
@@ -247,7 +247,7 @@ describe('runCombat event emission', () => {
         // A scheduled, always-active 'apply' enemy debuff. At an affinity disadvantage it is
         // resisted every round.
         //
-        // SP-4b-2b: the disadvantage must be a REAL matchup, not just the pre-resolved
+        // The disadvantage must be a REAL matchup, not just the pre-resolved
         // `affinityDamageModifier` scalar. On a positional cast `landingAtDisadvantage`
         // (playerTurn.ts) is re-derived as `computeAffinityModifiers(attackerAffinity,
         // victim.affinity) < 0`, so the scalar alone leaves the run NEUTRAL and the 'apply' debuff
@@ -598,12 +598,12 @@ describe('owner Post-Turn buff-expired windows (same-turn decrement rule)', () =
 });
 
 // ---------------------------------------------------------------------------
-// Phase 3 Task 3: retimed debuff-applied, sourceId, round-started, bomb-detonated
+// Retimed debuff-applied, sourceId, round-started, bomb-detonated
 // ---------------------------------------------------------------------------
 
 describe('Phase 3 Task 3 — event shape and timing', () => {
     // The damage clause every detonating charged slot below carries is LOAD-BEARING since
-    // SP-4b-2b: positional detonation detonates the victims this cast HIT (engine.ts's
+    // Positional detonation detonates the victims this cast HIT (engine.ts's
     // `detonationTargets`, fed from drivePositionalApply's resolved victims), so a detonate-ONLY
     // cast resolves nobody and its burst drops entirely — measured 10,800 → 0 on the inferno
     // fixture. Every real detonator ship deals damage in the same clause (Crocus "deals 250% damage
@@ -611,16 +611,16 @@ describe('Phase 3 Task 3 — event shape and timing', () => {
     // the corpus actually looks like.
     //
     // This is a REAL, latent engine gap, not a fixture quirk: any future `DOT_DETONATE_RE` cast
-    // whose clause carries no `type: 'damage'` ability (skillTextParser.ts:3167) would lose its
+    // whose clause carries no `type: 'damage'` ability (skillTextParser.ts) would lose its
     // detonation entirely on a positional run (`const detonationTargets = new Map<...>()`,
-    // engine.ts:7492 → `applyPerVictimDetonation(recipe, detonationTargets, …)`, engine.ts:7819).
+    // engine.ts → `applyPerVictimDetonation(recipe, detonationTargets, …)`, engine.ts).
     // It is intentionally left UNFIXED here — a
     // follow-up investigation scanned all 147 corpus ships' skill columns and confirmed the gap is
     // CORPUS-UNREACHABLE today: only Crocus, Demolisher and Incinerator mention detonation, and all
     // three deal damage in the same clause (safe, per above). Lingshe's charged skill also
     // detonates but does NOT match `DOT_DETONATE_RE` — it parses to `bomb-countdown-reduce`
-    // (skillTextParser.ts:4523-4537), which resolves its damage in `reduceBombsOnVictim`
-    // (bombCountdown.ts:29-80) from the cast's own target footprint, entirely independent of
+    // (skillTextParser.ts), which resolves its damage in `reduceBombsOnVictim`
+    // (bombCountdown.ts) from the cast's own target footprint, entirely independent of
     // `detonationTargets`, so it is unaffected by this gap. Do not read `detonatorHit()` below as
     // incidental filler: it exists BECAUSE of this gap, and removing it would silently zero out
     // every skill-triggered detonation assertion in this describe block.
@@ -1631,7 +1631,7 @@ describe('recordDestroyed helper (shared all-actor ship-destroyed)', () => {
 // post-death flatline". This file adds the focused recordDestroyed unit guard above.
 
 // ---------------------------------------------------------------------------
-// Phase 4c Task 3: per-hit `attacked` emission
+// Per-hit `attacked` emission
 // ---------------------------------------------------------------------------
 
 /**

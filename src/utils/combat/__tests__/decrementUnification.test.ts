@@ -129,7 +129,7 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
 
 /** Shared minimal DPS-mode base (no healTargetId). */
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real opponent. DAMAGE fixture (5000 attack over 5 rounds) so it takes the
+    // A real opponent. DAMAGE fixture (5000 attack over 5 rounds) so it takes the
     // 10M-HP form; a mid-sim death would truncate the decrement rounds this file counts.
     enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
     attack: 5000,
@@ -569,7 +569,7 @@ describe('Case 5 — RED GAP: debuff on non-heal-target team actor never expires
      *            (heal target only, NOT player-victim).
      *
      * WITH THE GAP (current code): buff-expired with actorId='player-victim' NEVER fires.
-     * WITH THE FIX (Task 3): decrementEnemy('player-victim') runs at player-victim's Post Turn
+     * WITH THE FIX: decrementEnemy('player-victim') runs at player-victim's Post Turn
      *   → duration 1→0 → buff-expired fires with actorId='player-victim', round 1.
      *
      * The non-vacuous precondition (debuff-applied with targetId='player-victim') MUST PASS

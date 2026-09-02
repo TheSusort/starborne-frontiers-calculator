@@ -86,7 +86,7 @@ describe('Wusheng remove-Stealth-on-attacked — reactive listener (unit)', () =
 
 // ── Integration test (engine-level, via runCombat) ─────────────────────────────────────────
 //
-// Positional setup mirroring incomingReductionEngine.test.ts (D-PR3 Task 6): a single positioned
+// Positional setup mirroring incomingReductionEngine.test.ts: a single positioned
 // PLAYER victim (fastest, casts a self-Stealth buff on its own turn) faces TWO positioned enemy
 // attackers targeting the same 'front' slot, at DIFFERENT speeds so both hits land within round 1
 // in a fixed order: victim casts Stealth first, enemy-1 hits second (Stealth active → the 25%
@@ -225,7 +225,7 @@ const BASE = (overrides: Partial<CombatEngineInput>): CombatEngineInput => ({
     defensePenetration: 0,
     chargeCount: 0,
     shipSkills: { slots: [{ slot: 'active', abilities: [stealthSelfBuff('focus-stealth')] }] },
-    // SP-4b-1: the focus is pinned to the back of the middle row AND cloaked.
+    // The focus is pinned to the back of the middle row AND cloaked.
     //
     // It used to be off the board entirely, and that is what kept both enemies' targeting on the
     // stealthed victim: `resolvePositionalTarget` drops stealthed cells UNLESS every candidate is

@@ -6,7 +6,7 @@ import type { Position } from '../../../types/encounters';
 import type { StatusEngine } from '../statusEngine';
 
 // ---------------------------------------------------------------------------
-// E5 Task 2: the SIDES-SWAPPED consequence of symmetric healing
+// The SIDES-SWAPPED consequence of symmetric healing
 // (nayraRepairedPurge.test.ts is the MIRROR — there the player focus is repaired
 // and an enemy Nayra purges it). Here the PLAYER focus IS the Nayra: its on-cast
 // purge is GATED on whether its struck target was REPAIRED (HP-healed) this round

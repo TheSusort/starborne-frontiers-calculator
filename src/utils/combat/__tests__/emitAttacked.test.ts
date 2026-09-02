@@ -30,7 +30,7 @@ describe('emitAttacked', () => {
             shieldWasHit: true,
             didCrit: true,
             damage: 500,
-            // PR4: with no explicit `subAttackIndex` the caller is the non-positional one, which
+            // With no explicit `subAttackIndex` the caller is the non-positional one, which
             // passes the whole cast's hitOutcomes in ONE call — so the hit's own position IS its
             // sub-attack index (a `hits: N` cast is N consecutive attacks, R1).
             subAttackIndex: 0,
@@ -83,7 +83,7 @@ describe('emitAttacked', () => {
             targetId: 't',
             attackerId: 'a',
             round: 1,
-            // PR4: `subAttackIndex` is NOT conditional — every `attacked` carries one, so the
+            // `subAttackIndex` is NOT conditional — every `attacked` carries one, so the
             // once-per-attack rider guard always has an attack identity to key on.
             subAttackIndex: 0,
         });

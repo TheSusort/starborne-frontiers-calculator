@@ -15,7 +15,7 @@
  *       resolved no victim — SP-4d Task 8 fixed all three `enemiesHitThisCastByActor.set(...)`
  *       booking sites in engine.ts (focus/team/enemy) to `aoeVictimIds?.length ?? (<a victim
  *       resolved this turn> ? 1 : 0)`, replacing the unconditional `?? 1`, and the SAME fix at the
- *       cast-path ctx (playerTurn.ts:2687) restored a genuine single-target cast's footprint to 1
+ *       cast-path ctx (playerTurn.ts) restored a genuine single-target cast's footprint to 1
  *       (a regression an earlier task introduced by dropping that site's `?? 1` outright).
  *       Discharged by `enemiesHitThisCastFootprint.integration.test.ts`'s drain-booking describe
  *       block — "a FOCUS cast that resolves NO victim: an `eq 0` reactive gate FIRES" and its

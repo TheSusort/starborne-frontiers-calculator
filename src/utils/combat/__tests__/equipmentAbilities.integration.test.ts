@@ -1,5 +1,5 @@
 /**
- * D-PR1: end-to-end engine integration — Leech standing leech + Bloodthirst proc frequency.
+ * End-to-end engine integration — Leech standing leech + Bloodthirst proc frequency.
  *
  * Both tests use `buildShipAbilitiesWithEquipment` with a stub `getGearPiece`, exercising the
  * real resolution→merge→engine path (Tasks 2+3+engine pickup), not just ability injection.
@@ -679,7 +679,7 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
                 })
             );
 
-            // SP-4b-2b: the cast resolves positionally onto the real, placed enemy, so its damage
+            // The cast resolves positionally onto the real, placed enemy, so its damage
             // is booked per-victim (`RoundData.perTargetDealt`) instead of on the legacy dummy
             // sink's `rawTotals.direct` — measured at 39d463f1 this fixture read
             // 11 500 / 10 000 / 10 000 / 10 000 on that scalar and now reads 0 on all four. Same
@@ -711,7 +711,7 @@ describe('D-PR2 integration — INTRUSION engine-level (outgoing damage amplifie
 });
 
 // ---------------------------------------------------------------------------
-// D-PR4 Task 9: Insidiousness implant — reactive damage on debuff-inflicted
+// Insidiousness implant — reactive damage on debuff-inflicted
 // ---------------------------------------------------------------------------
 //
 // Insidiousness fires a reactive direct-damage proc when the owner inflicts a debuff.
@@ -827,7 +827,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
                 })
             );
 
-            // SP-4b-2b: both the active's damage and the reactive proc's damage are booked
+            // Both the active's damage and the reactive proc's damage are booked
             // per-victim now that the cast resolves onto a real placed enemy — measured at
             // 39d463f1 this read 116 400 / 80 000 on `rawTotals.direct` and now reads 0 / 0 there
             // (mechanism M3). Same damage, different channel, so the comparison moves with it and
@@ -892,7 +892,7 @@ describe('D-PR4 Task 9 integration — Insidiousness reactive damage fires on de
 });
 
 // ---------------------------------------------------------------------------
-// D-PR5: Second Wind implant — reactive self-heal on crit-received
+// Second Wind implant — reactive self-heal on crit-received
 // ---------------------------------------------------------------------------
 //
 // Second Wind fires a reactive self-heal when the OWNER receives a critting hit
@@ -1084,7 +1084,7 @@ describe('D-PR5 integration — Second Wind reactive self-heal on crit-received'
 });
 
 // ---------------------------------------------------------------------------
-// D-PR5 Task 6: heal-cast amplification fold (Nourishment / Vivacious)
+// Heal-cast amplification fold (Nourishment / Vivacious)
 // ---------------------------------------------------------------------------
 //
 // A heal-amplification ability in the CASTER's passive slot boosts the cast repair's
@@ -1170,7 +1170,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization boundary
+        // The tank claims the front-middle cell EXPLICITLY. The normalization boundary
         // places every actor and synthesizes the enemy's `front enemy` targeting, so the victim is
         // chosen by board geometry now — and on its index-derived default (M3) the tank sits behind
         // the auto-placed HEALER at the M4 anchor, which would soak the hit instead. Every gate in
@@ -1327,7 +1327,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
         });
         // Enemy damage is tuned so the tank sits BELOW 25% while STILL ALIVE.
         //
-        // SP-4b-1: it used to be 8000/round, which killed the tank in round 3 of 10 — and the run
+        // It used to be 8000/round, which killed the tank in round 3 of 10 — and the run
         // still credited a full 1000 directHeal for each of the seven post-death casts, so the
         // "10 casts × 1000" baseline and most of the amp fires were casts onto a corpse. Once the
         // heal resolves against a real, placed recipient rather than the legacy sink, a heal with
@@ -1390,7 +1390,7 @@ describe('D-PR5 integration — heal-cast amplification fold (Nourishment / Viva
 });
 
 // ---------------------------------------------------------------------------
-// D-PR6 Task 6: Exuberance implant — recipient-side incoming-heal amplification fold
+// Exuberance implant — recipient-side incoming-heal amplification fold
 // ---------------------------------------------------------------------------
 //
 // Exuberance is a RECIPIENT-side, unconditional ("when repaired") incoming-heal
@@ -1651,7 +1651,7 @@ describe('D-PR6 integration — Exuberance recipient-side incoming-heal amplific
 });
 
 // ---------------------------------------------------------------------------
-// D-PR7 Task 4: Martyrdom implant — on-destroyed debuff routes to the killer
+// Martyrdom implant — on-destroyed debuff routes to the killer
 // ---------------------------------------------------------------------------
 //
 // Martyrdom is an on-destroyed DEBUFF reaction: "Applies Disable on the enemy that
@@ -1875,7 +1875,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
     });
 
     // -----------------------------------------------------------------------
-    // D-PR13 Task 5: END-TO-END consequence — the disabled killer SKIPS its turns
+    // END-TO-END consequence — the disabled killer SKIPS its turns
     // -----------------------------------------------------------------------
     //
     // APPROACH A (the faithful design): a dying TEAM-actor Martyrdom carrier +
@@ -2030,7 +2030,7 @@ describe('D-PR7 Task 4 integration — Martyrdom routes on-destroyed Disable to 
 });
 
 // ---------------------------------------------------------------------------
-// D-PR7 Task 5: Last Wish + Battlecry engine integration + enemy-side mirror
+// Last Wish + Battlecry engine integration + enemy-side mirror
 // ---------------------------------------------------------------------------
 //
 // These tests exercise the on-destroyed REACTIVE path for a NON-focus team ally
@@ -2334,7 +2334,7 @@ describe('D-PR7 Task 5 integration — Battlecry emits Inc. Damage Down II on li
 });
 
 // ---------------------------------------------------------------------------
-// D-PR7 Task 5: enemy-side mirror — an ENEMY Martyrdom carrier routes Disable to the PLAYER killer
+// Enemy-side mirror — an ENEMY Martyrdom carrier routes Disable to the PLAYER killer
 // ---------------------------------------------------------------------------
 //
 // The engine is team-agnostic: an on-destroyed reaction carried by an ENEMY ship must fire the
@@ -2428,7 +2428,7 @@ describe('D-PR7 Task 5 integration — enemy-side mirror: enemy Martyrdom routes
 });
 
 // ---------------------------------------------------------------------------
-// D-PR8 Task 4: not-hit-this-round gate — engine hit-tracking → drain-time gate
+// Not-hit-this-round gate — engine hit-tracking → drain-time gate
 // ---------------------------------------------------------------------------
 //
 // Alacrity grants a self-buff at end-of-round ONLY if the owner took no DIRECT hit
@@ -2645,7 +2645,7 @@ describe('D-PR8 Task 4 integration — not-hit-this-round gate (engine hit-track
 });
 
 // ---------------------------------------------------------------------------
-// D-PR8 Task 6: Synaptic Resonance (LIVE on-enemy-repaired) + Ambush gate (seeded Stealth)
+// Synaptic Resonance (LIVE on-enemy-repaired) + Ambush gate (seeded Stealth)
 // ---------------------------------------------------------------------------
 //
 // Two reactive self-buff-grant implants from the D-PR8 registry:
@@ -3684,7 +3684,7 @@ describe('D-PR11 integration — Fortifying Shroud: positional adjacent-allies b
         expect(buffGrantedTo.size).toBe(2);
     });
 
-    // SP-4b: this case used to drive `runCombat` with every actor's `position` stripped. That
+    // This case used to drive `runCombat` with every actor's `position` stripped. That
     // premise no longer exists — `normalizeCombatRoster` auto-places the whole roster on the
     // engine's first line, so a position-less run cannot be expressed through the public entry
     // point and the buff resolves through the POSITIONAL branch instead.
@@ -4212,7 +4212,7 @@ describe('D-PR reactive cleanse — Warpstrike duration-reduction + damage half'
                 enemyAttackers: [selfDebuffer()],
             })
         );
-        // SP-4b-1: the carrier's cast now resolves positionally onto the real, placed enemy, so its
+        // The carrier's cast now resolves positionally onto the real, placed enemy, so its
         // damage is booked per-victim (`RoundData.perTargetDealt`, via applyVictimDamage) instead of
         // on the legacy dummy sink's `rawTotals.direct`. Same damage, different channel — so the
         // comparison moves with it, and the old channel is pinned empty in BOTH arms because the two
@@ -4737,7 +4737,7 @@ describe('Cloaking integration — start-of-combat Stealth', () => {
 });
 
 // ---------------------------------------------------------------------------
-// H1 Task 10: Arcane Siege goes LIVE with a real in-sim shield
+// Arcane Siege goes LIVE with a real in-sim shield
 // ---------------------------------------------------------------------------
 //
 // Arcane Siege grants +X% outgoing direct damage WHILE the carrier holds a shield
@@ -4880,7 +4880,7 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
                 })
             );
 
-            // SP-4b-2b: read the carrier's damage per-victim (M3) — the cast resolves positionally
+            // Read the carrier's damage per-victim (M3) — the cast resolves positionally
             // onto the real placed enemy, so `rawTotals.direct` (the legacy dummy sink) is 0 in
             // both arms. Measured at 39d463f1: boosted 11 500 / baseline 10 000 on that scalar;
             // identical values now appear in `perTargetDealt`, keyed by the carrier. `dealtBy`
@@ -5047,7 +5047,7 @@ describe('H3.2 integration — Adaptive Plating once-per-round shield off the da
     const ENEMY_ATTACK = 1_000;
     const ENEMY_HITS = 11; // 11 × 0.19 = 2.09 → proc would pass TWICE/round → oncePerRound is binding
     const AP_PCT = 42; // legendary
-    // SP-4b-1: the `damage-taken` basis is the damage of ONE HP-intake event, and a `hits: N` cast
+    // The `damage-taken` basis is the damage of ONE HP-intake event, and a `hits: N` cast
     // is N FULL-WALK attacks — so an 11-hit attack is eleven 1000-damage intakes, not one 11_000
     // aggregate. The engine only ever collapsed them into a single intake on the legacy dummy-sink
     // route; now that the cast resolves positionally onto the real, placed carrier it drains once
@@ -5268,7 +5268,7 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
     /** The healer's active repair, targeting an ally. basis 'hp' + noCrit so raw = healer
      *  effectiveMaxHp × pct with no crit/heal-modifier folds.
      *
-     *  SP-4e Task 4: this reaches the whole own side (no support pattern narrows it), so the healer
+     *  This reaches the whole own side (no support pattern narrows it), so the healer
      *  takes a share of its own alongside 'tank'. The healer's share is NOT applied and produces no
      *  overheal — `perRecipientHealApply` is off on this run, so `applyHealToTarget` runs only for
      *  `rid === healing.targetId`. That is why the asserted 3,000 overheal and the tank-only shield
@@ -5290,7 +5290,7 @@ describe('H3.4 integration — Abundant Renewal grants overheal→shield to the 
         startCharged: false,
         selfBuffs: [],
         enemyDebuffs: [],
-        // SP-4b-1: the tank claims the front-middle cell EXPLICITLY. The normalization boundary
+        // The tank claims the front-middle cell EXPLICITLY. The normalization boundary
         // places every actor and synthesizes the enemy's `front enemy` targeting, so the victim is
         // chosen by board geometry now — and on its index-derived default (M3) the tank sits behind
         // the auto-placed HEALER at the M4 anchor, which would soak the hit instead. Every gate in

@@ -5,13 +5,13 @@
  * `modifierTotalsFromAbilities` (applyAbilities.ts) has always ignored the `target` field on
  * a `modifier` ability — an `all-allies`-scoped aura ("all allies deal N% more damage…") only
  * ever affected the CASTER's own attacks, because `runPlayerTurn`'s `modifierAbilities` was
- * built from the acting actor's OWN firing + passive skills only (playerTurn.ts:1339, pre-I3).
+ * built from the acting actor's OWN firing + passive skills only (playerTurn.ts, pre-I3).
  *
  * This suite locks the fix: `engine.ts`'s `buildTurnArgs` gathers `all-allies`-targeted
  * PASSIVE `modifier` abilities from every LIVING same-side ally (excluding the recipient's own
  * id — no double-count) and threads them as `allyModifierAbilities`, which `runPlayerTurn`
  * merges into `modifierAbilities` (playerTurn.ts). Because that list feeds BOTH the per-turn
- * `dmgStats` fold AND (PR I2) `perVictimOutgoing`, and is evaluated against the RECIPIENT's OWN
+ * `dmgStats` fold AND `perVictimOutgoing`, and is evaluated against the RECIPIENT's OWN
  * `ConditionContext`, a self-buff gate (Panguan's own Stealth) and an enemy-status gate
  * (Lodolite's Concentrate Fire) both resolve correctly from the recipient-attacker's
  * perspective — this is what makes "Friendly … units" include the caster for free.

@@ -83,10 +83,10 @@ const supportRun = (skills: ShipSkills = repairKit()) => {
     bus.on('turn-started', (e: Extract<CombatEvent, { type: 'turn-started' }>) => {
         if (e.actorId === 'attacker') focusTurns.push(e.round);
     });
-    // `hp-changed` does NOT carry heal evidence — its three emission sites (engine.ts:5030,
-    // :5306, :10914) are all on the INCOMING-damage-intake path (tank-side hit resolution and
+    // `hp-changed` does NOT carry heal evidence — its three emission sites (engine.ts,
+    // :5306) are all on the INCOMING-damage-intake path (tank-side hit resolution and
     // the vestigial dummy sink), never on the outgoing heal-apply path. The event that actually
-    // reports a cast's repair landing is `heal-performed` (events.ts:186), whose `perTarget`
+    // reports a cast's repair landing is `heal-performed` (events.ts), whose `perTarget`
     // breakdown is "always populated by the engine" — read that instead of the totals-only
     // `amount`/`targets` fields so this only counts a repair that reached the ally specifically.
     bus.on('heal-performed', (e: Extract<CombatEvent, { type: 'heal-performed' }>) => {
@@ -98,14 +98,14 @@ const supportRun = (skills: ShipSkills = repairKit()) => {
     runCombat({
         ...bareInput(),
         // The healing pipeline is gated on `runMode === 'battle'` (`healTarget` stays undefined,
-        // and the whole heal block is unreachable, under the default 'dps' mode — engine.ts:2468/
+        // and the whole heal block is unreachable, under the default 'dps' mode — engine.ts/
         // 2483). Every other heal-exercising fixture in this suite sets this too (e.g.
         // exposedStatus.integration.test.ts, deadVictimSkipsItsDotTick.integration.test.ts).
         mode: 'battle',
         position: 'M4',
         // The ally-side target is what makes the opposing selection resolve nobody. The
         // normalization boundary FILLS an absent target but never SUBSTITUTES an ally-side one
-        // (`normalizeRoster.ts:79-81`), so this shape reaches the engine unrewritten.
+        // (`normalizeRoster.ts`), so this shape reaches the engine unrewritten.
         target: { raw: 'ally-team', side: 'ally', selection: 'team' },
         pattern: { raw: 'base', shape: 'base', range: 0, modifiers: {} },
         shipSkills: skills,
@@ -121,7 +121,7 @@ const supportRun = (skills: ShipSkills = repairKit()) => {
 };
 
 // NOTE: do NOT call resetRateGateRng() after setupKeyedTestRng() — reset nulls the keyed
-// provider and restores Math.random, un-seeding the test (rateAccumulator.ts:26-29,
+// provider and restores Math.random, un-seeding the test (rateAccumulator.ts,
 // rateGateSeedingOrder.test.ts). setupKeyedTestRng alone seeds both streams.
 describe('SP-4c-2b: an ally-targeted player cast still acts', () => {
     beforeEach(() => {

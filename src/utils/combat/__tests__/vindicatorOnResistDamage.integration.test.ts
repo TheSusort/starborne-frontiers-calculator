@@ -127,7 +127,7 @@ const creditedDirectFor = (sourceId: string, input: CombatEngineInput): number =
 const dealtFor = (sourceId: string, input: CombatEngineInput): number =>
     dealtBy(runCombat(input).rounds, sourceId);
 
-// SP-4b-1: the normalization boundary places every actor and synthesizes the focus's missing
+// The normalization boundary places every actor and synthesizes the focus's missing
 // `target`/`pattern`, so the carrier's proc now resolves POSITIONALLY onto the real
 // `enemyAttackers[]` entry instead of the legacy dummy sink. `applyReactiveDamage` therefore takes
 // its per-victim branch: the proc lowers that enemy's real HP and books the intake via

@@ -123,7 +123,7 @@ const MEATSHIELD_DEFENCE = 500;
 const EXPECTED_SUBSTITUTED_DAMAGE =
     ENEMY_ATTACK * (1 - calculateDamageReduction(MEATSHIELD_DEFENCE) / 100);
 
-/** SP-4b-1: the boundary places every actor, and the enemy's synthesized `front enemy` selection
+/** The boundary places every actor, and the enemy's synthesized `front enemy` selection
  *  then picks the front-most player in its scan row. `ally-1` is the victim every PLAYER-side case
  *  below is about, so it is pinned to the front-middle cell; the inert focus and the Meatshield
  *  carrier sit behind it (`FOCUS_SLOT` / the index-derived team defaults, all column < 4). Left

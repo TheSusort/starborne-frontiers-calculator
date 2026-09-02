@@ -5,7 +5,7 @@
  * cast (playerTurn.ts) or the reactive executor (triggers.ts) — the two sites that own the
  * `shield-applied` emission. It therefore grew `victim.shieldPool` (and the `shieldGranted`
  * StatCard accumulator) with NO combat-log line at all, while its `shield-destroyed` twin IS
- * emitted a few lines below (SP-F F2) — the exact "a shield is destroyed that the log never
+ * emitted a few lines below — the exact "a shield is destroyed that the log never
  * showed being granted" shape reported for AEGIS. Being collected side-agnostically
  * (`incomingAbilitiesById` is built from BOTH runtime maps), it reaches ENEMY actors too.
  *

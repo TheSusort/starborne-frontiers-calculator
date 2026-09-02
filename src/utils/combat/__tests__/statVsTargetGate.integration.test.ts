@@ -22,7 +22,7 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-// SP-C Cobalt triage probe / statVsTarget.test.ts parser block.
+// Cobalt triage probe / statVsTarget.test.ts parser block.
 const COBALT_ACTIVE =
     "This Unit purges <unit-aid>1 buff</unit-aid> from the enemy and deals <unit-damage>200% damage</unit-damage>. If this Unit has more HP than the enemy, it additionally deals <unit-damage>damage equal to 25%</unit-damage> of this Unit's max HP.";
 
@@ -47,7 +47,7 @@ const cobaltShipSkills = (): ShipSkills => ({
 describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () => {
     it('player-side Cobalt: the 25%-max-HP bonus lands when its own maxHp exceeds the opponent maxHp', () => {
         const makeInput = (hp: number, enemyHp: number): CombatEngineInput => ({
-            // SP-4b-2b: the gate compares Cobalt's max HP against ITS ACTUAL VICTIM's max HP,
+            // The gate compares Cobalt's max HP against ITS ACTUAL VICTIM's max HP,
             // which on a positional run is the roster entry, not a fight-wide scalar (M6). SP-4d
             // deleted that scalar from `CombatEngineInput` entirely; the pool lives only on the
             // roster entry's own `stats.hp` now.
@@ -172,7 +172,7 @@ describe('stat-vs-target engine gate — Cobalt HP-vs-target bonus damage', () =
 });
 
 // Verbatim from docs/ship-skills.csv (charge_skill_text field) — same constant used by the
-// SP-C Bayah triage probe / statVsTarget.test.ts parser block.
+// Bayah triage probe / statVsTarget.test.ts parser block.
 const BAYAH_CHARGE =
     'This Unit deals <unit-damage>150% damage</unit-damage> plus an additional amount equal to <unit-damage>30%</unit-damage> of its Defense and inflicts <unit-skill>Crit Rate Down II</unit-skill> for 2 turns. If this Unit has more Crit Power than the target, it inflicts <unit-skill>Stasis</unit-skill> for 1 turn.';
 
@@ -206,7 +206,7 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
         // RoundData.activeEnemyDebuffs (the reliable per-round landed-debuff source used
         // elsewhere in this suite) proves the real effect landed, not just the event.
         const makeInput = (critDamage: number): CombatEngineInput => ({
-            // SP-4b-2b: the gate compares crit power against the ACTUAL victim. `bareEnemy()`
+            // The gate compares crit power against the ACTUAL victim. `bareEnemy()`
             // carries critDamage 0, exactly like the dummy it replaces, so the gate arithmetic
             // below is unchanged.
             enemyAttackers: bareEnemy({ stats: { hp: 1_000_000 } }),
@@ -249,7 +249,7 @@ describe('stat-vs-target engine gate — Bayah crit-power-vs-target Stasis infli
 });
 
 // Verbatim from docs/ship-skills.csv (active_skill_text field) — same constant used by the
-// SP-C Chakara triage probe / statVsTarget.test.ts parser block.
+// Chakara triage probe / statVsTarget.test.ts parser block.
 const CHAKARA_ACTIVE =
     'This Unit deals <unit-damage>180% damage</unit-damage> with additional damage equal to <unit-damage>80%</unit-damage> of its Defense. If all damaged enemies have more Speed than this Unit, it <unit-aid>adds 1 charge</unit-aid> to its Charged Skill.';
 
@@ -278,7 +278,7 @@ describe('stat-vs-target engine gate — Chakara speed-vs-target charge gain', (
         // chargeCount kept high so the ship never actually reaches its charged skill (stays on
         // 'active' every round) — isolating the charge-count delta as the only observable signal.
         const makeInput = (speed: number, enemySpeed: number): CombatEngineInput => ({
-            // SP-4b-2b: "all damaged enemies have more Speed than this Unit" is evaluated against
+            // "all damaged enemies have more Speed than this Unit" is evaluated against
             // the ACTUAL damaged enemies, so the comparison speed lives on the roster entry's own
             // `stats.speed` (M6). SP-4d deleted the fight-wide `enemySpeed` scalar that used to be
             // kept in step with it here.

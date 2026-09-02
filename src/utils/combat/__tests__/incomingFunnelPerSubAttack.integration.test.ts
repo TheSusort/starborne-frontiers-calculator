@@ -30,11 +30,11 @@
  *    of its own to fire it on — which our passive-only victim (mirroring Tier 1's `enemyAt`) does
  *    not have.
  *
- *    Fix: `createActor` (src/utils/combat/state.ts:212) already seeds
+ *    Fix: `createActor` (src/utils/combat/state.ts) already seeds
  *    `shieldPool = maxHp * (preFight?.startingShieldPctOfHp ?? 0) / 100` at actor construction,
  *    independent of any cast — the same mechanism the pre-fight combat-modifier layer (sub-
  *    project F) uses for "start combat shielded for N% of max HP". `EnemyActorInput.preFight` is
- *    threaded straight into `buildEnemyPlayerActorRuntime`'s `createActor` call (engine.ts:682),
+ *    threaded straight into `buildEnemyPlayerActorRuntime`'s `createActor` call (engine.ts),
  *    so setting `preFight.startingShieldPctOfHp` on the enemy input reproduces the fixture's
  *    intent (a pool that partially survives the cast) with zero engine changes and no invented
  *    trigger.
@@ -561,7 +561,7 @@ describe('PR6 Tier 2 — the incoming-block proc rolls per sub-attack', () => {
 //    doubles — each sub-attack of a 3-hit cast delivers 10,000, not the brief's assumed 5,000.
 //
 // 2. NO EVENT MARKS DoT-ENTRY CREATION. `convertHitToSelfDot` (engine.ts ~1602) pushes straight
-//    onto `victim.genericDoTEntries` with no accompanying emit — `dot-applied` (events.ts:164)
+//    onto `victim.genericDoTEntries` with no accompanying emit — `dot-applied` (events.ts)
 //    is a DIFFERENT mechanism (inflicted corrosion/inferno), never fired by the transform path,
 //    confirmed by reading every call site of `bus.emit({ type: 'dot-applied', ...})` (none is
 //    inside convertHitToSelfDot or its two call sites). So `dotEntryCountFor` cannot read
@@ -569,9 +569,9 @@ describe('PR6 Tier 2 — the incoming-block proc rolls per sub-attack', () => {
 //
 //    The working signal: `tickDoTs` (engine.ts ~1049) sums ALL generic entries into a SINGLE
 //    `dot-ticked` event per tick round (`emitTicked('generic', genericSum, genericStacks, 0)`,
-//    engine.ts:1060) — so the event's own COUNT never discriminates (always <= 1 per victim per
+//    engine.ts) — so the event's own COUNT never discriminates (always <= 1 per victim per
 //    round, an instance of the brief's own linearity warning). But `convertHitToSelfDot` always
-//    pushes `stacks: 1` per entry (engine.ts:1602), so the event's `stacks` FIELD is the summed
+//    pushes `stacks: 1` per entry (engine.ts), so the event's `stacks` FIELD is the summed
 //    stack count across every entry that ticked together — i.e., the entry count itself. A
 //    per-cast bug that created ONE entry (carrying the whole 3x damage, since `attackSkill`
 //    multiplies) would tick with `stacks: 1` regardless of N; a correct per-sub-attack model
@@ -664,7 +664,7 @@ describe('PR6 Tier 2 — the DoT transform on the ENEMY side (team symmetry)', (
 // per-arrival funnel Tier 1/2's shield/Protection/block tests already proved runs once per
 // sub-attack — so, unlike the counter block below, no separate guard layer is in play here. The
 // reflect's LOG-ONLY event is `reactive-damage-performed` (task correction #3; confirmed at
-// events.ts:229 and its sole emit sites, engine.ts:3984/4229/5043) — `sourceId` is the
+// events.ts and its sole emit sites, engine.ts) — `sourceId` is the
 // REFLECTOR (the wearer who took the hit and bounced it back), `targetId` the original attacker.
 // There is no separate discriminator between a reflect and a counter on this event (both funnel
 // through the same LOG-ONLY shape) — but filtering by `sourceId === <the reflecting victim's
@@ -747,7 +747,7 @@ describe('PR6 Tier 2 — damage reflection fires per sub-attack', () => {
 // attacks inside one turn) broke the equivalence, and this branch was never re-keyed with the
 // sub-attack index the sibling branch gained in PR4.
 //
-// THE FIX (Task 3b): the key gained the triggering event's `subAttackIndex`, exactly as its own
+// THE FIX: the key gained the triggering event's `subAttackIndex`, exactly as its own
 // SCOPE NOTE prescribed and matching `oncePerAttackGuardKey`'s convention. A counter is an
 // INCOMING-triggered reaction, and R2 resolves those per hit — so a victim of a 3-hit cast
 // counters three times. The assertions below now pin 3-for-N=3 / 1-for-N=1. They previously
@@ -763,7 +763,7 @@ const counterOnAttacked = (procChancePct: number): ShipSkills['slots'][number] =
             target: 'self',
             trigger: 'on-attacked',
             // procChance is a top-level Ability field (0..1); >= 1 bypasses the proc gate
-            // entirely (passesProcChanceGate, triggers.ts:2177-2179), leaving only the
+            // entirely (passesProcChanceGate, triggers.ts), leaving only the
             // counterFiredThisTurn guard this block exercises.
             procChance: procChancePct / 100,
             config: { type: 'counter', multiplier: 30 },

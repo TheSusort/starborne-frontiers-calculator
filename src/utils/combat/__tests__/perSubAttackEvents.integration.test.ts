@@ -237,9 +237,9 @@ describe('per-sub-attack ability-performed — cardinality and payload', () => {
 
         // The DISPLAY basis must not move: each sub-attack's `damage` still equals exactly what a
         // 1-hit cast's single aggregate event reports — this file's existing Σ-damage test's own
-        // per-event assertion (:198), which pins `damage` to the pre-funnel share. Comparing the
+        // per-event assertion, which pins `damage` to the pre-funnel share. Comparing the
         // SUM of the three `damage`s to a single-hit run's value would be the rejected "capture the
-        // total from a hits:1-equivalent run" approach that comment (:180-181) warns pins the wrong
+        // total from a hits:1-equivalent run" approach that comment warns pins the wrong
         // number: `hits: 3` deals 3× a 1-hit cast, not the same total split three ways.
         const single = perfOf(runStream(focusCast(1, basePattern())), 'attacker');
         for (const e of performed) expect(e.damage).toBeCloseTo(single[0].damage!, 6);
@@ -535,7 +535,7 @@ describe('attacked payload — Tenacity’s >25%-of-max-HP gate sees ONE sub-att
      *
      * `deferEmission` / `emitDeferred` is PR2's only asymmetric plumbing: the enemy site keeps a
      * LEADING `ability-performed` where the single aggregate emit has always sat and runs the rest
-     * of the sequence after its own inline damage-taken-leech tail (SP-U U5). Everything else in
+     * of the sequence after its own inline damage-taken-leech tail. Everything else in
      * this file drives the PLAYER path, which runs the whole sequence in one place, so the enemy
      * split is otherwise covered only by inference.
      *
@@ -664,7 +664,7 @@ describe('combat log — one attack row per sub-attack, splash amount per sub-at
  *  • `on-crit`        → Bloodthirst's damage-dealt self-repair. Enqueues ONCE per
  *    `ability-performed` event (i.e. once per sub-attack — since PR5 this holds on BOTH the
  *    positional and non-positional/DPS emitters, not just the positional one) and scales off THAT
- *    event's `deliveredDamage` (PR7) where present, falling back to `damage` on the non-positional
+ *    event's `deliveredDamage` where present, falling back to `damage` on the non-positional
  *    path. `critHits` remains a per-victim crit-identity signal on the payload but is not the
  *    enqueue driver here. This is the headline bug PR2 fixes: pre-PR2 the single aggregate event
  *    carried the WHOLE cast's damage, so all three fires healed off the full total. The amount,

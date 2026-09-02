@@ -1,5 +1,5 @@
 /**
- * SP-4b-1 §4B — a cast's damage must land in EXACTLY ONE accounting channel.
+ * §4B — a cast's damage must land in EXACTLY ONE accounting channel.
  *
  * The engine has two damage-accounting channels and they are mutually exclusive by design:
  *   • the per-victim POSITIONAL channel — `RoundData.perTargetDealt` (source → victim → dealt),
@@ -57,7 +57,7 @@ const rosterWithEnemyHp = (hp: number): CombatEngineInput => {
 };
 
 /**
- * SP-4b-2b: no longer a runnable shape — the normalization boundary refuses it. Kept as a fixture
+ * No longer a runnable shape — the normalization boundary refuses it. Kept as a fixture
  * so the refusal itself is pinned (below) rather than the shape quietly disappearing from this file.
  */
 const noRoster = (): CombatEngineInput => ({
@@ -81,7 +81,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         __resetNoVictimTurnCount();
     });
 
-    // SP-4c-2a INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case below. Its
+    // INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case below. Its
     // own hand-off note predicted the closure exactly: "SP-4c removes this shape too, along with
     // the sink it books into... the per-victim arm is the one that survives." The targetable-HP
     // floor (normalizeRoster.ts, MIN_TARGETABLE_MAX_HP) is that removal for THIS shape: an enemy
@@ -100,7 +100,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         expect(result.rawTotals.direct).toBe(0);
     });
 
-    // SP-4b-2b INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
+    // INVERTED THIS TEST. It read "an EMPTY opposing roster credits every cast to the
     // LEGACY sink", asserting `rawTotals.cumulative === ROUNDS * PER_CAST` and no per-victim credit.
     // The empty roster is now refused at the normalization boundary, so the premise is illegal by
     // contract and no roster line can repair it.
@@ -136,7 +136,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         // neither-channel state: rounds 2-4 had nothing living to hit and booked into neither
         // channel because the cast dealt nothing (the mid-run "whiff window").
         //
-        // SP-4c-1 DELETED that window rather than accounting for it. The kill wipes the enemy side,
+        // DELETED that window rather than accounting for it. The kill wipes the enemy side,
         // so the match ends on that turn and rounds 2-4 never happen — there is no round left that
         // could book into neither channel. The invariant this file guards is therefore STRICTLY
         // STRONGER than it was: not "one shape is allowed to book nothing", but "no shape does".
@@ -154,10 +154,10 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     it('INVARIANT: across every roster shape, no round books into both channels, and a round with a living victim books into one', () => {
         // The third state — "neither channel while a living victim existed" — is the SP-4b-1 §4B
         // defect. Pinned here directly so a future gate/selection divergence cannot reintroduce it.
-        // SP-4b-2b: the `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
+        // The `{ name: 'no roster', input: noRoster }` shape was dropped from this list —
         // it is refused at the boundary now, pinned by its own test above.
         //
-        // SP-4c-2a: the '0-max-HP pressure source' shape below no longer fails
+        // The '0-max-HP pressure source' shape below no longer fails
         // `resolvesPositionalVictim` either — the targetable-HP floor raises it to
         // MIN_TARGETABLE_MAX_HP, so it now books per-victim exactly like 'survives every round'.
         // It is KEPT in the list (rather than folded into the survives-every-round shape) so a
@@ -380,7 +380,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         // structural gate would have let the same 10 000 read as legacy damage as well.
         const result = runCombat(playerSideWithMaxHp(5_000));
 
-        // SP-4c-1: TWO rounds, not four. The round-2 kill wipes the player side, so the match ends
+        // TWO rounds, not four. The round-2 kill wipes the player side, so the match ends
         // on that turn — the retargeting claim below is untouched (it lives entirely in rounds 1-2),
         // and what disappears is only the pair of empty whiff rounds that used to trail it.
         expect(result.rounds).toHaveLength(2);
@@ -413,7 +413,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         // The liveness evidence that makes the zero legitimate: dead before the first cast lands.
         expect(result.healing!.destroyedRound).toBe(1);
         expect(result.healing!.rounds.map((r) => r.targetHpPctStart)).toEqual([0, 0, 0, 0]);
-        // SP-4e: the enemy resolves NO VICTIM every round and takes a no-victim turn (before the
+        // The enemy resolves NO VICTIM every round and takes a no-victim turn (before the
         // rung it consulted the fallback object and then short-circuited on it being dead). Either
         // way nothing is booked — which is why this counter's non-zero was never SP-4c's exit
         // condition, and is not SP-4e's either. It is the LIVENESS evidence for the zeros above:

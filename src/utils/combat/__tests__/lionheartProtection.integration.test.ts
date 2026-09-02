@@ -141,7 +141,7 @@ const BASE_INPUT: CombatEngineInput = {
     hp: 1_000_000_000,
     healTargetId: 'ally-1', // both manual enemies fire at this single shared victim.
     mode: 'healing',
-    // SP-4b-1: `ally-1` claims the front-middle cell and BOTH enemies are pinned to the middle
+    // `ally-1` claims the front-middle cell and BOTH enemies are pinned to the middle
     // row. The normalization boundary places every actor and synthesizes the enemies' `front
     // enemy` targeting, so "both enemies fire at this single shared victim" is now a claim about
     // board geometry rather than about `healTargetId`. Two things have to be stated for it to hold:

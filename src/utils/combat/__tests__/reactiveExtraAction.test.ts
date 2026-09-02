@@ -2,7 +2,7 @@
  * Phase 4b Task 10 — reactive death-triggered bridge (extra-action + charge).
  *
  * A death-triggered ability (Sokol/Liberator on-enemy-destroyed, Harvester on-ally-destroyed)
- * routes from its death listener (Task 5) through the executor's `extra-action` / `charge` branch
+ * routes from its death listener through the executor's `extra-action` / `charge` branch
  * into the engine's `grantExtraAction` / `grantAllyCharges`. Dispatch path is set by death TIMING:
  *
  *  Path A — during-turn death: the death fires inside an actor's turn while the round-local queue
@@ -12,7 +12,7 @@
  *  Path B — post-round death: a death reconciled AFTER the turn loop has no live queue, so an
  *    extra-action grant buffers as a cross-round pending grant landing at the START of round R+1.
  *
- * PR5d HISTORY (this file): Path B was previously exercised here via the DPS dummy enemy — the
+ * HISTORY (this file): Path B was previously exercised here via the DPS dummy enemy — the
  * dummy "died" post-round when its cumulative damage crossed `enemyHp`, emitting ship-destroyed
  * and triggering the player's on-enemy-destroyed reactive into the buffered cross-round grant.
  * PR5d made the dummy INDESTRUCTIBLE: it is a pure damage wall that never records destroyed, so
@@ -94,7 +94,7 @@ const positionalKillBase = (
     pattern: basePattern(),
     // One positioned enemy attacker at the focus's targeted cell (M4), HP 5000 → dies to the
     // 5000 firing-hit in round 1. Overridable per test.
-    // SP-4c-1: TWO members, not one. The front dies to the round-1 firing hit — that is the
+    // TWO members, not one. The front dies to the round-1 firing hit — that is the
     // on-enemy-destroyed trigger these cases are about — and a survivor at the back keeps the kill
     // from WIPING the enemy side, which would end the match on that turn and take the granted
     // extra action (and rounds 2-4) with it. The survivor is 0-attack and effectively immortal
@@ -415,7 +415,7 @@ describe('reactive death-triggered bridge', () => {
             speed: 50, // focus acts after atk1 (100) but before t1 (10)
             healTargetId: 't1',
             mode: 'healing',
-            // SP-4b-1: `t1` claims the front-middle cell explicitly. The normalization boundary
+            // `t1` claims the front-middle cell explicitly. The normalization boundary
             // places every actor and synthesizes `atk1`'s missing targeting, so the victim is now
             // decided by board geometry — and with `t1` on its index-derived default (M3) the
             // auto-placed FOCUS would hold M4, win `front enemy`, and soak the 5000 on its 100000

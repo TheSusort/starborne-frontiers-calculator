@@ -392,7 +392,7 @@ describe('per-victim skill-triggered detonation (positional WALKED-TEAM ally →
         expect(bombDet[0].damage).toBe(2000);
     });
 
-    // SP-4b: 'GATE-NEGATIVE: a walked-team detonate with a target but NO pattern stays on the
+    // 'GATE-NEGATIVE: a walked-team detonate with a target but NO pattern stays on the
     // legacy single-anchor path' lived here. Its whole subject was the PATTERN conjunct of
     // `teamPositional` — a walked ally with a target and no pattern falling through to the legacy
     // single-anchor detonate, with the positional-only surfaces (perActorDetonation /

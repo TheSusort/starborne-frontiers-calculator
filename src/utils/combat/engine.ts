@@ -11050,9 +11050,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // landscape, the scope handling and why this makes both sides
                                 // team-symmetric by construction, see the canonical block
                                 // comment above `procStandingLeechesPerVictim`'s definition
-                                // (engine.ts, `// E2 Task 3: PER-VICTIM standing-leech
-                                // proc for the POSITIONAL apply path.`, running to the
-                                // definition at engine.ts, `const procStandingLeechesPerVictim = (`) — not repeated here.
+                                // in this file — not repeated here.
                                 //
                                 // SPECIFIC TO THIS CALL SITE: `creditDamage` was not an option
                                 // here, because it would also write `dmg(sourceId)[dotType]`,
@@ -11381,7 +11379,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // (player→enemy here). pattern/target are non-null via the `positional` gate.
                                 // The per-victim apply/emit/detonation body is the shared
                                 // drivePositionalTurnApply helper; the focus site injects the player→enemy
-                                // STANDING leech (E2 Task 3 — the acting attacker's standing leeches proc
+                                // STANDING leech (the acting attacker's standing leeches proc
                                 // off EACH footprint victim's role-scaled dealt damage) and emits the
                                 // per-victim `attacked` inline (before detonation). The turn's deferred
                                 // ability-performed carries the anchor firing-hit values for the log.

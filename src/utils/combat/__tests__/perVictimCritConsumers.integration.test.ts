@@ -1,5 +1,5 @@
 /**
- * Per-victim crit — consumer integration tests (Task 6).
+ * Per-victim crit — consumer integration tests.
  *
  * Three "consumer" effects that must behave per-victim after the per-victim crit wiring:
  *
@@ -229,7 +229,7 @@ describe('per-victim crit identity on the event payload (Task 6)', () => {
         ];
 
         // rng=0.9 → anchor crits (rate 1.0), covered does NOT crit (rate 0.75)
-        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys, so a bare
         // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
         // shared constant draw actually reaches every gate this test depends on. (The second
         // branch below doesn't need this: `resetRateGateRng()` nulls the keyed provider, so
@@ -277,7 +277,7 @@ describe('per-victim crit consumers — Reactive Ward / per-victim attacked.didC
      * didCrit=true) — this test would FAIL on the pre-wiring engine.
      */
     it('per-victim attacked event carries the victim own didCrit (not the anchor)', () => {
-        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys, so a bare
         // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
         // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
@@ -346,7 +346,7 @@ describe('per-victim crit consumers — Reactive Ward / per-victim attacked.didC
      * Extends the two-victim case to a full line.
      */
     it('three-victim AoE: anchor crits, two thermal covered victims do NOT crit', () => {
-        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys, so a bare
         // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
         // shared constant draw actually reaches every gate this test depends on.
         setRateGateRng(() => 0.9);
@@ -424,7 +424,7 @@ describe('per-victim crit consumers — Menace outgoing amplification (Task 6)',
             passiveEnemy('covered', 'M3', 'thermal'), // does NOT crit at rng=0.9
         ];
 
-        // Per-victim crit gates carry `${victimId}:active-crit` stream keys (SP-0), so a bare
+        // Per-victim crit gates carry `${victimId}:active-crit` stream keys, so a bare
         // `setRateGateRng` override is bypassed by the keyed test provider — set BOTH so the
         // shared constant draw actually reaches every gate this test depends on, in BOTH runs.
         setRateGateRng(() => 0.9);

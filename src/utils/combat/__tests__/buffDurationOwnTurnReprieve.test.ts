@@ -88,7 +88,7 @@ const collect = (input: CombatEngineInput): CombatEvent[] => {
 
 /** Shared minimal DPS-mode base (no healTargetId). */
 const dpsBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a real opponent. This is a DAMAGE fixture (5000 attack for up to 5 rounds) so it
+    // A real opponent. This is a DAMAGE fixture (5000 attack for up to 5 rounds) so it
     // takes the 10M-HP form; the 500k default is not a survival guarantee and a mid-sim death would
     // truncate the buff-lifecycle rounds this file counts. 0 lives on the roster entry's own
     // stats.defence (the fight-wide `enemyDefense` scalar it used to be kept in step with, always

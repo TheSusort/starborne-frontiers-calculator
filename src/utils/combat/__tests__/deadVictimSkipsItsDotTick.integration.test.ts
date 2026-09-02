@@ -16,21 +16,21 @@
  *
  * WHY THE OLD NUMBERS DISAGREED. Pre-`071f2a33` a scalar-only DPS run resolved against the dummy
  * `enemy` sink, whose HP landed in the POST-ROUND accounting step rather than inside the turn loop
- * (engine.ts:3134-3141). `destroyedRound` was therefore never stamped while the round's turns were
+ * (engine.ts). `destroyedRound` was therefore never stamped while the round's turns were
  * still being walked, so the sink took its turn and ticked in the very round it died. The old
  * kill-round DoT numbers are that deferred-accounting artifact, not a game rule.
  *
  * THE TWO SITES, both in the round loop's turn walk:
- *   1. engine.ts:8451-8457 — the general dead-actor turn skip. The victim was killed by a DIRECT
+ *   1. engine.ts — the general dead-actor turn skip. The victim was killed by a DIRECT
  *      hit earlier in the same round → its whole turn body, including the DoT-tick prologue at
- *      engine.ts:8571+, is `continue`d past.
- *   2. engine.ts:8752-8757 — "lethal turn-start tick → skip the rest of the turn". The victim
+ *      engine.ts+, is `continue`d past.
+ *   2. engine.ts — "lethal turn-start tick → skip the rest of the turn". The victim
  *      survived the direct hit but its OWN DoT tick was lethal → the tick is credited, and
  *      everything later in that turn (bomb countdown/detonation) is not.
  * Site 1's predicate is side-agnostic and the DoT-tick prologue picks its opposing roster from
  * `actor.side`, so the rule reads symmetric — but asserting both directions is NOT redundant, and
  * measuring found why: under `mode: 'battle'` the focus IS the heal target, so a dead focus is
- * short-circuited one site EARLIER, by `handleDeadTargetSkip` (engine.ts:7744-7746), and never
+ * short-circuited one site EARLIER, by `handleDeadTargetSkip` (engine.ts), and never
  * reaches site 1 at all. The two directions are enforced by two different guards that happen to
  * agree. Team-symmetry is a locked rule of this epic precisely because "it reads symmetric" is not
  * a measurement.

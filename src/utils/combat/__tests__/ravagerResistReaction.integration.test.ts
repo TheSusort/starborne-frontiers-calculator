@@ -37,7 +37,7 @@ const RAVAGER_P2 =
 const HACKING_MODULE_OVERDRIVE = 'Hacking Module Overdrive';
 
 /** Ravager: a real corpus-phrased "inflicts <unit-skill>X</unit-skill> for N turns" active
- *  (parses to an enemy-targeted timed debuff, skillTextParser.test.ts:381-394) + the verbatim
+ *  (parses to an enemy-targeted timed debuff, skillTextParser.test.ts) + the verbatim
  *  RAVAGER_P2 passive on the R2 (2-refit) slot, so buildShipAbilities produces the REAL
  *  on-own-debuff-resisted reactive ability from production parsing — not a hand-written proxy. */
 const makeRavager = (id: string): Ship => ({

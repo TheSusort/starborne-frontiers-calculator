@@ -9,7 +9,7 @@
  * still omits `onHealTargetDestroyed` (the enemy victim is never the heal target).
  *
  * The round-level SCALARS (`incomingDamage`/`shieldAbsorbed`/`barrierAbsorbed` on RoundData)
- * read ONLY the heal target's own bucket (engine.ts:4210), so an enemy victim's intake never
+ * read ONLY the heal target's own bucket (engine.ts), so an enemy victim's intake never
  * moves those scalars — it lives solely in that victim's own per-actor bucket. E2 (per-victim
  * leech) reads this surface.
  *
@@ -105,7 +105,7 @@ const enemyAttacker = (id: string, shipSkills?: ShipSkills): EnemyAttacker => ({
 });
 
 const healBase = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: every run needs a real opponent. The id is DELIBERATELY not the shared
+    // Every run needs a real opponent. The id is DELIBERATELY not the shared
     // `BARE_ENEMY_ID` ('e1'): this file hand-builds victims called 'e1'/'e2' and asserts on
     // `perActorIncoming`/`ship-destroyed` keyed by those ids, so a roster actor sharing an id would
     // conflate the buckets. The focus has `attack: 0` and an empty kit, so this opponent is never hit.
@@ -259,7 +259,7 @@ describe('applyOutgoingToEnemy (player→enemy per-victim damage apply wrapper)'
         const hpBucket = rounds[0].perActorIncoming.get('e2');
         expect(hpBucket?.incoming).toBe(2000);
         // The heal target's own scalar totals stay 0 — the tank was never attacked this round; the
-        // scalars read ONLY the heal target's bucket (engine.ts:4210), not the enemy victims'.
+        // scalars read ONLY the heal target's bucket (engine.ts), not the enemy victims'.
         expect(rounds[0].incomingDamage).toBe(0);
     });
 });

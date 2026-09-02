@@ -3,7 +3,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { Ability } from '../../../types/abilities';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task R1: capture resisted enemy→tank TIMED debuffs into EnemyRoundEffects.
+// Capture resisted enemy→tank TIMED debuffs into EnemyRoundEffects.
 //
 // PR 5 item 12 routes an enemy attacker's TIMED debuff infliction through a
 // hacking-vs-security landing roll (per-enemy `debuffLandingChance`). When the

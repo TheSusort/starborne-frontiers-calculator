@@ -29,7 +29,7 @@ import type { Position } from '../../../types/encounters';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
-/** The vestigial DPS sink actor's id (engine.ts:1858) — the address the defect used. */
+/** The vestigial DPS sink actor's id (engine.ts) — the address the defect used. */
 const SINK_ID = 'enemy';
 const DEBUFF = 'Crit Shred';
 

@@ -1,5 +1,5 @@
 /**
- * SP-4c-2d §4.3/§4.6 — the sentinel id is RESERVED IN BOTH DIRECTIONS.
+ * §4.3/§4.6 — the sentinel id is RESERVED IN BOTH DIRECTIONS.
  *
  * The dummy `enemy` actor is gone, but the side-wide scheduled-enemy-debuff bucket still needs an
  * id to emit `buff-expired` under. `SENTINEL_ENEMY_ACTOR_ID` keeps the literal `'enemy'` so the

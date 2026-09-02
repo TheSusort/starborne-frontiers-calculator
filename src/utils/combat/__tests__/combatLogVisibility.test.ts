@@ -80,7 +80,7 @@ function shielder(id: string, extra: Partial<Ship> = {}): Ship {
         activeSkillText: `This Unit grants <unit-damage>Shield equal to ${SHIELDER_SHIELD_PCT}%</unit-damage> of its Max HP.`,
         secondPassiveSkillText:
             'This Unit grants <unit-skill>Defense Up II</unit-skill> for 1 turn and <unit-aid>cleanses all</unit-aid> debuffs when an ally within the Active pattern has their Shield destroyed.',
-        // SP-4b-1: state the targeting DATA COLUMNS (see `debuffer`'s note for why). The R2
+        // State the targeting DATA COLUMNS (see `debuffer`'s note for why). The R2
         // passive is `patternScoped` — "an ally within the Active pattern" — so the Active pattern
         // is what bounds its reach, and leaving the columns empty left the boundary to fill a
         // single-cell front-ENEMY footprint for a support ship. These are the REAL Aegis columns
@@ -94,7 +94,7 @@ function shielder(id: string, extra: Partial<Ship> = {}): Ship {
 
 /** Curator-shaped AoE debuffer: inflicts a timed debuff on every enemy and hits them.
  *
- *  SP-4b-1: the `activeTarget`/`activePattern` DATA COLUMNS are now stated. `parseShipTargeting`
+ *  The `activeTarget`/`activePattern` DATA COLUMNS are now stated. `parseShipTargeting`
  *  reads those columns, NOT the skill text, so leaving them empty made `plan.targeting` undefined
  *  and the cast had no board footprint at all — which the pre-boundary engine resolved to the
  *  legacy sink. The boundary fills an absent footprint with SINGLE-TARGET front-enemy, and a

@@ -81,7 +81,7 @@ describe('debuffImmunity helpers', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 4: Block Debuff — cast-side timed + persistent landing fold.
+// Block Debuff — cast-side timed + persistent landing fold.
 //
 // A target carrying `Block Debuff` auto-resists EVERY incoming timed and
 // persistent-stacking debuff. We drive the engine via `runCombat` with an enemy
@@ -257,7 +257,7 @@ describe('Block Debuff — cast-side timed/persistent landing fold (engine)', ()
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 6: Block Debuff — cast-side DoT block + resist event (engine).
+// Block Debuff — cast-side DoT block + resist event (engine).
 //
 // A DoT-casting attacker (enemy attacker `e1`, speed 10 — acts AFTER the speed-100
 // focus actor so the focus actor's recurring Block Debuff self-buff is already live)
@@ -417,7 +417,7 @@ describe('Block Debuff — cast-side control block (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 5: Block Debuff — reactive timed-debuff fold (executeIntent).
+// Block Debuff — reactive timed-debuff fold (executeIntent).
 //
 // The REACTIVE debuff executor (triggers.ts `cfg.type === 'debuff'`) applies a
 // timed debuff to a target on a triggered event (on-attacked / on-crit, etc).
@@ -581,7 +581,7 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 7: Block Debuff — reactive DoT block + resist event (executeIntent).
+// Block Debuff — reactive DoT block + resist event (executeIntent).
 //
 // The REACTIVE DoT executor (triggers.ts `cfg.type === 'dot'`) appends a DoT to
 // the routed reactive victim on a triggered event, gated by a landing roll that is
@@ -591,7 +591,7 @@ describe('Block Debuff — reactive timed-debuff fold (engine)', () => {
 // block-path ONLY. Normal landing failures stay silent (byte-identical). We drive
 // the executor directly, reusing the Task 5 harness.
 //
-// SP-4c-2d: the intent now STAMPS its victim (`eventCtx.counterTargetId`), which is
+// The intent now STAMPS its victim (`eventCtx.counterTargetId`), which is
 // what an on-attacked reactive does in production anyway. Before that rung these two
 // cases relied on the branch falling back to `ctx.enemy.id`; that fallback is now a
 // no-op, so without the stamp both cases would pass VACUOUSLY (nothing lands, so
@@ -705,7 +705,7 @@ describe('Block Debuff — reactive DoT block + resist event (engine)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 8: Block Debuff — end-to-end integration coverage.
+// Block Debuff — end-to-end integration coverage.
 //
 // The per-family seams (timed/persistent/DoT × cast/reactive) are each unit-tested
 // above (Tasks 4-7). This block covers the cross-cutting cases those seams do not

@@ -1,5 +1,5 @@
 /**
- * A2 Task 4: per-target debuff landing/resist recomputed LIVE each turn from the
+ * Per-target debuff landing/resist recomputed LIVE each turn from the
  * acting actor's effective hacking (× affinity) vs the TARGET's effective security.
  *
  *   effHacking = effectiveStatsOf(attacker).hacking * (1 + affinityDamageModifier/100)

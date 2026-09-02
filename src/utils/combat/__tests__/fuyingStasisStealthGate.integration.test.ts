@@ -1,5 +1,5 @@
 /**
- * #363 (Task 8) — Fuying's reactive Stasis honours its own "ally in Stealth" precondition.
+ * #363 — Fuying's reactive Stasis honours its own "ally in Stealth" precondition.
  *
  * Her R3/R4 refit passive's second sentence reads:
  *
@@ -50,7 +50,7 @@ import type { CombatActor } from '../state';
 import type { Ship } from '../../../types/ship';
 
 // `docs/` is gitignored reference data and a fresh worktree does not have it. Without this guard
-// the file fails to COLLECT rather than reporting a readable reason (realKitFingerprints.test.ts:41).
+// the file fails to COLLECT rather than reporting a readable reason (realKitFingerprints.test.ts).
 function requireReferenceData(): void {
     if (!csvAvailable() || !shipDataAvailable()) {
         throw new Error(

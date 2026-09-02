@@ -131,7 +131,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
     });
 
     const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-        // SP-4b-2b: a real opponent for the ally-inflicted Corrosion to land on. The DEFAULT
+        // A real opponent for the ally-inflicted Corrosion to land on. The DEFAULT
         // 500k HP is deliberate and safe here: corrosion MAGNITUDE scales with the victim's own
         // `recipientMaxHp` in the per-victim positional tick, but this fixture asserts only the
         // entry's family/tier/unremovable/remainingRounds — never a damage number — so the HP
@@ -282,7 +282,7 @@ describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna convert
             ...input,
             __testTapActors: (actors) => {
                 playerActor = actors.find((a) => a.id === 'attacker');
-                // SP-4b-2b: the negative control used to be the vestigial `enemy` sink (the focus's
+                // The negative control used to be the vestigial `enemy` sink (the focus's
                 // only offensive target back when no roster was supplied). Now that the roster is
                 // real, the control is the roster ITSELF — and it is looked up by id so a typo or a
                 // renamed actor fails loudly instead of resolving to `undefined` and letting a

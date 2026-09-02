@@ -214,7 +214,7 @@ describe('C2b-1 T3: executeIntent — purge branch', () => {
 
     it('(c) does NOT emit when fromPurgeEvent is true, but removal still happens', () => {
         const { ctx, purgedCalls, emitted } = makePurgeCtx(1);
-        // SP-4c-2d: counterTargetId is now REQUIRED for this case to reach the emission gate at
+        // counterTargetId is now REQUIRED for this case to reach the emission gate at
         // all — without it the executor no-ops and this test would pass vacuously.
         executeIntent(
             makePurgeIntent({ fromPurgeEvent: true, counterTargetId: 'routed-enemy' }),
@@ -228,7 +228,7 @@ describe('C2b-1 T3: executeIntent — purge branch', () => {
 
     it('(d) does NOT emit when removed === 0', () => {
         const { ctx, emitted } = makePurgeCtx(0);
-        // SP-4c-2d: same — a routed target is required or the no-op satisfies this vacuously.
+        // Same — a routed target is required or the no-op satisfies this vacuously.
         executeIntent(makePurgeIntent({ counterTargetId: 'routed-enemy' }), ctx);
         expect(emitted).toHaveLength(0);
     });

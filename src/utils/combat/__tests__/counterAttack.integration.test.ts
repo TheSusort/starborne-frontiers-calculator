@@ -5,7 +5,7 @@
  * counter through the REAL parse path: a player ship constructed with Stalwart's verbatim skill text
  * is run through `buildShipAbilities` (the same registry every production ship uses), and the
  * resulting `ShipSkills` is fed straight into `runCombat`. This makes the test mutation-resistant:
- * removing the parser branch (Task 5) OR the executor branch (Task 4) breaks it.
+ * removing the parser branch OR the executor branch breaks it.
  *
  * Harness mirrors counterAttack.test.ts EXACTLY: healing mode, the FOCUS ('attacker') is the heal
  * target and carries the parsed Stalwart skills; one `enemyAttackers` actor ('foe') lands a real
@@ -355,7 +355,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
         // Owner at M2; adjacent ally 'ally-T2' at T2 is the heal target → the enemy hits T2 →
         // owner is adjacent → the on-ally-attacked counter fires against the attacker.
         //
-        // SP-4b-1: the enemy has to be PINNED to row T. `front` selection scans rows starting from
+        // The enemy has to be PINNED to row T. `front` selection scans rows starting from
         // the caster's own row and only then takes the front-most column within it (selectTargets),
         // and every actor is now placed — so an unpositioned enemy would land on the middle row,
         // find the OWNER at M2 there, and fire the SELF counter instead. That reads as a pass while
@@ -384,7 +384,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
         // on-ally-attacked listener runs but requireDamagedAllyAdjacent rejects it → no counter.
         // Adjacent ally-T2 still present so the geometry is positional (not the all-allies fallback).
         //
-        // SP-4b-1: the enemy is pinned to row B for the same reason as the ADJACENT case above —
+        // The enemy is pinned to row B for the same reason as the ADJACENT case above —
         // otherwise it lands on the middle row, hits the OWNER at M2, and the SELF counter fires,
         // which is a real retaliation and has nothing to do with the adjacency gate under test.
         // `ally-B4` is the only actor in row B, so the scan resolves onto it.

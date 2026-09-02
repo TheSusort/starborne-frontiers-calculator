@@ -87,7 +87,7 @@ const baseInput = (overrides: Partial<DPSSimulationInput> = {}): DPSSimulationIn
 /**
  * Collect per-round PLAYER turn order from turn-started events (drops the opposing actor).
  *
- * SP-4b-2a: a scalar-only `simulateDPS` run now fights a REAL, positioned enemy
+ * A scalar-only `simulateDPS` run now fights a REAL, positioned enemy
  * (`SYNTHESIZED_DPS_ENEMY_ID`), and the vestigial dummy `enemy` no longer takes a turn at all —
  * unconditionally so since SP-4c-2c, which dropped it from `turnOrderActors` and deleted the
  * `dummyEnemyIsVestigial` gate. So the id to drop moved from `'enemy'` to `'enemy-1'`.

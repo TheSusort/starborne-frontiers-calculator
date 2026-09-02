@@ -82,7 +82,7 @@ const makeHealing = (
         grantShieldToTarget: () => ({ granted: 0, gross: 0 }),
         playerIds,
         enemyIds: [],
-        // SP-4e Task 2: no longer an "unused E5 field present for type-correctness" — the reactive
+        // No longer an "unused E5 field present for type-correctness" — the reactive
         // heal branch reads it to decide whose pool to repair (it used to repair only `targetId`).
         // Production resolves every roster id via `allActorsById.get`; a blanket `() => undefined`
         // would repair nobody and make this suite's effectiveHeal assertions vacuous.
@@ -172,7 +172,7 @@ describe('Phase 4 PR 2 Task 3 — Salvation dead-recipient gross-heal filtering'
 
         executeIntent(salvationHeal('caster'), ctx);
 
-        // SP-4e Task 2: the two LIVING recipients each consume their OWN pool. The recipient list
+        // The two LIVING recipients each consume their OWN pool. The recipient list
         // is the load-bearing assertion — before this rung only the anchor ('ally1') was applied,
         // an `all-allies` reactive heal credited gross for every ally but restored HP to one. The
         // dead caster is still excluded (THIS file's subject, pinned by the first test): the list

@@ -276,7 +276,7 @@ describe('dynamic per-round condition gating', () => {
                 },
             ],
         };
-        // SP-U U5: the enemy is a real, destructible target. Size the pool (80k) so it drops
+        // The enemy is a real, destructible target. Size the pool (80k) so it drops
         // below 80% by round 2 (the gate lapses) yet survives rounds 1-3 — the buff's 3-round
         // window is observed before the enemy is wiped (round 4) and the run terminates.
         const rows = buffNamesByRound(skills, { enemyHp: 80000 });

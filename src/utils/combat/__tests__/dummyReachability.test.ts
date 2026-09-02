@@ -76,7 +76,7 @@
  *
  * ── WHAT IS LEFT FOR A LATER RUNG ─────────────────────────────────────────────────────────────
  *
- * NOTHING on this axis. Both sides' fallbacks are deleted; the dummy actor is deleted (SP-4c-2d);
+ * NOTHING on this axis. Both sides' fallbacks are deleted; the dummy actor is deleted;
  * the shapes that used to reach it are closed twice over — the MID-RUN WHIFF WINDOW (SP-4c-1 ends
  * the match on the turn that wipes a side, so a killed roster produces no whiff rounds — see CORPSE
  * TARGETING) and the 0-max-HP PRESSURE SOURCE (SP-4c-2a floors it at the boundary — see the
@@ -263,7 +263,7 @@ describe('no-victim turns after normalization', () => {
         expect(noVictimTurns()).toBe(0);
     });
 
-    // SP-4b-2b INVERTED THIS TEST. It used to read "STILL takes it with an empty roster — 4b-2
+    // INVERTED THIS TEST. It used to read "STILL takes it with an empty roster — 4b-2
     // closes this, and the counter proves it is live", running an empty-roster fight and asserting
     // the consultation counter `> 0`. 4b-2b is that closure: the empty roster is now refused at the
     // normalization boundary, so the shape that reached the fallback no longer exists and the old
@@ -285,7 +285,7 @@ describe('the shapes that used to reach the dummy sink', () => {
     });
 
     it('a pressure-source roster is FLOORED, so it can no longer reach the sink at all', () => {
-        // SP-4c-2a INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case above.
+        // INVERTED THIS TEST, the same way SP-4b-2b inverted the empty-roster case above.
         // It used to read BARE_ROUNDS consultations AND BARE_ROUNDS credits, and was this file's
         // VACUITY GUARD — the only proof the readings were wired to anything. A max-HP-0 roster was
         // placed but unhittable, so `resolvesPositionalVictim` kept the run non-positional and the
@@ -321,7 +321,7 @@ describe('the shapes that used to reach the dummy sink', () => {
         expect(floored.enemyAttackers[0].stats.hp).toBe(MIN_TARGETABLE_MAX_HP);
     });
 
-    // SP-4c-2d DELETED a case here, titled 'a live roster consults nothing'. It ran `bareInput()`
+    // DELETED a case here, titled 'a live roster consults nothing'. It ran `bareInput()`
     // and asserted the zero — the FOCUS DAMAGE fixture exactly, with no positive half, so it was a
     // strictly weaker duplicate: a zero it produced could equally have come from a run that did
     // nothing. FOCUS DAMAGE makes the same claim with a `turn-started` and a `perTargetDealt` row
@@ -397,7 +397,7 @@ describe('the shapes that used to reach the dummy sink', () => {
             enemyAttackers: bareEnemy({ stats: { hp: 5_000 } }),
         });
 
-        // POSITIVE HALF (SP-4c-2d): this case used to assert the zero alone, which is the vacuity
+        // POSITIVE HALF: this case used to assert the zero alone, which is the vacuity
         // shape this file's header forbids — a zero from a run that never reached the whiff window
         // for some unrelated reason would read identically. The window's absence is only meaningful
         // if the kill that used to OPEN it still happens, so pin that: the member dies to the

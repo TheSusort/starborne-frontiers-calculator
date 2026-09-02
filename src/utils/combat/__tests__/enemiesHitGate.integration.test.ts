@@ -265,7 +265,7 @@ const tygrShipSkills = (): ShipSkills => ({
 
 const tygrChargesAfterRound1 = (enemyPositions?: Position[]): number => {
     const result = runCombat({
-        // SP-4b-2b: the no-`enemyPositions` case is the single-opponent shape. A roster is now
+        // The no-`enemyPositions` case is the single-opponent shape. A roster is now
         // required, so it gets the shared inert opponent and the boundary supplies the default
         // front-enemy/origin-only axes — one enemy damaged, so the 2+ gate is still NOT met.
         // (The `enemyPositions` branch below overrides this with its own placed roster.)

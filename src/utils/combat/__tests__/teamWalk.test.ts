@@ -890,7 +890,7 @@ describe('ally-target routing (Task 5)', () => {
     });
 });
 
-// --- Reactive parity (Task 6) ----------------------------------------------
+// --- Reactive parity ----------------------------------------------
 // Reactive (live-trigger) buff/debuff/dot/charge abilities on a WALKED team ship register
 // their own listeners keyed to that owner's events; the executor routes the follow-up to
 // the owner's runtime (its charges, its landing gates, its sourceId). These tests drive the

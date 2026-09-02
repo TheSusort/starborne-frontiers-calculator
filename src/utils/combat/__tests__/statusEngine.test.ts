@@ -564,7 +564,7 @@ describe('createStatusEngine — own-turn self-buff reprieve (beginTurn)', () =>
         // Flag-LOGIC unit test: currentTurnActorId ('someOtherActor') ≠ the 'attacker'
         // store, so applyTimedAbilityStatus never stamps appliedThisTurn → no reprieve.
         // The real off-turn ROUTING-fidelity case (a buff applied on a ship while another
-        // ship is acting) is covered by the engine behavioral test (Task 3).
+        // ship is acting) is covered by the engine behavioral test.
         eng.beginRound(1);
         eng.beginTurn('someOtherActor');
         eng.applyTimedAbilityStatus(1, mkStatus(1));
@@ -1404,7 +1404,7 @@ describe('per-target debuff stores (Task 1)', () => {
             expect(active[0].payload.buffName).toBe('WeakenAura');
         });
 
-        // SP-G G1b: a start-of-combat "N stacks" grant (Meatshield's Protection) is a
+        // A start-of-combat "N stacks" grant (Meatshield's Protection) is a
         // stackable, non-accumulating buff — the parser leaves stackTrigger undefined so it
         // rides the AURA branch (not accumulating) once seeded via buildShipAbilities' pre-combat
         // relabel. Before this fix, the aura branch's `active` object never carried a `stacks`

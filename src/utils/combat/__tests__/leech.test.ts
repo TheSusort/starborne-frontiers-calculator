@@ -8,7 +8,7 @@ import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import { dealtBy } from '../__testutils__/perTargetDealt';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 6: standing-leech credit hook (engine.ts procStandingLeechesPerVictim).
+// Standing-leech credit hook (engine.ts procStandingLeechesPerVictim).
 // A passive-slot heal/shield ability with basis 'damage-dealt' is a STANDING leech:
 // the engine's creditDamage chokepoint procs it at credit time against every channel
 // the owner's damage flows through (direct, detonation, corrosion, inferno) — scope
@@ -28,7 +28,7 @@ const ab = (partial: Partial<Ability> & Pick<Ability, 'type' | 'config'>): Abili
 });
 
 const BASE = (overrides: Partial<CombatEngineInput> = {}): CombatEngineInput => ({
-    // SP-4b-2b: a run needs an opponent. The id is deliberately NOT the shared fixture's default
+    // A run needs an opponent. The id is deliberately NOT the shared fixture's default
     // `e1` — the enemy-side blocks further down build their OWN attackers with `id: 'e1'` and
     // filter events on that string, and reusing it here would conflate two different actors.
     // 10M HP so a multi-round damage fixture never destroys it mid-run (which would change the
@@ -192,7 +192,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
         // standing leech pays out through the `creditDamage` chokepoint. At the time this test was
         // written, a POSITIONAL run booked the burst on the per-victim channel instead and never
         // reached the leech proc at all — item 2 of the leech-channel gap class (see the canonical
-        // comment above `procStandingLeechesPerVictim`, engine.ts:3901). That instance is FIXED:
+        // comment above `procStandingLeechesPerVictim`, engine.ts). That instance is FIXED:
         // both of `applyPositionedTimedBurst`'s `creditDetonation` callbacks call this proc with
         // `channel: 'detonation'`. SP-4b-2b kept this case off the positional path anyway, via the
         // 0-MAX-HP "pressure source" roster that `resolvesPositionalVictim` found untargetable.
@@ -455,7 +455,7 @@ describe('standing-leech hook — damage-dealt passive', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 7: damage-taken procs (damage-leech spec §5). A passive-slot heal/shield
+// Damage-taken procs (damage-leech spec §5). A passive-slot heal/shield
 // ability with basis 'damage-taken' on the HEAL TARGET procs once per enemy ATTACK,
 // AFTER that attack's shield-first drain (so the proc never absorbs its own trigger).
 // raw = FULL attack damage × pct (not just the HP portion). Quixilver's punch-through
@@ -655,7 +655,7 @@ describe('damage-taken procs — passive on the heal target', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 6b: enemy attackers walk runPlayerTurn bound to the heal target. These tests
+// Enemy attackers walk runPlayerTurn bound to the heal target. These tests
 // LOCK the per-round incoming-damage parity that the retired runEnemyAttackerTurn used
 // to produce (its damage-formula coverage, folded here), plus the NEW per-target debuff
 // / self-buff behaviour the walk unlocks.
@@ -861,7 +861,7 @@ describe('enemy attacker damage parity (runPlayerTurn vs the heal target)', () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 6b NEW behaviour: a walked enemy's kit lands per-TARGET debuffs and self-buffs.
+// NEW behaviour: a walked enemy's kit lands per-TARGET debuffs and self-buffs.
 // Verified through the event bus (the engine's external write-only tap).
 // ─────────────────────────────────────────────────────────────────────────────
 describe('enemy attacker kit application (runPlayerTurn walk)', () => {
@@ -989,7 +989,7 @@ describe('enemy attacker kit application (runPlayerTurn walk)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Task 7: live enemyBuffNames (enemy self-buffs) + selfDebuffNames (target debuffs)
+// Live enemyBuffNames (enemy self-buffs) + selfDebuffNames (target debuffs)
 // flow into player condition contexts. Names ONLY — never re-folding effects.
 // Plus the preliminary 6b-review dead-target guard: cadence advances vs a dead
 // target, but NO application/events reach it.
@@ -1265,7 +1265,7 @@ describe('enemyBuffNames / selfDebuffNames in player gates (Task 7)', () => {
                 bus,
                 // Focus is damage-only (no self-heal) → once dead it stays dead.
                 shipSkills: { slots: [{ slot: 'active', abilities: [damageAb(100)] }] },
-                // SP-4c-1: an inert SURVIVING ally. The heal target here is the focus, and alone it
+                // An inert SURVIVING ally. The heal target here is the focus, and alone it
                 // IS the whole player side — its round-1 death would WIPE that side and end the
                 // match, leaving one round and making the "no late applications" filter below
                 // trivially empty (a vacuous green). With a survivor the enemy keeps acting for all
