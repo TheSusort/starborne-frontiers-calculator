@@ -7,7 +7,8 @@ may be a real defect. The sweep does not fix code, so each one is recorded here 
 
 ## 1. Generic DoT damage is computed and credited, but never surfaced
 
-**Status: needs a ruling. Verified by the orchestrator, not just reported.**
+**Status: RULED 2026-09-02 — "damage to dot could be folded into normal damage totals."**
+**Not done in this PR (see below). Needs its own change.**
 
 `engine.ts` carried the comment "`rawTotals.generic` … **Always 0 today**". That is false:
 
@@ -34,13 +35,25 @@ $ grep -rln 'totalGenericRaw' src/components src/pages
 So a player running Voron, Orel, or Oleander in DPS mode has generic-DoT damage computed,
 credited, and returned — and then not shown anywhere.
 
-**The question:** should generic DoT damage appear in the DPS summary as its own row, be folded
-into an existing total, or stay deliberately unsurfaced? A concrete in-fight example would settle
-it: Voron transforms an incoming hit into a self-DoT, that DoT ticks for N over 3 rounds — should
-those N appear in the player's damage breakdown?
+**OWNER RULING:** fold it into the normal damage totals. Not a separate row — the generic-DoT
+ticks count as damage like any other.
 
-Nothing in this PR changes the behaviour either way. The comment now states what is actually
-true instead of fencing the case off as impossible.
+**Why this PR does not do it.** The whole sweep's verification rests on one invariant — the token
+oracle proving ZERO code bytes changed across all 21 files. Folding `totalGenericRaw` into a
+damage total is a behaviour change that moves player-visible DPS numbers and would almost
+certainly move golden fixtures. Landing it here would destroy the invariant that makes the comment
+diff reviewable, and would hide a real behaviour change inside a docs-only PR.
+
+**Follow-up work, scoped:**
+- `totalGenericRaw` (`engine.ts:2747` / `:12814` / `:13367`) folds into the normal damage total
+  rather than being returned as an unread `generic` field.
+- Ships affected: Voron and Orel (`transform-incoming-to-dot`), Oleander (`Hit Mitigation`).
+- Golden fixtures WILL move for any fixture running those kits — that is the expected signal, not
+  a regression. Confirm each moved token is the generic tick before updating.
+- User-facing, so it needs a `UNRELEASED_CHANGES` entry in `src/constants/changelog.ts`.
+
+The comment in this PR now states what is actually true (a live producer exists) instead of
+fencing the case off as "always 0 today".
 
 ---
 
@@ -60,8 +73,16 @@ left standing.
 
 ## 3. A false premise about `attacked.damage`, repeated as the justification for a live cap
 
-**Status: comment left byte-for-byte in this PR. No code defect found. Recorded because the same
-false premise appears in a second file that is OUT of this sweep's scope.**
+**Status: RESOLVED 2026-09-02 by owner ruling. No code defect. `triggers.ts` comment CORRECTED in
+this PR; the twin in `buildEquipmentAbilities.ts` is a follow-up (out of scope).**
+
+**OWNER RULING:** "Bloodthirst (on unit damage enemy) has a chance of triggering per sub-attack.
+Damage-taken reactives, like Second Wind, have a chance of triggering per incoming hit."
+
+So per-sub-attack / per-incoming-hit IS the intended granularity. There is no over-fire to cap,
+and the cap on Adaptive Plating stands purely on its own game text. This is consistent with the
+full-walk model of multi-hit (each sub-attack is itself a full attack), under which "outgoing per
+attack" and "outgoing per sub-attack" describe the same thing.
 
 `triggers.ts:172-174` says:
 

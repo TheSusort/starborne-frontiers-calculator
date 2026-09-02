@@ -169,9 +169,12 @@ export interface Intent {
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
          *  (ability-performed.damage — damage the owner DEALT, e.g. Bloodthirst) and
          *  `basis:'damage-taken'` (attacked.damage — damage the owner TOOK, e.g. Adaptive
-         *  Plating). NOTE: attacked.damage is the per-attack aggregate and on-attacked fires
-         *  once per hit, so a non-oncePerRound damage-taken reactive would grant N times for
-         *  an N-hit attack; Adaptive Plating's oncePerRound gate caps it to one grant/round.
+         *  Plating). Both are PER SUB-ATTACK, not per turn: `attacked.damage` is the slice one
+         *  sub-attack dealt to this victim (see its doc in `events.ts`), and a damage-taken
+         *  reactive rolls once per incoming hit — which is the intended granularity, not an
+         *  over-fire to be capped. Adaptive Plating carries `oncePerRound` because its own game
+         *  text says "limited to once per round"; a reactive whose text says no such thing
+         *  (Bloodthirst) rolls on every sub-attack.
          *  For `basis:'damage-dealt'` the on-crit listener prefers the event's
          *  `deliveredDamage` — what the sub-attack actually delivered, including a Protection
          *  cascade's redirected chunk and excluding a DoT-transformed portion. `damage` remains the
