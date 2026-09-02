@@ -158,7 +158,7 @@ import { protectionCascade } from './protectionTransfer';
  *  round), so any round needing more than this is a config/parser bug. */
 const MAX_EXTRA_TURNS_PER_ROUND = 8;
 
-/** SP-4c-2d §4.3: the id the side-wide scheduled-enemy-debuff bucket emits `buff-expired`
+/** §4.3: the id the side-wide scheduled-enemy-debuff bucket emits `buff-expired`
  *  under. The dummy actor that used to host that bucket is gone; the bucket is not. Keeping
  *  the literal 'enemy' keeps the event stream byte-identical across the deletion, and the
  *  name is honest about what it is — an id for a bucket, not a claim that an actor exists.
@@ -370,7 +370,7 @@ function registerActorAbilityStatuses(
             // target; `all-allies` (Hayyan) keeps every player. The global ally → all-players rule
             // for every OTHER cast-path buff is UNCHANGED.
             //
-            // SP-4e: `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
+            // `'lowest-hp-ally'` joins BOTH ally arms. On the CARVE-OUT arm the match is
             // purely DEFENSIVE and is expected to stay dead — do not read it as a Hermes fix.
             // Measured against the corpus (`docs/ship-skills.csv`, 2026-08-20): the only
             // firing-slot Cheat Death grants are Hermes (charged, `'ally'`) and Hayyan (charged,
@@ -1124,7 +1124,7 @@ function processBombs(args: {
     }
 }
 
-/** SP-4b-2 D6: the footprint of an `all-enemies` ability — every occupied cell of the opposing
+/** The footprint of an `all-enemies` ability — every occupied cell of the opposing
  *  board, all at ORIGIN role (full damage; `resolveCells` special-cases shape 'all' and ignores
  *  the anchor's geometry entirely). Used by `passiveSlotPattern` for a passive-slot damage
  *  ability whose own `target` is `'all-enemies'` (Judge, Incinerator). */
@@ -1142,7 +1142,7 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
 // ACCUMULATING SIDE this round (spec: Echoing Burst gathers all its side's direct); the OUTPUT
 // burst is credited to the accumulator's applier via `creditDetonation`.
 //
-// SP-4b-2 D1: the input is now supplied by `directDealtBy(<that side's roster>)`, which reads the
+// The input is now supplied by `directDealtBy(<that side's roster>)`, which reads the
 // scalar credit channel AND its positional twin. It used to be a bare sum over the scalar
 // `roundDamage` map, which a positional run never writes — so every accumulator drained on
 // schedule for exactly 0.
@@ -1184,7 +1184,7 @@ function processAccumulators(args: {
 // damage (preserving the pre-Task-4 single-event-per-type emission). At attacker-only this
 // produces byte-identical totals (exactly one applier → same sums).
 //
-// Sub-project I, PR I4b: `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH
+// `dotMultFor(ctx)` replaces the bare `ctx.dotMult` read for BOTH
 // dotTypes — it re-folds any enemy-status-name-gated dotDamage modifier (Wildfire) against
 // THIS call's ticking victim, live, at tick time (see `victimDotMult`). Every call site that
 // doesn't pass it (or an applier ctx with no such modifier) is unaffected: `ctx.dotMult` alone.
@@ -1621,7 +1621,7 @@ export interface CombatEngineInput {
     __testTapApplyOutgoingToEnemy?: (
         fn: (damage: number, enemyVictim: CombatActor) => VictimDamageOutcome
     ) => void;
-    /** TEST-ONLY notification hook (PR4b): fired on EVERY `creditDamage` call (both sides, every
+    /** TEST-ONLY notification hook: fired on EVERY `creditDamage` call (both sides, every
      *  round) with the raw (sourceId, channel, amount) — a per-call NOTIFICATION, not a
      *  tap-the-closure-out pattern (creditDamage is redeclared every round inside the round
      *  loop, so exposing the closure reference the way `__testTapApplyOutgoingToEnemy` does
@@ -1756,13 +1756,13 @@ interface ReactiveSideCtx {
     selfHpPctFor?: (ownerId: string) => number;
     /** Per-side most-buffs opposing-actor resolver (Rhodium). See IntentExecContext. */
     enemyWithMostBuffs?: (ownerId: string) => string | undefined;
-    /** D-PR14 Doomsayer: per-side highest-attack opposing-actor resolver. See IntentExecContext. */
+    /** Doomsayer: per-side highest-attack opposing-actor resolver. See IntentExecContext. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
-    /** SP-M M1 Task 6 Chakara: per-side highest-speed opposing-actor resolver. See
+    /** Chakara: per-side highest-speed opposing-actor resolver. See
      *  IntentExecContext. Resolved LIVE (no onceByOwner memo) — unlike enemyWithMostBuffs,
      *  Chakara's co-located clause is a SELF-buff that never changes an enemy's speed. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
-    /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
+    /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc (per-victim-conditional AoE). Player side → living enemy attackers; enemy side
      *  → living player actors. See IntentExecContext. Resolved LIVE per drain (no memo). */
     livingOpposingActorIds?: (ownerId: string) => string[];
@@ -1770,7 +1770,7 @@ interface ReactiveSideCtx {
     firstActivatorId?: string;
     /** Id of the sole living actor on this side, recomputed each drain (Last Stand). */
     lastStandingId?: string;
-    /** D-PR14 Bulwark: per-round once-per-(owner,ability) consume set (shared across both sides). */
+    /** Bulwark: per-round once-per-(owner,ability) consume set (shared across both sides). */
     oncePerRoundConsumed?: Set<string>;
     /** ship-kit W3 (Sansi): per-round fire COUNT per (owner,ability) backing Ability.maxPerRound
      *  (shared across both sides, like oncePerRoundConsumed). */
@@ -1848,7 +1848,7 @@ export interface HealingRoundEngine {
      *  ship shows an unexplained residual. */
     convertedToShield: number;
     /** Per-actor incoming accounting bucket. The heal target's `incomingDamage`/`shieldAbsorbed`/
-     *  `barrierAbsorbed` row totals above are sourced from this map's `healTarget.id` entry (PR5b);
+     *  `barrierAbsorbed` row totals above are sourced from this map's `healTarget.id` entry;
      *  the legacy per-round scalars it replaced were removed in the same change. Keyed by victim
      *  actor id. */
     perActorIncoming: Map<string, ActorIntake>;
@@ -2138,7 +2138,7 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  by DPSSimulationSummary; a future task can surface it as totalGenericDamage. */
         generic: number;
     };
-    // SP-4c-2d REMOVED `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) from this shape.
+    // REMOVED `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) from this shape.
     // It was read off the singular dummy `enemy` actor, so it was meaningful only when that actor
     // was the real target — a condition SP-4b-2b made unreachable — and on every run since it
     // described a never-dying billion-HP sink (`survived: true`, `roundsToKill: undefined`,
@@ -2151,7 +2151,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     healing?: { rounds: HealingRoundEngine[]; destroyedRound?: number };
 } {
     /**
-     * SP-4b: the ONE accommodation boundary. Everything below this line sees a fully positional
+     * The ONE accommodation boundary. Everything below this line sees a fully positional
      * world — every actor has a slot and active targeting — regardless of how under-specified the
      * caller's input was. Rebinding to `input` means every existing `input.x` read below picks up
      * the normalized values with no further edits.
@@ -2168,7 +2168,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         chargeCount,
         // shipSkills is intentionally NOT destructured here — the cast/reactive split below
         // rebinds `shipSkills` to the cast-only subset (partitionReactiveAbilities).
-        // SP-4d: `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are no longer
+        // `enemyDefense` / `enemyHp` / `enemySecurity` / `enemySpeed` are no longer
         // destructured here — they were the deleted dummy actor's stat block, and their last
         // readers were enemy-HP% phantoms this rung retired (the drain ctx's derivation, then the
         // skip row's). Task 6 deleted the fields from `CombatEngineInput` entirely. A victim's
@@ -2261,7 +2261,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         affinity: input.affinity,
         preFight: input.preFight,
     });
-    // SP-4c-2d: the DUMMY `enemy` ACTOR WAS BUILT HERE, and it is gone. It was the enemy side's
+    // The DUMMY `enemy` ACTOR WAS BUILT HERE, and it is gone. It was the enemy side's
     // structural counterpart to the focus attacker — a `createActor({ id: 'enemy', … })` huge-HP
     // sink fed by the four scalar inputs (`enemyHp`/`enemyDefense`/`enemySpeed`/`enemySecurity`).
     // Its roles were retired one rung at a time: SP-4b-2b required a real roster, SP-4c-2a made
@@ -2389,7 +2389,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })
     );
 
-    // Per-team-actor parsed positional target (Task C2). The team actor's `position`
+    // Per-team-actor parsed positional target. The team actor's `position`
     // already rides on its CombatActor (createActor above), but its parsed `target`
     // lives only on the TeamActorEngineInput — thread it to the team-turn call site by
     // id. Empty for every non-positional input (no team actor passes a target) → the
@@ -2789,7 +2789,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     let totalDetonationRaw = 0;
     let totalSecondaryRaw = 0;
     let totalConditionalRaw = 0;
-    // SP-4c-2d: the SIDE-WIDE reactive-drain DoT containers. These used to be aliases of the dummy
+    // The SIDE-WIDE reactive-drain DoT containers. These used to be aliases of the dummy
     // `enemy` actor's own arrays; with that actor deleted they are standalone, and that is the
     // honest shape — nothing REPORTS them (`dotCarrierActors` reads the positioned enemies'
     // containers) and nothing TICKS them (the dummy's turn was retired in SP-4c-2c). They survive
@@ -2936,7 +2936,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // mode supplies them under `mode: 'battle'` with no explicit heal focus, and a future
     // real DPS enemy (SP-U 5a) supplies one with neither.
     const enemyAttackerInputs = input.enemyAttackers ?? [];
-    // SP-4c-2d: a `dpsEnemyTarget` discriminator (`enemyAttackerInputs.length === 0`, "pure DPS
+    // A `dpsEnemyTarget` discriminator (`enemyAttackerInputs.length === 0`, "pure DPS
     // mode": no real enemy attackers, so the dummy WAS the destructible target) used to be derived
     // here and gated four branches. It went with the actor. SP-4b-2b made it provably constant
     // FALSE — `normalizeCombatRoster`, `runCombat`'s first statement, throws `enemyAttackers is
@@ -3007,7 +3007,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         enemyPlayerRuntimes.map((r) => [r.actor.id, r])
     );
 
-    // SP-4b-2 D3: every enemy-side actor that can CARRY a DoT container, in board order — the
+    // Every enemy-side actor that can CARRY a DoT container, in board order — the
     // positioned enemy attackers, and (since SP-4c-2d) nothing else. The RoundData DoT-state
     // reporting fields read this.
     //
@@ -3046,8 +3046,8 @@ export function runCombat(rawInput: CombatEngineInput): {
      * stacks are frozen forever: they deal nothing, never expire, and were still being summed into
      * every remaining round's report. That is the phantom, and it is what this excludes.
      *
-     * SP-4c-2d: this used to carry a `|| a.id === enemy.id` disjunct exempting the DUMMY sink, and
-     * that exemption was the last surviving shape of the phantom — the dummy took no turn (SP-4c-2c),
+     * This used to carry a `|| a.id === enemy.id` disjunct exempting the DUMMY sink, and
+     * that exemption was the last surviving shape of the phantom — the dummy took no turn,
      * so its containers never ticked and never expired, yet the disjunct kept REPORTING them. The
      * actor is deleted, so both the exemption and the strand it admitted are gone. The reactive
      * `ctx.*` containers that replaced its arrays are deliberately NOT members of
@@ -3078,7 +3078,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // EITHER side resolves. Used by grantExtraAction; companion actorsBySide lands in PR3.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
-    /** SP-4c-2b: the landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
+    /** The landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
      *  `victimId`'s live effective security, with the two actors' own affinity matchup applied.
      *
      *  WHY THIS EXISTS. Every reactive inflict already knew its victim (`debuffTargetId` /
@@ -3131,7 +3131,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         return liveDebuffLandingChance(statusEngine, selfBuffLookup, owner, victim, damageModifier);
     };
 
-    // SP-4c-2d: THE DUMMY `enemy` ACTOR IS GONE. A block here used to inventory what was still
+    // THE DUMMY `enemy` ACTOR IS GONE. A block here used to inventory what was still
     // true of it; there is nothing left to inventory. It is not built, not a member of `allActors`
     // or `allActorsById`, not a turn-taker, not a player-offense sink, and not a DoT carrier. The
     // literal `'enemy'` survives ONLY as `SENTINEL_ENEMY_ACTOR_ID`, the id the side-wide
@@ -3151,7 +3151,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     //   1. the roster is never empty — `normalizeCombatRoster` throws `enemyAttackers is empty`
     //      (SP-4b-2b), and it is `runCombat`'s first statement;
     //   2. every member is positioned AND targetable — `placeSide` assigns a slot to each, and
-    //      `withTargetableHp` floors max HP to `MIN_TARGETABLE_MAX_HP` (SP-4c-2a). `false` from
+    //      `withTargetableHp` floors max HP to `MIN_TARGETABLE_MAX_HP`. `false` from
     //      `isTargetableRosterMember` is therefore unreachable for an enemy actor.
     // Measured as well as argued: a `console.error` on the false branch over the whole suite hit
     // ZERO times in 535 files. The floor is ENEMY-SIDE ONLY by design, so the sibling predicate
@@ -3169,7 +3169,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     //
     //  - PLAYER actor's `enemy-buff` gate → opposing side = the enemy attacker(s). Aggregation:
     //    UNION of every enemy attacker's self-buff names (the condition is "does an enemy have a
-    //    buff", not "does THIS enemy"). NOT inert on a DPS run any more (SP-4b-2a): every
+    //    buff", not "does THIS enemy"). NOT inert on a DPS run any more: every
     //    `simulateDPS` run supplies a real enemy, so this reads that enemy's self-buffs. It is
     //    empty in PRACTICE for a SYNTHESIZED enemy only because that actor carries no skills and
     //    so grants itself nothing — an emptiness of content, not of roster. Since SP-4b-2b there
@@ -3198,7 +3198,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Sub-project I, PR I5 — count (not union) of opposing actors holding Stealth, for
     // Selenite's "10% more direct damage for every enemy with Stealth" count-scaling.
     // Same owner-id sourcing as the buff-NAME unions immediately above (team-symmetric).
-    // SP-4b-2a: a DPS run DOES have enemy attackers now, so this counts them; it still reads 0
+    // A DPS run DOES have enemy attackers now, so this counts them; it still reads 0
     // against the synthesized stand-in (no skills → it never gains Stealth). SP-4b-2b removed the
     // structurally-empty case entirely — `livingEnemyAttackerIds()` empties only by DEATH now.
     const playerStealthedEnemyCount = (): number =>
@@ -3207,7 +3207,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         countOwnersWithSelfBuff(statusEngine, playerIds, 'Stealth');
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
-    // Sub-project I, PR I1: NAMES on a resolved (real) opposing target for name-specific
+    // NAMES on a resolved (real) opposing target for name-specific
     // `enemy-debuff` gates (Tygr's "to enemies with Stasis or Disable", Incinerator's "to
     // enemies afflicted with Inferno"). Control/marker debuff names come from the same
     // ownerDebuffNamesFor read used for selfDebuffNames above, keyed by the TARGET's id
@@ -3558,7 +3558,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // → non-positional rounds byte-identical.
     let perActorDetonation = new Map<string, number>();
     // Per-round per-applier DoT-tick display tally (sourceId → {corrosion, inferno}). Populated
-    // ONLY by the positional per-victim DoT-tick path (Task C2); folded into the FOCUS actor's
+    // ONLY by the positional per-victim DoT-tick path; folded into the FOCUS actor's
     // corrosion/inferno display + raw totals at post-round assembly WITHOUT feeding cumulativeDamage
     // (the per-victim HP already lands via applyVictimDamage — exact mirror of perActorDetonation).
     // Empty on non-positional rounds → byte-identical.
@@ -3660,7 +3660,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // The healing rounds + first-destroyed-round seam (target HP can only reach 0 via enemy
     // attacks, which land in Task 8 — the detection just never fires this task).
     const healingRounds: HealingRoundEngine[] = [];
-    // Backstop-only local (PR5c): holds ONLY the post-round backstop's independent contribution
+    // Backstop-only local: holds ONLY the post-round backstop's independent contribution
     // — the start-dead / no-`recordDestroyed` path where the heal target enters a round at
     // currentHp<=0 without ever being stamped by recordDestroyed (Task-1 OUTCOME B). The normal
     // death round now comes from the per-actor `healTarget.destroyedRound` field; this captures
@@ -3724,7 +3724,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // crit gate) so it only ever creates keys for counter-carriers → no draw, no perturbation
     // for every existing fixture → byte-identical.
     const counterCritGates = new Map<string, RateGate>();
-    // PR4b: dedicated crit-gate for the reactive `damage` executor (Judge/Chakara/Incinerator/
+    // Dedicated crit-gate for the reactive `damage` executor (Judge/Chakara/Incinerator/
     // Rhodium/Grif/FrontLine start-of-round/end-of-round/on-enemy-cleansed/on-enemy-charged-cast
     // procs). A NEW map, mirroring counterCritGates — keyed `${ownerId}:${abilityId}`, so it only
     // ever draws for ships carrying one of these abilities. `noCrit`-flagged abilities (Grif,
@@ -4107,7 +4107,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         : undefined;
 
     /**
-     * SP-4e: the `'lowest-hp-ally'` selector, resolved SIDE-RELATIVE to `ownerId` — over the
+     * The `'lowest-hp-ally'` selector, resolved SIDE-RELATIVE to `ownerId` — over the
      * owner's OWN roster on either side (locked team symmetry). Lowest currentHp/maxHp, owner
      * EXCLUDED, ties broken by source order; `undefined` when the owner is the only living
      * candidate ("the OTHER ally" is nobody, never a self-target).
@@ -4138,7 +4138,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     };
 
     /**
-     * SP-3b Task 7: mirror ONE LANDED repair onto the RECIPIENT axis (`perRecipient`).
+     * Mirror ONE LANDED repair onto the RECIPIENT axis (`perRecipient`).
      *
      * The axis is defined as "keyed by the actor the repair LANDED ON", but until this change only
      * the direct cast-repair site (playerTurn.ts) credited it — HoT ticks, standing/taken leeches and
@@ -4215,7 +4215,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Enemy-side actor ids: every enemy ATTACKER. They walk runPlayerTurn (commit 6c456a14) and
     // emit the full reactive event suite with side === 'enemy'; ally-scoped player listeners MUST
     // treat all of them as non-allies. `seenEnemyAttackerIds` is never empty — the normalization
-    // boundary refuses an absent/empty roster (SP-4b-2b).
+    // boundary refuses an absent/empty roster.
     //
     // SP-4c-2d dropped an `actorId === enemy.id ||` disjunct here for the dummy wall enemy. It was
     // measured dead before removal: a `console.error` on that disjunct over the whole suite hit
@@ -5392,7 +5392,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // round onto charge-changed events without rebuilding their parent object each round.
     let currentRound = 0;
 
-    // SP-4c-1: the match ends when one side has no living member — the game rule (owner,
+    // The match ends when one side has no living member — the game rule (owner,
     // 2026-08-18): "when there's no more enemies, the match will end mid round, after the turn
     // that kills the last opposing ship ends."
     //
@@ -5744,7 +5744,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // through here so the bleed accounting is identical.
         // `victim` defaults to the heal target — the legacy (non-positional) caller passes no
         // arg, so every existing path reads/mutates `healTarget!` exactly as before (byte-
-        // identical). The positional enemy-turn path (Task C3) passes the SELECTED player actor
+        // identical). The positional enemy-turn path passes the SELECTED player actor
         // so the enemy's incoming drains the actor its parsed target picked. The heal target's
         // death round is read back off its per-actor `destroyedRound` field (stamped by
         // recordDestroyed below) at the result site — no heal-target-gated scalar write here.
@@ -7345,7 +7345,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             return { dealt: raw, didCrit };
         };
 
-        // PR4b: the reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
+        // The reactive `damage` executor branch (triggers.ts cfg.type==='damage') — Grif's
         // on-enemy-cleansed, FrontLine's on-enemy-charged-cast, and epic PR4's re-tagged Judge/
         // Chakara/Incinerator/Rhodium start-of-round/end-of-round passives. Mirrors
         // applyCounterAttack's mitigated/crit walk (SAME victimHitDamage call, SAME documented
@@ -7502,7 +7502,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     {
                         // Meatshield defense-substitution (approximation) — see the
                         // substitutedDefenceFor doc comment above for the full rule. Ship-kit W5
-                        // Task C3: `ignoresDefense` (non-flat generality path) bypasses the
+                        // `ignoresDefense` (non-flat generality path) bypasses the
                         // victim's Defense term entirely (defence: 0) instead of the normal
                         // substituted defence.
                         defence: opts?.ignoresDefense
@@ -7538,7 +7538,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reads the per-victim map instead (dpsSimulator.ts's focusDamageTotal), which this is
             // what feeds.
             //
-            // SP-4c-2d: this whole apply used to sit behind `hasPositionedEnemyRoster &&
+            // This whole apply used to sit behind `hasPositionedEnemyRoster &&
             // victim.id !== enemy.id`, with a CREDIT-ONLY else arm for "no real victim to reduce".
             // Both conjuncts are gone with the dummy: the first is constant true below the
             // normalization boundary (see the proof at its deleted definition) and the second was a
@@ -7585,7 +7585,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     (roundPerTargetDamage.get(victim.id) ?? 0) + procBooked
                 );
                 creditDealt(ownerId, victim.id, procBooked);
-                // SP-4b-2 D1: the twin of this function's own `creditDamage(ownerId,
+                // The twin of this function's own `creditDamage(ownerId,
                 // 'direct', raw)` below — the third and last suppressed direct write. Same
                 // if/else, so a proc lands in exactly one channel. A reactive hit IS direct
                 // damage its owner dealt, and it counted toward the Echoing Burst gather
@@ -7619,7 +7619,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //
         // (Task 3 adds the Akula doesntBreakStasis exception — placeholder left below.)
 
-        // Per-victim enemy-debuff-derived modifiers (B1/PR7b). Reads the victim's OWN per-actor
+        // Per-victim enemy-debuff-derived modifiers. Reads the victim's OWN per-actor
         // enemy-debuff store — BOTH channels: scheduled (__enemy__ global) + ability (per-victim
         // payload timed+aura). Delegates to victimEnemyBuffs (triggers.ts) which mirrors
         // ownerDebuffNamesFor's three-source read, ensuring modifier-read and name-read stay in
@@ -7628,7 +7628,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // — see the victimEnemyBuffs jsdoc (finding I1) for details and acceptance rationale.
         const victimIncomingModifiers = (
             victimId: string,
-            /** SP-4b-2 D4: the ACTING turn's already-gated scheduled enemy effects
+            /** The ACTING turn's already-gated scheduled enemy effects
              *  (`PlayerTurnResult.scheduledEnemyEffects`), threaded down from the positional apply.
              *  Without it this read hit the status engine's UNGATED `__enemy__` bucket, so a
              *  scheduled debuff the round's hacking-vs-security draw RESISTED still cut the
@@ -7867,7 +7867,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         /**
          * ONE victim's defensive profile for a positional damage read.
          *
-         * Extracted verbatim from `drivePositionalApply`'s inline `defenseProfileOf` (SP-4b-2 D6)
+         * Extracted verbatim from `drivePositionalApply`'s inline `defenseProfileOf`
          * so the passive-slot instance resolves against the SAME per-victim modifier state the
          * firing hit does, rather than growing a second, drifting copy. Identical across all three
          * cast sites (B1/PR7b + D-PR12) and direction-agnostic: `victimIncomingModifiers(v.id)`
@@ -7886,7 +7886,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // Meatshield defense-substitution (approximation) — see the
                 // substitutedDefenceFor doc comment above for the full rule.
                 defence: substitutedDefenceFor(v, v.stats.defence),
-                // B1/PR7b: per-victim defense-debuff sourcing (was hardcoded 0).
+                // Per-victim defense-debuff sourcing (was hardcoded 0).
                 // Addendum A2: ALSO the victim's own self-sourced defence modifiers (Defense Up,
                 // and by the A5 ruling the negative Overload/Supercharged half) — see the
                 // `selfDefense` block in victimIncomingModifiers for why they ride this channel
@@ -7903,7 +7903,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // still folds the whole mixed channel — this field never touches it.
                 victimSideIncomingPct: m.victimSideIncomingModifier,
                 affinity: v.affinity ?? 'antimatter',
-                // Sub-project I, PR I2: this footprint victim's own enemy-status-gated
+                // This footprint victim's own enemy-status-gated
                 // outgoing-modifier delta vs the attacker-fixed positionalScalars term.
                 outgoingDamageDeltaPct: perVictimOutgoingDeltaPct(
                     opts.perVictimOutgoing,
@@ -7953,7 +7953,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ignoresStealth?: boolean;
             actingId: string;
             opposingLiving: CombatActor[];
-            /** SP-4b-2 D4: this turn's landed scheduled enemy effects, from the acting
+            /** This turn's landed scheduled enemy effects, from the acting
              *  `PlayerTurnResult`. Feeds `defenseProfileOf` so the per-victim damage read honours
              *  the same landing/resist decision the turn's reporting fold made. */
             scheduledEnemyEffects?: SelectedGameBuff[];
@@ -7990,12 +7990,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             // capped rate via this callback. Unsupplied → every victim uses hitCrits[h] →
             // byte-identical. Each call site supplies the firing turn's rollVictimCrit.
             rollVictimCrit?: (victim: CombatActor) => boolean;
-            // Sub-project I, PR I2: this turn's enemy-status-gated outgoing-modifier ingredients
+            // This turn's enemy-status-gated outgoing-modifier ingredients
             // (modifierAbilities + primaryCtx), forwarded from `turn.perVictimOutgoing`.
             // Unsupplied/undefined → perVictimOutgoingDeltaPct short-circuits to 0 for every
             // victim → byte-identical.
             perVictimOutgoing?: PlayerTurnResult['perVictimOutgoing'];
-            // Sub-project I, PR I2: the PRE-TURN per-victim status snapshot (captured by the
+            // The PRE-TURN per-victim status snapshot (captured by the
             // call site via `snapshotPreTurnVictimStatus` BEFORE `runPlayerTurn` ran this turn),
             // keyed by victim id. Required for a non-zero delta — see the causality note above
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
@@ -8455,7 +8455,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Protection cascade diverted to protectors.
                     delivered += booked + (outcome.protectionRedirected ?? 0);
                 }
-                // SP-4b-2 D1: a passive-slot instance is DIRECT damage this actor dealt, so it
+                // A passive-slot instance is DIRECT damage this actor dealt, so it
                 // joins the accumulate-detonate gather exactly like the firing hit does.
                 creditPositionalDirect(actor.id, delivered);
             };
@@ -8866,7 +8866,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 },
             });
 
-            // Accumulator gather input (SP-4b-2 D1). The accumulators a POSITIONED actor carries
+            // Accumulator gather input. The accumulators a POSITIONED actor carries
             // were seeded by the OPPOSING side's casts, so the side whose direct damage they
             // gather is exactly `opposingRoster` — which makes this ONE expression correct for
             // BOTH sites, with no side branch: the enemy site passes `allPlayerActors` and the
@@ -8962,7 +8962,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           }
                       )
                     : null;
-            // SP-4e: ONE rule for both sides. An actor that resolves no living positional victim
+            // ONE rule for both sides. An actor that resolves no living positional victim
             // runs a NO-VICTIM turn — the honest answer, and the only one that does not silence a
             // supporter. The turn still RUNS (every call site below runs it rather than skipping,
             // so the repair/buff still lands); every victim-derived read answers "there is no
@@ -9104,7 +9104,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `adjacentAllyIds` / `adjacentEnemyIdsFor` above) are a measurement on this run.
                 // Same mode gate, same reason, as `enemyDestroyedCount` below.
                 liveCountsMeasurable,
-                // Ship-kit W5 Task A3: resolves the board-neighbours of an ENEMY-side anchor
+                // Resolves the board-neighbours of an ENEMY-side anchor
                 // (the resolved target `tgt`, not the caster) for the 'adjacent-enemies' /
                 // 'target-and-adjacent-enemies' debuff fan-out. Reuses the same side-dispatching
                 // adjacentAllyIdsFor the reactive-trigger registration (~2856) and the buff-steal
@@ -9118,7 +9118,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // The SAME side-agnostic map the roster is seeded into above — no `a.side`
                 // dispatch, so an enemy-side Fuying scopes to enemy Tianchao allies for free.
                 factionOf,
-                // SP-4c-2b: every victim-derived member lives in this ONE conditional spread.
+                // Every victim-derived member lives in this ONE conditional spread.
                 // `tgt` is absent exactly when an ally-targeted cast resolved nobody on the
                 // opposing side (contract.md §B) — omitting these fields (rather than emitting
                 // an empty/zero placeholder) is what routes the consumer to its documented
@@ -9139,12 +9139,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                               .attack,
                       }
                     : {}),
-                // B1/PR7b: thread targetId for BOTH directions so player-applied ABILITY debuffs route
+                // Thread targetId for BOTH directions so player-applied ABILITY debuffs route
                 // to the resolved victim's per-actor store (applyTimedAbilityStatus keys off targetId;
                 // the aggregate ability-read timedAbilityStatuses('enemy',actor.id,targetId) follows
                 // automatically). The scheduled channel stays global __enemy__ (upsertBuff hardcoded).
                 //
-                // SP-4c-2d: the player side used to carry a `tgt.id !== enemy.id` conjunct here —
+                // The player side used to carry a `tgt.id !== enemy.id` conjunct here —
                 // when `selectTurnTarget` fell back to the dummy sink, `targetId` was left unset so
                 // the writes routed to the global `__enemy__` store instead of keying by a ghost's
                 // id. SP-4c-2b stopped the player side ever resolving the ghost and this rung
@@ -9167,11 +9167,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // actor, this still tracks the heal target. Per-actor target-HP% is deferred to a
                 // later phase; inert today (bare enemies have no `hpSubject:'target'` gate).
                 targetHpPct: healTargetHpPctNow(),
-                // SP-4c-2b: `targetRepairedThisRound` (was the STRUCK victim `tgt` repaired this
+                // `targetRepairedThisRound` (was the STRUCK victim `tgt` repaired this
                 // round? — C2b-3) moved into the victim-derived conditional block above; a
                 // no-victim turn omits it and `playerTurn.ts` defaults the destructure to `false`.
                 enemyBuffNames: tb.enemyBuffNamesUnion(),
-                // Sub-project I, PR I5: count (not union) of opposing actors holding Stealth,
+                // Count (not union) of opposing actors holding Stealth,
                 // for Selenite's "for every enemy with Stealth" count-scaling. Same per-turn
                 // cadence as enemyBuffNames above; 0 against a synthesized DPS enemy (it has no
                 // skills, so it never gains Stealth). There is no structurally-0 caller left since
@@ -9193,7 +9193,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                           ).length,
                       }
                     : {}),
-                // Sub-project I, PR I1: opt-in NAMES on the resolved target for name-specific
+                // Opt-in NAMES on the resolved target for name-specific
                 // `enemy-debuff` gates — SAME guard as targetId above, and for the same reason
                 // (SP-4c-2d dropped the identical dummy-sink conjunct). Omitted when there is no
                 // victim this turn, so buildRoundContext leaves enemyDebuffNames undefined (the
@@ -9229,7 +9229,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     : {}),
                 // Target's effective attack (for 'amplify-vs-higher-attack' eligibility),
                 // for a per-(owner,ability) deterministic proc closure. `targetEffectiveAttack`
-                // moved into the victim-derived conditional block above (SP-4c-2b) — READ only
+                // moved into the victim-derived conditional block above — READ only
                 // when the actor's passive slot carries an outgoing-amplification ability →
                 // byte-identical for every fixture without one (rollOutgoingProc never invoked).
                 rollOutgoingProc: (abilityId: string, chance: number) =>
@@ -9275,12 +9275,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // no double-count) — reuses `sameSideLivingFor` (the SAME same-side-living
                 // roster the support-footprint path uses; team-symmetric via `a.side`). Merged
                 // into `modifierAbilities` in playerTurn.ts, so it folds into BOTH the per-turn
-                // dmgStats AND (PR I2) perVictimOutgoing for free. Absent-source case → the
+                // dmgStats AND perVictimOutgoing for free. Absent-source case → the
                 // flatMap is [] → byte-identical.
                 allyModifierAbilities: sameSideLivingFor(a)
                     .filter((x) => x.id !== a.id)
                     .flatMap((x) => allAlliesModifierAbilitiesById.get(x.id) ?? []),
-                // Sub-project I, PR I4c: per-SOURCE breakdown of ally `all-allies` `dotDamage`-
+                // Per-SOURCE breakdown of ally `all-allies` `dotDamage`-
                 // channel modifier abilities (Wildfire's refit-3 team aura) — needed alongside
                 // `allyModifierAbilities` above because that flat list loses PROVENANCE (which
                 // ally sourced which ability), and the locked game rule requires this bonus to
@@ -9393,7 +9393,7 @@ export function runCombat(rawInput: CombatEngineInput): {
              */
             applyDebuffsForSubAttack: PlayerTurnResult['applyDebuffsForSubAttack'];
             deferredEnemyApplications: PlayerTurnResult['deferredEnemyApplications'];
-            /** SP-4b-2 D4: this turn's scheduled enemy effects AFTER its landing/resist draw.
+            /** This turn's scheduled enemy effects AFTER its landing/resist draw.
              *  `undefined` only where the turn itself produced none — `victimEnemyBuffs` then keeps
              *  its raw bucket read, which is the pre-fix behaviour. (This used to add "the enemy
              *  site's hoisted capture on a dead-target turn"; #346 deleted both the dead-target
@@ -9518,7 +9518,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 actingId: actor.id,
                 opposingLiving: tb.opposingRoster,
                 applyToVictim: tb.applyToVictim,
-                // SP-4b-2 D4: the acting turn's landed scheduled enemy effects reach
+                // The acting turn's landed scheduled enemy effects reach
                 // defenseProfileOf's per-victim modifier read, so a RESISTED scheduled debuff
                 // stops cutting the victim's defence behind the reporting channel's back.
                 scheduledEnemyEffects: sel.scheduledEnemyEffects,
@@ -9684,7 +9684,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 //    because `share = dap.damage / emitting.length` divides the cast's pre-funnel
                 //    directDamage by the emitting count. (The plan prescribed `damage === 0` here;
                 //    that was a plan defect, corrected in the plan file too.)
-                //    PR6 NUANCE: emitting is still right, and the outgoing riders no longer pay out
+                //    NUANCE: emitting is still right, and the outgoing riders no longer pay out
                 //    for it. Such an event carries `deliveredDamage: 0` and the `on-deal-damage`
                 //    guard (triggers.ts) now reads THAT rather than `damage`, so the event exists
                 //    for the log and for the incoming side while its outgoing riders stay silent.
@@ -10109,7 +10109,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             victimSelfBuffs(statusEngine, id, selfBuffLookup),
                         reactiveDealtByOwner,
                         enemyType,
-                        // SP-4d: `enemyHp` (IntentExecContext) deleted — it fed only the
+                        // `enemyHp` (IntentExecContext) deleted — it fed only the
                         // buildDrainContext fight-wide `enemyHpPct` derivation this rung removed.
                         // Fix wave 1: `cumulativeDamage` (IntentExecContext) is deleted too — it
                         // had zero readers left anywhere in src/ once that derivation was gone
@@ -10130,7 +10130,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             if (lastTurn) lastTurn.resistedEnemyDebuffs.push(resisted);
                             else pendingResisted.push(resisted);
                         },
-                        // PR4b: reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
+                        // Reactive direct damage (Grif/FrontLine/Judge/Chakara/Incinerator/
                         // Rhodium) — full mitigated/crit walk, credited via the single credit
                         // point (creditDamage, inside applyReactiveDamage) so leeches still see it.
                         applyReactiveDamage,
@@ -10181,7 +10181,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // (e.g. Martyrdom Disable onto the real killer) rather than the applier's
                         // precomputed-vs-representative static disadvantage flag.
                         affinityOf: (id) => allActorsById.get(id)?.affinity,
-                        // SP-4c-2b: the OTHER half of Task A's per-target seam. Task A made the
+                        // The OTHER half of Task A's per-target seam. Task A made the
                         // reactive 'apply' arm read the actual target's AFFINITY; the 'inflict' arm
                         // and the reactive DoT were still drawing against the owner's cached
                         // `liveDebuffLandingChance` — a chance the owner computed for ITS OWN turn
@@ -10191,7 +10191,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // team-symmetric for free (either id may be on either side).
                         liveDebuffLandingChanceFor: (ownerId, victimId) =>
                             reactiveLandingChanceFor(ownerId, victimId),
-                        // SP-E, Task E4: resolve any actor (either side) by id — the convert-dot
+                        // Resolve any actor (either side) by id — the convert-dot
                         // executor uses this to find the ACTUAL victim of an ally's DoT
                         // application (eventCtx.victimId) instead of the fixed enemy/
                         // corrosionEntries closures above (side-biased to the player's single
@@ -10216,7 +10216,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // per-victim `enemy-type` re-check (Zeolite: "when dealing damage to a
                         // Defender"), team-symmetrically.
                         roleOf: (id) => roleByActorId.get(id),
-                        // SP-E, Task E4: live hacking/critDamage for `id` (either side), feeding
+                        // Live hacking/critDamage for `id` (either side), feeding
                         // Belladonna's conversion-chance (hacking) and paired extend-chance
                         // (critDamage) gates. Same statusEngine/selfBuffLookup every other
                         // effectiveStatsOf call site in this scope uses (e.g. mostBuffsAmong).
@@ -10274,11 +10274,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Live adjacent-allies resolver (Fortifying Shroud). Sourced
                         // per-side from sideCtx; positional neighbours, else all same-side allies.
                         adjacentAllyIdsFor: sideCtx.adjacentAllyIdsFor,
-                        // Ship-kit W5 Task C3: OPPOSING-side counterpart (Demolisher bomb-splash's
+                        // OPPOSING-side counterpart (Demolisher bomb-splash's
                         // 'adjacent-enemies' anchor resolution). See IntentExecContext.
                         adjacentOpposingIdsFor: sideCtx.adjacentOpposingIdsFor,
                         footprintAllyIdsFor: sideCtx.footprintAllyIdsFor,
-                        // SP-4e: the 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
+                        // The 'lowest-hp-ally' selector. NOT sourced from sideCtx — the
                         // closure is already side-relative to the OWNER it is asked about, which is
                         // the correct scoping for a drain whose intents can carry either side's
                         // owner id, and it shares the cast path's single ranking.
@@ -10437,7 +10437,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // The three opposing-side resolvers below read the REAL positioned enemy roster,
             // unconditionally.
             //
-            // SP-4c-2d: each used to be a ternary on `hasPositionedEnemyRoster` whose else arm
+            // Each used to be a ternary on `hasPositionedEnemyRoster` whose else arm
             // handed back the dummy `enemy`'s id — the pre-SP-M behaviour, from when a roster-less
             // "pure DPS mode" made that actor the genuine target. That premise died at SP-4b-2b
             // (an absent/empty roster is refused) and the gate became constant true at SP-4c-2a
@@ -10467,7 +10467,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             oncePerRoundConsumed,
             perRoundFireCounts,
             adjacentAllyIdsFor: bySide('player').adjacentAllyIdsFor,
-            // Ship-kit W5 Task C3: a player-owned reactive's 'adjacent-enemies' anchor (the bomb
+            // A player-owned reactive's 'adjacent-enemies' anchor (the bomb
             // victim) lives on the ENEMY side — mirrors livingOpposingActorIds' direction, not
             // adjacentAllyIdsFor's (which stays bound to this drain's OWN side, player).
             adjacentOpposingIdsFor: bySide('enemy').adjacentAllyIdsFor,
@@ -10504,7 +10504,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             oncePerRoundConsumed,
             perRoundFireCounts,
             adjacentAllyIdsFor: bySide('enemy').adjacentAllyIdsFor,
-            // Ship-kit W5 Task C3: mirror of playerDrainCtx's wiring — an enemy-owned reactive's
+            // Mirror of playerDrainCtx's wiring — an enemy-owned reactive's
             // 'adjacent-enemies' anchor lives on the PLAYER side.
             adjacentOpposingIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
@@ -10661,7 +10661,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 return undefined;
             };
             for (let actor = selectNext(); actor; actor = selectNext()) {
-                // SP-4c-1: a side can be wiped OUTSIDE a turn. Both the start-of-round drain
+                // A side can be wiped OUTSIDE a turn. Both the start-of-round drain
                 // (drain point (a), above) and the previous round's end-of-round drain credit real
                 // damage — Rhodium, Grif, FrontLine, Chakara and Incinerator all carry passives
                 // that fire there. Without this check the loop would go on to select an actor and
@@ -10706,7 +10706,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // `continue`d if dead, so reaching here means it's alive; the exemption is
                 // belt-and-suspenders.
                 //
-                // SP-4c-2d: there used to be a SECOND exemption, `!isDummyEnemy`, for the dummy
+                // There used to be a SECOND exemption, `!isDummyEnemy`, for the dummy
                 // `enemy` sink. SP-4c-2c dropped that actor from `turnOrderActors` unconditionally,
                 // so the exemption could not fire on any run, and this rung deleted the actor
                 // outright — there is nothing left to exempt. Do not resurrect it from an older
@@ -10805,7 +10805,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // turn-blocked at the drain pass — for a 1-turn block the Post-Turn decrement (~4651)
                 // can clear the block before the deferred end-of-turn intent drains, so that golden
                 // uses a ≥2-turn block spanning a proc turn.
-                // SP-4c-2c: the dummy-sink enemy is NOT bumped here any more — it takes no turn, so
+                // The dummy-sink enemy is NOT bumped here any more — it takes no turn, so
                 // its `turnsTaken` stays 0 for the whole run. Nothing reads it (it has no
                 // every-n-turns ability), which is why this is a note rather than a fix.
                 actor.turnsTaken += 1;
@@ -10835,7 +10835,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // via applyVictimDamage (DoT → bypass shield) and NEVER calls creditDamage (no
                 // cumulativeDamage double-feed).
                 //
-                // SP-4c-2d: this prologue used to sit inside `if (actor.id !== enemy.id)`, which
+                // This prologue used to sit inside `if (actor.id !== enemy.id)`, which
                 // excluded the dummy so it could take the legacy AGGREGATE tick in its own turn
                 // branch instead. SP-4c-2c retired that turn (and with it the aggregate tick) and
                 // this rung deleted the actor, so there is nothing to exclude and the wrapper is
@@ -10939,7 +10939,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // itself), so this reduction-path ctx never reads it.
                                 attackerTauntedOrProvoked: false,
                             }),
-                        // PR I4b: the tank is the ticking victim.
+                        // The tank is the ticking victim.
                         dotMultFor: (ctx) => victimDotMult(ctx, healTarget),
                     });
                     // Site 3 of the leech-channel class, FIXED (spec §3): this branch's
@@ -10996,7 +10996,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         actor.genericDoTEntries.length > 0;
                     if (hasDots && isPositional(actor.position, opposing)) {
                         let total = 0;
-                        // SP-F F1 RESHAPE: per-`sourceId` dealt detail for THIS tick batch —
+                        // RESHAPE: per-`sourceId` dealt detail for THIS tick batch —
                         // multiple distinct DoT appliers can tick on the same victim in the
                         // same round, so a single collapsed attacker id (like every other
                         // site) would misattribute. Populated on BOTH sides (team-symmetric:
@@ -11044,7 +11044,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     e[dotType] += damage;
                                     perActorDot.set(sourceId, e);
                                 }
-                                // SP-4b-2b Task 2b: this DoT-tick branch now procs the
+                                // This DoT-tick branch now procs the
                                 // APPLIER's standing damage-dealt leech too, via the same
                                 // per-victim proc the firing hit uses. For the two-proc
                                 // landscape, the scope handling and why this makes both sides
@@ -11081,7 +11081,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     selfHpPct: selfHpPctOf(actor.id),
                                     attackerTauntedOrProvoked: false,
                                 }),
-                            // PR I4b: this actor IS the ticking victim.
+                            // This actor IS the ticking victim.
                             dotMultFor: (ctx) => victimDotMult(ctx, actor),
                         });
                         if (total > 0) {
@@ -11097,7 +11097,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 actor.id,
                                 (roundPerTargetDamage.get(actor.id) ?? 0) + total
                             );
-                            // SP-F F1 RESHAPE: one roundPerTargetDealt entry PER distinct
+                            // RESHAPE: one roundPerTargetDealt entry PER distinct
                             // applier — do not collapse to a single guessed attacker (see
                             // tickDealtBySource above). Σ over sourceIds here == `total`, so
                             // this write reconciles with the unchanged victim-keyed write above.
@@ -11196,7 +11196,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (non-positional) path `tgt` WAS the dummy, whose stats and DoT/bomb
                             // containers were the legacy module vars, which is what made deriving every
                             // binding from `tgt` byte-identical.
-                            // HP decline is no longer passed in (PR6b): runPlayerTurn derives it from the
+                            // HP decline is no longer passed in: runPlayerTurn derives it from the
                             // struck victim's currentHp (max − currentHp), so both cases read `tgt`
                             // uniformly — no separate decline ternary here.
                             // SP-4c-2b/2d AMEND the two paragraphs above: the legacy fallthrough is GONE
@@ -11204,7 +11204,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // `tgt` is either a real positioned actor or absent. See the note under the
                             // call.
                             const { tgt } = selectTurnTarget(actor);
-                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // `tgt` is undefined when this cast targets an ALLY — there is
                             // no opposing victim to resolve. The turn still RUNS (a repair/buff must
                             // land); only the victim-derived context is absent. Skipping here would
                             // permanently silence all 24 shipped ally-target support ships.
@@ -11213,7 +11213,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
                             // victim is never recorded → no break-mark, no stasisBreakPending entry.
-                            // SP-4c-2b: no victim ⇒ no hit ⇒ nothing to break out of Stasis, so the
+                            // No victim ⇒ no hit ⇒ nothing to break out of Stasis, so the
                             // hook is never injected (the honest no-victim answer is `false`, not
                             // "the dummy was not stasised").
                             const tgtWasStasised =
@@ -11230,7 +11230,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // hold — so the suppression condition matches the `positional` gate for
                             // every turn that HAS a victim. A non-damage cast keeps its inline emit
                             // (flag ignored).
-                            // SP-4c-2b: this flag is deliberately NOT victim-fenced, even though the
+                            // This flag is deliberately NOT victim-fenced, even though the
                             // `positional` gate below now is. (1) Fencing it would buy nothing for the
                             // event: with no victim runPlayerTurn emits no `ability-performed` on EITHER
                             // arm — the inline emit and the deferred payload are both fenced on its own
@@ -11256,7 +11256,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 target != null &&
                                 pattern != null;
-                            // Sub-project I, PR I2: snapshot the opposing roster's enemy-status
+                            // Snapshot the opposing roster's enemy-status
                             // BEFORE this turn runs (see the causality note above
                             // perVictimOutgoingDeltaPct) — this turn's own debuff-inflict must
                             // not retroactively satisfy its own per-victim outgoing gate.
@@ -11325,7 +11325,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // Barrier/Cheat-Death/death is mutated through the real applyOutgoingToEnemy.
                             // At Task 8b no production caller threaded position+target+pattern, so this
                             // was false for every existing test/golden → byte-identical. STALE since
-                            // SP-4b-1: `normalizeCombatRoster` fills a position, a target and a pattern
+                            // `normalizeCombatRoster` fills a position, a target and a pattern
                             // for every actor, so this is now the NORMAL path for both calculators.
                             // The pattern is REQUIRED for footprint expansion — without it there is no
                             // apply to perform (the then-existing positionalSelection tests set
@@ -11349,7 +11349,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // per-hit live re-resolution own the whiff. (Credit suppression below pairs with
                             // this: the per-victim apply is the ONLY damage path here.)
                             //
-                            // SP-4c-2b: `tgt !== undefined` IS now a precondition, and it does not
+                            // `tgt !== undefined` IS now a precondition, and it does not
                             // reopen the phantom-damage hole the paragraph above guards. The two cases
                             // are different. That hazard is an anchor that RESOLVED and then died,
                             // where routing back to a live sink would book damage against a corpse.
@@ -11386,7 +11386,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // per-victim `attacked` inline (before detonation). The turn's deferred
                                 // ability-performed carries the anchor firing-hit values for the log.
                                 const tb = turnBindings(actor.side);
-                                // SP-4b-2 D6: stage the passive-slot damage instance — its footprint
+                                // Stage the passive-slot damage instance — its footprint
                                 // is resolved HERE (against the turn-entry board) and applied after
                                 // the firing hit, so neither instance's kill can swallow the other.
                                 // See stagePassiveSlotHit for the invariant and the measurements.
@@ -11437,7 +11437,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     (sum, sub) => sum + (sub.deliveredDamage ?? 0),
                                     0
                                 );
-                                // SP-4b-2 D6: the staged passive-slot instance lands now.
+                                // The staged passive-slot instance lands now.
                                 landPassiveSlotHit?.();
                             }
                             // Clause order: this turn's damage has landed (or the cast had none) —
@@ -11450,7 +11450,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // a future divergence degrades to the old basis instead of silently dropping
                             // the repair.
                             //
-                            // SP-4c-2b: that divergence has ARRIVED — the fallback is now REACHABLE, and
+                            // That divergence has ARRIVED — the fallback is now REACHABLE, and
                             // it is the second consumer of the gate split documented at
                             // `willApplyPositionally` above. The two sides of the pin no longer move
                             // together on a no-victim turn: DEFERRAL follows `deferAbilityPerformed`
@@ -11489,7 +11489,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // folded into cumulativeDamage here (that would double-count it). Skip the
                             // direct credit; KEEP detonation (bombs are a separate mechanic, out of scope).
                             // The single-sink decline that used to be zeroed for the positional path is now
-                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // derived from the victim's own currentHp inside runPlayerTurn, so no
                             // separate decline suppression is needed here.
                             if (!positional) {
                                 creditDamage(actor.id, 'direct', turn.directDamage);
@@ -11499,7 +11499,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', turn.detonationDamage);
                             } else {
-                                // SP-4b-2 D1: the suppressed direct credit's positional TWIN. Same
+                                // The suppressed direct credit's positional TWIN. Same
                                 // gate, opposite branch — which is the whole proof that the Echoing
                                 // Burst gather cannot double-count: a cast reaches exactly one of
                                 // these two lines. `castDelivered` (not `turn.directDamage`) is the
@@ -11521,7 +11521,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             lastTurnCtxByActor.set(actor.id, turn.turnCtx);
                             // Record this cast's footprint size (aoeVictimIds — undefined in
                             // DPS/non-positional mode) for the enemies-hit-this-cast drain-time gate.
-                            // SP-4d Task 8: `tgt` (not `aoeVictimIds`) is the "did a victim resolve"
+                            // `tgt` (not `aoeVictimIds`) is the "did a victim resolve"
                             // discriminator — mirrors playerTurn.ts's `hasVictim` (`enemy !==
                             // undefined`, and `enemy` here IS `tgt`, see buildTurnArgs's conditional
                             // spread). Was `?? 1`, which fabricated a footprint of 1 for a no-victim
@@ -11620,7 +11620,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // `enemyDefense` is no longer even a binding in this file. So `tgt` is
                             // EITHER a real positioned CombatActor OR undefined — never a stand-in.
                             const { tgt } = selectTurnTarget(actor);
-                            // SP-4c-2b: `tgt` is undefined when this cast targets an ALLY — there is
+                            // `tgt` is undefined when this cast targets an ALLY — there is
                             // no opposing victim to resolve. The turn still RUNS (a repair/buff must
                             // land); only the victim-derived context is absent. Skipping here would
                             // permanently silence all 24 shipped ally-target support ships.
@@ -11630,13 +11630,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
                             // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
                             // the victim is never recorded → no break-mark, no stasisBreakPending.
-                            // SP-4c-2b: mirror of the focus site — no victim ⇒ no hit ⇒ no break.
+                            // Mirror of the focus site — no victim ⇒ no hit ⇒ no break.
                             const teamTgtWasStasised =
                                 !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const teamTurnStasisHitVictims = new Set<string>();
                             // Task 5 (per-victim crit signal): predict positional apply (mirror of the
                             // focus site) so runPlayerTurn defers its inline ability-performed emit.
-                            // SP-4c-2b: NOT victim-fenced, for the two reasons spelled out at the focus
+                            // NOT victim-fenced, for the two reasons spelled out at the focus
                             // site's own `willApplyPositionally` — no event is lost (runPlayerTurn's own
                             // `hasVictim` already suppresses both emit arms) and fencing it would move
                             // the no-victim turn's landing/crit RNG draws.
@@ -11644,7 +11644,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 resolvesPositionalVictim(actor.position, enemyAttackerActors) &&
                                 teamTarget != null &&
                                 teamPattern != null;
-                            // Sub-project I, PR I2: pre-turn snapshot (mirrors the focus site).
+                            // Pre-turn snapshot (mirrors the focus site).
                             const teamPreTurnVictimStatus =
                                 snapshotPreTurnVictimStatus(enemyAttackerActors);
                             const teamTurnArgs = buildTurnArgs(actor, tgt);
@@ -11684,7 +11684,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // roster when this walked team actor is positional, has a parsed target, AND its
                             // firing hit produced scalars. At Task 8b no production caller threaded these,
                             // so it was false for every existing test/golden → byte-identical. STALE since
-                            // SP-4b-1: the boundary places and targets every team actor, so this fires for
+                            // The boundary places and targets every team actor, so this fires for
                             // both calculators' team ships. That flip is what silently cost the DPS page its
                             // team-damage series — the scalar `roundDamage` team writer is gated on
                             // `!teamPositional`, so the credit moved to `perTargetDealt` and the display had
@@ -11693,7 +11693,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // it there is no apply to perform (the then-shipped positionalSelection C2 test
                             // set position+target only, never a pattern, so it kept the legacy single-sink
                             // credit and never entered this branch; the boundary now fills the pattern).
-                            // SP-4c-2b: victim-fenced exactly as the focus gate is — an ally-targeted
+                            // Victim-fenced exactly as the focus gate is — an ally-targeted
                             // cast has no opposing anchor to walk a footprint from, and the
                             // `!teamPositional` arm cannot book a phantom lump in its place because
                             // runPlayerTurn fences `directDamage` to 0 with no victim. See the focus
@@ -11715,7 +11715,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // the player→enemy STANDING leech and emits the per-victim `attacked`
                                 // inline (before detonation).
                                 const tb = turnBindings(actor.side);
-                                // SP-4b-2 D6: mirror of the focus site — stage the walked team
+                                // Mirror of the focus site — stage the walked team
                                 // actor's passive-slot instance against the turn-entry board.
                                 const landTeamPassiveSlotHit = teamTurn.passiveSlotHit
                                     ? stagePassiveSlotHit(actor, tb, tgt, teamTurn.passiveSlotHit, {
@@ -11763,12 +11763,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     (sum, sub) => sum + (sub.deliveredDamage ?? 0),
                                     0
                                 );
-                                // SP-4b-2 D6: the staged passive-slot instance lands now.
+                                // The staged passive-slot instance lands now.
                                 landTeamPassiveSlotHit?.();
                             }
                             // Clause order — mirror of the focus site (see flushDeferredEnemyApplications).
                             flushDeferredEnemyApplications(teamTurn.deferredEnemyApplications);
-                            // SP-4c-2b: the `?? teamTurn.directDamage` fallback below is REACHABLE on a
+                            // The `?? teamTurn.directDamage` fallback below is REACHABLE on a
                             // no-victim turn — do NOT read the focus site's pre-SP-4c-2b claim that
                             // deferral is pinned to the positional gate, which this rung falsified at both
                             // sites. Deferral follows the unfenced `teamWillApplyPositionally`;
@@ -11790,7 +11790,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // the firing-hit damage already landed per-victim via applyPositionalDamage, so
                             // skip the direct credit; KEEP detonation (bombs are out of scope). The
                             // single-sink decline that used to be zeroed for the positional path is now
-                            // derived from the victim's own currentHp inside runPlayerTurn (PR6b), so no
+                            // derived from the victim's own currentHp inside runPlayerTurn, so no
                             // separate decline suppression is needed here.
                             const td = dmg(actor.id);
                             // secondary/conditional: a SYMMETRY PLACEHOLDER with NO READER today.
@@ -11818,7 +11818,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // cumulativeDamage (it lands per-victim via applyVictimDamage above).
                                 creditDamage(actor.id, 'detonation', teamTurn.detonationDamage);
                             } else {
-                                // SP-4b-2 D1: the walked team's mirror of the focus site's
+                                // The walked team's mirror of the focus site's
                                 // positional direct twin — see its note for why the pair cannot
                                 // double-count. A walked team actor's direct damage IS part of the
                                 // gather (Echoing Burst gathers the whole side's direct), which is
@@ -12030,7 +12030,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // path applies its own per-sub-hit reduction via drivePositionalApply;
                             // this fold serves the legacy single-apply.)
                             //
-                            // SP-4e: fenced on the victim's PRESENCE, not just on the ability list.
+                            // Fenced on the victim's PRESENCE, not just on the ability list.
                             // With no victim there is nobody whose incoming channel could reduce
                             // anything, and the two args default to 0 inside runPlayerTurn — which is
                             // also what the two PLAYER cast sites pass (they never thread these at
@@ -12086,7 +12086,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // terms are negated (victim incomingCritDamage -10 → +10 reduction
                             // on crits; attacker outgoingCritDamage -10 → its crits deal 10%
                             // less). Absent → 0 → byte-identical.
-                            // SP-4e: only the VICTIM term is fenced. The ACTING enemy's own
+                            // Only the VICTIM term is fenced. The ACTING enemy's own
                             // `outgoingCritDamage` is not victim-derived, so it keeps applying
                             // on a no-victim turn — collapsing the whole expression would have
                             // silently dropped a modifier that has nothing to do with the victim.
@@ -12097,7 +12097,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 incomingReductionCritAll -
                                 incomingReductionNonCritPct +
                                 preFightCritFamilyPct;
-                            // Sub-project I, PR I2: snapshot BEFORE runPlayerTurn (the enemy's
+                            // Snapshot BEFORE runPlayerTurn (the enemy's
                             // opposing roster is the PLAYER team — allPlayerActors).
                             const enemyPreTurnVictimStatus =
                                 snapshotPreTurnVictimStatus(allPlayerActors);
@@ -12163,11 +12163,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 enemyTurn.positionalScalars != null;
                             const enemyScalars = enemyTurn.positionalScalars;
                             const enemyPassiveSlotHit = enemyTurn.passiveSlotHit;
-                            // Sub-project I, PR I2: capture the enemy turn's per-victim
+                            // Capture the enemy turn's per-victim
                             // outgoing-modifier ingredients (team-symmetric mirror of the
                             // focus/team sites).
                             const enemyPerVictimOutgoing = enemyTurn.perVictimOutgoing;
-                            // SP-4b-2 D4: capture the enemy turn's gated scheduled enemy effects.
+                            // Capture the enemy turn's gated scheduled enemy effects.
                             const enemyScheduledEnemyEffects = enemyTurn.scheduledEnemyEffects;
                             // Per-victim crit: capture the enemy turn's per-victim crit resolver.
                             const enemyRollVictimCrit = enemyTurn.rollVictimCrit;
@@ -12496,10 +12496,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     );
                                     enemyCritAgg = posApply.critAgg;
                                     enemyEmitDeferred = posApply.emitDeferred;
-                                    // SP-4b-2 D6: the staged passive-slot instance lands now — after
+                                    // The staged passive-slot instance lands now — after
                                     // the firing hit, exactly as the two player-side sites do it.
                                     landEnemyPassiveSlotHitOnce();
-                                    // SP-4b-2 D1: the enemy site's positional direct twin. There is
+                                    // The enemy site's positional direct twin. There is
                                     // no `if (!enemyPositional) creditDamage(...,'direct',…)` to
                                     // pair with — `roundDamage` is a player-credit map, so the
                                     // enemy side never had a scalar direct channel at all. That is
@@ -12703,7 +12703,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // player→enemy-attacker variant is fixed by this same line but stays latent (no
                 // firing site threads a player→enemy targetId yet — a future per-victim-accounting
                 // PR lights it up).
-                // SP-4c-2d: this used to be a ternary whose true arm decremented the side-wide
+                // This used to be a ternary whose true arm decremented the side-wide
                 // '__enemy__' sentinel store on the dummy's own turn (`isDummyEnemy`). SP-4c-2c
                 // retired that turn, making the arm dead, and this rung deleted the actor — so
                 // every acting actor keys its own per-actor debuff store, unconditionally. The
@@ -12717,7 +12717,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 drainIntentsFor('player');
                 drainIntentsFor('enemy');
 
-                // SP-4c-1: AFTER the turn ends (including its drains, so an on-death reactive
+                // AFTER the turn ends (including its drains, so an on-death reactive
                 // that revives or kills still counts), check for a wipe. Breaking HERE — rather
                 // than at the round boundary — is what makes termination turn-granular: the
                 // remaining actors in this round's order do not act. The round's row is still
@@ -12750,7 +12750,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             actingTurnCtx = undefined;
         }
 
-        // SP-4b-2 D5: decrement the GLOBAL enemy-debuff sentinel bucket once per round.
+        // Decrement the GLOBAL enemy-debuff sentinel bucket once per round.
         //
         // A SCHEDULED (input-level `enemyDebuffs`) debuff is always upserted into the
         // side-wide `DEFAULT_ENEMY_TARGET` ('__enemy__') store — `upsertBuff` hardcodes that
@@ -12888,7 +12888,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Aggregate dot-detonated fires ONLY for the non-positional aggregate path; positional
         // detonation already emitted per-victim bomb-detonated/dot-detonated in the apply loop.
         //
-        // SP-4c-2d: `targetId` was the dummy sink's id and is now `SENTINEL_ENEMY_ACTOR_ID` — the
+        // `targetId` was the dummy sink's id and is now `SENTINEL_ENEMY_ACTOR_ID` — the
         // same string, so the event is byte-identical. It stays the sentinel rather than naming a
         // positioned enemy because this event describes the AGGREGATE scalar channel, which has no
         // per-victim identity; naming `enemyAttackers[0]` would invent one. Corpus-inert today: a
@@ -12948,7 +12948,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // ⚠️ This scalar fold is INCOMPLETE for a walked team actor that resolved positionally: its
         // credit lands in `perTargetDealt` and never reaches here (#331). It is not the DPS-facing
         // number — `simulateDPS` re-derives `RoundData.teamDamage`/`teamTotalDamage` from
-        // `perTargetDealt` for exactly that reason (SP-4b-1), and the fallback to this scalar is
+        // `perTargetDealt` for exactly that reason, and the fallback to this scalar is
         // taken only when there are no walked team actors at all, where it is 0 either way.
         let teamRoundDamage = 0;
         for (const [id, d] of roundDamage) {
@@ -12957,7 +12957,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         totalTeamRaw += teamRoundDamage;
 
-        // SP-4c-2d DELETED THE ROUND-TAIL ENEMY-HP BLOCK. It had two arms and both went:
+        // DELETED THE ROUND-TAIL ENEMY-HP BLOCK. It had two arms and both went:
         //
         //  • the `dpsEnemyTarget` arm landed the round's dealt damage (focus + team) on the dummy
         //    through the shared per-victim funnel, so it could actually DIE and end the run
@@ -13124,7 +13124,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             });
         }
 
-        // SP-4c-2d DELETED THE POST-DRAIN RE-FOLD. It was gated on `dpsEnemyTarget` (roster
+        // DELETED THE POST-DRAIN RE-FOLD. It was gated on `dpsEnemyTarget` (roster
         // emptiness), so it had been unreachable since SP-4b-2b's boundary started refusing an
         // absent/empty roster. What it did: end-of-round reactive-damage procs (Rhodium's
         // most-buffed-enemy purge, Incinerator's enemy-debuff AoE) credit into `roundDamage` DURING
@@ -13285,7 +13285,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(perActorReflected.size > 0
                 ? { perActorReflected: Object.fromEntries(perActorReflected) }
                 : {}),
-            // SP-4b-2 D3: the DoT-state fields describe every enemy-side carrier. Before SP-4c-2d
+            // The DoT-state fields describe every enemy-side carrier. Before SP-4c-2d
             // they also covered the dummy's own (never-written) containers, which is what made
             // `dotCarrierActors` REPORT a stack the dummy never ticked. See `dotCarrierActors`.
             //
@@ -13315,7 +13315,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             resistedEnemyDebuffs,
             appliedDoTs: dotsConfig,
             dotsLanded,
-            // SP-4b-2 D3: the UNION of every enemy-side carrier's standing DoT entries. A list is
+            // The UNION of every enemy-side carrier's standing DoT entries. A list is
             // the one shape where the lossless answer exists, so concatenation is the aggregation
             // — reporting one carrier's entries would silently hide the rest of the board's.
             // Grouping stays TYPE-MAJOR (all carriers' corrosion, then inferno, then bombs, then
@@ -13364,7 +13364,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // The destroyed-round seam is set the moment the target's HP first reaches 0 (in the
         // enemy attacker turn); this post-round guard is a backstop for any other 0-HP path.
         if (healTarget) {
-            // PR5b: the heal target's intake totals are sourced from its per-actor bucket
+            // The heal target's intake totals are sourced from its per-actor bucket
             // (written by sink, PR5a). In the single-target path this is byte-identical to
             // the legacy per-round scalars this replaced (the heal target is the only recorded
             // victim); in positional AoE it is the correct per-victim share rather than the old
@@ -13419,13 +13419,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
 
-        // SP-4c-2d: a THIRD exit used to sit beside these two — `if (dpsEnemyTarget &&
+        // A THIRD exit used to sit beside these two — `if (dpsEnemyTarget &&
         // enemy.destroyedRound !== undefined) break;`, which ended the run on the round the dummy
         // died. It was gated on roster emptiness, so it had been unreachable since SP-4b-2b, and it
         // is gone with the actor. A real positioned enemy's death ends the run through the
-        // side-wipe exit below instead (SP-4c-1), which is the honest signal.
+        // side-wipe exit below instead, which is the honest signal.
         //
-        // SP-4c-1: a side was wiped during this round's turn walk. The row is already pushed, so
+        // A side was wiped during this round's turn walk. The row is already pushed, so
         // the wiping round is reported in full and the run ends here. Placed with the other two
         // exits and independent of both: this one fires in EVERY mode, whereas the focus-death
         // exit below is DPS-only (two-team and healing runs legitimately continue past the focus's
@@ -13459,7 +13459,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // gated on `healReportActive`, which a DPS run leaves false.
     const healTargetDestroyedRound = healTarget?.destroyedRound ?? backstopDestroyedRound;
 
-    // SP-4c-2d DELETED `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) and the
+    // DELETED `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) and the
     // `enemyFinalHpPct` derivation behind it. All three read the DUMMY, so on every run with a real
     // roster they described a billion-HP sink that never died — `survived: true`,
     // `roundsToKill: undefined`, `finalHpPct: 100` — no matter what actually happened on the board.

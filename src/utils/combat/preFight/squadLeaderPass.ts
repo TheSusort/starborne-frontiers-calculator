@@ -124,7 +124,7 @@ export function isSquadLeaderEffectSimulated(effect: SquadLeaderEffect): boolean
         return false;
     }
     if (effect.kind === 'stat') return isPreFightStat(effect.stat);
-    // kind === 'modifier': mapped channels are consumed by the engine (PR F3).
+    // kind === 'modifier': mapped channels are consumed by the engine.
     return MODIFIER_FIELD_BY_CHANNEL[effect.channel] !== undefined;
 }
 
@@ -204,7 +204,7 @@ function applyLeaderForSide(
                 for (const unit of recipients) unit.unsimulated.push(effect.text);
                 continue;
             }
-            // SIMULATED (PR F3): every mapped channel is consumed by the engine — the
+            // SIMULATED: every mapped channel is consumed by the engine — the
             // battle simulator attaches the accumulated block to the unit's actor and
             // the folds fire at the buff-channel/crit-family/shield-seed sites. Only
             // conditional effects (filtered above) and unmapped channels stay unsimulated.

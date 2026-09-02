@@ -206,7 +206,7 @@ export interface Intent {
          *  AND as the single-target for "decrease THAT enemy's charge" (Zosimos). Phase 3 PR-F:
          *  ALSO used to key the debuff branch's oncePerRoundPerEnemy cap (Ruiner). */
         repairerId?: string;
-        /** Phase 3 PR-F: the recipients of an on-enemy-repaired heal-performed event
+        /** PR-F: the recipients of an on-enemy-repaired heal-performed event
          *  (heal-performed.targets — every healed enemy, unfiltered). Read by a
          *  `repairedRecipientTargeted` debuff (Amartya's "on that defender" Defense Shred),
          *  which fans out to EACH of these instead of routing to the repairer. Mirrors
@@ -254,7 +254,7 @@ export interface Intent {
          *  must still resolve, whereas a stale listener firing on some LATER event (e.g. a
          *  dead Curator reacting to an enemy charge rounds after dying) is suppressed. */
         fromOwnDeath?: boolean;
-        /** Phase 3 PR-H: the recipient ids ACTUALLY cleansed by the owner's OWN cleanse-performed
+        /** PR-H: the recipient ids ACTUALLY cleansed by the owner's OWN cleanse-performed
          *  event (cleanse-performed.targets — a subset of the cleanse's targeted recipients,
          *  only those with a real removal). The `on-own-cleanse` listener stamps this so an
          *  `ally`-target reactive repair (Cultivator's "that ally") fans out to exactly these ids
@@ -276,7 +276,7 @@ export interface Intent {
          *  ("repairs 5% per enemy affected"); Hemlock's heal is self-target so the ids themselves
          *  are never routed. Mirrors repairedEnemyIds' count-only use. */
         spreadAffectedIds?: string[];
-        /** SP-E, Task E4: the ACTUAL victim id (dot-applied.targetId) of the ally's DoT
+        /** The ACTUAL victim id (dot-applied.targetId) of the ally's DoT
          *  application, captured by the on-ally-debuff-inflicted dot-applied listener. Read by
          *  the convert-dot executor to resolve the correct CombatActor (via ctx.actorById) whose
          *  entries to retag — NOT the fixed ctx-level `corrosionEntries`, which is side-biased to
@@ -296,7 +296,7 @@ export interface Intent {
          *  (Warden's debuff, APEX/Butcher/Torcher/Prospect/Yuyan self-riders, Hemlock's
          *  charge, Pestilence's cleanse) ignores this field → unchanged. */
         debuffVictimId?: string;
-        /** SP-E, Task E4: the DoT type of the ally's application (dot-applied.dotType), captured
+        /** The DoT type of the ally's application (dot-applied.dotType), captured
          *  alongside victimId. The convert-dot executor gates on this === cfg.fromDotType so an
          *  ally's Inferno (or any other DoT) never converts under a Corrosion-only ability. */
         dotType?: DoTType;
@@ -469,7 +469,7 @@ export function registerReactiveListeners(args: {
      *  Returns the actor's ShipTypeName or undefined (manual actor / no ship picked).
      *  Optional: DPS-mode runs and unit fixtures omit it. */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
-    /** D-PR14 Bulwark: same-side ids adjacent to an owner (living, owner excluded; non-positional
+    /** Bulwark: same-side ids adjacent to an owner (living, owner excluded; non-positional
      *  → all living same-side allies). Used to gate requireDamagedAllyAdjacent reactions. Optional:
      *  DPS/unit fixtures omit it (→ treat any ally as adjacent). */
     adjacentAllyIdsFor?: (ownerId: string) => string[];
@@ -615,7 +615,7 @@ export function registerReactiveListeners(args: {
                                 // once per turn — after every sub-attack — so it cannot ask the
                                 // engine which sub-attack it is in.
                                 subAttackIndex: e.subAttackIndex,
-                                // SP-4b-2 D2: the enemies this sub-attack actually CRIT. Without
+                                // The enemies this sub-attack actually CRIT. Without
                                 // it an 'enemy'-target reactive debuff ("when this Unit critically
                                 // hits, it inflicts X on that enemy" — Enforcer) had no routed
                                 // victim at all and the debuff executor fell through to
@@ -715,7 +715,7 @@ export function registerReactiveListeners(args: {
                         // positional victim — instead of the ctx-level fallback, which was the DPS
                         // dummy `enemy` sink until SP-4c-2d and is a NO-OP since. On a run with no
                         // positioned roster `e.targetId` WAS the dummy → byte-identical; that shape
-                        // is neither a DPS-calculator one (SP-4b-2a) nor constructible at all
+                        // is neither a DPS-calculator one nor constructible at all
                         // (SP-4b-2b refuses an absent/empty roster), so a DPS run now genuinely
                         // routes the rider to the real victim. Non-DoT riders
                         // (Warpstrike duration-reduction) ignore victimId, so this is inert there.
@@ -803,7 +803,7 @@ export function registerReactiveListeners(args: {
                                 eventCtx: {
                                     ...intent.eventCtx,
                                     damagedAllyId: e.sourceId,
-                                    // SP-E, Task E4: Belladonna's convert-dot executor needs the
+                                    // Belladonna's convert-dot executor needs the
                                     // actual victim + DoT type of THIS application.
                                     victimId: e.targetId,
                                     dotType: e.dotType,
@@ -1263,7 +1263,7 @@ export function registerReactiveListeners(args: {
                     bus.on('debuff-resisted', (e) => {
                         // Self-scoped on the RESISTER. `debuff-resisted` carries targetId = the
                         // unit that resisted (either side: cast-side, reactive-side, and the
-                        // D-PR15 Block-Debuff auto-resist all emit it). Route the inflictor
+                        // Block-Debuff auto-resist all emit it). Route the inflictor
                         // (e.sourceId) as counterTargetId so a damage reaction (Vindicator's
                         // on-resist HP proc) retaliates against THAT enemy. When the resist carries
                         // no source, enqueue the bare intent — buff consumers (Lockdown) are
@@ -1382,7 +1382,7 @@ export function registerReactiveListeners(args: {
                         ) {
                             return;
                         }
-                        // D-PR14 Bulwark: fire only when the DAMAGED ally is adjacent to this
+                        // Bulwark: fire only when the DAMAGED ally is adjacent to this
                         // owner. Pure read (listener stays enqueue-only). Helper absent → allow.
                         if (
                             ra.ability.requireDamagedAllyAdjacent &&
@@ -1496,7 +1496,7 @@ export function registerReactiveListeners(args: {
                     // Opposing-scoped. Capture the repairer id so the charge branch can (a)
                     // count repairs per source for an everyNthEvent gate and (b) target THAT
                     // enemy. Harmless for Zosimos's self-gain intent (it ignores repairerId).
-                    // Phase 3 PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
+                    // PR-F: ALSO stamp counterTargetId = the repairer (Ruiner's Bomb
                     // routes here like every other "on that enemy" counter-infliction — the
                     // debuff branch's existing `counterTargetId` route picks
                     // this up for free) and repairedEnemyIds = the healed set (Amartya's "that
@@ -1926,7 +1926,7 @@ export interface IntentExecContext {
      *  faction is unknown, which NEVER matches a filter (conservative). Absent entirely (unit-test
      *  ctx / no factions supplied) → byte-identical for every ability with no `factionFilter`. */
     factionOf?: (id: string) => FactionKey | undefined;
-    /** SP-4e: the `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
+    /** The `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
      *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
      *  ally, owner EXCLUDED, ties broken by source order. `undefined` means NO recipient (the
      *  owner is the only living candidate; "the OTHER ally" is nobody, never a self-target).
@@ -1956,14 +1956,14 @@ export interface IntentExecContext {
     /** Number of enemies damaged by `ownerId`'s most recent cast this round, feeding the
      *  `enemies-hit-this-cast` gate at drain time (Berserker's Marauder Rage, drained via the
      *  on-deal-damage reactive trigger). Engine-populated from the per-turn footprint size.
-     *  SP-4d Fix wave 1: the delegate itself may return `undefined` for an owner with no
+     *  Fix wave 1: the delegate itself may return `undefined` for an owner with no
      *  recorded footprint (no cast yet this combat) — that footprint is UNKNOWN, not "hit
      *  exactly one enemy", so `number | undefined` here lets buildDrainContext's absent-subject
      *  guard leave the gate unresolved instead of defaulting to a fabricated 1. Absent
      *  DELEGATE (no function at all — DPS mode / fixtures) is unaffected: the optional-chain
      *  call below already answers `undefined` in that case, byte-identical. */
     enemiesHitThisCastFor?: (ownerId: string) => number | undefined;
-    /** PR4b: apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
+    /** Apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
      *  on-enemy-cleansed, FrontLine's on-enemy-charged-cast). `abilityId` keys the dedicated
      *  reactive-damage crit gate; `noCrit` (Grif/Rhodium "cannot critically hit") skips the roll
@@ -2062,7 +2062,7 @@ export interface IntentExecContext {
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
      *  flag, byte-identical for single-opponent fixtures). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
-    /** SP-4c-2b: the LIVE debuff-landing chance (0..1) for `ownerId`'s infliction against
+    /** The LIVE debuff-landing chance (0..1) for `ownerId`'s infliction against
      *  `victimId` — the applier's effective hacking vs THAT victim's effective security, with the
      *  two actors' own affinity matchup applied. The reactive path's landing roll must be measured
      *  against the enemy it is actually inflicting on ("an enemy shoots Flamel; Flamel's passive
@@ -2083,7 +2083,7 @@ export interface IntentExecContext {
      *  its `damagePerStack` at application. Absent (unit-test ctxs) → that pre-first-turn bomb is
      *  skipped, the pre-2026-07-31 behaviour. */
     effectiveAttackFor?: (actorId: string) => number | undefined;
-    /** SP-E, Task E4: resolve ANY actor (either side, from the combat-wide actor map) by id.
+    /** Resolve ANY actor (either side, from the combat-wide actor map) by id.
      *  Used by the convert-dot executor to locate the ACTUAL victim of an ally's DoT infliction
      *  (eventCtx.victimId) so it retags the right entries — team-symmetric (works for a real enemy
      *  attacker hit by a player ally and for a real player actor hit by an enemy ally; the singular
@@ -2114,7 +2114,7 @@ export interface IntentExecContext {
      *  absent reader means: a `roleFilter` gate with no `roleOf` never FIRES, while a `notRole`
      *  recipient axis with no `roleOf` reaches NOBODY — both conservative, both "excluded". */
     roleOf?: (actorId: string) => ShipTypeName | undefined;
-    /** SP-E, Task E4: live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
+    /** Live (buff-folded) hacking/critDamage for `actorId`, either side. Used by
      *  the convert-dot executor to compute the conversion chance (hacking) and the paired
      *  crit-power extend chance (critDamage). Optional — absent in unit-test ctxs that don't
      *  exercise convert-dot. */
@@ -2124,13 +2124,13 @@ export interface IntentExecContext {
     /** Id of the sole living actor on the drain owner's side (recomputed each drain),
      *  or undefined when !=1 actor is alive. Drives the `last-standing` gate (Last Stand). */
     lastStandingId?: string;
-    /** D-PR14 Doomsayer: living opposing actor with the greatest live effective attack. */
+    /** Doomsayer: living opposing actor with the greatest live effective attack. */
     enemyWithHighestAttack?: (ownerId: string) => string | undefined;
-    /** SP-M M1 Task 6 Chakara: living opposing actor with the greatest live effective speed.
+    /** Chakara: living opposing actor with the greatest live effective speed.
      *  Resolved LIVE per owner (unlike enemyWithMostBuffs, no purge co-occurs with it, so no
      *  onceByOwner memo is needed). Optional — absent in unit-test ctxs that don't drive it. */
     enemyWithHighestSpeed?: (ownerId: string) => string | undefined;
-    /** SP-M M1 Task 7 Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
+    /** Judge/Incinerator: LIVING opposing-actor ids for an 'all-enemies' reactive
      *  DAMAGE proc. The executor enumerates these and re-checks the ability's per-victim enemy
      *  conditions (hp-threshold / enemy-debuff) against EACH victim's own live state. Optional —
      *  ABSENT in unit-test ctxs, where resolveAoEReactiveDamageVictims returns [] (no-op, never a
@@ -2146,7 +2146,7 @@ export interface IntentExecContext {
      *  denominator for the per-victim hp-threshold gate (Judge's "<50% HP"). Optional — absent
      *  in unit-test ctxs. */
     recipientMaxHpFor?: (victimId: string) => number;
-    /** D-PR14 Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
+    /** Bulwark: per-(owner,ability) once-per-round consume set (reset each round in engine). */
     oncePerRoundConsumed?: Set<string>;
     /** ship-kit W3 (Sansi): per-(owner,ability) fire COUNT this round — the numeric generalization
      *  of oncePerRoundConsumed, backing Ability.maxPerRound. Incremented on each successful reactive
@@ -2199,7 +2199,7 @@ export function buildActorConditionContext(
         infernoEntryCount: number;
         bombCount: number;
         enemyType?: EnemyBaseClass;
-        /** SP-4d: passed through as-is to `buildRoundContext` below — absent means no enemy/victim
+        /** Passed through as-is to `buildRoundContext` below — absent means no enemy/victim
          *  reading exists this round (no phantom is invented). Every existing caller still supplies
          *  a real number; only `playerTurn.ts`'s foreign-caster aura ctx forwards the turn-local
          *  absent value. */
@@ -2530,14 +2530,14 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
             ctx.genericDoTEntries ?? []
         ),
         enemyType: ctx.enemyType,
-        // SP-4d: NO fight-wide enemy-HP reading. It used to be
+        // NO fight-wide enemy-HP reading. It used to be
         // `100 * (1 - cumulativeDamage / enemyHp)`, both terms legacy scalars describing the dummy
         // sink SP-4c-2d deleted; on a positional run (every run) it sat at a constant 100. A
         // `below` gate read false off it and an `above` gate read TRUE against nobody. Enemy-HP
         // gates that CAN be re-checked per resolved target already are (`perVictimOk`, see
         // splitDrainGateConditions); the rest are now honestly unresolvable instead of
         // dead-but-fail-closed. Do not reintroduce a scalar here.
-        // Task 6: live self-HP% for drain-time hp-threshold gates. The engine
+        // Live self-HP% for drain-time hp-threshold gates. The engine
         // closes over the heal target's current/max HP; every non-tank id reports 100 (the pre-4c
         // default). #415 RETIRED the rest of this note ("and DPS mode report 100 → all existing
         // drain gating stays byte-identical"): `healTarget` is anchored in every mode, so THIS is
@@ -2622,7 +2622,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
 // "enemy has a buff" / "self has a debuff" gate only needs to know the status is present. No
 // fixture exercises a conditional enemy aura/accum, so this is inert for current goldens.
 //
-// SP-4d: `noOpposingVictim: true` is EXPLICIT, not incidental — this constant already passes
+// `noOpposingVictim: true` is EXPLICIT, not incidental — this constant already passes
 // literal `0`s for every entry count, which `buildRoundContext` would otherwise sum into a real
 // (satisfiable-by-`eq 0`) `enemyDebuffCount`/`enemyDotCount` of exactly 0, and default
 // `enemyShielded` to a real `false`. `tsc` cannot flag a missing optional field, and a call site
@@ -3205,7 +3205,7 @@ export function reactiveRecipients(
     ctx: IntentExecContext,
     fallbackTargetId: string
 ): string[] {
-    // SP-4e: resolved by the engine (it owns live HP), side-relative to the OWNER.
+    // Resolved by the engine (it owns live HP), side-relative to the OWNER.
     // Undefined → no recipient (Pallas's "the OTHER ally" with nobody else alive).
     //
     // Returns EARLY, above `footprintFilteredRecipients`, for two reasons that point the same way:
@@ -3656,7 +3656,7 @@ function resolveAoEReactiveDamageVictims(intent: Intent, ctx: IntentExecContext)
  * PRESERVES TODAY'S BEHAVIOUR EXACTLY — this is a dispatch refactor, not a widening:
  *   - the three SELECTOR targets each resolve to ONE opposing actor (#399 Task 3);
  *   - `enemy` / `all-enemies` bulk-remove from every opposing actor (`everyNthEvent` included);
- *   - `lowest-hp-ally` bumps the one lowest-HP ally (SP-4e);
+ *   - `lowest-hp-ally` bumps the one lowest-HP ally;
  *   - `ally` / `all-allies` bump every same-side actor;
  *   - everything else — `self`, `adjacent-allies`, and (deliberately, per #399's scope) the two
  *     enemy-adjacency targets `adjacent-enemies` / `target-and-adjacent-enemies` — falls to the
@@ -3874,7 +3874,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 ctx.removeEnemyCharges(cfg.amount, owner.attackerAffinity, ctx.bus);
                 return;
             }
-            // SP-4e: the named selector bumps exactly ONE same-side ally — the engine resolves it
+            // The named selector bumps exactly ONE same-side ally — the engine resolves it
             // (live HP), owner EXCLUDED. Handled ahead of the ally/all-allies arm below, and
             // deliberately NOT routed through `footprintFilteredRecipients`: a named selector is
             // never footprint-narrowed, and that helper's `resolveSupportRecipients` throws on this
@@ -3945,7 +3945,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             if (ctx.oncePerCombatFired?.has(key)) return;
             ctx.oncePerCombatFired?.add(key);
         }
-        // Phase 3 PR-E: "once per ally per round" cap (Oleander's RoT-to-ally grant). A DEDICATED
+        // PR-E: "once per ally per round" cap (Oleander's RoT-to-ally grant). A DEDICATED
         // flag — not the plain oncePerRound gate above, which has no gate in THIS branch today
         // (adding one there would newly cap every other reactive buff and drift goldens). Keyed
         // on (owner, ability, damagedAllyId) so a DIFFERENT ally still procs this round.
@@ -3980,7 +3980,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // lives on another recipient.
         const isAllyTarget =
             intent.ability.target === 'ally' || intent.ability.target === 'all-allies';
-        // SP-4e: the named selector grants to exactly ONE same-side ally — engine-resolved from
+        // The named selector grants to exactly ONE same-side ally — engine-resolved from
         // live HP, owner EXCLUDED, `undefined` → nobody. Resolved BESIDE the chain below rather
         // than inside it, because it must bypass `footprintFilteredRecipients` on both counts: a
         // named selector is never footprint-narrowed, and that helper's `resolveSupportRecipients`
@@ -4152,7 +4152,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a future ability combines them, move this mark below the target-resolution guard so a
         // no-living-target round doesn't burn the charge.
         if (intent.ability.oncePerRound) ctx.oncePerRoundConsumed?.add(onceKey);
-        // Phase 3 PR-F: "once per round per enemy" cap (Ruiner's Bomb-on-repair). A DEDICATED
+        // PR-F: "once per round per enemy" cap (Ruiner's Bomb-on-repair). A DEDICATED
         // flag — not the plain oncePerRound gate above, which caps once per round OVERALL — so a
         // DIFFERENT enemy repairing still procs even if one enemy already consumed the cap this
         // round. Keyed on (owner, ability, repairerId), mirroring the buff branch's
@@ -4203,7 +4203,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // No living highest-attack enemy → no-op (don't fall back to the default enemy).
         if (intent.ability.target === 'enemy-highest-attack' && counterTargetId === undefined)
             return;
-        // Phase 3 PR-F: Amartya's recipient-targeted repair reaction fans the debuff out to
+        // PR-F: Amartya's recipient-targeted repair reaction fans the debuff out to
         // EVERY repaired enemy from the triggering heal-performed event ("that defender"
         // distributes across a multi-target heal) — mirrors the buff branch's repairedRecipientIds
         // fan-out, but for enemy-side recipients. Distinct from Ruiner's REPAIRER-targeted Bomb
@@ -4218,7 +4218,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // anchor's own-side neighbours within the OPPOSING roster (team-symmetric), excluding the
         // anchor itself. No anchor → empty, never falls back to the default enemy.
         //
-        // SP-4b-2 D2: `critVictimIds` is the crit route — "when this Unit (or an ally) critically
+        // `critVictimIds` is the crit route — "when this Unit (or an ally) critically
         // hits an enemy, it inflicts X on that enemy". "That enemy" is EVERY enemy the attack
         // crit, so this fans out rather than taking a single id; an AoE that crit two of three
         // victims debuffs exactly those two. Checked BEFORE the singular `counterTargetId` for the
@@ -4241,7 +4241,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ? intent.eventCtx.critVictimIds
                     : [counterTargetId];
         for (const applicationTargetId of applicationTargetIds) {
-            // SP-4c-2d: a victimless infliction is a NO-OP — the rule the reactive damage
+            // A victimless infliction is a NO-OP — the rule the reactive damage
             // branch already states above its selector arms. Before this rung an unresolved
             // target fell through to `ctx.enemy.id`, the vestigial dummy sink.
             if (applicationTargetId === undefined) continue;
@@ -4282,7 +4282,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // the applier's precomputed-vs-representative static flag). affinityOf is absent in
             // unit-test ctxs → undefined target affinity → static fallback (byte-identical for
             // single-opponent).
-            // SP-4c-2b: the third argument closes the other half of the same per-target seam the
+            // The third argument closes the other half of the same per-target seam the
             // second one opened. Task A made the 'apply' arm resolve against the ACTUAL target's
             // AFFINITY; the 'inflict' arm was still drawing against the owner's cached
             // `liveDebuffLandingChance` — its own turn TARGET's security, from an unrelated earlier
@@ -4449,7 +4449,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // pattern but keyed off the reactive event's actual cleansed ids — NOT the single-victim
         // fallback (which routed to the dummy sink until SP-4c-2d and is a NO-OP since). The
         // per-victim Block-Debuff resist is checked inside the loop.
-        // SP-4c-2b MOVED THE LANDING DRAW INSIDE THE LOOP. It used to be ONE draw gating the whole
+        // MOVED THE LANDING DRAW INSIDE THE LOOP. It used to be ONE draw gating the whole
         // fire, against the owner's cached turn-target chance. Under the per-target ruling there is
         // no single "the enemy" for a fan-out to measure itself against, so each recipient now draws
         // its own gate at its OWN hacking-vs-security chance — which is exactly what the sibling
@@ -4526,7 +4526,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // never reach the real enemy at all — they landed in the vestigial dummy's containers, where
         // they never ticked or burst, and since SP-4c-2d they would simply no-op.
         const routedVictimId = intent.eventCtx?.victimId ?? intent.eventCtx?.counterTargetId;
-        // SP-4c-2d: victimless → NO-OP, so no container push and NO `dot-applied`. Before this
+        // Victimless → NO-OP, so no container push and NO `dot-applied`. Before this
         // rung the stack landed in the dummy's containers, where since 4c-2c it never ticked and
         // never expired while `dotCarrierActors` kept REPORTING it (spec §9.8).
         if (routedVictimId === undefined) return;
@@ -4552,7 +4552,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         }
         // One landing draw at execution (deterministic queue order) — the OWNER's DoT landing
         // gate + chance (a team ship's DoT lands at ITS hacking-vs-security rate).
-        // SP-4c-2b: that chance is now resolved against THIS DoT's own victim (`victimId`, resolved
+        // That chance is now resolved against THIS DoT's own victim (`victimId`, resolved
         // just above), not read off the owner's cached turn-target chance. Same correction as the
         // sibling `debuff` branch, same reason: a reactive DoT lands on the enemy the triggering
         // event carries, so its landing roll must be that enemy's hacking-vs-security. The
@@ -4642,7 +4642,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (cfg.type === 'heal' || cfg.type === 'shield') {
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         const healing = ctx.healing; // local binding preserves narrowing inside the closure below
-        // Task 5 SCOPE NOTE: reactive HEALS/SHIELDS are deliberately NOT collapsed to once per
+        // SCOPE NOTE: reactive HEALS/SHIELDS are deliberately NOT collapsed to once per
         // attack. Unlike a fixed buff (Everliving Regeneration — discrete state), a reactive
         // repair/shield scales or crit-filters PER HIT (Isha's non-crit 3% / crit 6% on-attacked
         // heal; Adaptive Plating's shield off each hit's damage taken), so every hit legitimately
@@ -4914,7 +4914,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 };
                 healPerTarget.push(healEntry);
                 healSum += raw;
-                // SP-4e: apply to the RESOLVED recipient's own pool, mirroring the reactive
+                // Apply to the RESOLVED recipient's own pool, mirroring the reactive
                 // SHIELD branch below (which has always resolved recipientActor). The old
                 // `rid === ctx.healing.targetId` gate credited gross for every recipient but
                 // restored HP only to the anchor — invisible while every reactive 'ally' heal
@@ -5102,7 +5102,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // gate tick the healing-on pass does not, desynchronizing the proc stream across sims.
         if (!ctx.healing) return; // healing mode off → not-simulated follow-up
         if (!passesProcChanceGate(intent, ctx)) return;
-        // Phase 3 PR-I: "(once per round)" cap (Nuqtu's self-cleanse). Mirrors the heal/shield
+        // PR-I: "(once per round)" cap (Nuqtu's self-cleanse). Mirrors the heal/shield
         // branch's ordering (procChance, THEN oncePerRound) — this branch previously had NO
         // oncePerRound consult at all (no shipped cleanse set the flag pre-PR-I), so this is
         // additive: every other cleanse ability leaves `oncePerRound` unset and passes through.
@@ -5290,7 +5290,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // a future ability combines them, extract the selector chain into a pure resolver and gate on
         // it before these two lines — and re-pin the golden boards, since that moves an RNG draw.
         if (!passesOncePerRoundGate(intent, ctx)) return;
-        // PR4b: reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
+        // Reactive direct-damage proc (Grif's on-enemy-cleansed 75% no-crit, FrontLine's
         // on-enemy-charged-cast 80%, and epic PR4's re-tagged Judge/Chakara/Incinerator/Rhodium
         // start-of-round/end-of-round passives) now runs the SAME defense-mitigated,
         // crit-eligible pipeline as an on-cast hit (ctx.applyReactiveDamage, mirroring the
@@ -5385,7 +5385,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // already carries a `destroyedRound`, so the filter empties the list. No claim is made
             // here about whether a shipped run reaches it — it no-ops either way.
             const opposing = ctx.livingOpposingActorIds?.(intent.ownerId) ?? [];
-            // SP-4c-2d: an empty living roster is a NO-OP, matching the two selector arms above
+            // An empty living roster is a NO-OP, matching the two selector arms above
             // — this arm is the last one that still fell back to the dummy.
             if (opposing.length === 0) return;
             victimIds = [opposing[0]];
@@ -5445,7 +5445,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 undefined, // hpBasisPct — inert on this path (the hpBasisPct/shieldBasisPct branch above returns early)
                 undefined, // shieldBasisPct — inert on this path, same reason
                 false, // allowDeadOwner
-                // Ship-kit W5 Task C3: flatBasis/ignoresDefense are ONLY ever non-inert for
+                // flatBasis/ignoresDefense are ONLY ever non-inert for
                 // Demolisher's splash (the sole ability carrying cfg.ignoresDefense===true AND
                 // reachable via a trigger — on-bomb-detonated — that stamps eventCtx.triggerDamage;
                 // every other reactive `damage` ability either has cfg.ignoresDefense undefined
@@ -5490,12 +5490,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // victim this event carries (eventCtx.victimId — Task 12's on-deal-damage purge,
         // Zeolite: "purges 1 buff from the enemy when dealing damage to a Defender" — the
         // owner's own damage target, mirrors the `dot`/`convert-dot` branches' victimId seam).
-        // SP-4c-2d: nothing resolved → NO-OP. It used to be "else the turn's enemy", the dummy.
+        // Nothing resolved → NO-OP. It used to be "else the turn's enemy", the dummy.
         const targetId =
             intent.ability.target === 'enemy-most-buffs'
                 ? ctx.enemyWithMostBuffs?.(intent.ownerId)
                 : (intent.eventCtx?.counterTargetId ?? intent.eventCtx?.victimId);
-        // SP-4c-2d: this was the ONLY fallback with a SHIPPED consumer — Rhodium's end-of-round
+        // This was the ONLY fallback with a SHIPPED consumer — Rhodium's end-of-round
         // purge, in every round where no enemy carried a buff (`mostBuffsAmong` returns undefined
         // there, `engine.ts`). Measured 73 hits suite-wide. Rhodium's own `damage` half on the
         // same trigger and same target already returned on undefined; now both halves agree.

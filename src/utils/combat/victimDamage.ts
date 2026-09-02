@@ -236,7 +236,7 @@ export function victimHitDamageParts(
     const incomingAsThrown =
         incomingChannel - (v.victimSideIncomingPct ?? 0) - attackerSideReductionPct;
 
-    // PR I2: fold the per-victim enemy-status-gated delta additively into the same
+    // Fold the per-victim enemy-status-gated delta additively into the same
     // percentage term as the attacker-fixed outgoing buff — both are additive-percentage
     // contributions to the SAME `(1 + x/100)` multiplier, so there is no rounding
     // divergence from a single-victim (delta === 0) evaluation.
