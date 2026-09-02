@@ -19,8 +19,14 @@
  * deterministic crit gate.
  */
 import { describe, expect, it } from 'vitest';
-import { runPlayerTurn, PlayerActorRuntime, PlayerTurnArgs, RateGate } from '../playerTurn';
-import { createActor, CombatActor } from '../state';
+import {
+    runPlayerTurn,
+    PlayerActorRuntime,
+    PlayerTurnArgs,
+    RateGate,
+    TimedStatus,
+} from '../playerTurn';
+import { createActor, CombatActor, ActiveDoTStack } from '../state';
 import { createStatusEngine, StatusEngine, RegisteredAbilityStatus } from '../statusEngine';
 import { createEventBus } from '../events';
 import { makeRateGate } from '../../calculators/rateAccumulator';
@@ -430,5 +436,349 @@ describe('Lev — on-cast charged all-enemies debuff-extend gated on self-crit',
         );
 
         expect(enemyDebuffTurns(statusEngine, victim.id)).toBe(3);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Asphyxiator — INFLICTED-scope debuff extend, gated on self-crit.
+//
+// Owner ruling 2026-09-02: "all debuffs inflicted with a critical hit have their duration
+// extended". So a crit extends what THIS cast just applied — on the main target and on every
+// enemy it splashed — and leaves a debuff standing from an earlier round alone. That last
+// clause is the whole difference from Lev above, who grows every standing debuff.
+// ---------------------------------------------------------------------------
+const asphyxiatorExtend = (turns = 1): Ability => ({
+    id: 'asphyxiator-extend',
+    type: 'extend-status',
+    target: 'all-enemies',
+    trigger: 'on-cast',
+    conditions: [{ subject: 'self-crit', derivable: true }],
+    config: { type: 'extend-status', statusKind: 'debuff', turns, scope: 'inflicted' },
+});
+
+/** The cast's own debuff clause — the ability half, which recipient resolution reads. */
+const asphyxiatorDebuffAbility: Ability = {
+    id: 'asphyxiator-defdown',
+    type: 'debuff',
+    target: 'all-enemies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName: 'Defense Down III',
+        stacks: 1,
+        isStackable: false,
+        application: 'inflict',
+        parsedEffects: { defense: -30 },
+        duration: 1,
+    },
+};
+
+/** The cast's own debuff clause — the TimedStatus half, which actually lands it. */
+const asphyxiatorDebuffStatus = (): TimedStatus => ({
+    kind: 'timed',
+    side: 'enemy',
+    sourceSlot: 'charged',
+    conditions: [],
+    duration: 1,
+    payload: { buffName: 'Defense Down III', stacks: 1, parsedEffects: { defense: -30 } },
+});
+
+const asphyxiatorSkills = (): ShipSkills => ({
+    slots: [{ slot: 'charged', abilities: [asphyxiatorDebuffAbility, asphyxiatorExtend(1)] }],
+});
+
+/** Seeds a debuff from a family the cast never touches, so a tier overwrite cannot eat it. */
+function seedUnrelatedDebuff(
+    statusEngine: StatusEngine,
+    victimId: string,
+    duration: number,
+    round = 1
+): void {
+    const status: Extract<RegisteredAbilityStatus, { kind: 'timed' }> = {
+        kind: 'timed',
+        side: 'enemy',
+        sourceSlot: 'active',
+        conditions: [],
+        duration,
+        payload: { buffName: 'Speed Down', stacks: 1, parsedEffects: { speed: -10 } },
+    };
+    statusEngine.applyTimedAbilityStatus(round, status, undefined, victimId);
+}
+
+const debuffTurnsNamed = (
+    statusEngine: StatusEngine,
+    victimId: string,
+    buffName: string
+): number | undefined =>
+    statusEngine
+        .timedAbilityStatuses('enemy', undefined, victimId)
+        .find((s) => s.payload.buffName === buffName)?.active.turnsRemaining as number | undefined;
+
+function runAsphyxiator(
+    statusEngine: StatusEngine,
+    victims: CombatActor[],
+    opts: { crit: boolean; side?: 'player' | 'enemy' }
+): void {
+    const runtime = makeRuntime('asphyxiator', asphyxiatorSkills(), {
+        side: opts.side ?? 'player',
+        chargedCritGate: () => opts.crit,
+    });
+    runtime.timedEnemyBySlot = [asphyxiatorDebuffStatus()];
+    runPlayerTurn(
+        makeArgs(runtime, victims[0], statusEngine, {
+            aoeVictimIds: victims.map((v) => v.id),
+            opposingVictimById: new Map(victims.map((v) => [v.id, v])),
+        })
+    );
+}
+
+describe('Asphyxiator — inflicted-scope debuff extend on a crit', () => {
+    it('CRIT: extends the debuff this cast just inflicted, on the main target AND the splashed enemy', () => {
+        const main = makeEnemy('enemy1');
+        const adjacent = makeEnemy('enemy2');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiator(statusEngine, [main, adjacent], { crit: true });
+
+        // Applied for 1 turn, extended to 2 — on both victims the cast reached.
+        expect(debuffTurnsNamed(statusEngine, main.id, 'Defense Down III')).toBe(2);
+        expect(debuffTurnsNamed(statusEngine, adjacent.id, 'Defense Down III')).toBe(2);
+    });
+
+    // THE discriminating case. The three assertions above pass with the scope ignored too —
+    // when the only debuff on the board is the one the cast just applied, "extend what I
+    // inflicted" and "extend everything standing" give the same number. Only a debuff from an
+    // UNRELATED family, standing since an earlier round, tells the two apart.
+    it('CRIT: leaves a debuff standing from an earlier round untouched', () => {
+        const main = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        // A different FAMILY on purpose: seeding another Defense Down would be overwritten by
+        // the cast's higher-tier Defense Down III (highest tier wins) and prove nothing.
+        seedUnrelatedDebuff(statusEngine, main.id, 2);
+
+        runAsphyxiator(statusEngine, [main], { crit: true });
+
+        expect(debuffTurnsNamed(statusEngine, main.id, 'Defense Down III')).toBe(2);
+        expect(debuffTurnsNamed(statusEngine, main.id, 'Speed Down')).toBe(2);
+    });
+
+    it('NON-CRIT: the freshly inflicted debuff keeps its printed duration', () => {
+        const main = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiator(statusEngine, [main], { crit: false });
+
+        expect(debuffTurnsNamed(statusEngine, main.id, 'Defense Down III')).toBe(1);
+    });
+
+    it('is team-symmetric: an ENEMY-side Asphyxiator extends its own inflictions on a PLAYER victim', () => {
+        const victim = makeEnemy('player1', 'player');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiator(statusEngine, [victim], { crit: true, side: 'enemy' });
+
+        expect(debuffTurnsNamed(statusEngine, victim.id, 'Defense Down III')).toBe(2);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The DEFERRED arm. A debuff clause that follows its cast's damage clause is not written during
+// `runPlayerTurn` at all — the engine flushes it once the damage has resolved, which is after the
+// extension block has already run. Extending by name at that point would find nothing, so each
+// pending write is wrapped instead. Asphyxiator's charged Stasis is the corpus instance.
+//
+// The test drives the flush the way the engine does (`applyState()` then `emitEvents()`, see
+// engine.ts's flushDeferredEnemyApplications) rather than asserting on the store mid-turn.
+// ---------------------------------------------------------------------------
+const asphyxiatorDeferredStatus = (): TimedStatus => ({
+    kind: 'timed',
+    side: 'enemy',
+    sourceSlot: 'charged',
+    conditions: [],
+    duration: 1,
+    afterDamageClause: true,
+    payload: { buffName: 'Stasis', stacks: 1, parsedEffects: {} },
+});
+
+const asphyxiatorDeferredAbility: Ability = {
+    id: 'asphyxiator-stasis',
+    type: 'debuff',
+    target: 'all-enemies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName: 'Stasis',
+        stacks: 1,
+        isStackable: false,
+        application: 'inflict',
+        parsedEffects: {},
+        duration: 1,
+    },
+};
+
+function runAsphyxiatorDeferred(
+    statusEngine: StatusEngine,
+    victim: CombatActor,
+    crit: boolean
+): void {
+    const runtime = makeRuntime(
+        'asphyxiator',
+        {
+            slots: [
+                { slot: 'charged', abilities: [asphyxiatorDeferredAbility, asphyxiatorExtend(1)] },
+            ],
+        },
+        { chargedCritGate: () => crit }
+    );
+    runtime.timedEnemyBySlot = [asphyxiatorDeferredStatus()];
+    const result = runPlayerTurn(
+        makeArgs(runtime, victim, statusEngine, {
+            aoeVictimIds: [victim.id],
+            opposingVictimById: new Map([[victim.id, victim]]),
+        })
+    );
+    // Nothing has been written yet — this is the whole point of the arm.
+    expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBeUndefined();
+    for (const pending of result.deferredEnemyApplications) {
+        pending.applyState();
+        pending.emitEvents();
+    }
+}
+
+describe('Asphyxiator — a debuff deferred past the damage clause is extended when it lands', () => {
+    it('CRIT: the deferred Stasis lands at its printed duration plus the extension', () => {
+        const victim = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiatorDeferred(statusEngine, victim, true);
+
+        expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBe(2);
+    });
+
+    it('NON-CRIT: the deferred Stasis lands at its printed duration', () => {
+        const victim = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiatorDeferred(statusEngine, victim, false);
+
+        expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// The DoT half of the same ruling: "both debuffs are extended on the main target". Asphyxiator's
+// cast lands Defense Down III (a timed debuff) AND Inferno III (a DoT), and the game counts the
+// DoT as one of the debuffs it inflicted — so a crit grows its remaining rounds too, on the main
+// target and on every enemy the Inferno splashed onto.
+// ---------------------------------------------------------------------------
+const asphyxiatorInfernoAbility: Ability = {
+    id: 'asphyxiator-inferno',
+    type: 'dot',
+    target: 'target-and-adjacent-enemies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'dot', dotType: 'inferno', tier: 9, stacks: 1, duration: 3 },
+};
+
+const asphyxiatorDoTSkills = (): ShipSkills => ({
+    slots: [{ slot: 'charged', abilities: [asphyxiatorInfernoAbility, asphyxiatorExtend(1)] }],
+});
+
+describe('Asphyxiator — the inflicted DoT is extended too', () => {
+    it('CRIT: grows the Inferno this cast just applied to the main target', () => {
+        const main = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const infernoEntries: ActiveDoTStack[] = [];
+        const runtime = makeRuntime('asphyxiator', asphyxiatorDoTSkills(), {
+            chargedCritGate: () => true,
+        });
+
+        runPlayerTurn(
+            makeArgs(runtime, main, statusEngine, {
+                infernoEntries,
+                aoeVictimIds: [main.id],
+                opposingVictimById: new Map([[main.id, main]]),
+            })
+        );
+
+        // Applied for 3 rounds, extended to 4.
+        expect(infernoEntries.map((e) => e.remainingRounds)).toEqual([4]);
+    });
+
+    it('CRIT: does NOT grow an Inferno that was already ticking before the cast', () => {
+        const main = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        // A DoT from an earlier round, sitting in the container before this cast appends to it.
+        const infernoEntries: ActiveDoTStack[] = [
+            { stacks: 1, tier: 3, remainingRounds: 2, sourceId: 'someone-else' },
+        ];
+        const runtime = makeRuntime('asphyxiator', asphyxiatorDoTSkills(), {
+            chargedCritGate: () => true,
+        });
+
+        runPlayerTurn(
+            makeArgs(runtime, main, statusEngine, {
+                infernoEntries,
+                aoeVictimIds: [main.id],
+                opposingVictimById: new Map([[main.id, main]]),
+            })
+        );
+
+        expect(infernoEntries[0].remainingRounds).toBe(2);
+        expect(infernoEntries[1].remainingRounds).toBe(4);
+    });
+
+    it("CRIT: grows the splashed neighbour's Inferno as well (gated on the MAIN target's crit)", () => {
+        const main = makeEnemy('enemy1');
+        const neighbour = makeEnemy('enemy2');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const runtime = makeRuntime('asphyxiator', asphyxiatorDoTSkills(), {
+            chargedCritGate: () => true,
+        });
+
+        runPlayerTurn(
+            makeArgs(runtime, main, statusEngine, {
+                infernoEntries: [],
+                aoeVictimIds: [main.id, neighbour.id],
+                opposingVictimById: new Map([
+                    [main.id, main],
+                    [neighbour.id, neighbour],
+                ]),
+                adjacentEnemyIdsFor: (id: string) => (id === main.id ? [neighbour.id] : []),
+            })
+        );
+
+        expect(neighbour.infernoEntries.map((e) => e.remainingRounds)).toEqual([4]);
+    });
+
+    it('NON-CRIT: the inflicted Inferno keeps its printed duration', () => {
+        const main = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+        const infernoEntries: ActiveDoTStack[] = [];
+        const runtime = makeRuntime('asphyxiator', asphyxiatorDoTSkills(), {
+            chargedCritGate: () => false,
+        });
+
+        runPlayerTurn(
+            makeArgs(runtime, main, statusEngine, {
+                infernoEntries,
+                aoeVictimIds: [main.id],
+                opposingVictimById: new Map([[main.id, main]]),
+            })
+        );
+
+        expect(infernoEntries.map((e) => e.remainingRounds)).toEqual([3]);
     });
 });

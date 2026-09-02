@@ -1969,6 +1969,22 @@ const EXTEND_STATUS_ACTIVE_RE =
     /extends?\b(?![^.]*\bdamage over time\b)[^.]*?\bactive\s+(buffs|debuffs)\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+// Asphyxiator: "After this Unit applies a Debuff with a Critical hit the newly applied Debuff is
+// extended by 1 turn." The two arms above grow every status ALREADY STANDING on the target; this
+// one grows only what the cast just inflicted, which is a different scope, not a different
+// mechanic — hence `scope: 'inflicted'`, the same axis `extend-dot` carries for Valerian's twin
+// wording. Tried FIRST, so a hypothetical plural "the newly applied Debuffs are extended" is
+// scoped rather than being claimed by the standing-status arm.
+//
+// Two negative lookaheads keep the three extension detectors disjoint, and each is load-bearing:
+// "damage over time" belongs to EXTEND_DOT_RE, and "crit(ical) power" to CRIT_POWER_EXTEND_RE
+// (Valerian's own "the newly applied Corrosion is extended … chance equal to the Critical Power",
+// which builds an extend-dot with a chance gate). Valerian is additionally excluded by the
+// literal `buff`/`debuff` token — he names the DoT family — but a future row that spelled his
+// clause with the generic word would otherwise emit BOTH an always-on extend-status and a
+// chance-gated extend-dot for one clause.
+const EXTEND_STATUS_INFLICTED_RE =
+    /\bnewly\s+applied\s+(buff|debuff)s?\b(?![^.]*\b(?:damage over time|crit(?:ical)?\s*power)\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 
 // #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
 // two arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
@@ -1996,9 +2012,12 @@ const EXTEND_NAMED_STATUS_RE =
  * for the next named-extend ship, and it mirrors the precedent `DR_ALLY_STATUS_RE` already set for
  * `detectDamageReactionTrigger`'s `allyStatusName`.
  */
-export function parseExtendStatus(
-    text: string | null | undefined
-): { turns: number; statusKind: 'buff' | 'debuff'; buffName?: string } | null {
+export function parseExtendStatus(text: string | null | undefined): {
+    turns: number;
+    statusKind: 'buff' | 'debuff';
+    buffName?: string;
+    scope?: 'inflicted';
+} | null {
     if (!text) return null;
     const named = EXTEND_NAMED_STATUS_RE.exec(text);
     if (named) {
@@ -2012,10 +2031,16 @@ export function parseExtendStatus(
         };
     }
     const plain = stripUnitTags(text);
-    const m = EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
+    const inflicted = EXTEND_STATUS_INFLICTED_RE.exec(plain);
+    const m =
+        inflicted ?? EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
     if (!m) return null;
     const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
-    return { turns: parseInt(m[2], 10), statusKind: kind };
+    return {
+        turns: parseInt(m[2], 10),
+        statusKind: kind,
+        ...(inflicted ? { scope: 'inflicted' as const } : {}),
+    };
 }
 
 // "extend(s/ed) … by/for N turn(s) … chance … crit power" — a duration extension whose chance is

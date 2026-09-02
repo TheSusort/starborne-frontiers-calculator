@@ -291,7 +291,11 @@ export interface StatusEngine {
      *  non-positive/non-finite `turns` rejection, but NEVER expires an entry — extending only
      *  grows `turnsRemaining`, so there is no deletion pass. Returns the number of debuffs
      *  affected. Unknown id → 0. */
-    extendAllDebuffsDuration(actorId: string, turns: number): number;
+    extendAllDebuffsDuration(
+        actorId: string,
+        turns: number,
+        onlyNames?: ReadonlySet<string>
+    ): number;
     /** Wave 4 (Ripper): the self-buff sibling of extendAllDebuffsDuration — extends EVERY
      *  eligible timed buff on `actorId` (per-owner `selfMaps`) by `turns`. Same eligibility
      *  rules and never expires an entry. Returns the number of buffs affected. Unknown id → 0.
@@ -1468,8 +1472,18 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  eligibility rules as reduceAllDebuffsDuration (numeric turnsRemaining only, skip
      *  isUnremovable(name, turnsRemaining)) but ADDS instead of subtracting, and there is no
      *  deletion pass — extending a duration can never expire an entry. Returns the count of
-     *  debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0. */
-    const extendAllDebuffsDuration = (actorId: string, turns: number): number => {
+     *  debuffs affected; a non-positive/non-finite `turns` or unknown id returns 0.
+     *
+     *  `onlyNames` restricts the extension to statuses with one of those exact names — the
+     *  INFLICTED-scope case (Asphyxiator), where the caller has recorded what its own cast just
+     *  applied to this victim and everything else standing must be left alone. Absent → extend
+     *  every eligible debuff (Sokol/Lev, unchanged). An EMPTY set therefore extends nothing,
+     *  which is the correct reading of "extend what I inflicted" when nothing landed. */
+    const extendAllDebuffsDuration = (
+        actorId: string,
+        turns: number,
+        onlyNames?: ReadonlySet<string>
+    ): number => {
         const delta = Number.isFinite(turns) ? Math.trunc(turns) : 0;
         if (delta <= 0) return 0;
         const timedMap = enemyMaps.get(actorId);
@@ -1478,6 +1492,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const [, s] of timedMap) {
             if (typeof s.turnsRemaining !== 'number') continue;
             if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
+            if (onlyNames !== undefined && !onlyNames.has(s.buffName)) continue;
             s.turnsRemaining += delta;
             affected++;
         }

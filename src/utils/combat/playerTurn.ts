@@ -115,6 +115,11 @@ export type RateGate = (rate: number) => boolean;
 /** The timed variant of a registered ability status (duration guaranteed numeric). */
 export type TimedStatus = Extract<RegisteredAbilityStatus, { kind: 'timed' }>;
 
+/** The filter an inflicted-scope extension passes for a victim it inflicted nothing on. Extends
+ *  nothing, which is what the scope means — deliberately NOT `undefined`, which
+ *  `extendAllDebuffsDuration` reads as "extend everything standing". */
+const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
+
 // Round-scoped context the enemy's DoT processing needs from the focus player actor's
 // turn. At default speeds the player acts first, so the enemy's tick uses THIS round's
 // context (identical to the pre-restructure behaviour). For a FASTER enemy it is the
@@ -316,6 +321,18 @@ export interface DeferredEnemyApplication {
      *  sub-attack boundary and has no index to give; consumers read absent as "the only
      *  sub-attack". */
     emitEvents: (subAttackIndex?: number) => void;
+    /** Who this pending application lands on, and what it lands — the two facts an
+     *  inflicted-scope `extend-status` needs in order to grow THIS status once it is finally
+     *  written. The pair runs after `runPlayerTurn` has returned, so a cast that both defers a
+     *  debuff clause and extends its own inflictions (Asphyxiator's charged Stasis) can only
+     *  reach it by wrapping `applyState`.
+     *
+     *  Absent on a pair that writes NOTHING — a buffered RESIST carries an event and an empty
+     *  `applyState`, and there is no status for an extension to grow. Also absent on a landing
+     *  whose recipient resolved to the non-positional `undefined` sink, which no per-victim
+     *  read can address. Both cases are correctly skipped by the extension. */
+    victimId?: string;
+    buffName?: string;
 }
 
 /**
@@ -1072,6 +1089,42 @@ function extendInflictedDoTs(args: {
             const critPowerFactor = Math.min(1, args.effectiveCritDamage / 100);
             if (!args.extendChanceGate(critPowerFactor)) continue;
         }
+        for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
+            args.corrosionEntries[i].remainingRounds += ab.config.turns;
+        }
+        for (let i = args.infernoEntriesBefore; i < args.infernoEntries.length; i++) {
+            args.infernoEntries[i].remainingRounds += ab.config.turns;
+        }
+    }
+}
+
+/**
+ * The DoT half of an inflicted-scope `extend-status` (Asphyxiator). Owner ruling 2026-09-02: a
+ * crit extends every debuff the cast inflicted, and the game counts a DoT as one of them — so the
+ * Inferno the cast just applied grows alongside the timed Defense Down its sibling clause landed.
+ *
+ * Same slice discipline as `extendInflictedDoTs`: `*EntriesBefore` are the container lengths from
+ * before this cast appended, so only the entries from that index onward are this cast's. Bombs are
+ * excluded, matching both DoT-extension helpers — delaying a one-shot detonation adds nothing.
+ *
+ * Deliberately gate-free, unlike its `extend-dot` sibling: this clause carries no crit-power
+ * chance, so it draws nothing from `extendChanceGate` and cannot disturb that gate's
+ * deterministic schedule. That is what makes it safe to call once per SPLASH victim as well as
+ * for the primary.
+ */
+function extendInflictedStatusDoTs(args: {
+    abilities: Ability[];
+    ctx: ConditionContext;
+    corrosionEntries: ActiveDoTStack[];
+    infernoEntries: ActiveDoTStack[];
+    corrosionEntriesBefore: number;
+    infernoEntriesBefore: number;
+}): void {
+    for (const ab of args.abilities) {
+        if (ab.config.type !== 'extend-status') continue;
+        if (ab.config.scope !== 'inflicted') continue;
+        if (ab.config.statusKind !== 'debuff') continue;
+        if (!conditionsMet(ab.conditions, args.ctx)) continue;
         for (let i = args.corrosionEntriesBefore; i < args.corrosionEntries.length; i++) {
             args.corrosionEntries[i].remainingRounds += ab.config.turns;
         }
@@ -2309,6 +2362,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (Finding 1). A control with NO paired named status leaves this set empty for that name, so it
     // still emits (only Block-Debuff immunity gates a standalone control — preserved separately).
     const resistedTimedEnemyNames: string[] = [];
+    /** Which timed debuffs THIS cast landed on which victim — the input an inflicted-scope
+     *  `extend-status` needs (Asphyxiator). Written at the one landing funnel below, read by the
+     *  extension block near the end of the turn. */
+    const inflictedDebuffNamesByVictim = new Map<string, Set<string>>();
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
     // Returned on the turn result. PR8: the engine drains this at ONE of two points — at the end of
     // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at the
@@ -2423,6 +2480,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     emitEvents: () => {
                         emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
                     },
+                    victimId: vid,
+                    buffName: status.payload.buffName,
                 };
                 if (collect) {
                     collect.push(pair);
@@ -2439,6 +2498,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         buffName: status.payload.buffName,
                         turnsRemaining: status.duration,
                     });
+                }
+                // Per-VICTIM record of what this cast landed, which `inflictedEnemyDebuffs`
+                // above deliberately is not (it collapses the recipient list to one row for the
+                // Stasis-break check). An inflicted-scope extension needs to know that victim V
+                // got status S from THIS cast, so it can grow S on V and leave V's other
+                // debuffs alone. Recorded for the deferred branch too: the pair has not written
+                // yet, and the extension block below is what waits for it.
+                // The non-positional `undefined` recipient sink has no id to key on, so it is
+                // skipped here — an extension that cannot name its victim cannot extend it.
+                if (vid !== undefined) {
+                    let landedHere = inflictedDebuffNamesByVictim.get(vid);
+                    if (!landedHere) {
+                        landedHere = new Set<string>();
+                        inflictedDebuffNamesByVictim.set(vid, landedHere);
+                    }
+                    landedHere.add(status.payload.buffName);
                 }
                 anyLanded = true;
             } else if (collect) {
@@ -4060,6 +4135,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 corrosionEntriesBefore,
                 infernoEntriesBefore,
             });
+            extendInflictedStatusDoTs({
+                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+                ctx,
+                corrosionEntries,
+                infernoEntries,
+                corrosionEntriesBefore,
+                infernoEntriesBefore,
+            });
         }
 
         if (dotsLanded) {
@@ -4104,6 +4187,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 }
                 continue;
             }
+            // Per-NEIGHBOUR slice bounds, captured immediately before this victim's apply — the
+            // primary's `*EntriesBefore` describe a different container entirely.
+            const splashCorrosionBefore = victim.corrosionEntries.length;
+            const splashInfernoBefore = victim.infernoEntries.length;
             applyNewDoTs({
                 dotsConfig: splashDots,
                 effectiveAttack,
@@ -4126,6 +4213,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         tier,
                         ...(critHits > 0 ? { viaCrit: true } : {}),
                     }),
+            });
+            // Owner ruling 2026-09-02: the neighbours' freshly splashed DoT is extended too, and
+            // the gate is the MAIN target's hit critting — which is what `ctx.roundCrit` already
+            // holds, so each neighbour reads the same cast-level answer rather than rolling its
+            // own. A neighbour that resisted `continue`d above and never reaches this line.
+            extendInflictedStatusDoTs({
+                abilities: [...(firingSkill?.abilities ?? []), ...(passiveSkill?.abilities ?? [])],
+                ctx,
+                corrosionEntries: victim.corrosionEntries,
+                infernoEntries: victim.infernoEntries,
+                corrosionEntriesBefore: splashCorrosionBefore,
+                infernoEntriesBefore: splashInfernoBefore,
             });
         }
     }
@@ -4351,8 +4450,46 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 positionalLanding,
                 selectorEnemyIdFor,
             }).map((id) => id ?? targetId);
+            // Asphyxiator: an INFLICTED-scope extension grows only what THIS cast landed on
+            // each victim, so it passes that victim's own recorded name set as the filter and
+            // leaves everything else standing alone. A victim the cast inflicted nothing on
+            // gets an empty set, which extends nothing — the right answer, and the reason the
+            // filter is `?? EMPTY` rather than `undefined` (undefined means extend-everything).
+            const inflictedScope = ab.config.scope === 'inflicted';
             for (const vid of recipients) {
-                statusEngine.extendAllDebuffsDuration(vid, turns);
+                statusEngine.extendAllDebuffsDuration(
+                    vid,
+                    turns,
+                    inflictedScope
+                        ? (inflictedDebuffNamesByVictim.get(vid) ?? NO_INFLICTED_NAMES)
+                        : undefined
+                );
+            }
+            // A clause that follows this cast's damage lands LATER — the engine flushes
+            // `deferredEnemyApplications` once the damage has resolved, which is after this
+            // block runs (Asphyxiator's charged Stasis is the corpus instance). Extending by
+            // name now would find nothing in the store, so each pending write is wrapped to
+            // grow its own status the moment it lands. Only inflicted scope needs this: an
+            // extend-everything sweep is a snapshot of what was standing when it ran, and
+            // growing a status the cast had not yet applied would be a different mechanic.
+            //
+            // KNOWN BOUNDARY: this reaches only the CAST-TIME deferred list. A per-sub-attack
+            // after-damage landing goes to `applyDebuffsForSubAttack`'s own `collect` array,
+            // which this block never sees — so on a MULTI-HIT positional cast, sub-attacks 1..N
+            // would land unextended. Corpus-unreachable today (the only inflicted-scope ship is
+            // single-hit), and left that way deliberately rather than guessed at, mirroring the
+            // #403/#407 precedent above for the buff-typed enemy predicate.
+            if (inflictedScope) {
+                for (const pending of deferredEnemyApplications) {
+                    const { victimId, buffName } = pending;
+                    if (victimId === undefined || buffName === undefined) continue;
+                    if (!recipients.includes(victimId)) continue;
+                    const write = pending.applyState;
+                    pending.applyState = () => {
+                        write();
+                        statusEngine.extendAllDebuffsDuration(victimId, turns, new Set([buffName]));
+                    };
+                }
             }
         } else {
             // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses

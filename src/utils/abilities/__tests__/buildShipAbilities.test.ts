@@ -467,6 +467,32 @@ describe('buildShipAbilities', () => {
             expect(extend.trigger).toBe('on-cast');
             expect(extend.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
         });
+
+        // Asphyxiator's refit passive. Two differences from Lev, both from the owner's ruling:
+        // the extension covers only what the cast INFLICTED (scope 'inflicted' — a debuff
+        // standing from an earlier round is untouched), and the crit gate is worded "with a
+        // Critical hit" rather than Lev's "if a critical hit occurs". The target is the cast's
+        // whole hit footprint because the ruling extends the adjacent enemies' debuffs too,
+        // gated on the MAIN target's hit critting.
+        it('Asphyxiator refit passive: inflicted-scope extend-status on all-enemies, self-crit gated', () => {
+            const s = ship({
+                thirdPassiveSkillText:
+                    'At the start of the round, if there are any enemies with 3 or more debuffs, this Unit gains 1 stack of <unit-skill>Overload</unit-skill>. After this Unit applies a Debuff with a Critical hit the newly applied Debuff is extended by 1 turn.',
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                refits: [{}, {}, {}, {}] as any,
+            });
+            const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+            const extend = abilityOfType(passive.abilities, 'extend-status')!;
+            expect(extend.config).toEqual({
+                type: 'extend-status',
+                statusKind: 'debuff',
+                turns: 1,
+                scope: 'inflicted',
+            });
+            expect(extend.target).toBe('all-enemies');
+            expect(extend.trigger).toBe('on-cast');
+            expect(extend.conditions).toEqual([{ subject: 'self-crit', derivable: true }]);
+        });
     });
 
     it('Crocus passive: ally-crit-DoT routes through the on-ally-crit-dot reactive trigger (conditions empty)', () => {

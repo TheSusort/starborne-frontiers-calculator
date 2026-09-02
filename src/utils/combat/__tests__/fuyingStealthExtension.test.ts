@@ -143,7 +143,7 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
         expect(named).toEqual(['Fuying:Stealth']);
     });
 
-    it('every OTHER extend-status match in the corpus still has no buffName (Sokol/Ripper/Lev unmoved)', () => {
+    it('every OTHER extend-status match in the corpus still has no buffName (Sokol/Ripper/Lev/Asphyxiator unmoved)', () => {
         const generic: { name: string; result: ReturnType<typeof parseExtendStatus> }[] = [];
         for (const record of loadShipSkillRecords()) {
             for (const text of [record.active, record.charge, ...record.passives]) {
@@ -152,9 +152,30 @@ describe('parseExtendStatus — corpus sweep (non-vacuity + non-disturbance)', (
                 if (r && r.buffName === undefined) generic.push({ name: record.name, result: r });
             }
         }
-        // Sokol (charged debuff), Ripper (passive buff), Lev (charged debuff) — exactly 3 rows.
-        expect(generic.map((g) => g.name).sort()).toEqual(['Lev', 'Ripper', 'Sokol']);
+        // Sokol (charged debuff), Ripper (passive buff), Lev (charged debuff) and Asphyxiator
+        // (refit passive, the INFLICTED-scope arm) — exactly 4 rows.
+        expect(generic.map((g) => g.name).sort()).toEqual([
+            'Asphyxiator',
+            'Lev',
+            'Ripper',
+            'Sokol',
+        ]);
         for (const g of generic) expect(g.result?.buffName).toBeUndefined();
+    });
+
+    // The scope axis is what separates Asphyxiator from the other three, and it is the whole
+    // behavioural difference: he grows only what his cast inflicted, they grow everything
+    // standing. If a future parser change scoped one of theirs, it would silently stop
+    // extending pre-existing statuses.
+    it('the inflicted scope fires on Asphyxiator alone across the corpus', () => {
+        const scoped: string[] = [];
+        for (const record of loadShipSkillRecords()) {
+            for (const text of [record.active, record.charge, ...record.passives]) {
+                if (!text) continue;
+                if (parseExtendStatus(text)?.scope === 'inflicted') scoped.push(record.name);
+            }
+        }
+        expect([...new Set(scoped)]).toEqual(['Asphyxiator']);
     });
 });
 
