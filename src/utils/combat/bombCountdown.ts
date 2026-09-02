@@ -31,7 +31,7 @@ export function reduceBombsOnVictim(
     turns: number,
     round: number,
     bus: CombatEventBus,
-    // Ship-kit W7: the actor whose bomb-countdown-reduce cast is forcing this detonation (Lingshe),
+    // The actor whose bomb-countdown-reduce cast is forcing this detonation (Lingshe),
     // or the caster of the duration-shrink that drove the bomb to 0 (Heliodor). Distinct from
     // `bomb.sourceId` (the ORIGINAL applier, kept as `actorId` for attribution) — it becomes the
     // event's `detonatorId` so Lingshe's on-self-bomb-detonated Stealth grant fires for a burst SHE

@@ -235,7 +235,7 @@ export interface HealingRuntimeCtx {
      *  source. Widening this signature would invite a caller to pass a ctx belonging to the wrong
      *  actor. */
     recipientIncomingHealPct: (actorId: string) => number;
-    /** D-PR6: summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
+    /** Summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
      *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
      *  use 0 → byte-identical. */
     recipientIncomingHealAmpPct?: (rid: string) => number;
@@ -624,7 +624,7 @@ export interface PlayerTurnArgs {
     // no-victim turn — a DoT applied to nobody lands nowhere.
     corrosionEntries?: ActiveDoTStack[];
     infernoEntries?: ActiveDoTStack[];
-    /** SP-E: generic (absolute per-tick) DoT entries. */
+    /** Generic (absolute per-tick) DoT entries. */
     genericDoTEntries?: ActiveDoTStack[];
     pendingBombs?: PendingBomb[];
     pendingAccumulators?: PendingAccumulator[];
@@ -755,15 +755,15 @@ export interface PlayerTurnArgs {
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
      *  detonationDamage is 0 in this mode. Absent/false → legacy anchor detonation (byte-identical). */
     positional?: boolean;
-    /** D-PR3: victim-side incoming %-reduction against the bound target.
+    /** Victim-side incoming %-reduction against the bound target.
      *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
      *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
     incomingReductionNonCritPct?: number;
     incomingReductionCritFamilyPct?: number;
-    /** D-PR4: the bound target's live effective attack (for Giant Slayer's higher-attack gate).
+    /** The bound target's live effective attack (for Giant Slayer's higher-attack gate).
      *  Absent → targetHigherAttack false → Giant Slayer inert. */
     targetEffectiveAttack?: number;
-    /** D-PR4: engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
+    /** Engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
      *  ability id under this actor. Absent → no amplification rolled (byte-identical). */
     rollOutgoingProc?: (abilityId: string, chance: number) => boolean;
     /** Per-victim crit signal. When true AND a damage ability fires this cast, runPlayerTurn
@@ -1234,7 +1234,7 @@ function applyNewDoTs(args: {
     sourceId: string;
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
-    /** SP-E: generic (absolute per-tick) DoT entries. Nothing in `dotsConfig` produces
+    /** Generic (absolute per-tick) DoT entries. Nothing in `dotsConfig` produces
      *  `type:'generic'` today — the parser never emits it — but this branch exists so a future
      *  transform (Voron/Orel, E3) can share this one apply entry point. */
     genericDoTEntries: ActiveDoTStack[];
@@ -1332,7 +1332,7 @@ function stripShieldPct(
 }
 
 /**
- * SP-F F3: fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
+ * Fans `reduceBombsOnVictim` over the firing skill's `bomb-countdown-reduce`
  * ability/abilities (all-enemies), across the AoE footprint (`aoeVictimIds` when present, else
  * the single anchor). Hacking-gated: reuses the SAME single-draw landing infra as every other
  * ability-timed 'inflict' enemy application in this file (`landsTimedEnemyApplicationLive`) — one
@@ -1348,7 +1348,7 @@ function reduceEnemyBombs(args: {
     opposingVictimById: Map<string, CombatActor> | undefined;
     round: number;
     bus: CombatEventBus;
-    // Ship-kit W7: the caster forcing these detonations (Lingshe) — becomes each burst's
+    // The caster forcing these detonations (Lingshe) — becomes each burst's
     // `detonatorId`. See reduceBombsOnVictim.
     detonatorId: string;
     landsTimedEnemyApplicationLive: (application?: 'inflict' | 'apply') => boolean;
@@ -1920,7 +1920,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (targetCarriesBlockDebuff(statusEngine, victim.id)) {
             return { landed: false, viaRoll: false };
         }
-        // SP-F F4: per-victim affinity honours the override (offensive advantage / this victim's
+        // Per-victim affinity honours the override (offensive advantage / this victim's
         // defensive override) before falling back to the real matchup.
         const victimAffinityMod = affinityModsVsVictim(victim).damageModifier;
         if (application === 'apply') {
@@ -2026,13 +2026,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Effective crit rate from a given crit-buff total, clamped by affinity.
     // Gate/context estimates use representative scalars (byte-identical to pre-SP1). The actual
     // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
-    // SP-F F4: cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
+    // Cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
     // scalars when no override is active → byte-identical default).
     const cappedCrit = (critBuffTotal: number) =>
         Math.min(effAffinityCritCap, Math.max(0, crit + critBuffTotal - effAffinityCritPenalty));
 
     const realAffinityCappedCrit = (critBuffTotal: number) => {
-        // SP-F F4: the anchor's real matchup, overridden when this cast forces affinity.
+        // The anchor's real matchup, overridden when this cast forces affinity.
         // SP-4c-2b: with no victim there is no matchup, so this reads the neutral cap/penalty (see
         // affinityModsVsVictim). Inert on that path — no victim means no hit to roll a crit for.
         const { critCap, critPenalty } = affinityModsVsVictim(enemy);
@@ -2222,7 +2222,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
-        // SP-C: owner-vs-target stat comparison. REQUIRED here (not just at the payload
+        // Owner-vs-target stat comparison. REQUIRED here (not just at the payload
         // hard-gate `ctx` further down) — this is the gate for TIMED ENEMY DEBUFF application
         // (the `conditionsMet(status.conditions, preDebuffGateCtx)` check just below), which is
         // how Bayah's crit-power-gated Stasis INFLICT actually lands (the `type:'control'`
@@ -2236,7 +2236,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfCritPower: critDamage + critDamageForGates,
         // SP-4c-2b: omitted entirely when there is no victim — see victimStatGateCtx.
         ...victimStatGateCtx(enemy),
-        // Ship-kit Wave 4, Task 3: the caster's own shield-presence gate, live-derived from
+        // The caster's own shield-presence gate, live-derived from
         // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
         // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
         // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check at :1476). APEX's
@@ -2526,7 +2526,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // `undefined` sink). Do not restate the branch rules here — two copies is exactly how the
         // cast-time and per-sub-attack paths would drift.
         const abTarget = matchingAbility?.target;
-        // PR8 Task 1: the nine-branch mapping now lives in ./debuffRecipients so the
+        // The nine-branch mapping now lives in ./debuffRecipients so the
         // per-sub-attack path resolves recipients by exactly the same rules,
         // keyed off ITS OWN re-resolved anchor and footprint instead of the cast's.
         const recipientIds: (string | undefined)[] = resolveDebuffRecipientIds({
@@ -2542,7 +2542,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         if (positionalLanding) perSubAttackDebuffRecipes.push({ status, abTarget });
     }
 
-    /** PR8: sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
+    /** Sub-attacks ≥ 1 re-roll every gated clause against their own anchor + footprint. */
     const applyDebuffsForSubAttack = (
         sub: { index: number; anchorId: string; victimIds: string[] },
         phase: 'before-damage' | 'after-damage'
@@ -3072,7 +3072,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
         // identical to the pre-per-victim behavior for noCrit AoE.
         if (damageNoCrit) return false;
-        // SP-F F4: an outgoing-advantage force lifts the cap for every victim; otherwise the real
+        // An outgoing-advantage force lifts the cap for every victim; otherwise the real
         // per-victim matchup (a covered victim's own Defensive Override is NOT resolved here —
         // rollVictimCrit receives only the affinity, not the victim actor — a documented AoE
         // limitation; no corpus override ship is AoE).
@@ -3082,7 +3082,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const rate = Math.min(critCap, Math.max(0, uncappedCritTotal - critPenalty)) / 100;
         return critGate(rate);
     };
-    // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
+    // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
     // weighted sums collapse to (nonCritHits, critHits) → byte-identical.
@@ -3166,7 +3166,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Ability-status self Out. DoT folds in per-round (KNOWN-DIFF b). Enemy Inc. DoT is
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
     const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
-    // SP-F F4: the anchor damage mult honours the forced-affinity override (equals the runtime
+    // The anchor damage mult honours the forced-affinity override (equals the runtime
     // scalar when no override → byte-identical default).
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
@@ -3205,7 +3205,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // (on-cast/active/charged) evaluate against the real N — symmetric with the reactive
         // (end-of-turn) drain path, which already reads it via the turnsTakenFor delegate.
         turnsTaken: actor.turnsTaken,
-        // SP-C: owner-vs-target stat comparison (Bayah/Cobalt/Chakara), gating THIS cast's
+        // Owner-vs-target stat comparison (Bayah/Cobalt/Chakara), gating THIS cast's
         // payload abilities via gateFiringAbilities below. Sourced directly from the live
         // `actor`/`enemy` CombatActor pair — the SAME pairing every call site (focus/team/
         // enemy-walk) passes via buildTurnArgs's `runtime`/`enemy` — so this is team-symmetric
@@ -3223,7 +3223,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // degenerates to this one target's speed. A future multi-target stat-vs-target ship
         // would need real per-victim aggregation; out of scope here (no corpus ship needs it).
         ...victimStatGateCtx(enemy),
-        // SP-D: enemies-hit-this-cast, gating Tygr's self-charge-gain (a `type:'charge'` on-cast
+        // Enemies-hit-this-cast, gating Tygr's self-charge-gain (a `type:'charge'` on-cast
         // ability evaluated via gateFiringAbilities below, NOT a timed self-buff — so it needs
         // THIS ctx, distinct from Berserker's Marauder Rage which drains via the on-deal-damage
         // reactive path instead). aoeVictimIds is the actor's own splash-pattern footprint
@@ -3336,7 +3336,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     let secondaryStatValue = 0;
     if (secondary) {
-        // PR9(a): 'shield' reads the caster's own LIVE shieldPool at cast time (the SAME field
+        // 'shield' reads the caster's own LIVE shieldPool at cast time (the SAME field
         // the I6 shield-strip mechanic reads/writes) — 0 by default (no starting pool), grown
         // only by the caster's own prior shield grants (self-cast or pre-combat seeding). No
         // DPS-mode special-casing needed: a solo DPS run without a healing-mode target never
@@ -3502,7 +3502,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Both default 0 → byte-identical to the prior fold.
     const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
     const R = args.incomingReductionCritFamilyPct ?? 0;
-    // D-PR3: crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
+    // Crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
     // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
     // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
     // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1 → byte-identical
@@ -3524,7 +3524,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         (1 + dmgStats.totals.outgoingDamageBuff / 100) *
         (1 + incBase / 100) *
         affinityMult;
-    // D-PR4: per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
+    // Per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
     // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits, ampCritWeight=critHits)
     // → byte-identical. critIncomingRatio carries D-PR3's crit-family incoming reduction.
     const amplifiedCritMultiplier =
@@ -3826,7 +3826,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // meaning (critting victims in this sub-attack, and there is exactly one bound
                 // victim), and the two sentences must not be read as claiming drawHits is always 1.
                 ...(subCrit ? { critHits: 1 } : {}),
-                // PR4: the outgoing reactive listeners stamp this onto the intents they enqueue so
+                // The outgoing reactive listeners stamp this onto the intents they enqueue so
                 // the end-of-turn drain — which runs once per turn, after every sub-attack — can
                 // gate at sub-attack scope (`passesProcChanceGate`'s memo key; the per-victim
                 // `firedKey` in the reactive-damage branch). Emitted unconditionally now that this
@@ -3936,7 +3936,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     type: 'bomb-detonated',
                     actorId: actor.id,
                     victimId: enemy.id,
-                    // Ship-kit W7: this cast's own detonate ability caused the burst — the caster
+                    // This cast's own detonate ability caused the burst — the caster
                     // IS the detonator (here actorId and detonatorId coincide, but they diverge on
                     // the reduceBombsOnVictim path where actorId is the original applier).
                     detonatorId: actor.id,
@@ -4067,7 +4067,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Ship-kit W5: fan splash-scoped DoTs (Asphyxiator active Inferno) onto the target's
+    // Fan splash-scoped DoTs (Asphyxiator active Inferno) onto the target's
     // board-neighbours. 'target-and-adjacent-enemies' hits the primary via the block above
     // ('adjacent-enemies', neighbours-only, is filtered OUT of the primary apply and applied
     // ONLY here). Runs INDEPENDENTLY of the primary's Block-Debuff immunity/`dotsLanded` gate
@@ -4265,7 +4265,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // PR9(b): standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — NOT gated on a
+    // Standalone "removes X% of the enemy Shield" (APEX/Laika/Malvex) — NOT gated on a
     // purge landing (that's the I6 branch above). Fires on-cast against the skill's own
     // damage target(s), side-symmetric for the same reason as the purge block above (this
     // function runs identically for player and enemy casters).
@@ -4438,7 +4438,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // three sites", and that omission left the fourth consumption site unclamped. #367 task 7
         // added a fifth and sixth in `engine.ts` (the two per-victim leech procs). Read that doc
         // before touching any of the six.
-        // D-PR5: caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
+        // Caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
         // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
         // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
         // 0 (and never rolls) → byte-identical for every fixture without one.
@@ -4632,7 +4632,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // Scheduled HoT (no caster) attributes to the holder; otherwise to the applier.
             const creditId = applierId ?? actor.id;
             let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
-            // D-PR6: recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
+            // Recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
             // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick (0 → byte-identical).
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
@@ -4781,7 +4781,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // list; healEventOnly continues to govern CREDIT, not which abilities run. The passive
         // entries carry the same `isHookOwned(a, true)` filter as normal mode, so a leech-basis
         // passive still belongs to its engine hook and cannot double-count here.
-        // Epic PR4: pre-combat abilities ("At the start of combat, this Unit gains a Shield …" —
+        // Pre-combat abilities ("At the start of combat, this Unit gains a Shield …" —
         // Crucialis/FrontLine) are one-time pre-fight grants seeded ONCE by the engine
         // (seedPreCombatShields, r === 1); processing them here would re-grant the pool on every
         // cast. `pre-combat` is not a live trigger, so the reactive partition leaves them in
@@ -4857,9 +4857,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 (1 + healModifier / 100) *
                                 (1 + dmgStats.totals.outgoingHealBuff / 100) *
                                 incomingHealFactor(incomingPctFor(rid));
-                            // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
+                            // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                             raw *= 1 + healAmpPctFor(rid) / 100;
-                            // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
+                            // Recipient-side incoming-heal amplification (Exuberance) — rolls the
                             // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                             const recipientActor = healing.recipientActor(rid);
@@ -4948,9 +4948,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             (1 + healModifier / 100) *
                             (1 + dmgStats.totals.outgoingHealBuff / 100) *
                             incomingHealFactor(incomingPctFor(rid));
-                        // D-PR5: caster heal-cast amplification (rolls the proc gate ONCE per recipient).
+                        // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                         raw *= 1 + healAmpPctFor(rid) / 100;
-                        // D-PR6: recipient-side incoming-heal amplification (Exuberance) — rolls the
+                        // Recipient-side incoming-heal amplification (Exuberance) — rolls the
                         // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         let perTargetOverheal: number | undefined;
@@ -5076,7 +5076,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     for (const rid of recipients) {
                         const raw = basisValue(cfg.basis, rid) * (cfg.pct / 100);
                         healing.credit(actor.id, 'shield', raw);
-                        // H1 Task 5: route the pool to EACH targeted ally's own actor (mirrors the
+                        // Route the pool to EACH targeted ally's own actor (mirrors the
                         // event-only heal branch's recipientActor routing) — not just the heal
                         // target. The absorb side already works per-actor, so an `all-allies`/`ally`
                         // shield must land a `shieldPool` on every targeted ally, not only the focus.
@@ -5289,7 +5289,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               incomingDamageModifierPct: incomingDamageModifier,
               defensePenetrationPct: effectivePen,
               attackerAffinity: attackerAffinity ?? actor.affinity ?? 'antimatter',
-              // SP-F F4: carry the forced-affinity OFFENSIVE override to the positional apply path
+              // Carry the forced-affinity OFFENSIVE override to the positional apply path
               // (Wusheng's forceAffinityAdvantage flag / Isha/Nayra 'Offensive Affinity Override').
               // Without this the engine's per-victim `victimHitDamage` recomputes the REAL matchup
               // from attackerAffinity and the forced advantage is lost on the production path.
@@ -5388,7 +5388,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         inflictedEnemyDebuffs,
         resistedEnemyDebuffs,
         deferredEnemyApplications,
-        // PR8: only meaningful on a positional cast that has gated clauses to replay. Left
+        // Only meaningful on a positional cast that has gated clauses to replay. Left
         // undefined otherwise so the engine's wiring is a no-op for DPS/healing/non-positional.
         applyDebuffsForSubAttack:
             positionalLanding && perSubAttackDebuffRecipes.length > 0
@@ -5411,7 +5411,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         scheduledEnemyEffects: scheduledEnemy.roundEnemyDebuffs,
         rollVictimCrit,
         ...(positionalDetonation ? { positionalDetonation } : {}),
-        // Task 5: when the inline emit was SUPPRESSED (engine will resolve positionally), hand the
+        // When the inline emit was SUPPRESSED (engine will resolve positionally), hand the
         // engine the payload to emit post-apply with the true per-victim crit signal. anchor-based
         // didCrit/critHits are a defensive fallback; the engine overrides them with anyCrit/critPairs.
         // SP-4c-2b: also fenced on the victim — the payload's `targetId` IS the victim, so with none

@@ -116,7 +116,7 @@ export function resolvesPositionalVictim(
  *      Skipped when `acting.ignoresForcedTargeting` is true.
  *   4. Stealth filter — drop stealthed cells; if that empties the set, restore all. Skipped
  *      entirely when the acting attacker (ship-level `acting.ignoresStealth`) or this cast's
- *      target (per-ability `target.ignoresStealth`) ignores Stealth (Ship-kit W6).
+ *      target (per-ability `target.ignoresStealth`) ignores Stealth.
  * `statusOf(id)` returning `undefined` is treated as all-false (never throws/skips).
  *
  * @param acting - Optional context for the acting attacker. `provokedBy` is the id of the
