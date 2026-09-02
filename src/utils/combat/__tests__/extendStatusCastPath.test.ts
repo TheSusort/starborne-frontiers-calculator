@@ -587,6 +587,93 @@ describe('Asphyxiator — inflicted-scope debuff extend on a crit', () => {
 });
 
 // ---------------------------------------------------------------------------
+// The DEFERRED arm. A debuff clause that follows its cast's damage clause is not written during
+// `runPlayerTurn` at all — the engine flushes it once the damage has resolved, which is after the
+// extension block has already run. Extending by name at that point would find nothing, so each
+// pending write is wrapped instead. Asphyxiator's charged Stasis is the corpus instance.
+//
+// The test drives the flush the way the engine does (`applyState()` then `emitEvents()`, see
+// engine.ts's flushDeferredEnemyApplications) rather than asserting on the store mid-turn.
+// ---------------------------------------------------------------------------
+const asphyxiatorDeferredStatus = (): TimedStatus => ({
+    kind: 'timed',
+    side: 'enemy',
+    sourceSlot: 'charged',
+    conditions: [],
+    duration: 1,
+    afterDamageClause: true,
+    payload: { buffName: 'Stasis', stacks: 1, parsedEffects: {} },
+});
+
+const asphyxiatorDeferredAbility: Ability = {
+    id: 'asphyxiator-stasis',
+    type: 'debuff',
+    target: 'all-enemies',
+    trigger: 'on-cast',
+    conditions: [],
+    config: {
+        type: 'debuff',
+        buffName: 'Stasis',
+        stacks: 1,
+        isStackable: false,
+        application: 'inflict',
+        parsedEffects: {},
+        duration: 1,
+    },
+};
+
+function runAsphyxiatorDeferred(
+    statusEngine: StatusEngine,
+    victim: CombatActor,
+    crit: boolean
+): void {
+    const runtime = makeRuntime(
+        'asphyxiator',
+        {
+            slots: [
+                { slot: 'charged', abilities: [asphyxiatorDeferredAbility, asphyxiatorExtend(1)] },
+            ],
+        },
+        { chargedCritGate: () => crit }
+    );
+    runtime.timedEnemyBySlot = [asphyxiatorDeferredStatus()];
+    const result = runPlayerTurn(
+        makeArgs(runtime, victim, statusEngine, {
+            aoeVictimIds: [victim.id],
+            opposingVictimById: new Map([[victim.id, victim]]),
+        })
+    );
+    // Nothing has been written yet — this is the whole point of the arm.
+    expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBeUndefined();
+    for (const pending of result.deferredEnemyApplications) {
+        pending.applyState();
+        pending.emitEvents();
+    }
+}
+
+describe('Asphyxiator — a debuff deferred past the damage clause is extended when it lands', () => {
+    it('CRIT: the deferred Stasis lands at its printed duration plus the extension', () => {
+        const victim = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiatorDeferred(statusEngine, victim, true);
+
+        expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBe(2);
+    });
+
+    it('NON-CRIT: the deferred Stasis lands at its printed duration', () => {
+        const victim = makeEnemy('enemy1');
+        const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+        statusEngine.beginRound(1);
+
+        runAsphyxiatorDeferred(statusEngine, victim, false);
+
+        expect(debuffTurnsNamed(statusEngine, victim.id, 'Stasis')).toBe(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
 // The DoT half of the same ruling: "both debuffs are extended on the main target". Asphyxiator's
 // cast lands Defense Down III (a timed debuff) AND Inferno III (a DoT), and the game counts the
 // DoT as one of the debuffs it inflicted — so a crit grows its remaining rounds too, on the main

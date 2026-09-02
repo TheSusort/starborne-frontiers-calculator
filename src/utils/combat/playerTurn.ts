@@ -4472,6 +4472,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // grow its own status the moment it lands. Only inflicted scope needs this: an
             // extend-everything sweep is a snapshot of what was standing when it ran, and
             // growing a status the cast had not yet applied would be a different mechanic.
+            //
+            // KNOWN BOUNDARY: this reaches only the CAST-TIME deferred list. A per-sub-attack
+            // after-damage landing goes to `applyDebuffsForSubAttack`'s own `collect` array,
+            // which this block never sees — so on a MULTI-HIT positional cast, sub-attacks 1..N
+            // would land unextended. Corpus-unreachable today (the only inflicted-scope ship is
+            // single-hit), and left that way deliberately rather than guessed at, mirroring the
+            // #403/#407 precedent above for the buff-typed enemy predicate.
             if (inflictedScope) {
                 for (const pending of deferredEnemyApplications) {
                     const { victimId, buffName } = pending;
