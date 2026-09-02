@@ -245,11 +245,11 @@ export function effectiveOutgoingStatsOf(
  *   chance     = clamp(effHacking - effSec, 0, 100) / 100
  *
  * This is the SINGLE landing-chance producer: self-sufficient for base-less
- * actors. A missing hacking base defaults to 200 and a missing security base to 100 — the
- * values the old static formula (dpsSimulator) baked — so no caller needs a base-presence
- * ternary. The fold is reproduced directly via foldActorBuffTotals (NOT effectiveStatsOf,
- * which coerces a missing base to 0 for ALL its readers); for a base-PRESENT actor this is
- * byte-identical to the prior effectiveStatsOf-based implementation (base + hackingBuff).
+ * actors. A missing hacking base defaults to 200 and a missing security base to 100 — the same
+ * defaults `dpsSimulator` applies (`input.hacking ?? 200` / `input.enemySecurity ?? 100`) — so no
+ * caller needs a base-presence ternary. The fold is reproduced directly via foldActorBuffTotals
+ * (NOT effectiveStatsOf, which coerces a missing base to 0 for ALL its readers), so a base-PRESENT
+ * actor resolves to base + hackingBuff.
  *
  * Affinity is applied ONCE here, so callers must pass the RAW affinityDamageModifier, never a
  * pre-baked landing scalar.

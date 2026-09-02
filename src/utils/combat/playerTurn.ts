@@ -122,9 +122,9 @@ const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
 
 // Round-scoped context the enemy's DoT processing needs from the focus player actor's
 // turn. At default speeds the player acts first, so the enemy's tick uses THIS round's
-// context (identical to the pre-restructure behaviour). For a FASTER enemy it is the
-// PREVIOUS round's context; only in that case is round 1 undefined (the enemy acts
-// before any player turn — containers necessarily empty, processing skipped).
+// context. For a FASTER enemy it is the PREVIOUS round's context; only in that case is
+// round 1 undefined (the enemy acts before any player turn — containers necessarily
+// empty, processing skipped).
 export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
@@ -239,8 +239,8 @@ export interface HealingRuntimeCtx {
      *  actor. */
     recipientIncomingHealPct: (actorId: string) => number;
     /** Summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
-     *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
-     *  use 0 → byte-identical. */
+     *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent →
+     *  callers use 0. */
     recipientIncomingHealAmpPct?: (rid: string) => number;
     /** A FOREIGN HoT applier's effective max HP at tick time: reads
      *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
@@ -506,7 +506,7 @@ export interface PlayerTurnResult {
     rollVictimCrit: (victimAffinity: AffinityName) => boolean;
     /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
      *  `positional` arg was set (the engine then detonates each footprint victim's own containers
-     *  via detonateContainers). Absent for non-positional callers → byte-identical. */
+     *  via detonateContainers). Absent for non-positional callers → no per-victim recipe. */
     positionalDetonation?: DetonationRecipe;
     /** Deferred `ability-performed` payload. Present ONLY when `deferAbilityPerformedToEngine`
      *  was set AND a damage ability fired this cast — in that case runPlayerTurn does NOT emit the
@@ -680,7 +680,7 @@ export interface PlayerTurnArgs {
     healEventOnly?: boolean;
     /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
-     *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
+     *  as if the actor is at full HP — the gate never fires. */
     selfHpPct?: number;
     /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
      *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
@@ -703,8 +703,8 @@ export interface PlayerTurnArgs {
     /** Active buff names on the OPPOSING side for this actor's `enemy-buff` condition
      *  gates. For a player actor this is the UNION of the enemy attacker(s)' self-buff names;
      *  for the enemy-dispatch walk it is symmetric (the player team's buffs). NAMES ONLY — these
-     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
-     *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
+     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (the
+     *  DPS assumption). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
     /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
@@ -726,7 +726,7 @@ export interface PlayerTurnArgs {
     enemyDebuffNames?: string[];
     /** Active debuff names on THIS actor for its `self-debuff` condition gates. For a
      *  player heal target these are the enemy-applied debuffs in its per-target store (keyed by
-     *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
+     *  its own id). NAMES ONLY — never folded. Defaults to [] (the DPS assumption).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
     /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
@@ -734,12 +734,12 @@ export interface PlayerTurnArgs {
      *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
      *  Receives the resolved enemy target id (`targetId`). The engine supplies this for DIRECT-
      *  channel apply boundaries (non-positional and positional via emitHit override); absent for
-     *  DPS/standalone callers → inert (byte-identical). */
+     *  DPS/standalone callers → inert. */
     onHitBreakStasis?: (targetId: string) => void;
     /**
      * The firing skill's footprint victim ids, supplied by the engine in
      * positional mode. The on-cast purge fans an 'all-enemies' purge over these instead of the
-     * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
+     * single `targetId`. Absent for non-positional callers → single-anchor.
      */
     aoeVictimIds?: string[];
     /** Living opposing actors keyed by id — per-victim debuff landing/application in
@@ -748,18 +748,18 @@ export interface PlayerTurnArgs {
     /** Positional mode (per-victim detonation): when true, runPlayerTurn does NOT detonate the
      *  anchor enemy's containers (no consume, no credit, no bomb-detonated emit) and instead
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
-     *  detonationDamage is 0 in this mode. Absent/false → legacy anchor detonation (byte-identical). */
+     *  detonationDamage is 0 in this mode. Absent/false → anchor detonation. */
     positional?: boolean;
     /** Victim-side incoming %-reduction against the bound target.
      *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
-     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
+     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0. */
     incomingReductionNonCritPct?: number;
     incomingReductionCritFamilyPct?: number;
     /** The bound target's live effective attack (for Giant Slayer's higher-attack gate).
      *  Absent → targetHigherAttack false → Giant Slayer inert. */
     targetEffectiveAttack?: number;
     /** Engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
-     *  ability id under this actor. Absent → no amplification rolled (byte-identical). */
+     *  ability id under this actor. Absent → no amplification rolled. */
     rollOutgoingProc?: (abilityId: string, chance: number) => boolean;
     /** Per-victim crit signal. When true AND a damage ability fires this cast, runPlayerTurn
      *  does NOT emit the aggregate `ability-performed` event itself — instead it returns
@@ -786,7 +786,7 @@ export interface PlayerTurnArgs {
      *  every existing damage/heal consumer (incl. turnCtx + positionalScalars). NOTE:
      *  outgoingCritDamage is NOT folded here — "outgoing crit damage" is a crit-conditional
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
-     *  damage sites. Absent → byte-identical. */
+     *  damage sites. Absent → no pre-fight baseline is folded. */
     preFight?: PreFightCombatModifiers;
 
     /** #389/#396: the named families THIS acting actor carries in its own per-victim ENEMY store
@@ -817,8 +817,8 @@ export interface PlayerTurnArgs {
      *  (a.id)` — team-symmetric for free, same helper 'adjacent-allies' targets use elsewhere).
      *  Consumed ONLY by a `buff-steal` ability whose config carries `grantAdjacentAllies` — the
      *  stolen buff is additionally granted to every id here (alongside the caster itself).
-     *  Absent/[] → the grant is caster-only (byte-identical for every ship without that flag,
-     *  and for non-positional/DPS callers that never supply it). */
+     *  Absent/[] → the grant is caster-only (every ship without that flag, and every
+     *  non-positional/DPS caller that never supplies it). */
     adjacentAllyIds?: string[];
     /** Resolves the board-neighbours of an ENEMY-side anchor id (the
      *  resolved `targetId`, not the caster) — feeds the `adjacent-enemies` /
@@ -912,8 +912,7 @@ export interface PlayerTurnArgs {
      *  narrows to its OWN side's matching allies with no mirrored branch. Returns `undefined` for
      *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
      *  filter (conservative, mirroring `roleOf`/`matchesRoleCategory`). Absent entirely
-     *  (standalone/unit-test callers, single-ship DPS) → byte-identical for every ability with no
-     *  `factionFilter`, which today is every ability but Fuying's Stealth grant. */
+     *  (standalone/unit-test callers, single-ship DPS) → no faction narrowing at all. */
     factionOf?: (id: string) => FactionKey | undefined;
 }
 
@@ -1398,9 +1397,9 @@ function reduceEnemyBombs(args: {
         // #403 ruling R1 says an unresolved selector fizzles for a POSITIONAL caller (the resolver
         // returns `[]`, so the map is a no-op) and keeps the bound victim for a NON-POSITIONAL one.
         // A DPS caller never supplies `selectorEnemyIdFor` at all, so every selector target lands
-        // here — and `?? args.targetId` reproduces the old ternary's `[args.targetId]` tail exactly,
-        // byte-identical for DPS. An earlier draft filtered `undefined` out instead, which silently
-        // made a selector-targeted clause hit NOBODY in DPS mode (caught in review on PR #408).
+        // here, and `?? args.targetId` maps it to the bound victim. Filtering `undefined` out
+        // instead would conflate "no delegate supplied" with a real "nobody" answer and make a
+        // selector-targeted clause hit NOBODY in DPS mode.
         // `boundVictimId` is the post-guard capture of `args.targetId` (see its declaration).
         const recipients = resolveDebuffRecipientIds({
             abTarget: ab.target,
@@ -1819,7 +1818,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         return computeAffinityModifiers(attackerAff, victim?.affinity ?? 'antimatter');
     };
     // Primary/bound-target effective scalars — supersede the pre-baked flat fields when an override
-    // is active; otherwise equal the destructured runtime values (byte-identical default).
+    // is active; otherwise equal the destructured runtime values.
     // No victim ⇒ nobody can be holding a defensive override against this cast.
     const primaryDefensiveOverride =
         !forceOutgoingAdvantage && hasVictim && victimHasDefensiveOverride(enemy);
@@ -2003,7 +2002,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Gate/context estimates use representative scalars. The actual
     // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
     // Cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
-    // scalars when no override is active → byte-identical default).
+    // scalars when no override is active).
     const cappedCrit = (critBuffTotal: number) =>
         Math.min(effAffinityCritCap, Math.max(0, crit + critBuffTotal - effAffinityCritPenalty));
 
@@ -2035,7 +2034,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // (damage assembly, heal block, turnCtx, positionalScalars) with buff-channel semantics
     // (direct damage only; additive pct points). outgoingCritDamage is deliberately NOT
     // folded (crit-conditional damage modifier — consumed at the engine's crit-family
-    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → byte-identical.
+    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → nothing is folded.
     if (args.preFight) {
         scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
         scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
@@ -2139,9 +2138,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // The same ruling covers the `timedAbilityEnemy` loop further down (see its own note).
     //
     // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
-    // accum first, then timed — matching the original snapshot() iteration order
-    // (alwaysSnap, accumSnap, timed map) so the all-landing golden fixtures keep
-    // byte-identical list ordering.
+    // accum first, then timed — matching snapshot()'s own iteration order
+    // (alwaysSnap, accumSnap, timed map), which the all-landing golden fixtures pin.
     const scheduledEnemy = {
         roundEnemyDebuffs: [
             ...recurringEnemy.roundEnemyDebuffs,
@@ -2984,7 +2982,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the final number. Do NOT "fix" this by adding the delta to the gate estimates — they are
     // already consumed by the time control reaches here.
     //
-    // Absent/empty map → empty deltas → byte-identical, and the self side is not even read.
+    // Absent/empty map → empty deltas, and the self side is not even read.
     if (args.enemyAppliedFamilies) {
         const ownNamed = [
             ...entry.activeSelfBuffs.flatMap((abf) =>
@@ -3064,7 +3062,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
         // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
         // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
-        // identical to the pre-per-victim behavior for noCrit AoE.
+        // unperturbed for noCrit AoE.
         if (damageNoCrit) return false;
         // An outgoing-advantage force lifts the cap for every victim; otherwise the real
         // per-victim matchup (a covered victim's own Defensive Override is NOT resolved here —
@@ -3079,7 +3077,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
-    // weighted sums collapse to (nonCritHits, critHits) → byte-identical.
+    // weighted sums collapse to (nonCritHits, critHits).
     const ampAbilities = (passiveSkill?.abilities ?? []).filter(
         (a) => a.config.type === 'outgoing-amplification'
     );
@@ -3160,7 +3158,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
     const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime
-    // scalar when no override → byte-identical default).
+    // scalar when no override).
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
     const effectiveHp = dmgStats.hp;
@@ -3239,8 +3237,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
         // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (computed
         // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
-        // stored into effectiveMaxHp at turnCtx below) — so this reads byte-identically
-        // to the drain-time gate instead of the static base stat, which would disagree under an
+        // stored into effectiveMaxHp at turnCtx below) — so this reads the same value as the
+        // drain-time gate instead of the static base stat, which would disagree under an
         // active max-HP buff.
         selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx), for
@@ -3511,8 +3509,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         (1 + incBase / 100) *
         affinityMult;
     // Per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
-    // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits, ampCritWeight=critHits)
-    // → byte-identical. critIncomingRatio carries the crit-family incoming reduction.
+    // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits,
+    // ampCritWeight=critHits). critIncomingRatio carries the crit-family incoming reduction.
     const amplifiedCritMultiplier =
         drawHits > 0
             ? (ampNonCritWeight +
@@ -4572,7 +4570,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const creditId = applierId ?? actor.id;
             let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
             // Recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
-            // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick (0 → byte-identical).
+            // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick.
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
             // R10′ (#362): the gross bucket here is `hotHeal`, not `directHeal` — and like every
@@ -4793,7 +4791,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                             raw *= 1 + healAmpPctFor(rid) / 100;
                             // Recipient-side incoming-heal amplification (Exuberance) — rolls the
-                            // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                            // recipient's combat-lifetime gate ONCE per applied repair.
                             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                             const recipientActor = healing.recipientActor(rid);
                             // Capture the clipped over-repair per recipient (team symmetry with the
@@ -4884,7 +4882,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                         raw *= 1 + healAmpPctFor(rid) / 100;
                         // Recipient-side incoming-heal amplification (Exuberance) — rolls the
-                        // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                        // recipient's combat-lifetime gate ONCE per applied repair.
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         let perTargetOverheal: number | undefined;
                         /** #362: this recipient took the repair as damage (Reversed Repairs). */
@@ -4920,7 +4918,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 healing.credit(actor.id, 'overheal', applied.overheal);
                                 // Recipient axis: credit the actor the repair LANDED
                                 // ON. Gated on perRecipientActor so a legacy single-target run leaves
-                                // the map empty and every existing golden stays byte-identical.
+                                // the map empty.
                                 if (perRecipientActor) {
                                     healing.creditRecipient?.(rid, 'directHeal', raw);
                                     healing.creditRecipient?.(
@@ -5194,7 +5192,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
         // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →
-        // use `dotMult` unchanged) is byte-identical.
+        // use `dotMult` unchanged) applies.
         ...(victimGatedDotDamage.length > 0 ? { victimGatedDotDamage } : {}),
     };
 

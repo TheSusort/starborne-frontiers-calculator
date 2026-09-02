@@ -16,7 +16,7 @@ function conditionMet(cond: OutgoingCondition, ctx: OutgoingHitContext): boolean
  * advance its proc gate via `rollProc(abilityId, procChance)`; on a firing gate, add `ampPct`.
  * Eligibility gates the gate — an ineligible hit never advances rollProc (matches "when
  * critically damaging" / "when directly damaging a higher-attack enemy"). Returns 0 when
- * nothing applies → callers stay byte-identical with no such equipment.
+ * nothing applies (no such equipment).
  */
 export function outgoingAmplificationForHit(
     attackerAbilities: Ability[],

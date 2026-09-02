@@ -107,7 +107,7 @@ export function resolvesPositionalVictim(
  * Resolve the positional target anchor to a single living CombatActor.
  *
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
- * runs — this is the arm the byte-identical goldens pin. When `statusOf` is supplied
+ * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
  *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (front-most if many).
  *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).

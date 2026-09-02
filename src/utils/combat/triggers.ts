@@ -488,8 +488,8 @@ export function registerReactiveListeners(args: {
      *     the resolver is unwired would restore the very defect it exists to close.
      *   - The delegate RETURNS `undefined` → a real answer: this owner has no active SUPPORT
      *     pattern (or the board is non-positional), so there is no footprint to be inside and
-     *     nothing to narrow by. Pass-through, byte-identical to `footprintFilteredRecipients`'s
-     *     handling of the same resolver — and required by the owner ruling recorded at
+     *     nothing to narrow by. Pass-through, the same handling `footprintFilteredRecipients`
+     *     gives the same resolver — and required by the owner ruling recorded at
      *     `supportRecipients.ts` ("`undefined` means DO NOT NARROW … do not split it into two
      *     outcomes", 2026-08-21). A fixture that wants the legacy team-wide reach must therefore
      *     supply `() => undefined` explicitly, which is a real answer rather than an omission. */
@@ -510,8 +510,8 @@ export function registerReactiveListeners(args: {
         maxHpOf,
     } = args;
     // Same-side ally = NOT opposing AND not the owner itself (own events route to the
-    // self-scoped triggers). For the player registration (opposing = enemy-side) this
-    // is byte-identical to the old pattern.
+    // self-scoped triggers). Side-agnostic: `isOpposing` is supplied per registration, so the
+    // enemy-side registration resolves its own side's allies with no mirrored branch.
     const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
         !isOpposing(actorId) && actorId !== ownerId;
     /**
@@ -1719,8 +1719,7 @@ export interface IntentExecContext {
     infernoEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     /** Generic (absolute per-tick) DoT entries, for `enemyDotFamilyCounts`/`genericCount`
-     *  drain-time derivation. Optional: absent test fixtures fall back to `[]` (byte-identical —
-     *  no existing DoT carries a `family` tag, so the family map is always `{}` regardless). */
+     *  drain-time derivation. Optional: absent → `[]`, so the derived family map is `{}`. */
     genericDoTEntries?: ActiveDoTStack[];
     /** Player actor runtimes keyed by owner id ('attacker' + every walked team id). The
      *  executor resolves the intent's owner from this map for per-owner landing gates,
@@ -1780,14 +1779,13 @@ export interface IntentExecContext {
      *  self-buff union is empty for the synthesized stand-in — an emptiness of CONTENT, not of
      *  roster: the normalization boundary throws on an absent/empty roster. */
     enemyAttackerIds?: string[];
-    /** When supplied, filters `enemyAttackerIds` to living opposing actors for the
-     *  drain-time `enemy-buff` gate (Graphite start-of-round Stealth check). Absent →
-     *  all ids pass through (byte-identical for callers that omit it). */
+    /** When supplied, filters `enemyAttackerIds` to living opposing actors for the drain-time
+     *  `enemy-buff` gate (Graphite start-of-round Stealth check). Absent → all ids pass through. */
     isActorAlive?: (actorId: string) => boolean;
     /** Actor id → ship name, for the live `ally-on-team` roster check (Isha/Nayra's
      *  reciprocal Override gate). Present ONLY in the team-sim (battle sim). Absent (single-ship
-     *  DPS / healing / any caller without ship names) → `ally-on-team` keeps its manual assume-met
-     *  fallback, byte-identical to before. */
+     *  DPS / healing / any caller without ship names) → `ally-on-team` keeps its manual
+     *  assume-met fallback. */
     nameByActorId?: Map<string, string>;
     /** Per-actor last-turn ctx (effectiveAttack/affinityMult for bombs). Undefined for an
      *  owner that has not acted this run (faster enemy, round 1) → bomb follow-ups skip. */
@@ -1796,8 +1794,7 @@ export interface IntentExecContext {
      *  family comparison `liveHealChannelPct` performs on the two heal channels. Engine-populated;
      *  it cannot be derived here because this ctx carries no `selfBuffLookup`, and the scheduled
      *  (manual-picker) list is exactly where a same-family straddle actually comes from. Absent
-     *  (unit fixtures, DPS mode) → the live enemy half is taken un-shadowed, which is
-     *  byte-identical to the pre-#396 behaviour. */
+     *  (unit fixtures, DPS mode) → the live enemy half is taken un-shadowed. */
     selfNamedBuffsFor?: (actorId: string) => SelectedGameBuff[];
     /** Last reactive-damage amount each owner dealt this drain cycle. A reactive shield
      *  on the same trigger with basis 'damage-dealt' but no eventCtx.triggerDamage (on-enemy-
@@ -1810,7 +1807,7 @@ export interface IntentExecContext {
     /** Healing-mode runtime ctx. Present ONLY in healing mode; the SAME shared
      *  instance the player turns use (credit/applyHealToTarget/grantShieldToTarget close
      *  over the live target). When undefined, the heal/shield/cleanse executor branches
-     *  are inert (not-simulated follow-up) — DPS goldens stay byte-identical. */
+     *  are inert (not-simulated follow-up). */
     healing?: HealingRuntimeCtx;
     /** Combat-lifetime "once per battle" guard. Owned by the engine OUTSIDE the
      *  round loop (alongside cheatDeathConsumed) so it persists across rounds. A heal whose
@@ -1836,7 +1833,7 @@ export interface IntentExecContext {
     selfHpPctFor?: (ownerId: string) => number;
     /** Quixilver R2: owner's shield pool is at or above max HP. Optional — absent (every test
      *  fixture, DPS mode) → buildDrainContext leaves selfShieldFull false, so a drain gate on
-     *  this subject is simply not met. Byte-identical for every ability that omits the subject. */
+     *  this subject is simply not met. */
     selfShieldFullFor?: (ownerId: string) => boolean;
     /** Whether `ownerId` has the lowest Speed among the player team (ties → all qualify),
      *  feeding the `lowest-speed-ally` gate at drain time. Computed once by the engine (Speed
@@ -1864,7 +1861,7 @@ export interface IntentExecContext {
      *  key (mirrors the cast-path `PlayerTurnArgs.factionOf`) — an ENEMY-side owner's grant scopes
      *  to its own side's matching allies with no mirrored branch. `undefined` for an actor whose
      *  faction is unknown, which NEVER matches a filter (conservative). Absent entirely (unit-test
-     *  ctx / no factions supplied) → byte-identical for every ability with no `factionFilter`. */
+     *  ctx / no factions supplied) → no faction narrowing at all. */
     factionOf?: (id: string) => FactionKey | undefined;
     /** The `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
      *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
@@ -1888,7 +1885,7 @@ export interface IntentExecContext {
     /** Whether `ownerId` was hit by a direct attack this round, feeding the
      *  `not-hit-this-round` gate at drain time. Engine-populated from the combat-wide
      *  hitThisRound Set. Absent → buildDrainContext defaults the gate to false (DPS /
-     *  not-yet-hit → "not hit" ⇒ met), keeping existing drain gating byte-identical. */
+     *  not-yet-hit → "not hit" ⇒ met). */
     wasHitThisRoundFor?: (ownerId: string) => boolean;
     /** The owner's current own-turn counter (CombatActor.turnsTaken). Engine-populated;
      *  absent in DPS mode → defaults 0 (every-n-turns inert). */
@@ -1901,7 +1898,7 @@ export interface IntentExecContext {
      *  exactly one enemy", so `number | undefined` here lets buildDrainContext's absent-subject
      *  guard leave the gate unresolved instead of defaulting to a fabricated 1. Absent
      *  DELEGATE (no function at all — DPS mode / fixtures) is unaffected: the optional-chain
-     *  call below already answers `undefined` in that case, byte-identical. */
+     *  call below already answers `undefined` in that case. */
     enemiesHitThisCastFor?: (ownerId: string) => number | undefined;
     /** Apply a full mitigated/crit-eligible reactive damage hit from `ownerId` against
      *  `victimId` (Judge/Chakara/Incinerator/Rhodium start-of-round/end-of-round, Grif's
@@ -1973,7 +1970,7 @@ export interface IntentExecContext {
      *  reactions (Sentinel damage, Howler/Cultivator/Graphite ally heal) are per-victim by design,
      *  and reactive HEALS/SHIELDS scale per hit (Isha/Adaptive Plating) — neither is keyed here
      *  (see oncePerAttackGuardKey + the heal branch). Absent → no guard (unit ctxs without the
-     *  engine keep firing per intent, byte-identical). */
+     *  engine keep firing per intent). */
     reactionFiredThisAttack?: Set<string>;
     /** Per-SUB-ATTACK verdict cache for `procScope:'per-attack'` abilities (Insidiousness).
      *  Keyed `ownerId:abilityId:subAttackIndex` → the single roll's outcome; the map is cleared at
@@ -1986,7 +1983,7 @@ export interface IntentExecContext {
      *
      *  Distinct from `reactionFiredThisAttack`: this is not a suppression guard but a memo, so
      *  EVERY qualifying event in the sub-attack still executes against its own victim under one
-     *  shared pass/fail. Absent (unit ctxs) → per-event draws, byte-identical. */
+     *  shared pass/fail. Absent (unit ctxs) → per-event draws. */
     procDecisionThisSubAttack?: Map<string, boolean>;
     /** Resolve the opposing actor carrying the most buffs (Rhodium's enemy-most-buffs purge).
      *  Per-side: a player owner scans the enemy roster, an enemy owner scans the player roster.
@@ -1998,7 +1995,7 @@ export interface IntentExecContext {
      *  Used by the reactive `apply`-debuff branch to re-resolve landing vs the ACTUAL target's
      *  affinity instead of the applier's precomputed-vs-representative static disadvantage flag.
      *  Optional — absent in unit-test ctxs (→ landsTimedEnemyApplication falls back to the static
-     *  flag, byte-identical for single-opponent fixtures). */
+     *  flag, which is the same answer for a single-opponent fixture). */
     affinityOf?: (actorId: string) => AffinityName | undefined;
     /** The LIVE debuff-landing chance (0..1) for `ownerId`'s infliction against
      *  `victimId` — the applier's effective hacking vs THAT victim's effective security, with the
@@ -2009,7 +2006,7 @@ export interface IntentExecContext {
      *
      *  Engine-populated from the same combat-wide `allActorsById` map `affinityOf`/`actorById` use.
      *  Returns undefined when either id does not resolve. Optional — absent in unit-test ctxs, where
-     *  every consumer falls back to the old cached-chance chain and stays byte-identical. */
+     *  every consumer falls back to the cached-chance chain. */
     liveDebuffLandingChanceFor?: (ownerId: string, victimId: string) => number | undefined;
     /** Any actor's CURRENT effective attack (base folded with its live buffs), for a reactive
      *  that must snapshot the owner's attack before the owner has taken a turn this run and so has
@@ -2474,22 +2471,21 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         ),
         selfDebuffNames: ownerDebuffNamesFor(ctx.statusEngine, ownerId),
         // Live lowest-speed-ally gate (Chakara). Default true → DPS / no-delegate
-        // paths keep the lone-actor assumption and stay byte-identical.
+        // paths keep the lone-actor assumption.
         isLowestSpeedAlly: ctx.isLowestSpeedAllyFor?.(ownerId) ?? true,
         selfShieldFull: ctx.selfShieldFullFor?.(ownerId) ?? false,
         // Live not-hit-this-round gate (Alacrity). Default false → DPS / no-delegate
-        // paths read "not hit" ⇒ met and stay byte-identical.
+        // paths read "not hit" ⇒ met.
         wasHitThisRound: ctx.wasHitThisRoundFor?.(ownerId) ?? false,
         // Live first-activator gate (Doomsayer). Default false → DPS / no-delegate
-        // paths read "not first" ⇒ not met and stay byte-identical.
+        // paths read "not first" ⇒ not met.
         firstActivator: ctx.firstActivatorId === ownerId,
         // Live last-standing gate (Last Stand). lastStandingId is undefined unless EXACTLY
-        // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met and
-        // stay byte-identical.
+        // one same-side actor is alive → DPS / no-delegate paths read "not alone" ⇒ not met.
         lastStanding: ctx.lastStandingId === ownerId,
         // Every-n-turns gate (Chrono Reaver). Default 0 → DPS / no-delegate
-        // paths read 0 and stay byte-identical (the evaluator's t<=0 guard blocks ALL
-        // periods at turn 0, so every-n-turns is never met).
+        // paths read 0 (the evaluator's t<=0 guard blocks ALL periods at turn 0, so
+        // every-n-turns is never met).
         turnsTaken: ctx.turnsTakenFor?.(ownerId) ?? 0,
         // Live enemies-hit-this-cast gate (Berserker's Marauder Rage). No `?? 1` default anywhere
         // on this path — the delegate itself (engine.ts) returns `undefined` when
@@ -2887,8 +2883,8 @@ export function victimOwnEnemyFamilies(
  *     OPTIONAL, and absent means the ctx folded no enemy term, so `?? 0` subtracts nothing — which
  *     is correct, not a fallback.
  *   - ctx absent (pre-first-turn) → there is no stale total to correct; the baseline is the actor's
- *     `preFight` value and the live term is simply added. Not a formality: 7 of the 8 corpus
- *     `Inc. Repair Down` appliers inflict it from a DAMAGE clause, which can land in round 1
+ *     `preFight` value and the live term is simply added. Not a formality: nearly every corpus
+ *     `Inc. Repair Down` applier inflicts it from a DAMAGE clause, which can land in round 1
  *     before the victim has taken a turn.
  *
  * NOT for an actor reading its OWN current turn's totals — those are computed fresh from
@@ -2897,16 +2893,15 @@ export function victimOwnEnemyFamilies(
  *
  * ⚠️ THE LIVE HALF IS SHADOWED TOO (#396). Both the ctx's `stale` term and the `live` term are
  * post-shadowing DELTAS, not raw enemy sums: `runPlayerTurn` publishes the delta its fold actually
- * added, and this function recomputes today's delta the same way. They cancel for a fast applier
- * exactly as before. Doing the subtraction against a raw sum and the addition against a delta (or
- * vice versa) would leave the difference behind — which is why the two halves are deliberately the
- * same quantity.
+ * added, and this function recomputes today's delta the same way. They cancel for a fast applier.
+ * Doing the subtraction against a raw sum and the addition against a delta (or vice versa) would
+ * leave the difference behind — which is why the two halves are deliberately the same quantity.
  *
  * The comparison needs the actor's OWN named statuses, which this function cannot derive on its
  * own — it has no `selfBuffLookup`. Callers that have one pass `ownNamedBuffs`
  * (`victimSelfBuffs(...)`); callers that do not omit it, and the live half degrades to the raw
- * enemy sum (every applied family wins uncontested). That degradation is byte-identical to the
- * pre-#396 behaviour, so an un-threaded caller loses the shadowing rather than getting it wrong.
+ * enemy sum (every applied family wins uncontested), so an un-threaded caller loses the shadowing
+ * rather than getting it wrong.
  *
  * ⚠️ THE CHANNEL IS NOW ASYMMETRICALLY FRESH, and only the enemy half is live. The ctx's own
  * SELF-side contribution (`Inc. Repair Up`, a pre-fight baseline, any timed self-buff) is still
@@ -2931,8 +2926,8 @@ export function liveHealChannelPct(
     const applied = victimOwnEnemyFamilies(statusEngine, actorId, [shadowChannel]);
     // The live half is the SHADOWED delta, matching what `runPlayerTurn`'s fold contributes and
     // what the ctx therefore carries. With no `ownNamedBuffs` the self side is empty, every applied
-    // family wins uncontested, and the delta collapses to the raw enemy sum — i.e. exactly the
-    // pre-#396 value, which is what keeps an un-threaded caller byte-identical.
+    // family wins uncontested, and the delta collapses to the raw enemy sum — an un-threaded
+    // caller loses the shadowing rather than getting a wrong number.
     const live =
         shadowedDelta(applied, ownNamedBuffs ?? [], [shadowChannel]).delta[shadowChannel] ?? 0;
     if (ctx === undefined) return preFightPct + live;
@@ -3689,7 +3684,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     // in here as a targeted override rather than threaded through buildDrainContext's owner-only
     // signature. Reads the slain actor's OWN per-target debuff store (ownerDebuffNamesFor is the
     // same reader `selfDebuffNames`/`buildActorConditionContext` already use for a target's
-    // debuffs); no victimId (every other reactive trigger, or DPS mode) → false, byte-identical.
+    // debuffs); no victimId (every other reactive trigger, or DPS mode) → false.
     // Explicitly gated on trigger==='on-enemy-destroyed' — other
     // triggers (on-deal-damage, on-bomb-detonated, on-own-echoing-burst-detonated,
     // on-ally-crit-dot, on-self-crit-dot, on-enemy-dot-damage, on-ally-debuff-inflicted) also
@@ -3854,9 +3849,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ctx.oncePerRoundConsumed?.add(key);
         }
         // procChance gate for reactive buff grants (Ambush 5-16%, Alacrity 12-20%).
-        // De-Morgan pass-through — true when procChance is undefined/≤0/≥1, so every existing
-        // (procChance-less) buff grant stays byte-identical. Mirrors the heal/shield + damage
-        // branches. Keys on `${ownerId}:${ability.id}` via ctx.procChanceGates.
+        // De-Morgan pass-through — true when procChance is undefined/≤0/≥1, so a procChance-less
+        // buff grant is never gated. Mirrors the heal/shield + damage branches. Keys on
+        // `${ownerId}:${ability.id}` via ctx.procChanceGates.
         if (!passesProcChanceGate(intent, ctx)) return;
         // Consume the once-per-attack slot now that the self-buff WILL apply.
         if (buffGuardKey) ctx.reactionFiredThisAttack?.add(buffGuardKey);
@@ -4080,9 +4075,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         };
         // Counter-infliction routing: an intent whose eventCtx names the
         // attacking enemy ("on that enemy" — Warden) lands on THAT enemy's per-target
-        // store. Default (no eventCtx) → the singular default enemy store, byte-identical.
+        // store. Default (no eventCtx) → the singular default enemy store.
         // Target resolution — enemy-highest-attack global selector (Doomsayer) else the
-        // counter-infliction route (Bulwark/Warden). Existing appliers use counterTargetId → identical.
+        // counter-infliction route (Bulwark/Warden), which resolves via counterTargetId.
         //
         // `debuffVictimId` is the second half of that seam: `on-debuff-inflicted` stamps the enemy
         // the triggering infliction landed on under THAT field and never stamps counterTargetId, so
@@ -4397,8 +4392,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         const victimId = victim?.id ?? routedVictimId;
         // Block Debuff: an immune target auto-resists this reactive DoT — block
         // it AND emit a resist event (block path ONLY; a normal landing failure below stays
-        // silent → byte-identical when not immune). Placed AFTER the inert-DoT guard above so a
-        // zero-stack/tier DoT doesn't surface a spurious resist.
+        // silent). Placed AFTER the inert-DoT guard above so a zero-stack/tier DoT doesn't
+        // surface a spurious resist.
         if (targetCarriesBlockDebuff(ctx.statusEngine, victimId)) {
             // #413: block path — no landing gate drawn, so no on-resist proc.
             emitBlockDebuffResist(
@@ -4442,7 +4437,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             ? ctx.actorById?.(intent.eventCtx.victimId)
             : undefined;
         // No victim resolver / id (unit-test ctx without actorById, or a listener that somehow
-        // fired without a captured victim) → not-simulated follow-up, byte-identical no-op.
+        // fired without a captured victim) → not-simulated follow-up, no-op.
         if (!allyId || !victim) return;
         // Gate 1: conversion chance — 1% per 10 Hacking (pctPerPoint 0.1) of the OWNER's
         // (Belladonna's) LIVE effective Hacking. Deterministic RateGate keyed by ability,
@@ -5237,7 +5232,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // enemy twice under the single shared verdict — 200% damage for a 100% implant.
             // Keyed with the victim so a DIFFERENT debuffed enemy still takes its own hit; rides
             // `reactionFiredThisAttack`, which the engine clears at each actor turn-start beside
-            // the proc verdict cache. Absent set (unit ctxs) → no dedupe, byte-identical.
+            // the proc verdict cache. Absent set (unit ctxs) → no dedupe.
             if (intent.ability.procScope === 'per-attack') {
                 // The key carries the SUB-ATTACK too. `reactionFiredThisAttack` is cleared
                 // only at actor turn-start, so without the index a victim would be suppressed for

@@ -223,9 +223,9 @@ export function createActor(
     return {
         ...rest,
         currentHp: partial.stats.hp,
-        // Pre-fight shield seeding (F3): "Start combat shielded for N% of max HP" — hp is
+        // Pre-fight shield seeding: "Start combat shielded for N% of max HP" — hp is
         // already post-leader (the pre-fight stat pass mutated plan stats before actor
-        // construction). Absent preFight → 0 → byte-identical to the old literal 0.
+        // construction). Absent preFight → 0.
         shieldPool: partial.stats.hp * ((partial.preFight?.startingShieldPctOfHp ?? 0) / 100),
         turnMeter: 0,
         charges: startCharged ? chargeCount : 0,

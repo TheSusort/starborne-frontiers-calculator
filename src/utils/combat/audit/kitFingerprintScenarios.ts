@@ -331,8 +331,8 @@ function seedFor(
 
 /**
  * The scenario battle for one subject ship, on one of the three engine actor paths named by
- * `placement` (default `'focus'`, kept for the 147-ship fingerprint snapshot's byte-identical call
- * shape — see `realKitFingerprints.test.ts`). In `'focus'` the subject sits first on the player side
+ * `placement` (default `'focus'`, the call shape the fingerprint snapshot uses — see
+ * `realKitFingerprints.test.ts`). In `'focus'` the subject sits first on the player side
  * with 3 inert filler allies, against 4 inert filler enemies. In `'team'` it keeps its cell but gives
  * up player index 0 to a filler, so the engine walks it as a 'team' actor instead of minting it
  * 'attacker'. In `'enemy'` it is on the ENEMY side against the filler allies-turned-opponents — the

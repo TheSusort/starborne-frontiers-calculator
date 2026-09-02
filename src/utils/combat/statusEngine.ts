@@ -36,7 +36,7 @@ export interface StatusEngineInput {
     landsTimedEnemyApplication?: (buff: SelectedGameBuff) => boolean;
     /** Boost gear set: extra turns to add to a TIMED SELF-SIDE buff applied by `casterId`
      *  (the firing source for scheduled buffs, `status.casterId` for ability buffs). Returns 0
-     *  for non-wearers. Default → always 0 (byte-identical: no wearer, no change). */
+     *  for non-wearers. Default → always 0 (no wearer, no change). */
     buffDurationExtensionFor?: (casterId: string) => number;
 }
 
@@ -78,7 +78,7 @@ interface AbilityStatusBase {
      *  `recipients` above is resolved at actor CONSTRUCTION and knows nothing about factions, so
      *  the filter rides the status and is intersected in at APPLICATION time (playerTurn's
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
-     *  in scope. Absent → no faction narrowing, byte-identical for every other ship. */
+     *  in scope. Absent → no faction narrowing. */
     factionFilter?: FactionKey[];
     /** Recipient BOARD-ADJACENCY scope, copied off the source ability's `target`. Set ONLY for
      *  `'adjacent-allies'`; absent for every other target.
@@ -141,7 +141,7 @@ export type RegisteredAbilityStatus =
            *  Orthogonal to `duration`: a status with both expires on whichever comes first. A
            *  hit-counted status with no turn duration is applied with duration Infinity (never
            *  ticks out, still removable) — see the TOXIC_OVERFLOW_DURATION precedent. Absent →
-           *  the turn lifecycle alone governs, byte-identical. */
+           *  the turn lifecycle alone governs. */
           hits?: number;
           /** Cap for the LIVE stack count when a stackable timed status is re-applied onto a
            *  victim that still holds it (see applyTimedAbilityStatus's stack-accumulation rule).
@@ -539,13 +539,12 @@ interface TimedSourceSets {
  * source actually acts (and increments per-active/per-charge stacks for the
  * attacker); `snapshot()` reads the round's active lists; `decrementPlayer` /
  * `decrementEnemy` run in each owner's Post Turn. It predicts nothing — cadences
- * are reported, not computed (the old computeChargeSchedule path is retired).
+ * are reported, not computed.
  */
 
 /** Sentinel enemy-target id used for the default (non-per-victim) scheduled-debuff store.
- *  Callers that do not supply an explicit enemyTargetId resolve to this value — byte-identical
- *  to the old singular enemyMap path. Exported so triggers.ts can reference the same constant
- *  instead of duplicating the string literal. */
+ *  Callers that do not supply an explicit enemyTargetId resolve to this value. Exported so
+ *  triggers.ts can reference the same constant instead of duplicating the string literal. */
 export const DEFAULT_ENEMY_TARGET = '__enemy__';
 
 /**
@@ -688,9 +687,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             buffName: b.buffName,
             stacks: 0,
             maxStacks: b.maxStacks,
-            // Scheduled enemy debuffs ride the attacker's cadence (pre-#436 semantics). Under the
-            // uniform granter rule this is byte-identical: the old code ticked EVERY enemy map
-            // when sourceId === 'attacker', and only this map is ever seeded.
+            // Scheduled enemy debuffs ride the attacker's cadence: one `'attacker'` contribution
+            // under #436's uniform granter rule, and this is the only enemy accum map ever seeded.
             contributions: [{ granterId: 'attacker', rate: b.stacks, trigger: b.stackTrigger! }],
         });
     }
@@ -706,7 +704,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     // Per-target enemy-side timed maps. Keyed by targetId → (familyKey → BuffState).
     // Lazy-created on first write — mirroring the per-owner selfMaps pattern.
     // DEFAULT_ENEMY_TARGET is declared earlier (before accumEnemyMaps, which references it);
-    // callers that do not supply a targetId resolve to it → byte-identical to the old singular enemyMap.
+    // callers that do not supply a targetId resolve to it.
     const enemyMaps = new Map<string, Map<string, BuffState>>();
 
     // Per-owner player-side persistent-stacking maps. Same lazy-create semantics.
@@ -1283,7 +1281,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  the STACKS axis — orthogonal to reduceTimedEnemyStatus, which moves the TURNS axis. Do not
      *  conflate the two.
      *  An entry with no live `stacks` (written by upsertBuff, which has no stack model) counts as
-     *  its last stack and is deleted — byte-identical to removeTimedEnemyStatus for such entries.
+     *  its last stack and is deleted — the same outcome removeTimedEnemyStatus gives such entries.
      *  Lazy-empty / unknown id / unknown name → safe no-op. */
     const consumeTimedEnemyStatusStack = (targetId: string, buffName: string): void => {
         const map = enemyMaps.get(targetId);
@@ -1703,8 +1701,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         //   self side  → recipientId (player-side carrier, defaults to 'attacker')
         //   enemy side → enemyTargetId (enemy target's debuff store, defaults to DEFAULT_ENEMY_TARGET)
         // `recipientId` is IGNORED for enemy-side statuses; `enemyTargetId` is IGNORED for self-side.
-        // This keeps the existing call site `applyTimedAbilityStatus(r, status, actor.id)` byte-identical:
-        // enemy-side statuses still go to DEFAULT_ENEMY_TARGET regardless of what actor.id is passed.
+        // So at the call site `applyTimedAbilityStatus(r, status, actor.id)` an enemy-side status
+        // goes to DEFAULT_ENEMY_TARGET regardless of what actor.id is passed.
         const selfEffectiveId = recipientId ?? 'attacker';
         const enemyEffectiveId = enemyTargetId ?? DEFAULT_ENEMY_TARGET;
 
@@ -1788,7 +1786,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             // active actor. Enemy-side: ONLY an opt-in reprieve status (on-destroyed Martyrdom
             // Disable) landing on the actor whose turn is executing — so decrementEnemy skips the
             // first same-turn tick, mirroring the self-side protection. All other enemy debuffs
-            // (no flag) stay falsy → decrement immediately, byte-identical.
+            // (no flag) stay falsy → decrement immediately.
             appliedThisTurn:
                 status.side === 'self'
                     ? selfEffectiveId === currentTurnActorId
@@ -1905,7 +1903,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // anyone mutating the shared, by-reference registered payload.
         //
         // GATED ON DIVERGENCE, deliberately not on `payload.isStackable`. Divergence is the only
-        // gate that is both (a) byte-identical for every status nothing has spent from — which is
+        // gate that is both (a) inert for every status nothing has spent from — which is
         // every status in the corpus except a partly-spent Exposed — and (b) actually reachable by
         // the mechanic it exists for: NEITHER corpus Exposed applier sets isStackable (Amartya's
         // reactive payload is built by payloadFromConfig, which drops the flag entirely; Nayra's

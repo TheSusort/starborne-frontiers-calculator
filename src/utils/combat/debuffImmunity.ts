@@ -72,12 +72,11 @@ export const controlEffectLabel = (effect: ControlEffect): string => CONTROL_EFF
 
 /** Emit a `debuff-resisted` event for a DoT that did not land.
  *
- *  ⚠️ THE NAME IS NARROWER THAN THE FUNCTION. The doc that stood here said "Call ONLY on the block
- *  path — normal DoT landing-roll failures stay silent (byte-identical)", and that stopped being
- *  true: `playerTurn`'s `else if (dotsConfig.length > 0)` branch — the LANDING-ROLL FAILURE arm —
- *  calls it too, so the combat log can show "Inferno III resisted" symmetrically with stat-debuff
- *  resists. Reading the old comment and tagging every call here as a Block-Debuff auto-resist would
- *  drop exactly the rolled DoT resists that #413's `viaLandingRoll` gate is supposed to keep.
+ *  ⚠️ THE NAME IS NARROWER THAN THE FUNCTION. It is NOT called only on the Block-Debuff path:
+ *  `playerTurn`'s DoT LANDING-ROLL FAILURE arm (the `else` that draws `roundDebuffLanded`) calls it
+ *  too, so the combat log can show "Inferno III resisted" symmetrically with stat-debuff resists.
+ *  Tagging every call here as a Block-Debuff auto-resist would drop exactly the rolled DoT resists
+ *  that #413's `viaLandingRoll` gate is supposed to keep.
  *
  *  Hence `viaLandingRoll`, which the CALLER supplies because only the caller knows which arm it is
  *  in: `false` on the Block-Debuff branch (no gate drawn), `true` on the landing-roll-failure

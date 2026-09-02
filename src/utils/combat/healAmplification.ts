@@ -13,7 +13,7 @@ function conditionMet(cond: HealAmpCondition, ctx: HealAmpContext): boolean {
  * Summed heal-cast amplification % for one cast on one recipient (mirror of
  * outgoingAmplificationForHit). For each heal-amplification ability whose condition is met:
  * deterministic (no procChance) → always add ampPct; proc'd → add ampPct iff rollProc fires.
- * Eligibility gates the proc roll. Returns 0 when nothing applies → byte-identical with no such equipment.
+ * Eligibility gates the proc roll. Returns 0 when nothing applies (no such equipment).
  */
 export function healAmplificationForCast(
     casterAbilities: Ability[],

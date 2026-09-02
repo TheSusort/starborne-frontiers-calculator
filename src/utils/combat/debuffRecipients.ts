@@ -73,8 +73,7 @@ export function resolveDebuffRecipientIds(args: {
     // anywhere on the opposing side has no victim, so nothing is inflicted, nothing is resisted,
     // and no landing draw is taken. A non-positional/DPS caller never supplies the delegate at
     // all (it has no roster to resolve against), so it keeps the turn's own bound victim via the
-    // `undefined` sink — byte-identical DPS output for every kit. Same fork, same reason, as the
-    // tail below.
+    // `undefined` sink. Same fork, same reason, as the tail below.
     //
     // NOTE, deliberate divergence: the sibling on-cast PURGE loop (playerTurn.ts, the
     // `enemy-most-buffs` arm) falls back to the anchor when its selector does not resolve. Purge
