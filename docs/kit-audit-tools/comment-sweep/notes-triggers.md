@@ -316,6 +316,200 @@ ACTION: kept.
 
 ---
 
+---
+
+## Line-number index — all 181 candidate blocks accounted for
+
+Original `origin/main` line ranges, in file order. Every row is either touched or
+deliberately kept; there are no silent skips. The narrative entries above give the claim,
+evidence and reasoning per group.
+
+| block | classifier hit | outcome |
+| --- | --- | --- |
+| 83-94 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 105 | workstream-label | rewritten / deleted (label, history, count) |
+| 134-138 | history-claim | rewritten / deleted (label, history, count) |
+| 143-155 | workstream-label | rewritten / deleted (label, history, count) |
+| 160-168 | workstream-label | rewritten / deleted (label, history, count) |
+| 170-181 | workstream-label, history-claim | FLAGGED FOR OWNER at 172-174 (NOTE untouched); tail rewritten |
+| 186-188 | workstream-label | rewritten / deleted (label, history, count) |
+| 190-192 | workstream-label | rewritten / deleted (label, history, count) |
+| 204-207 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 264-271 | workstream-label | rewritten / deleted (label, history, count) |
+| 273-277 | workstream-label | rewritten / deleted (label, history, count) |
+| 279-287 | workstream-label | rewritten / deleted (label, history, count) |
+| 346-457 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 462-466 | workstream-label | rewritten / deleted (label, history, count) |
+| 472-474 | history-claim | kept (legitimate contract) |
+| 483-503 | workstream-label, pending-claim | rewritten / deleted (label, history, count) |
+| 525-549 | workstream-label | rewritten / deleted (label, history, count) |
+| 573 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 576 | workstream-label | rewritten / deleted (label, history, count) |
+| 580 | workstream-label | rewritten / deleted (label, history, count) |
+| 609 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 626 | workstream-label | rewritten / deleted (label, history, count) |
+| 636 | workstream-label | rewritten / deleted (label, history, count) |
+| 669 | workstream-label | rewritten / deleted (label, history, count) |
+| 688 | workstream-label | rewritten / deleted (label, history, count) |
+| 707 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 716 | workstream-label | rewritten / deleted (label, history, count) |
+| 719 | workstream-label | rewritten / deleted (label, history, count) |
+| 758 | workstream-label | rewritten / deleted (label, history, count) |
+| 798 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 828 | workstream-label | rewritten / deleted (label, history, count) |
+| 838 | workstream-label | rewritten / deleted (label, history, count) |
+| 849 | workstream-label | rewritten / deleted (label, history, count) |
+| 865 | history-claim | rewritten / deleted (label, history, count) |
+| 879 | history-claim | rewritten: keeper ref #444 kept, "gate is ADDITIVE" history deleted |
+| 1003 | history-claim | rewritten / deleted (label, history, count) |
+| 1035 | workstream-label | rewritten / deleted (label, history, count) |
+| 1043 | history-claim | rewritten / deleted (label, history, count) |
+| 1044 | history-claim | rewritten / deleted (label, history, count) |
+| 1055 | workstream-label | rewritten / deleted (label, history, count) |
+| 1099 | workstream-label | rewritten / deleted (label, history, count) |
+| 1126 | workstream-label | rewritten / deleted (label, history, count) |
+| 1184 | workstream-label | rewritten / deleted (label, history, count) |
+| 1249 | workstream-label | rewritten / deleted (label, history, count) |
+| 1410 | workstream-label | rewritten / deleted (label, history, count) |
+| 1479 | workstream-label | rewritten / deleted (label, history, count) |
+| 1480 | workstream-label | rewritten / deleted (label, history, count) |
+| 1541 | workstream-label | rewritten / deleted (label, history, count) |
+| 1546 | workstream-label | rewritten / deleted (label, history, count) |
+| 1561 | history-claim | rewritten / deleted (label, history, count) |
+| 1564 | workstream-label | rewritten / deleted (label, history, count) |
+| 1567 | workstream-label | rewritten / deleted (label, history, count) |
+| 1609 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 1649 | workstream-label | rewritten / deleted (label, history, count) |
+| 1674 | workstream-label | rewritten / deleted (label, history, count) |
+| 1739-1763 | workstream-label | rewritten / deleted (label, history, count) |
+| 1834-1840 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 1890-1895 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 1910-1917 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 1966-1982 | workstream-label | rewritten / deleted (label, history, count) |
+| 1991-1992 | workstream-label | rewritten / deleted (label, history, count) |
+| 2007-2012 | workstream-label | rewritten / deleted (label, history, count) |
+| 2020-2025 | workstream-label | rewritten / deleted (label, history, count) |
+| 2053-2057 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 2065-2077 | workstream-label | rewritten / deleted (label, history, count) |
+| 2086-2092 | workstream-label | rewritten / deleted (label, history, count) |
+| 2133-2138 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 2151-2154 | workstream-label | rewritten / deleted (label, history, count) |
+| 2164-2193 | workstream-label | rewritten / deleted (label, history, count) |
+| 2209 | workstream-label | rewritten / deleted (label, history, count) |
+| 2211 | workstream-label | rewritten / deleted (label, history, count) |
+| 2213 | workstream-label | rewritten / deleted (label, history, count) |
+| 2228-2252 | workstream-label | rewritten / deleted (label, history, count) |
+| 2266-2272 | workstream-label | rewritten / deleted (label, history, count) |
+| 2349-2393 | history-claim | rewritten / deleted (label, history, count) |
+| 2412 | workstream-label | rewritten / deleted (label, history, count) |
+| 2414 | workstream-label | rewritten / deleted (label, history, count) |
+| 2429 | workstream-label | rewritten / deleted (label, history, count) |
+| 2431 | history-claim | rewritten / deleted (label, history, count) |
+| 2432 | workstream-label | rewritten / deleted (label, history, count) |
+| 2454 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 2472 | workstream-label | rewritten / deleted (label, history, count) |
+| 2480 | workstream-label | rewritten / deleted (label, history, count) |
+| 2533 | history-claim | rewritten / deleted (label, history, count) |
+| 2535 | workstream-label | rewritten / deleted (label, history, count) |
+| 2548 | workstream-label | rewritten / deleted (label, history, count) |
+| 2552 | history-claim | rewritten / deleted (label, history, count) |
+| 2553 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 2580 | workstream-label | rewritten / deleted (label, history, count) |
+| 2585 | pending-claim | kept (legitimate contract) |
+| 2619 | workstream-label | rewritten / deleted (label, history, count) |
+| 2642-2651 | history-claim | kept (legitimate contract) |
+| 2691-2696 | history-claim | rewritten / deleted (label, history, count) |
+| 2754-2758 | history-claim | kept (legitimate contract) |
+| 2790-2840 | history-claim | rewritten / deleted (label, history, count) |
+| 2893-2935 | history-claim | rewritten / deleted (label, history, count) |
+| 3063-3071 | workstream-label | rewritten / deleted (label, history, count) |
+| 3089-3096 | workstream-label | rewritten / deleted (label, history, count) |
+| 3172-3202 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 3235-3266 | workstream-label | rewritten / deleted (label, history, count) |
+| 3328 | workstream-label | rewritten / deleted (label, history, count) |
+| 3329 | history-claim | rewritten / deleted (label, history, count) |
+| 3349-3355 | workstream-label | rewritten / deleted (label, history, count) |
+| 3364-3368 | workstream-label | rewritten / deleted (label, history, count) |
+| 3528-3548 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 3554-3572 | workstream-label | rewritten / deleted (label, history, count) |
+| 3597 | history-claim | rewritten / deleted (label, history, count) |
+| 3599 | workstream-label | rewritten / deleted (label, history, count) |
+| 3604 | workstream-label | rewritten / deleted (label, history, count) |
+| 3610 | workstream-label | rewritten / deleted (label, history, count) |
+| 3647-3667 | workstream-label | rewritten / deleted (label, history, count) |
+| 3779 | workstream-label | rewritten / deleted (label, history, count) |
+| 3780 | history-claim | rewritten / deleted (label, history, count) |
+| 3790 | workstream-label | rewritten / deleted (label, history, count) |
+| 3797 | workstream-label | rewritten / deleted (label, history, count) |
+| 3851 | workstream-label | rewritten / deleted (label, history, count) |
+| 3871 | workstream-label | rewritten / deleted (label, history, count) |
+| 4142 | workstream-label | rewritten / deleted (label, history, count) |
+| 4194 | history-claim | rewritten / deleted (label, history, count) |
+| 4212 | workstream-label | rewritten / deleted (label, history, count) |
+| 4213 | workstream-label | rewritten / deleted (label, history, count) |
+| 4338 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 4399 | history-claim | rewritten / deleted (label, history, count) |
+| 4434 | workstream-label | rewritten / deleted (label, history, count) |
+| 4446 | workstream-label | rewritten / deleted (label, history, count) |
+| 4450 | workstream-label | rewritten / deleted (label, history, count) |
+| 4452 | history-claim | rewritten / deleted (label, history, count) |
+| 4462 | history-claim | rewritten / deleted (label, history, count) |
+| 4516 | workstream-label | rewritten / deleted (label, history, count) |
+| 4518 | history-claim | rewritten / deleted (label, history, count) |
+| 4527 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 4576 | history-claim | rewritten / deleted (label, history, count) |
+| 4577 | workstream-label | rewritten / deleted (label, history, count) |
+| 4605 | pending-claim | rewritten (E1/E2 + SP-D labels stripped); "not yet converted" kept |
+| 4661 | workstream-label | rewritten / deleted (label, history, count) |
+| 4665 | workstream-label | rewritten / deleted (label, history, count) |
+| 4670 | workstream-label | rewritten / deleted (label, history, count) |
+| 4672 | workstream-label | rewritten / deleted (label, history, count) |
+| 4712 | history-claim | rewritten / deleted (label, history, count) |
+| 4803 | history-claim | rewritten / deleted (label, history, count) |
+| 4804 | workstream-label | rewritten / deleted (label, history, count) |
+| 4807 | workstream-label | rewritten / deleted (label, history, count) |
+| 4839 | workstream-label | rewritten / deleted (label, history, count) |
+| 4846 | history-claim | rewritten / deleted (label, history, count) |
+| 4847 | workstream-label | rewritten / deleted (label, history, count) |
+| 4941 | workstream-label | rewritten / deleted (label, history, count) |
+| 5016 | history-claim | rewritten / deleted (label, history, count) |
+| 5048 | workstream-label | rewritten / deleted (label, history, count) |
+| 5082 | history-claim | rewritten / deleted (label, history, count) |
+| 5106 | history-claim | rewritten / deleted (label, history, count) |
+| 5151 | workstream-label | rewritten / deleted (label, history, count) |
+| 5162 | workstream-label | rewritten / deleted (label, history, count) |
+| 5170 | workstream-label | rewritten / deleted (label, history, count) |
+| 5176 | workstream-label | rewritten / deleted (label, history, count) |
+| 5182 | workstream-label | rewritten / deleted (label, history, count) |
+| 5218 | workstream-label | rewritten / deleted (label, history, count) |
+| 5220 | workstream-label | rewritten / deleted (label, history, count) |
+| 5261 | workstream-label | rewritten / deleted (label, history, count) |
+| 5294 | workstream-label | rewritten / deleted (label, history, count) |
+| 5309 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5325 | workstream-label | rewritten / deleted (label, history, count) |
+| 5331 | workstream-label | rewritten / deleted (label, history, count) |
+| 5341 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5352 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5371 | history-claim | rewritten / deleted (label, history, count) |
+| 5373 | workstream-label | rewritten / deleted (label, history, count) |
+| 5376 | history-claim | rewritten / deleted (label, history, count) |
+| 5377 | workstream-label | rewritten / deleted (label, history, count) |
+| 5378 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5379 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5380 | history-claim | rewritten / deleted (label, history, count) |
+| 5381 | workstream-label | rewritten / deleted (label, history, count) |
+| 5396 | workstream-label | rewritten / deleted (label, history, count) |
+| 5402 | workstream-label | rewritten / deleted (label, history, count) |
+| 5427 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5429 | workstream-label, history-claim | rewritten / deleted (label, history, count) |
+| 5490 | workstream-label | rewritten / deleted (label, history, count) |
+| 5493 | history-claim | rewritten / deleted (label, history, count) |
+| 5505 | workstream-label | rewritten / deleted (label, history, count) |
+| 5507 | workstream-label | rewritten / deleted (label, history, count) |
+| 5513 | workstream-label | rewritten / deleted (label, history, count) |
+
+---
+
 ## FALSE COMMENTS FOUND
 
 ### 1. triggers.ts:105 — "no parser produces it until Task 5"

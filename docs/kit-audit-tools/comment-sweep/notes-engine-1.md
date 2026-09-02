@@ -283,14 +283,27 @@ CLAIM: "SP-4c-2c dropped its turn and SP-4c-2d deleted the actor".
 ACTION: rewritten to the present-tense invariant ("every turn in the pool belongs to a ship on the
 board — there is no stand-in `enemy` actor").
 
-### engine.ts:2136-2138 (`rawTotals.generic`) [pending-claim]
+### engine.ts:2136-2138 (`rawTotals.generic`) + the `totalGenericRaw` local [pending-claim] — **FALSE**
 CLAIM: "Always 0 today (generic DoTs are never auto-applied from skill text in this task) — not
 yet consumed by DPSSimulationSummary; a future task can surface it as totalGenericDamage."
-EVIDENCE: `grep totalGenericDamage src/` → the ONLY hit was this comment, so the no-consumer half
-is true. `playerTurn.ts:1283` states the parser never emits `type:'generic'`, but the
-`genericDoTEntries` arg is caller-suppliable, so "always 0" over-claims.
-ACTION: rewritten as "0 unless a caller supplies generic DoT entries directly"; task vocabulary
-dropped.
+EVIDENCE, no-consumer half — TRUE: `grep totalGenericDamage src/` returns only this comment, and
+`dpsSimulator.ts:889-893` reads `rawTotals.corrosion/inferno/detonation/totalSecondary/
+totalConditional` but never `.generic`.
+EVIDENCE, "always 0" half — FALSE: `convertHitToSelfDot` (engine.ts:1997-2010) pushes a
+`type`-less absolute-per-tick entry onto `victim.genericDoTEntries` with `sourceId: victim.id`,
+and it has a live production call site at engine.ts:6190-6198 gated on a
+`transform-incoming-to-dot` ability — which the SKILL-TEXT PARSER itself emits
+(`skillTextParser.ts:3143 detectTransformToDot`, Voron/Orel) — plus the name-keyed Hit Mitigation
+one-shot (Oleander) just below it. `tickDoTs` then credits those entries through
+`args.credit(sourceId, 'generic', …)` (engine.ts:1305-1326), and `totalGenericRaw += genericDamage`
+where `genericDamage = focus.generic + (focusDot?.generic ?? 0)` (engine.ts:12810). So a focus
+carrying Voron/Orel or Hit Mitigation reports NONZERO generic damage. The parser claim is true only
+of the APPLIED-DEBUFF path.
+ACTION: both sites rewritten to name `convertHitToSelfDot` and its two producers, and to scope the
+parser claim to applied debuffs. WAS FALSE.
+(An interim rewrite of mine — "0 unless a caller supplies generic DoT entries directly" — was
+itself wrong twice over: `CombatEngineInput` has no DoT-entry input, and the real producer is
+internal. Corrected before finishing.)
 
 ### engine.ts:2143-2148 (`enemyOutcome`) [workstream-label, history-claim]
 ACTION: rewritten — the live rule kept ("a single scalar cannot describe a multi-enemy roster");
@@ -335,11 +348,14 @@ written; since SP-4b-1 …"; "since SP-4b-2b the roster is provably non-empty".
 ACTION: rewritten — task labels and the was-inert history dropped; the live guarantee
 (`normalizeCombatRoster` fills target + pattern and throws on an empty roster) kept.
 
-### engine.ts:2473, 2493, 2509 [workstream-label]
-CLAIM: "(Task 7 — …)"; "(A2 Task 4 — set each turn by runPlayerTurn)"; "SP-4c-2b:"; several
-"byte-identical" diff justifications.
-ACTION: rewritten — labels and zero-churn framing dropped; the per-victim-vs-cast-path contract
-kept.
+### engine.ts:2473, 2493, 2509, 2684, 2700 [workstream-label]
+CLAIM: "(Task 7 — …)"; "(A2 Task 4 — set each turn by runPlayerTurn)" at BOTH the focus closure
+(2493) and the team-actor closure (2684); "SP-4c-2b:" at BOTH the focus arm (2509) and the
+team-actor arm (2700); several "byte-identical" diff justifications; "Target-aware (Task A)".
+EVIDENCE: `playerTurn.ts:2040` sets `runtime.liveDebuffLandingChance` per turn, so the substance
+of the A2-Task-4 claim holds at both sites — only the labels are dead.
+ACTION: all five rewritten — labels, "Task A" and the zero-churn framing dropped; the
+per-victim-vs-cast-path fallback contract kept at both sites.
 
 ### engine.ts:2569, 2571, 2656-2657, 2661 [history-claim, workstream-label] — **FALSE**
 CLAIM (2656-2657): "Reactive abilities are PARTITIONED here but NOT registered as listeners this
@@ -429,8 +445,13 @@ asymmetries stated as present-tense contracts and the real consumer named.
 CLAIM: "target HP can only reach 0 via enemy attacks, which land in Task 8 — the detection just
 never fires this task."
 EVIDENCE: enemy attackers walk `runPlayerTurn` today (`enemyPlayerRuntimes`, and the enemy-side
-turn dispatch in the round loop), so enemy attacks land and the detection does fire.
-ACTION: rewritten. WAS FALSE.
+turn dispatch in the round loop), so enemy attacks land and the detection does fire. The
+"only via enemy attacks" half is ALSO wrong: the #362 reversed-repair branch in the same function
+(`applyHealToTarget`'s `{ reversed: true }` arm) damages the heal target through an ALLY's repair.
+ACTION: rewritten to "the detection needs the heal target to actually take incoming damage — an
+enemy attack, or a reversed repair (#362)". WAS FALSE.
+(My first rewrite re-asserted the original's "only via enemy attacks" in fresh prose; corrected
+before finishing.)
 
 ### engine.ts:3711 [history-claim]
 CLAIM: "incremented on every qualifying enqueue-drain and used to trigger removal only on the Nth
@@ -495,8 +516,10 @@ reads it yet") is **FALSE** — `incomingHealAmpAbilitiesOf` is read at engine.t
 
 ## FALSE COMMENTS FOUND
 
-Ten distinct false claims, all of the same family: a wiring/reader claim written while the
-workstream was in flight, never swept when the workstream landed.
+Thirteen distinct false claims in range. Ten are one family — a wiring/reader claim written while
+the workstream was in flight and never swept when the workstream landed. Items 12-13 are a
+different, more interesting family: a comment asserting a value is ALWAYS ZERO / a state
+UNREACHABLE, where a second producer exists that the author was not thinking about.
 
 1. **`shieldPenetration` has "no production reader until H1 Task 4"** — three sites
    (`EnemyActorInput.stats`, `CombatEngineInput.shieldPenetration`,
@@ -533,28 +556,45 @@ workstream was in flight, never swept when the workstream landed.
     owner"** — `reactivePerOwner` in the same function builds from
     `teamRuntimeById.get(t.id)!.reactiveAbilities` and hands them to `registerReactiveListeners`.
 
+12. **`rawTotals.generic` / `totalGenericRaw`: "Always 0 today (generic DoTs are never
+    auto-applied from skill text in this task)"** — `convertHitToSelfDot` (engine.ts:1997) is a
+    live producer, reached at engine.ts:6190-6198 from a `transform-incoming-to-dot` ability that
+    the parser DOES emit (`skillTextParser.ts:3143`, Voron/Orel) and from Hit Mitigation
+    (Oleander); the ticks credit `focus.generic` → `totalGenericRaw` (engine.ts:12810). The
+    companion "not consumed by DPSSimulationSummary" half IS true.
+
+13. **`healingRounds` seam: "target HP can only reach 0 via enemy attacks"** — the #362
+    reversed-repair branch in the same function damages the heal target through an ally's repair.
+
 Plus one false COUNT:
 
-11. **`ReactiveSideCtx`: "The four side-specific fields the reactive intent drain needs"** — the
+14. **`ReactiveSideCtx`: "The four side-specific fields the reactive intent drain needs"** — the
     interface declares roughly eighteen.
 
 And one recorded for the 4500+ owner (edit reverted, out of my range):
 
-12. **`incomingHealAmpAbilitiesById`: "Consumed by the heal-apply fold (a later task) — nothing
+15. **`incomingHealAmpAbilitiesById`: "Consumed by the heal-apply fold (a later task) — nothing
     reads it yet"** (old line 4527-4528) — `incomingHealAmpAbilitiesOf` is read at
     engine.ts:3823 via `incomingHealAmpForRecipient`.
 
 ## FLAGGED FOR OWNER
 
-**None.** No comment in lines 1-4499 asserted a mechanic that the adjacent code visibly does not
-perform. Every false claim found was a wiring/reader/count claim (outcome 1 or 2), verifiable by
-grep and safe to rewrite or delete; none required a game-behaviour ruling.
+**None.** No comment in lines 1-4499 asserted a MECHANIC that the adjacent code visibly does not
+perform. Every false claim found — including the two always-zero / unreachable-state claims
+(items 12-13) — was settled by grep against a named producer or reader, never by inference about
+how the game ought to behave; each was therefore safe to rewrite. Nothing needed an owner ruling.
 
 Two adjacent observations, offered as notes rather than questions:
 
-- The ten false comments are a single systemic pattern, not ten independent slips: the H1, A2,
-  Task 9, PR5 and bySide workstreams all landed without sweeping the "no reader yet" comments they
-  wrote on the way in. Worth a lint or a review-checklist item rather than another sweep.
+- The ten reader-claim falsehoods are a single systemic pattern, not ten independent slips: the
+  H1, A2, Task 9, PR5 and bySide workstreams all landed without sweeping the "no reader yet"
+  comments they wrote on the way in. Worth a lint or a review-checklist item rather than another
+  sweep.
+- Items 12-13 are worth a second look for a different reason. Both are comments that fenced off a
+  case as impossible ("always 0", "HP can only reach 0 via enemy attacks") while a SECOND producer
+  existed elsewhere in the same file — `convertHitToSelfDot` and the #362 reversed repair. Neither
+  is a bug on its own, but "this can never happen" comments are the shape most likely to be
+  believed and built on.
 - `engine.ts:2792-2807` carries a genuine ⚠️ **OPEN RESIDUAL** (the side-biased
   `ctx.corrosionEntries` read in `buildDrainContext`). It was already labelled open before this
   sweep; the label is preserved and its "a later rung's job" framing removed, since nothing is
@@ -570,7 +610,7 @@ Two adjacent observations, offered as notes rather than questions:
   149). Four are deliberate keeps — current lines 279 (intra-cast clause order), 978-980
   (`dedupeByBuffName`), 2776 (applier-has-no-ctx) and 3615 (`repairCountBySource`'s "used to
   trigger", i.e. "is used to"). The other two are OUT OF MY RANGE and were left untouched: current
-  4412 = original 4527 (`incomingHealAmpAbilitiesById`, which is FALSE — see item 12) and current
+  4412 = original 4527 (`incomingHealAmpAbilitiesById`, which is FALSE — see item 15) and current
   4463 = original 4579 (`Wave 4 Task 8`). NOTE: because the file shrank by ~120 lines,
   `--to 4499` now reaches past original line 4499; the two out-of-range hits appear only for that
   reason.
