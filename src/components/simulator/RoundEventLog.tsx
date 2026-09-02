@@ -59,12 +59,39 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
     }
 };
 
-/** One target's outcome rendered inline: "{amount} (crit) → {hp}%" or "miss". */
+/**
+ * One target's outcome rendered inline: "{amount} (crit) → {hp}%" or "miss".
+ *
+ * `amount` is what LANDED. For the two grant kinds that can waste part of their output, the wasted
+ * portion is named in the same parenthetical: a repair onto a full HP bar reads
+ * "0 (full HP, 5,200 overhealed)", a shield onto a saturated pool "0 (pool full, 8,400 clipped)".
+ * Without the clause the saturated shield row was a bare, unexplained `0` — the #418 follow-up.
+ * The "pool full"/"full HP" reason appears only when NOTHING landed; a partial clip is
+ * self-explanatory ("2,100 (3,900 clipped)").
+ *
+ * Crit and waste share ONE parenthetical rather than stacking two — "1,400 (crit, 800 overhealed)".
+ * A row with no waste therefore renders exactly as it did before.
+ */
 const targetOutcome = (t: CombatLogTarget): string => {
     if (t.didHit === false) return 'miss';
     const parts: string[] = [];
-    if (t.amount !== undefined) parts.push(fmt(t.amount));
-    if (t.didCrit) parts.push('(crit)');
+    // ONE normalized number drives both the display and the "did anything land" test. `fmt`
+    // rounds, so gating on the raw `t.amount` let a fractional 0.3 HP render as a bare, unexplained
+    // `0` — the very row this clause exists to remove. Whatever the reader sees as zero is what
+    // gets the reason.
+    const shown = t.amount !== undefined ? Math.round(t.amount) : undefined;
+    if (shown !== undefined) parts.push(fmt(shown));
+    const notes: string[] = [];
+    if (t.didCrit) notes.push('crit');
+    if (t.overshield !== undefined) {
+        if (shown === 0) notes.push('pool full');
+        notes.push(`${fmt(t.overshield)} clipped`);
+    }
+    if (t.overheal !== undefined) {
+        if (shown === 0) notes.push('full HP');
+        notes.push(`${fmt(t.overheal)} overhealed`);
+    }
+    if (notes.length > 0) parts.push(`(${notes.join(', ')})`);
     let line = parts.join(' ');
     if (t.resultingHpPct !== undefined) {
         line = line

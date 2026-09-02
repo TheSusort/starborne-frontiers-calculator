@@ -596,7 +596,16 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         let targets: CombatLogTarget[];
         if (e.perTarget && e.perTarget.length > 0) {
             targets = e.perTarget.map((pt) => {
-                const t: CombatLogTarget = { targetId: pt.targetId, amount: pt.amount };
+                // `pt.amount` is the GROSS repair; the row reports what LANDED and names the
+                // waste separately (see `CombatLogTarget.overheal`). A reversed repair (#362)
+                // carries no `overheal` — it damaged rather than overflowed — so it nets to
+                // itself and stays whole.
+                const overheal = pt.overheal ?? 0;
+                const t: CombatLogTarget = {
+                    targetId: pt.targetId,
+                    amount: pt.amount - overheal,
+                };
+                if (overheal > 0) t.overheal = overheal;
                 if (pt.didCrit !== undefined) t.didCrit = pt.didCrit;
                 return t;
             });
@@ -618,7 +627,15 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         if (!ctx.currentTurn && !ctx.currentRound) return;
         let targets: CombatLogTarget[];
         if (e.perTarget && e.perTarget.length > 0) {
-            targets = e.perTarget.map((pt) => ({ targetId: pt.targetId, amount: pt.amount }));
+            // `pt.amount` is ALREADY the post-cap pool growth (#418), so — unlike the heal path
+            // above — nothing needs netting here; the clipped portion just rides along.
+            targets = e.perTarget.map((pt) => ({
+                targetId: pt.targetId,
+                amount: pt.amount,
+                ...(pt.overshield !== undefined && pt.overshield > 0
+                    ? { overshield: pt.overshield }
+                    : {}),
+            }));
         } else {
             // Fallback: one synthetic target per id in recipientIds[], no amount.
             targets = e.recipientIds.map((id) => ({ targetId: id }));
@@ -753,7 +770,16 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
         const entry: CombatLogEntry = {
             kind: 'heal',
             actorId: e.casterId,
-            targets: e.perTarget.map((pt) => ({ targetId: pt.targetId, amount: pt.amount })),
+            // Same net-and-annotate rule as the cast path's `heal-performed` above — one rule for
+            // every heal row, whichever channel produced it.
+            targets: e.perTarget.map((pt) => {
+                const overheal = pt.overheal ?? 0;
+                return {
+                    targetId: pt.targetId,
+                    amount: pt.amount - overheal,
+                    ...(overheal > 0 ? { overheal } : {}),
+                };
+            }),
             reactions: [],
         };
         ctx.attachEntry(entry);

@@ -3897,6 +3897,15 @@ const DocumentationPage: React.FC = () => {
                                         shown rather than an even split.
                                     </li>
                                     <li>
+                                        <strong>Wasted repairs and shields are named:</strong> Heal
+                                        and shield rows show what actually landed, and say how much
+                                        went nowhere. A repair onto a full HP bar reads &quot;0
+                                        (full HP, 5,200 overhealed)&quot; and a shield onto an
+                                        already-full shield pool reads &quot;0 (pool full, 8,400
+                                        clipped)&quot;, so a grant that had no effect is never
+                                        mistaken for one that did — nor for one that never happened.
+                                    </li>
+                                    <li>
                                         <strong>Buff grants show who cast them:</strong> A buff
                                         entry is attributed to the ship that granted it, with the
                                         ally that received it listed as the target — so a support

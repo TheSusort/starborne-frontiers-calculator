@@ -1018,6 +1018,159 @@ describe('buildCombatLog', () => {
         expect(entry.targets[0].targetId).toBe('B');
     });
 
+    // ─── Wasted-portion annotation (the #418 follow-up) ───────────────────────
+    //
+    // ONE rule across both grant kinds: `CombatLogTarget.amount` is what ACTUALLY LANDED, and the
+    // portion that went nowhere rides alongside in `overheal` / `overshield` so the row can say so.
+    // Before this, the two kinds disagreed — heal rendered the GROSS (an over-repair on a full ally
+    // read as a full-size heal) while shield rendered the post-cap growth (a grant onto a saturated
+    // pool read as a bare `0`, with no hint that anything had been attempted).
+
+    it('heal-performed: amount is the NET restored, with the clipped excess in overheal', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B', 'C'],
+                round: 1,
+                amount: 7400,
+                perTarget: [
+                    // Fully wasted: B was already at full HP.
+                    { targetId: 'B', amount: 5200, overheal: 5200 },
+                    // Partly wasted.
+                    { targetId: 'C', amount: 2200, overheal: 800 },
+                ],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        const b = entry.targets.find((t) => t.targetId === 'B')!;
+        const c = entry.targets.find((t) => t.targetId === 'C')!;
+        expect(b.amount).toBe(0);
+        expect(b.overheal).toBe(5200);
+        expect(c.amount).toBe(1400);
+        expect(c.overheal).toBe(800);
+    });
+
+    it('heal-performed: a repair that wastes nothing carries no overheal and keeps its amount', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B'],
+                round: 1,
+                amount: 300,
+                perTarget: [{ targetId: 'B', amount: 300 }],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const t = log[0].turns[0].entries[0].targets[0];
+        expect(t.amount).toBe(300);
+        expect(t.overheal).toBeUndefined();
+    });
+
+    it('heal-performed: a REVERSED repair is not over-repair — the amount stays whole', () => {
+        // #362: a reversed repair damages instead of restoring, so its `raw` is not a heal that
+        // was clipped. It carries no `overheal` and must not be netted down to something else.
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'heal-performed',
+                casterId: 'A',
+                targets: ['B'],
+                round: 1,
+                amount: 900,
+                perTarget: [{ targetId: 'B', amount: 900, reversed: true }],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const t = log[0].turns[0].entries[0].targets[0];
+        expect(t.amount).toBe(900);
+        expect(t.overheal).toBeUndefined();
+    });
+
+    it('reactive-heal-performed: nets the same way as the cast path', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'reactive-heal-performed',
+                casterId: 'A',
+                round: 1,
+                amount: 1000,
+                perTarget: [{ targetId: 'B', amount: 1000, overheal: 600 }],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const t = log[0].turns[0].entries[0].targets[0];
+        expect(t.amount).toBe(400);
+        expect(t.overheal).toBe(600);
+    });
+
+    it('shield-applied: amount is already the post-cap growth — overshield rides alongside', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'shield-applied',
+                granterId: 'A',
+                recipientIds: ['B', 'C'],
+                round: 1,
+                amount: 2100,
+                overshield: 12300,
+                perTarget: [
+                    // Saturated pool: the whole grant was clipped (#418's `amount: 0` emit).
+                    { targetId: 'B', amount: 0, overshield: 8400 },
+                    { targetId: 'C', amount: 2100, overshield: 3900 },
+                ],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const entry = log[0].turns[0].entries[0];
+        const b = entry.targets.find((t) => t.targetId === 'B')!;
+        const c = entry.targets.find((t) => t.targetId === 'C')!;
+        expect(b.amount).toBe(0);
+        expect(b.overshield).toBe(8400);
+        expect(c.amount).toBe(2100);
+        expect(c.overshield).toBe(3900);
+    });
+
+    it('shield-applied: a grant that clips nothing carries no overshield', () => {
+        const events: CombatEvent[] = [
+            ev({ type: 'round-started', round: 1 }),
+            ev({ type: 'turn-started', actorId: 'A', round: 1 }),
+            ev({
+                type: 'shield-applied',
+                granterId: 'A',
+                recipientIds: ['B'],
+                round: 1,
+                amount: 500,
+                perTarget: [{ targetId: 'B', amount: 500 }],
+            }),
+            ev({ type: 'turn-ended', actorId: 'A', round: 1 }),
+            ev({ type: 'round-ended', round: 1 }),
+        ];
+        const log = buildCombatLog(events, roster, initialCharge);
+        const t = log[0].turns[0].entries[0].targets[0];
+        expect(t.amount).toBe(500);
+        expect(t.overshield).toBeUndefined();
+    });
+
     it('buff-applied: self-buff — actorId is the granter (same as receiver), recipient in targets', () => {
         const events: CombatEvent[] = [
             ev({ type: 'round-started', round: 1 }),
