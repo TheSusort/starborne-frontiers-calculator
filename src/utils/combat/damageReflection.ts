@@ -3,8 +3,8 @@
  *
  * When a ship wearing Reflect takes a direct hit, it reflects a portion of the
  * damage back at the attacker. This module computes that raw reflected amount
- * **before shield absorb** — shield is applied at the engine seam in a
- * separate task.
+ * **before shield absorb** — the engine seam applies shield, inside
+ * `applyVictimDamage` (`engine.ts`).
  *
  * Empirically-validated model (two in-game duels):
  *   reflected = pct% × netHpDamage × affinityFactor
@@ -30,13 +30,13 @@ export function reflectedDamageForHit(args: {
      * threw the original hit and is now the VICTIM of the thorns. The incoming-reduction channel, resolved at
      * `engine.ts` as `incomingReductionForHit(incomingAbilitiesOf(attacker.id), …)`.
      *
-     * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. That name let a Critical survive a
-     * full review: "attacker" reads as POSITIONAL here (who threw the original hit) where every
-     * reader took it as CAUSAL (attacker-side, therefore not a victim-side reduction to strip).
+     * ⚠️ DO NOT RENAME THIS TO `attackerIncomingReductionPct`. "attacker" reads as POSITIONAL
+     * here (who threw the original hit) where a reader takes it as CAUSAL (attacker-side, and
+     * therefore not a victim-side reduction to strip).
      * The distinction is not cosmetic — `attackerSideReductionPct` in `victimDamage.ts`, ONE call
      * away, is where "attacker" genuinely IS causal (the attacker's own squad-leader penalty). Two
      * adjacent parameters with the same prefix and opposite meanings is exactly the shape that
-     * produced the defect, so the positional one no longer carries the prefix.
+     * produces this defect, so the positional one does not carry the prefix.
      * (`attackerDefenceReductionPct` below is positional in the same way and keeps its name only
      * because it names a stat OF that ship rather than a side; read it as "the bounce-back
      * recipient's own defence".)
@@ -47,35 +47,28 @@ export function reflectedDamageForHit(args: {
 }
 
 /**
- * #358 ADDENDUM 2/3: BOTH axes of one reflected hit, from ONE evaluation.
+ * #358: BOTH axes of one reflected hit, from ONE evaluation — so the model cannot be changed on
+ * one axis and left stale on the other.
  *
  *  • `damage`       — what the recipient takes: the full empirical model above, every term intact.
- *  • `preMitigation` — the "damage absorbed" axis (C2): the same hit with EVERY reduction that
+ *  • `preMitigation` — the "damage absorbed" axis: the same hit with EVERY reduction that
  *    belongs to the recipient removed. Two terms go, both replaced by an exact 1:
- *    `attackerDefenceReductionPct` (addendum 2) and `reflectVictimIncomingReductionPct` (addendum 3).
+ *    `attackerDefenceReductionPct` and `reflectVictimIncomingReductionPct`.
  *    What survives is the hit as THROWN — the reflect percentage, the reflector's affinity, and
  *    the `netHpDamage` the reflector actually took.
  *
- * WHY `reflectVictimIncomingReductionPct` COMES OUT (it used to be folded into both). The previous
- * revision of this comment argued the opposite: that stripping it was "a separate, unmade decision
- * (this module's own duel-fit model owns it)". That argument is WRONG, and it is wrong in a way
- * worth spelling out, because a comment arguing against a fix is how the defect survived a review.
+ * WHY `reflectVictimIncomingReductionPct` COMES OUT of `preMitigation`.
  * The duel-fit model governs `damage` — the number the recipient's HP bar actually loses — and
- * `damage` is untouched by this. `preMitigation` is not a fit to anything; it is by construction a
+ * `damage` keeps the term. `preMitigation` is not a fit to anything; it is by construction a
  * DEPARTURE from the fit, since it already replaces the fitted defence term with a literal 1. A
  * term cannot be defended as load-bearing for an empirical constant on an axis that no constant is
  * fitted against.
  * MEASURED, on a defender swinging 200% of 50,000 attack into a 50%-reflect enemy over 4 rounds:
  * `0% incoming-reduction -> 200,000 absorbed` · `30% -> 140,000` · `60% -> 80,000`, with IDENTICAL
- * round counts. A purely defensive passive quartered its owner's own headline number — the same
- * inversion the defence term, the `Inc. Damage Down` term and the incoming-block proc were each
- * fixed for, on the fourth channel. Pinned by the reflect direction arm in
+ * round counts. Leaving it in makes a purely defensive passive quarter its owner's own headline
+ * number — the same inversion the defence term, the `Inc. Damage Down` term and the
+ * incoming-block proc each carried. Pinned by the reflect direction arm in
  * `defenseSurvivabilitySim.test.ts`.
- *
- * WHY ONE FUNCTION AND NOT TWO. This shipped as `reflectedDamageForHit` plus a hand-copied
- * `reflectedDamagePreDefenceForHit` — the same five lines twice, with NOTHING tying the copies
- * together. A change to the model (a new term, a different clamp) would have had to be made in two
- * places by memory, and the compiler would not have said a word.
  */
 export function reflectedDamageParts(args: {
     reflectPct: number;

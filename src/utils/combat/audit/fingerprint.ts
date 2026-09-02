@@ -50,7 +50,7 @@ export function diffFingerprints(
  *
  *  The `:slot` suffix is NOT a reliable CAST-vs-passive/reactive marker, despite appearances.
  *  `ctx.pendingSkill` (`{skillName, slot}`) is set exactly once per cast — from the single
- *  `skill-fired` event emitted before any of its clauses resolve (`playerTurn.ts`) — and EIGHT
+ *  `skill-fired` event emitted before any of its clauses resolve (`playerTurn.ts`) — and several
  *  log-entry handlers in `buildCombatLog.ts` each spread `...(ctx.consumePendingSkill() ?? {})`,
  *  which reads-and-clears it. So the tag is single-use FOR THE WHOLE CAST: whichever of those
  *  handlers runs first wins `:slot`, and every later entry from that same cast lands BARE. A bare
@@ -64,9 +64,9 @@ export function diffFingerprints(
  *  ONE handler is not among those: the `ability-performed` handler calls `ctx.currentSkillTag()`
  *  instead, which LATCHES the tag for the rest of the cast so all N of a multi-hit skill's attack
  *  rows read as the same named skill.
- *  That does not change the outcome described above — `currentSkillTag` still consumes
- *  `pendingSkill` on its first call, so a handler that ran earlier has already cleared it and the
- *  attack still lands bare (verified: the Malvex snapshot is unmoved). Only the mechanism differs:
+ *  The latch does not exempt it from the race — `currentSkillTag` still consumes `pendingSkill`
+ *  on its first call, so a handler that ran earlier has already cleared it and the attack still
+ *  lands bare. What the latch buys is narrower:
  *  the `attack` token can lose the race, but it can no longer lose it to a SIBLING attack row of
  *  its own cast. Its committed `richEnemy` snapshot carries both `attack` and `attack:charged` for
  *  exactly this reason: once the seeded enemy shield is spent, later charged casts grant no Barrier

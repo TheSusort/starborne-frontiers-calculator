@@ -30,9 +30,9 @@ export const EXPOSED_INCOMING_PCT = 100;
  *
  * SETTLED GAME RULE (owner ruling, 2026-08-10 — LOCKED): a hit READS ALL of the victim's stacks but
  * SPENDS EXACTLY ONE, so each stack arms its own hit. 2 stacks → +200% on the first hit, then
- * +100% on the second, then nothing. This function is the READ half and is unchanged by that
- * ruling; {@link consumeExposed} is the SPEND half, and it spends one stack via the status engine's
- * stack axis. The live count arrives through `payload.stacks` because `timedAbilityStatuses`
+ * +100% on the second, then nothing. This function is the READ half; {@link consumeExposed} is
+ * the SPEND half, and it spends one stack via the status engine's stack axis.
+ * The live count arrives through `payload.stacks` because `timedAbilityStatuses`
  * spreads the entry's own live count over the shared registered payload — there is no second store
  * of stack counts to fall out of step with expiry or victim death.
  *
@@ -42,10 +42,10 @@ export const EXPOSED_INCOMING_PCT = 100;
  * channels are the SCHEDULED store (keyed to the global `__enemy__` sentinel, so a per-victim
  * removal can never reach it) and the aura/accumulating ability channel (`recurring`, living in
  * maps `consumeTimedEnemyStatusStack` never visits). A manually selected DPS-mode `Exposed` arrives
- * always-active on the scheduled channel and used to amplify EVERY direct hit of the battle by
- * +100%, which contradicts the status's own text; it is now INERT instead — the faithful rendering,
- * since "the next direct hit" has no standing value to model, the same reason the status is
- * name-keyed rather than a `parsedEffects` entry. Both corpus appliers (Amartya's reaction,
+ * always-active on the scheduled channel and is therefore INERT — amplifying EVERY direct hit of
+ * the battle by +100% would contradict the status's own text, and inertness is the faithful
+ * rendering, since "the next direct hit" has no standing value to model, the same reason the status
+ * is name-keyed rather than a `parsedEffects` entry. Both corpus appliers (Amartya's reaction,
  * Nayra's cast) land on the timed channel via `applyTimedAbilityStatus`, so nothing real is lost.
  *
  * (`timedAbilityStatuses` also surfaces the persistent-stacking store, which the stack spend

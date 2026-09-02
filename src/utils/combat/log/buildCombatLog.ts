@@ -27,8 +27,7 @@ const dotNote = (dotType: DoTType, tier: number | undefined, stacks: number): st
  * so it can report the TRUE per-victim crit outcome instead of the anchor-only guess. (There is
  * one such event per SUB-ATTACK, not one per cast — a `hits: N` skill produces N attack rows, all
  * carrying the same sticky skill tag; the deferral, and therefore this sort, applies to each.)
- * That is why the attack line landed last, under its own
- * consequences:
+ * Without this sort the attack line renders last, under its own consequences:
  *
  *     Butcher: charge 0→1
  *     Butcher → Enemy Heliodor: Inferno II resisted
@@ -878,10 +877,8 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             kind: 'bomb',
             actorId: e.actorId,
             // The burst is a single aggregate payout, carried on the HOLDER the bomb went off on
-            // (`victimId`) — `actorId` stays the applier who gets credited. This used to key the
-            // target as `actorId` too, on a stale "no per-victim breakdown on the event" comment
-            // (victimId has been required since Wave 5 C2), so a bomb Ruiner planted on Heliodor
-            // rendered as "Ruiner → Ruiner".
+            // (`victimId`) — `actorId` stays the applier who gets credited. Keying the target as
+            // `actorId` too would render a bomb Ruiner planted on Heliodor as "Ruiner → Ruiner".
             targets: [{ targetId: e.victimId, amount: e.damage }],
             reactions: [],
             note: `bombs detonated ×${e.stacks}`,

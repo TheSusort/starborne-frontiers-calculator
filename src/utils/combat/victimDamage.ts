@@ -147,12 +147,10 @@ export function victimDefenceMitigation(
 /**
  * Damage dealt to a single victim by ONE hit of a multi-hit skill.
  *
- * NO PRODUCTION CALLERS, DELIBERATELY KEPT. Its pre-mitigation sibling
- * (`victimHitDamagePreMitigation`) was deleted for exactly that reason, so the asymmetry is worth
- * stating: this one survives because it is the `.damage`-only façade a dozen unit tests are written
- * against (`victimDamage.test.ts`, `positionalApply.test.ts`), and those tests are real users. It
- * is a one-line delegation to `victimHitDamageParts`, so it cannot drift from the parts helper the
- * way the hand-copied pre-mitigation twin did. Delete it only together with those tests.
+ * NO PRODUCTION CALLERS, DELIBERATELY KEPT: it is the `.damage`-only façade the unit tests are
+ * written against, and those tests are real users. It is a one-line delegation to
+ * `victimHitDamageParts`, so it cannot drift from the parts helper. Delete it only together with
+ * those tests.
  *
  * @param s        attacker-side scalars (fixed across victims)
  * @param v        this victim's defensive profile

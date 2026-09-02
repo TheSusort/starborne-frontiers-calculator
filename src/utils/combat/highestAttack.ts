@@ -4,12 +4,11 @@
  * when `ids` is empty. Pure — the caller supplies live attack, so the engine wires
  * effectiveStatsOf and this stays unit-testable (mirrors incomingEffects.ts / outgoingEffects.ts).
  *
- * #407: the `isLiving` predicate parameter was REMOVED. Liveness is no longer this function's
- * question — every caller hands it a roster already narrowed by `aliveTargetsOf`
- * (targetableActors.ts), which is THE one gate for the whole selector layer. Do not re-add a
- * liveness argument here: asking the same question at four separate sites is exactly how
- * `mostBuffsAmong` ended up as the one site that forgot to ask it, and let a buffed corpse win a
- * purge selection 1086 times.
+ * Liveness is NOT this function's question (#407): every caller hands it a roster already
+ * narrowed by `aliveTargetsOf` (targetableActors.ts), which is THE one gate for the whole
+ * selector layer. Do not add a liveness argument here — re-asking the same question per selector
+ * is how one selector ends up the site that forgets to ask, and lets a buffed corpse win a
+ * selection.
  */
 export function highestAttackAmong(
     ids: string[],
