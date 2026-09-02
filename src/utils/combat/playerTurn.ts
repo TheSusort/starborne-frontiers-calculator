@@ -1526,7 +1526,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  units adjacent to its own target, with no branching here.
      *
      *  `enemyAdjacentCount` anchors on the resolved primary `targetId`, matching every other
-     *  target-anchored adjacency read in this file (the splash-DoT fan-out at ~:4008 and the
+     *  target-anchored adjacency read in this file (the splash-DoT fan-out and the
      *  `adjacent-enemies` debuff scope both call `adjacentEnemyIdsFor(targetId)`). A no-victim
      *  turn has no anchor, so the question cannot be asked and the member stays absent. */
     const liveCountCtx: {
@@ -1588,7 +1588,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  as it stood before the cast. Harmless for the boolean — removing 30% of a positive pool
      *  leaves 70% of it, still positive — so pre- and post-strip agree; see the shield-strip site
      *  for the ordering. Empty when there is no victim: `enemyShielded` defaults false
-     *  (triggers.ts:1793, roundContext.ts:151), so omission answers "there is no enemy to be
+     *  (triggers.ts, roundContext.ts), so omission answers "there is no enemy to be
      *  shielded". This is the field the ghost was lying about (plan §A.5). */
     const victimShieldGateCtx = (v: CombatActor | undefined) =>
         v !== undefined ? { enemyShielded: v.shieldPool > 0 } : {};
@@ -1611,7 +1611,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // `Charged Overdrive II` — one-shot +20 points of Defense Penetration on the next CHARGED
     // activation. Read and consumed HERE, immediately after `action` is decided and before this
     // turn's own slot-matched ability statuses are applied to the status store below (the
-    // timedSelfBySlot loop, ~:1719, which includes an `all-allies` self-grant reaching this same
+    // timedSelfBySlot loop, which includes an `all-allies` self-grant reaching this same
     // actor). Reading any later would let a self-granting charged cast consume the copy it just
     // granted itself, boosting the very cast that grants it — the game text ("the next Charged
     // Skill activation") requires the grant to only ever affect a LATER cast. An ally's grant is
@@ -1879,7 +1879,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // status-engine sourceFired hook, and the reactive (triggers.ts) path — uses the live value
     // uniformly.
     // With NO VICTIM nothing lands, and it does so WITHOUT drawing the gate — a phantom
-    // draw against a 0 chance (makeRateGate draws unconditionally, rateAccumulator.ts:105) would
+    // draw against a 0 chance (makeRateGate draws unconditionally, rateAccumulator.ts) would
     // shift the deterministic schedule of every later real application for no reason.
     //
     // #413: the decision now reports WHICH of the three arms answered, because only the third one
@@ -2239,7 +2239,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // The caster's own shield-presence gate, live-derived from
         // actor.shieldPool (SAME field/derivation as modifierCtx's selfShielded below) — REQUIRED
         // here because THIS ctx (not modifierCtx) gates the TIMED ENEMY DEBUFF application just
-        // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check at :1476). APEX's
+        // below (the `conditionsMet(status.conditions, preDebuffGateCtx)` check). APEX's
         // charged Disable ("If this Unit has Shield, the primary target is inflicted with
         // Disable") is a self-shield-gated NAMED debuff — without this field, selfShielded
         // defaults false here (buildRoundContext's DPS-safe default) and the debuff would never
@@ -2249,7 +2249,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Approximates max HP with the static base stat (`actor.stats.hp`), NOT the live
         // buff-inclusive value drain-time reads (engine.ts's isSelfShieldFull via
         // recipientMaxHp). This ctx is built before `dmgStats`/`effectiveHp` exist in the turn
-        // (they're computed further down, :1878/:1987) and cannot be reordered here without
+        // (they're computed further down) and cannot be reordered here without
         // reordering the whole turn, which is out of scope. Consequence: an actor under an
         // active max-HP buff can read "full" here slightly EARLY (base HP is smaller than the
         // buffed HP, so the shieldPool>=threshold trips sooner). Inert today regardless — the
@@ -2710,12 +2710,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg,
         turnsTaken: actor.turnsTaken,
         // Approximates max HP with the static base stat (`actor.stats.hp`), same limitation and
-        // same reasoning as preDebuffGateCtx above (:1461) — this ctx is also built before
-        // `dmgStats`/`effectiveHp` exist in the turn (computed further down, :2055/:2056) and
+        // same reasoning as preDebuffGateCtx above — this ctx is also built before
+        // `dmgStats`/`effectiveHp` exist in the turn (computed further down) and
         // cannot be reordered here without reordering the whole turn, which is out of scope.
         // THIS is the ctx that matters for the subject: the per-slot timed-SELF-buff loop just
-        // below (`timedSelfBySlot`, gated via `conditionsMet(status.conditions, postDebuffGateCtx)`
-        // at :1763) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
+        // below (`timedSelfBySlot`, gated via
+        // `conditionsMet(status.conditions, postDebuffGateCtx)`) is what fires an ON-CAST ability gated on `self-shield-full` (Quixilver R2's
         // shape, e.g. a charge/active-slot "if this Unit has Shield equal to 100% of its max HP"
         // grant). Without this field, selfShieldFull defaults false here (buildRoundContext's
         // DPS-safe default) and such a cast-path grant would be permanently suppressed regardless
@@ -2849,10 +2849,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfDebuffNames: selfDebuffNamesArg,
         selfShielded: actor.shieldPool > 0,
         // Approximates max HP with the static base stat, same limitation as preDebuffGateCtx
-        // above (:1470) — but here it is a hard dependency ordering, not just "not yet
+        // above — but here it is a hard dependency ordering, not just "not yet
         // computed": this ctx is threaded into effectiveDamageStatsOf as `modifierCtx`, which
         // gates `modifierAbilities` and folds the result into `mod.hp` → `dmgStats.hp` →
-        // `effectiveHp` (:1878/:1987 below). Reading `effectiveHp` here would be circular —
+        // `effectiveHp` (below). Reading `effectiveHp` here would be circular —
         // exactly the self-referential-gate class the PRE-modifier `critBuffForGates` estimate
         // above (layers 1+2+3, see the comment two above this ctx) exists to avoid for crit.
         // Consequence: an actor under an active max-HP buff can read "full" here slightly
@@ -2935,7 +2935,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Final four-layer effective-stat fold (layer 1 scheduledTotals + layers 2+3
     // abilitySelfEffects + layer 4 modifierAbilities gated by modifierCtx). The accessor
     // reproduces the prior inline fold byte-for-byte; the turn loop owns gating/side effects.
-    // `Charged Overdrive II`'s `chargedOverdrivePen` was read/consumed above (~:1046), before the
+    // `Charged Overdrive II`'s `chargedOverdrivePen` was read/consumed above, before the
     // self-status-apply loop; folded here into base.defensePenetrationBuff rather than into
     // effectiveStats.ts: `dmgStats` is turn-local, rebuilt every turn, so the bonus cannot outlive
     // this cast. Pushing it into the standing stat instead would leak +20% pen into every later hit
@@ -2952,7 +2952,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //
     // WHY ALL FOUR SIT HERE. The shadowing comparison needs this actor's OWN named statuses on the
     // same channels, and those live in TWO lists: the scheduled self-buffs (layer 1) and
-    // `abilitySelfEffects` (layers 2+3, resolved at ~:2516). The second does not exist yet at the
+    // `abilitySelfEffects` (layers 2+3, resolved). The second does not exist yet at the
     // early `preFight` fold where #367 originally summed the heal pair — which is exactly why #396
     // moved them down here rather than shadowing them in place. The delta is applied at the last
     // moment before `scheduledTotals` is consumed, which is safe and checked: nothing between the
@@ -2977,16 +2977,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // The claim above ("nothing between the early site and here reads ...") holds for the four
     // original channels but NOT for the two crit ones this change adds. Both staged gate estimates
     // read them earlier:
-    //   • `critBuffForGates`   — init ~:1859, `+=` layers 2+3 ~:2539, consumed as
-    //                            `cappedCrit(critBuffForGates)` at ~:1987, ~:2445 and ~:2566;
-    //   • `critDamageForGates` — init ~:1866, consumed as `selfCritPower` at ~:2014, ~:2610, ~:2917.
-    // All six reads happen BEFORE this point, so those estimates do not see the enemy-applied term.
+    //   • `critBuffForGates`   — initialised, then `+=`'d by layers 2+3, then consumed as
+    //                            `cappedCrit(critBuffForGates)`;
+    //   • `critDamageForGates` — initialised, then consumed as `selfCritPower`.
+    // Every one of those reads happens BEFORE this point, so those estimates do not see the enemy-applied term.
     // That is the SAME documented approximation they already carry for layer 4 (`modifierAbilities`,
     // excluded for self-referential-gate avoidance) — not a new class of inaccuracy. Folding earlier
-    // is not available: the shadowing comparison needs `abilitySelfEffects`, which does not exist at
-    // :1859, which is exactly why #396 moved the heal pair down here.
+    // is not available: the shadowing comparison needs `abilitySelfEffects`, which does not exist
+    // where those estimates are initialised — which is exactly why #396 moved the heal pair down
+    // here.
     // The AUTHORITATIVE values are exact: `effectiveCrit` / `dmgStats.critDamage` drive the real
-    // crit rolls and damage, and the ctx at ~:2890 publishes `effectiveCritRate: effectiveCrit`,
+    // crit rolls and damage, and the ctx publishes `effectiveCritRate: effectiveCrit`,
     // the final number. Do NOT "fix" this by adding the delta to the gate estimates — they are
     // already consumed by the time control reaches here.
     //
@@ -3237,20 +3238,19 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // silently never fire); this restores the correct-for-single-target value while also
         // fixing the no-victim value from absent to the honest 0.
         enemiesHitThisCast: aoeVictimIds?.length ?? (hasVictim ? 1 : 0),
-        // Ship-kit Wave 4, Task 3 (review follow-up): SAME field/derivation as preDebuffGateCtx
-        // (:1444) and modifierCtx (:1724) above — REQUIRED here because THIS ctx is what
-        // gateFiringAbilities consumes just below (:1956) to gate `type:'control'` payload
+        // SAME field/derivation as preDebuffGateCtx and modifierCtx above — REQUIRED here because THIS ctx is what
+        // gateFiringAbilities consumes just below to gate `type:'control'` payload
         // abilities. APEX's charged Disable is modelled BOTH as a named debuff (gated by
         // preDebuffGateCtx) AND as a `control`-type ability (effect:'disable', gated by this
-        // ctx) — both twins carry the same self-shield condition (buildShipAbilities.ts
-        // :3237-3238), so both need selfShielded here or the control twin is permanently
+        // ctx) — both twins carry the same self-shield condition (in `buildShipAbilities`),
+        // so both need selfShielded here or the control twin is permanently
         // suppressed regardless of the caster's real shieldPool (control-applied never fires,
         // the combat log's kind:'control' Disable entry never appears — even with a shield).
         selfShielded: actor.shieldPool > 0,
         // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
-        // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (:1987,
+        // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (computed
         // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
-        // stored into effectiveMaxHp at turnCtx below, :3289) — so this reads byte-identically
+        // stored into effectiveMaxHp at turnCtx below) — so this reads byte-identically
         // to the drain-time gate instead of the static base stat, which would disagree under an
         // active max-HP buff.
         selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
@@ -3565,12 +3565,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // accumulator regardless of any event guard. It also zeroes the `% of damage dealt` support
     // basis below (`castDeliveredDamage ?? directDamage`), which is the same ruling applied to a
     // repair scaled off damage that never happened.
-    // WHY THE THREE ASSIGNMENTS AND NOT A POINT FURTHER UP: the whole chain from `effectiveDefense`
-    // (:2472) down to `passiveDamage` above consists of intermediate FACTORS whose only consumers
+    // WHY THE THREE ASSIGNMENTS AND NOT A POINT FURTHER UP: the whole chain from
+    // `effectiveDefense` down to `passiveDamage` above consists of intermediate FACTORS whose only consumers
     // are these three lines (grep-verified: `effectiveDefense`, `damageReduction`, `nonCritFactor`,
     // `postDefenseFactor`, `preCritDamage` and `passiveDamage` appear nowhere else), so no phantom
     // magnitude escapes past this point and each returned number is fenced where it is produced
-    // rather than zeroed after the fact. `detonationDamage` is fenced at its own branch (:3147).
+    // rather than zeroed after the fact. `detonationDamage` is fenced at its own branch.
     // Corpus-inert today — no shipped ally-target ship carries a damage clause (plan §A.2) — so
     // this is zero movement.
     const directDamage = hasVictim ? preCritDamage * postDefenseFactor + passiveDamage : 0;
@@ -3605,10 +3605,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // so it should fire the 'critically repaired' rider and not the 'critically hit an enemy'
     // rider." The engine already splits exactly that way, so this fence lands on the right side of
     // it: `on-crit` / `on-ally-crit` ride THIS event and are per-ATTACK, documented "critically
-    // hits an enemy" (triggers.ts:308, :434, :789) — losing them off an ally-targeted support cast
+    // hits an enemy" (triggers.ts) — losing them off an ally-targeted support cast
     // is the INTENDED consequence, not collateral. The repair-crit rider is untouched:
     // `on-ally-critically-repaired` rides `heal-performed` and reads its own `critHits`
-    // (triggers.ts:722-731), which the heal block below still emits. Hermes carries both riders and
+    // (triggers.ts), which the heal block below still emits. Hermes carries both riders and
     // is therefore the case to name: after this rung its ally-targeted repair still fires the
     // critically-repaired rider and no longer fires the critically-hit-an-enemy one.
     //
@@ -3643,7 +3643,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // DAMAGE per event is the cast's pre-funnel `directDamage` split N ways — the SAME basis
         // and the SAME split the positional path uses (`share = dap.damage / emitting.length`).
         // Sigma over the loop reproduces the old single event's `damage` exactly, so NO damage
-        // total moves. Looping buys zero damage accuracy (victimDamage.ts:16-30 proves the fold
+        // total moves. Looping buys zero damage accuracy (victimDamage.ts proves the fold
         // is algebraically identical); it buys one derivation of "a sub-attack" instead of two
         // that can drift.
         //
@@ -3692,7 +3692,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // bound target already be at 0 before the cast begins", for which the answer on the sink is
         // yes, permanently, without a death. `currentHp <= 0` conflates "at the HP floor" with
         // "dead"; on the sink those are different facts. `destroyedRound` is the canonical
-        // aliveness signal (state.ts:151, stamped once by `recordDestroyed`, state.ts:243 — the
+        // aliveness signal (state.ts, stamped once by `recordDestroyed`, state.ts — the
         // same signal the dead-owner gate at triggers.ts ~2514 reads) and is never stamped on the
         // sink, so the guard is inert there and fires only on a genuinely destroyed bound target.
         // The unreachability derivation, re-walked against source for PR5 and still accurate:
@@ -3732,13 +3732,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
         //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real
         //     grouping:
-        //       – POSITION-gated: bomb splash-on-death (engine.ts:4772, `victim.position !==
+        //       – POSITION-gated: bomb splash-on-death (engine.ts, `victim.position !==
         //         undefined`) and positioned bomb/accumulator bursts (`applyPositionedTimedBurst`,
         //         engine.ts ~6286, `isPositional(actor.position, opposingRoster)`).
         //       – VICTIM'S-OWN-KIT-gated: the protection redirect (engine.ts ~4181) applies to the
         //         hit victim's own PROTECTORS, and a DoT-tick batch applies to the container's own
         //         carrier. The kit-less sink is never granted Protection and carries no DoTs.
-        //       – NEITHER: reflect (engine.ts:4982) and counterattack (engine.ts:5307) resolve
+        //       – NEITHER: reflect (engine.ts) and counterattack (engine.ts) resolve
         //         their victim from whoever DELIVERED the triggering hit —
         //         `allActorsById.get(cause.killerId)` and the `counterTargetId` triggers.ts routes
         //         into `applyCounterAttack`'s `attackerId`. Position has nothing to do with it.
@@ -3747,9 +3747,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         //   • `forceDetonateBomb` (Lingshe/Heliodor countdown-to-0) has TWO producers and NEITHER
         //     is position-gated. (a) The reactive cleanse path resolves same-side recipients only
         //     (`reactiveRecipients` → 'ally' / 'all-allies' / 'adjacent-allies' / self,
-        //     triggers.ts:2118), so it never reaches an opposing id. (b) `reduceEnemyBombs`
+        //     triggers.ts), so it never reaches an opposing id. (b) `reduceEnemyBombs`
         //     (this file, ~2556 → `reduceBombsOnVictim` ~941 → `args.forceDetonateBomb` →
-        //     `forceDetonateBombOnVictim`, engine.ts:6252 → `applyVictimDamage`) routes to
+        //     `forceDetonateBombOnVictim`, engine.ts → `applyVictimDamage`) routes to
         //     OPPOSING victims and never touches `reactiveRecipients`. There is no guard inside it.
         //     WAS-COUPLED-TO (PR5's WARNING, NARROWED — not discharged — by PR6; kept because a
         //     reader tracing why the guard below exists needs to know what it replaced): path (b)
@@ -3779,7 +3779,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const emitHits = hits > 0 ? hits : 1;
         for (let h = 0; h < emitHits; h++) {
             // R5 whiff guard. `destroyedRound` is the bound target's DEATH stamp
-            // (state.ts:151, written once by `recordDestroyed`): once set, the remaining
+            // (state.ts, written once by `recordDestroyed`): once set, the remaining
             // sub-attacks land on a corpse and, per R5, deal nothing — so they emit nothing either.
             // Deliberately NOT `currentHp <= 0`, which is an HP FLOOR and not a death: the
             // vestigial sim/healing sink sat clamped at 0 forever without ever dying, and gating
@@ -3832,7 +3832,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // `firedKey` in the reactive-damage branch). Emitted unconditionally now that this
                 // path has a real sub-attack identity. Safe at hits === 1: both maps
                 // (`procDecisionThisSubAttack`, `reactionFiredThisAttack`) are cleared at every
-                // actor turn-start (engine.ts:7730/7735) and both keys are already owner-scoped,
+                // actor turn-start (engine.ts) and both keys are already owner-scoped,
                 // so moving the suffix from 'x' to 0 is a pure rename with no collision.
                 subAttackIndex: h,
                 didHit: true,
@@ -4305,8 +4305,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
     // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
     // Sourced from BOTH the firing slot (gatedSkill: Sokol/Lev, charged) AND the always-active
-    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine (:2733-2739
-    // below) and the extendDoTs/extendInflictedDoTs combine (:2236/:2351 above), since a
+    // passive slot (gatedPassive: Ripper) — mirroring the healAbilities combine
+    // (below) and the extendDoTs/extendInflictedDoTs combine (above), since a
     // gatedSkill-only scan (like the purge/steal loops, whose abilities are never passive-slot
     // in the corpus) would silently skip Ripper's passive-slot extend ability.
     // conditionsMet(ab.conditions, ctx) evaluates Lev's self-crit gate against THIS cast's live
@@ -4356,7 +4356,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             }
         } else {
             // Ripper: 'all-allies' — same allyRoster pattern the ally-charge-gain block uses
-            // (:2118-2123 above): healing-mode roster when present, else the live same-side
+            // (above): healing-mode roster when present, else the live same-side
             // roster, narrowed through supportRecipients (the caster's own footprint pattern,
             // if any — undefined pattern/anchor leaves the roster unfiltered, so Ripper's own
             // buffs extend too, matching "All allies extend their active Buffs"). Independent of
@@ -4652,10 +4652,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // `selfAbilityStatuses` / `entry.activeSelfBuffs`, which are this actor's OWN status
             // stores. So `actor` is passed straight through — no `recipientActor(actor.id)`
             // round-trip. That lookup used to sit here for the off-anchor case and was pure
-            // indirection: `recipientActor` is `allActorsById.get(id)` (engine.ts:3783) over
-            // `[...teamCombatActors, attacker, ...enemyAttackerActors]` (engine.ts:2834/2844),
+            // indirection: `recipientActor` is `allActorsById.get(id)` (engine.ts) over
+            // `[...teamCombatActors, attacker, ...enemyAttackerActors]` (engine.ts),
             // while `actor` is `runtime.actor` and every runtime is built over one of those same
-            // objects (engine.ts:2391 `actor: attacker`, :2492 `actor: teamActor`, :2769
+            // objects (engine.ts `actor: attacker` `actor: teamActor`
             // `enemyAttackerActors = enemyPlayerRuntimes.map((r) => r.actor)`) — so it returned
             // the identical object on both sides, on every reachable path. Both HoT sources are
             // keyed to `actor.id` as well (`timedAbilityStatuses('self', actor.id)` and
@@ -4728,9 +4728,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // R2 is NOT a claim about `repairedThisRound`, and the two must not be conflated: an
         // on-repaired trigger and the `'target-repaired-this-round'` ability CONDITION are
         // different channels. The tick DOES enter `repairedThisRound` — `applyHealToTarget` adds
-        // its victim whenever `consumed > 0` (engine.ts:3756), the set is read back as
-        // `targetRepairedThisRound` when an actor's turn args are built (engine.ts:8310), and that
-        // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts:407-412;
+        // its victim whenever `consumed > 0` (engine.ts), the set is read back as
+        // `targetRepairedThisRound` when an actor's turn args are built (engine.ts), and that
+        // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts;
         // Nayra's charged purge and its Stasis/Exposed inflicts). #369 therefore WIDENED that
         // condition's reach: before it, only a player-side ANCHOR holder could arm the flag from a
         // tick; now an enemy holder and an off-anchor player holder do too. That is deliberate —
@@ -5375,9 +5375,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         hitCrits,
         // A no-victim cast inflicted no DoT on anybody, so the round row reports NONE —
         // neither landed nor resisted. Both engine derivations read this pair, and each is wrong if
-        // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts:11240) would display
+        // only `dotsLanded` is touched: `appliedDoTs: dotsConfig` (engine.ts) would display
         // this cast's configured DoTs as applied, and the resisted-DoT derivation
-        // (`!dotsLanded && dotsConfig.length > 0`, engine.ts:10163) would surface them as RESISTED
+        // (`!dotsLanded && dotsConfig.length > 0`, engine.ts) would surface them as RESISTED
         // if `dotsLanded` were flipped to false — a resist implies a target that resisted. Emptying
         // the LIST makes both answer "nothing happened" and leaves `dotsLanded` immaterial, which is
         // exactly the reading a cast with no DoT clauses already gets.

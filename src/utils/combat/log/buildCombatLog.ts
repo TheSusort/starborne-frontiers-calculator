@@ -415,7 +415,7 @@ function createBuildContext(
             // drained rider grants when the parent row is suppressed" already asserts three
             // promoted `buff` entries landing in `currentTurn.entries`. A promoted `buff` reaction
             // keeps its `targets: [{ targetId }]`, so those three are ALREADY inside `setHp`'s
-            // top-level reverse fallback scan (above, :315-324) — the exact stale-`resultingHpPct`
+            // top-level reverse fallback scan (above) — the exact stale-`resultingHpPct`
             // hazard the `buff-applied` handler's own comment flags for that shape. A later
             // `hp-changed` for that actor can stamp a promoted grant instead of the row that was
             // actually meant.

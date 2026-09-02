@@ -581,10 +581,10 @@ export function registerReactiveListeners(args: {
                         // removed it by making the DPS path emit like the engine.)
                         //
                         // The two remaining CAST-SCOPED emitters are the engine's fallbacks, and one
-                        // enqueue is right for both: the nothing-landed site (engine.ts:6843) can
+                        // enqueue is right for both: the nothing-landed site (engine.ts) can
                         // only carry critPairs 0 (no sub-attack had a victim, and critPairs
                         // increments only inside the per-victim loop). The enemy 0-damage site
-                        // (engine.ts:9307) is reached only when a damage ability actually fired
+                        // (engine.ts) is reached only when a damage ability actually fired
                         // (the deferred payload only exists when deferAbilityPerformedToEngine &&
                         // hasDamageAbility) AND the cast's total damage is 0. For a PARSED kit that
                         // means a multiplier-0 damage ability, and parseHitCount only assigns
@@ -687,16 +687,16 @@ export function registerReactiveListeners(args: {
                         //
                         // `deliveredDamage` (PR7, events.ts) is the post-funnel number. Per funnel
                         // leg, what counts as delivered:
-                        //   - DoT transform          NO  (engine.ts:5132 subtracts transformedToDot)
-                        //   - incoming-block shave   NO  (engine.ts:4111 shaves before the number
+                        //   - DoT transform          NO  (engine.ts subtracts transformedToDot)
+                        //   - incoming-block shave   NO  (engine.ts shaves before the number
                         //                                is even recorded)
                         //   - shield absorption      YES (incomingRecorded is captured at
-                        //                                engine.ts:4271, before the shield/HP split —
+                        //                                engine.ts, before the shield/HP split —
                         //                                a shield-soaked hit is still on-screen damage)
-                        //   - Protection redirect    YES (positionalApply.ts:410 adds the diverted
+                        //   - Protection redirect    YES (positionalApply.ts adds the diverted
                         //                                chunk back — that hit did land, just on
                         //                                someone else)
-                        //   - Barrier nullification  YES (engine.ts:4569 books it as delivered anyway)
+                        //   - Barrier nullification  YES (engine.ts books it as delivered anyway)
                         // So only a DoT transform or an incoming-block shave silences these riders.
                         // A shield-soaked, Barrier-nullified, or Protection-redirected hit still
                         // fires them.
@@ -3196,7 +3196,7 @@ function payloadFromConfig(cfg: {
  * `plainAllyCleanseFootprintReach.integration.test.ts`.
  *
  * The OPPOSING-side twin of that knock-on is `cleansedEnemyIds` (stamped from the same
- * `cleanse-performed.targets` on `on-enemy-cleansed`, ~:1226): Pestilence's "inflicts Corrosion II
+ * `cleanse-performed.targets` on `on-enemy-cleansed`): Pestilence's "inflicts Corrosion II
  * on all cleansed enemies" now lands on every ally an opposing plain-`'ally'` cleanse touched,
  * where pre-Task-4 there was only ever one.
  */
@@ -4811,10 +4811,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // recipient — every one of them absorbed its whole share) must resolve nobody rather
             // than healing someone for 0. The caster's own waste counts toward that sum, so a
             // repair that over-repaired ONLY the caster is not zero and DOES redirect. This embodies two principles. (1) The ability's contract:
-            // per overRepairRedirect.test.ts:164-171, a redirect with nothing to redirect applies
+            // per overRepairRedirect.test.ts, a redirect with nothing to redirect applies
             // to nobody. (2) The engine's idiom that zero-magnitude events are not events, adopted
-            // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts:4041), `burn > 0`
-            // gates the reversal log (engine.ts:3982), and `healSum > 0` gates the
+            // at these sites: `consumed > 0` gates repairedThisRound.add (engine.ts), `burn > 0`
+            // gates the reversal log (engine.ts), and `healSum > 0` gates the
             // `reactive-heal-performed` emit below (the `cfg.type === 'heal' && ... && healSum > 0`
             // guard). That emit is already independently gated this way and therefore cannot fire
             // whether or not this zero-sum guard exists. (Incidentally,

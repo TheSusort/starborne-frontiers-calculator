@@ -1893,7 +1893,7 @@ export interface HealingRoundEngine {
      *  happened. Several sources credit the source axis's raw bucket for recipients they never
      *  repair (a non-heal-target `all-allies` leech share), and mirroring those invents a landing.
      *  And every new credit MUST be gated on `perRecipientApply` — the shield-grant site
-     *  (playerTurn.ts:3730-3738) has NO flag gate of its own, so an ungated
+     *  (playerTurn.ts) has NO flag gate of its own, so an ungated
      *  `creditRecipient(rid, 'shield', …)` there would make the map non-empty on legacy runs and
      *  break the byte-identical guarantee above. */
     perRecipient: Map<string, ActorHealing>;
@@ -5167,7 +5167,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (takenLeechesByOwner.get(victim.id)) off the per-victim `damage` it took, applying to the
     // victim's OWN pool via the Task-1 closures.
     //
-    // SEMANTICS — mirror the non-positional block (~:4025-4060) PER VICTIM:
+    // SEMANTICS — mirror the non-positional block PER VICTIM:
     //   - Barrier carve-out: skip entirely if the victim was `barriered` (its hit was fully
     //     blocked — no damage taken, nothing to leech). Per victim via `outcome.barriered`.
     //   - requiresHpDamage (Quixilver): only fire an entry with requiresHpDamage when the hit
@@ -5556,7 +5556,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // therefore cannot see `creditDealt`/`roundPerTargetDamage` directly) — never captured into
         // a copy, so the ctx's closure reads THIS round's accumulators at call time.
         //
-        // ALL THREE channels, matching the DoT-tick path (~:9880) — which reaches them by routing
+        // ALL THREE channels, matching the DoT-tick path — which reaches them by routing
         // through `applyVictimDamage`, and which is the attribution shape R7′ names:
         //   1. `roundPerTargetDamage` — the victim-keyed per-round total (→ `RoundData.perTargetDamage`
         //      → `ShipRoundState.damageTaken`).
@@ -6385,7 +6385,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // earliest point in the funnel where it is needed.
             const maxHp = recipientMaxHp(victim.id);
             // Set only when the Shield Converter branch below actually fires — the PRE-deposit
-            // pool, so the returned `shieldBefore` (shieldWasHit detection at :6406-6411/:8592-8597) reflects
+            // pool, so the returned `shieldBefore` (shieldWasHit detection) reflects
             // the state this hit FOUND, not what its own nullify-and-deposit just grew (IMPORTANT 1
             // of the Shield Converter review). `undefined` for every other hit, meaning "no override
             // — use the real `shieldBefore` captured below".
@@ -6435,12 +6435,12 @@ export function runCombat(rawInput: CombatEngineInput): {
                 shieldPoolBeforeConversion = poolBeforeConversion;
                 // Never SHRINK the pool (MINOR 4 of the review): if a max-HP buff lapsed after an
                 // earlier grant, `victim.shieldPool` can already sit above `maxHp` — the same
-                // reachable state `grantShieldToTarget` (:2918-2921) documents. `Math.min(pool +
+                // reachable state `grantShieldToTarget` documents. `Math.min(pool +
                 // nullified, cap)` alone would clamp DOWN to `cap` in that state, destroying shield
                 // the victim already held while still crediting the attacker in full via
                 // `addConvertedToShield` below. `Math.max(before, …)` floors the result at the
                 // pre-deposit pool so a converted hit can only grow the pool, matching Lifeline's
-                // own guard at :4346-4348.
+                // own guard.
                 victim.shieldPool = Math.max(
                     poolBeforeConversion,
                     Math.min(poolBeforeConversion + nullified, maxHp)
@@ -6502,7 +6502,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 sink.addBarrierAbsorbed(damage, victim.id);
                 // Hit-counted Barrier: this absorb spends one charge. "for 1 hit" means a DIRECT
                 // hit, and the guard spells that out exactly as the funnel's other two consumables
-                // do (Hit Mitigation :4271-4272, Shield Converter :4289-4290):
+                // do (Hit Mitigation, Shield Converter):
                 //  - `byDirectDamage`: a DoT tick is not a hit.
                 //  - `bombPortion === 0`: a pure detonation arrives stamped `byDirectDamage: true`
                 //    with the whole amount in `bombPortion`, and bomb-death-splash loops once PER
@@ -6521,7 +6521,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 ) {
                     for (const name of BARRIER_BUFFS) {
                         // True ONLY when the last charge went and the status was removed — the
-                        // turn-expiry path (decrementPlayer/decrementEnemy, :8886/:8898) emits the
+                        // turn-expiry path (decrementPlayer/decrementEnemy) emits the
                         // same event with the same fields, so a hit-consumed Barrier disappears
                         // from the combat log and the round status panel the same way a
                         // turn-expired one does instead of vanishing silently.
@@ -6554,7 +6554,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // unlike `immediateDamage`, which is 0 here (nothing landed).
                     incomingBooked: incomingRecorded,
                     // Provably always 0 here: this branch is `carriesBarrier === true`, but the
-                    // cascade that populates `protectionRedirected` (:4131) is gated on
+                    // cascade that populates `protectionRedirected` is gated on
                     // `!carriesBarrier` and sits upstream of this return, so it never ran. Kept
                     // for shape uniformity with the main `VictimDamageOutcome` return below, not
                     // because this case can populate it.
@@ -7057,7 +7057,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // IMPORTANT 1 (Shield Converter review): report the PRE-deposit pool for a
                 // converted hit, not the post-deposit `shieldBefore` captured above (which, for
                 // this one hit, already includes the deposit) — otherwise shieldWasHit detection
-                // at :6406-6411/:8592-8597 reads a nullify-and-grow as "the shield absorbed part of this hit".
+                // The shieldWasHit detection reads a nullify-and-grow as "the shield absorbed part of this hit".
                 shieldBefore: shieldPoolBeforeConversion ?? shieldBefore,
                 hpDamage,
                 barriered: false,
@@ -9889,10 +9889,10 @@ export function runCombat(rawInput: CombatEngineInput): {
         // act). Returns true when the actor is the dead heal target and the caller must `continue`.
         const handleDeadTargetSkip = (actor: CombatActor): boolean => {
             // A DESTROYED focus does not act, in ANY mode — independent of `healReportActive`.
-            // `destroyedRound` is the canonical death signal (state.ts:167, stamped once by
+            // `destroyedRound` is the canonical death signal (state.ts, stamped once by
             // `recordDestroyed`); `currentHp <= 0` is NOT, because a never-alive actor (DPS's
             // `hp`-defaults-to-0 focus, see the gate below) also satisfies it
-            // (normalizeRoster.ts:126). Before #415 this case was covered incidentally by the
+            // (normalizeRoster.ts). Before #415 this case was covered incidentally by the
             // `currentHp` branch below, which DPS mode could never reach (healReportActive was
             // false there) — so a faster enemy killing the focus before its own turn left the
             // focus falling through to act anyway. Checked first, unconditionally.
@@ -9908,7 +9908,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
             // Gated on `healReportActive`, NOT merely on `healTarget` (#415): `hp` defaults to 0 in
             // `simulateDPS` and on the DPS page, so every DPS focus enters the run at currentHp 0.
-            // That is NEVER-ALIVE, not KILLED (normalizeRoster.ts:126) — reading it as a corpse
+            // That is NEVER-ALIVE, not KILLED (normalizeRoster.ts) — reading it as a corpse
             // skipped the focus's whole turn and returned 0 damage for the entire calculator.
             // Measured: 124 tests across 11 files fail without this gate.
             if (!(
@@ -10144,7 +10144,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // heal/shield/cleanse credits the same per-round buckets and mutates the
                         // same live target. #415: this used to read "healing mode only — undefined
                         // in DPS mode → the executor's heal/shield/cleanse branches stay inert".
-                        // `healTarget` is now anchored in EVERY mode, so `healingCtx` (`:3724`) is
+                        // `healTarget` is now anchored in EVERY mode, so `healingCtx` is
                         // always built and the reactive heal/shield/cleanse branches are LIVE in
                         // DPS mode too — pinned by `dpsBattleShieldParity.test.ts`. What DPS mode
                         // still omits is the healing REPORT, gated on `healReportActive`.
@@ -10170,7 +10170,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // Player side: heal-target current/max HP (every other id → 100). Enemy
                         // side: 100 for every owner until PR5. #415: this used to add "DPS mode has
                         // no closure (undefined → buildDrainContext defaults to 100)" — with
-                        // `healTarget` anchored in every mode the player-side closure (`:3362`) is
+                        // `healTarget` anchored in every mode the player-side closure is
                         // always built, so a DPS drain-time hp-threshold gate reads the focus's REAL
                         // live HP instead of a hardcoded 100 (both directions pinned by
                         // `dpsFullEngineChannels.test.ts`'s drain-time gate pair).
@@ -11050,9 +11050,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // landscape, the scope handling and why this makes both sides
                                 // team-symmetric by construction, see the canonical block
                                 // comment above `procStandingLeechesPerVictim`'s definition
-                                // (engine.ts:3868, `// E2 Task 3: PER-VICTIM standing-leech
+                                // (engine.ts, `// E2 Task 3: PER-VICTIM standing-leech
                                 // proc for the POSITIONAL apply path.`, running to the
-                                // definition at engine.ts:3931, `const procStandingLeechesPerVictim = (`) — not repeated here.
+                                // definition at engine.ts, `const procStandingLeechesPerVictim = (`) — not repeated here.
                                 //
                                 // SPECIFIC TO THIS CALL SITE: `creditDamage` was not an option
                                 // here, because it would also write `dmg(sourceId)[dotType]`,
@@ -11152,7 +11152,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // actor killed by its own burst must still push a synthesized focus turn so
                         // the post-round focusTurns.length guard does not throw.
                         // #415: the `focusActorId` clause is the MID-TURN twin of the unconditional
-                        // branch added to handleDeadTargetSkip (`:9533`) — the top-of-turn guard
+                        // branch added to handleDeadTargetSkip — the top-of-turn guard
                         // cannot catch this death, which is the whole reason this second check
                         // exists. Anchoring healTarget to the focus in every mode turned the
                         // healTarget carve-out ON in DPS mode, so a focus killed by its own
@@ -11920,7 +11920,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         //
                         // GATE: only a POSITIONED enemy (enemy-site positional sense — the same
                         // `resolvesPositionalVictim(actor.position, allPlayerActors)` predicate the firing-hit
-                        // gate uses at `enemyPositional`/`:5011`) that actually carries timed
+                        // gate uses at `enemyPositional`/) that actually carries timed
                         // entries. The non-empty guard makes this a STRICT no-op (byte-identical)
                         // for every existing fixture — none seed enemy-actor timed containers.
                         // Stasis: this burst sits INSIDE the `!isTurnBlocked` gate, so a stasised/
@@ -11930,14 +11930,14 @@ export function runCombat(rawInput: CombatEngineInput): {
 
                         // Dead-after-burst guard (spike Fact 3): a lethal timed burst above
                         // fires recordDestroyed inside applyVictimDamage, but the loop's
-                        // top-of-turn dead-skip (`:4185`) already ran BEFORE this turn body, so
+                        // top-of-turn dead-skip already ran BEFORE this turn body, so
                         // it cannot catch a same-turn death. A ship the burst just destroyed must
                         // not act — skip the whole action-resolution body. We key off
                         // `destroyedRound` (the canonical death signal stamped by recordDestroyed),
                         // NOT `currentHp > 0`: a bare enemy ATTACKER carries no HP stat
                         // (`currentHp` undefined), yet still acts — only a recordDestroyed stamp
                         // means the burst actually killed it this turn. The healTarget exception
-                        // mirrors the `:4185` top-of-turn guard so a dead heal-target enemy still
+                        // mirrors the top-of-turn guard so a dead heal-target enemy still
                         // runs its cadence-only body. The post-turn decrements / `turn-ended`
                         // AFTER this `if/else` still run (a dead ship's turn still consumed its
                         // slot; bomb-splash-on-death already chained inside applyVictimDamage).
@@ -12549,7 +12549,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         // a stack-frame probe over the whole combat + calculator
                                         // suite (406 files / 3935 tests) recorded ZERO calls
                                         // through it — every enemy attack in every fixture takes
-                                        // the positional branch (`enemyPositional`, :11303). The
+                                        // the positional branch (`enemyPositional`). The
                                         // fix would need a new `PlayerTurnResult` field that no
                                         // test could exercise, so it would ship unverified. The
                                         // other six folding paths ARE covered; see
