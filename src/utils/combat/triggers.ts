@@ -2686,9 +2686,10 @@ export function ownerDebuffNamesFor(statusEngine: StatusEngine, targetId: string
 }
 
 /** The two heal channels an enemy-applied debuff can move, as additive percentage POINTS (-50
- *  means -50%). One named shape rather than three hand-written copies of the same object literal:
- *  it is `victimOwnEnemyHealModifiers`'s return, `liveHealChannelPct`'s channel key, and
- *  `runPlayerTurn`'s `enemyAppliedHeal` turn arg (#367). */
+ *  means -50%). One named shape rather than hand-written copies of the same object literal: it is
+ *  `victimOwnEnemyHealModifiers`'s return and `liveHealChannelPct`'s channel key (#367). The heal
+ *  pair reaches `runPlayerTurn` as part of `enemyAppliedFamilies`, not as a shape of its own —
+ *  see that arg's doc for why a family map rather than summed percentages. */
 export interface EnemyAppliedHealModifiers {
     /** `Inc. Repair Down/Up` — repairs LANDING on this actor. */
     incomingHealPct: number;

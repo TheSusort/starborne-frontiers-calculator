@@ -401,3 +401,372 @@ the wiring-claim shape that was false fifteen times elsewhere. `grep -rn '\.seco
 The comment is TRUE. Untouched.
 
 Oracle after batch 4: **GREEN**. Candidate blocks 144 → 107.
+
+## Batch 5 — focus turn and the shared turn preamble (10480–11380)
+
+### 11303-11313 [history-claim] `Was `?? 1`, which fabricated a footprint of 1 … the residual
+`noVictimResidualTripwires.test.ts` used to tripwire … (neither reader, Berserker/Tygr, is one of
+the 24 ally-target ships)`
+ACTION: rewritten — the was/now framing and the ship counts dropped, the discriminator rule and the
+tripwire test NAME kept.
+
+### 11272-11274, 11229-11250 [history-claim] the two `single-sink decline that used to be zeroed`
+lines and `The `?? turn.directDamage` fallback was written as unreachable-… That divergence has
+ARRIVED`
+ACTION: rewritten. The fallback block keeps its whole argument in present tense under a new
+searchable anchor `THE FALLBACK IS REACHABLE`; the plan-section label `§A.7` and the
+`13 rows, zero shipped ships` count are gone.
+⚠️ CROSS-REFERENCE REPAIRED: the walked-team site told the reader to `search
+`the fallback is now REACHABLE``. That string no longer existed after the rewrite, so the pointer
+would have led nowhere — the team site was updated to `search `THE FALLBACK IS REACHABLE``. (This
+is the class the task warned about: fixing one comment can break another's pointer.)
+
+### 11098-11147 [workstream-label ×3, diff-justification] the 50-line positional-APPLY block
+`AMENDED BY SP-4c-2b at the end of this comment …` · `Positional APPLY (Task 8b, GATED)` ·
+`At Task 8b no production caller threaded position+target+pattern, so this was false for every
+existing test/golden → byte-identical` · `(CodeRabbit raised this)` · `since SP-4c-2d there is none
+anywhere, so the counterfactual below can no longer be constructed` · `(plan §A.1: 100% of the
+player-side fallback rows)` · `fixture-only today (13 rows, zero shipped ships)`
+ACTION: rewritten to 36 lines. The read-the-amendment-first instruction is gone (the amendment is
+folded into the text it amended, which is why it existed); so are the task labels, the review
+attribution, the dummy counterfactual and both plan-section counts. Kept whole: the NORMAL-path
+statement, the deliberate absence of a `selectedEnemy != null` precondition with its whiff
+argument, the `tgt !== undefined` precondition's non-overlap with the phantom-damage hazard, and
+"the fence lives in the GATE, above every RNG draw".
+
+### 11064-11078 [workstream-label, count-enum] `KNOWN LIMITATION, deliberate for PR8 … Corpus-inert
+today: Enforcer is the only ship with hits > 1 … which PR8 must keep byte-identical`
+ACTION: rewritten — ⚠️ added, the limitation and its exact consequence kept verbatim; the PR labels
+and the single-ship corpus census dropped (delete-first: I did not re-measure the corpus, so I did
+not restate the claim in new words).
+
+### 11056, 10514 [workstream-label] `#367 fix wave:` ×2, plus the hard line pointer `~240 lines
+below`. ACTION: rewritten to `#367:` and "further down".
+
+### 11026-11035 [history-claim] `a branch the comment at that call used to describe as unreachable.
+It is reachable now`
+ACTION: rewritten — the retracted-description narrative dropped, the conclusion kept.
+
+### 10963-10986 [workstream-label, history-claim, diff-justification] the 24-line
+positional-target-selection block (`Task C1, GATED` · `At Task C1 … byte-identical` · `Positional
+target (phase 2): … else the dummy sink` · `SP-4c-2b/2d AMEND the two paragraphs above`)
+ACTION: rewritten to 12 lines of present tense. The AMEND paragraph is gone because the paragraphs
+it amended are gone; the dummy-binding description is gone with the dummy.
+
+### 10949-10955 [line-pointer] `(playerTurn.ts:~1044)`. ACTION: deleted (the file no longer has
+that line number; the predicate is named instead).
+
+### 10935-10943 [history-claim] `Anchoring healTarget to the focus in every mode turned the carve-out
+ON in DPS mode, so a focus … fell through and cast anyway`
+ACTION: rewritten to the present-tense reason the clause exists; `#415` kept.
+
+### 10929 [workstream-label] `(PR2 lesson)`. ACTION: deleted (parenthetical only).
+
+### 10921-10926 [workstream-label] `PR-B: … Mirror of the PR2 enemy site; strict no-op for every
+existing fixture (none seed player-actor timed containers) … PR-C will add tickDoTs AHEAD of this
+burst`
+ACTION: rewritten — the labels, the fixture claim and the PENDING-WORK sentence dropped (a "will
+add" comment reads as scheduled work and there is nothing scheduled); the canonical turn-start
+order kept as the rule.
+
+### 10907 [workstream-label] `Task 4 adds team runtimes.` ACTION: deleted (sentence only).
+
+### 10492-10498 [history-claim] `There used to be a SECOND exemption, `!isDummyEnemy` … Do not
+resurrect it from an older comment or commit …`
+ACTION: deleted (10 lines). It documents an exemption that no longer exists for an actor that no
+longer exists; the live one-exemption rule above it is untouched.
+
+### 10573-10590 [line-pointer ×5] `(~4249/4314)`, `(~4595)`, `(~4567)`, `(~3403: …)`, `(~4651)`
+ACTION: rewritten — every hard line pointer deleted (all five are stale: the file is ~13 000 lines
+and these point into the 4 000s). The named symbols, the §4.4 filter's actual source line of code,
+and the `chronoReaverCharge.integration.test.ts` golden are kept, which is what makes the block
+findable without numbers.
+
+### 10591-10593 [class 3] `The dummy-sink enemy is NOT bumped here any more — it takes no turn, so
+its `turnsTaken` stays 0 … Nothing reads it`
+ACTION: deleted — it describes an actor that does not exist.
+
+### 10520-10532, 10506, 10748-10751, 10700-10703, 10848 [workstream-label ×5]
+`G PR1:` · `PR6:` · `since PR4` · `C2b-2 T5:` ×2 · `D-PR3 (Vortex Veil):` ×2 · `(Faust, Task 6,
+distinguishes them)` · `Absent → 0 → byte-identical for all existing tests`
+ACTION: all rewritten — labels and byte-identity tails dropped, every rule kept. `PR6:`'s content
+was preserved as a positive statement of what separates the N attacks (the key) from what separates
+the turns (the clear).
+
+### 10600-10643 [history-claim, workstream-label] the DoT-tick prologue header
+`this used to be phrased as "mirroring the dummy enemy's DoT-tick timing", but since SP-4c-2c …` ·
+`(Task 6b)` · `(goldens byte-identical)` · `PR-C C2:` · `This prologue used to sit inside
+`if (actor.id !== enemy.id)` …`
+ACTION: rewritten to a present-tense header describing both branches. The `#415 NOTE` ⚠️ accounting
+gap below it is KEPT in full (a live, deliberately-declined gap with a named consequence) — only
+its "is now REACHABLE" tightened to "is REACHABLE".
+
+### 10687-10691, 10728-10734 [history-claim] `Site 3 of the leech-channel class (spec §3): the
+applier is no longer discarded …` / `… FIXED (spec §3) … It previously discarded `_sourceId``
+ACTION: both rewritten to what the code does now. The ⚠️ OPEN GAP block between them is KEPT
+verbatim — it is a live, deliberately-declined gap that names its own workaround and test.
+
+### 10770-10773 [diff-justification] `→ byte-identical for non-positional fixtures`.
+ACTION: rewritten to "with no positioned opposing actors this is a no-op".
+
+### 12106 [workstream-label] `Since PR5b the sink keys intake by victim.id` (surfaced by the
+re-run after batch 4). ACTION: rewritten — label dropped.
+
+Oracle after batch 5: **GREEN**.
+
+## Batch 6 — the reactive drain contexts, drainQueue, and the shared cast-arg builder (9000–10500)
+
+### 10381-10386 [history-claim] `It used to be `lastAttackerTurn.enemyHpPct` … That is #341`
+ACTION: rewritten as a present-tense rule ("Read from the ROSTER, never from the focus's struck
+victim (#341)") keeping the concrete failure it prevents.
+
+### 10358-10364 [workstream-label] `Documented deviation from the Phase 1 contract's turn-started
+mapping … no observable ordering change vs the old emit site`
+ACTION: rewritten — the phase label and the diff argument dropped, the round-started-is-the-reliable
+-signal rule and the "nothing between beginRound and here emits an event" fact kept.
+
+### 10295-10300, 10208-10211 [diff-justification] `Side-parameterized drain replacing the former
+separate `drainIntents`/`drainEnemyIntents` closures … byte-identical for the player side too` ·
+`Behaviourally identical to the pre-refactor drainIntents`
+ACTION: rewritten — the guard is described as an allocation saving with its own no-op proof, not as
+a diff argument.
+
+### 10259-10269 [workstream-label] `Enemy drain (enemy-team PR1) … (PR1 exercises self-target only;
+this future-proofs PR2 enemy→enemy reactions) … (Gap F …, done in enemy-team PR3)`
+ACTION: rewritten — labels dropped; recipientIds' meaning and grantAllyCharges' side kept.
+
+### 10220-10237 [history-claim] `Each used to be a ternary on `hasPositionedEnemyRoster` … Two OTHER
+gates were tried for this job and both were wrong; the history is worth keeping …`
+ACTION: DELETED the 15-line history (both gates it names — `dummyEnemyIsVestigial`,
+`positionalTeamBattle` — no longer exist under those names). Replaced by the two-line present-tense
+contract: the resolvers read the real roster unconditionally, because the boundary refuses an
+absent/empty `enemyAttackers`.
+
+### 10172-10191 [history-claim] `(review fix: the original single-cell `once()` ignored `ownerId`
+entirely …)`
+ACTION: rewritten as a forward-looking "memoizing on the ctx instance ALONE would…" so the hazard
+survives without the review narrative. The rest of the onceByOwner argument is untouched.
+
+### 10087-10119 [workstream-label, count-enum] the 33-line mostBuffsAmong header
+`C2b-2:` · `SP-4c-2d: the executor NO-OPS on undefined. It used to fall back to ctx.enemyId … 73
+measured hits suite-wide` · `#407 CLOSED what #403 review Finding 5 left open` · `MEASURED, not
+argued — and measured twice … 1086 calls … 4 suite-wide … only 24 times … byte-identical across the
+fix`
+ACTION: rewritten to 18 lines. Every measurement count deleted (policy class 2). KEPT: the selection
+rule, the ties rule, the total-function contract for an empty roster, the whole `#407` liveness
+argument (liveness lives at the SEAM, enforced by the `AliveRoster` type, which is why this loop
+asks nothing), the corpse hazard it prevents, and the `aliveSelectorTarget.integration.test.ts`
+observer.
+
+### 10083 [workstream-label] `ship-kit W3 (Sansi):` → `(Sansi)`. ACTION: rewritten.
+### 10069-10073 [count-enum] `(site 4 of the four-site sweep — …)` → `(read by …)`. ACTION:
+rewritten — the count dropped, the pointer kept.
+### 10049 [workstream-label] `SP-4d Fix wave 1: no `?? 1` default` → `Deliberately NO `?? 1``.
+
+### 9951-9959 [workstream-label] `Phase 4c PR 1 Task 6 / bySide PR3 Task 2: … Enemy side: 100 for
+every owner until PR5. #415: this used to add "…"`
+VERIFIED before rewriting: the enemy arm really does return 100 for every owner
+(`selfHpPctFor` at the side-context bundle), and the bundle's own doc explains why. So the claim is
+TRUE and only the `until PR5` pending-label had to go.
+ACTION: rewritten — labels and the retracted #415 sentence dropped; the asymmetry now POINTS at the
+bundle's note (one rule, one place) instead of restating it.
+
+### 9926-9933, 9947-9949, 9884-9886, 9879-9880 [history-claim, diff-justification]
+`#415: this used to read "healing mode only — undefined in DPS mode …"` and three
+`byte-identical` / `Empty in DPS mode → byte-identical` tails.
+ACTION: all rewritten present-tense; `#415` and both pinning test names kept.
+
+### 9895-9903 [history-claim] `enemyHp (IntentExecContext) deleted … Fix wave 1: cumulativeDamage
+(IntentExecContext) is deleted too — it had zero readers … Do not reintroduce it …`
+ACTION: DELETED. It documents two fields that are not on the interface; a reader following it finds
+nothing. The live sentence beneath it (bomb damagePerStack/affinity resolve per OWNER) is kept.
+
+### 9830-9834 **FALSE (count)** `The four side-specific fields are `runtimes`, `recipientIds`,
+`isLowestSpeedAllyFor`, and `grantAllyCharges`; everything else is shared`
+EVIDENCE: `grep -n 'sideCtx\.'` in this function returns FIFTEEN distinct fields — the four named
+plus `removeEnemyCharges`, `removeChargesFrom`, `selfHpPctFor`, `enemyWithMostBuffs`,
+`enemyWithHighestAttack`, `enemyWithHighestSpeed`, `livingOpposingActorIds`, `firstActivatorId`,
+`lastStandingId`, `oncePerRoundConsumed`, `perRoundFireCounts`, `adjacentAllyIdsFor`,
+`adjacentOpposingIdsFor`, `footprintAllyIdsFor`. This is notes-engine-1's item-14 defect
+(`ReactiveSideCtx`'s "four fields") recurring at a second site.
+ACTION: rewritten to point at `ReactiveSideCtx` for the full set instead of enumerating one.
+
+### 9805 [workstream-label] `Since bySide PR2 the granter may be …`. ACTION: rewritten.
+
+### 9713-9722 [workstream-label, history-claim] `E5 §4.4: … Extracted from the two byte-identical
+sites` and `#341: this used to carry the row's `enemyHpPct` — a DISPLAY constant of 100 …`
+ACTION: both rewritten — the extraction argument and the was/now framing dropped; the
+carries-NO-enemyHpPct contract and `#341` kept.
+
+### 9553 [workstream-label] `total `attacked` cardinality is invariant across PR2`
+ACTION: rewritten to state the invariant itself ("one `attacked` per victim per sub-attack").
+
+### 9101-9122, 9123-9136, 9180-9202, 9227-9234, 9239-9246, 9260, 9333, 9379-9389, 9449, 9468,
+9484-9494 [workstream-label ×9, diff-justification ×5]
+The `drivePositionalTurnApply` header and its five JSDoc blocks, carrying `SP-U U2 (Option B)`,
+`Note A in task-2-report.md`, `row-14 accounting, kept inline → U5`, `since PR2 Task 3`,
+`PR8 (multi-hit full-walk epic)`, `PR8 split the thunk … byte-identical to the pre-PR8 single
+thunk … Task 4`, `PR2 Task 2`, `PR1 threads`, `PR2 Task 3` ×3, `PR1 added it trailing`,
+`N=1 is byte-identical BY CONSTRUCTION`, `both loops stay byte-identical`, `the pre-PR2 emit …
+byte-identical`, `the pre-PR2 behaviour this branch exists to preserve`, `R5(i)`, and a pointer to
+a plan file (`The plan prescribed `damage === 0` here; that was a plan defect, corrected in the plan
+file too`).
+ACTION: all rewritten. Every mechanism kept — the two injected callbacks and why, the fallback +
+final-flush split, the sub-attack grouping and its Tenacity/log consequence, the OPTIONAL
+`subAttackIndex`, the footprint-alone gate with both bullets, the `deliveredDamage: 0`
+requirement and why omitting it pays riders for a cast that struck nobody, and the `subAttack`
+stays-undefined → `flushReflectLogs` drains everything rule. Every `byte-identical`, `N=1`, PR/Task
+label and the external plan-file pointer are gone; "N=1" is rendered as "with one hit".
+
+### 9028-9034 **FALSE (class 3 — an orphan doc)** the `#367 … enemy-APPLIED heal-channel modifiers
+… Spread-guarded like `preFight` so a clean actor omits the key entirely` block
+EVIDENCE: there is NO spread between this comment and the next one — the comment sits alone,
+followed by a blank line and then the `#389/#396` block that documents the spread which REPLACED it.
+`grep -rn enemyAppliedHeal src` finds no such key in engine.ts; the #389/#396 comment itself says
+"#367 originally passed the heal pair as summed percentages (`enemyAppliedHeal`) … Both pairs now
+travel as families". So the comment documents a property that no longer exists and appears, on a
+skim, to document the `enemyAppliedFamilies` spread below it — which has different semantics.
+ACTION: deleted. The #389/#396 block already carries everything true in it.
+
+### 9000-9006, 9016-9017, 9023-9026, 9050, 9055-9062, 9072-9075 [workstream-label,
+diff-justification]
+`ALL THREE CAST-SITES (PR1 + PR3 + PR4) … the WALKED-TEAM site (PR4 …) … With the walked-team loop
+now wired` · `F3:` · `Sub-project I, PR I3 (Layer 1):` · `per I3` · four `byte-identical` tails.
+ACTION: all rewritten — labels and tails dropped, contracts kept.
+NOTE: line 8998 is part of the SAME comment block and carries a `→ byte-identical` tail. It was
+edited and then RESTORED, because it sits below the 9000 boundary and belongs to the residue agent.
+
+Oracle after batch 6: **GREEN**.
+
+## Line-width pass
+
+74 added lines exceeded prettier's `printWidth: 100` after the rewrites. They were re-wrapped by a
+script constrained to (a) lines at or past 9000, (b) plain `//` comment lines, (c) lines this run
+added, run to convergence. Verified TWO ways afterwards:
+- the oracle stayed **GREEN**;
+- a whitespace-normalised comparison of every comment block before and after the re-wrap printed
+  `blocks equal: True` over all 8033 blocks — i.e. the re-wrap moved line breaks and changed NOT ONE
+  WORD.
+Three artefacts the script produced were then repaired by hand: one bullet continuation that lost
+its indent (`//  - NON-positional: …` / `// drains`), one `HP/ shield` split by a wrap, and five
+inline code spans split mid-expression (`` `damage > `` / `` 0` ``). Final count of added lines over
+100 columns: **0**.
+
+---
+
+## FALSE COMMENTS FOUND
+
+Sixteen distinct false claims. The dominant family is again the one both earlier agents found — a
+comment that survived the deletion or replacement of the thing it describes — with the
+wiring/reader family second.
+
+1. **`Generic DoTs are never auto-applied from skill text in this task`** — TWO sites (13130 and
+   12663, the latter adding "real once E2/E3/E4 populate genericDoTEntries"). `convertHitToSelfDot`
+   (engine.ts:1997) pushes into `victim.genericDoTEntries` and is called from the shared
+   victim-damage funnel (engine.ts:6145) on a `transform-incoming-to-dot` ability the parser DOES
+   emit (`skillTextParser.ts:3151`; Voron/Orel, Hit Mitigation). notes-engine-1 item 12, recurring.
+2. **`Only the attacker entry exists today`** (12651) — contradicted 60 lines below, where
+   `teamRoundDamage` sums every `roundDamage` id that is NOT the focus.
+3. **`Rounds always have exactly one focus turn today`** (12595) — contradicted by the very next
+   statement, `if (!focusTurns.length)`, whose own body names TWO ways to reach zero.
+4. **`see the focus-death exit beside the enemy-death one below`** (12615) and **`Focus-death exit,
+   sibling of the enemy-death one above`** (13218) — both point at an exit that no longer exists
+   (its own obituary sat at 13203 and was deleted this run).
+5. **`the post-round death-drain`** — TWO sites (12523, 13205), both asserting a drain that runs
+   after the turn loop. `drainIntentsFor(` past line 12400: 12470/12471 and 12494/12495 (inside the
+   turn loop) and 12770/12771 (`round-ended`). There is no third.
+6. **`the player→enemy-attacker variant … stays latent (no firing site threads a player→enemy
+   targetId yet — a future per-victim-accounting PR lights it up)`** (12484) — `playerTurn.ts:2369`
+   calls `applyTimedAbilityStatus(r, status, actor.id, vid)`; `vid` lands as `enemyTargetId`
+   (`statusEngine.ts:1682-1707`). The wiring/reader family.
+7. **`enemyAttackedSignals is the helper's returned per-victim signals`** — TWO sites (12368 and the
+   whole leading paragraph at 12188). `grep` finds the identifier ONLY inside those comments; the
+   variable is `enemyEmitDeferred`. At 12188 the dead paragraph sat directly above the live
+   declaration and read as its doc.
+8. **`Non-positional path only (… no fixture threads enemy positions)`** (12353) — contradicted 150
+   lines below in the same function: "the sim goldens (2v2/3v3/healing) thread enemy
+   positions+patterns so real enemy attackers hit player victims here".
+9. **`Undefined for every current fixture → enemyPositional false`** (11763) — same falsehood, same
+   refutation.
+10. **`These aggregate locals feed ONLY the non-positional damage-taken leech block below`** (12171)
+    — that block was deleted by #374 (a comment 130 lines away says so). The surviving reader is the
+    non-positional `attacked` emit's `shieldWasHit` computation.
+11. **`surfacing those other per-actor buckets as result rows is the still-deferred
+    symmetric-accounting surface`** (12138) — they ARE surfaced, as `RoundData.perActorIncoming`,
+    assembled in this same function and read by four modules (notes-engine-1 item 7).
+12. **`The four side-specific fields are …`** (9830) — fifteen `sideCtx.` fields are read in that
+    function. notes-engine-1's item-14 defect at a second site.
+13. **The orphaned `#367 … enemy-APPLIED heal-channel modifiers` doc** (9028) — documents a spread
+    that does not exist, sitting immediately above a DIFFERENT spread it appears to describe.
+14. **`The dummy-sink enemy is NOT bumped here any more … Nothing reads it`** (10591) — describes an
+    actor that does not exist.
+15. **Three quoted-then-retracted claims** — `"No production caller threads position+target+pattern
+    for an enemy yet → false for every golden" was true when written and is NOT true now` (11928),
+    and `At Task 8b no production caller threaded these, so it was false for every existing
+    test/golden` at BOTH the focus (11098) and walked-team (11460) sites. Each leaves a false
+    sentence on the page for a skimming reader to lift out of context; all three were rewritten so
+    only the true statement remains.
+16. **A cross-reference I broke and repaired** — the walked-team site instructs the reader to
+    `search `the fallback is now REACHABLE``. My rewrite of the focus site removed that exact string.
+    Both were updated to `THE FALLBACK IS REACHABLE`. Recording it because it is the failure mode
+    this sweep is most likely to create: fixing one comment can silently orphan another's pointer.
+
+Plus three PRE-EXISTING prose defects repaired in passing (none a false claim):
+- **11460 (walked-team positional APPLY)** — the sentence `…→ byte-identical. STALE since` ended
+  mid-clause and ran straight into the next sentence, so the reader could not tell what it was stale
+  since.
+- **12011** — `…the same expression the two player sites have recorded since SP-4d` with no
+  terminator, running into `All three sites read one expression…`.
+- **11704** — a stray `/` inside ``at `enemyPositional`/)``.
+
+## FLAGGED FOR OWNER
+
+**None.** Every false claim above was settled by grep against a named symbol, reader, or call site —
+none required a ruling about how the game ought to behave, so each was safe to rewrite in place. No
+comment in 9000+ asserted a MECHANIC that the adjacent code visibly does not perform.
+
+Two standing items are PRESERVED in the code (kept, not flagged as defects, because they are
+deliberate and already carry their own ⚠️):
+- **`#358 ADDENDUM 2` (now `#358`), the enemy non-positional intake fold** — a known raw-axis
+  under-report at a corpus-unreachable site, parked by owner ruling and tracked with **#357**. Kept
+  in full; only its file/test counts were removed.
+- **The `#415` DoT-tick accounting fork** — in DPS mode an enemy DoT ticking on the focus takes the
+  heal-target branch, which omits `creditDealt`/`roundPerTargetDamage`, so it is absent from
+  `RoundData.perTargetDamage`. Deliberately declined; kept verbatim.
+
+One observation OUTSIDE my file, offered as a note rather than a change (I did not open it for
+writing): **`triggers.ts:2691`** documents "`runPlayerTurn`'s `enemyAppliedHeal` turn arg (#367)".
+That arg no longer exists — it is `enemyAppliedFamilies` now — so it is the same orphan as finding
+13, in the file another agent is sweeping.
+
+---
+
+## Verification
+
+- `tokenOracle.mjs --base origin/main src/utils/combat/engine.ts` → **GREEN** (37842 tokens
+  identical) on the untouched baseline, after every batch, after the scripted re-wrap, and in the
+  final state. **Zero code bytes changed.**
+- **Negative control** (run early, after batch 1, not at the end): appended
+  `export const __probe = 1;` → the oracle reported **RED, exit 1**, naming the divergence at token
+  37842 (`ExportKeyword :: export`). Removed that exact line by text edit (never
+  `git checkout`/`restore`) → **GREEN, exit 0**. The instrument has been seen to report both
+  outcomes in this session.
+- **Boundary**: measured against a pre-run snapshot (`engine.pre-A3.ts`), not against `origin/main`,
+  because the working tree also carries two other agents' uncommitted work.
+  `diff -U0 snapshot current` → the LOWEST changed hunk starts at snapshot line **9000**. One edit
+  had landed at 8998 (the same contiguous comment block as my 9000 block) and was reverted.
+- File: 13277 → 12953 lines (324 removed, all comment text).
+- `blocks.mjs --from 9000 --to 99999` re-run at the end: **5** candidate blocks remain, down from
+  **214**. All five are finder false positives, each verified by reading: "a target that no longer
+  exists" and "can no longer leave inTurnLoop stuck true" (×2) are present-tense contracts,
+  "All three sites read one expression" is a symmetry statement whose three sites are named on the
+  spot, and the `flushDeferredEnemyApplications` JSDoc trips `count-enum` on "the three turn sites".
+- Residual dead-vocabulary grep over lines 9000+ (`Task N`, `task-N`, `SP-*`, `Sub-project`, `PRn`,
+  `D-PRn`, `Wave N`, `Phase N`, `Wn`, `H1 Tn`, `epic PR`, `Ship-kit`, `byte-identical`,
+  `zero-churn`, `Fix wave`, `C2b-2`, `PR-A/B/C`, `Un`, `R5(`, `(~NNNN)`): **zero hits**.
+- Line width: **0** added lines exceed 100 columns (measured in characters, not bytes).
+- Prose integrity: the whole diff read end to end, plus automated checks for duplicated words,
+  residual dead vocabulary and unbalanced backticks in added lines. Three pre-existing defects
+  repaired (listed above) and three re-wrap artefacts fixed.
+- Not run, per instructions: `npm test`, `tsc`, `lint`. Nothing committed. `triggers.ts`,
+  `playerTurn.ts`, `statusEngine.ts` and every other module were never opened for writing.
