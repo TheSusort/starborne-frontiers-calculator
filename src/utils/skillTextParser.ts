@@ -4350,6 +4350,30 @@ function maskStatusNameRepairs(text: string): string {
     );
 }
 
+/**
+ * Neutralises "Cheat Death" where it is the OBJECT OF A GRANT ("grants Cheat Death to all
+ * allies"), so `HEAL_DISQUALIFY_RE`'s `\bcheat death\b` arm cannot reach it.
+ *
+ * That arm disqualifies a whole SENTENCE that mentions Cheat Death, because the revive content
+ * the mention normally accompanies is unmodeled and a repair amount sitting next to it is
+ * usually part of that content. A GRANT of the status carries no such content — the grant is a
+ * plain buff, parsed separately by `parseSkillEffects` — so an unrelated repair clause sharing
+ * the sentence is a genuine on-cast heal. Hayyan's charged skill is the shape: "This Unit
+ * repairs 17% of its Max HP, grants Cheat Death to all allies, and adds 1 charge…", where the
+ * repair is the first clause and has nothing to do with the grant.
+ *
+ * "gains Cheat Death" is deliberately NOT masked: that is the status LANDING on this Unit, which
+ * is the revive shape the arm exists to suppress.
+ *
+ * Runs on the tag-STRIPPED text — a `<unit-skill>` boundary sits between the verb and the name in
+ * the source, so the two are only adjacent after stripping. Like `maskStatusNameRepairs`, the
+ * substitution is local to `parseHealAbilities` and cannot leak into buff-name parsing, which
+ * reads the untouched text. "Renewal" is chosen because no other pattern in this file matches it.
+ */
+function maskGrantedCheatDeath(text: string): string {
+    return text.replace(/\b(grants?)(\s+)cheat\s+death\b/gi, '$1$2Renewal');
+}
+
 // Repair amount: "repairs ... N%" or "repair N%" (caster heal). The `[^%]*?` between
 // the verb and the percentage tolerates interleaved recipients ("repairs the ally for 4%").
 const HEAL_REPAIR_RE = /\brepairs?\b[^%.;]*?(\d+(?:\.\d+)?)\s*%/gi;
@@ -4535,7 +4559,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
     // Mask repair-bearing STATUS NAMES before the tags are stripped — see maskStatusNameRepairs
     // (#362). `plain` is local to this function, so the substitution cannot leak into buff-name
     // parsing, which reads the untouched text via parseSkillEffects.
-    const plain = stripUnitTags(maskStatusNameRepairs(text)).replace(/<br\s*\/?>/gi, '. ');
+    const plain = maskGrantedCheatDeath(
+        stripUnitTags(maskStatusNameRepairs(text)).replace(/<br\s*\/?>/gi, '. ')
+    );
     const results: ParsedHealAbility[] = [];
 
     const emit = (kind: ParsedHealAbility['kind'], re: RegExp): void => {

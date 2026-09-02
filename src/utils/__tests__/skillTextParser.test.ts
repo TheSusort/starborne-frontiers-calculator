@@ -3050,6 +3050,34 @@ describe('parseHealAbilities', () => {
             )
         ).toEqual([]);
     });
+    // HEAL_DISQUALIFY_RE suppresses a heal sentence that MENTIONS Cheat Death, because the
+    // revive content it usually accompanies is unmodeled. A sentence that merely GRANTS Cheat
+    // Death carries no such content — the grant itself parses separately as a buff — so its
+    // repair clause must survive. Hayyan is the corpus's only grant-shaped instance; the two
+    // tests below are the whole family (the census lives in the commit body).
+    it('Hayyan charged: a repair alongside a Cheat Death GRANT is parsed', () => {
+        expect(
+            parseHealAbilities(
+                'This Unit <unit-damage>repairs 17%</unit-damage> of its Max HP, grants <unit-skill>Cheat Death</unit-skill> to all allies, and <unit-aid>adds 1 charge</unit-aid> to their Charged Skill.'
+            )
+        ).toEqual([
+            { kind: 'heal', pct: 17, basis: 'hp', target: 'all-allies', explicitTarget: true },
+        ]);
+    });
+    it('Yazid: a repair riding "when Cheat Death ACTIVATES" is still parsed', () => {
+        expect(
+            parseHealAbilities(
+                'Once per battle, when <unit-skill>Cheat Death</unit-skill> activates, this Unit <unit-damage>repairs itself for 60%</unit-damage> of its Max HP and gains <unit-skill>Barrier</unit-skill> for 1 turn.'
+            )
+        ).toEqual([{ kind: 'heal', pct: 60, basis: 'hp', target: 'self', explicitTarget: true }]);
+    });
+    it('a repair sentence that GAINS Cheat Death stays disqualified', () => {
+        expect(
+            parseHealAbilities(
+                'When this Unit gains <unit-skill>Cheat Death</unit-skill>, it <unit-damage>repairs 20%</unit-damage> of its Max HP.'
+            )
+        ).toEqual([]);
+    });
     it('"X% of damage dealt" repair IS parsed as a dual-recipient leech (Valkyrie burst reaction)', () => {
         expect(
             parseHealAbilities(
