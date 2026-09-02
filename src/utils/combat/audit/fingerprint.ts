@@ -61,7 +61,7 @@ export function diffFingerprints(
  *  `buff-applied` consumes the tag (`buff:charged`) and THAT cast's attack lands as a bare
  *  `attack`.
  *
- *  ONE handler is no longer among the eight: since the multi-hit full-walk epic (PR2) the
+ *  ONE handler is no longer among the eight: since the multi-hit full-walk epic the
  *  `ability-performed` handler calls `ctx.currentSkillTag()` instead, which LATCHES the tag for
  *  the rest of the cast so all N of a multi-hit skill's attack rows read as the same named skill.
  *  That does not change the outcome described above — `currentSkillTag` still consumes

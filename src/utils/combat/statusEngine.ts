@@ -18,7 +18,7 @@ export interface ActiveBuff {
 export interface StatusEngineInput {
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
-    /** Team-actor scheduled sources (Phase 2 Task 8). Each source's TIMED entries key
+    /** Team-actor scheduled sources. Each source's TIMED entries key
      *  off that source's own id (matched in sourceFired by sourceId), so they apply on
      *  the team actor's real turns rather than the attacker's cadence. ALWAYS-ACTIVE and
      *  ACCUMULATING entries from these sources join the same global always/accum sets as
@@ -200,7 +200,7 @@ export interface StatusEngine {
         slot: 'active' | 'charge',
         round: number
     ): { resistedEnemy: string[]; appliedEnemy: string[] };
-    /** Swap the TIMED-enemy landing hook used by `sourceFired` (A2 Task 4). The engine resets
+    /** Swap the TIMED-enemy landing hook used by `sourceFired`. The engine resets
      *  this per turn to the ACTING actor's live landing closure (live hacking-vs-target-security
      *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
      *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
@@ -506,7 +506,7 @@ interface AccumulatingState {
     payload?: AbilityStatusPayload;
     conditions?: Condition[];
     /** The caster of an ability-sourced accumulating status — its gate evaluates against the
-     *  caster's ctx (Task 5). Undefined for scheduled accum entries (no conditions → no gate). */
+     *  caster's ctx. Undefined for scheduled accum entries (no conditions → no gate). */
     casterId?: string;
     /** Application order, stamped at the 0→positive stack transition (when the status first
      *  becomes active). Undefined while seeded-but-inert (stacks === 0). Drives cleanse/purge
@@ -1013,7 +1013,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         for (const buff of sets.timedSelf) {
             if (buff.skillSource === slot) upsertBuff(buff, 'self', sourceId);
         }
-        // Timed ENEMY upserts draw the landing decision ONCE here (Task 7). A rejected
+        // Timed ENEMY upserts draw the landing decision ONCE here. A rejected
         // application is NOT upserted (the existing in-window status is untouched) and
         // its buffName is collected so the engine can emit debuff-resisted + record it.
         // A landed application's buffName is collected BEFORE the family-rule upsert so
@@ -1606,7 +1606,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return stolen.map((s) => s.buffName);
     };
 
-    // --- Ability-status API (Task 6) ---
+    // --- Ability-status API ---
 
     const registerAbilityStatuses = (
         statuses: RegisteredAbilityStatus[],

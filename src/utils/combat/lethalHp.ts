@@ -58,8 +58,8 @@ export function resolveLethalHp(
     );
     if (carriesCheatDeath && !opts.cheatDeathConsumed.has(targetId)) {
         // Floor HP at 1 — this overrides the `Math.max(0, …)` clamp that just set currentHp to
-        // 0. That clamp now lives in the caller (engine.ts:5776), not in this file, so neither
-        // side documents the coupling without this note.
+        // 0. That clamp lives in the caller, not in this file, so neither side documents the
+        // coupling without this note.
         victim.currentHp = 1;
         opts.cheatDeathConsumed.add(targetId);
         if (!opts.cheatDeathConsumedRound.has(targetId)) {
@@ -69,7 +69,7 @@ export function resolveLethalHp(
         // Actor-state DoT stacks (Corrosion/Inferno/generic) are NOT StatusEngine entries, so
         // clearRemovable doesn't touch them — wipe them here so the survivor takes no further
         // ticks. These are the SAME arrays the turn-start DoT-tick intake reads
-        // (corrosionEntries/infernoEntries/genericDoTEntries). SP-E: filter, don't clear — an
+        // (corrosionEntries/infernoEntries/genericDoTEntries). Filter, don't clear — an
         // `unremovable` stack (Acidic Decay) survives this wipe and keeps ticking. Bombs
         // (Blast, treated as persistent here) and accumulators are intentionally left untouched.
         victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
@@ -89,11 +89,10 @@ export function resolveLethalHp(
         return 'cheat-death';
     }
     // First reach 0 (no intercept) → record the destroyed round and emit ship-destroyed once
-    // (idempotent via the per-actor destroyedRound field). That idempotency is load-bearing —
-    // it is what makes the corpse-re-hit reasoning at engine.ts:5783-5786 sound, and a later
-    // task reuses this function on the strength of it. The healing result reads the destroyed
-    // round back off the heal target's runtime `destroyedRound` field at the result site — no
-    // side-specific scalar write is needed here.
+    // (idempotent via the per-actor destroyedRound field). That idempotency is load-bearing: the
+    // caller's corpse-re-hit handling relies on a second lethal resolution being a no-op. The
+    // healing result reads the destroyed round back off the heal target's runtime
+    // `destroyedRound` field at the result site — no side-specific scalar write is needed here.
     recordDestroyed(victim, opts.round, opts.bus, opts.killerId, opts.byDirectDamage);
     return 'destroyed';
 }

@@ -23,7 +23,7 @@ export function emitPerVictimAttacked(args: {
     attackerId: string;
     primaryId: string;
     victims: Map<string, { damage: number; shieldWasHit: boolean; hitOutcomes: boolean[] }>;
-    /** The sub-attack `victims` belongs to (PR4) — stamped onto every event it emits. */
+    /** The sub-attack `victims` belongs to — stamped onto every event it emits. */
     subAttackIndex?: number;
 }): void {
     for (const [victimId, sig] of args.victims) {

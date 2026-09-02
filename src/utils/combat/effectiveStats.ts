@@ -238,7 +238,7 @@ export function effectiveOutgoingStatsOf(
 
 /**
  * Live debuff-LANDING chance (0..1) for one acting actor against one target, recomputed
- * from current effective stats (A2 Task 4). Mirrors the dpsSimulator setup formula exactly,
+ * from current effective stats. Mirrors the dpsSimulator setup formula exactly,
  * but live + with the affinity modifier applied IN the engine:
  *
  *   effHacking = (hacking + hackingBuff) * (1 + affinityDamageModifier / 100)

@@ -121,7 +121,7 @@ interface BuildContext {
      * `pendingSkill` by the first `ability-performed` of the cast.
      *
      * Sticky for the whole cast: a multi-hit skill emits one ability-performed per
-     * sub-attack (PR2) and every row must carry the same skill identity. Cleared at
+     * sub-attack and every row must carry the same skill identity. Cleared at
      * turn-started and replaced by the next skill-fired.
      */
     castSkillTag: { skillName?: string; slot: 'active' | 'charged' } | undefined;
@@ -176,7 +176,7 @@ interface BuildContext {
      * Returns the skill tag for the cast currently being logged WITHOUT clearing it.
      *
      * Sticky for the whole cast: a multi-hit skill emits one ability-performed per
-     * sub-attack (PR2) and every row must carry the same skill identity. Cleared at
+     * sub-attack and every row must carry the same skill identity. Cleared at
      * turn-started and replaced by the next skill-fired.
      *
      * The first call of a cast still *consumes* `pendingSkill` (latching it into

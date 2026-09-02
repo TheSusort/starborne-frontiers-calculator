@@ -184,7 +184,7 @@ export interface CombatActor {
     doesntBreakStasis?: boolean;
     /** RAW affinity of this actor (positional plumbing — set at construction, not yet consumed
      *  by apply). The positional damage calculator's `defenseProfileOf(victim)` will read this
-     *  for per-victim affinity re-resolution (Task 8b/9). Absent → treated as neutral downstream. */
+     *  for per-victim affinity re-resolution. Absent → treated as neutral downstream. */
     affinity?: AffinityName;
     // Unlike the optional plumbing flags above (doesntBreakStasis/affinity/…),
     // the next two always carry a defined value: createActor seeds them on every actor, so they

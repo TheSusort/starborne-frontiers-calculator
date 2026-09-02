@@ -111,7 +111,7 @@ export function computeAblationResult(
  * a different crit sequence as focus (`'attacker'`) vs as ally (`p:<id>:<idx>`) can trigger a
  * crit-gated ability in one run and not the other WITHOUT any real interaction between A and
  * B. That is expected, not a bug in this oracle — `diverges` is a signal for the needs-triage
- * bucket (Task 9/10), never a confirmed Finding on its own.
+ * bucket, never a confirmed Finding on its own.
  */
 export function runAblation(a: Ship, b: Ship, seed: number): AblationResult {
     const soloAResult = runSeededBattle(battleFor([a]), seed);

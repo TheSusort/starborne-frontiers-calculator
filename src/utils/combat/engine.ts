@@ -213,7 +213,7 @@ export function foldSpeedBuffPct(
 // an aura): it is a one-time combat-start window ("gains X for N turns"), seeded once in the
 // round-1 loop and then decrementing on the owner's normal timed lifecycle.
 //
-// TARGET ROUTING (Task 5): the binary side computation becomes recipient routing —
+// TARGET ROUTING: the binary side computation becomes recipient routing —
 //   enemy/all-enemies → 'enemy' side (recipients ignored, enemy maps are singular);
 //   self              → recipients [casterId] (the owner only);
 //   ally/all-allies   → recipients = ALL player ids (`playerIds`, a FIXED source order
@@ -463,7 +463,7 @@ function registerActorAbilityStatuses(
             };
             // `as const` keeps the literal types (side, sourceSlot) so the spread into
             // a union variant below doesn't widen them — runtime object is unchanged.
-            // casterId/recipients (Task 5) carry the ally-routing decision on the status.
+            // casterId/recipients carry the ally-routing decision on the status.
             const base = {
                 payload,
                 side,
@@ -709,13 +709,13 @@ export interface EnemyActorInput {
         speed: number;
         defence?: number;
         hp?: number;
-        /** Base hacking (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.hacking
-         *  (base for effectiveStatsOf.hacking). No production reader until landing lands (A2 Task 4). */
+        /** Base hacking. Optional — flows onto the enemy CombatActor's stats.hacking
+         *  (base for effectiveStatsOf.hacking). No production reader until landing lands. */
         hacking?: number;
-        /** Base security (A2 Task 2). Optional — flows onto the enemy CombatActor's stats.security
-         *  (base for effectiveStatsOf.security). No production reader until landing lands (A2 Task 4). */
+        /** Base security. Optional — flows onto the enemy CombatActor's stats.security
+         *  (base for effectiveStatsOf.security). No production reader until landing lands. */
         security?: number;
-        /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+        /** Shield penetration. Optional — flows onto the enemy CombatActor's
          *  stats.shieldPenetration. No production reader until H1 Task 4 wires the apply path. */
         shieldPenetration?: number;
         /** Heal-modifier % (SP-F F4). Folded into this enemy's own heal casts as
@@ -745,7 +745,7 @@ export interface EnemyActorInput {
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
-     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+     *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this enemy. Consumed by the enemy-turn positional
      *  target selection AND the positional apply at the enemy damage site (threaded via
@@ -790,7 +790,7 @@ export interface EnemyActorInput {
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
  *  Exported for unit-testing; called inside runCombat. The enemy-dispatch branch
- *  walks runPlayerTurn with this runtime, bound to the heal target (Task 6b). */
+ *  walks runPlayerTurn with this runtime, bound to the heal target. */
 export function buildEnemyPlayerActorRuntime(
     e: EnemyActorInput,
     ctx: {
@@ -874,7 +874,7 @@ export function buildEnemyPlayerActorRuntime(
             defence: e.stats.defence ?? 0,
             hp: e.stats.hp ?? 0,
             speed: e.stats.speed,
-            // Base hacking/security (A2 Task 2) — base for effectiveStatsOf; unread until landing lands (A2 Task 4).
+            // Base hacking/security — base for effectiveStatsOf; unread until landing lands.
             hacking: e.stats.hacking,
             security: e.stats.security,
         },
@@ -898,7 +898,7 @@ export function buildEnemyPlayerActorRuntime(
     const affinityDisadvantage = resolvedDamageMod < 0;
     // Own gate instances — separate draw streams so this enemy's crit/heal-crit/debuff/extend
     // rolls are fully isolated from every other actor's deterministic schedule. Keyed by this
-    // enemy's own id + purpose (SP-0 Task 3) so, under the keyed test provider, its draws come
+    // enemy's own id + purpose so, under the keyed test provider, its draws come
     // from a sub-stream no other actor shares; production (no keyed provider) is unaffected.
     const enemyActiveCritGate = makeRateGate(`${e.id}:active-crit`);
     const enemyChargedCritGate = makeRateGate(`${e.id}:charged-crit`);
@@ -935,7 +935,7 @@ export function buildEnemyPlayerActorRuntime(
         affinityDisadvantage,
         // RAW affinity — sourced from the SAME e.affinity the adapter fed to
         // computeAffinityModifiers for resolvedDamageMod, so the two never disagree. Positional
-        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // plumbing: read by victimHitDamage for per-victim re-resolution. Undefined →
         // neutral 'antimatter' default downstream.
         attackerAffinity: e.affinity,
         allyChargePerRound: undefined,
@@ -979,7 +979,7 @@ function totalStacks(entries: ActiveDoTStack[]): number {
 
 /** De-dupe ActiveBuffs by buffName, keeping the first occurrence. Used to collapse the
  *  per-round enemy-effects union (multiple enemy attackers can carry the same status) so
- *  the UI shows each effect once per round (Task 10). */
+ *  the UI shows each effect once per round. */
 function dedupeByBuffName(buffs: ActiveBuff[]): ActiveBuff[] {
     const seen = new Set<string>();
     const out: ActiveBuff[] = [];
@@ -1005,7 +1005,7 @@ function mergeDoTsForDisplay(
     return expiredOnly.length === 0 ? live : [...live, ...expiredOnly];
 }
 
-/** Assemble the per-round `EnemyRoundEffects[]` for the healing UI (Task 4a). Each enemy that acted
+/** Assemble the per-round `EnemyRoundEffects[]` for the healing UI. Each enemy that acted
  *  (in `roundEnemyEffects`, keyed by actor id) keeps its de-duped self-buffs/debuffs; on top, the
  *  DoTs ACTIVE on the heal target this round are attributed to their applier via the stack
  *  `sourceId`, summed per type+tier (mirroring the DPS active-DoT display). A DoT-only enemy (no
@@ -1100,7 +1100,7 @@ function expireStacks(entries: ActiveDoTStack[]): void {
 // Step 6: Process bombs — their burst is detonation damage (same category as Step 2.95).
 // `emitBombDetonated` is called once per burst (per detonating bomb entry) so Phase 3
 // reactive triggers can observe each burst's actorId, round, stacks, and damage.
-// Per-actor attribution (Task 4): each burst uses the APPLIER's affinityMult (snapshotted at
+// Per-actor attribution: each burst uses the APPLIER's affinityMult (snapshotted at
 // application) and is credited to that applier's detonation channel via `creditDetonation`.
 // `actorIdFor` supplies the bomb-detonated event's actorId (the applier).
 function processBombs(args: {
@@ -1138,7 +1138,7 @@ const ALL_ENEMIES_PATTERN: ParsedPattern = {
 // Step 6b: Echoing Burst accumulators gather this round's direct damage, then detonate
 // for pct% of the accumulated total on expiry (game-categorised as detonation damage).
 // directDamage already includes affinity, so no extra affinity multiplier is applied.
-// Per-actor attribution (Task 4): the accumulation INPUT is the summed direct damage of the
+// Per-actor attribution: the accumulation INPUT is the summed direct damage of the
 // ACCUMULATING SIDE this round (spec: Echoing Burst gathers all its side's direct); the OUTPUT
 // burst is credited to the accumulator's applier via `creditDetonation`.
 //
@@ -1176,7 +1176,7 @@ function processAccumulators(args: {
 
 // Steps 4 & 5: Tick corrosion (scales with enemy HP, capped at 5000 dmg per 1%) and
 // inferno (scales with the APPLIER's effective attack, no outgoing buff), then expire both
-// stack sets. Per-actor attribution (Task 4): each entry ticks with its applier's ctx (looked
+// stack sets. Per-actor attribution: each entry ticks with its applier's ctx (looked
 // up via `ctxFor(entry.sourceId)`) — inferno uses the applier's effectiveAttack, both use the
 // applier's dotMult/affinityMult; corrosion stays enemy-HP-based. An entry whose applier has
 // no ctx yet (faster-enemy round 1) is skipped this tick (its applier acts later). Damage is
@@ -1374,7 +1374,7 @@ export type TeamActorEngineInput = TeamActorInput & {
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
-     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+     *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for this team actor. Consumed by the walked-team
      *  positional target selection AND the Task 8b positional apply at the team damage site. */
@@ -1417,7 +1417,7 @@ export interface CombatEngineInput {
     crit: number;
     critDamage: number;
     defensePenetration: number;
-    /** Shield penetration for the focus attacker (H1 Task 2). Optional — defaults to 0 at the
+    /** Shield penetration for the focus attacker. Optional — defaults to 0 at the
      *  actor-construction site. No production reader until H1 Task 4 wires the apply path. */
     shieldPenetration?: number;
     chargeCount: number;
@@ -1426,7 +1426,7 @@ export interface CombatEngineInput {
     /** Scheduled (manual + team) buffs — statusEngine input. */
     selfBuffs: SelectedGameBuff[];
     enemyDebuffs: SelectedGameBuff[];
-    /** Team ships as real speed-ordered actors (Phase 2). Their buff lists are keyed to
+    /** Team ships as real speed-ordered actors. Their buff lists are keyed to
      *  their own turns via the status engine's teamSources, NOT merged into selfBuffs/
      *  enemyDebuffs (no-double-count). */
     teamActors?: TeamActorEngineInput[];
@@ -1441,9 +1441,9 @@ export interface CombatEngineInput {
     affinityCritPenalty: number;
     defence: number;
     hp: number;
-    /** Focus attacker's base hacking (A2 Task 2). Optional — base for effectiveStatsOf.hacking on the
+    /** Focus attacker's base hacking. Optional — base for effectiveStatsOf.hacking on the
      *  attacker actor. The adapter passes `input.hacking ?? 200` (the OLD landing-formula default); no
-     *  production reader until dynamic landing lands (A2 Task 4). */
+     *  production reader until dynamic landing lands. */
     hacking?: number;
     /** Focus attacker's base security. Optional — base for effectiveStatsOf.security on the
      *  attacker actor. Threaded so the focus actor's own security (e.g. gear-folded via Code
@@ -1504,11 +1504,11 @@ export interface CombatEngineInput {
             defence?: number;
             /** Enemy's own hp stat. Default 0. Task 9 provides real value. */
             hp?: number;
-            /** Base hacking (A2 Task 2). Optional — base for effectiveStatsOf.hacking; unread until A2 Task 4. */
+            /** Base hacking. Optional — base for effectiveStatsOf.hacking; unread until A2 Task 4. */
             hacking?: number;
-            /** Base security (A2 Task 2). Optional — base for effectiveStatsOf.security; unread until A2 Task 4. */
+            /** Base security. Optional — base for effectiveStatsOf.security; unread until A2 Task 4. */
             security?: number;
-            /** Shield penetration (H1 Task 2). Optional — flows onto the enemy CombatActor's
+            /** Shield penetration. Optional — flows onto the enemy CombatActor's
              *  stats.shieldPenetration. No production reader until H1 Task 4. */
             shieldPenetration?: number;
         };
@@ -1534,7 +1534,7 @@ export interface CombatEngineInput {
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
         doesntBreakStasis?: boolean;
         /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
-         *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+         *  no-op against actors with this flag set. Optional — undefined = false. */
         chargeLossImmune?: boolean;
         /** Pre-parsed targeting preference for this enemy attacker. Consumed by the enemy-turn
          *  positional target selection AND the positional apply at the enemy damage site
@@ -1585,7 +1585,7 @@ export interface CombatEngineInput {
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
-     *  no-op against actors with this flag set (Phase 0 Task 7). Optional — undefined = false. */
+     *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
     /** Pre-parsed targeting preference for the focus attacker. Consumed by the focus positional
      *  target selection AND the Task 8b positional apply at the focus damage site. */
@@ -1609,7 +1609,7 @@ export interface CombatEngineInput {
     /** Pre-fight combat-modifier baseline (sub-project F, PR F3) — squad-leader modifier
      *  channels for the focus attacker. Absent → all folds inert (byte-identical). */
     preFight?: PreFightCombatModifiers;
-    /** TEST-ONLY tap (Phase 4 PR1, Task 3): receives the genuine `applyOutgoingToEnemy` closure
+    /** TEST-ONLY tap: receives the genuine `applyOutgoingToEnemy` closure
      *  once on the first round it is built, so unit tests can exercise the player→enemy victim
      *  wrapper against a hand-built enemy actor. Never set by production code; the closure runs the
      *  real applyVictimDamage path (no mocks).
@@ -1639,7 +1639,7 @@ export interface CombatEngineInput {
         channel: 'direct' | 'detonation' | 'corrosion' | 'inferno' | 'generic',
         amount: number
     ) => void;
-    /** TEST-ONLY tap (A2 Task 2): receives the full `allActors` roster once, right after actors
+    /** TEST-ONLY tap: receives the full `allActors` roster once, right after actors
      *  are constructed, so unit tests can assert the plumbed base hacking/security on each actor
      *  (the bases have no production reader yet). Never set by production code; inert when absent.
      *  IMPORTANT: the passed array and its CombatActors are LIVE references mutated by the run
@@ -1647,7 +1647,7 @@ export interface CombatEngineInput {
      *  in the callback, not after runCombat returns. Base stats (hacking, security, etc.) are
      *  never mutated, so existing base-stat assertions are safe to read post-run. */
     __testTapActors?: (actors: CombatActor[]) => void;
-    /** TEST-ONLY tap (B1 Task 2): receives the per-victim incoming-damage modifier reader
+    /** TEST-ONLY tap: receives the per-victim incoming-damage modifier reader
      *  (`victimIncomingModifiers`) once it is built in the round loop. Since D-PR12 the closure
      *  sums BOTH the enemy-debuff term AND the victim's own friendly self-buff term (field name
      *  kept as `__testTapVictimEnemyModifiers` to avoid churning the existing tap tests). Unit
@@ -1668,7 +1668,7 @@ export interface CombatEngineInput {
      *  test can assert per-victim Stasis detection for both directions. Mirrors
      *  __testTapVictimEnemyModifiers. Never set by production callers. */
     __testTapIsStasised?: (fn: (actorId: string) => boolean) => void;
-    /** TEST-ONLY tap (C2a Task 3): receives the live `statusEngine` once it is built so a test can
+    /** TEST-ONLY tap: receives the live `statusEngine` once it is built so a test can
      *  read an actor's settled self-buff / debuff state AFTER `runCombat` returns (e.g. to assert a
      *  cast-path purge removed an enemy's self-buffs). Never set by production code; inert when
      *  absent. The engine reference is LIVE — read it after the run when state is fully settled. */
@@ -1676,10 +1676,10 @@ export interface CombatEngineInput {
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
- *  damage map. incomingDamage/shieldAbsorbed stay 0 until enemy attacks (Task 8).
+ *  damage map. incomingDamage/shieldAbsorbed stay 0 until enemy attacks.
  *  targetHpPctStart/targetShieldStart are captured at the ROUND TOP (raw floats — the
  *  adapter owns any rounding). */
-/** One enemy attacker's effects for a single round, attributed to its actor id (Task 10a).
+/** One enemy attacker's effects for a single round, attributed to its actor id.
  *  selfBuffs = the self-buffs active on that enemy this round; debuffs = the debuffs/DoTs it
  *  landed on the heal target. Both are de-duped by buffName WITHIN this enemy (so the same
  *  status from two attackers stays distinct per source). The UI resolves enemyId → the enemy
@@ -1857,7 +1857,7 @@ export interface HealingRoundEngine {
      *  `perRecipientApply` (or `mode: 'battle'`) is set; **empty otherwise**, which is what
      *  keeps every legacy healing result byte-identical.
      *
-     *  EVERY repair whose pool application succeeds is on this axis (SP-3b Task 7): the cast site
+     *  EVERY repair whose pool application succeeds is on this axis: the cast site
      *  (playerTurn.ts — BOTH arms, the player one and the `healEventOnly` enemy one), HoT ticks
      *  (playerTurn.ts `tickHot` — raw into the HOLDER's `hotHeal`), the per-victim standing and
      *  taken leeches (engine.ts, both via `creditLandedRepair`), and reactive repairs (triggers.ts).
@@ -1897,7 +1897,7 @@ export interface HealingRoundEngine {
      *  `creditRecipient(rid, 'shield', …)` there would make the map non-empty on legacy runs and
      *  break the byte-identical guarantee above. */
     perRecipient: Map<string, ActorHealing>;
-    /** Per-enemy effects this round (Task 10a): one entry per enemy attacker that produced an
+    /** Per-enemy effects this round: one entry per enemy attacker that produced an
      *  effect, carrying its own self-buffs + the debuffs it landed on the heal target. Surfaced
      *  for the UI's enemy-effects round overview, grouped/attributed by the source enemy ship.
      *  Empty for a bare/manual enemy with no effects. NAMES ONLY — never folded into a sim value. */
@@ -2199,7 +2199,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // normalized roster unchanged.
     const teamActors = normalizeTeamActorsToWalked(input.teamActors ?? []);
 
-    // Internal bus — always created (Phase 3). Reactive listeners attach here. When an
+    // Internal bus — always created. Reactive listeners attach here. When an
     // external bus is provided it is a pure WRITE-ONLY tap: each emit fans out to the
     // external bus FIRST (its listeners stay write-only, registered before the engine's
     // own reactive listeners), then to the internal bus. Everything that flowed through
@@ -2215,7 +2215,7 @@ export function runCombat(rawInput: CombatEngineInput): {
           }
         : internalBus;
 
-    // Cast/reactive split (Phase 3). Live-trigger buff/debuff/dot/charge abilities are
+    // Cast/reactive split. Live-trigger buff/debuff/dot/charge abilities are
     // EXCLUDED from every on-cast pipeline (the registration loop + runPlayerTurn) and
     // instead registered as reactive listeners in slot/text order. Everything else stays
     // on-cast — including any non-buff/debuff/dot/charge ability carrying a live trigger
@@ -2245,7 +2245,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             defence,
             hp,
             speed: speed ?? 100,
-            // Base hacking (A2 Task 2) — base for effectiveStatsOf.hacking; unread until landing lands (A2 Task 4).
+            // Base hacking — base for effectiveStatsOf.hacking; unread until landing lands.
             hacking,
             // Focus actor's own security — base for effectiveStatsOf.security (stats-snapshot
             // display) and the live debuff-landing recompute when the focus is targeted.
@@ -2281,7 +2281,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // lifts this into CombatEngineInput once multi-actor damage rows are needed (YAGNI).
     const focusActorId = 'attacker';
 
-    // The full player-id universe for ally-target routing (Task 5): the focus actor FIRST,
+    // The full player-id universe for ally-target routing: the focus actor FIRST,
     // then every team actor in INPUT ORDER. This order is FIXED (independent of which actor
     // casts an ally buff) so per-recipient application order is deterministic across the run.
     // For an attacker-only run this is just ['attacker'] → ally/all-allies collapse to the
@@ -2338,7 +2338,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             sideIds.map((id) => ({ id, position: positionByActorId.get(id) }))
         );
 
-    // Team actors (Phase 2). Real speed-ordered actors carrying their own charge cadence;
+    // Team actors. Real speed-ordered actors carrying their own charge cadence;
     // they deal no damage and hold no DoTs/statuses (their buff grants sit on the attacker/
     // enemy via the status engine's per-source timed sets). For a WALKED team actor the real
     // combat stats come from the walk bundle (so the heal target's `currentHp` starts at its
@@ -2401,7 +2401,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
     }
 
-    // Per-team-actor parsed positional pattern (Task 8a), mirroring teamTargetById. The pattern
+    // Per-team-actor parsed positional pattern, mirroring teamTargetById. The pattern
     // lives only on the TeamActorEngineInput — thread it to the team-turn call site by id for the
     // Task 8b apply path. Was empty for every non-positional input (no pattern set) and inert when
     // written; since SP-4b-1 `normalizeCombatRoster` fills every team actor's target and pattern
@@ -2441,7 +2441,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
     }
 
-    // Per-enemy-attacker parsed positional pattern (Task 8a), mirroring enemyTargetById /
+    // Per-enemy-attacker parsed positional pattern, mirroring enemyTargetById /
     // teamPatternById. The pattern lives only on the EnemyActorInput — thread it to the enemy-turn
     // call site by id for the Task 8b apply path. Same staleness note as enemyTargetById above: the
     // SP-4b-1 boundary fills a pattern for every supplied enemy, so this is no longer inert.
@@ -2598,7 +2598,7 @@ export function runCombat(rawInput: CombatEngineInput): {
 
     // Attacker runtime — everything the focus actor's turns close over, built once.
     // The attacker carries the top-level inputs, the global merged lookups, and the
-    // shared gates. Walked team runtimes (Task 4) come from TeamActorInput with their
+    // shared gates. Walked team runtimes come from TeamActorInput with their
     // own gate instances and empty lookups. The engine core keys on runtime/actor ids.
     const attackerRuntime: PlayerActorRuntime = {
         actor: attacker,
@@ -2623,7 +2623,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         affinityDisadvantage,
         // RAW focus affinity — sourced from the SAME input.affinity the page resolved into the
         // pre-resolved affinityDamageModifier above, so the two never disagree. Positional
-        // plumbing: read by victimHitDamage for per-victim re-resolution (Task 8b/9). Undefined →
+        // plumbing: read by victimHitDamage for per-victim re-resolution. Undefined →
         // neutral 'antimatter' default downstream.
         attackerAffinity: input.affinity,
         allyChargePerRound,
@@ -2638,7 +2638,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         enemyDebuffLookup,
     };
 
-    // Walked team runtimes (Task 4). For each team input with a `walk` bundle, build a
+    // Walked team runtimes. For each team input with a `walk` bundle, build a
     // PlayerActorRuntime so its real turns run the full runPlayerTurn pipeline. Each gets
     // its OWN gate instances (determinism isolation — its draws never interleave with the
     // attacker's or another team actor's), its own landing closure (its affinity disadvantage
@@ -2673,7 +2673,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         const teamAffinityDisadvantage = w.affinityDamageModifier < 0;
         // Own gate instances — separate draw streams so a team actor's crit/landing/extend
         // rolls are isolated from the attacker's deterministic schedule. Keyed by this team
-        // actor's own id + purpose (SP-0 Task 3) — see the enemy/focus gates above for the
+        // actor's own id + purpose — see the enemy/focus gates above for the
         // same convention.
         const teamActiveCritGate = makeRateGate(`${t.id}:active-crit`);
         const teamChargedCritGate = makeRateGate(`${t.id}:charged-crit`);
@@ -2725,7 +2725,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             affinityDisadvantage: teamAffinityDisadvantage,
             // RAW affinity — sourced from the SAME w.affinity (TeamActorInput.affinity) the adapter
             // fed to computeAffinityModifiers for w.affinityDamageModifier, so the two never
-            // disagree. Positional plumbing: read by victimHitDamage (Task 8b/9). Undefined →
+            // disagree. Positional plumbing: read by victimHitDamage. Undefined →
             // neutral 'antimatter' default downstream.
             attackerAffinity: w.affinity,
             allyChargePerRound: undefined, // attacker-only manual input
@@ -2984,10 +2984,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Enemy-team recipient order (mirror of playerIds): enemy ATTACKER ids in input order. Equals
     // enemyAttackerActorIds but computable before the runtimes map.
     const enemyRecipientIds = enemyAttackerInputs.map((e) => e.id);
-    // Build a full PlayerActorRuntime for each enemy attacker (Task 5), in input order.
+    // Build a full PlayerActorRuntime for each enemy attacker, in input order.
     // Each enemy gets its OWN gate instances (determinism isolation), reactive-partitioned
     // abilities, neutral affinity placeholder, and real defence/hp. The enemy walks
-    // runPlayerTurn bound to the heal target (Task 6b) — its damage drains into the target,
+    // runPlayerTurn bound to the heal target — its damage drains into the target,
     // self-buffs land in its own owner store, debuffs/DoTs on the target's per-target store.
     // Manual flat-card enemies (no shipSkills) are handled inside the builder by synthesizing
     // a single 100%/1-hit basic-attack active slot (parity with the retired EnemyAttackerRuntime).
@@ -3069,7 +3069,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     const allActors: CombatActor[] = [...teamCombatActors, attacker, ...enemyAttackerActors];
 
     // TEST-ONLY: hand the full roster out once at construction so unit tests can assert the
-    // plumbed base hacking/security on each actor (A2 Task 2). Inert in production (field never set).
+    // plumbed base hacking/security on each actor. Inert in production (field never set).
     input.__testTapActors?.(allActors);
 
     // Combined id→actor map over the unified roster (bySide unification PR2 — first
@@ -3538,7 +3538,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // fresh at the top of each round so it never accumulates across rounds. Surfaced as the
     // `granted` half of RoundData.perActorShield at the post-round push.
     let perActorShieldGranted = new Map<string, number>();
-    // Reflect gear set (Task 5): per-round reflected-thorns accumulator (ATTACKER actor id →
+    // Reflect gear set: per-round reflected-thorns accumulator (ATTACKER actor id →
     // total reflected damage dealt back to it THIS round). Mirrors perActorShieldGranted's
     // lifecycle — declared once, written by the reflection block inside applyVictimDamage, and
     // rebound fresh each round so it never accumulates across rounds. Surfaced both as the
@@ -3643,7 +3643,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     const actingSelfCtx = (id: string): PlayerRoundCtx | undefined =>
         actingTurnCtx?.actorId === id ? actingTurnCtx.ctx : undefined;
 
-    // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates (Task 5). Read at
+    // Heal target's live HP% (0..100) for `hpSubject:'target'` cast-time gates. Read at
     // the ACTING actor's turn start (pre-this-cast-heal): healTarget.currentHp already reflects
     // the turn-start DoT tick but not the cast's heal. Pre-#415, DPS mode had no `healTarget`, so
     // this always returned 100 there — a "below N" target gate always failed, inert by
@@ -3871,7 +3871,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                       (abilityId, chance) =>
                           rollRateGate(procChanceGates, `${rid}:${abilityId}`, chance)
                   ),
-              // Foreign HoT applier max HP (Task 7): lastTurnCtxByActor ONLY, NO base-stat
+              // Foreign HoT applier max HP: lastTurnCtxByActor ONLY, NO base-stat
               // fallback (strict corrosion applier-ctx rule — undefined → the holder skips the tick).
               applierMaxHp: (id) => lastTurnCtxByActor.get(id)?.effectiveMaxHp,
               // `repairSourceId` (Task 4, #362): the actor credited with this repair — the caster
@@ -4083,7 +4083,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                   // and shrinks targetMaxHp below an already-granted pool, the larger pool simply
                   // persists (we never shrink an existing shield) — acceptable, as the cap is only
                   // enforced at grant time and a shield is additive, never HP-reducing.
-                  // Post-cap delta (Task 6): record the REAL increase, not `raw`. A grant that
+                  // Post-cap delta: record the REAL increase, not `raw`. A grant that
                   // exceeds the maxHP cap records only the portion that actually landed, so the
                   // surfaced `granted` matches the pool growth the UI shows.
                   const before = victim.shieldPool;
@@ -4199,7 +4199,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // executions; the engine drains them at the drain points. Pure listeners (enqueue only) keep
     // the Phase 1 contract — the executor is the only state mutator.
     const intentQueues: Record<Side, Intent[]> = { player: [], enemy: [] };
-    // Per-owner reactive listeners (Task 6): the FOCUS/attacker owner FIRST (zero-churn —
+    // Per-owner reactive listeners: the FOCUS/attacker owner FIRST (zero-churn —
     // its listeners enqueue in the historical order), then every walked team owner in input
     // order. Each owner's guards key on its OWN events; the executor routes the follow-up to
     // the owner's runtime. A legacy team actor (no walk) has no reactive abilities → omitted.
@@ -4309,7 +4309,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         });
     }
 
-    // Owner-routed executor context (Task 6): the executor resolves an intent's owner runtime
+    // Owner-routed executor context: the executor resolves an intent's owner runtime
     // from this map for per-owner landing gates, charge caps, sourceId, bomb effective-attack.
     const runtimesById = new Map<string, PlayerActorRuntime>([
         ['attacker', attackerRuntime],
@@ -5050,7 +5050,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         healingCtx.credit(sourceId, 'directHeal', scaled);
                         healingCtx.credit(sourceId, 'effectiveHeal', applied.consumed);
                         healingCtx.credit(sourceId, 'overheal', applied.overheal);
-                        // Recipient axis (SP-3b Task 7) — this per-victim path repairs whichever
+                        // Recipient axis — this per-victim path repairs whichever
                         // ally it resolved, so the landing id is `rid`, not the heal target.
                         creditLandedRepair(
                             rid,
@@ -5280,7 +5280,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     healingCtx.credit(victim.id, 'directHeal', scaled);
                     healingCtx.credit(victim.id, 'effectiveHeal', applied.consumed);
                     healingCtx.credit(victim.id, 'overheal', applied.overheal);
-                    // Recipient axis (SP-3b Task 7): a damage-TAKEN leech repairs its own owner, so
+                    // Recipient axis: a damage-TAKEN leech repairs its own owner, so
                     // source and recipient coincide here — the axes still differ in meaning.
                     creditLandedRepair(
                         victim.id,
@@ -5499,7 +5499,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         const pending = new Map<string, number>(roundActors.map((a) => [a.id, 1]));
         const pendingOf = (id: string) => pending.get(id) ?? 0;
 
-        // End-of-round action pool (Task 4): "1 extra end of round action" grants (Harvester)
+        // End-of-round action pool: "1 extra end of round action" grants (Harvester)
         // land here instead of `pending`. The selection closure drains `pending` (speed-positioned)
         // FIRST and only consults this pool once the normal pool is empty — so end-of-round extra
         // turns fire AFTER every normal-pool action for the round, regardless of the granter's
@@ -5887,7 +5887,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                  *  re-entry guard skips when set → a counter is never itself reflected (loop-safe). */
                 isCounter?: boolean;
                 /** Protection transfer: true when THIS application is a redirected Protection
-                 *  chunk. The transfer block (Task 4) skips when set → a redirected chunk's own
+                 *  chunk. The transfer block skips when set → a redirected chunk's own
                  *  cascade was already precomputed, so it never re-triggers (loop-safe). */
                 isProtectionTransfer?: boolean;
                 /** The DEFENCE mitigation factor the CALLER already folded into `rawDamage` for
@@ -5989,7 +5989,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }
                             let gate = procChanceGates.get(onceKey);
                             if (!gate) {
-                                // Keyed by the blocking victim's own id + purpose (SP-0 Task 3) —
+                                // Keyed by the blocking victim's own id + purpose —
                                 // `victim.id` is the stable owner of this incoming-block ability.
                                 gate = makeRateGate(`${victim.id}:proc`);
                                 procChanceGates.set(onceKey, gate);
@@ -6771,7 +6771,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (cause?.byDirectDamage && (absorbed > 0 || hpDamage > 0)) {
                 hitThisRound.add(victim.id);
             }
-            // Reflect gear set (Task 5): thorns. When a Reflect wearer takes a DIRECT hit that
+            // Reflect gear set: thorns. When a Reflect wearer takes a DIRECT hit that
             // dealt net HP damage, reflect Σpct% of that net HP damage back at the attacker —
             // mitigated by the attacker's affinity matchup (wearer is the source of the reflected
             // hit), defence, and incoming-reduction. Applied via a RECURSIVE applyVictimDamage with
@@ -7211,7 +7211,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         input.__testTapApplyOutgoingToEnemy?.(applyOutgoingToEnemy);
 
         // G PR1: full mitigated/crit counter walk from the counter owner to the attacker.
-        // Unreferenced dead code until the executor (Task 4) wires it via ctx.applyCounterAttack
+        // Unreferenced dead code until the executor wires it via ctx.applyCounterAttack
         // → byte-identical now. Reuses applyVictimDamage (no attacked event → no re-counter).
         const applyCounterAttack = (
             ownerId: string,
@@ -7596,7 +7596,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             return { dealt: raw, didCrit };
         };
 
-        // §4.5 STASIS direct-damage break (B3 Task 2). Fires via the `onHitBreakStasis` hook
+        // §4.5 STASIS direct-damage break. Fires via the `onHitBreakStasis` hook
         // injected into `runPlayerTurn` (playerTurn.ts), which calls it AFTER the scheduled
         // debuffs (sourceFired) but BEFORE the ability timed-debuff loop. This ordering ensures:
         //  - A pre-existing Stasis IS broken when the hit lands (victim was stasised at mark time).
@@ -8000,7 +8000,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // keyed by victim id. Required for a non-zero delta — see the causality note above
             // perVictimOutgoingDeltaPct. Unsupplied → delta stays 0 for every victim.
             preTurnVictimStatus?: Map<string, PreTurnVictimStatusSnapshot>;
-            // PR8: applyPositionalDamage's sub-attack boundary hooks (Task 2), forwarded verbatim
+            // PR8: applyPositionalDamage's sub-attack boundary hooks, forwarded verbatim
             // below. Widened here for the same reason PR2 Task 2 had to widen `onVictimResolved`:
             // this engine-side wrapper declares its OWN args type, so a hook that exists on
             // applyPositionalDamage is un-typeable by an engine caller until it is repeated here.
@@ -8451,7 +8451,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // instance's primary target, so its damage-taken leech does not proc (owner
                     // ruling, spec §2.2).
                     procStandingLeechesPerVictim(actor.id, damage, 'direct');
-                    // The ruled "damage dealt" basis (PR7): booked intake PLUS anything a
+                    // The ruled "damage dealt" basis: booked intake PLUS anything a
                     // Protection cascade diverted to protectors.
                     delivered += booked + (outcome.protectionRedirected ?? 0);
                 }
@@ -8490,7 +8490,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // to the enemies actually crit rather than the cast's SELECTED anchor (which may not
             // have crit at all in an AoE). Empty on the 0-damage fallback path (no apply ran).
             critVictimIds: string[],
-            // Which sub-attack this event belongs to, for the deferred-log drain below AND (PR4) as
+            // Which sub-attack this event belongs to, for the deferred-log drain below AND as
             // the event's own sub-attack identity. Omitted on the single-event paths ⟹ drain
             // everything (the pre-PR2 behaviour) and emit no index.
             subAttack?: number,
@@ -9214,8 +9214,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // returns a `positionalDetonation` recipe for the per-victim detonation loop below
                 // to apply. Conditional spread → non-positional turns omit the key → byte-identical.
                 //
-                // ALL THREE CAST-SITES (PR1 + PR3 + PR4): the focus-turn site (PR1), the enemy-
-                // attacker site (PR3), and now the WALKED-TEAM site (PR4 — `a.kind === 'team'`) each
+                // ALL THREE CAST-SITES (PR1 + PR3 + PR4): the focus-turn site, the enemy-
+                // attacker site, and now the WALKED-TEAM site (PR4 — `a.kind === 'team'`) each
                 // consume the recipe via their own per-victim detonation loop, so all three get
                 // `positional: true` (runPlayerTurn SKIPS the anchor detonation and returns the
                 // recipe; detonationDamage stays 0 — the loop applies it per footprint victim). With
@@ -9326,7 +9326,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         //     player→enemy sites proc a STANDING leech off the dealt damage; the enemy→player site
         //     procs a TAKEN leech off the damage each player victim took (+ captures the focus
         //     victim's shield-hit flag). Called at the SAME per-victim point for all three.
-        //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit (PR2 Task 3). The
+        //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit. The
         //     player→enemy sites run the whole interleaved sequence HERE (before the per-victim
         //     detonation); the enemy site DEFERS everything but its first `ability-performed` to
         //     AFTER its inline non-positional damage-taken-leech tail (its row-14 accounting, kept
@@ -9622,12 +9622,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             });
             // Set the DEFERRED Stasis break for every covered victim (unconditional — covered victims
             // have no same-turn re-apply vector). The victim's own skip branch consumes it next turn.
-            // Pure state, no events: hoisted ABOVE the emission block (PR2 Task 3) so the
+            // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             for (const victimId of coveredStasisVictims) {
                 stasisBreakPending.set(victimId, true);
             }
-            // ── Interleaved per-sub-attack emission (PR2 Task 3) ───────────────────────────
+            // ── Interleaved per-sub-attack emission ───────────────────────────
             // A multi-hit skill is N consecutive full-walk attacks, so this cast emits ONE
             // `ability-performed` per sub-attack that landed, each IMMEDIATELY followed by that
             // sub-attack's own `attacked` events.
@@ -9841,7 +9841,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // healTarget) so DPS-mode and team runs reset it too — grantShieldToTarget can fire in
         // any mode, and a stale carry-over would over-report `granted`.
         perActorShieldGranted = new Map<string, number>();
-        // Reflect gear set (Task 5): rebind the per-round reflected-thorns accumulator EVERY round
+        // Reflect gear set: rebind the per-round reflected-thorns accumulator EVERY round
         // (mirrors perActorShieldGranted), so a stale carry-over never over-reports reflected damage.
         perActorReflected = new Map<string, number>();
         // Bomb-splash-on-death: rebind every round (like perActorShieldGranted) so a stale
@@ -9997,7 +9997,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             `an extra-action grant is re-firing without bound`
                     );
                 }
-                // Route by pool (Task 4): end-of-round grants (Harvester) bump the end-of-round
+                // Route by pool: end-of-round grants (Harvester) bump the end-of-round
                 // pool, drained after the normal speed pool; default grants stay speed-positioned
                 // in the normal pool. The oncePerRound gate + MAX_EXTRA_TURNS_PER_ROUND backstop
                 // above apply to BOTH pools.
@@ -10014,7 +10014,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // inTurnLoop=false → Path B (buffer).
         let inTurnLoop = false;
 
-        // Reactive extra-action bridge (Task 10). PATH A (inTurnLoop): bump the granter's pending
+        // Reactive extra-action bridge. PATH A (inTurnLoop): bump the granter's pending
         // count so the selection loop re-picks it at its live speed-rank among the remaining
         // actors (same machinery the attacker/team turn branches use), so a during-turn death
         // grants a SAME-round extra turn. PATH B (no live loop — a death reconciled in one of the
@@ -10149,7 +10149,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         // DPS mode too — pinned by `dpsBattleShieldParity.test.ts`. What DPS mode
                         // still omits is the healing REPORT, gated on `healReportActive`.
                         healing: healingCtx,
-                        // Combat-lifetime once-per-battle guard (Task 8): a flagged reactive
+                        // Combat-lifetime once-per-battle guard: a flagged reactive
                         // repair (Yazid) fires at most once across the whole combat.
                         oncePerCombatFired,
                         // Combat-lifetime per-(owner, ability, source) event counter for
@@ -10360,7 +10360,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
             );
 
-        // SP-M M1 (Task 6): opposing actor with the greatest LIVE effective SPEED (Chakara's
+        // SP-M M1: opposing actor with the greatest LIVE effective SPEED (Chakara's
         // enemy-highest-speed round-boundary hit). Reuses the generic highestAttackAmong picker (a
         // max-of-a-stat selector) with a speed accessor. Ties → roster order. #407: pre-gated at
         // the seam, same as its sibling above.
@@ -10386,7 +10386,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             return living.length === 1 ? living[0].id : undefined;
         };
 
-        // SP-M M1 (Task 5): a round's co-located Rhodium purge+damage pair BOTH target
+        // SP-M M1: a round's co-located Rhodium purge+damage pair BOTH target
         // 'enemy-most-buffs' and are drained TOGETHER off the SAME queue with ONE ctx instance
         // (drainQueue drains every intent in the queue using the single ctx a drainIntentsFor
         // call built). The purge's own buff removal can zero out the very count that identified
@@ -10454,10 +10454,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             //     purgeConditionalSources.test.ts) supply a real positioned roster without it.
             enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(alivePlayerDrainOpposing())),
             enemyWithHighestAttack: () => highestAttackInRoster(alivePlayerDrainOpposing()),
-            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — Chakara has no purge/damage race
+            // SP-M M1: plain arrow, NOT onceByOwner — Chakara has no purge/damage race
             // (its co-located clause is a self-buff), so LIVE re-resolution per drain is correct.
             enemyWithHighestSpeed: () => highestSpeedInRoster(alivePlayerDrainOpposing()),
-            // SP-M M1 (Task 7): living opposing roster for an 'all-enemies' reactive damage proc
+            // SP-M M1: living opposing roster for an 'all-enemies' reactive damage proc
             // (Judge/Incinerator) — each resolved victim's own hp-threshold/enemy-debuff gates are
             // re-checked per victim downstream. #407: reads the shared gate instead of its own
             // inline `destroyedRound` filter, so it now also excludes the never-alive 0-hp shape.
@@ -10494,9 +10494,9 @@ export function runCombat(rawInput: CombatEngineInput): {
             selfHpPctFor: bySide('enemy').selfHpPctFor,
             enemyWithMostBuffs: onceByOwner(() => mostBuffsAmong(aliveEnemyDrainOpposing())),
             enemyWithHighestAttack: () => highestAttackInRoster(aliveEnemyDrainOpposing()),
-            // SP-M M1 (Task 6): plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
+            // SP-M M1: plain arrow, NOT onceByOwner — see playerDrainCtx's comment.
             enemyWithHighestSpeed: () => highestSpeedInRoster(aliveEnemyDrainOpposing()),
-            // SP-M M1 (Task 7): mirror — an enemy owner scans the living player roster. #407: same
+            // SP-M M1: mirror — an enemy owner scans the living player roster. #407: same
             // shared gate as the player mirror above.
             livingOpposingActorIds: () => aliveEnemyDrainOpposing().map((a) => a.id),
             firstActivatorId,
@@ -10550,7 +10550,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (e.length) drainQueue(e, enemyDrainCtx());
         };
 
-        // Path-B flush (Task 10): grants buffered from a PRIOR round's post-round enemy death
+        // Path-B flush: grants buffered from a PRIOR round's post-round enemy death
         // (on-enemy-destroyed → Sokol/Liberator) bump the granter's pending count for THIS round,
         // so the selection loop picks it up at its live speed-rank among all actors.
         // The round's extraActionFired set + MAX_EXTRA_TURNS_PER_ROUND backstop still bound them.
@@ -10572,7 +10572,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
 
-        // round-started: the canonical start-of-round trigger (Phase 3). Fires once per
+        // round-started: the canonical start-of-round trigger. Fires once per
         // round, before any turn-started of that round. Documented deviation from the
         // Phase 1 contract's turn-started mapping: in a multi-actor round turn-started fires
         // once per actor, so round-started is the reliable "start of round" signal. Emitted
@@ -10622,7 +10622,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         drainIntentsFor('player');
         drainIntentsFor('enemy');
 
-        // §4.5 Stasis-break pending map (B3 Task 2). Reset fresh each round (new Map here).
+        // §4.5 Stasis-break pending map. Reset fresh each round (new Map here).
         // Keys: victimIds whose Stasis should be removed when their skip branch runs.
         // Values: always true (present = break approved; absent = no break queued).
         // An entry is added by the ATTACKER's turn block AFTER runPlayerTurn returns:
@@ -10641,7 +10641,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         inTurnLoop = true;
         try {
             let selectionGuard = 0;
-            // Pick the next actor to act, OWNING the pending decrement (Task 4). Drain the NORMAL
+            // Pick the next actor to act, OWNING the pending decrement. Drain the NORMAL
             // pool first — the unacted actor with the highest CURRENT effective speed (reads live
             // speed buffs → mid-round Speed Up/Down reorders the remainder). Only once the normal
             // pool is fully drained do we consult the END-OF-ROUND pool (Harvester-style grants),
@@ -10690,7 +10690,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // is correct: every per-iteration step below (turn-started emit, the kind-branch
                 // turn body, drainIntentsFor('player')/drainIntentsFor('enemy'), turn-ended) is THIS actor's own turn
                 // work, which a dead actor does none of. The pending decrement already happened in
-                // selectNext (Task 4) BEFORE the body runs, so the dead actor's pending is consumed
+                // selectNext BEFORE the body runs, so the dead actor's pending is consumed
                 // and termination is preserved. Extra-action grants only fire from inside a live
                 // turn body, so a skipped actor produces none.
                 //
@@ -11125,7 +11125,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // The attacker's per-actor config/gates/stats are bundled in
                     // attackerRuntime (built once at setup); Task 4 adds team runtimes.
                     // ====================================================================
-                    // §4.3 STASIS GATE (B2 Task 3): a stasised actor SKIPS its action body
+                    // §4.3 STASIS GATE: a stasised actor SKIPS its action body
                     // (active/charged skill + attack + status applications). The DoT-tick
                     // prologue (healTarget branch above) and the Post-Turn decrements (below)
                     // STILL run — the guard wraps ONLY this action body. Duration N therefore
@@ -11484,7 +11484,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // per-victim instead.
                             d.secondary += turn.secondaryDamage;
                             d.conditional += turn.conditionalDamage;
-                            // Credit SUPPRESSION for the positional case (Task 8b): the firing-hit damage
+                            // Credit SUPPRESSION for the positional case: the firing-hit damage
                             // now lands per-victim via applyPositionalDamage above, so it must NOT also be
                             // folded into cumulativeDamage here (that would double-count it). Skip the
                             // direct credit; KEEP detonation (bombs are a separate mechanic, out of scope).
@@ -11551,7 +11551,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                         } // end dead-after-burst guard (!burstDestroyedActor)
                     } else {
                         // Stasised focus/attacker turn: skip the action body.
-                        // §4.3 STASIS GATE (B2 Task 3).
+                        // §4.3 STASIS GATE.
                         // §4.5 Deferred break: consume any pending Stasis break so this actor
                         // acts on their NEXT scheduled turn. The break was pre-approved by a
                         // direct hit in an earlier turn this round (stored in stasisBreakPending
@@ -11580,7 +11580,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // extras (TeamActorInput.selfBuffs/enemyDebuffs) still apply on its turns —
                     // the legacy sourceFired block below is fully superseded for walked actors.
                     // ====================================================================
-                    // §4.3 STASIS GATE (B2 Task 3): a stasised walked-team actor skips its action
+                    // §4.3 STASIS GATE: a stasised walked-team actor skips its action
                     // body. The DoT-tick prologue (healTarget branch above) and Post-Turn decrements
                     // (below) still run. A walked team actor is never the focus → no focusTurns
                     // synthesis needed (no-else). §4.3 deviation: skip action, decrement preserved.
@@ -11786,7 +11786,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // sub-buckets of direct (do NOT double-add) but kept distinct for the
                             // simulator-page seam.
                             //
-                            // Credit SUPPRESSION for the positional case (Task 8b): same as the focus site —
+                            // Credit SUPPRESSION for the positional case: same as the focus site —
                             // the firing-hit damage already landed per-victim via applyPositionalDamage, so
                             // skip the direct credit; KEEP detonation (bombs are out of scope). The
                             // single-sink decline that used to be zeroed for the positional path is now
@@ -11871,7 +11871,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // ====================================================================
                     // ENEMY ATTACKER TURN (healing mode) — a bare-stat offense actor that
                     // bombards the heal target by walking the FULL runPlayerTurn pipeline with
-                    // the TARGET bound as the `enemy` arg (Task 6b). Its damage drains shield-first
+                    // the TARGET bound as the `enemy` arg. Its damage drains shield-first
                     // into the live target via the intake below; self-buffs land in its OWN owner
                     // store; debuffs/DoTs land on the target's per-target store (targetId).
                     // Healing mode is guaranteed here in the current corpus: an enemy attacker only
@@ -11889,7 +11889,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // advance the cadence manually here, mirroring runPlayerTurn's preTurn step
                     // (consume-at-cap-and-reset, else +1) under the old `chargeCount > 0` guard.
                     // ====================================================================
-                    // §4.3 STASIS GATE (B2 Task 3): a stasised real-enemy actor skips its
+                    // §4.3 STASIS GATE: a stasised real-enemy actor skips its
                     // action body. The Post-Turn decrements (below) still run — duration N
                     // therefore skips exactly N actions (decrement fires on the skipped turn).
                     // A stasised enemy banks NO charge (advanceChargeCadence is INSIDE the
@@ -11979,7 +11979,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // (defence/maxHp/decline, the runPlayerTurn `enemy`+containers, and the
                             // applyIncomingToTarget intake), each guarded on its presence.
                             const { tgt } = selectTurnTarget(actor);
-                            // This enemy attacker's parsed pattern (Task 9) — REQUIRED for the enemy-site
+                            // This enemy attacker's parsed pattern — REQUIRED for the enemy-site
                             // positional apply (footprint expansion). An enemy with a target but NO pattern
                             // stays on the legacy single-apply path (same `pattern != null` guard as the
                             // focus/team sites). Undefined for every current fixture → enemyPositional false.
@@ -12234,7 +12234,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 actor.id,
                                 enemyTurnArgs.aoeVictimIds?.length ?? (tgt !== undefined ? 1 : 0)
                             );
-                            // Surface this enemy attacker's effects for the UI's round overview (Task 10a):
+                            // Surface this enemy attacker's effects for the UI's round overview:
                             // its own active self-buffs and the debuffs it landed on the heal target,
                             // ATTRIBUTED to this enemy's actor id. NAMES ONLY for display — never folded
                             // into any sim value. Empty for a bare enemy → no entry recorded for it.
@@ -12380,7 +12380,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 //    the shield/HP/Barrier outcome consumed by the damage-taken leech
                                 //    block below.
                                 //
-                                //  - POSITIONAL (Task 9): drivePositionalApply lands the firing hit per-victim
+                                //  - POSITIONAL: drivePositionalApply lands the firing hit per-victim
                                 //    across the LIVE PLAYER roster (origin full / covered half) via the
                                 //    PLAYER-side applyIncomingToTarget wrapper — each player victim takes REAL
                                 //    HP/shield/death damage. The single apply is SUPPRESSED (else the anchor
@@ -13200,7 +13200,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ...(perActorDetonation.size > 0
                 ? { perActorDetonation: Object.fromEntries(perActorDetonation) }
                 : {}),
-            // perActorShield (H1 Task 6): per-actor shield accounting for THIS round, set only
+            // perActorShield: per-actor shield accounting for THIS round, set only
             // when at least one actor has a nonzero {granted, absorbed, pool}. Mirrors
             // perTargetDamage's "absent when empty" rule so legacy/no-shield rounds stay
             // byte-identical. granted = post-cap grant this round (perActorShieldGranted);
@@ -13226,7 +13226,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 }
                 return Object.keys(perActorShield).length > 0 ? { perActorShield } : {};
             })(),
-            // perActorIncoming (PR7 Task 6): per-victim incoming-damage accounting for THIS round,
+            // perActorIncoming: per-victim incoming-damage accounting for THIS round,
             // keyed by victim id ({incoming, shieldAbsorbed, barrierAbsorbed}). Mirrors
             // perActorShield's "absent when empty" rule — set ONLY when at least one victim has a
             // nonzero entry, so legacy / no-intake rounds keep the RoundData shape byte-identical
