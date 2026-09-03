@@ -323,6 +323,28 @@ export interface StatusEngine {
         count: number,
         stackStealable?: ReadonlyMap<string, number>
     ): string[];
+    /** Move up to `count` STACKS of ONE named status from `sourceId` to every id in
+     *  `recipientIds`, touching nothing else. The named-only sibling of {@link steal}, for a
+     *  clause whose text names the status it takes (Meatshield's Protection top-up).
+     *
+     *  ⚠️ USE THIS, NOT `steal`, FOR A NAMED CLAUSE. `steal` spends its `count` budget on TIMED
+     *  candidates FIRST and gives stacks only the remainder, so passing a named clause's deficit
+     *  through it steals a timed buff off the source and moves one fewer stack than the clause
+     *  asked for. That was a real defect in this mechanic's first cut (caught in review on
+     *  PR #465) and it is why the two operations are separate methods rather than a flag.
+     *
+     *  Only a status in `STACK_STEALABLE_STATUSES` moves; anything else is a no-op. `count` is
+     *  clamped by what the source actually holds — the caller supplies that figure, for the same
+     *  aggregation reason {@link steal}'s `stackStealable` documents. Returns the number of stacks
+     *  moved. Every recipient gains one per stack moved (the fan-out DUPLICATES, owner ruling
+     *  2026-09-03) while the source loses one. */
+    stealStacks(
+        sourceId: string,
+        recipientIds: string[],
+        buffName: string,
+        count: number,
+        heldAtSource: number
+    ): number;
     /** Signed per-owner adjustment to a NAMED status's stack count, independent of which store
      *  granted it. THE one thing that makes an AURA-granted count mutable: an aura's reported
      *  stacks come from its STATIC `payload.stacks` and `auraSelfMaps` is written only at actor
@@ -1693,6 +1715,28 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return [...stolen.map((s) => s.buffName), ...stolenStacks];
     };
 
+    // The named-only stack transfer — see the interface doc for why this is NOT `steal` with a
+    // flag. Shares `moveOneStack`'s accounting with the generic path so the fan-out and
+    // conservation rules cannot drift between the two.
+    const stealStacks = (
+        sourceId: string,
+        recipientIds: string[],
+        buffName: string,
+        count: number,
+        heldAtSource: number
+    ): number => {
+        if (!STACK_STEALABLE_STATUSES.has(buffName)) return 0;
+        const movable = Math.min(Math.floor(count), Math.floor(heldAtSource));
+        if (!Number.isFinite(movable) || movable <= 0) return 0;
+        for (let i = 0; i < movable; i++) {
+            adjustSelfBuffStacks(sourceId, buffName, -1);
+            for (const recipientId of recipientIds) {
+                adjustSelfBuffStacks(recipientId, buffName, +1);
+            }
+        }
+        return movable;
+    };
+
     // --- Ability-status API ---
 
     const registerAbilityStatuses = (
@@ -2062,6 +2106,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extendAllBuffsDuration,
         purge,
         steal,
+        stealStacks,
         adjustSelfBuffStacks,
         selfBuffStackAdjustment,
         registerAbilityStatuses,

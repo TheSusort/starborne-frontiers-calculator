@@ -539,3 +539,61 @@ describe('team symmetry: an ENEMY caster tops itself up off a PLAYER holder', ()
         expect(stacks['player-holder']).toBe(8);
     });
 });
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// REGRESSION (CodeRabbit, PR #465): a top-up must consume ONLY the named status.
+//
+// The first cut passed the deficit as the generic `count` to `statusEngine.steal`, which spends
+// its budget on TIMED candidates first and hands stacks only the remainder. So a top-up against a
+// source that ALSO held a timed buff stole that buff — and moved one fewer Protection stack than
+// the clause asked for. Meatshield's text names Protection and nothing else.
+//
+// Every earlier top-up fixture used a source holding Protection ALONE, so the combination was
+// unobserved and either behaviour went green. The named-only path (`stealStacks`) is what fixes it.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('a top-up consumes ONLY the named status, never a timed buff (CodeRabbit #465)', () => {
+    /** Reads the TIMED ability statuses an actor holds, to prove the timed buff stayed put. */
+    const timedNamesOf = (input: CombatEngineInput, id: string): string[] => {
+        idc = 0;
+        let engine: StatusEngine | undefined;
+        runCombat({
+            ...input,
+            __testTapStatusEngine: (e) => {
+                engine = e;
+            },
+        });
+        return engine!.timedAbilityStatuses('self', id).map((b) => b.active.buffName);
+    };
+
+    const build = (): CombatEngineInput => ({
+        ...THIEF_BASE(
+            [
+                { slot: 'passive', abilities: [protectionAura(1)] },
+                { slot: 'active', abilities: [topUpSteal('Protection', 3)] },
+            ],
+            // `alsoTimed` gives the holder an "Attack Up" on its own active slot, so the source
+            // carries a timed candidate ALONGSIDE its Protection stacks.
+            [auraEnemy(10, true)]
+        ),
+        attack: 0,
+    });
+
+    it('moves the full deficit in Protection and leaves the timed buff on the source', () => {
+        const { stacks } = runAndReadStacks(build(), ['attacker', 'holder']);
+
+        // Pre-fix: attacker 2 / holder 9 — one stack short, because the timed "Attack Up" ate half
+        // the budget.
+        expect(stacks.attacker).toBe(3);
+        expect(stacks.holder).toBe(8);
+    });
+
+    it("and the caster does NOT pick up the source's timed buff", () => {
+        const input = build();
+
+        // Pre-fix the caster held ['Attack Up'] — a buff Meatshield's clause never mentions.
+        expect(timedNamesOf(input, 'attacker')).toEqual([]);
+        // The source keeps it: a named top-up is not a purge.
+        expect(timedNamesOf(input, 'holder')).toEqual(['Attack Up']);
+    });
+});

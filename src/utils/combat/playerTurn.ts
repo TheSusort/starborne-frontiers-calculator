@@ -4094,7 +4094,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // own DEFICIT, not `count`, and the clause is a no-op once the caster is at the
                 // threshold — which per the owner's ruling 1 (2026-09-03) is its normal state,
                 // since nothing but an enemy steal can put it below.
-                if (ab.config.buffName !== undefined && ab.config.upToStacks !== undefined) {
+                // BOTH fields, and a sane threshold. A persisted/authored config can carry
+                // anything (a fractional or zero `upToStacks`, or a `buffName` with no threshold),
+                // and a HALF-specified pair must not fall through to the generic path below —
+                // that would steal an arbitrary buff for a clause that names one status. Guarded
+                // here as well as in the editor because the editor is not the only writer.
+                if (
+                    ab.config.buffName !== undefined &&
+                    ab.config.upToStacks !== undefined &&
+                    Number.isInteger(ab.config.upToStacks) &&
+                    ab.config.upToStacks > 0
+                ) {
                     const { buffName, upToStacks } = ab.config;
                     const held = selfBuffStacksForOwner(statusEngine, actor.id, buffName);
                     const deficit = upToStacks - held;
@@ -4114,11 +4124,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             if (availableAtSource > 0) {
                                 // The SOURCE KEEPS THE REST (ruling 2): move only the deficit, and
                                 // only as much of it as the source actually has.
-                                statusEngine.steal(
+                                //
+                                // `stealStacks`, NOT `steal`: the generic path spends its budget on
+                                // TIMED candidates first, so routing a NAMED clause through it
+                                // stole a timed buff off the source and moved one stack too few.
+                                // Caught in review on PR #465; pinned by the regression case in
+                                // `protectionSteal.integration.test.ts`.
+                                statusEngine.stealStacks(
                                     sourceId,
                                     [actor.id],
-                                    Math.min(deficit, availableAtSource),
-                                    new Map([[buffName, availableAtSource]])
+                                    buffName,
+                                    deficit,
+                                    availableAtSource
                                 );
                             }
                         }
