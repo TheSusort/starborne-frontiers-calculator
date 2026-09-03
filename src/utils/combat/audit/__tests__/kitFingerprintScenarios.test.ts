@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
     buildScenarioBattle,
+    corpusNames,
     darkSlotsOnPrimaryBoard,
     FILLER_HP,
     FILLER_NAMES,
@@ -18,9 +19,13 @@ import {
     PRIMARY_BOARD,
     ROUNDS,
     SCENARIOS,
+    scenariosFor,
     SEED,
+    statusRichShipNames,
     SUPPORT_ANCHOR_BOARD,
+    type FingerprintScenario,
 } from '../kitFingerprintScenarios';
+import { fingerprintActorTokens } from '../fingerprint';
 import { PLACEMENTS } from '../types';
 import { resolveSubjectActorId } from '../placementSymmetry';
 import { runSeededBattle } from '../seededBattle';
@@ -445,5 +450,201 @@ describe('fragile ally is keyed by board position, not array index', () => {
             const input = buildScenarioBattle(subject, scenario);
             expect(input.playerTeam.filter((p) => p.statOverrides?.hp === 1)).toHaveLength(0);
         }
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// `statusRich` — the status-seeded scenario the exhaustiveness guard in `seedFor` said was
+// DEFERRED, not cancelled.
+//
+// WHY IT EXISTS, measured 2026-09-03: across all 150 committed fingerprints the tokens `steal`,
+// `purge` and `cleanse` appeared ZERO times each. Not because those clauses were broken — because
+// no scenario ever put a buff on an enemy or a debuff on an ally, so all three fired into nothing.
+// 36 corpus ships carry one of them and not one had a golden observing it.
+//
+// The arm adds two clauses to the filler's active on BOTH sides — a stealable/purgeable self-buff
+// and a cleansable debuff on the whole opposing side — which makes it symmetric by construction and
+// needs none of `richEnemy`'s placement-relative seeding.
+//
+// ⚠️ THE ASSERTIONS BELOW ARE THE ARM'S NON-VACUITY WITNESS, one per mechanic. The snapshot moving
+// is NOT the test: a `steal` token could appear on Pallas while every purge and cleanse ship still
+// showed nothing, and the only symptom would be a snapshot diff someone could `-u` away. Each
+// mechanic gets a named ship and an explicit token assertion instead.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('statusRich scenario', () => {
+    beforeAll(requireReferenceData);
+
+    /** Corpus display names running the arm (the cached set is UPPERCASED for lookup). */
+    const statusRichNames = (): string[] =>
+        corpusNames().filter((n) => statusRichShipNames().has(n.toUpperCase()));
+
+    const tokensFor = (name: string, scenario: FingerprintScenario): string[] => {
+        const ship = buildTraceShip(name);
+        expect(ship, `${name} did not resolve from the corpus`).not.toBeNull();
+        const result = runSeededBattle(buildScenarioBattle(ship!, scenario), SEED);
+        return fingerprintActorTokens(result, FOCUS_ACTOR_ID);
+    };
+
+    it('applies to exactly the ships whose kit CONSUMES a status, derived from the parse', () => {
+        // A TRIPWIRE, not a decoration. The set is derived from `buildShipAbilities`, so a parser
+        // regression that stopped producing `buff-steal`/`purge`/`cleanse` would silently shrink it
+        // to nothing and every assertion built on it would pass vacuously. Pinning the size makes
+        // that regression loud. Measured 2026-09-03: 4 steal + 14 purge + 19 cleanse, Tithonus
+        // carrying both a purge and a steal.
+        const set = statusRichShipNames();
+
+        expect(set.size).toBe(36);
+        for (const name of ['PALLAS', 'THRESH', 'TITHONUS', 'MEATSHIELD']) {
+            expect(set.has(name), `${name} should carry a steal`).toBe(true);
+        }
+        for (const name of ['SEFUBA', 'ZEOLITE', 'RHODIUM']) {
+            expect(set.has(name), `${name} should carry a purge`).toBe(true);
+        }
+        for (const name of ['SUSTAINER', 'AEGIS', 'PURIFIER', 'HAYYAN']) {
+            expect(set.has(name), `${name} should carry a cleanse`).toBe(true);
+        }
+        // ...and a ship with none of the three must NOT get the arm, or "applies to the right
+        // ships" would be satisfied by applying it to everybody.
+        expect(set.has('BEDROCK')).toBe(false);
+    });
+
+    it('only the qualifying ships run the arm', () => {
+        const pallas = buildTraceShip('Pallas')!;
+        const bedrock = buildTraceShip('Bedrock')!;
+
+        expect(scenariosFor(pallas)).toContain('statusRich');
+        expect(scenariosFor(bedrock)).not.toContain('statusRich');
+        // Every ship still runs the three universal arms, whatever else it gains.
+        for (const s of SCENARIOS) expect(scenariosFor(bedrock)).toContain(s);
+    });
+
+    it.each([
+        ['Pallas', 'steal:charged'],
+        ['Thresh', 'steal:charged'],
+        ['Tithonus', 'steal:charged'],
+    ])('NON-VACUITY (steal): %s produces %s, which no other scenario can', (name, token) => {
+        expect(tokensFor(name, 'statusRich')).toContain(token);
+        // The point of the arm: the SAME ship on a clean board produces nothing of the kind.
+        expect(tokensFor(name, 'plain').some((t) => t.startsWith('steal'))).toBe(false);
+    });
+
+    it.each([
+        ['Sefuba', 'purge:active'],
+        ['Zeolite', 'purge:active'],
+        ['Tithonus', 'purge:active'],
+    ])('NON-VACUITY (purge): %s produces %s, which no other scenario can', (name, token) => {
+        expect(tokensFor(name, 'statusRich')).toContain(token);
+        expect(tokensFor(name, 'plain').some((t) => t.startsWith('purge'))).toBe(false);
+    });
+
+    it.each([
+        ['Sustainer', 'cleanse:active'],
+        ['AEGIS', 'cleanse'],
+        ['Purifier', 'cleanse'],
+        ['Hayyan', 'cleanse'],
+    ])('NON-VACUITY (cleanse): %s produces %s, which no other scenario can', (name, token) => {
+        // AEGIS/Purifier/Hayyan are the reason the filler debuffs the WHOLE opposing side rather
+        // than just the focus: a census of the 19 cleanse ships found 9 carrying `target: 'ally'`
+        // — the single designated ALLY, not the caster — so a focus-only debuff would have left
+        // half the mechanic uncovered and the arm silently half-vacuous.
+        expect(tokensFor(name, 'statusRich')).toContain(token);
+        expect(tokensFor(name, 'plain').some((t) => t.startsWith('cleanse'))).toBe(false);
+    });
+
+    it('MEATSHIELD is the deliberate exception: no steal token, per the locked ruling', () => {
+        // His clause is "if this Unit has less than 3 stacks of Protection, it steals Protection
+        // until it has 3" — and the owner ruled (2026-09-03) that ONLY AN ENEMY STEALING THEM can
+        // put him below 3. The statusRich fillers buff and debuff; they do not steal. So he
+        // correctly never fires it, and this is NOT a hole to plug: covering it would need a
+        // Protection thief on the opposing side, which is a different scenario question.
+        expect(statusRichShipNames().has('MEATSHIELD')).toBe(true);
+        expect(tokensFor('Meatshield', 'statusRich').some((t) => t.startsWith('steal'))).toBe(
+            false
+        );
+    });
+
+    /**
+     * MEASURED RESIDUAL: 30 of the 36 arm-running ships now emit a status-consuming token
+     * (18 cleanse, 12 purge, 3 steal). These SIX still do not, and every one has a named cause —
+     * pinned here so the number cannot drift silently in either direction. A ship LEAVING this list
+     * is good news that should be seen; a ship JOINING it means a clause went quiet.
+     *
+     *  - MEATSHIELD  — locked ruling (owner, 2026-09-03): only an ENEMY STEALING them can put him
+     *                  below 3 Protection stacks, and the statusRich fillers buff/debuff but never
+     *                  steal. Correct silence, not a hole.
+     *  - CURATOR     — passive purge on `on-enemy-charged-cast`. The fillers have no charge skill
+     *                  at all (statusRich changes only their ACTIVE text), so the trigger cannot
+     *                  fire. Closable by giving the filler a charged skill — a bigger change.
+     *  - FAUST       — passive purge on `on-destroyed`, i.e. it fires when FAUST dies. The focus
+     *                  surviving 20 rounds is a hard requirement of this suite, so this is
+     *                  unreachable by construction — the same class as the `death` / `cheat-death`
+     *                  entries in realKitFingerprints' EXPECTED_KINDS ledger.
+     *  - NAYRA       — charged purge gated on `target-repaired-this-round`. The fillers never
+     *                  repair, so the condition is never satisfied.
+     *  - AMARTYA     — charged purge whose count is `countScaling` on critDamage per 50, so at
+     *                  canonical base stats the scaled count floors to 0 and the purge removes
+     *                  nothing. A gearing artefact of the fixture, not a kit defect.
+     *  - FUYING      — active + charged cleanse, `target: 'ally'`, no conditions. This one is NOT
+     *                  explained: every player-side ship IS debuffed by the fillers, so an
+     *                  ally-scoped cleanse should find a target. Worth investigating on its own —
+     *                  it may be a real recipient-resolution defect of the kind
+     *                  `project_ally_scoped_target_resolution_sites` catalogues.
+     */
+    it('pins the six ships whose clause is still silent, each for a known reason', () => {
+        const STILL_SILENT = ['Amartya', 'Curator', 'Faust', 'Fuying', 'Meatshield', 'Nayra'];
+        const silent = statusRichNames()
+            .filter((name) => {
+                const tokens = tokensFor(name, 'statusRich');
+                return !tokens.some((t) => ['steal', 'purge', 'cleanse'].includes(t.split(':')[0]));
+            })
+            .sort();
+
+        expect(silent).toEqual(STILL_SILENT);
+    });
+
+    it('presses the focus without killing it — the arm cannot truncate a fingerprint', () => {
+        // statusRich presses HARDER than plain (fillers gain Attack Up, the focus carries Defense
+        // Down), and it is excluded from the corpus-wide live invariants because it is not in
+        // SCENARIOS. So the truncation hazard is guarded HERE: a focus that died early would cut
+        // its own fingerprint short and the missing tokens would read as a behaviour change.
+        for (const name of ['Pallas', 'Sefuba', 'AEGIS', 'Meatshield']) {
+            const ship = buildTraceShip(name)!;
+            const result = runSeededBattle(buildScenarioBattle(ship, 'statusRich'), SEED);
+            const rows = result.rounds
+                .flatMap((r) => r.ships)
+                .filter((s) => s.actorId === FOCUS_ACTOR_ID);
+            const taken = rows.reduce((sum, s) => sum + s.damageTaken, 0);
+
+            expect(
+                rows.every((s) => s.alive),
+                `${name} died in statusRich`
+            ).toBe(true);
+            expect(taken, `${name} took no damage in statusRich`).toBeGreaterThan(0);
+            expect(result.outcome.lastRound, `${name} truncated early`).toBe(ROUNDS);
+        }
+    });
+
+    it('leaves every OTHER scenario byte-identical — the arm is purely additive', () => {
+        // The filler swap is gated on `scenario === 'statusRich'`, so no existing arm can move.
+        // Asserted rather than assumed, because a leak here would silently rewrite 150 snapshots.
+        const pallas = buildTraceShip('Pallas')!;
+        for (const s of SCENARIOS) {
+            const battle = buildScenarioBattle(pallas, s);
+            const actives = [...battle.playerTeam, ...battle.enemyTeam].map(
+                (p) => p.ship.activeSkillText
+            );
+            expect(
+                actives.some((t) => t?.includes('Attack Up II')),
+                `${s} must not use the statusRich filler`
+            ).toBe(false);
+        }
+        const rich = buildScenarioBattle(pallas, 'statusRich');
+        expect(
+            [...rich.playerTeam, ...rich.enemyTeam].filter((p) =>
+                p.ship.activeSkillText?.includes('Attack Up II')
+            ).length,
+            'statusRich must use it for every filler on both sides'
+        ).toBe(7);
     });
 });

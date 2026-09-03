@@ -4,6 +4,7 @@ import type { CombatActor } from '../state';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
+import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { parseShipTargeting, type ParsedPattern } from '../../targetingParser';
 import { resolveCells } from '../../targeting/resolvePattern';
@@ -20,8 +21,9 @@ export type ScenarioName = 'plain' | 'richEnemy' | 'wounded';
  *  of `SCENARIOS` excludes it from those invariants with no exemption list to go stale. */
 export const SCENARIOS: readonly ScenarioName[] = ['plain', 'richEnemy', 'wounded'] as const;
 
-/** Every scenario a ship MAY run. `supportAnchor` is conditional — see `scenariosFor`. */
-export type FingerprintScenario = ScenarioName | 'supportAnchor';
+/** Every scenario a ship MAY run. `supportAnchor` and `statusRich` are conditional — see
+ *  `scenariosFor`. */
+export type FingerprintScenario = ScenarioName | 'supportAnchor' | 'statusRich';
 
 /** Pinned RNG seed for every scenario battle. One seed for all of them: the scenarios are meant
  *  to differ by initial STATE, not by RNG stream. */
@@ -226,6 +228,43 @@ function fillerPlacement(
     return { ...base, statOverrides: { ...base.statOverrides, hp, attack } };
 }
 
+/**
+ * `statusRich`'s filler active. THE ONLY DIFFERENCE from the inert filler is two appended clauses;
+ * the "deals 90% damage" damage clause is preserved VERBATIM because `fillerAttackFor` inverts the
+ * damage formula against exactly that number, and the filler-inertness guard still reads the
+ * unmodified ships.
+ *
+ * WHY THE DEBUFF IS BOARD-WIDE AND NOT JUST ON THE SUBJECT. Fillers resolve onto the FOCUS, so a
+ * single-target debuff would land on the subject alone — and a CENSUS of the corpus's 19 cleanse
+ * ships (2026-09-03) says that is not enough: 9 of them carry `target: 'ally'`, the single
+ * designated ALLY, which is not the caster. Those ships would have cleansed nothing and the arm
+ * would have been silently vacuous for half the mechanic it exists to cover. `self` (8 ships) and
+ * `all-allies` (3) would have been fine either way. Debuffing the whole opposing side covers all
+ * three scopes.
+ *
+ * Both statuses are TIMED and REMOVABLE, which is what makes them stealable/purgeable/cleansable:
+ * an unremovable name (`UNREMOVABLE_STATUSES`) or a durationless aura would be skipped by every one
+ * of the three mechanics. 2 turns so they are re-applied faster than they expire.
+ */
+const STATUS_RICH_FILLER_ACTIVE =
+    'This Unit deals <unit-damage>90% damage</unit-damage> and inflicts ' +
+    '<unit-skill>Defense Down II</unit-skill> to all enemies for 2 turns.<br /><br />' +
+    'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns.';
+
+/** A filler that carries a stealable/purgeable self-buff and inflicts a cleansable debuff on the
+ *  whole opposing side. Used ONLY by `statusRich`, and on BOTH sides — which makes the scenario
+ *  symmetric by construction, so it needs none of `richEnemy`'s placement-relative seeding. */
+function statusRichFillerPlacement(
+    name: string,
+    position: Position,
+    attack: number
+): BattlePlacement {
+    const base = fillerShip(name);
+    const ship: Ship = { ...base, activeSkillText: STATUS_RICH_FILLER_ACTIVE };
+    const placed = canonicalPlacement(ship, position);
+    return { ...placed, statOverrides: { ...placed.statOverrides, hp: FILLER_HP, attack } };
+}
+
 /** `richEnemy`'s seeded shield on the subject's OPPONENTS, as a multiple of the focus ship's base
  *  attack — an ABSOLUTE pool, not a fraction of the filler's (absurd) max HP. A fraction was the
  *  original choice and it was inert: 20% of 500M is 100M against ~1.2k hits, so `enemy-shield` gates
@@ -280,6 +319,12 @@ function seedFor(
 
     switch (scenario) {
         case 'plain':
+            return undefined;
+        // `statusRich` varies the board's STATUSES, not its actor state, and it does that through
+        // the filler KIT (see `statusRichFillerPlacement`) rather than a tap — statuses live in the
+        // StatusEngine, which `__testTapActors` cannot reach. Returning undefined here is
+        // therefore correct and not an omission.
+        case 'statusRich':
             return undefined;
         case 'richEnemy': {
             const pool = SHIELD_POOL_HITS * subject.baseStats.attack;
@@ -362,16 +407,24 @@ export function buildScenarioBattle(
     // wounded's HP seeding but must NOT get a fragile ally, because a dying support target would
     // make support-pattern reach flaky.
     const fragileCell = scenario === 'wounded' ? board.allies[0] : undefined;
+    // `statusRich` swaps in a filler that self-buffs and debuffs the opposing side, on BOTH sides.
+    // Every other scenario keeps the inert filler byte-for-byte, which is what makes this arm
+    // purely ADDITIVE to the snapshot: no existing arm can move.
+    const statusRich = scenario === 'statusRich';
     const allyFillers = allyNames.map((name, i) =>
-        fillerPlacement(
-            name,
-            board.allies[i],
-            attack,
-            board.allies[i] === fragileCell ? FRAGILE_ALLY_HP : FILLER_HP
-        )
+        statusRich
+            ? statusRichFillerPlacement(name, board.allies[i], attack)
+            : fillerPlacement(
+                  name,
+                  board.allies[i],
+                  attack,
+                  board.allies[i] === fragileCell ? FRAGILE_ALLY_HP : FILLER_HP
+              )
     );
     const enemyFillers = enemyNames.map((name, i) =>
-        fillerPlacement(name, board.enemies[i], attack)
+        statusRich
+            ? statusRichFillerPlacement(name, board.enemies[i], attack)
+            : fillerPlacement(name, board.enemies[i], attack)
     );
 
     switch (placement) {
@@ -411,15 +464,59 @@ export function buildScenarioBattle(
 }
 
 /** The scenarios THIS ship runs: the three universal ones, plus `supportAnchor` when the primary
- *  board cannot reach one of its targeting slots. */
+ *  board cannot reach one of its targeting slots, plus `statusRich` when its kit carries a clause
+ *  that CONSUMES a status (steal / purge / cleanse) and so does nothing on a clean board. */
 export function scenariosFor(ship: Ship): FingerprintScenario[] {
-    return darkShipNames().has(ship.name.toUpperCase())
-        ? [...SCENARIOS, 'supportAnchor']
-        : [...SCENARIOS];
+    const out: FingerprintScenario[] = [...SCENARIOS];
+    if (darkShipNames().has(ship.name.toUpperCase())) out.push('supportAnchor');
+    if (statusRichShipNames().has(ship.name.toUpperCase())) out.push('statusRich');
+    return out;
+}
+
+/** The three ability kinds that operate ON an existing status and therefore fire into NOTHING on a
+ *  clean board. Measured 2026-09-03: across all 150 fingerprints the tokens `steal`, `purge` and
+ *  `cleanse` appeared ZERO times — not because the clauses were broken, but because no scenario
+ *  ever put a buff on an enemy or a debuff on an ally. `statusRich` exists for exactly this set. */
+const STATUS_CONSUMING_CONFIGS: ReadonlySet<string> = new Set(['buff-steal', 'purge', 'cleanse']);
+
+let statusRichNameCache: Set<string> | null = null;
+
+/**
+ * Ships whose kit carries a status-CONSUMING clause, derived from the PARSE (not from skill text):
+ * any slot holding an ability whose `config.type` is in {@link STATUS_CONSUMING_CONFIGS}.
+ *
+ * Derived rather than hand-listed for the reason `darkShipNames` is: a hand list goes stale on a
+ * ship-data refresh and the arm silently stops covering a ship. The flip side is that a PARSER
+ * regression which stops producing one of the three configs would silently SHRINK this set to
+ * nothing and every assertion built on it would pass vacuously — so the scenario tests pin the
+ * set's size and membership per kind. See `kitFingerprintScenarios.test.ts`.
+ */
+export function statusRichShipNames(): ReadonlySet<string> {
+    if (!statusRichNameCache) {
+        statusRichNameCache = new Set<string>();
+        for (const name of corpusNames()) {
+            const ship = buildTraceShip(name);
+            if (!ship) continue;
+            let skills;
+            try {
+                skills = buildShipAbilities(ship);
+            } catch {
+                continue;
+            }
+            const hit = skills.slots.some((slot) =>
+                slot.abilities.some((a) => STATUS_CONSUMING_CONFIGS.has(a.config.type))
+            );
+            if (hit) statusRichNameCache.add(name.toUpperCase());
+        }
+    }
+    return statusRichNameCache;
 }
 
 /** The three universal scenarios are always present; `supportAnchor` only for dark ships. */
-export type FingerprintResult = Record<ScenarioName, string[]> & { supportAnchor?: string[] };
+export type FingerprintResult = Record<ScenarioName, string[]> & {
+    supportAnchor?: string[];
+    statusRich?: string[];
+};
 
 /** Fingerprint one ship across every scenario it runs. Every battle goes through runSeededBattle —
  *  its `finally` restores Math.random rather than any ambient seed, so a raw simulateBattle call
