@@ -3,7 +3,7 @@ export interface CombatLogRound {
     /** Entries drained after round-started but before the first turn (start-of-round reactives). */
     startOfRound: CombatLogEntry[];
     turns: CombatLogTurn[];
-    endOfRound: CombatLogEntry[]; // round-end-drained entries with no enclosing turn (filled by a later task)
+    endOfRound: CombatLogEntry[]; // round-end-drained entries with no enclosing turn (buildCombatLog)
 }
 
 export interface CombatLogTurn {
@@ -62,7 +62,7 @@ export interface CombatLogEntry {
     skillName?: string;
     slot?: 'active' | 'charged';
     targets: CombatLogTarget[]; // 1 = single-target, N = AoE
-    reactions: CombatLogEntry[]; // reactions triggered BY this entry (filled by a later task; [] for now)
+    reactions: CombatLogEntry[]; // reactions nested under this entry by buildCombatLog's routeReaction
     note?: string;
     /** #362 fix-wave-1, `reversed-repair` ONLY: the healer whose repair was reversed, for DISPLAY
      *  alone ("Zosimos → Nova: Medic's repair reversed 10,000"). A dedicated field rather than
@@ -95,11 +95,9 @@ export interface CombatLogTarget {
      *  that was already full (`heal-performed` / `reactive-heal-performed`'s `perTarget.overheal`).
      *  Present only when > 0.
      *
-     *  It exists because `amount` alone could not tell the two grant kinds apart. Heal rows used to
-     *  render the GROSS, so a repair onto a full ally read as a full-size heal that had plainly not
-     *  moved the bar; shield rows rendered post-cap growth, so a grant onto a saturated pool read
-     *  as a bare `0` with no hint anything had been attempted. Opposite failures of one missing
-     *  clause. Both kinds now report the landed number and name the waste beside it.
+     *  It exists because `amount` alone cannot tell a landed repair from a wasted one: `amount` is
+     *  the LANDED number for both grant kinds, so the waste is named beside it here (and in
+     *  `overshield` for shield grants) rather than folded into it.
      *
      *  ABSENT ON A REVERSED REPAIR (#362): that repair damaged the target rather than being
      *  clipped, so there is no waste to report and `amount` stays the whole reversed figure. */

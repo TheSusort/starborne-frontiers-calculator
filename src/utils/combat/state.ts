@@ -171,8 +171,8 @@ export interface CombatActor {
     position?: Position;
     /** Attacker ignores Taunt/Provoke forced targeting (not Concentrate Fire). Positional
      *  plumbing — set at construction, consumed by resolvePositionalTarget. ORed at the
-     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts) — this
-     *  field alone is no longer the resolver's effective input. */
+     *  engine.ts read sites with the timed `Rogue's Liberty` buff (rogueLiberty.ts), so this
+     *  field alone is not the resolver's effective input. */
     ignoresForcedTargeting?: boolean;
     /** Attacker ignores the Stealth targeting filter on ALL its casts (Lodolite's "ignores
      *  Stealth effects" passive). Positional plumbing — set at construction, consumed by
@@ -195,7 +195,7 @@ export interface CombatActor {
     /** When true, enemy-sourced charge removal is a no-op against this actor
      *  ("immune to charge loss effects"). Derived from ship skill text. */
     chargeLossImmune: boolean;
-    /** Pre-fight combat-modifier baseline (sub-project F, PR F3): squad-leader modifier
+    /** Pre-fight combat-modifier baseline: squad-leader modifier
      *  channels accumulated BEFORE combat (additive pct points). Hidden, permanent,
      *  non-purgeable — deliberately NOT statuses (they would leak into logs/purge/cleanse).
      *  Consumed via `?? 0` folds at the exact sites the regular buff channels are read;
@@ -223,9 +223,9 @@ export function createActor(
     return {
         ...rest,
         currentHp: partial.stats.hp,
-        // Pre-fight shield seeding (F3): "Start combat shielded for N% of max HP" — hp is
+        // Pre-fight shield seeding: "Start combat shielded for N% of max HP" — hp is
         // already post-leader (the pre-fight stat pass mutated plan stats before actor
-        // construction). Absent preFight → 0 → byte-identical to the old literal 0.
+        // construction). Absent preFight → 0.
         shieldPool: partial.stats.hp * ((partial.preFight?.startingShieldPctOfHp ?? 0) / 100),
         turnMeter: 0,
         charges: startCharged ? chargeCount : 0,

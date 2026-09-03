@@ -52,17 +52,14 @@ export function allyScopedIncomingRecipients(args: {
 }
 
 /**
- * #363 follow-up (item 5) — appends `ability` onto `list` unless an ability with the SAME `id`
- * is already present, then returns `list`. `incomingAbilitiesById`'s ally-scoped fan-out pass
- * used to dedupe on OBJECT IDENTITY (`list.includes(ability)`), which only catches the case where
- * BOTH runtime maps hand back the literal same `Ability` object for one actor id. Two distinct
- * runtimes for the same actor id would each hand back a distinct object describing the SAME
- * underlying ability, and `incomingReductionForHit` SUMS non-crit-family entries — so a 30% aura
- * would silently double to 60%. Not reachable today (the per-actor OWN-abilities pass already
- * guards the one known path that could put an actor in both runtime maps), but the fan-out pass
- * had no equivalent guard of its own. Keying on `id` rather than object identity closes that gap
- * regardless of how a duplicate might arise in the future. Mutates `list` in place (matches the
- * call site's existing get-or-create-then-push idiom) and also returns it for convenience.
+ * #363 — appends `ability` onto `list` unless an ability with the SAME `id` is already present,
+ * then returns `list`.
+ *
+ * The dedupe key is the `id`, NOT object identity: two distinct runtimes for the same actor id
+ * each hand back a distinct object describing the SAME underlying ability, and
+ * `incomingReductionForHit` SUMS non-crit-family entries — so an identity-keyed dedupe would let
+ * a 30% aura silently double to 60%. Mutates `list` in place (matches the call site's existing
+ * get-or-create-then-push idiom) and also returns it for convenience.
  */
 export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ability[] {
     if (!list.some((existing) => existing.id === ability.id)) list.push(ability);
@@ -70,7 +67,7 @@ export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ab
 }
 
 /**
- * #363 follow-up — DROPS ally-scoped incoming entries whose OWNER is no longer alive.
+ * #363 — DROPS ally-scoped incoming entries whose OWNER is no longer alive.
  *
  * OWNER-RULED 2026-08-22: an ally-scoped aura STOPS when its carrier dies. In a fight: round 2,
  * Fuying alive, a Stealthed Anjian takes 10,000 → 7,000. Round 3, Fuying destroyed, the same hit on
@@ -78,7 +75,7 @@ export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ab
  *
  * WHY IT LIVES HERE AND NOT IN `incomingReductionForHit`. The fan-out pass writes the carrier's
  * `Ability` object into each RECIPIENT's list, so the recipient-side read has no idea who the owner
- * was — and `incomingReductionForHit` is a pure fold over `Ability[]` with a dozen call sites
+ * was — and `incomingReductionForHit` is a pure fold over `Ability[]` with many call sites
  * across the engine (block, transform, threshold-shield, reflection all share the same list). This
  * filter sits on the LIST accessor instead, so every one of those consumers inherits the liveness
  * rule at once and no per-hit signature has to grow an owner parameter.
@@ -90,9 +87,9 @@ export function addIncomingAbilityDeduped(list: Ability[], ability: Ability): Ab
  * LIVE, NOT CAPTURED: this runs on every list read (i.e. per hit), so it reads the owner's CURRENT
  * `destroyedRound`. Nothing about liveness is frozen at setup.
  *
- * BYTE-IDENTICAL FOR THE SELF-SCOPED FAMILY (Iridium, Anemone, Wusheng, Panon, Tormenter, Voron):
- * a self-scoped entry never appears in `ownerByAllyScopedAbilityId`, and a recipient with no
- * ally-scoped entries at all short-circuits to the SAME array reference — no copy, no filter.
+ * INERT FOR SELF-SCOPED ENTRIES: a self-scoped entry never appears in
+ * `ownerByAllyScopedAbilityId`, and a recipient with no ally-scoped entries at all
+ * short-circuits to the SAME array reference — no copy, no filter.
  * (A self-scoped entry would be moot anyway: its owner IS the victim, and a dead victim takes no
  * hits. The lookup miss keeping it is the conservative answer either way.)
  */

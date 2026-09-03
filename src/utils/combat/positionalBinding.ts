@@ -71,11 +71,12 @@ export function isPositional(
  * The static half of a decision whose dynamic half is `resolvePositionalTarget`; the two must
  * agree. `isPositional` alone is too weak here because a board position outlives
  * its owner's ability to be hit: a roster whose every member is a 0-max-HP pressure source is
- * placed but unhittable, so the gate went positional, selection found nobody, the per-victim apply
- * booked nothing, and the legacy scalar credit was suppressed "because the positional branch was
- * taken" — the cast's damage landed in NEITHER channel and vanished.
+ * placed but unhittable, so gating on `isPositional` there sends the run positional, selection
+ * finds nobody, the per-victim apply books nothing, and the legacy scalar credit is suppressed
+ * "because the positional branch was taken" — the cast's damage lands in NEITHER channel and
+ * vanishes.
  *
- * `normalizeCombatRoster` auto-places every actor, so "nobody carries a position" is no longer a
+ * `normalizeCombatRoster` auto-places every actor, so "nobody carries a position" is not a
  * usable signal for "this roster is pressure, not targets" — it has to be asked for explicitly.
  *
  * WHERE THAT DIVERGENCE IS STILL REACHABLE — the direction matters when reading
@@ -86,7 +87,7 @@ export function isPositional(
  * `bombSplashOnDeath.integration.test.ts` pin it as such. The floor is enemy-side only, so for an
  * OPPOSING ROSTER OF PLAYERS (what an enemy-side caller passes) the divergence is fully intact: a
  * 0-max-HP focus plus 0-max-HP allies is still `isPositional` true / `resolvesPositionalVictim`
- * false. Keeping the two predicates distinct is therefore still live, not merely historical.
+ * false. Keeping the two predicates distinct is therefore live.
  *
  * Keyed on MAX hp, so an actor KILLED mid-battle still keeps the run positional and the cast
  * whiffs against the corpse instead of teleporting back onto the legacy dummy sink and recording
@@ -106,7 +107,7 @@ export function resolvesPositionalVictim(
  * Resolve the positional target anchor to a single living CombatActor.
  *
  * When `statusOf` is omitted, or the target is ally-side, no forced-targeting or stealth rule
- * runs — this is the arm the byte-identical goldens pin. When `statusOf` is supplied
+ * runs — this is the arm the golden fixtures pin. When `statusOf` is supplied
  * AND `target.side === 'enemy'`, forced targeting and stealth run before `selectTargets`:
  *   1. Concentrate Fire (bypasses stealth, never skipped) — force the marked actor (front-most if many).
  *   2. Taunt (before stealth) — force the taunting actor (latest tauntAppliedRound else front-most).

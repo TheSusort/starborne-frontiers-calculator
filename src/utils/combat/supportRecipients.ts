@@ -15,8 +15,7 @@ export function resolveSupportRecipients(args: {
     casterId: string;
     baseRecipients: string[];
     footprintAllyIds?: string[];
-    /** #363: intersect with recipients of these factions. Absent (or empty) → no faction
-     *  narrowing, byte-identical to every pre-#363 caller. */
+    /** #363: intersect with recipients of these factions. Absent (or empty) → no narrowing. */
     factionFilter?: FactionKey[];
     /** Actor id → faction. `undefined` for an actor whose faction is unknown, which NEVER
      *  matches a filter (conservative). Absent reader + present filter → nobody matches, which
@@ -76,10 +75,9 @@ export function resolveSupportRecipients(args: {
  * above, the aura/accumulating registration fan-out, the passive combat-start seed, and the
  * reactive support-recipient resolver) so all four narrow identically.
  *
- * An absent-or-empty filter means no narrowing (byte-identical to every pre-#363 caller). An
- * actor whose faction is unknown (`factionOf` returns `undefined`, or `factionOf` itself is
- * absent) NEVER matches a filter — conservative: a faction-scoped grant can only under-reach,
- * never over-reach, when faction data is missing.
+ * An absent-or-empty filter means no narrowing. An actor whose faction is unknown (`factionOf`
+ * returns `undefined`, or `factionOf` itself is absent) NEVER matches a filter — conservative: a
+ * faction-scoped grant can only under-reach, never over-reach, when faction data is missing.
  */
 export function narrowByFaction(
     ids: string[],
@@ -100,11 +98,10 @@ export function narrowByFaction(
  * qualify by roster). This one asks about each ally's LIVE state: what it is holding, what role it
  * plays, how hurt it is.
  *
- * Deliberately shaped like {@link narrowByFaction}: an absent filter means no narrowing
- * (byte-identical for every ability that does not carry one), and a reader the caller could not
- * supply makes its axis EXCLUDE rather than admit. A grant can therefore only under-reach when
- * data is missing, never over-reach — the same conservative direction `narrowByFaction` and
- * `matchesRoleCategory` already run on.
+ * Deliberately shaped like {@link narrowByFaction}: an absent filter means no narrowing, and a
+ * reader the caller could not supply makes its axis EXCLUDE rather than admit. A grant can
+ * therefore only under-reach when data is missing, never over-reach — the same conservative
+ * direction `narrowByFaction` and `matchesRoleCategory` already run on.
  *
  * ⚠️ NOT applied at every site `factionFilter` is. That one runs at FOUR (the registration
  * fan-out, the cast-path timed loop, the passive-slot combat-start seed, and the reactive

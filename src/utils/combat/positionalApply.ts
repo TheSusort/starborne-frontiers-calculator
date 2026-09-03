@@ -289,8 +289,8 @@ export function applyPositionalDamage(args: {
     /**
      * OPTIONAL per-sub-hit incoming %-reduction hook. Invoked per footprint victim with
      * that victim's per-hit crit outcome; the returned percentage points are folded additively
-     * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 → byte-identical (inert
-     * for victims without an incoming-reduction ability).
+     * into the incoming term of {@link victimHitDamage}. Unsupplied → 0 (inert for victims
+     * without an incoming-reduction ability).
      *
      * #358 ADDENDUM 3: the channel is MIXED, so the hook may return the SPLIT instead of a single
      * number. A bare `number` keeps its original meaning — entirely VICTIM-side, which is what
@@ -307,8 +307,8 @@ export function applyPositionalDamage(args: {
     /**
      * OPTIONAL per-hit attacker-side outgoing amplification % hook (Menace/Giant Slayer).
      * Invoked per footprint victim with that victim's per-hit crit outcome; the returned percentage
-     * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0 →
-     * byte-identical (inert for attackers without an outgoing-amplification ability).
+     * is applied multiplicatively on the resolved hit BEFORE {@link applyToVictim}. Unsupplied → 0
+     * (inert for attackers without an outgoing-amplification ability).
      */
     outgoingAmplificationFor?: (
         victim: CombatActor,
@@ -319,7 +319,7 @@ export function applyPositionalDamage(args: {
      * OPTIONAL per-victim crit resolver.
      * The anchor victim (the resolved target, `victim.id === anchorActor.id`) reuses
      * hitCrits[h]; each other footprint victim resolves via this callback.
-     * Unsupplied → every victim uses hitCrits[h] → byte-identical.
+     * Unsupplied → every victim uses hitCrits[h].
      */
     rollVictimCrit?: (victim: CombatActor, subAttackIndex?: number) => boolean;
     /**
@@ -330,7 +330,7 @@ export function applyPositionalDamage(args: {
      *
      * They exist so a direct debuff clause can land per sub-attack, in written clause order
      * relative to that sub-attack's own damage, and be visible to the NEXT sub-attack's
-     * `defenseProfileOf` read. Both optional: an unsupplied hook makes the loop byte-identical.
+     * `defenseProfileOf` read. Both optional: an unsupplied hook is simply not called.
      *
      * `victimIds` is this sub-attack's footprint in hit order — the anchor plus every covered
      * cell — and is the set the engine re-rolls the landing against. Overkill retargeting is correct for

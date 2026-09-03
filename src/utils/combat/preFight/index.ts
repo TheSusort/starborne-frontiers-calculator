@@ -1,5 +1,5 @@
 /**
- * Pre-fight stat-modifier layer (combat-realism sub-project F) — public entry point.
+ * Pre-fight stat-modifier layer — public entry point.
  *
  * `runPreFight` executes the given passes IN ORDER over both sides' units (F ordering:
  * squad-leader pass first, then — in PR F5 — the ship-passives pass computed from the

@@ -1,5 +1,5 @@
 /**
- * Pre-fight ship-passive application (combat-realism sub-project F, PR F5).
+ * Pre-fight ship-passive application.
  *
  * Applies the parsed `pre-combat-stat` abilities (PR F4: Lionheart / Centurion / Enforcer /
  * Defiant / Stalwart) to ONE side's placement-plan stats, once, before actor/roster

@@ -122,9 +122,9 @@ const NO_INFLICTED_NAMES: ReadonlySet<string> = new Set<string>();
 
 // Round-scoped context the enemy's DoT processing needs from the focus player actor's
 // turn. At default speeds the player acts first, so the enemy's tick uses THIS round's
-// context (identical to the pre-restructure behaviour). For a FASTER enemy it is the
-// PREVIOUS round's context; only in that case is round 1 undefined (the enemy acts
-// before any player turn — containers necessarily empty, processing skipped).
+// context. For a FASTER enemy it is the PREVIOUS round's context; only in that case is
+// round 1 undefined (the enemy acts before any player turn — containers necessarily
+// empty, processing skipped).
 export interface PlayerRoundCtx {
     effectiveAttack: number;
     dotMult: number;
@@ -156,13 +156,11 @@ export interface PlayerRoundCtx {
      *  nothing anywhere tests for the key. Optionality exists to keep the hand-built
      *  `PlayerRoundCtx` test doubles valid, not to encode "no enemy term".
      *
-     *  #396 also widened WHEN they are published. Pre-#396 they rode a spread guarded on a
-     *  non-zero enemy heal term; now they are published whenever `enemyAppliedFamilies` is
-     *  present, so an actor carrying only an `Attack Down` publishes an explicit 0 here where it
-     *  previously published nothing. Correct either way, by the paragraph above. */
+     *  They are published whenever `enemyAppliedFamilies` is present, so an actor carrying only an
+     *  `Attack Down` publishes an explicit 0 here. Correct, by the paragraph above. */
     enemyAppliedIncomingHealPct?: number;
     enemyAppliedOutgoingHealPct?: number;
-    /** Sub-project I, PR I4b/I4c — `dotDamage`-channel modifier abilities whose GATE is a
+    /** `dotDamage`-channel modifier abilities whose GATE is a
      *  name-specific enemy-status condition (Wildfire's "when an enemy has Scorching
      *  Radiation… for every N% crit power" bonus), plus the ctx used to fold each group
      *  (`partitionDotDamageAbilities` — see its jsdoc for the shape check). EXCLUDED from
@@ -171,13 +169,13 @@ export interface PlayerRoundCtx {
      *  per-VICTIM, per-TICK ctx (only the enemy-status fields swapped to that victim's own
      *  CURRENT live status — see `tickDoTs`/`victimDotMult` in engine.ts) so the bonus
      *  applies to a tick only while the ticking victim currently carries the required
-     *  status. A LIST (not a single entry) because I4c's refit-3 "all allies deal…" team
+     *  status. A LIST (not a single entry) because a refit-3 "all allies deal…" team
      *  aura contributes ADDITIONAL entries — one per ally aura SOURCE, each carrying that
      *  SOURCE's own `selfCritPower` (the locked rule: the bonus scales by the aura
      *  SOURCE's crit power, never the recipient's) — alongside this actor's own entry (if
-     *  any), which keeps using this actor's own ctx unchanged from I4b. Undefined/empty →
-     *  tick math is `dotMult` alone, byte-identical for every non-Wildfire-shaped ship (and
-     *  for the DPS simulator, which never reads this field). */
+     *  any), which uses this actor's own ctx. Undefined/empty → tick math is `dotMult`
+     *  alone, which is every non-Wildfire-shaped ship (and the DPS simulator, which never
+     *  reads this field). */
     victimGatedDotDamage?: { abilities: Ability[]; ctx: ConditionContext }[];
 }
 
@@ -241,8 +239,8 @@ export interface HealingRuntimeCtx {
      *  actor. */
     recipientIncomingHealPct: (actorId: string) => number;
     /** Summed incoming-heal amplification % for a repair landing on `rid` (Exuberance). Rolls the
-     *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent → callers
-     *  use 0 → byte-identical. */
+     *  recipient's incoming-heal-amp procs ONCE (combat-lifetime gate keyed rid+ability). Absent →
+     *  callers use 0. */
     recipientIncomingHealAmpPct?: (rid: string) => number;
     /** A FOREIGN HoT applier's effective max HP at tick time: reads
      *  lastTurnCtxByActor ONLY — NO base-stat fallback (the strict corrosion applier-ctx
@@ -255,22 +253,17 @@ export interface HealingRuntimeCtx {
      *  the repair was turned into damage (#362) and the caller must credit NOTHING for it, gross
      *  bucket included. See `HealApplyResult`.
      *
-     *  ALL THREE PARAMETERS ARE REQUIRED, deliberately. `victim` lost its `= healTarget` default
-     *  and `repairSourceId` is not optional, so `tsc` reports an arity error at every call site
+     *  ALL THREE PARAMETERS ARE REQUIRED, deliberately: `victim` carries no default and
+     *  `repairSourceId` is not optional, so `tsc` reports an arity error at every call site
      *  rather than letting a missed one compile.
      *
-     *  WHY REQUIRED-NESS STILL BUYS SOMETHING UNDER R7′. The kill is credited to the DEBUFF'S
+     *  WHY REQUIRED-NESS BUYS SOMETHING. The kill is credited to the DEBUFF'S
      *  APPLIER (`reversal.applierId` in engine.ts's reversal branch), never to the repair's
      *  source — so `repairSourceId` is NOT the killer and an omission here could not misattribute
      *  a kill. What it would silently break instead is R11's log row: `healerId` is exactly this
      *  id, so a site that forgot it would print a reversal row that names nobody as the healer,
      *  on a channel where the healer is the only thing the row explains. Required-ness turns that
-     *  into a compile error — a hand-enumerated layer, the shape that produced two silent
-     *  failures with green tests in #294/#296.
-     *
-     *  ⚠️ AN EARLIER RULING (R7, RETRACTED) credited the reversal's damage and kill to the
-     *  REPAIR'S SOURCE, and that is what this paragraph used to cite. It is not the rule. See the
-     *  reversal branch in engine.ts for the standing one and for why it must not be flipped back.
+     *  into a compile error.
      *
      *  `repairSourceId` is the actor credited with the repair: the caster for a cast repair, the
      *  APPLIER for a HoT tick (not the holder), the leeching actor for a leech, `intent.ownerId`
@@ -280,11 +273,11 @@ export interface HealingRuntimeCtx {
         victim: CombatActor,
         repairSourceId: string
     ) => HealApplyResult;
-    /** Additive pool capped at the victim's max HP; drains before HP (enemy attacks, Task 8).
+    /** Additive pool capped at the victim's max HP; drains before HP on enemy attacks.
      *  Dead victim → no-op (returns `{ granted: 0, gross: 0 }`). `victim` defaults to the heal
-     *  target (E2 T1: optional per-victim override for positional AoE leech). Returns BOTH the
+     *  target (optional per-victim override for positional AoE leech). Returns BOTH the
      *  post-cap pool growth and the gross attempt so the caller can build a shield-applied event
-     *  (H3.6) that still fires on a saturated pool (#418) — see `ShieldGrantResult`. */
+     *  that still fires on a saturated pool (#418) — see `ShieldGrantResult`. */
     grantShieldToTarget: (raw: number, victim?: CombatActor) => ShieldGrantResult;
     /** Fixed player-id order for all-allies recipient routing. */
     playerIds: string[];
@@ -294,22 +287,21 @@ export interface HealingRuntimeCtx {
     recipientActor: (id: string) => CombatActor | undefined;
     /** Apply each heal to the recipient's OWN actor (and capture its own overheal) rather than
      *  accounting the whole heal against `targetId`. This is the APPLICATION axis only — recipient
-     *  CHOICE is decided by the ability's target (see `recipientsFor`), never by the run mode.
-     *  SP-4e retired the sibling `teamBattle` routing flag, which conflated the two. */
+     *  CHOICE is decided by the ability's target (see `recipientsFor`), never by the run mode. */
     perRecipientApply?: boolean;
 }
 
 /**
  * One enemy-debuff landing this cast decided but has not yet written, split so the ENGINE can run
- * its two halves at different moments (multi-hit full-walk epic, PR8).
+ * its two halves at different moments.
  *
  * `applyState` performs the `applyTimedAbilityStatus` write plus the display-list refresh;
  * `emitEvents` emits the paired discrete `debuff-applied`. They are separate because a multi-hit
  * cast needs the STATE in the store at its sub-attack's boundary — so the next sub-attack's
  * `defenseProfileOf` read sees it — while the EVENT must wait for that sub-attack's
  * `ability-performed` row to exist, or `buildCombatLog`'s `openAttackEntry` misattributes it.
- * `flushDeferredEnemyApplications` runs them back-to-back, which is what keeps a single-sub-attack
- * cast byte-identical to the pre-PR8 single thunk.
+ * `flushDeferredEnemyApplications` in engine.ts runs them back-to-back, which is the
+ * single-sub-attack case.
  */
 export interface DeferredEnemyApplication {
     applyState: () => void;
@@ -399,21 +391,16 @@ export interface PlayerTurnResult {
      *
      * The ENGINE must flush these once this turn's damage has landed (`flushDeferredEnemyApplications`),
      * before the actor's Post-Turn decrement so the status still runs its normal window. Empty for
-     * every cast whose debuff clauses all precede its damage — i.e. for almost the whole corpus,
-     * which keeps those byte-identical.
-     *
-     * PR8 split the element from a bare `() => void` thunk into `{applyState, emitEvents}` so the
-     * engine can run the two halves at different moments at a multi-hit cast's sub-attack boundary.
+     * every cast whose debuff clauses all precede its damage.
      */
     deferredEnemyApplications: DeferredEnemyApplication[];
     /**
-     * Rolls and applies this cast's direct enemy-debuff clauses for ONE sub-attack ≥ 1
-     * (multi-hit full-walk epic, PR8). Present only on a positional cast that has at least one
-     * condition-gated direct debuff clause; `undefined` everywhere else, which is what keeps DPS
-     * mode, healing mode and every non-positional path on the single-flush behaviour they have
-     * today.
+     * Rolls and applies this cast's direct enemy-debuff clauses for ONE sub-attack ≥ 1.
+     * Present only on a positional cast that has at least one condition-gated direct debuff
+     * clause; `undefined` everywhere else, which is what keeps DPS mode, healing mode and every
+     * non-positional path on single-flush behaviour.
      *
-     * Sub-attack 0 is NOT served by this — it keeps its cast-time draw, because three consumers
+     * Sub-attack 0 is NOT served by this — it keeps its cast-time draw, because consumers
      * read that outcome before the positional loop runs: `resistedTimedEnemyNames` (gates this
      * turn's `control-applied` emission, inside this function), `resistedEnemyDebuffs` (the round
      * display list), and `inflictedEnemyDebuffs` (the engine's `reInflictedStasis` check, which
@@ -458,18 +445,18 @@ export interface PlayerTurnResult {
     /** Per-cast attacker-side damage scalars for the positional apply path.
      *  Populated from the SAME locals that feed the aggregate `directDamage`, so feeding
      *  these + `hitCrits` through `victimHitDamage` for the bound victim's defense profile
-     *  reproduces the FIRING HIT exactly (Task-4 parity). Read ONLY by the positional engine
-     *  branch; non-positional callers ignore it → goldens byte-identical.
+     *  reproduces the FIRING HIT exactly. Read ONLY by the positional engine
+     *  branch; non-positional callers ignore it.
      *  Present whenever a damage ability fired this cast (else undefined).
      *
-     *  FIRING HIT ≠ `directDamage` (SP-4b-2 D6 — the gap this doc used to paper over). The
+     *  FIRING HIT ≠ `directDamage`. The
      *  aggregate `directDamage` is `firing hit + passiveDamage`; `multiplierPct` here is the
      *  FIRING skill's multiplier only, deliberately excluding the passive slot's. So a positional
      *  cast that re-derives its round damage from this payload alone LOSES the passive-slot
-     *  instance — which is exactly what happened until `passiveSlotHit` below started carrying it.
+     *  instance — which is why `passiveSlotHit` below carries it separately.
      *  Anything else `directDamage` folds in but this does not must be handed over the same way. */
     positionalScalars?: AttackerDamageScalars;
-    /** SP-4b-2 D6 — the PASSIVE-SLOT damage instance, for the positional apply path to land
+    /** The PASSIVE-SLOT damage instance, for the positional apply path to land
      *  itself (Judge: "At the start of the round, this Unit deals 60% damage to all enemies
      *  with less than 50% HP").
      *
@@ -478,12 +465,12 @@ export interface PlayerTurnResult {
      *  takes `directDamage` and the passive lands with it. On a POSITIONAL cast the engine
      *  suppresses that scalar credit and re-derives the round's direct damage from the
      *  per-victim apply — whose payload is `positionalScalars`, the FIRING skill's scalars only.
-     *  The passive instance was therefore computed and dropped (measured: Judge's round-4
-     *  `directDamage` stuck at 23000 instead of 29000). Present only when the passive slot's
+     *  Without this field the passive instance would be computed and then dropped on that path.
+     *  Present only when the passive slot's
      *  GATED damage ability contributes damage this round; absent otherwise, so the engine's
      *  wiring is a no-op for every cast without one. */
     passiveSlotHit?: PassiveSlotHit;
-    /** Sub-project I, PR I2 (Layer 3) — ingredients for the engine's per-victim outgoing-
+    /** Ingredients for the engine's per-victim outgoing-
      *  modifier delta (Tygr/Incinerator/Lodolite-shape "+N% to enemies with <named status>"
      *  gates). `primaryCtx` is the SAME `modifierCtx` folded into `positionalScalars.
      *  outgoingDamageBuffPct` above (built against the primary/bound target's enemy-status);
@@ -492,10 +479,10 @@ export interface PlayerTurnResult {
      *  `modifierAbilities` against it, and subtracts the primary-ctx fold to isolate the
      *  per-victim enemy-status delta (non-enemy-status modifiers cancel identically in both
      *  folds). Present ONLY when a damage ability fired this cast (mirrors positionalScalars).
-     *  Absent → the engine skips the per-victim fold (byte-identical to I1's single-ctx
-     *  behavior); read ONLY by the positional engine branch. */
+     *  Absent → the engine skips the per-victim fold and keeps the single primary-ctx result;
+     *  read ONLY by the positional engine branch. */
     perVictimOutgoing?: { modifierAbilities: Ability[]; primaryCtx: ConditionContext };
-    /** SP-4b-2 D4 — this turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
+    /** This turn's SCHEDULED enemy-debuff effects AFTER the per-round landing
      *  decision, i.e. exactly the entries that LANDED (`scheduledEnemy.roundEnemyDebuffs`:
      *  recurring/always/accumulating re-rolled through `roundDebuffLanded()` / the affinity
      *  gate for `application:'apply'`, plus timed scheduled entries which were gated once at
@@ -519,7 +506,7 @@ export interface PlayerTurnResult {
     rollVictimCrit: (victimAffinity: AffinityName) => boolean;
     /** Per-cast detonation recipe for the positional per-victim path. Present ONLY when the
      *  `positional` arg was set (the engine then detonates each footprint victim's own containers
-     *  via detonateContainers). Absent for non-positional callers → byte-identical. */
+     *  via detonateContainers). Absent for non-positional callers → no per-victim recipe. */
     positionalDetonation?: DetonationRecipe;
     /** Deferred `ability-performed` payload. Present ONLY when `deferAbilityPerformedToEngine`
      *  was set AND a damage ability fired this cast — in that case runPlayerTurn does NOT emit the
@@ -561,29 +548,23 @@ export interface PlayerActorRuntime {
     healModifier: number;
     // Per-actor adapter-derived rates
     /** LIVE debuff-landing chance (0..1) for THIS actor against ITS OWN TURN TARGET, set at turn
-     *  start by runPlayerTurn from current effective hacking-vs-that-target's-security + affinity
-     *  (A2 Task 4). Undefined until the actor's first turn — callers use `?? 1` as a neutral default.
+     *  start by runPlayerTurn from current effective hacking-vs-that-target's-security + affinity.
+     *  Undefined until the actor's first turn — callers use `?? 1` as a neutral default.
      *
-     *  ⚠️ SP-4c-2b: this is a CAST-path value and the REACTIVE path must not use it as a standing
-     *  per-owner rate. It is a number derived from THIS turn's target being read against a DIFFERENT
-     *  target later, which was wrong in kind and became wrong in effect once an ally-targeted cast
-     *  started resolving no victim at all (it then published 0 and silenced the owner's reactive
-     *  inflicts entirely — Flamel's on-damaged Stasis). The reactive path now resolves its own
-     *  per-victim chance through `TriggerDrainContext.liveDebuffLandingChanceFor` and passes it in as
+     *  ⚠️ This is a CAST-path value and the REACTIVE path must not use it as a standing
+     *  per-owner rate. It is a number derived from THIS turn's target, and reading it against a
+     *  DIFFERENT target later is wrong in kind: an ally-targeted cast that resolves no victim at
+     *  all would publish 0 and silence the owner's reactive inflicts entirely (Flamel's
+     *  on-damaged Stasis). The reactive path resolves its own per-victim chance through
+     *  `TriggerDrainContext.liveDebuffLandingChanceFor` and passes it in as
      *  `targetLandingChance`; this field survives only as the fallback for a caller with no REAL
      *  victim in hand.
      *
-     *  WHO ACTUALLY READS IT, measured over the whole suite rather than assumed — an earlier draft of
-     *  this doc guessed wrong in both directions. NONE of the three cast-path closures reads it
-     *  (`runPlayerTurn` replaces the status engine's landing hook every turn with its own live
-     *  closure, which computes from `enemy` directly). The live readers are the reactive fallbacks,
-     *  reached when `liveDebuffLandingChanceFor` declines to price a victim: an id absent from
-     *  `allActorsById`. Until SP-4c-2d there was a SECOND such case, and it was the load-bearing
-     *  one: an explicit refusal to price the DUMMY SENTINEL, which WAS in the map (pricing an
-     *  inflict aimed at nobody against a ghost's default security of 100 would never land — a
-     *  stronger lie than this field ever told). The actor is deleted, so the sentinel is not in the
-     *  map at all and the absent-id arm covers it; the RULE it encoded stands.
-     *  Measured before that deletion: 3 such rows in the suite, 0 on shipped kits.
+     *  WHO ACTUALLY READS IT. NONE of the cast-path closures reads it (`runPlayerTurn` replaces
+     *  the status engine's landing hook every turn with its own live closure, which computes from
+     *  `enemy` directly). The live readers are the reactive fallbacks in engine.ts, reached when
+     *  `liveDebuffLandingChanceFor` declines to price a victim: an id absent from
+     *  `allActorsById`.
      *
      *  ONLY EVER WRITTEN FROM A TURN THAT HAD A VICTIM (see the guard at the write site). A no-victim
      *  turn deliberately publishes nothing, so this field can never hold the 0 that caused the
@@ -637,7 +618,7 @@ export interface PlayerTurnArgs {
      *  §A.4-A.5). Absent is NOT "a neutral enemy": every read below answers "there is no enemy". */
     enemy?: CombatActor;
     statusEngine: StatusEngine;
-    // DoT containers (live on the enemy actor; passed through for clarity). SP-4c-2b: absent on a
+    // DoT containers (live on the enemy actor; passed through for clarity). Absent on a
     // no-victim turn — a DoT applied to nobody lands nowhere.
     corrosionEntries?: ActiveDoTStack[];
     infernoEntries?: ActiveDoTStack[];
@@ -647,9 +628,9 @@ export interface PlayerTurnArgs {
     pendingAccumulators?: PendingAccumulator[];
     /** Absent on a no-victim turn (no victim ⇒ no defence to pierce). */
     enemyDefense?: number;
-    /** Absent on a no-victim turn. SP-4d: the `enemyHpPct` derivation below now answers
-     *  `undefined` rather than 100 when this is absent — the honest "no reading" answer, not the
-     *  ghost's fabricated one. */
+    /** Absent on a no-victim turn. The `enemyHpPct` derivation below answers
+     *  `undefined` when this is absent — the honest "no reading" answer, never a fabricated
+     *  100. */
     enemyHp?: number;
     enemyType?: EnemyBaseClass;
     // Required: the engine always passes its internal bus (wrapping the optional
@@ -657,7 +638,7 @@ export interface PlayerTurnArgs {
     bus: CombatEventBus;
     // Per-call round state.
     round: number;
-    /** Grant `amount` charges to EVERY player actor (Task 5 ally-charge routing). Supplied by
+    /** Grant `amount` charges to EVERY player actor. Supplied by
      *  the engine, which loops all player actors (incl. this caster) bumping
      *  min(charges + amount, chargeCount) and skipping chargeCount 0 (no charge skill → no
      *  banking). Called from the CASTER's active-round charge step (mirrors own gains). Optional
@@ -669,8 +650,8 @@ export interface PlayerTurnArgs {
         amount: number,
         opts?: { recipientIds?: string[]; emitBus?: CombatEventBus }
     ) => void;
-    /** Remove `amount` charges from every OPPOSING-side actor (Task 7 enemy-target charge
-     *  removal). Supplied by the engine, which loops the opposing side flooring each actor at 0
+    /** Remove `amount` charges from every OPPOSING-side actor. Supplied by the engine, which
+     *  loops the opposing side flooring each actor at 0
      *  and skipping chargeLossImmune / chargeCount-0 actors. Called from the caster's active/charged
      *  charge step for enemy/all-enemies-targeted charge abilities. Optional so standalone callers
      *  without an opposing roster need not supply it — when absent enemy-target removal is a no-op
@@ -683,61 +664,58 @@ export interface PlayerTurnArgs {
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
-    /** The shared heal/shield/cleanse runtime. #415: this used to say "present ONLY when the
-     *  engine runs in healing mode / absent for DPS-mode turns". The engine anchors `healTarget`
-     *  in EVERY mode now, so it supplies this on DPS turns too and the heal block runs there —
-     *  what a DPS run omits is the healing REPORT (`healReportActive`). Still optional because
+    /** The shared heal/shield/cleanse runtime. The engine anchors `healTarget` in EVERY mode, so
+     *  it supplies this on DPS turns too and the heal block runs there — what a DPS run omits is
+     *  the healing REPORT (`healReportActive`, #415). Still optional because
      *  standalone callers (tests) may leave it unset. */
     healing?: HealingRuntimeCtx;
-    /** Event-only heal/cleanse emission (Phase 4c PR 4 Task 5; HP-restore lifted in E5 §4.1):
+    /** Event-only heal/cleanse emission:
      *  when true (the enemy walk), the heal block EMITS `heal-performed`/`cleanse-performed`
-     *  carrying THIS actor's id and (E5) restores each heal recipient's OWN currentHp via the
+     *  carrying THIS actor's id and restores each heal recipient's OWN currentHp via the
      *  per-victim pool — but credits NO player healing bucket and never mutates the player
      *  heal-target (the shared player `healing` ctx never sees an enemy-id BUCKET credit).
      *  Shields/cleanse still mutate nothing on this path. Scopes emission to the CAST skill
-     *  (gatedSkill) only, never the passive. Defaults falsy (player/team turns credit + mutate
-     *  as before). */
+     *  (gatedSkill) only, never the passive. Defaults falsy (player/team turns credit and
+     *  mutate). */
     healEventOnly?: boolean;
     /** Acting actor's live HP% (0..100) for self-HP-threshold gates. Defaults to 100 so
      *  callers that do not supply it (e.g. standalone tests, un-updated call sites) behave
-     *  as if the actor is at full HP — gate never fires → byte-identical to prior behaviour. */
+     *  as if the actor is at full HP — the gate never fires. */
     selfHpPct?: number;
     /** Heal target's live HP% (0..100) at THIS acting actor's turn start (pre-this-cast-heal),
      *  for `hpSubject:'target'` condition gates — Hermes' "grants Cheat Death to an ally below
      *  40% HP" evaluated at cast time. Defaults to 100 so un-updated callers behave as if the
-     *  target is full HP → a "below N" gate fails. #415: this used to add "so DPS-mode … callers
-     *  … → grant inert in DPS (correct)" — the twin of the `hpSubject:'target'` doc in
-     *  `types/abilities.ts`. The engine now threads `healTargetHpPctNow()` unconditionally
-     *  (`engine.ts`, the per-actor turn-args block), so a DPS turn reads the focus's REAL live HP
-     *  and the gate can open; only callers that supply nothing still see the 100 default.
+     *  target is full HP → a "below N" gate fails. The engine threads `healTargetHpPctNow()`
+     *  unconditionally (`engine.ts`, the per-actor turn-args block), so a DPS turn reads the
+     *  focus's REAL live HP and the gate can open (#415); only callers that supply nothing still
+     *  see the 100 default. The twin of the `hpSubject:'target'` doc in `types/abilities.ts`.
      *  Threaded into the round contexts (postDebuffGateCtx gates the per-slot timed application). */
     targetHpPct?: number;
-    /** The acting attacker's STRUCK target was repaired (HP-healed) this round (C2b-3). Default
+    /** The acting attacker's STRUCK target was repaired (HP-healed) this round. Default
      *  false. Threaded into the round contexts to gate target-repaired-this-round conditions. */
     targetRepairedThisRound?: boolean;
-    /** Enemy-side debuff target key. Passed as the `enemyTargetId` arg to the three
+    /** Enemy-side debuff target key. Passed as the `enemyTargetId` arg to the
      *  enemy-side statusEngine calls (applyTimedAbilityStatus / timedAbilityStatuses /
-     *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET
-     *  (pre-Task-6 path, byte-identical). The real tank id is supplied only by the enemy-dispatch
+     *  activeAbilityStatuses). When UNDEFINED the statusEngine resolves to DEFAULT_ENEMY_TARGET.
+     *  The real tank id is supplied only by the enemy-dispatch
      *  branch; all player-side call sites in engine.ts leave this unset. */
     targetId?: string;
     /** Active buff names on the OPPOSING side for this actor's `enemy-buff` condition
      *  gates. For a player actor this is the UNION of the enemy attacker(s)' self-buff names;
      *  for the enemy-dispatch walk it is symmetric (the player team's buffs). NAMES ONLY — these
-     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (DPS-assumption,
-     *  byte-identical). Sourced by the engine via triggers.selfBuffNamesForOwners. */
+     *  feed condition gates, never effect folding (no double-fold). Defaults to [] (the
+     *  DPS assumption). Sourced by the engine via triggers.selfBuffNamesForOwners. */
     enemyBuffNames?: string[];
-    /** Sub-project I, PR I5 — count (not union) of living opposing actors currently holding
+    /** Count (not union) of living opposing actors currently holding
      *  the Stealth self-buff, for this actor's `enemy-stealth-count` scaling condition
      *  (Selenite's "10% more direct damage for every enemy with Stealth"). Same per-turn
      *  cadence/sourcing as `enemyBuffNames` above (triggers.countOwnersWithSelfBuff). Defaults
-     *  to 0 for any caller that does not supply it — byte-identical there. The old rationale
-     *  ("no enemy attackers to count" in DPS mode) is stale: every DPS run has carried a real
-     *  enemy since SP-4b-2a and, since SP-4b-2b, `normalizeCombatRoster` throws on a roster-less
-     *  input. The 0 holds because the synthesized DPS stand-in carries no Stealth — nobody to
-     *  count STEALTHED, not nobody to count. */
+     *  to 0 for any caller that does not supply it. In DPS mode the 0 holds because the
+     *  synthesized DPS stand-in carries no Stealth — nobody to count STEALTHED, not nobody to
+     *  count (every DPS run carries a real enemy; `normalizeCombatRoster` throws on a
+     *  roster-less input). */
     stealthedEnemyCount?: number;
-    /** Sub-project I, PR I1 — NAMES on the opposing (primary) target for this actor's
+    /** NAMES on the opposing (primary) target for this actor's
      *  name-specific `enemy-debuff` condition gates (Tygr's "to enemies with Stasis or
      *  Disable", Incinerator's "to enemies afflicted with Inferno"). SENTINEL: `undefined`
      *  (the default — simply omit this key) means the caller has NOT opted in, so the round
@@ -748,40 +726,40 @@ export interface PlayerTurnArgs {
     enemyDebuffNames?: string[];
     /** Active debuff names on THIS actor for its `self-debuff` condition gates. For a
      *  player heal target these are the enemy-applied debuffs in its per-target store (keyed by
-     *  its own id). NAMES ONLY — never folded. Defaults to [] (DPS-assumption, byte-identical).
+     *  its own id). NAMES ONLY — never folded. Defaults to [] (the DPS assumption).
      *  Sourced by the engine via triggers.ownerDebuffNamesFor. */
     selfDebuffNames?: string[];
-    /** §4.5 Stasis direct-damage break hook. When supplied, fires AFTER scheduled
+    /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
      *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
      *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
      *  Receives the resolved enemy target id (`targetId`). The engine supplies this for DIRECT-
      *  channel apply boundaries (non-positional and positional via emitHit override); absent for
-     *  DPS/standalone callers → inert (byte-identical). */
+     *  DPS/standalone callers → inert. */
     onHitBreakStasis?: (targetId: string) => void;
     /**
-     * E3 (AoE purge): the firing skill's footprint victim ids, supplied by the engine in
+     * The firing skill's footprint victim ids, supplied by the engine in
      * positional mode. The on-cast purge fans an 'all-enemies' purge over these instead of the
-     * single `targetId`. Absent for non-positional callers → single-anchor (byte-identical).
+     * single `targetId`. Absent for non-positional callers → single-anchor.
      */
     aoeVictimIds?: string[];
-    /** SP2b: living opposing actors keyed by id — per-victim debuff landing/application in
+    /** Living opposing actors keyed by id — per-victim debuff landing/application in
      *  positional mode. Supplied from the side's opposing roster. Absent → anchor-only path. */
     opposingVictimById?: Map<string, CombatActor>;
     /** Positional mode (per-victim detonation): when true, runPlayerTurn does NOT detonate the
      *  anchor enemy's containers (no consume, no credit, no bomb-detonated emit) and instead
      *  returns a `positionalDetonation` recipe for the engine to apply per footprint victim.
-     *  detonationDamage is 0 in this mode. Absent/false → legacy anchor detonation (byte-identical). */
+     *  detonationDamage is 0 in this mode. Absent/false → anchor detonation. */
     positional?: boolean;
     /** Victim-side incoming %-reduction against the bound target.
      *  nonCrit = applies to ALL hits (Voidshade/Nebula); critFamily = take-max crit-family reduction
-     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0 → byte-identical. */
+     *  applied to the crit fraction only (Iridium/Hardened/Hyperion). Both default 0. */
     incomingReductionNonCritPct?: number;
     incomingReductionCritFamilyPct?: number;
     /** The bound target's live effective attack (for Giant Slayer's higher-attack gate).
      *  Absent → targetHigherAttack false → Giant Slayer inert. */
     targetEffectiveAttack?: number;
     /** Engine-supplied deterministic proc gate for outgoing-amplification procs, keyed by
-     *  ability id under this actor. Absent → no amplification rolled (byte-identical). */
+     *  ability id under this actor. Absent → no amplification rolled. */
     rollOutgoingProc?: (abilityId: string, chance: number) => boolean;
     /** Per-victim crit signal. When true AND a damage ability fires this cast, runPlayerTurn
      *  does NOT emit the aggregate `ability-performed` event itself — instead it returns
@@ -790,11 +768,10 @@ export interface PlayerTurnArgs {
      *  this ONLY on the positional-apply branch (its `positional` gate is `... && positionalScalars
      *  != null`, i.e. exactly `hasDamageAbility` — so the suppression condition here matches EXACTLY
      *  which turns the engine will resolve positionally). Absent/false, OR set on a cast with no
-     *  damage ability → runPlayerTurn emits inline instead. NOT "as before": since PR5 of the
-     *  multi-hit full-walk epic that inline emit is itself ONE event per SUB-ATTACK, each carrying
-     *  `directDamage / N` and its own `subAttackIndex` — the SAME cardinality the engine's deferred
-     *  path has emitted since PR2, not the pre-PR5 single aggregate. Only at hits === 1 (every
-     *  corpus ship but Enforcer) is it one event carrying the undivided damage, i.e. byte-identical.
+     *  damage ability → runPlayerTurn emits inline instead. That inline emit is itself ONE event
+     *  per SUB-ATTACK, each carrying `directDamage / N` and its own `subAttackIndex` — the SAME
+     *  cardinality the engine's deferred path emits. Only at hits === 1 is it a single event
+     *  carrying the undivided damage.
      *  See the block comment at the emit loop for the cardinality/damage-split derivation. */
     deferAbilityPerformedToEngine?: boolean;
     /** Active-skill parsed pattern (support footprint for on-cast grants/heals/shields/buffs). */
@@ -803,13 +780,13 @@ export interface PlayerTurnArgs {
     chargedPattern?: ParsedPattern;
     /** Living same-side roster for support footprint resolution (positional mode). */
     sameSideLiving?: CombatActor[];
-    /** Pre-fight combat-modifier baseline for THIS acting actor (sub-project F, PR F3).
+    /** Pre-fight combat-modifier baseline for THIS acting actor.
      *  outgoingDamage/outgoingHeal/incomingHeal fold additively into the scheduled self-buff
      *  totals right after resolveSelfBuffTotals, flowing through effectiveDamageStatsOf into
      *  every existing damage/heal consumer (incl. turnCtx + positionalScalars). NOTE:
      *  outgoingCritDamage is NOT folded here — "outgoing crit damage" is a crit-conditional
      *  DAMAGE modifier (not the Crit Power stat), consumed at the engine's crit-family
-     *  damage sites. Absent → byte-identical. */
+     *  damage sites. Absent → no pre-fight baseline is folded. */
     preFight?: PreFightCombatModifiers;
 
     /** #389/#396: the named families THIS acting actor carries in its own per-victim ENEMY store
@@ -822,28 +799,26 @@ export interface PlayerTurnArgs {
      *  actor's OWN instance of the same family and keep the stronger, which a pre-summed scalar
      *  makes impossible.
      *
-     *  #367 originally folded the two HEAL channels as a plain SUM at a much earlier site (beside
-     *  `preFight`). That site cannot do the comparison — the self side needs `abilitySelfEffects`,
-     *  which is not resolved until ~700 lines later — so #396 moved them to join the outgoing pair
-     *  at the late fold. Verified before moving: nothing between the two sites reads
-     *  `incomingHealBuff` or `outgoingHealBuff`. Absent → byte-identical. */
+     *  All four channels fold at the LATE fold, NOT at the early `preFight` site (#367/#396): the
+     *  early site cannot do the comparison, because the self side needs `abilitySelfEffects`,
+     *  which is not resolved until much later in the turn. Nothing between the two sites reads
+     *  `incomingHealBuff` or `outgoingHealBuff`, which is what makes the late fold safe. */
     enemyAppliedFamilies?: FamilyMap;
-    /** I6: the opposing actor with the most buffs (Rhodium's §C2b-2 `mostBuffsAmong`), resolved
+    /** The opposing actor with the most buffs (Rhodium's `mostBuffsAmong`), resolved
      *  fresh per turn from THIS actor's opposing roster. Feeds an ON-CAST purge ability whose
      *  `target` is `'enemy-most-buffs'` (Lodolite's charged skill) — the reactive counterpart
      *  (end-of-round/on-attacked triggers, e.g. Rhodium) resolves this itself via
      *  triggers.ts's `ctx.enemyWithMostBuffs`, which this on-cast path never reaches. Undefined
      *  when no living opposing actor carries a buff, or for non-positional/DPS callers that never
-     *  supply it — the purge loop then falls back to the anchor `targetId` (byte-identical to
-     *  pre-I6 behavior for every ship without an enemy-most-buffs on-cast purge). */
+     *  supply it — the purge loop then falls back to the anchor `targetId`. */
     enemyMostBuffsId?: string;
-    /** PR10 (buff steal): living adjacent allies of THIS acting actor, resolved fresh per turn
+    /** Buff steal: living adjacent allies of THIS acting actor, resolved fresh per turn
      *  from its own side's roster (engine.ts's buildTurnArgs: `bySide(a.side).adjacentAllyIdsFor
      *  (a.id)` — team-symmetric for free, same helper 'adjacent-allies' targets use elsewhere).
      *  Consumed ONLY by a `buff-steal` ability whose config carries `grantAdjacentAllies` — the
      *  stolen buff is additionally granted to every id here (alongside the caster itself).
-     *  Absent/[] → the grant is caster-only (byte-identical for every ship without that flag,
-     *  and for non-positional/DPS callers that never supply it). */
+     *  Absent/[] → the grant is caster-only (every ship without that flag, and every
+     *  non-positional/DPS caller that never supplies it). */
     adjacentAllyIds?: string[];
     /** Resolves the board-neighbours of an ENEMY-side anchor id (the
      *  resolved `targetId`, not the caster) — feeds the `adjacent-enemies` /
@@ -887,17 +862,17 @@ export interface PlayerTurnArgs {
      *  absence — do not lean on "every non-positional/DPS caller supplies none" as a production
      *  fact. */
     selectorEnemyIdFor?: (kind: EnemySelectorKind) => string | undefined;
-    /** Sub-project I, PR I3 (Layer 1) — `all-allies`-targeted passive `modifier` abilities
+    /** `all-allies`-targeted passive `modifier` abilities
      *  gathered from THIS actor's living same-side allies (source excluded — see
      *  engine.ts's `buildTurnArgs`). Merged into `modifierAbilities` below alongside the
      *  actor's own firing + passive abilities, so a team aura (Lodolite's "+15% to enemies
      *  with Concentrate Fire", Panguan's "+40% to Stealthed allies") folds into the
      *  RECIPIENT's own dmgStats fold AND `perVictimOutgoing`, evaluated against the
      *  recipient's OWN ctx (self-buff/enemy-status gates resolve from the recipient's
-     *  perspective, not the source's). Defaults to `[]` — absent/empty is byte-identical to
-     *  pre-I3 behavior (no ship's all-allies modifier reaches teammates without this). */
+     *  perspective, not the source's). Defaults to `[]` — with it absent/empty, no ship's
+     *  all-allies modifier reaches teammates. */
     allyModifierAbilities?: Ability[];
-    /** Sub-project I, PR I4c — per-SOURCE breakdown of `all-allies` `dotDamage`-channel
+    /** Per-SOURCE breakdown of `all-allies` `dotDamage`-channel
      *  modifier abilities, needed IN ADDITION TO `allyModifierAbilities` (which flattens
      *  every source into one list and so loses provenance). Wildfire's refit-3 aura is the
      *  one shape (today) where an all-allies modifier's bonus must scale by the SOURCE's
@@ -911,14 +886,14 @@ export interface PlayerTurnArgs {
      *  `sourceCritPower` is that ally's OWN live crit power (base + scheduled/timed self-
      *  buffs — the same "layers 1+2+3" shape `modifierCtx.selfCritPower` uses for the
      *  acting actor, computed via `effectiveStatsOf` since the source may not be acting
-     *  this round — see engine.ts's `buildTurnArgs`). Defaults to `[]` — absent/empty is
-     *  byte-identical to pre-I4c behavior. */
+     *  this round — see engine.ts's `buildTurnArgs`). Defaults to `[]`, which contributes no
+     *  source-scaled entry. */
     allyDotDamageAuraSources?: {
         sourceId: string;
         sourceCritPower: number;
         abilities: Ability[];
     }[];
-    /** SP-F F3 fix (Critical): routes a FORCED bomb detonation — `reduceEnemyBombs`/
+    /** Routes a FORCED bomb detonation — `reduceEnemyBombs`/
      *  `reduceBombsOnVictim` driving an existing PendingBomb's countdown to <=0 (Lingshe) — through
      *  the engine's real per-victim `applyVictimDamage` sink, so it behaves EXACTLY like a natural
      *  countdown-0 burst: Barrier full-damage-immunity, the Cheat-Death intercept, `destroyedRound`/
@@ -937,8 +912,7 @@ export interface PlayerTurnArgs {
      *  narrows to its OWN side's matching allies with no mirrored branch. Returns `undefined` for
      *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
      *  filter (conservative, mirroring `roleOf`/`matchesRoleCategory`). Absent entirely
-     *  (standalone/unit-test callers, single-ship DPS) → byte-identical for every ability with no
-     *  `factionFilter`, which today is every ability but Fuying's Stealth grant. */
+     *  (standalone/unit-test callers, single-ship DPS) → no faction narrowing at all. */
     factionOf?: (id: string) => FactionKey | undefined;
 }
 
@@ -972,12 +946,11 @@ function resolveSelfBuffTotals(args: {
 // the hacking-vs-security landing roll. The roll is a LAZY getter (`roundDebuffLanded`)
 // so the single per-round gate draw is taken only when a non-'apply' recurring debuff is
 // present (and is memoized across all round consumers — recurring fold, DoT landing, and
-// since SP-4b-2 D4 the POSITIONAL DAMAGE read, which consumes this function's
+// the POSITIONAL DAMAGE read, which consumes this function's
 // `roundEnemyDebuffs` via `PlayerTurnResult.scheduledEnemyEffects` rather than re-reading
 // the ungated `__enemy__` bucket. One draw, one decision, both channels).
-// NOTE: no `debuff-applied` is emitted here (Phase 3 retiming: recurring/aura per-round
-// re-applications are NOT discrete inflictions — only `debuff-resisted` fires on miss,
-// unchanged from Phase 1).
+// NOTE: no `debuff-applied` is emitted here — recurring/aura per-round re-applications are
+// NOT discrete inflictions; only `debuff-resisted` fires on miss.
 function resolveEnemyDebuffs(args: {
     activeEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
@@ -1018,8 +991,8 @@ function resolveEnemyDebuffs(args: {
 // drew their landing roll ONCE at application (status-engine hook) and persist their full
 // window with no re-roll, so here they are unconditionally landed: expand their effects
 // and report them as landed. No gate draw, no resist partition, NO `debuff-applied`
-// emission (Phase 3 retiming: discrete-infliction-only; the emission moved to the
-// sourceFired/applyTimedAbilityStatus application sites).
+// emission: that channel is discrete-infliction-only and lives at the
+// sourceFired/applyTimedAbilityStatus application sites.
 function foldTimedEnemyDebuffs(args: {
     timedEnemyDebuffs: ActiveBuff[];
     enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
@@ -1143,14 +1116,14 @@ function chargeGainFromSkill(args: {
     gatedSkill: Skill | undefined;
     ctxFor: Map<string, ConditionContext>;
     fallbackCtx: ConditionContext;
-    /** Which charge abilities to sum (Task 5 ally routing; Task 7 enemy routing):
+    /** Which charge abilities to sum:
      *  - 'own'   → self-targeted (and anything not ally/all-allies/enemy/all-enemies) → bumps the
      *    caster only.
      *  - 'ally'  → ally/all-allies-targeted → bumps every player actor (via grantAllyCharges).
      *  - 'enemy' → enemy/all-enemies-targeted → REMOVES from every opposing actor (via
      *    removeEnemyCharges). Positive amount; the engine subtracts.
      *  For attacker-only runs the 'ally' total still routes through grantAllyCharges, which
-     *  loops the sole attacker → identical net charge to the pre-Task-5 single 'own' sum. */
+     *  loops the sole attacker → identical net charge to a single 'own' sum. */
     targetFilter: 'own' | 'ally' | 'enemy';
 }): number {
     let gain = 0;
@@ -1165,12 +1138,10 @@ function chargeGainFromSkill(args: {
         // the 'ally' side (grantAllyCharges bumps every same-side actor, so a single-ally grant is
         // over-applied; that approximation is pre-existing and shared with plain 'ally').
         //
-        // That over-application is an OPEN RESIDUAL belonging to no scheduled task — SP-4e Task 6
-        // is the epic's last rung, so do not read the earlier "not this rung's scope" wording as a
-        // pending fix. It is also CORPUS-DEAD: every ability carrying `'lowest-hp-ally'` in the
-        // shipped roster is a HEAL, never a charge (all five of them — Pallas/active,
-        // Volk/passive1+2, Valkyrie/passive1+2 — pinned by the inventory gate in
-        // `lowestHpAllySelector.test.ts`). Only a hand-authored charge ability can reach it.
+        // That over-application is an OPEN RESIDUAL. It is also CORPUS-DEAD: every ability
+        // carrying `'lowest-hp-ally'` in the shipped roster is a HEAL, never a charge — pinned by
+        // the inventory gate in `lowestHpAllySelector.test.ts`. Only a hand-authored charge
+        // ability can reach it.
         const isAlly =
             ability.target === 'ally' ||
             ability.target === 'all-allies' ||
@@ -1190,13 +1161,11 @@ function chargeGainFromSkill(args: {
         // they can emit, pinned by the inventory gate in `chargeTargetSideWidening.test.ts`, so
         // none of the five widened targets is corpus-reachable through them.
         //
-        // There IS a fourth producer: the ability editor (`AbilityCard.tsx`) lets a user
-        // hand-author a `charge`-typed ability, and its target dropdown used to offer
-        // 'adjacent-enemies' / 'target-and-adjacent-enemies' alongside the safe targets (it never
-        // offered the three selectors). #399 Change 1a restricts the editor's target options for a
-        // `charge`-typed ability to `CHARGE_TARGET_OPTIONS` (`self` / `all-allies` / `enemy` — the
-        // same three the data builders emit), so no NEWLY authored charge ability can carry one of
-        // the five widened targets.
+        // There IS another producer: the ability editor (`AbilityCard.tsx`) lets a user
+        // hand-author a `charge`-typed ability. Its target dropdown for a `charge`-typed ability
+        // is restricted to `CHARGE_TARGET_OPTIONS` (`self` / `all-allies` / `enemy` — the same
+        // targets the data builders emit), so no NEWLY authored charge ability can carry one of
+        // the widened targets (#399).
         //
         // RESIDUAL, deliberately accepted: an ALREADY-SAVED charge ability carrying
         // 'adjacent-enemies' / 'target-and-adjacent-enemies' is PRESERVED by the editor as a
@@ -1222,7 +1191,7 @@ function chargeGainFromSkill(args: {
         const scale =
             !primary || primary.countComparator != null
                 ? 1
-                : // SP-4d: an unresolvable scaling source contributes no charge.
+                : // An unresolvable scaling source contributes no charge.
                   (evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx) ??
                   0);
         gain += scale * ability.config.amount;
@@ -1235,7 +1204,7 @@ function chargeGainFromSkill(args: {
 // that detonates and re-applies the same type (e.g. Incinerator) doesn't eat its own new
 // stack. The payout is DETONATION damage (the game category that also covers Bomb bursts).
 // `emitBombDetonated` is called for the bomb branch when the payout is non-zero, carrying
-// total stacks and damage so Phase 3 reactive triggers can respond.
+// total stacks and damage so reactive triggers can respond.
 function detonate(args: {
     gatedSkill: Skill | undefined;
     effectiveAttack: number;
@@ -1276,8 +1245,8 @@ function detonate(args: {
 }
 
 // Step 3: Apply new DoT stacks from this round's skill (subject to landing roll).
-// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution
-// (Task 4); bombs also snapshot the applier's `affinityMult` at application (used at burst).
+// `sourceId` (the applier) is stamped on every appended entry for per-actor attribution;
+// bombs also snapshot the applier's `affinityMult` at application (used at burst).
 function applyNewDoTs(args: {
     dotsConfig: DoTApplicationConfig;
     effectiveAttack: number;
@@ -1289,7 +1258,7 @@ function applyNewDoTs(args: {
     infernoEntries: ActiveDoTStack[];
     /** Generic (absolute per-tick) DoT entries. Nothing in `dotsConfig` produces
      *  `type:'generic'` today — the parser never emits it — but this branch exists so a future
-     *  transform (Voron/Orel, E3) can share this one apply entry point. */
+     *  transform (Voron/Orel) can share this one apply entry point. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     emitDotApplied: (dotType: DoTType, stacks: number, tier: number) => void;
@@ -1357,16 +1326,14 @@ function applyAccumulators(args: {
 /**
  * Reduces `victim.shieldPool` by `pct`% of its CURRENT value (the locked H shield rule: an
  * untimed maxHP-capped pool; a percentage strip removes a share of whatever is currently in
- * the pool, not of its max). `pct: 100` fully zeroes it — the same numeric result as the
- * pre-PR9 `victim.shieldPool = 0` it replaces at the I6 (Lodolite) purge-coupled call site.
- * Shared by BOTH strip mechanics so there is one strip-apply site, not two:
- *   - I6: the `stripsShield` flag on a 'purge' ability (gated on the purge landing).
- *   - PR9(b): the standalone `type:'shield-strip'` ability (APEX/Laika/Malvex, unconditional
+ * the pool, not of its max). `pct: 100` fully zeroes it.
+ * Shared by BOTH strip mechanics so there is one strip-apply site:
+ *   - the `stripsShield` flag on a 'purge' ability (gated on the purge landing).
+ *   - the standalone `type:'shield-strip'` ability (APEX/Laika/Malvex, unconditional
  *     on-cast — see parseShieldStrip's doc comment for why these stay mutually exclusive).
  *
- * Ship-kit Wave 3 (Task 7, Laika): emits `shield-stripped` (combat/events.ts) HERE — the one
- * shared mutation site both call sites route through — rather than at each call site, so there
- * is exactly one emit point and no risk of a double-emit if a future third caller appears.
+ * Emits `shield-stripped` (combat/events.ts) HERE — the one shared mutation site both call
+ * sites route through — rather than at each call site, so there is exactly one emit point.
  * Suppressed when the pool was already 0 (nothing to remove) or the strip is a no-op, mirroring
  * `purge-performed`'s 0-removed suppression.
  */
@@ -1430,9 +1397,9 @@ function reduceEnemyBombs(args: {
         // #403 ruling R1 says an unresolved selector fizzles for a POSITIONAL caller (the resolver
         // returns `[]`, so the map is a no-op) and keeps the bound victim for a NON-POSITIONAL one.
         // A DPS caller never supplies `selectorEnemyIdFor` at all, so every selector target lands
-        // here — and `?? args.targetId` reproduces the old ternary's `[args.targetId]` tail exactly,
-        // byte-identical for DPS. An earlier draft filtered `undefined` out instead, which silently
-        // made a selector-targeted clause hit NOBODY in DPS mode (caught in review on PR #408).
+        // here, and `?? args.targetId` maps it to the bound victim. Filtering `undefined` out
+        // instead would conflate "no delegate supplied" with a real "nobody" answer and make a
+        // selector-targeted clause hit NOBODY in DPS mode.
         // `boundVictimId` is the post-guard capture of `args.targetId` (see its declaration).
         const recipients = resolveDebuffRecipientIds({
             abTarget: ab.target,
@@ -1464,10 +1431,10 @@ function reduceEnemyBombs(args: {
  * §10), minus the DoT-processing calls (tickDoTs / processBombs / processAccumulators) which
  * run on the enemy turn. Returns everything the round's RoundData row needs from this turn; the
  * caller folds the numeric damage fields into the round accumulator and drains any pending
- * resisted team-turn entries into `resistedEnemyDebuffs`. Math is byte-identical to the old
- * inline attacker block; only the structure (parameters + return) changed. Every per-actor
- * read comes from `runtime`, and every owner id is `runtime.actor.id` — only the attacker
- * uses this today; Task 4 builds walked team runtimes.
+ * resisted team-turn entries into `resistedEnemyDebuffs`. Every per-actor read comes from
+ * `runtime`, and every owner id is `runtime.actor.id`, which is what lets ALL THREE turn sites
+ * in engine.ts call this same function: the focus actor, each walked team ally (built into
+ * `teamRuntimeById`) and each enemy attacker.
  */
 export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const {
@@ -1551,11 +1518,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /** No victim this turn — an ally-targeted cast resolved nobody on the opposing side.
      *  Every victim-derived read below must answer "there is no enemy", NEVER "an enemy with neutral
-     *  stats": the latter was exactly the dummy ghost, which SP-4c-2b stopped handing out and
-     *  SP-4c-2d deleted (see plan §A.4-A.5 — the ghost's `shieldPool` was arming `enemyShielded`
-     *  gates in 22 support-ship fingerprints).
-     *  Read it as the ONE discriminator: every branch keyed off it keeps the with-victim
-     *  path byte-identical by construction. Test it (never `enemy !== undefined`) at every site,
+     *  stats" — a neutral-stat stand-in arms `enemyShielded`-shaped gates that should stay shut.
+     *  Read it as the ONE discriminator: every branch keyed off it leaves the with-victim
+     *  path untouched by construction. Test it (never `enemy !== undefined`) at every site,
      *  including those that then dereference `enemy` — TS's aliased-condition narrowing carries the
      *  `const` through, closures included. */
     const hasVictim = enemy !== undefined;
@@ -1600,32 +1565,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /** The victim-derived STAT slice of a gate context — the owner-vs-target comparison subjects
      *  (Bayah's crit-power gate, Cobalt's HP gate, Chakara's speed gate). Empty when there is no
-     *  victim. Spread ONLY into the two contexts that carry these fields today (preDebuffGateCtx and
+     *  victim. Spread ONLY into the contexts that carry these fields (preDebuffGateCtx and
      *  `ctx`) — adding them to postDebuffGateCtx or modifierCtx would change which gates those
      *  contexts can resolve.
      *
-     *  DISCHARGED (was a NAMED RESIDUAL through SP-4d task 2) — omission now correctly answers "there
-     *  is no target". `ConditionContext.targetSpeed`/`targetCurrentHp`/`targetCritPower` are no
-     *  longer defaulted with `?? 0`: `buildRoundContext` (roundContext.ts) conditionally spreads each
+     *  Omission correctly answers "there is no target".
+     *  `ConditionContext.targetSpeed`/`targetCurrentHp`/`targetCritPower` are NOT
+     *  defaulted with `?? 0`: `buildRoundContext` (roundContext.ts) conditionally spreads each
      *  one, withholding the KEY entirely when this slice is empty, and `evaluateConditions.ts`'s
      *  `stat-vs-target` arm returns `undefined` rather than comparing against a fabricated 0.
      *  `conditionMet` rejects that `undefined` above the comparator switch, so with the slice empty a
-     *  **`gt`** comparator now reads FALSE against nobody, not TRUE — the same fix shape as the
-     *  `enemyHpPct` derivation this task closes.
+     *  **`gt`** comparator reads FALSE against nobody, not TRUE.
      *
      *  REACHABLE: this slice is spread into `ctx` (further down), which `gateFiringAbilities` uses to
      *  gate heal/shield/buff/charge payloads. That consumer is deliberately NOT victim-fenced — the
-     *  repair must land on a no-victim turn — so the gate really does evaluate, and now evaluates
+     *  repair must land on a no-victim turn — so the gate really does evaluate, and evaluates
      *  honestly rather than against an invented target.
      *
-     *  Exactly three corpus ships carry `stat-vs-target`, measured over parsed abilities:
-     *    • Bayah   (charged control + debuff, crit-power, `gt`)
-     *    • Cobalt  (active additional-damage, hp, `gt`)
-     *    • Chakara (active charge, speed, `lt`) — was always SAFE regardless of this fix: `self < 0`
-     *      is never true by arithmetic alone.
-     *  None of the three is an ally-target ship (§A.2), so none can take a no-victim turn in the
-     *  shipped corpus today — `noVictimAbsentSubject.integration.test.ts` (SP-4d task 3) pins the
-     *  synthetic shape directly, since no shipped kit can build it. */
+     *  `noVictimAbsentSubject.integration.test.ts` pins the no-victim `stat-vs-target` shape
+     *  synthetically, because no shipped kit pairs an ally target with a `stat-vs-target` gate. */
     const victimStatGateCtx = (v: CombatActor | undefined) =>
         v !== undefined
             ? {
@@ -1647,9 +1605,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         v !== undefined ? { enemyShielded: v.shieldPool > 0 } : {};
 
     // ====================================================================
-    // PLAYER TURN — the old attacker block, minus the DoT-processing
-    // calls (tickDoTs / processBombs / processAccumulators), which move to
-    // the enemy turn. Math is byte-identical; only the DoT block relocated.
+    // PLAYER TURN — everything but the DoT-processing calls (tickDoTs /
+    // processBombs / processAccumulators), which run on the enemy turn.
     // ====================================================================
 
     // --- preTurn: action selection + charge consumption ---
@@ -1697,18 +1654,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //      `Ability.patternScoped`, see the flag's doc comment. That is what `scopedByFootprint`
     //      below decides, and it is the ONLY axis this predicate knows about.
     //
-    //  (2) TARGET (SP-4e, user-confirmed 2026-08-20). A TEXT-NAMED ally selector is never
-    //      footprint-scoped **on either slot**. The Volk observation above was originally recorded
-    //      as a fact about his passive slot, but the load-bearing half of it is the selector: his
-    //      text names "the ally with the most missing health", and a named ally is reached wherever
-    //      it stands. `'lowest-hp-ally'` (Pallas, Volk, Valkyrie) therefore bypasses
+    //  (2) TARGET (user-confirmed 2026-08-20). A TEXT-NAMED ally selector is never
+    //      footprint-scoped **on either slot**. The load-bearing half of the Volk observation
+    //      above is the selector, not the slot: his text names "the ally with the most missing
+    //      health", and a named ally is reached wherever it stands.
+    //      `'lowest-hp-ally'` (Pallas, Volk, Valkyrie) therefore bypasses
     //      `supportRecipients` entirely — `recipientsFor` returns for it BEFORE calling this, and
     //      `resolveSupportRecipients` THROWS on the target by design so a future caller cannot
     //      quietly narrow it. Put a named selector on an ACTIVE skill and it still ignores the
     //      pattern; that is not the passive-slot rule leaking, it is rule (2).
     //
     // Everything left over — a plain `'ally'`, `'all-allies'`, `'adjacent-allies'` on the cast slot
-    // — IS narrowed, including plain `'ally'` since SP-4e Task 4 (see `recipientsFor`).
+    // — IS narrowed, plain `'ally'` included (see `recipientsFor`).
     const scopedByFootprint = (ability: Ability | undefined, fromPassive: boolean): boolean =>
         !fromPassive || ability?.patternScoped === true;
     const supportRecipients = (
@@ -1745,30 +1702,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const allyHpFractionOf = (id: string): number | undefined =>
         allyHpFraction({ id, healing: args.healing, sameSideLiving });
 
-    // Enemy HP% entering this round, derived from the struck victim's live HP decline (PR6b:
-    // the engine no longer passes a precomputed scalar — `enemy` is the tgt actor, `enemyHp`
-    // its max, so decline = how much HP the victim has lost). For the DPS dummy sink it equalled
-    // the old cumulativeDamage+cumulativeTeamDamage (the sink's currentHp tracked it post-round);
-    // for a real positional victim — which since SP-4c-2d is the only kind — it reflects that
-    // victim's actual HP.
-    // LOAD-BEARING TIMING: on a roster-less run the dummy's currentHp updated POST-round (the
-    // round-tail HP block, deleted in SP-4c-2d), not per-hit, so the derived value equalled the
-    // entering-round scalar the old param carried. That timing does NOT hold for a real positioned
-    // victim — its HP falls
-    // during the turn walk — so on a positional run (since SP-4b-2a, every DPS-calculator run)
-    // this reads the victim's HP as it stood when THIS actor's turn began, which is the intended
-    // "entering this turn" semantics for the hp-threshold gates, not a per-round scalar.
+    // Enemy HP% entering this round, derived from the struck victim's live HP decline: `enemy` is
+    // the tgt actor and `enemyHp` its max, so the decline is how much HP the victim has lost.
+    // LOAD-BEARING TIMING: a real positioned victim's HP falls during the turn walk, and this is
+    // computed once at the top of the turn, so it reads the victim's HP as it stood when THIS
+    // actor's turn began — the intended "entering this turn" semantics for the hp-threshold
+    // gates, not a per-round scalar.
     // With no victim there is no HP to have declined and no denominator to divide by, so
     // there is NO READING — the gate-facing value is absent, and every enemy-HP gate on this turn
-    // is unresolvable rather than satisfied by a fabricated 100 ("a healthy enemy"). The
-    // 4c-2b-era residual note that stood here is discharged; do not restore a `: 100` fallback.
+    // is unresolvable rather than satisfied by a fabricated 100 ("a healthy enemy"). Do not
+    // restore a `: 100` fallback.
     // The `: 0` arm is REACHABLE — do not collapse this ternary. A victim with max HP 0 is a real
     // victim with no HP, i.e. 0%, which is a different answer from `undefined` ("no victim") and
     // from 100 ("a healthy enemy"). It is NOT reached the obvious way: `normalizeRoster` floors an
     // ENEMY's max HP to 1,000,000, so `bareEnemy({ stats: { hp: 0 } })` never gets here. It is
     // reached on an ENEMY's own turn against a PLAYER-side actor whose `stats.hp` is omitted or
-    // zero — the player side carries no such floor. Measured by instrumenting this branch over the
-    // combat suite: 4 hits, every one with victim id `'attacker'`.
+    // zero — the player side carries no such floor.
     const enemyHpPct = hasVictim
         ? enemyHp > 0
             ? Math.max(0, 100 * (1 - Math.max(0, enemyHp - enemy.currentHp) / enemyHp))
@@ -1785,9 +1734,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         damageInputsFromSkill(firingSkill);
     const hasDamageAbility = damageAbility !== undefined;
 
-    // `victimId` is REQUIRED (it used to default to the turn victim's id). There is no
+    // `victimId` is REQUIRED. There is no
     // victim to default to on a no-victim turn, and an application/resist event with no victim is
-    // not a thing — so every caller now names its victim, and each enclosing application block is
+    // not a thing — so every caller names its victim, and each enclosing application block is
     // fenced on `hasVictim` so a no-victim turn never reaches one.
     //
     // #413: `viaLandingRoll` says whether the hacking-vs-security gate was DRAWN and failed. Every
@@ -1810,14 +1759,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             ...(viaLandingRoll ? { viaLandingRoll: true as const } : {}),
             ...(subAttackIndex !== undefined ? { subAttackIndex } : {}),
         });
-    // emitDebuffApplied: discrete-infliction-only (Phase 3 retiming). `sourceId` is the
+    // emitDebuffApplied: discrete-infliction-only. `sourceId` is the
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
     // `victimId` is REQUIRED here too — see emitDebuffResisted above.
     const emitDebuffApplied = (sourceId: string, buffName: string, victimId: string) =>
         bus.emit({ type: 'debuff-applied', sourceId, targetId: victimId, round: r, buffName });
 
-    // LIVE per-target debuff-landing chance (A2 Task 4 / A-closeout). The sole producer of
+    // LIVE per-target debuff-landing chance. The sole producer of
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
     // actor's affinity) vs the TURN TARGET's effective security. `liveDebuffLandingChance` is
     // self-sufficient — it defaults a missing attacker hacking → 200 and target security → 100,
@@ -1825,12 +1774,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // `selfBuffLookup` folds scheduled self-buffs; timed ability statuses (the hacking/security
     // buffs that move landing) fold lookup-free from the status engine. Cached once per turn here
     // — every landing consumer below reads this value.
-    // SP2a: positional casts re-resolve affinity vs the bound anchor; non-positional keeps
-    // representative scalars (DPS byte-identical).
+    // Positional casts re-resolve affinity vs the bound anchor; non-positional keeps
+    // representative scalars.
     const attackerAff = attackerAffinity ?? actor.affinity ?? 'antimatter';
     const positionalLanding = args.deferAbilityPerformedToEngine === true;
 
-    // ── SP-F F4: forced-affinity override surface ──────────────────────────────────────────
+    // ── Forced-affinity override surface ───────────────────────────────────────────────────
     // Two sources force this cast's affinity, superseding the real matchup / pre-baked adapter
     // flat fields:
     //  (1) the firing damage ability's `forceAffinityAdvantage` flag (Wusheng's charged "deals
@@ -1844,8 +1793,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //      penalty, 'apply' debuffs resist.
     //  PRECEDENCE: an outgoing-advantage force wins over a victim's defensive force (rare collision).
     //  DEFAULT (no override, incl. single-ship DPS against a synthesized enemy that carries no
-    //  skills and so grants itself no buffs — before SP-4c-2d, the dummy enemy): the
-    //  effective values equal the destructured runtime scalars / real matchup — byte-identical.
+    //  skills and so grants itself no buffs): the effective values equal the destructured
+    //  runtime scalars / real matchup.
     //  SCOPE: the anchor (primary/bound target) path is fully covered. Per-covered-victim AoE
     //  offensive/defensive forcing is a documented limitation (no corpus override ship is AoE).
     const damageForcesAffinityAdvantage =
@@ -1859,9 +1808,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfBuffNamesForOwners(statusEngine, [victim.id]).includes('Defensive Affinity Override');
     // Effective affinity modifiers vs a specific victim, applying the override precedence.
     // `victim` is optional — with no victim there is no matchup, so there is also no
-    // defensive override to honour and the neutral 'antimatter' answer stands. Byte-identical to the
-    // ghost's reading (plan §A.4: the dummy's `affinity` was ALWAYS undefined, so this call already
-    // resolved 'antimatter' on every ally-targeted turn).
+    // defensive override to honour and the neutral 'antimatter' answer stands.
     const affinityModsVsVictim = (
         victim: CombatActor | undefined
     ): { damageModifier: number; critCap: number; critPenalty: number } => {
@@ -1871,7 +1818,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         return computeAffinityModifiers(attackerAff, victim?.affinity ?? 'antimatter');
     };
     // Primary/bound-target effective scalars — supersede the pre-baked flat fields when an override
-    // is active; otherwise equal the destructured runtime values (byte-identical default).
+    // is active; otherwise equal the destructured runtime values.
     // No victim ⇒ nobody can be holding a defensive override against this cast.
     const primaryDefensiveOverride =
         !forceOutgoingAdvantage && hasVictim && victimHasDefensiveOverride(enemy);
@@ -1900,8 +1847,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const landingAffinityMod = affinityOverrideActive
         ? effAffinityDamageModifier
         : positionalLanding
-          ? // SP-4c-2b: no victim ⇒ no matchup ⇒ the neutral answer. Byte-identical to the ghost's
-            // (plan §A.4: its `affinity` was always undefined, so this already read 'antimatter').
+          ? // No victim ⇒ no matchup ⇒ the neutral answer.
             computeAffinityModifiers(attackerAff, enemy?.affinity ?? 'antimatter').damageModifier
           : affinityDamageModifier;
     const landingAtDisadvantage = affinityOverrideActive
@@ -1916,9 +1862,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         ? liveDebuffLandingChance(statusEngine, selfBuffLookup, actor, enemy, landingAffinityMod)
         : 0;
     // Block Debuff: an immune turn-target auto-resists every timed/persistent application.
-    // Computed ONCE per turn (the turn target `enemy` is fixed for this turn) — the immune
-    // short-circuit below is only reached when this is true, which no existing fixture triggers,
-    // so the non-immune path stays byte-identical. Task 6 reuses this for the DoT path.
+    // Computed ONCE per turn (the turn target `enemy` is fixed for this turn); the DoT path
+    // reuses it.
     // No victim ⇒ nobody is carrying Block Debuff against this cast, so `false`. This
     // also makes the Block-Debuff DoT branch further down provably unreachable on a no-victim turn.
     const targetImmuneToDebuffs = hasVictim
@@ -1991,48 +1936,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Publish this turn's chance onto the runtime. It is a CAST-PATH value: the chance THIS actor's
     // own turn target resists, for THIS turn.
     //
-    // ⚠️ WHAT THIS COMMENT USED TO SAY, and why both halves are now false. It read: "so the REACTIVE
-    // (triggers.ts) path — which draws the OWNER's landing gate via
-    // `owner.debuffLandingGate(owner.liveDebuffLandingChance ?? 1)` — uses the same live value.
-    // Always set now (the live path is unconditional)."
-    //  1. The reactive path no longer draws against this value. It resolves its OWN per-victim
-    //     chance (`TriggerDrainContext.liveDebuffLandingChanceFor`) against the enemy it is actually
-    //     inflicting on, and only falls back here when that resolver declines. Sharing a cast-derived
-    //     number with the reactive path was the DEFECT, not the design: an enemy shoots Flamel, and
-    //     the roll must be Flamel's hacking vs THAT ship's security, not vs whatever Flamel last
-    //     aimed its own skill at.
-    //  2. It is no longer unconditional — see the `hasVictim` guard on the line below.
+    // The REACTIVE path does NOT draw against this value. It resolves its own per-victim chance
+    // (`TriggerDrainContext.liveDebuffLandingChanceFor`) against the enemy it is actually
+    // inflicting on, and falls back here only when that resolver declines. Sharing a cast-derived
+    // number with the reactive path is the DEFECT the split exists to prevent: an enemy shoots
+    // Flamel, and the roll must be Flamel's hacking vs THAT ship's security, not vs whatever
+    // Flamel last aimed its own skill at.
     //
-    // THE GUARD, and why it is load-bearing rather than tidy. ATTRIBUTION, so nobody reads this block
-    // as the rung that added the conjunct: the `hasVictim` conjunct on the write below arrived with
-    // SP-4c-2b (`f1bce838`), whose own review wave 1 labelled it "FIX 2". SP-4c-2d added only the
-    // corrected commentary here and the `dynamicLanding.test.ts` fence named at the end of it. With no victim
-    // `liveLandingChance` is correctly 0 ("there is no enemy whose security to beat"), but publishing
-    // that 0 poisons every later reader of the field. That is precisely how the Flamel defect
-    // happened — a real, previously-SHIPPED defect, not a hypothetical: an ally-targeted supporter
-    // published 0 and its on-damaged retaliation then auto-resisted forever (measured on Flamel at
-    // the time: 138 landings → 0). So a no-victim turn publishes NOTHING and the field keeps the
+    // THE `hasVictim` GUARD IS LOAD-BEARING. With no victim `liveLandingChance` is correctly 0
+    // ("there is no enemy whose security to beat"), but publishing that 0 poisons every later
+    // reader of the field: an ally-targeted supporter publishes 0 and its on-damaged retaliation
+    // then auto-resists forever. So a no-victim turn publishes NOTHING and the field keeps the
     // last chance this actor computed against a real victim.
     //
-    // CURRENT STATUS (SP-4c-2d review wave 2) — a MEASURED-INERT BACKSTOP. SP-4c-2b gave the
-    // reactive path its own per-victim resolver, and SP-4c-2d then deleted the victimless fallbacks
-    // in triggers.ts, so no victimless reaction can reach the `?? owner.liveDebuffLandingChance`
-    // tails there either. An earlier draft of this comment predicted the opposite — that 4c-2d would
-    // change the resolver's fallbacks and re-arm this mine — and that prediction is FALSE: the rung
-    // removed those fallbacks instead. Verified by mutation rather than argued: with the `hasVictim`
-    // conjunct dropped, all 7 pre-existing test files that name `liveDebuffLandingChance` stay green
-    // (96 tests). The accurate claim is CORPUS-INERT — no shape the suite can build reaches it — and
-    // NOT "structurally unreachable": the field still has readers, and 24 of 148 shipped ships carry
-    // the arming shape (an ally-side active target), so it is one refactor from mattering again.
-    // Because an inert guard is exactly what a future simplification deletes unopposed, the line is
-    // now fenced by `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance'.
-    //
-    // ⚠️ THIS GUARD SURVIVED THE EPIC — do NOT sweep it alongside its (now removed) sibling. The
-    // dummy-sentinel refusal in engine.ts's `reactiveLandingChanceFor` went DEAD the moment SP-4c-2d
-    // deleted the dummy actor, because refusing that one actor's id was all it did, and 4c-2d deleted
-    // it: an id naming no actor now takes the generic `!victim` return. This guard never mentioned the
-    // dummy — its subject is a turn with NO victim, a shape SP-4c-2b created and which outlived the
-    // dummy entirely. The two were inert for different reasons and only one of them expired.
+    // The guard is CORPUS-INERT — no shape the suite can build reaches it, because triggers.ts
+    // carries no victimless fallback to the `?? owner.liveDebuffLandingChance` tails — but it is
+    // NOT structurally unreachable: the field still has readers and shipped ships carry the arming
+    // shape (an ally-side active target), so it is one refactor from mattering again. Because an
+    // inert guard is exactly what a simplification deletes unopposed, the line is fenced by
+    // `dynamicLanding.test.ts`'s 'a no-victim turn does not publish a landing chance'.
     //
     // GUARD rather than DROP the write: the field still has readers (the reactive fallbacks), and
     // dropping it would push those rows from a real cast-derived chance to a flat `?? 1` — new
@@ -2059,9 +1981,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the snapshot. No decrement here — that lives in each owner's Post Turn
     // (statusEngine.decrementPlayer/decrementEnemy, called after this actor's turn block).
     // sourceFired returns the buffNames of any TIMED enemy applications the
-    // landing hook rejected this round (drawn once at application — Task 7).
-    // NOTE: sourceFired(runtime.actor.id, …) is already correct for future team ids —
-    // it applies that source's own manual lists.
+    // landing hook rejected this round (drawn once at application).
+    // NOTE: sourceFired(runtime.actor.id, …) is keyed on the ACTING source, so it is already
+    // correct for a walked team actor — it applies that source's own manual lists.
     const { resistedEnemy: resistedScheduledTimedNames, appliedEnemy: appliedScheduledTimedNames } =
         statusEngine.sourceFired(actor.id, action === 'charged' ? 'charge' : 'active', r);
     // Emit debuff-applied ONCE per landed timed enemy application (discrete-infliction event).
@@ -2077,10 +1999,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const entry = statusEngine.snapshot(actor.id);
 
     // Effective crit rate from a given crit-buff total, clamped by affinity.
-    // Gate/context estimates use representative scalars (byte-identical to pre-SP1). The actual
+    // Gate/context estimates use representative scalars. The actual
     // per-hit roll below uses realAffinityCappedCrit when deferAbilityPerformedToEngine.
     // Cap/penalty honour the forced-affinity override (effAffinity* equal the runtime
-    // scalars when no override is active → byte-identical default).
+    // scalars when no override is active).
     const cappedCrit = (critBuffTotal: number) =>
         Math.min(effAffinityCritCap, Math.max(0, crit + critBuffTotal - effAffinityCritPenalty));
 
@@ -2092,42 +2014,42 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         return Math.min(critCap, Math.max(0, crit + critBuffTotal - critPenalty));
     };
 
-    // --- Scheduled (manual + team) statuses: same path as before ---
+    // --- Scheduled (manual + team) statuses ---
     // Scheduled self-buff names + totals.
     const scheduledSelfBuffNames = entry.activeSelfBuffs
         .filter((ab) => ab.stacks === undefined || ab.stacks > 0)
         .map((ab) => ab.buffName);
     // Layer 1 of the damage fold (scheduled manual + team self buffs). The accessor
     // (effectiveDamageStatsOf) recomputes ALL four layers from scheduledTotals +
-    // abilitySelfEffects + modifiers, so the per-layer `+=` staging that used to live
-    // here is gone — only critBuffForGates is staged, to feed the three mid-fold gate
-    // estimates (cappedCrit) that read a partial crit total before the final fold.
+    // abilitySelfEffects + modifiers, so no per-layer `+=` staging is needed here — only
+    // critBuffForGates is staged, to feed the mid-fold gate estimates (cappedCrit) that read a
+    // partial crit total before the final fold.
     const scheduledTotals = resolveSelfBuffTotals({
         activeSelfBuffs: entry.activeSelfBuffs,
         selfBuffLookup,
     });
-    // F3: fold the actor's pre-fight modifier baseline (squad leaders) into the layer-1
+    // Fold the actor's pre-fight modifier baseline (squad leaders) into the layer-1
     // totals — outgoingDamage → outgoing-damage buff, outgoingHeal/incomingHeal → the heal
     // buffs. All three flow through effectiveDamageStatsOf into the existing consumers
     // (damage assembly, heal block, turnCtx, positionalScalars) with buff-channel semantics
     // (direct damage only; additive pct points). outgoingCritDamage is deliberately NOT
     // folded (crit-conditional damage modifier — consumed at the engine's crit-family
-    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → byte-identical.
+    // sites, never via critDamageBuff/effectiveDamageStatsOf). Absent → nothing is folded.
     if (args.preFight) {
         scheduledTotals.outgoingDamageBuff += args.preFight.outgoingDamage;
         scheduledTotals.outgoingHealBuff += args.preFight.outgoingHeal;
         scheduledTotals.incomingHealBuff += args.preFight.incomingHeal;
     }
-    // #367's enemy-APPLIED heal fold USED to sit here, beside `preFight`, as a plain sum. #396
-    // moved it to the late shadowing block (~700 lines down, search `enemyAppliedFamilies`): the
-    // locked rule is highest-tier-wins ACROSS the self/enemy boundary, and the comparison needs
-    // this actor's own named statuses from BOTH the scheduled list and `abilitySelfEffects` — and
+    // The enemy-APPLIED heal fold does NOT belong here beside `preFight` (#367/#396). It lives in
+    // the late shadowing block (search `enemyAppliedFamilies`): the locked rule is
+    // highest-tier-wins ACROSS the self/enemy boundary, so the comparison needs this actor's own
+    // named statuses from BOTH the scheduled list and `abilitySelfEffects` — and
     // `abilitySelfEffects` does not exist yet at this point in the turn. Nothing between here and
-    // there reads `incomingHealBuff` or `outgoingHealBuff`, which is what makes the move safe.
+    // there reads `incomingHealBuff` or `outgoingHealBuff`.
     // Partial crit-buff total for the gate estimates: starts at layer 1, then gains
     // layers 2+3 (abilityTotalsForGates) before the modifier gate at the modifierCtx.
     let critBuffForGates = scheduledTotals.critBuff;
-    // I4a: parallel PRE-modifier critDAMAGE (crit power) estimate — layers 1+2+3, mirroring
+    // Parallel PRE-modifier critDAMAGE (crit power) estimate — layers 1+2+3, mirroring
     // critBuffForGates above. Feeds modifierCtx.selfCritPower (Wildfire's "for every 10%
     // crit power" dotDamage scaling) without a self-referential dependency on dmgStats
     // (which is computed FROM modifierCtx, further down). Exact for Wildfire (its own
@@ -2136,7 +2058,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     let critDamageForGates = scheduledTotals.critDamageBuff;
 
     // Per-round landing roll, drawn ONCE and memoized across this round's
-    // consumers (the RECURRING/aura partition, DoT landing, and — since SP-4b-2 D4, through
+    // consumers (the RECURRING/aura partition, DoT landing, and — through
     // `scheduledEnemyEffects` — the positional per-victim damage read; a second draw would
     // let the reporting and damage channels disagree about the same debuff). Lazy so the
     // single draw is taken only when something actually needs it — TIMED
@@ -2183,7 +2105,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         timedEnemyDebuffs: timedEnemySnap,
         enemyDebuffLookup,
         // No emitApplied: timed debuffs already emitted debuff-applied at application time
-        // (sourceFired appliedEnemy path). Per-round re-emission removed (Phase 3 retiming).
+        // (sourceFired appliedEnemy path); there is no per-round re-emission.
     });
     // Scheduled timed applications the landing hook rejected this round: synthesize
     // a resisted ActiveBuff carrying the would-be duration (skillDuration) and emit.
@@ -2201,7 +2123,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
               emitDebuffResisted(buffName, enemy.id, scheduledResistViaRoll.get(buffName) ?? false)
           )
         : [];
-    // DELIBERATELY NOT FENCED ON THE VICTIM (SP-4c-2b, ruled by the owner at review): unlike the
+    // DELIBERATELY NOT FENCED ON THE VICTIM (ruled by the owner at review): unlike the
     // recurring fold above, `foldTimedEnemyDebuffs` reads scheduled TIMED statuses already sitting
     // in the store, and on a no-victim turn `targetId` is undefined so the statusEngine resolves
     // them against DEFAULT_ENEMY_TARGET — i.e. they still fold from the phantom-target store. That
@@ -2209,17 +2131,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // modelling assumption, the fold is inert today (a no-victim cast deals no damage, so the only
     // reachable effect is the round's display list and `landedEnemyDebuffCount`), and fencing it
     // would risk unmeasured movement.
-    // MEASURED, and the answer is ZERO. "Belongs to Task 5's measurement scope" is now discharged:
-    // a console.error probe on this fold and on the `timedAbilityEnemy` loop below, run over the
-    // WHOLE suite (531 files / 5,882 tests), fired 0 times — nothing folds from the phantom
+    // MEASURED INERT: a console.error probe on this fold and on the `timedAbilityEnemy` loop
+    // below, run over the whole suite, fired zero times — nothing folds from the phantom
     // `__enemy__` store on a no-victim turn anywhere. So the modelling assumption is not merely
-    // sanctioned, it is unexercised, and this fold is provably a no-op on these turns.
+    // sanctioned, it is unexercised, and this fold is a no-op on these turns.
     // The same ruling covers the `timedAbilityEnemy` loop further down (see its own note).
     //
     // Combined scheduled enemy effect/landed/resisted lists. Recurring/always/
-    // accum first, then timed — matching the original snapshot() iteration order
-    // (alwaysSnap, accumSnap, timed map) so the all-landing golden fixtures keep
-    // byte-identical list ordering.
+    // accum first, then timed — matching snapshot()'s own iteration order
+    // (alwaysSnap, accumSnap, timed map), which the all-landing golden fixtures pin.
     const scheduledEnemy = {
         roundEnemyDebuffs: [
             ...recurringEnemy.roundEnemyDebuffs,
@@ -2328,13 +2248,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     if (targetId !== undefined) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
-    // Each application that passes its condition gate draws the landing decision here
-    // (Task 7): 'apply' → lands unless affinity-disadvantaged (no draw); otherwise draws
+    // Each application that passes its condition gate draws the landing decision here:
+    // 'apply' → lands unless affinity-disadvantaged (no draw); otherwise draws
     // the hacking-vs-security gate. Resisted → the apply is SKIPPED (no status stored),
     // recorded resisted with its would-be duration, and emitted. Landed → emit
-    // debuff-applied at this infliction site (Phase 3 retiming).
+    // debuff-applied at this infliction site.
     //
-    // CARDINALITY (multi-hit full-walk epic, PR8): this draw is SUB-ATTACK 0's, not the
+    // CARDINALITY: this draw is SUB-ATTACK 0's, not the
     // whole cast's. A multi-hit skill is N consecutive full attacks, so sub-attacks ≥ 1
     // re-roll every clause below against their OWN anchor and footprint, via
     // `applyDebuffsForSubAttack` (defined after this loop, driven by the engine's
@@ -2344,7 +2264,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // and `resistedTimedEnemyNames` for why each has to.
     const resistedAbilityTimedEnemy: ActiveBuff[] = [];
     // Debuffs THIS actor discretely inflicted on the target this turn (source-accurate
-    // attribution for the enemy-effects overview — Task 10a). Unlike landedEnemyDebuffs,
+    // attribution for the enemy-effects overview). Unlike landedEnemyDebuffs,
     // which reflects the whole per-target window (shared across all attackers of one target),
     // this captures only the applications THIS actor made at their own infliction sites.
     // Seed with the newly-applied SCHEDULED timed enemy debuffs (this actor's own manual
@@ -2359,7 +2279,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // landing-roll gate, or Block-Debuff immunity, since landsTimedEnemyApplicationLive folds all
     // three). Unioned with the scheduled-path resisted names below to gate the control-applied
     // emission: a control whose paired named status was RESISTED must NOT emit a success event
-    // (Finding 1). A control with NO paired named status leaves this set empty for that name, so it
+    // at all. A control with NO paired named status leaves this set empty for that name, so it
     // still emits (only Block-Debuff immunity gates a standalone control — preserved separately).
     const resistedTimedEnemyNames: string[] = [];
     /** Which timed debuffs THIS cast landed on which victim — the input an inflicted-scope
@@ -2367,23 +2287,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
      *  extension block near the end of the turn. */
     const inflictedDebuffNamesByVictim = new Map<string, Set<string>>();
     // Landings held back by intra-cast clause order (see the `afterDamageClause` branch below).
-    // Returned on the turn result. PR8: the engine drains this at ONE of two points — at the end of
-    // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at the
-    // historical post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
+    // Returned on the turn result. The engine drains this at ONE of two points — at the end of
+    // sub-attack 0 when a later sub-attack exists (so hit 2 can see hit 1's stack), otherwise at
+    // the post-walk `flushDeferredEnemyApplications`. Both run before the actor's Post-Turn
     // decrement, so either way the status keeps its normal window.
     const deferredEnemyApplications: DeferredEnemyApplication[] = [];
 
     /**
-     * Roll + apply ONE timed enemy status over one recipient list. Extracted from the cast-time
-     * loop (multi-hit full-walk epic, PR8) so sub-attacks ≥ 1 re-run the IDENTICAL body against
-     * their own anchor and footprint — a second copy is how the two paths would drift on the
-     * resist bookkeeping or the display refresh.
+     * Roll + apply ONE timed enemy status over one recipient list. Shared by the cast-time loop
+     * and by sub-attacks ≥ 1, which re-run the IDENTICAL body against their own anchor and
+     * footprint — a second copy is how the two paths would drift on the resist bookkeeping or the
+     * display refresh.
      *
      * `collect`: when supplied, a landing's pair (landed OR resisted) is pushed here instead of
      * being applied/emitted inline, and `applyState` is NOT run by this function — the caller owns
-     * both halves' timing. When absent (the cast-time path) behaviour is exactly pre-PR8: a
-     * before-damage clause applies inline, an after-damage clause is pushed to the deferred list
-     * unapplied.
+     * both halves' timing. When absent (the cast-time path) a before-damage clause applies
+     * inline, and an after-damage clause is pushed to the deferred list unapplied.
      *
      * Cast-time inline note: the inline (before-damage, `collect` absent) branch deliberately does
      * NOT call `pair.applyState` — it performs the raw store write directly instead. `applyState`
@@ -2430,14 +2349,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
             if (lands) {
                 // Intra-cast clause order: a clause that follows a damage clause in this same slot
-                // must not be in the store while that damage resolves. Since PR8 the unit of
+                // must not be in the store while that damage resolves. The unit of
                 // "that damage" is the SUB-ATTACK, not the cast.
                 // NOT deferred:
                 //  - the LANDING decision for sub-attack 0 (drawn at the cast-time call site) — so
                 //    its RNG draw order and the resist bookkeeping below, which gates this turn's
                 //    control-applied emission, are untouched;
                 //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
-                //    store state. The §4.5 Stasis-break re-inflict check reads it back before the
+                //    store state. The Stasis-break re-inflict check reads it back before the
                 //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
                 //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
                 // Single source of truth for the store write — both the deferred `applyState`
@@ -2488,8 +2407,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 } else if (status.afterDamageClause === true) {
                     deferredEnemyApplications.push(pair);
                 } else {
-                    // Cast-time inline apply: EXACTLY pre-PR8 — the raw write plus the discrete
-                    // emit, without the display-list refresh (see the TDZ note above pair).
+                    // Cast-time inline apply: the raw write plus the discrete emit, without the
+                    // display-list refresh (see the TDZ note above pair).
                     writeState();
                     pair.emitEvents();
                 }
@@ -2552,12 +2471,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     /**
      * The condition-gated direct debuff clauses of THIS cast, captured for replay on sub-attacks
-     * ≥ 1 (multi-hit full-walk epic, PR8).
+     * ≥ 1.
      *
      * DELIBERATE SCOPE LINE: the recipe carries the RESULT of the cast-time
      * `conditionsMet(status.conditions, preDebuffGateCtx)` gate, not the conditions themselves.
-     * Re-evaluating per sub-attack means rebuilding `preDebuffGateCtx` (~30 live-sourced fields,
-     * built earlier in this function) inside the hit loop; that is a separate change. Consequence:
+     * Re-evaluating per sub-attack means rebuilding `preDebuffGateCtx` (a large live-sourced
+     * context, built earlier in this function) inside the hit loop. Consequence:
      * a clause gated on state the cast itself changes (e.g. the victim's HP%) is judged once, at
      * cast time, for all N sub-attacks.
      */
@@ -2593,15 +2512,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         const matchingAbility = firingSkill?.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === status.payload.buffName
         );
-        // Ship-kit W5 Task A3 introduced the 'adjacent-enemies' / 'target-and-adjacent-enemies'
+        // Recipient resolution — including the 'adjacent-enemies' / 'target-and-adjacent-enemies'
         // board-neighbour fan-out (`adjacentEnemyIdsFor`, supplied by engine.ts's buildTurnArgs —
-        // team-symmetric via bySide). That mapping is no longer written here: PR8 Task 1 moved the
-        // whole nine-branch ternary into ./debuffRecipients, whose JSDoc is now the one place it is
-        // described (including why a positional caller gets [] rather than the non-positional
+        // team-symmetric via bySide) — lives in ./debuffRecipients, whose JSDoc is the one place it
+        // is described (including why a positional caller gets [] rather than the non-positional
         // `undefined` sink). Do not restate the branch rules here — two copies is exactly how the
         // cast-time and per-sub-attack paths would drift.
         const abTarget = matchingAbility?.target;
-        // The nine-branch mapping now lives in ./debuffRecipients so the
+        // The mapping lives in ./debuffRecipients so the
         // per-sub-attack path resolves recipients by exactly the same rules,
         // keyed off ITS OWN re-resolved anchor and footprint instead of the cast's.
         const recipientIds: (string | undefined)[] = resolveDebuffRecipientIds({
@@ -2656,8 +2574,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // Caster-ctx resolver: activeAbilityStatuses gates each aura/accum against ITS
     // CASTER's context. For the acting actor's OWN statuses (casterId === actor.id) the resolver
-    // returns the local round ctx — byte-identical to the pre-Task-5 single-ctx call, so the
-    // attacker-only path (where every casterId is the attacker) is zero-churn. For a FOREIGN
+    // returns the local round ctx, so the attacker-only path (where every casterId is the
+    // attacker) resolves against exactly that one context. For a FOREIGN
     // caster (an ally-cast aura sitting on this actor's side) it builds that caster's ctx from
     // its own snapshot + the shared enemy state, MEMOIZED per caster for this turn (cheap: one
     // snapshot read per distinct foreign caster). effectiveCritRate is 0 for foreign casters
@@ -2716,12 +2634,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const abilityEnemyEffects: SelectedGameBuff[] = [];
     // Timed ability statuses: unconditionally landed (gated at application in the timed
     // loop above). NO debuff-applied here — already emitted at the application site above
-    // (Phase 3 retiming: discrete-infliction-only, not per-round while the window is active).
-    // DELIBERATELY NOT FENCED ON THE VICTIM (SP-4c-2b, ruled by the owner at review): with no victim
+    // (discrete-infliction-only, not per-round while the window is active).
+    // DELIBERATELY NOT FENCED ON THE VICTIM (ruled by the owner at review): with no victim
     // `targetId` is undefined, so `timedAbilityStatuses` above read the DEFAULT_ENEMY_TARGET store
     // and this loop still folds those statuses. Accepted as-is for the same three reasons as the
     // scheduled-timed fold (see the note above `scheduledEnemy`): the side-wide `__enemy__` channel
-    // is a sanctioned modelling assumption, the fold is inert today, and fencing it risks unmeasured
+    // is a sanctioned modelling assumption, the fold is inert, and fencing it risks unmeasured
     // movement. MEASURED at zero over the whole suite — see the full note above `scheduledEnemy`,
     // which carries the probe result for both folds. Do not fence it here.
     for (const s of timedAbilityEnemy) {
@@ -2729,7 +2647,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         abilityEnemyEffects.push(payloadToSelectedBuff(s.payload));
     }
     // Aura/accumulating ability statuses: per-round landing re-roll. No debuff-applied
-    // (recurring/aura re-applications are NOT discrete inflictions — Phase 3 retiming).
+    // (recurring/aura re-applications are NOT discrete inflictions).
     // An aura debuff is conceptually re-applied to the opposing side every round. With no
     // victim it re-applies to nobody, so it neither lands (no effect folded, no display row) nor
     // resists (no debuff-resisted event naming no victim) and takes no landing draw. Fenced at the
@@ -2945,7 +2863,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         turnsTaken: actor.turnsTaken,
         // Only the modifier ctx needs this — it feeds
         // modifierAbilities/modifierTotalsFromAbilities (Selenite's count-scaling passive).
-        // The I2 per-victim re-fold spreads this ctx unchanged (only enemyDebuffNames/
+        // The per-victim re-fold spreads this ctx unchanged (only enemyDebuffNames/
         // enemyBuffNames/enemyHpPct are swapped per victim), so it naturally stays constant
         // across the delta computation — no per-victim distribution, matching the design
         // (this is a global count, not a per-target gate).
@@ -2958,12 +2876,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selfCritPower: critDamage + critDamageForGates,
     });
     const passiveSkill = shipSkills.slots.find((s) => s.slot === 'passive');
-    // Sub-project I, PR I3 (Layer 1): distributed all-allies auras (Lodolite/Panguan-shape)
+    // Distributed all-allies auras (Lodolite/Panguan-shape)
     // append AFTER this actor's own firing + passive abilities — array order only affects
     // scaling-condition positional context (ctxFor in gateFiringAbilities, which this list
     // does not feed), so ordering is inert here; every ability folds independently in
-    // modifierTotalsFromAbilities. Defaults to [] (pre-I3 callers / no ally aura present)
-    // → byte-identical.
+    // modifierTotalsFromAbilities. Defaults to [] when no ally aura is present.
     const selfModifierAbilities = [
         ...(firingSkill?.abilities ?? []),
         ...(passiveSkill?.abilities ?? []),
@@ -2977,14 +2894,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // derived from the FULL flat list (self + every ally aura source) so it correctly
     // excludes name-gated dotDamage from EITHER provenance — carries every OTHER ability
     // unchanged (all channels, plus any non-name-gated dotDamage source e.g. Decimation set
-    // gear); for every ship without such a modifier this equals `modifierAbilities` and the
-    // fold below is byte-identical to before.
+    // gear); for every ship without such a modifier this equals `modifierAbilities`.
     //
-    // I4c: the CONDITIONAL half is no longer taken from the flat list, because the flat list
+    // The CONDITIONAL half is NOT taken from the flat list, because the flat list
     // loses PROVENANCE (self vs. which ally sourced it) — and the locked game rule requires
     // Wildfire's team-aura bonus to scale by the SOURCE's crit power, not the recipient's
     // (`modifierCtx.selfCritPower` below is the RECIPIENT's). Instead: this actor's OWN
-    // conditional dotDamage (unchanged from I4b — ctx = modifierCtx) is partitioned from
+    // conditional dotDamage (ctx = modifierCtx) is partitioned from
     // `selfModifierAbilities` ALONE, and each ally aura source contributes its OWN entry,
     // partitioned from JUST that source's abilities, with `selfCritPower` swapped to that
     // source's own live crit power. No double-apply: a given ability object is folded via
@@ -3066,7 +2982,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // the final number. Do NOT "fix" this by adding the delta to the gate estimates — they are
     // already consumed by the time control reaches here.
     //
-    // Absent/empty map → empty deltas → byte-identical, and the self side is not even read.
+    // Absent/empty map → empty deltas, and the self side is not even read.
     if (args.enemyAppliedFamilies) {
         const ownNamed = [
             ...entry.activeSelfBuffs.flatMap((abf) =>
@@ -3146,7 +3062,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     const rollVictimCrit = (victimAffinity: AffinityName): boolean => {
         // A noCrit attack can never crit — mirror the anchor (drawHits=0 → hitCrits empty
         // → anchorCrit false) and, critically, draw NOTHING so the RNG schedule stays
-        // identical to the pre-per-victim behavior for noCrit AoE.
+        // unperturbed for noCrit AoE.
         if (damageNoCrit) return false;
         // An outgoing-advantage force lifts the cap for every victim; otherwise the real
         // per-victim matchup (a covered victim's own Defensive Override is NOT resolved here —
@@ -3161,7 +3077,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Per-hit outgoing amplification (Menace/Giant Slayer) on the firing hit only.
     // Sourced from the always-active passive slot. With no amplification ability OR no
     // engine-supplied proc gate, the loop never calls outgoingAmplificationForHit and the
-    // weighted sums collapse to (nonCritHits, critHits) → byte-identical.
+    // weighted sums collapse to (nonCritHits, critHits).
     const ampAbilities = (passiveSkill?.abilities ?? []).filter(
         (a) => a.config.type === 'outgoing-amplification'
     );
@@ -3202,21 +3118,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Only call outgoingAmplificationForHit when amplification is actually present AND a
         // proc gate is supplied — keeps the critGate sequence and behaviour untouched otherwise.
         //
-        // NOT on the positional path (multi-hit full-walk epic, PR4 — spec §4.6). There the
-        // engine's per-victim apply is the authority on amplification: it resolves the condition
-        // against each footprint victim's OWN crit outcome and attack matchup, and THIS aggregate
-        // result is never applied to anyone's HP. Drawing here anyway advanced the SAME
-        // `procChanceGates` key (`${ownerId}:${abilityId}`) a second time — measured
-        // `hits × (1 + victims)` draws for one cast — and left the deferred `ability-performed`
-        // damage basis decided by a coin flip the applied damage ignored. One verdict per
-        // sub-attack, drawn where eligibility is actually known, is the fix; the accepted cost is
-        // that the positional event's pre-funnel `damage` basis no longer carries amplification
-        // (it never reflected any other per-victim outcome either). Non-positional / DPS / healing
-        // casts are the sole remaining consumer here and stay byte-identical.
+        // NOT on the positional path. There the engine's per-victim apply is the authority on
+        // amplification: it resolves the condition against each footprint victim's OWN crit
+        // outcome and attack matchup, and THIS aggregate result is never applied to anyone's HP.
+        // Drawing here as well would advance the SAME `procChanceGates` key
+        // (`${ownerId}:${abilityId}`) a second time and leave the deferred `ability-performed`
+        // damage basis decided by a coin flip the applied damage ignores. One verdict per
+        // sub-attack, drawn where eligibility is actually known, is the rule; the accepted cost is
+        // that the positional event's pre-funnel `damage` basis does not carry amplification
+        // (it reflects no other per-victim outcome either). Non-positional / DPS / healing
+        // casts are the sole consumer here.
         //
-        // RESOLVED that cost for effect purposes: damage-proportional reactives now read the
-        // event's `deliveredDamage` (post-amplification, per-victim, funnel-accurate). This field
-        // remains the pre-funnel DISPLAY basis that buildCombatLog reads.
+        // Damage-proportional reactives read the event's `deliveredDamage` (post-amplification,
+        // per-victim, funnel-accurate) instead. This field is the pre-funnel DISPLAY basis that
+        // buildCombatLog reads.
         const amp =
             ampAbilities.length > 0 && rollOutgoingProc && !deferAmplificationToEngine
                 ? outgoingAmplificationForHit(
@@ -3243,16 +3158,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // already inside enemyDotMod (roundEnemyDebuffs includes abilityEnemyEffects).
     const dotMult = 1 + (selfDotModifier + enemyDotMod + dmgStats.selfDotDamageModifier) / 100;
     // The anchor damage mult honours the forced-affinity override (equals the runtime
-    // scalar when no override → byte-identical default).
+    // scalar when no override).
     const affinityMult = 1 + effAffinityDamageModifier / 100;
     const effectiveDefence = dmgStats.defence;
     const effectiveHp = dmgStats.hp;
     const effectiveSecurity = dmgStats.security;
 
-    // Per-round condition context for the Phase 1 condition engine. Built once
+    // Per-round condition context for the condition engine. Built once
     // after landedEnemyDebuffs and effectiveCrit are known, but BEFORE Step 3
-    // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state,
-    // matching the prior inline behaviour.
+    // applies this round's fresh DoTs — so derivable counts read pre-Step-3 state.
     const ctx = buildRoundContext({
         // Live adjacency / kill counts (Panguan, Centurion, Judge) — see `liveCountCtx`.
         ...liveCountCtx,
@@ -3285,7 +3199,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // payload abilities via gateFiringAbilities below. Sourced directly from the live
         // `actor`/`enemy` CombatActor pair — the SAME pairing every call site (focus/team/
         // enemy-walk) passes via buildTurnArgs's `runtime`/`enemy` — so this is team-symmetric
-        // with zero player/enemy branching. SP-4c-2b: the target half is now omitted outright when
+        // with zero player/enemy branching. The target half is omitted outright when
         // there is no victim (see victimStatGateCtx); the OWNER half below always has a subject.
         selfSpeed: actor.stats.speed,
         selfCurrentHp: actor.currentHp,
@@ -3303,15 +3217,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // ability evaluated via gateFiringAbilities below, NOT a timed self-buff — so it needs
         // THIS ctx, distinct from Berserker's Marauder Rage which drains via the on-deal-damage
         // reactive path instead). aoeVictimIds is the actor's own splash-pattern footprint
-        // (already computed pre-turn by buildTurnArgs for the AoE-purge fan-out, E3) — undefined
+        // (already computed pre-turn by buildTurnArgs for the AoE-purge fan-out) — undefined
         // in DPS/non-positional mode, which is exactly the single-target-cast and no-victim-cast
-        // cases alike. SP-4d Task 8: those two are NOT the same measurement — a single-target
+        // cases alike. Those two are NOT the same measurement — a single-target
         // cast hit its one target (1), a no-victim cast hit nobody (0) — so the fallback is keyed
         // on `hasVictim` (the same discriminator every other victim-derived field in this ctx
-        // uses), not a bare `?? 1`. A prior rung dropped that `?? 1` default outright, which made
-        // the single-target case read absent instead of 1 (Tygr's own `eq 1`-shaped gate would
-        // silently never fire); this restores the correct-for-single-target value while also
-        // fixing the no-victim value from absent to the honest 0.
+        // uses), not a bare `?? 1`. Absent is the wrong answer for the single-target case:
+        // Tygr's own `eq 1`-shaped gate would then silently never fire.
         enemiesHitThisCast: aoeVictimIds?.length ?? (hasVictim ? 1 : 0),
         // SAME field/derivation as preDebuffGateCtx and modifierCtx above — REQUIRED here because THIS ctx is what
         // gateFiringAbilities consumes just below to gate `type:'control'` payload
@@ -3325,8 +3237,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Reconciled with drain-time (engine.ts's isSelfShieldFull, which reads
         // recipientMaxHp → lastTurnCtxByActor.get(id)?.effectiveMaxHp): `effectiveHp` (computed
         // above this ctx) is exactly that same live, buff-inclusive max HP (it IS the value
-        // stored into effectiveMaxHp at turnCtx below) — so this reads byte-identically
-        // to the drain-time gate instead of the static base stat, which would disagree under an
+        // stored into effectiveMaxHp at turnCtx below) — so this reads the same value as the
+        // drain-time gate instead of the static base stat, which would disagree under an
         // active max-HP buff.
         selfShieldFull: effectiveHp > 0 && actor.shieldPool >= effectiveHp,
         // Malvex charged Barrier: the TARGET's shield-presence gate (see victimShieldGateCtx), for
@@ -3372,21 +3284,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     for (const ctrl of controlAbilitiesFromSkill(gatedSkill)) {
         if (ctrl.config.type !== 'control') continue;
         if (ctrl.target === 'enemy') {
-            // SP-4c-2b (final review, IMPORTANT 2): NO VICTIM ⇒ nothing was controlled, so there is
-            // no success to announce. This site was a MISSED SITE, not a ruled residual — contract §B
-            // class 2 says "fence the enclosing clause, not the emit" and this loop is simply absent
-            // from that table. Fencing it here (a `continue`, i.e. the clause) rather than at the
-            // `bus.emit` is that rule applied.
+            // NO VICTIM ⇒ nothing was controlled, so there is no success to announce. Fenced at
+            // the enclosing CLAUSE (a `continue`) rather than at the `bus.emit`, which is the same
+            // rule every other no-victim fence in this file follows.
             //
             // WHY IT COULD NOT BE LEFT: on a no-victim turn NOTHING below suppresses this emit.
             // `targetImmuneToDebuffs` is fenced to `false` (nobody is carrying Block Debuff against a
             // cast with no target), and `resistedEnemyDebuffNames` can only carry ability-sourced
             // names via `landStatusOnRecipients`, whose loop is itself victim-fenced — so only the
             // SCHEDULED resist list can populate it, and that covers scheduled statuses, not the
-            // ability-sourced control this loop reads. The ghost path at least suppressed the event
-            // whenever the paired named status lost its landing roll; without a fence the rung would
-            // have moved this from a PROBABILISTIC phantom to an ALWAYS-ON one, and the event is not
-            // inert — it wakes `on-stasis-applied` reactions.
+            // ability-sourced control this loop reads. Without this fence the emit would be
+            // unconditional on a no-victim turn, and the event is not inert — it wakes
+            // `on-stasis-applied` reactions.
             //
             // `ctrl.target === 'enemy'` scoping is load-bearing: a SELF-targeted control (Taunt) has
             // nothing to do with the opposing side and must keep emitting on a no-victim turn.
@@ -3573,15 +3482,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // restructuring the damage assembly. drawHits 0 (noCrit) → fraction 0 →
     // multiplier 1 (the "cannot critically hit" path, unchanged).
     const critFraction = drawHits > 0 ? critHits / drawHits : 0;
-    // D-PR3 victim-side incoming %-reduction against the bound target (aggregate path).
-    // Both default 0 → byte-identical to the prior fold.
+    // Victim-side incoming %-reduction against the bound target (aggregate path).
+    // Both default 0.
     const equipNonCrit = args.incomingReductionNonCritPct ?? 0;
     const R = args.incomingReductionCritFamilyPct ?? 0;
     // Crit-family reduction folds ADDITIVELY into the incoming channel for the CRIT
     // FRACTION only — consistent with the positional path (victimHitDamage). Expressed as a
     // ratio against the non-crit incoming factor so damageCritMultiplier * nonCritFactor stays
-    // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1 → byte-identical
-    // to the prior expression. The crit fraction therefore sees incoming channel (incBase - R)
+    // structurally valid and the passive-hit path is unaffected. R=0 → ratio 1.
+    // The crit fraction therefore sees incoming channel (incBase - R)
     // additively, exactly like positional victimHitDamage; the non-crit fraction sees incBase.
     // Redefining damageCritMultiplier (vs a separate factor) is correct: both downstream uses —
     // postDefenseFactor (firing hit) and passiveCritMultiplier (passive hit) — are the SAME enemy
@@ -3600,8 +3509,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         (1 + incBase / 100) *
         affinityMult;
     // Per-hit outgoing amplification (Menace/Giant Slayer), firing hit only. Collapses to
-    // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits, ampCritWeight=critHits)
-    // → byte-identical. critIncomingRatio carries D-PR3's crit-family incoming reduction.
+    // damageCritMultiplier when no amplification fired (ampNonCritWeight=nonCritHits,
+    // ampCritWeight=critHits). critIncomingRatio carries the crit-family incoming reduction.
     const amplifiedCritMultiplier =
         drawHits > 0
             ? (ampNonCritWeight +
@@ -3656,27 +3565,25 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // ability-performed: emitted below, once per SUB-ATTACK when not deferred to the engine (and
     // stopping early if the bound target is already dead — the R5 whiff guard) — see the loop's
-    // own comment for cardinality, the DAMAGE split, and the hits===1 byte-identical guarantee
-    // (not restated here).
-    // Task 5 (per-victim crit signal): when the ENGINE will resolve this cast POSITIONALLY
+    // own comment for cardinality and the DAMAGE split (not restated here).
+    // PER-VICTIM CRIT SIGNAL: when the ENGINE will resolve this cast POSITIONALLY
     // (deferAbilityPerformedToEngine set AND a damage ability fired — the exact condition under
     // which the engine runs its per-victim apply, since its `positional` gate requires
     // positionalScalars != null ⟺ hasDamageAbility), DO NOT emit here. The engine emits ONE
     // `ability-performed` AFTER its per-victim apply so `didCrit`/`critHits` reflect the TRUE
     // per-victim outcomes rather than the anchor-only values.
-    // Since PR2 of the multi-hit full-walk epic the engine emits ONE event per SUB-ATTACK (a
-    // `hits: N` skill is N consecutive full-walk attacks), each immediately followed by that
-    // sub-attack's own `attacked` events — so what deferring preserves is the
-    // ability-performed → per-victim `attacked` bus order, per sub-attack. With N=1 that is one
-    // event per positional cast, exactly as before.
+    // The engine emits ONE event per SUB-ATTACK (a `hits: N` skill is N consecutive full-walk
+    // attacks), each immediately followed by that sub-attack's own `attacked` events — so what
+    // deferring preserves is the ability-performed → per-victim `attacked` bus order, per
+    // sub-attack. With N=1 that is one event per positional cast.
     // Non-positional / DPS / healing (flag absent, or no damage ability): emitted inline in the
-    // loop below, at the SAME per-sub-attack cardinality as the positional/engine path since PR5.
+    // loop below, at the SAME per-sub-attack cardinality as the positional/engine path.
     const deferAbilityPerformed = args.deferAbilityPerformedToEngine === true && hasDamageAbility;
     // `hasVictim` fences the whole emitting block, not the emit inside it — every
     // `ability-performed` here NAMES the victim it was performed against, and with no victim the
     // attack did not happen to anybody.
     //
-    // RULED CORRECT (owner, SP-4c-2b review): "a heal is not an attack, but a heal can still crit,
+    // RULED CORRECT (owner): "a heal is not an attack, but a heal can still crit,
     // so it should fire the 'critically repaired' rider and not the 'critically hit an enemy'
     // rider." The engine already splits exactly that way, so this fence lands on the right side of
     // it: `on-crit` / `on-ally-crit` ride THIS event and are per-ATTACK, documented "critically
@@ -3684,19 +3591,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // is the INTENDED consequence, not collateral. The repair-crit rider is untouched:
     // `on-ally-critically-repaired` rides `heal-performed` and reads its own `critHits`
     // (triggers.ts), which the heal block below still emits. Hermes carries both riders and
-    // is therefore the case to name: after this rung its ally-targeted repair still fires the
-    // critically-repaired rider and no longer fires the critically-hit-an-enemy one.
+    // is therefore the case to name: its ally-targeted repair fires the critically-repaired
+    // rider and does NOT fire the critically-hit-an-enemy one.
     //
     // The cast's `directDamage` is 0 on this path (fenced at the assembly above), so nothing is
     // silently applied without an event either.
     if (!deferAbilityPerformed && hasVictim) {
-        // PR5 (multi-hit full-walk epic): ONE event per SUB-ATTACK, matching the positional
-        // path's interleaved emission (engine.ts `emitDeferredAbilityPerformed`, per sub-attack
-        // since PR2). A `hits: N` skill is N consecutive FULL-WALK attacks (locked rule R1), so
-        // outgoing riders must fire N times: `on-deal-damage` (Burner's Inferno, Warpstrike's
-        // duration-reduction, Zeolite's purge), `on-crit`, `on-ally-crit`. Folding the cast into
-        // one event fired them ONCE — which is why the DPS calculator reported one Inferno stack
-        // for Enforcer + Burner while the simulator reported three (verified in-game 2026-08-08).
+        // ONE event per SUB-ATTACK, matching the positional path's interleaved emission
+        // (engine.ts `emitDeferredAbilityPerformed`, per sub-attack). A `hits: N` skill is N
+        // consecutive FULL-WALK attacks (locked rule R1), so outgoing riders must fire N times:
+        // `on-deal-damage` (Burner's Inferno, Warpstrike's duration-reduction, Zeolite's purge),
+        // `on-crit`, `on-ally-crit`. Enforcer + Burner applies THREE Inferno stacks in one cast,
+        // not one (verified in-game 2026-08-08).
         //
         // CARDINALITY comes from `hits` — the GATED count (damageInputsFromSkill(gatedSkill)),
         // the same value that built `effectiveMultiplier`, so the event count and the damage it
@@ -3705,24 +3611,24 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // on an active/charged damage ability (not representable from parser output today — see
         // the KNOWN LIMITATION at the `drawHits` read). A cast with NO damage ability gets
         // hits === 1 from damageInputsFromSkill's default, so heal/buff/utility casts emit
-        // exactly one event as before.
+        // exactly one event.
         //
         // `hits: 0` GUARD: the ability editor's `min={1}` is advisory HTML — a hand-stored 0
         // survives `damageInputsFromSkill`'s `?? 1` (that only guards `undefined`) and
         // `parseInt('0', 10) === 0`. A bare `h < hits` loop would then run zero times: no event,
-        // no riders, no log row, silently dropping the ONE zero-damage event pre-PR5 code
-        // unconditionally emitted. `emitHits` (declared just above the loop) clamps BOTH the loop
+        // no riders, no log row, silently dropping the ONE zero-damage event this path must
+        // still emit. `emitHits` (declared just above the loop) clamps BOTH the loop
         // bound and the damage divisor to the same value so they cannot drift apart, reproducing
         // that one event exactly (directDamage undivided) for an explicit hits:0 cast.
         //
         // DAMAGE per event is the cast's pre-funnel `directDamage` split N ways — the SAME basis
         // and the SAME split the positional path uses (`share = dap.damage / emitting.length`).
-        // Sigma over the loop reproduces the old single event's `damage` exactly, so NO damage
+        // Sigma over the loop reproduces the cast's total `damage` exactly, so NO damage
         // total moves. Looping buys zero damage accuracy (victimDamage.ts proves the fold
         // is algebraically identical); it buys one derivation of "a sub-attack" instead of two
         // that can drift.
         //
-        // KNOWN ASYMMETRY (epic spec PR5 section 5.4), deliberately NOT decided here:
+        // KNOWN ASYMMETRY, deliberately NOT decided here:
         // `secondaryStatValue`, `conditionalBonusPct` and the passive-slot hit (`passiveDamage`,
         // computed just above and added into `directDamage` BEFORE this divisor) are each folded
         // in ONCE per cast while the base multiplier scales with `hits`, so each sub-attack
@@ -3741,114 +3647,37 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // above, before this loop, and still flows out unchanged in this function's return value
         // for the CALLER to apply. So the damage half of R5 remains the caller's responsibility on
         // this path; do not read the break as making a dead-target multi-hit deal zero.
-        // PR5 derived the branch to be structurally UNREACHABLE on this
-        // path and left it unbuilt; PR6 builds it anyway so that the whiff safety is INTENTIONAL
-        // rather than an incidental side-effect of unrelated plumbing (see WAS-COUPLED-TO below).
+        // The branch is structurally UNREACHABLE on this path (derivation below) and is built
+        // anyway, so that the whiff safety is INTENTIONAL rather than an incidental side-effect
+        // of unrelated plumbing.
         // Because the branch is unreachable, its ONLY coverage is a direct-runPlayerTurn test
         // (`__tests__/multiHitInlineEmitGuards.test.ts`); no integration test can take it, so do
         // not "consolidate" that test into one.
         //
-        // WHICH SIGNAL, AND WHY NOT `currentHp <= 0` (PR6, after a review caught the first cut).
-        // The guard's first version read `enemy.currentHp <= 0` and was WRONG — reachable, in
-        // healing/sim mode, where it silently killed the focus's entire event stream from the
-        // moment cumulative damage crossed `enemyHp` (round 6 of 10 in the reproduction; see
-        // `multiHitInlineEmitGuards.test.ts`'s runCombat-level block). HISTORY, and it is what makes
-        // the signal choice permanent rather than incidental: the sink NEVER DIED, but its
-        // `currentHp` was CLAMPED — engine.ts set it to `Math.max(0, enemyHp - cumulativeDamage -
-        // cumulativeTeamDamage)` at every round tail, so it reached 0 and stayed there forever
-        // while nothing terminated the run. SP-4c-2d deleted the sink, that clamp and the
-        // roster-emptiness break together, so the specific reproduction is gone — but the LESSON
-        // (`currentHp <= 0` is not an aliveness signal) is not about the dummy at all: a
-        // never-alive actor reads the same way, which is the class that failed 346 tests during
-        // SP-4c-1.
-        // THE READING ERROR WORTH NOT REPEATING: the derivation below reasons exclusively about
-        // MID-CAST HP application — "can anything decline this target's HP while the loop runs" —
-        // and every bullet in it is still true. It simply never asked the OTHER question, "can the
-        // bound target already be at 0 before the cast begins", for which the answer on the sink is
-        // yes, permanently, without a death. `currentHp <= 0` conflates "at the HP floor" with
-        // "dead"; on the sink those are different facts. `destroyedRound` is the canonical
-        // aliveness signal (state.ts, stamped once by `recordDestroyed`, state.ts — the
-        // same signal the dead-owner gate at triggers.ts ~2514 reads) and is never stamped on the
-        // sink, so the guard is inert there and fires only on a genuinely destroyed bound target.
-        // The unreachability derivation, re-walked against source for PR5 and still accurate:
-        //   • THE PRIMARY ARGUMENT, and self-sufficient on its own — it needs nothing from the
-        //     engine enumeration below. This loop never mutates HP: it only emits events, and the
-        //     listeners those events reach are enqueue-only (the Phase 1 listener contract,
-        //     triggers.ts), draining at end of turn. The bound target's actual currentHp decrement
-        //     happens exactly ONCE, after `runPlayerTurn` returns, via the caller's own aggregate
-        //     apply. So a mid-cast kill inside this loop is impossible — including on the
-        //     symmetric reverse invocation (an enemy actor's turn against a player `enemy`/tgt,
-        //     e.g. healing mode's tank).
-        //     ⚠️ SP-4e (#335): this bullet used to END by citing "a target already dead BEFORE
-        //     the cast is caught by the turn-level `skipDeadTargetTurn` guard", a guard that
-        //     existed only at the ENEMY call site while this function is walked by BOTH sides.
-        //     #346 DELETED it: a resolved victim is drawn from `positionalBinding`'s living-only
-        //     `byCell` and can never be a corpse, so the guard's precondition was unsatisfiable
-        //     (tripwired in `dummyReachability.test.ts`'s `A RESOLVED VICTIM IS ALIVE`). The
-        //     derivation does not need it: the primary argument above is self-sufficient, and an
-        //     already-dead bound target is impossible one step EARLIER, at resolution.
-        //   Everything below is CORROBORATION: it shows no OTHER actor's mid-round work can
-        //   decline the bound target's HP either, so the target is alive at every cast this loop
-        //   can reach and not merely un-killable by this loop.
-        //   • ⚠️ TWO BULLETS HERE DESCRIBED THE DUMMY SINK AND WENT WITH IT. They said
-        //     that a ROSTER-LESS run drove a real destructible `enemy` whose HP landed POST-round
-        //     (so nothing declined it mid-round), and that every OTHER non-positional mode bound the
-        //     vestigial billion-HP sink, which never DIED even though the round-tail clamp pinned
-        //     its `currentHp` at 0. Both shapes are gone: the roster-less run has been impossible
-        //     since SP-4b-2b, and the sink itself is deleted. Every bound target is now a real
-        //     actor, so this corroboration reduces to the PRIMARY argument above.
-        //   • The general reactive-proc funnel (`applyVictimDamage` for a proc victim) used to be
-        //     gated `hasPositionedEnemyRoster && victim.id !== enemy.id`, which kept it off a
-        //     non-positional bound target. SP-4c-2d deleted both conjuncts (the first was constant
-        //     true below the normalization boundary, the second named the deleted dummy), so the
-        //     funnel is unconditional — which is why the derivation rests on the PRIMARY argument
-        //     (this loop emits only, and its listeners are enqueue-only) rather than on any gate.
-        //   • The remaining mid-round `applyVictimDamage` sites do NOT share one gate. An earlier
-        //     draft of this comment claimed they were all "gated on `victim.position !== undefined`
-        //     or on the victim carrying an ability/kit"; that is WRONG for two of them. The real
-        //     grouping:
-        //       – POSITION-gated: bomb splash-on-death (engine.ts, `victim.position !==
-        //         undefined`) and positioned bomb/accumulator bursts (`applyPositionedTimedBurst`,
-        //         engine.ts ~6286, `isPositional(actor.position, opposingRoster)`).
-        //       – VICTIM'S-OWN-KIT-gated: the protection redirect (engine.ts ~4181) applies to the
-        //         hit victim's own PROTECTORS, and a DoT-tick batch applies to the container's own
-        //         carrier. The kit-less sink is never granted Protection and carries no DoTs.
-        //       – NEITHER: reflect (engine.ts) and counterattack (engine.ts) resolve
-        //         their victim from whoever DELIVERED the triggering hit —
-        //         `allActorsById.get(cause.killerId)` and the `counterTargetId` triggers.ts routes
-        //         into `applyCounterAttack`'s `attackerId`. Position has nothing to do with it.
-        //         They are safe because the vestigial `enemy` never acts as an ATTACKER, so it is
-        //         never a killerId or a counterTargetId.
-        //   • `forceDetonateBomb` (Lingshe/Heliodor countdown-to-0) has TWO producers and NEITHER
-        //     is position-gated. (a) The reactive cleanse path resolves same-side recipients only
-        //     (`reactiveRecipients` → 'ally' / 'all-allies' / 'adjacent-allies' / self,
-        //     triggers.ts), so it never reaches an opposing id. (b) `reduceEnemyBombs`
-        //     (this file, ~2556 → `reduceBombsOnVictim` ~941 → `args.forceDetonateBomb` →
-        //     `forceDetonateBombOnVictim`, engine.ts → `applyVictimDamage`) routes to
-        //     OPPOSING victims and never touches `reactiveRecipients`. There is no guard inside it.
-        //     WAS-COUPLED-TO (PR5's WARNING, NARROWED — not discharged — by PR6; kept because a
-        //     reader tracing why the guard below exists needs to know what it replaced): path (b)
-        //     missed the vestigial `enemy` only as an INCIDENTAL SIDE-EFFECT of unrelated plumbing.
-        //     `reduceEnemyBombs` bails on `args.targetId === undefined`, and engine.ts's
-        //     `buildTurnArgs` deliberately left `targetId` unset whenever the player-side target
-        //     resolved to the dummy sink — a BUFF-ROUTING parity choice whose own comment flagged the
-        //     unset field as a gap that may later be "fixed". (SP-4c-2d dropped that dummy-sink
-        //     conjunct; `targetId` is now unset only on a genuine NO-VICTIM turn.) That was never
-        //     an intentional guard on this rule, so PR5 required a maintainer closing that gap to
-        //     revisit this derivation: path (b) would then land real mid-cast HP damage on a
-        //     non-positional bound target.
-        //     WHAT THE OBLIGATION NOW COVERS. PR5's WARNING was about DAMAGE, and the guard below
-        //     is an EVENT guard — it stops the loop emitting, not the caller applying. Closing that
-        //     `buildTurnArgs` gap would have let path (b) land real mid-cast HP damage on a
-        //     non-positional bound target, with the aggregate `directDamage` this function returns
-        //     applied on top of it by the caller. SP-4c-2d closed the gap the other way: the
-        //     dummy-sink conjunct is gone, `targetId` is unset only on a genuine NO-VICTIM turn, and
-        //     every bound target is a real positioned actor — so the shape the obligation was about
-        //     no longer exists. It is recorded because the DERIVATION still rests on the PRIMARY
-        //     argument, not on any of this. What PR6 removes from the obligation is
-        //     only its LOG/EVENT half: however the bound target dies mid-cast, the remaining
-        //     sub-attacks emit nothing, so no phantom sub-attack row or rider firing can result.
-        //     The damage half stands.
+        // WHICH SIGNAL, AND WHY NOT `currentHp <= 0`. `currentHp <= 0` conflates "at the HP
+        // floor" with "dead", and those are different facts: an actor clamped at 0 that never
+        // died, and an actor that was NEVER ALIVE, both read the same way. Gating on it silences
+        // the focus's whole event stream from the moment cumulative damage crosses `enemyHp`
+        // (reproduced in `multiHitInlineEmitGuards.test.ts`'s runCombat-level block).
+        // `destroyedRound` is the canonical aliveness signal (state.ts, stamped once by
+        // `recordDestroyed` — the same signal the dead-owner gate in triggers.ts reads), so the
+        // guard fires only on a genuinely destroyed bound target.
+        //
+        // THE UNREACHABILITY DERIVATION, and it is self-sufficient: this loop never mutates HP.
+        // It only emits events, and the listeners those events reach are enqueue-only (the
+        // listener contract, triggers.ts), draining at end of turn. The bound target's actual
+        // currentHp decrement happens exactly ONCE, after `runPlayerTurn` returns, via the
+        // caller's own aggregate apply. So a mid-cast kill inside this loop is impossible —
+        // including on the symmetric reverse invocation (an enemy actor's turn against a player
+        // `enemy`/tgt, e.g. healing mode's tank). An already-dead bound target is impossible one
+        // step EARLIER, at resolution: a resolved victim is drawn from `positionalBinding`'s
+        // living-only `byCell` and can never be a corpse (tripwired in
+        // `dummyReachability.test.ts`'s `A RESOLVED VICTIM IS ALIVE`).
+        //
+        // That derivation reasons about MID-CAST HP application only, and what the guard buys is
+        // the LOG/EVENT half of R5: however the bound target dies mid-cast, the remaining
+        // sub-attacks emit nothing, so no phantom sub-attack row or rider firing can result. The
+        // damage half stands with the caller.
         // The positional path, where the rule is also observable, implements it separately at
         // positionalApply.ts's per-sub-attack anchor re-resolution against `opposingLiving`.
         const emitHits = hits > 0 ? hits : 1;
@@ -3856,19 +3685,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             // R5 whiff guard. `destroyedRound` is the bound target's DEATH stamp
             // (state.ts, written once by `recordDestroyed`): once set, the remaining
             // sub-attacks land on a corpse and, per R5, deal nothing — so they emit nothing either.
-            // Deliberately NOT `currentHp <= 0`, which is an HP FLOOR and not a death: the
-            // vestigial sim/healing sink sat clamped at 0 forever without ever dying, and gating
-            // on it silenced the focus's whole event stream (see WHICH SIGNAL in the derivation
-            // above — that was this guard's first cut, and it was a live regression). SP-4c-2d
-            // deleted that sink; the DISTINCTION is not about it (a never-alive actor reads the
-            // same way), which is why the signal choice stands.
+            // Deliberately NOT `currentHp <= 0`, which is an HP FLOOR and not a death — see
+            // WHICH SIGNAL in the derivation above.
             // EVENTS only: the cast's `directDamage` is already totalled and is returned to the
-            // caller regardless of where this break lands, so the damage half of R5 is not enforced
-            // here. Unreachable through any production cast (the derivation above), and
-            // INTENTIONALLY built anyway: before PR6 the same outcome depended on engine.ts's
-            // `buildTurnArgs` leaving `targetId` unset for the dummy sink, a choice that site's own
-            // comment flagged as a gap a maintainer might later close (SP-4c-2d removed both the
-            // conjunct and the sink).
+            // caller regardless of where this break lands, so the damage half of R5 is not
+            // enforced here. Unreachable through any production cast (the derivation above), and
+            // INTENTIONALLY built anyway.
             // `enemy` is narrowed non-optional here — the enclosing block is fenced on the
             // victim, so a no-victim turn emits nothing at all rather than reaching this break.
             if (enemy.destroyedRound !== undefined) break;
@@ -3924,7 +3746,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         infernoEntries,
     });
 
-    // SP-F F3 (Lingshe): countdown-reduces + force-detonates enemy Bombs. Runs BEFORE
+    // Lingshe: countdown-reduces + force-detonates enemy Bombs. Runs BEFORE
     // applyNewDoTs (mirrors extendDoTs' ordering immediately above) so a Bomb III THIS cast
     // inflicts is never itself reduced.
     // The whole call is fenced on the victim — its `anchor` IS the victim, and with none
@@ -3940,7 +3762,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             opposingVictimById,
             round: r,
             bus,
-            detonatorId: actor.id, // Ship-kit W7: the countdown-reduce caster is the detonator.
+            detonatorId: actor.id, // The countdown-reduce caster is the detonator.
             landsTimedEnemyApplicationLive,
             forceDetonateBomb: args.forceDetonateBomb,
             adjacentEnemyIdsFor,
@@ -3978,9 +3800,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             for (const e of v.infernoEntries) detonatable.add(e);
             for (const b of v.pendingBombs) detonatable.add(b);
         };
-        // The anchor's containers arrive as loose params (until SP-4c-2d they could be the dummy
-        // sink's), so collect them directly; the footprint/splash victims come from the opposing
-        // roster map.
+        // The anchor's containers arrive as loose params, so collect them directly; the
+        // footprint/splash victims come from the opposing roster map.
         collectDetonatable({ corrosionEntries, infernoEntries, pendingBombs });
         for (const victim of opposingVictimById?.values() ?? []) collectDetonatable(victim);
         positionalDetonation = {
@@ -4154,12 +3975,11 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // board-neighbours. 'target-and-adjacent-enemies' hits the primary via the block above
     // ('adjacent-enemies', neighbours-only, is filtered OUT of the primary apply and applied
     // ONLY here). Runs INDEPENDENTLY of the primary's Block-Debuff immunity/`dotsLanded` gate
-    // above (review fix, B2) — each neighbour rolls its OWN landing via `landsDebuffOnVictim`
+    // above — each neighbour rolls its OWN landing via `landsDebuffOnVictim`
     // (Block-Debuff + hacking-vs-security, mirrors PR #185 for non-DoT debuffs), so a neighbour
     // can be hit even when the primary resists (immune or failed its own roll), and vice versa.
     // Positional-only: adjacentEnemyIdsFor returns [] / is undefined for a target with no board
-    // slot — which, until SP-4c-2d, meant the DPS dummy sink (targetId was unset there), so DPS was
-    // byte-identical. affinityMult reused as the caster's
+    // slot. affinityMult reused as the caster's
     // own value (correct for the corpus: Asphyxiator's splash is Inferno, which doesn't consume
     // affinityMult at apply time; only pendingBombs snapshot it, and no corpus bomb-DoT splashes
     // exist) — true per-victim affinity is deferred.
@@ -4234,13 +4054,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // ally of the caster (Tithonus) — via statusEngine.steal. Keyed off targetId, same
     // side-symmetric pattern as the on-cast purge loop below (works for player AND enemy
     // casters; no healEventOnly gate — a buff transfer, not a heal/shield/cleanse consumption).
-    // A run whose target was the dummy sink (no buffs on its empty self-store) had
-    // statusEngine.steal find nothing → [] → no-op → byte-identical. That stopped being the DPS
-    // calculator at SP-4b-2a — a DPS cast anchors on a real positioned enemy and CAN steal from it,
-    // which is correct, and inert only because the synthesized stand-in grants itself none — and
-    // SP-4c-2d deleted the sink, so no cast anchors on one at all.
+    // A DPS cast anchors on a real positioned enemy and CAN steal from it, which is correct; it
+    // is inert there only because the synthesized stand-in grants itself no buffs.
     //
-    // ORDER (Finding 1): this block runs BEFORE the on-cast purge block below. The sole corpus
+    // ORDER: this block runs BEFORE the on-cast purge block below. The sole corpus
     // ship carrying both in one skill (Tithonus) reads "steals 1 buff ... THEN purges 2 buffs",
     // so the steal must see the target's FULL buff set and take its NEWEST buff; the purge then
     // strips from what remains. Running purge first would let it remove the newest buffs before
@@ -4260,15 +4077,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // On-cast purge (C2a/C2b-3): remove buffs from the acting actor's target. Keyed off targetId
+    // On-cast purge: remove buffs from the acting actor's target. Keyed off targetId
     // (the opposing victim) → side-symmetric (works for player AND enemy casters; no
-    // healEventOnly gate). gatedSkill holds the fired slot's abilities. A dummy-sink target (no
-    // buffs) was a no-op → byte-identical; since SP-4b-2a that stopped being the DPS calculator,
-    // whose cast anchors on a real positioned enemy, and SP-4c-2d deleted the sink outright. NOT
+    // healEventOnly gate). gatedSkill holds the fired slot's abilities. NOT
     // inside the args.healing gate.
     // conditionsMet() enforces any ability-level gates (e.g. Nayra's target-repaired-this-round
     // condition) so conditional purges only fire when their precondition holds.
-    // E3: 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of just targetId.
+    // An 'all-enemies' purge ability fans over the footprint victims (aoeVictimIds) instead of
+    // just targetId.
     if (targetId !== undefined) {
         for (const ab of gatedSkill?.abilities ?? []) {
             if (
@@ -4282,13 +4098,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // `targetId`. Each victim emits its own purge-performed (Salvation/Sefuba are
                 // victim-scoped). (Amartya's per-victim COUNT scaling is E4; this ships at the
                 // parsed count.)
-                // I6: an 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
+                // An 'enemy-most-buffs' purge (Lodolite's charged skill) resolves to the
                 // engine-supplied enemyMostBuffsId instead of the normal positional anchor
                 // (targetId) — the reactive counterpart (Rhodium, end-of-round) resolves this
                 // itself via triggers.ts and never reaches this on-cast path. Falls back to the
                 // anchor when no living opposing actor carries a buff (mostBuffsAmong's
                 // no-buffs-anywhere case) or for a non-positional/DPS caller that never supplies
-                // enemyMostBuffsId — byte-identical to pre-I6 behavior in both cases.
+                // enemyMostBuffsId.
                 // #403 R4, DELIBERATE DIVERGENCE: the DEBUFF clause path (debuffRecipients.ts)
                 // does NOT fall back to the anchor when its selector fails to resolve — positional
                 // inflicts nobody, non-positional keeps the bound victim. Purge keeps the anchor
@@ -4296,18 +4112,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 // purge loop and the debuff clause loop disagree on the unresolved case ON PURPOSE.
                 // If you are aligning them, change this one and say so in the commit.
                 //
-                // #403 review Finding 7, CLOSED by #407: this file has FIVE on-cast loops that ask
-                // the footprint question. Three of them — the `bomb-countdown-reduce` loop
-                // (reduceEnemyBombs), the standalone `shield-strip` loop, and the `extend-status`
-                // debuff branch — used to resolve recipients with a bare
-                // `ab.target === 'all-enemies' && aoeVictimIds ? aoeVictimIds : [targetId]` and had
-                // no selector arm at all. All three now route through `resolveDebuffRecipientIds`,
-                // so every one of the five agrees on which enemy a selector names — and on the two
-                // enemy-adjacency scopes, which those three were also collapsing to the anchor.
+                // Every OTHER on-cast loop in this file that asks the footprint question — the
+                // `bomb-countdown-reduce` loop (reduceEnemyBombs), the standalone `shield-strip`
+                // loop and the `extend-status` debuff branch — resolves recipients through
+                // `resolveDebuffRecipientIds`, so they all agree on which enemy a selector names
+                // and on the two enemy-adjacency scopes (#403, #407).
                 //
-                // THIS purge loop is the one that still differs, deliberately: it keeps its anchor
-                // fall-back for an unresolved selector (see the R4 paragraph above). Four sites
-                // share one resolver; this one shares the resolver and overrides the tail.
+                // THIS purge loop is the one that differs, deliberately: it keeps its anchor
+                // fall-back for an unresolved selector (see the R4 paragraph above). It shares
+                // the resolver and overrides the tail.
                 const recipients =
                     ab.target === 'all-enemies' && aoeVictimIds
                         ? aoeVictimIds
@@ -4399,7 +4212,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         }
     }
 
-    // Wave 4: on-cast extend-status (Sokol charged debuff-extend; Ripper passive
+    // On-cast extend-status (Sokol charged debuff-extend; Ripper passive
     // all-allies buff-extend; Lev charged all-enemies debuff-extend gated on self-crit). Pure
     // StatusEngine duration mutation — side-symmetric (mirrors the purge/steal/shield-strip
     // blocks above: runs identically for player AND enemy casters, OUTSIDE the healing gate).
@@ -4413,8 +4226,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // SAME ctx the purge/steal blocks gate against, so a non-crit cast correctly suppresses
     // Lev's extension (see evaluateConditions.ts's 'self-crit' case, binary off ctx.roundCrit).
     // The DEBUFF branch targets enemies, so it requires a hit target (targetId / aoeVictimIds)
-    // and is skipped when there is none — a NO-VICTIM turn, and before SP-4c-2d the DPS dummy sink,
-    // both of which leave targetId unset. The
+    // and is skipped when there is none — a NO-VICTIM turn, which leaves targetId unset. The
     // BUFF branch (Ripper 'all-allies') needs NO enemy target — it must run regardless of
     // targetId, otherwise the ally/self buff-extend is silently dropped in DPS mode and on any
     // enemy-less cast. extendAll{Debuffs,Buffs}Duration return 0 against an empty/missing store,
@@ -4527,34 +4339,27 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     }
 
     // ====================================================================
-    // HEAL/SHIELD/CLEANSE CONSUMPTION (every mode since #415; formerly labelled
-    // "HEALING MODE") against the live heal target (healing-calc adoption). The
-    // old banner outlived its accuracy — see below. Gated on `args.healing`, which #415 now
-    // supplies in EVERY mode (`healTarget` is anchored to the focus even in DPS
-    // runs), so this is no longer a healing-mode carve-out. A DPS run without a
-    // shield/heal/leech basis in its kit still produces byte-identical goldens
-    // because the buckets this block feeds go unused there, not because the
-    // block itself is skipped.
+    // HEAL/SHIELD/CLEANSE CONSUMPTION, in EVERY mode, against the live heal target. Gated on
+    // `args.healing`, which the engine supplies in every mode (`healTarget` is anchored to the
+    // focus even in DPS runs), so this is NOT a healing-mode carve-out (#415). A DPS run reaches
+    // this block too; the buckets it feeds simply go unused there.
     //
-    // #371 asked whether the HoT tick further down being inside this gate is a DEFECT. It was
-    // ANSWERED "no" on the premise that DPS mode had no live self-HP read anywhere — `healTarget`
-    // was undefined there, so `selfHpPctFor` sat at its `= 100` default and no gate could mis-fire.
-    // #415 RETIRED THAT PREMISE: `healTarget` is now anchored to the focus in every mode, so DPS
-    // now gets a real drain-time self-HP read (`ctx.selfHpPctFor`, consumed in triggers.ts) — not
-    // to be confused with the cast-path `selfHpPct` below, which is per-actor and always read real
-    // HP, pre-#415 included — plus `lowest-hp-ally` selection and repair-over-time ticks. The gate
-    // below is no longer a DPS carve-out — it now separates what it always should have: the player
-    // healing BUCKETS and the report (which DPS has no use for) from HP APPLICATION, which is side-
-    // and mode-independent. Do not re-derive #371's original argument from this comment; it expired.
+    // ⚠️ #371's answer to "is the HoT tick further down being inside this gate a DEFECT?" rested
+    // on DPS mode having no live self-HP read anywhere. That premise is RETIRED (#415):
+    // `healTarget` is anchored to the focus in every mode, so a DPS run gets a real drain-time
+    // self-HP read (`ctx.selfHpPctFor`, consumed in triggers.ts — not to be confused with the
+    // cast-path `selfHpPct` below, which is per-actor and always reads real HP), plus
+    // `lowest-hp-ally` selection and repair-over-time ticks. Do not re-derive #371's argument
+    // from this comment. What the gate separates is the player healing BUCKETS and the report
+    // (which DPS has no use for) from HP APPLICATION, which is side- and mode-independent.
     // Runs at a fixed sequence point AFTER all DoT-application steps and BEFORE
     // the turnCtx assembly. Processes gated firing + passive abilities in array
     // order; heals draw the SEPARATE per-actor heal crit gate (never the damage
-    // crit gate). HoT (hotHeal) ticking is Task 7 — not produced here.
+    // crit gate). HoT (hotHeal) ticking runs further down this same block, in `tickHot`.
     // ====================================================================
     // The cast's DELIVERED total, filled in only when the support pass is deferred to the engine
-    // (see `deferCastSupport` below). Undefined on every inline path, where `directDamage` remains
-    // the basis — which is what keeps the healing calculator and every non-positional fixture
-    // byte-identical.
+    // (see `deferCastSupport` below). Undefined on every inline path, where `directDamage`
+    // remains the basis.
     let castDeliveredDamage: number | undefined;
     /** Set only when the support pass deferred; the engine invokes it after the funnel with the
      *  cast's delivered total. Surfaced on the result as `resolveCastSupport`. */
@@ -4569,16 +4374,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             rid === actor.id
                 ? dmgStats.totals.incomingHealBuff
                 : healing.recipientIncomingHealPct(rid);
-        // `incomingHealFactor` (the incoming-repair multiplier, floored at 0 — #367 §3.4) used to
-        // be a closure here. It moved to the `buffTotals` leaf module so the reactive-heal executor
-        // in `triggers.ts` can share the ONE definition: its doc scoped itself to "this file's
-        // three sites", and that omission left the fourth consumption site unclamped. #367 task 7
-        // added a fifth and sixth in `engine.ts` (the two per-victim leech procs). Read that doc
-        // before touching any of the six.
+        // `incomingHealFactor` (the incoming-repair multiplier, floored at 0 — #367 §3.4) lives
+        // in the `buffTotals` leaf module so every consumer shares ONE definition: this file, the
+        // reactive-heal executor in `triggers.ts`, and engine.ts's per-victim leech procs. Read
+        // that doc before touching any consumption site.
         // Caster-side heal-cast amplification (Nourishment/Vivacious), sourced from the
         // passive slot. Per recipient, fold (1 + ampPct/100) into the cast-heal raw. With no
         // heal-amplification ability OR no engine-supplied proc gate, the guard short-circuits to
-        // 0 (and never rolls) → byte-identical for every fixture without one.
+        // 0 and never rolls.
         const healAmpAbilities = (passiveSkill?.abilities ?? []).filter(
             (a) => a.config.type === 'heal-amplification'
         );
@@ -4604,21 +4407,18 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // Recipient routing (user-confirmed): self → caster; `lowest-hp-ally` → the worst-HP living
         // ally on the caster's own side (caster excluded, nobody if it is alone); `ally` and
         // `all-allies` → the caster's own side in fixed source order, narrowed by its support
-        // footprint. Shared by the heal + shield branches. SP-4e Task 4 replaced "ally → the
-        // bombarded target" with the footprint route and deleted the run-mode arms that chose
-        // between them.
+        // footprint. Shared by the heal + shield branches.
         const isEnemyCaster = actor.side === 'enemy';
         // Resolver for the `'lowest-hp-ally'` TARGET (Pallas, Volk, Valkyrie), which the
-        // ability's own TEXT names — no longer a mode-flag route. Lowest HP FRACTION among living
+        // ability's own TEXT names. Lowest HP FRACTION among living
         // same-side allies, caster excluded, ties broken by source order.
         // Returns UNDEFINED when the caster is the only living ally: Pallas says "the OTHER ally",
-        // so there is nobody, and the pre-4e `?? actor.id` tail made that a self-heal her text
-        // forbids. Callers must handle undefined by producing NO recipient.
+        // so there is nobody. Callers must handle undefined by producing NO recipient — an
+        // `?? actor.id` tail would be the self-heal her text forbids.
         //
         // The ranking itself lives ONCE, in `lowestHpAllyRecipients` (supportRecipients.ts) — this
-        // is only the per-turn binding of the caster id and the live HP reader. The hand-copy that
-        // used to stand here disagreed with the shared helper on exactly the lone-caster case, so
-        // routing `recipientsFor` through the copy would have re-created the forbidden self-heal.
+        // is only the per-turn binding of the caster id and the live HP reader. Do not hand-copy
+        // it: a copy that disagrees on the lone-caster case re-creates that forbidden self-heal.
         // `allyHpFractionOf` reads the healing ctx's buff-aware `recipientMaxHp` (requirement (b)
         // in the helper's doc), and both id lists below arrive in fixed source order (requirement
         // (a), the tie-break).
@@ -4770,25 +4570,23 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             const creditId = applierId ?? actor.id;
             let raw = maxHp * (hotPct / 100) * stacks * holderIncomingFactor;
             // Recipient-side incoming-heal amplification (Exuberance) — the HoT recipient is
-            // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick (0 → byte-identical).
+            // the holder (actor.id). Rolls its combat-lifetime gate ONCE per tick.
             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(actor.id) ?? 0) / 100;
             if (raw <= 0) return;
             // R10′ (#362): the gross bucket here is `hotHeal`, not `directHeal` — and like every
             // other site it books BELOW the apply, so a reversed tick books nothing at all on the
-            // applier. That ordering matters MORE since #369, not less: an off-anchor holder is now
-            // pool-applied too, so it can carry `Reversed Repairs` and reverse its own tick — which
-            // it never could while the anchor-only early-return withheld the apply.
+            // applier. That ordering is load-bearing: an off-anchor holder is pool-applied too,
+            // so it can carry `Reversed Repairs` and reverse its own tick.
             // #369: the tick applies to the HOLDER, whichever side it stands on and whether or
-            // not the holder is the healing anchor. `applyHealToTarget` has taken its victim
-            // explicitly since #362, so nothing on this path is anchor-specific any more — the
-            // `actor.id !== healing.targetId` early-return that used to sit here was a legacy
-            // restriction that credited the gross bucket and then silently withheld the HP from
-            // every off-anchor holder, PLAYER SIDE INCLUDED.
+            // not the holder is the healing anchor. `applyHealToTarget` takes its victim
+            // explicitly (#362), so nothing on this path is anchor-specific. Do NOT reinstate an
+            // `actor.id !== healing.targetId` early-return: it credits the gross bucket and then
+            // silently withholds the HP from every off-anchor holder, PLAYER SIDE INCLUDED.
             //
             // The holder IS this acting actor, by construction: both source loops below read
             // `selfAbilityStatuses` / `entry.activeSelfBuffs`, which are this actor's OWN status
             // stores. So `actor` is passed straight through — no `recipientActor(actor.id)`
-            // round-trip. That lookup used to sit here for the off-anchor case and was pure
+            // round-trip. Such a lookup would be pure
             // indirection: `recipientActor` is `allActorsById.get(id)` (engine.ts) over
             // `[...teamCombatActors, attacker, ...enemyAttackerActors]` (engine.ts),
             // while `actor` is `runtime.actor` and every runtime is built over one of those same
@@ -4849,15 +4647,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             healing.credit(creditId, 'effectiveHeal', applied.consumed);
             healing.credit(creditId, 'overheal', applied.overheal);
         };
-        // #369: BOTH sides tick. The gate that used to wrap this whole block was suppressing the
-        // tick itself in order to suppress its CREDIT — `tickHot` now separates the two, so an
-        // enemy holder moves its own HP and books nothing.
+        // #369: BOTH sides tick. `tickHot` separates the tick from its CREDIT, so an enemy
+        // holder moves its own HP and books nothing.
         //
-        // R2 (unchanged by #369): this block emits NO `heal-performed`, on either side, and fires
+        // R2: this block emits NO `heal-performed`, on either side, and fires
         // NO on-repaired TRIGGER — a HoT tick is not a "performed repair", so nothing subscribed
         // to the repair event reacts to it.
         //
-        // It DOES emit `hot-ticked` (final-review FIX 1, see the emit inside `tickHot`), which is
+        // It DOES emit `hot-ticked` (see the emit inside `tickHot`), which is
         // not a counter-example to R2: nothing in the engine subscribes to that type, so it arms no
         // trigger and can chain nothing. It exists only so `battleSimulator`'s DERIVED HP bar can
         // see HP that this block really moved. Do not add a listener for it.
@@ -4868,11 +4665,9 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // its victim whenever `consumed > 0` (engine.ts), the set is read back as
         // `targetRepairedThisRound` when an actor's turn args are built (engine.ts), and that
         // flag gates the `'target-repaired-this-round'` condition (types/abilities.ts;
-        // Nayra's charged purge and its Stasis/Exposed inflicts). #369 therefore WIDENED that
-        // condition's reach: before it, only a player-side ANCHOR holder could arm the flag from a
-        // tick; now an enemy holder and an off-anchor player holder do too. That is deliberate —
-        // the owner's ruling is that any HP restoration counts as being repaired this round, so
-        // the widening makes every holder agree with what a player-side anchor holder already did.
+        // Nayra's charged purge and its Stasis/Exposed inflicts). EVERY holder arms the flag from
+        // a tick — enemy holders and off-anchor player holders included — because the owner's
+        // ruling is that any HP restoration counts as being repaired this round (#369).
         // Fenced on both side arms in `enemySideHotTick.test.ts`.
         //
         // (a) Payload-carrying ability HoT statuses on this holder (applier = status.casterId).
@@ -4905,17 +4700,16 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (c.basis === 'damage-taken') return true;
             return c.basis === 'damage-dealt' && fromPassive;
         };
-        // Event-only mode (enemy walk, Task 5): the enemy path performs the SAME real effects as
-        // the player path — heals restore each recipient's OWN currentHp (E5 §4.1), shields grant
+        // Event-only mode (enemy walk): the enemy path performs the SAME real effects as
+        // the player path — heals restore each recipient's OWN currentHp, shields grant
         // real pools (#166), and cleanse removes real debuffs (#167) — via the side-agnostic
         // helpers over recipientsFor; it only credits NO player healing/metric bucket and never
         // mutates the player heal-target.
         //
-        // It used to scope to the CAST skill alone ("the cast skill carries"), dropping the
-        // passive slot entirely, so no enemy ever fired a passive-slot repair or shield. That is
-        // not the game rule: a ship fires its passives whenever their conditions are met, on
-        // either side of the board (user-confirmed 2026-08-07). Both modes now build the same
-        // list; healEventOnly continues to govern CREDIT, not which abilities run. The passive
+        // The list spans BOTH slots, on both sides: a ship fires its passives whenever their
+        // conditions are met, on either side of the board (user-confirmed 2026-08-07). Scoping
+        // this to the CAST skill alone would mean no enemy ever fires a passive-slot repair or
+        // shield. `healEventOnly` governs CREDIT, not which abilities run. The passive
         // entries carry the same `isHookOwned(a, true)` filter as normal mode, so a leech-basis
         // passive still belongs to its engine hook and cannot double-count here.
         // Pre-combat abilities ("At the start of combat, this Unit gains a Shield …" —
@@ -4997,7 +4791,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                             raw *= 1 + healAmpPctFor(rid) / 100;
                             // Recipient-side incoming-heal amplification (Exuberance) — rolls the
-                            // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                            // recipient's combat-lifetime gate ONCE per applied repair.
                             raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                             const recipientActor = healing.recipientActor(rid);
                             // Capture the clipped over-repair per recipient (team symmetry with the
@@ -5088,7 +4882,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         // Caster heal-cast amplification (rolls the proc gate ONCE per recipient).
                         raw *= 1 + healAmpPctFor(rid) / 100;
                         // Recipient-side incoming-heal amplification (Exuberance) — rolls the
-                        // recipient's combat-lifetime gate ONCE per applied repair (0 → byte-identical).
+                        // recipient's combat-lifetime gate ONCE per applied repair.
                         raw *= 1 + (healing.recipientIncomingHealAmpPct?.(rid) ?? 0) / 100;
                         let perTargetOverheal: number | undefined;
                         /** #362: this recipient took the repair as damage (Reversed Repairs). */
@@ -5106,16 +4900,14 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         const perRecipientActor = healing.perRecipientApply
                             ? healing.recipientActor(rid)
                             : undefined;
-                        // R10′ (#362): the caster's gross `directHeal` credit used to sit ABOVE this
-                        // block, where the reversal could not retract it. It now books inside the
-                        // not-reversed branch (and, unchanged, for a recipient this path never
-                        // applies to at all — nothing landed there, so nothing was reversed).
+                        // R10′ (#362): the caster's gross `directHeal` credit books INSIDE the
+                        // not-reversed branch, never above this block, because a closure cannot
+                        // retract a credit already written.
                         if (perRecipientActor || rid === healing.targetId) {
-                            // `victim` no longer defaults to the heal target (Task 4, #362): resolve
-                            // it explicitly when perRecipientActor is undefined (the
-                            // healing-calculator single-target path). `recipientActor(targetId)` is
-                            // the same actor the removed default used — guaranteed resolvable
-                            // because the ctx was built FROM that actor (engine.ts `healTarget`).
+                            // `victim` has no default (#362): resolve it explicitly when
+                            // perRecipientActor is undefined (the healing-calculator single-target
+                            // path). `recipientActor(targetId)` is guaranteed resolvable because
+                            // the ctx was built FROM that actor (engine.ts `healTarget`).
                             const victimActor =
                                 perRecipientActor ?? healing.recipientActor(healing.targetId)!;
                             const applied = healing.applyHealToTarget(raw, victimActor, actor.id);
@@ -5126,7 +4918,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 healing.credit(actor.id, 'overheal', applied.overheal);
                                 // Recipient axis: credit the actor the repair LANDED
                                 // ON. Gated on perRecipientActor so a legacy single-target run leaves
-                                // the map empty and every existing golden stays byte-identical.
+                                // the map empty.
                                 if (perRecipientActor) {
                                     healing.creditRecipient?.(rid, 'directHeal', raw);
                                     healing.creditRecipient?.(
@@ -5224,15 +5016,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                             shieldAcc.add(rid, healing.grantShieldToTarget(raw, recipientActor));
                         }
                     }
-                    // H3.6: emit ONE shield-applied per shield CAST, keyed on the caster, listing
+                    // Emit ONE shield-applied per shield CAST, keyed on the caster, listing
                     // every RESOLVED recipient. Drives Resonating Fury (on-shield-applied).
                     //
-                    // #418: this now genuinely mirrors the heal-performed emit below — it gates on
-                    // the GROSS attempt (`shouldEmit`), exactly as that one gates on
-                    // `healRawSum > 0`. The comment here used to CLAIM it mirrored that emit while
-                    // gating on post-cap pool growth, the opposite rule, so a grant onto a
-                    // saturated pool silently failed to fire Resonating Fury. Only a grant that
-                    // applied nothing at all is silenced now.
+                    // #418: the gate is the GROSS attempt (`shouldEmit`), mirroring the
+                    // heal-performed emit below, which gates on `healRawSum > 0`. NOT post-cap
+                    // pool growth — a grant onto a saturated pool must still fire Resonating Fury.
+                    // Only a grant that applied nothing at all is silenced.
                     //
                     // NOTE: enemy event-only shields grant their OWN pool and emit their OWN
                     // shield-applied from the lifted event-only sub-branch above; this player-path
@@ -5283,15 +5073,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
             // ONE heal-performed per cast that healed at least one recipient. critHits is the
             // number of heal abilities that crit (present-only-when-positive). In event-only
-            // (enemy) mode E5 §4.1 now computes the numeric, so amount/critHits reflect the real
+            // (enemy) mode the numeric is computed too, so amount/critHits reflect the real
             // enemy heal (the player healing buckets stay uncredited — see the healEventOnly note above).
             //
-            // The gate is "resolved to at least one recipient AND restored something". The second
-            // term closed the asymmetry PR6 knowingly opened: PR6 gated the REACTIVE path on
-            // `healSum > 0` (triggers.ts heal branch) and left this one on recipients alone, so a CAST
-            // repair that restored nothing still emitted, still opened a "repaired 0" combat-log row,
-            // and still counted as a repair for the `on-enemy-repaired` riders (Ruiner's Bomb,
-            // Overload, Zosimos's charge removal, Amartya's Defense Shred). The two paths now agree.
+            // The gate is "resolved to at least one recipient AND restored something". Both terms
+            // matter: the REACTIVE path gates on `healSum > 0` (triggers.ts heal branch), and
+            // gating this one on recipients alone would let a CAST repair that restored nothing
+            // emit anyway, open a "repaired 0" combat-log row, and count as a repair for the
+            // `on-enemy-repaired` riders (Ruiner's Bomb, Overload, Zosimos's charge removal,
+            // Amartya's Defense Shred). The two paths agree.
             //
             // `healRawSum` is the GROSS across recipients — the same basis the reactive gate uses — so
             // an over-repair that is entirely clipped still emits. That is deliberate: the repair DID
@@ -5392,18 +5182,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // point: a cross-actor reader subtracts this number back out, so it must be BY
         // CONSTRUCTION the number that went in, or the subtraction would not cancel.
         //
-        // #396: what "the portion that went in" MEANS changed. The fold no longer adds the raw
-        // enemy-applied sum — it adds the SHADOWED delta, which differs from the raw sum whenever
-        // this actor carries its own instance of the same family (and is 0 when the actor's own
-        // instance wins outright). `enemyAppliedHealDelta` is captured at the fold itself for
-        // exactly that reason; publishing the raw value here would make the reader subtract a
-        // term the total never held.
-        // Spread-guarded so a clean actor's ctx is byte-identical to the pre-#367 shape.
+        // #396: "the portion that went in" is the SHADOWED delta, NOT the raw enemy-applied sum.
+        // The two differ whenever this actor carries its own instance of the same family (and the
+        // delta is 0 when the actor's own instance wins outright). `enemyAppliedHealDelta` is
+        // captured at the fold itself for exactly that reason; publishing the raw value here would
+        // make the reader subtract a term the total never held.
+        // Spread-guarded so a clean actor's ctx omits the keys entirely.
         ...(enemyAppliedHealDelta ?? {}),
         // Only set when this cast's own abilities OR a distributed ally aura
         // actually carry a victim-gated dotDamage ability — undefined for every ship without
         // one (the common case), so tickDoTs' fast path (`ctx.victimGatedDotDamage` falsy →
-        // use `dotMult` unchanged) is byte-identical.
+        // use `dotMult` unchanged) applies.
         ...(victimGatedDotDamage.length > 0 ? { victimGatedDotDamage } : {}),
     };
 
@@ -5452,8 +5241,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     //                      aggregate `passiveDamage` folds it in exactly once too,
     //   secondaryStatValue 0 — the defence/HP-scaling payload belongs to the firing hit.
     // Feeding these through `victimHitDamage(scalars, profile, didCrit, 1)` reproduces
-    // `passiveDamage` exactly for the bound victim's defence profile (the same identity Task 4
-    // established for the firing hit), so the positional and aggregate values agree.
+    // `passiveDamage` exactly for the bound victim's defence profile (the same identity the
+    // firing hit relies on), so the positional and aggregate values agree.
     //
     // GUARD: `passiveMultiplier > 0`. `damageInputsFromSkill` returns multiplier 0 for a slot
     // with no damage ability AND for one whose damage ability was gated OFF this round

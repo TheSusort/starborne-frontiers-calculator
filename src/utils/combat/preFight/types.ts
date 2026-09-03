@@ -1,5 +1,5 @@
 /**
- * Pre-fight stat-modifier layer (combat-realism sub-project F) — shared types.
+ * Pre-fight stat-modifier layer — shared types.
  *
  * The layer runs ONCE in `simulateBattle`, after the placement plans are built and
  * BEFORE any actor/roster construction. Passes mutate each unit's `stats` (shared BY

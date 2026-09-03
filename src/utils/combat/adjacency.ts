@@ -20,10 +20,10 @@ interface AdjacencyActor {
  */
 export function adjacentAllyIds(ownerId: string, actors: AdjacencyActor[]): string[] {
     const owner = actors.find((x) => x.id === ownerId);
-    // Wave 5 hardening: if the anchor isn't in this roster at all, it has no neighbours here —
-    // return [] rather than falling through to the whole-roster fallback below. Every current
-    // `adjacent-allies` caller queries the owner's OWN side, where the owner is always present,
-    // so this guard is inert on the existing corpus; it only protects a future wrong-roster call.
+    // If the anchor isn't in this roster at all it has no neighbours here — return [] rather
+    // than falling through to the whole-roster fallback below. `adjacent-allies` callers query
+    // the owner's OWN side, where the owner is always present; this guard protects against a
+    // wrong-roster call.
     if (owner === undefined) return [];
     const living = actors.filter((x) => x.destroyedRound === undefined && x.id !== ownerId);
     const anyOtherPositioned = actors.some((x) => x.id !== ownerId && x.position != null);

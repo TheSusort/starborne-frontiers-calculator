@@ -1,9 +1,7 @@
 /**
- * The "bare roster" shape: no positions, no targeting, one real enemy — what the 64 direct-engine
- * fixture files SP-4b-2b migrated pass to `runCombat` today (64 files / 253 tests is the branch's
- * measured inventory; an earlier draft of this line said 54, which undercounted). Shared by the
- * boundary and dummy-reachability suites so the two agree on exactly what an under-specified
- * caller looks like.
+ * The "bare roster" shape: no positions, no targeting, one real enemy — what the direct-engine
+ * fixture files pass to `runCombat`. Shared by the boundary and dummy-reachability suites so the
+ * two agree on exactly what an under-specified caller looks like.
  */
 import type { CombatEngineInput } from '../engine';
 import type { ShipSkills } from '../../../types/abilities';
@@ -39,9 +37,9 @@ export const BARE_ENEMY_ID = 'e1';
 /**
  * No position, no target, no pattern.
  *
- * `overrides` exists for one reason, learned repairing the SP-4b-2b fixture waves: the default
- * 500,000 HP is NOT a survival guarantee. A fixture whose focus actually deals damage for several
- * rounds will DESTROY this enemy mid-sim, and once the opposing roster is wiped the run changes
+ * `overrides` exists for one reason: the default 500,000 HP is NOT a survival guarantee. A fixture
+ * whose focus actually deals damage for several rounds will DESTROY this enemy mid-sim, and once
+ * the opposing roster is wiped the run changes
  * shape — the enemy stops taking turns, the cast falls back onto the legacy dummy victim (with the
  * dummy's `enemyDefense`, so damage magnitudes change too), and any assertion that assumed "one
  * enemy turn per round" silently reads a shorter fight. Fixtures that need a punching bag for the
@@ -77,7 +75,7 @@ export const SECOND_BARE_ENEMY_ID = 'e2';
  * A roster member that ACTS: the bare enemy plus a real attack and the same 100%-multiplier damage
  * kit the focus carries, so the enemy→player direction is genuinely exercised rather than being
  * turn-order filler. A 0-attack positioned enemy is RNG-stream-inert and books nothing, so it can
- * never evidence the "enemy turns" path (SP-1's lesson, narrowed by SP-4b-2a to enemies that ACT).
+ * never evidence the "enemy turns" path — only an enemy that ACTS can.
  */
 export const attackingEnemy = (
     overrides: Omit<Partial<EnemyAttackerInput>, 'stats'> & {

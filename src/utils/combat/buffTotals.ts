@@ -123,33 +123,25 @@ export function payloadToSelectedBuff(payload: AbilityStatusPayload): SelectedGa
  * sanctioned repair-to-damage channel, and it is an explicit status, not a sign accident reached by
  * folding percentages past −100%.
  *
- * WHY IT LIVES IN THIS LEAF MODULE. It has SIX consumption sites across three files that import
- * each other in one direction only — `runPlayerTurn`'s player and `healEventOnly` cast arms and its
- * HoT tick (`playerTurn.ts`), the reactive-heal executor (`triggers.ts`), and the two per-victim
- * leech procs `procStandingLeechesPerVictim` / `procTakenLeechesPerVictim` (`engine.ts`, added by
- * #367 task 7 when the owner ruled a leech self-repair is a repair like any other). It was
- * originally a closure inside `runPlayerTurn` whose doc was honestly scoped to "this file's three
- * sites", which made it an INCOMPLETE tripwire: #367 routed `triggers.ts`'s `incomingPctFor`
- * through `liveHealChannelPct`, so for the first time that site could see an enemy-applied
- * reduction while being the only one not clamped. `buffTotals` is the leaf all three files already
- * import — the "import-cycle safe: … come from ./buffTotals (leaf module), not from ./playerTurn
- * (which imports triggers.ts)" note on `triggers.ts`'s `victimEnemyBuffs` is the same argument — so
- * a single definition serves all six without a cycle. A value import of `playerTurn` from
- * `triggers` would be one, which is why this did not simply get exported where it stood.
- *
- * HISTORICAL: two leech heal-apply sites in `engine.ts` were deliberately left unfolded here — the
- * aggregate `procStandingLeeches` and the non-positional heal-target taken-leech block — because
- * both were corpus-DEAD (measured with ungated probes across the whole suite; neither fired), so a
- * fold there would have been an unverifiable change to unexercised code. #374 DELETED both, so
- * there is no longer an unfolded site to account for.
+ * WHY IT LIVES IN THIS LEAF MODULE. Its consumers span `runPlayerTurn`'s player and
+ * `healEventOnly` cast arms and its HoT tick (`playerTurn.ts`), the reactive-heal executor
+ * (`triggers.ts`), and the per-victim leech procs `procStandingLeechesPerVictim` /
+ * `procTakenLeechesPerVictim` (`engine.ts` — a leech self-repair is a repair like any other,
+ * #367), and those files import each other in one direction only. A floor applied at some of
+ * them and not the others is an INCOMPLETE tripwire, which is the failure this single definition
+ * removes. `buffTotals` is the leaf every one of those files already imports — the
+ * "import-cycle safe: … come from ./buffTotals (leaf module), not from ./playerTurn (which
+ * imports triggers.ts)" note on `triggers.ts`'s `victimEnemyBuffs` is the same argument — so one
+ * definition serves them all without a cycle. A value import of `playerTurn` from `triggers`
+ * would be one, which is why this is not simply exported from where it is consumed.
  *
  * ⚠️ NO OUTGOING TWIN, DELIBERATELY. The outgoing channel (`Out. Repair Down`) is unfloored at
  * every one of its sites — `(1 + outgoingHealBuff / 100)` in both `playerTurn` cast arms and
  * `(1 + ownerOutgoing / 100)` in the reactive executor — so it is at least CONSISTENT today.
- * Flooring it in one of the three would rebuild exactly the partial tripwire this function exists
- * to remove. Its own reachability argument is the same shape (one tier-shadowed family,
+ * Flooring it at only some of them would rebuild exactly the partial tripwire this function
+ * exists to remove. Its own reachability argument is the same shape (one tier-shadowed family,
  * `Out. Repair Down II` at −50%, so −100% is unreachable today). If a second outgoing reducer ever
- * ships, add the twin at ALL THREE sites in one change, not here first.
+ * ships, add the twin at EVERY outgoing site in one change, not here first.
  */
 export function incomingHealFactor(pct: number): number {
     return Math.max(0, 1 + pct / 100);
@@ -206,13 +198,10 @@ export function incomingHealFactor(pct: number): number {
 // `dotDamage`, `detonationDamage`, `defensePenetration` and `hotPct` are read from the
 // self/attacker list only.
 //
-// #398 CLOSED THE LAST FIVE. `crit`, `critDamage`, `speed`, `hacking` and `security` USED to fold
-// exclusively through `foldActorBuffTotals`, whose sources were the SELF store and the scheduled
-// `selfBuffLookup` — the enemy store was not among them, so those enemy-side channels were DEAD
-// rather than additive. Measured (5 families, 17 corpus ships): they landed, displayed, ticked down
-// and changed nothing. They now read the enemy store via `FOLD_SHADOW_CHANNELS` at the status-mode
-// fold, and `crit`/`critDamage`/`security` additionally via `TURN_SHADOW_CHANNELS` at the
-// damage-mode fold. `hp` remains dead, with no corpus applier to switch on.
+// #398: `crit`, `critDamage`, `speed`, `hacking` and `security` read the enemy store via
+// `FOLD_SHADOW_CHANNELS` at the status-mode fold, and `crit`/`critDamage`/`security` additionally
+// via `TURN_SHADOW_CHANNELS` at the damage-mode fold. `hp` remains dead, with no corpus applier
+// to switch on.
 //
 // Adding a channel here without a meeting point is inert; adding one when a new meeting point
 // appears is required — and `enemyStoreChannelCoverage.test.ts` is the tripwire that says so.

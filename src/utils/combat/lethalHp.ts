@@ -75,8 +75,8 @@ export function resolveLethalHp(
         victim.corrosionEntries = victim.corrosionEntries.filter((e) => e.unremovable);
         victim.infernoEntries = victim.infernoEntries.filter((e) => e.unremovable);
         victim.genericDoTEntries = victim.genericDoTEntries.filter((e) => e.unremovable);
-        // Real event INLINE for its combat listener (Yazid on-cheat-death-activated) — keeps
-        // listener timing byte-identical. The LOG-ONLY twin carries the nesting.
+        // Real event INLINE for its combat listener (Yazid on-cheat-death-activated), so the
+        // listener fires at this point in the sequence. The LOG-ONLY twin carries the nesting.
         opts.bus.emit({ type: 'cheat-death-activated', actorId: targetId, round: opts.round });
         opts.emitConsequenceLog({
             type: 'cheat-death-log',

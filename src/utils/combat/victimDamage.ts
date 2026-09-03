@@ -104,9 +104,9 @@ export interface VictimDefenseProfile {
      * VICTIM in an AoE. Rather than re-deriving the full outgoing term per victim, the engine
      * computes ONLY the delta between that victim's own enemy-status ctx and the primary
      * target's ctx (non-enemy-status modifiers cancel identically in both folds, isolating the
-     * per-victim enemy-status variation) and passes it here. Defaults to 0 → byte-identical
-     * for the primary target (delta is 0 by construction) and for any attacker with no
-     * enemy-status-gated outgoing modifier.
+     * per-victim enemy-status variation) and passes it here. Defaults to 0, which is also the
+     * primary target's own value (delta is 0 by construction) and the value for any attacker with
+     * no enemy-status-gated outgoing modifier.
      */
     outgoingDamageDeltaPct?: number;
     /**
@@ -147,12 +147,10 @@ export function victimDefenceMitigation(
 /**
  * Damage dealt to a single victim by ONE hit of a multi-hit skill.
  *
- * NO PRODUCTION CALLERS, DELIBERATELY KEPT. Its pre-mitigation sibling
- * (`victimHitDamagePreMitigation`) was deleted for exactly that reason, so the asymmetry is worth
- * stating: this one survives because it is the `.damage`-only façade a dozen unit tests are written
- * against (`victimDamage.test.ts`, `positionalApply.test.ts`), and those tests are real users. It
- * is a one-line delegation to `victimHitDamageParts`, so it cannot drift from the parts helper the
- * way the hand-copied pre-mitigation twin did. Delete it only together with those tests.
+ * NO PRODUCTION CALLERS, DELIBERATELY KEPT: it is the `.damage`-only façade the unit tests are
+ * written against, and those tests are real users. It is a one-line delegation to
+ * `victimHitDamageParts`, so it cannot drift from the parts helper. Delete it only together with
+ * those tests.
  *
  * @param s        attacker-side scalars (fixed across victims)
  * @param v        this victim's defensive profile
@@ -245,8 +243,8 @@ export function victimHitDamageParts(
         defenceMitigation * (1 + outgoingPct / 100) * (1 + incoming / 100) * affinityMult;
     // #358 ADDENDUM 2/3: the same product with EVERY victim-side reduction removed — the defence
     // term replaced by an exact 1 (addendum 2) and the incoming term re-based on `incomingAsThrown`
-    // (addendum 3). The `damage` expression below keeps its original operand order and its original
-    // `incoming` local, so it stays BYTE-IDENTICAL (no re-association), while the pre-mitigation
+    // (addendum 3). The `damage` expression below keeps its own operand order and its own
+    // `incoming` local, so no floating-point re-association reaches it, while the pre-mitigation
     // figure is computed at source rather than reconstructed by division.
     const nonCritFactorPreDefence =
         1 * (1 + outgoingPct / 100) * (1 + incomingAsThrown / 100) * affinityMult;

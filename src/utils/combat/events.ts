@@ -490,8 +490,7 @@ export type CombatEvent =
      *  `bomb-countdown-reduce`; the attacker-turn `detonate()` aggregate branch emits the
      *  casting `actor.id` instead. Any actor, not always 'attacker'. `victimId` = the actor
      *  the bomb detonated ON (the bomb's holder) — distinct from `actorId`, which stays the
-     *  applier/caster per the above. Added for Wave 5 C2 (Demolisher adjacent-enemy splash
-     *  anchoring, consumed by C3); purely additive, no behaviour change.
+     *  applier/caster per the above. Anchors Demolisher's adjacent-enemy splash.
      *  `detonatorId` (Lingshe) = the actor who ACTIVELY caused this burst — the
      *  caster of the detonating skill (`detonate()`/positional detonate) or the
      *  `bomb-countdown-reduce` caster (Lingshe's charge). UNDEFINED for a natural countdown-0
