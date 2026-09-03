@@ -4687,8 +4687,15 @@ export function runCombat(rawInput: CombatEngineInput): {
     // THIS IS THE ONLY STANDING-LEECH PROC (#374). It works by
     // running once per FOOTPRINT VICTIM (wired via drivePositionalApply's `onVictimResolved`),
     // leeching off THAT victim's already-role-scaled dealt damage — so origin victims contribute
-    // full damage and covered victims contribute half automatically (the caller passes the
-    // per-victim `damage`).
+    // full damage and covered victims contribute half automatically.
+    //
+    // `amount` IS ALREADY THE RULED BASIS; this proc does not translate it. The role scaling is
+    // baked into the hit and survives the funnel, but the funnel is what decides the figure: the
+    // firing-hit caller passes `incomingBooked + protectionRedirected`, NOT the hit as thrown (see
+    // the basis block in `procLeechesForVictim` for the locked rule and the two directions'
+    // deliberate disagreement). Every other channel — detonation, DoT tick, passive-slot instance
+    // — likewise passes its own already-booked delivered figure. A new call site that hands this
+    // proc a pre-funnel number reintroduces a leech off damage that never landed.
     //
     // The entry-level fold is pct → raw → healModifier → heal-crit draw; pool application goes
     // through the parametrized closures (applyHealToTarget(raw, actor, repairSourceId) /
@@ -5043,7 +5050,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // (enemy→player). THIS IS THE ONLY TAKEN-LEECH PROC (#374). It runs once per FOOTPRINT
     // VICTIM (wired via drivePositionalApply's
     // `onVictimResolved` at the enemy site), procing THAT victim's OWN taken-leeches
-    // (takenLeechesByOwner.get(victim.id)) off the per-victim `damage` it took, applying to the
+    // (takenLeechesByOwner.get(victim.id)) off the damage it actually took, applying to the
     // victim's OWN pool.
     //
     // SEMANTICS, per victim:
@@ -5052,8 +5059,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     //   - requiresHpDamage (Quixilver): only fire an entry with requiresHpDamage when the hit
     //     dealt HP damage PAST shield — per victim via `outcome.shieldBefore > 0 &&
     //     outcome.hpDamage > 0`.
-    //   - The leech is off `damage` (the FULL per-victim damage taken — already covered-cell
-    //     reduced), NOT the HP portion.
+    //   - The leech is off `damageTaken` — the funnel's own recorded intake for this victim
+    //     (`incomingBooked`, already covered-cell reduced), NOT the HP portion and NOT the hit as
+    //     thrown. RULED (owner, 2026-09-03): "damage taken" is the number displayed ON THE VICTIM,
+    //     so a Protection-redirected slice (the protector took it) and a DoT-transformed one (not
+    //     taken yet — it re-books per tick) are both out. The caller does that translation; see
+    //     the block in `procLeechesForVictim`, which is where this proc's ONE call site lives and
+    //     where the dealt direction's differing basis is spelled out beside it.
     //   - Same heal/shield fold (pct → raw, healModifier, heal-crit gate/noCrit) and the same
     //     directHeal/effectiveHeal/overheal vs shield bucket split, credited to the victim.
     //
@@ -5065,10 +5077,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // victim's `activeHealCritGate` ONCE PER VICTIM (matching procStandingLeechesPerVictim).
     const procTakenLeechesPerVictim = (
         victim: CombatActor,
-        damage: number,
+        damageTaken: number,
         outcome: VictimDamageOutcome
     ): void => {
-        if (!healingCtx || damage <= 0) return;
+        if (!healingCtx || damageTaken <= 0) return;
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
         if (outcome.barriered) return;
         const entries = takenLeechesByOwner.get(victim.id);
@@ -5089,7 +5101,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (e.requiresHpDamage && !(outcome.shieldBefore > 0 && outcome.hpDamage > 0)) {
                 continue;
             }
-            let raw = damage * (e.pct / 100);
+            let raw = damageTaken * (e.pct / 100);
             if (e.kind === 'heal' && rt) {
                 raw *= 1 + rt.healModifier / 100;
                 // #447 — the outgoing-repair channel of the ship performing this repair, the
@@ -5249,8 +5261,34 @@ export function runCombat(rawInput: CombatEngineInput): {
         damage: number,
         outcome: VictimDamageOutcome
     ): void => {
-        procStandingLeechesPerVictim(actorId, damage, 'direct');
-        procTakenLeechesPerVictim(victim, damage, outcome);
+        // ⚠️ NEITHER DIRECTION LEECHES OFF `damage`. That is the hit as THROWN — the seam hands it
+        // down pre-cascade, pre-block, pre-transform — and both bases are funnel figures:
+        //
+        //  • `booked` (= `incomingBooked`) is what the funnel RECORDED for this victim. A
+        //    Protection cascade moved a slice to a protector, an incoming-block proc shaved one,
+        //    a Voron/Orel/Hit-Mitigation transform deferred the whole hit into a DoT — all three
+        //    are already netted out of it. The transform's amount re-books per TICK on the DoT
+        //    path, where the entry's `sourceId` keeps the basis on the victim.
+        //  • The DEALT basis adds `protectionRedirected` back: the attacker dealt that chunk, it
+        //    just landed on another row. LOCKED rule (owner, 2026-08-08): "% of damage dealt" is
+        //    the final on-screen number, a redirect COUNTS, a DoT transform does not. This is the
+        //    same figure `SubAttackOutcome.deliveredDamage` carries for Bloodthirst.
+        //  • The TAKEN basis does NOT. RULED (owner, 2026-09-03): "damage taken" is the number
+        //    displayed on the VICTIM, and the protector took the redirected slice.
+        //
+        // The two therefore differ by exactly `protectionRedirected`, which is why they are
+        // computed here rather than folded into one shared amount.
+        //
+        // The `??` fallback keeps the pre-funnel shape for a caller that supplies no
+        // `incomingBooked` — only test stubs of `applyToVictim`; the engine's own funnel always
+        // sets it. Same expression `drivePositionalApply` uses for its own booking.
+        const booked = outcome.incomingBooked ?? damage - (outcome.transformedToDot ?? 0);
+        procStandingLeechesPerVictim(
+            actorId,
+            booked + (outcome.protectionRedirected ?? 0),
+            'direct'
+        );
+        procTakenLeechesPerVictim(victim, booked, outcome);
     };
 
     // The id of the actor whose turn is CURRENTLY executing. Set once at the top of
@@ -8273,25 +8311,26 @@ export function runCombat(rawInput: CombatEngineInput): {
                         );
                         creditDealt(actor.id, victim.id, booked);
                     }
+                    // The ruled "damage dealt" basis: booked intake PLUS anything a
+                    // Protection cascade diverted to protectors.
+                    const victimDelivered = booked + (outcome.protectionRedirected ?? 0);
                     // This instance pays the actor's
                     // standing damage-dealt leech. Channel `'direct'` — it is a direct-damage
                     // intake (it passes `byDirectDamage: true` through `tb.applyToVictim`), so an
                     // `'all'`-scoped leech pays and a `'detonation'`-scoped one does not.
                     //
-                    // BASIS: the pre-funnel per-victim `damage`, matching what the firing hit's
-                    // seam passes (`positionalApply.ts`'s `onVictimResolved?.(victim, dmg, …)`
-                    // hands the leech `dmg`, not `booked`). Whether that basis is right under the
-                    // locked "damage dealt = the final on-screen number" rule is a PRE-EXISTING
-                    // question for the whole seam and is deliberately out of scope here —
-                    // consistency with the existing site beats a unilateral change.
+                    // BASIS: `victimDelivered`, the same figure the accumulate-detonate gather
+                    // below books — NOT the pre-funnel `damage`. Both sites moved together: this
+                    // one stayed on the pre-funnel number only to match the firing-hit seam, and
+                    // that seam now translates through the funnel too (see the basis block in
+                    // `procLeechesForVictim`). Leaving this one behind would recreate exactly the
+                    // hand-copied divergence that deferral was avoiding.
                     //
                     // Standing direction only, never `procLeechesForVictim`: the victim is not this
                     // instance's primary target, so its damage-taken leech does not proc (owner
                     // ruling, spec §2.2).
-                    procStandingLeechesPerVictim(actor.id, damage, 'direct');
-                    // The ruled "damage dealt" basis: booked intake PLUS anything a
-                    // Protection cascade diverted to protectors.
-                    delivered += booked + (outcome.protectionRedirected ?? 0);
+                    procStandingLeechesPerVictim(actor.id, victimDelivered, 'direct');
+                    delivered += victimDelivered;
                 }
                 // A passive-slot instance is DIRECT damage this actor dealt, so it
                 // joins the accumulate-detonate gather exactly like the firing hit does.
@@ -9121,7 +9160,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         //   • onVictimResolved — the per-victim LEECH direction: the player→enemy sites proc a
         //     STANDING leech off the dealt damage; the enemy→player site procs a TAKEN leech off
         //     the damage each player victim took (+ captures the focus victim's shield-hit flag).
-        //     Called at the SAME per-victim point for all three.
+        //     Called at the SAME per-victim point for all three. All three route through
+        //     `procLeechesForVictim`, which turns the seam's PRE-FUNNEL `damage` into the two
+        //     directions' actual bases — read its basis block before adding a fourth site.
         //   • emitAttackedForSubAttack — ONE sub-attack's `attacked` emit. The player→enemy sites
         //     run the whole interleaved sequence HERE (before the per-victim detonation); the enemy
         //     site DEFERS everything but its first `ability-performed` to AFTER its inline tail, by

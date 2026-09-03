@@ -278,6 +278,15 @@ export function applyPositionalDamage(args: {
      * the hit resolves, with the resolved {@link VictimDamageOutcome}. Direction-specific leech
      * logic is supplied per call site (standing vs taken) rather than branched inline. Unsupplied
      * → fully inert.
+     *
+     * ⚠️ `damage` IS THE HIT AS THROWN, NOT WHAT LANDED. It is the computed per-victim hit, handed
+     * down before the funnel recorded anything: a Protection cascade may have moved a slice to a
+     * protector, an incoming-block proc may have shaved one, a transform may have deferred the
+     * whole thing into a DoT. A consumer that needs a damage-proportional BASIS must derive it from
+     * `outcome` — {@link VictimDamageOutcome.incomingBooked} for what this victim took, plus
+     * {@link VictimDamageOutcome.protectionRedirected} for what the attacker dealt elsewhere. It is
+     * left as the raw hit because the hook's other consumers legitimately want it: the `attacked`
+     * suppression asks only WHETHER a transform fired, not for a magnitude.
      */
     onVictimResolved?: (
         victim: CombatActor,

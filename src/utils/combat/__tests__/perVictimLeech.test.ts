@@ -8,9 +8,14 @@
  * own standing leech never fired.
  *
  * E2 wires an `onVictimResolved` callback at the player→enemy positional sites that procs
- * the ACTING attacker's standing leeches off EACH footprint victim's dealt damage. Because
- * the per-victim `damage` is already role-scaled (origin full, covered half), leeching off
- * `damage` per victim yields exactly `origin dealt + 0.5×covered dealt`.
+ * the ACTING attacker's standing leeches off EACH footprint victim's dealt damage. Because the
+ * per-victim hit is already role-scaled (origin full, covered half) and the role scaling survives
+ * the funnel, the per-victim basis yields exactly `origin dealt + 0.5×covered dealt`.
+ *
+ * The basis itself is the FUNNEL's figure, not the hit as thrown — `incomingBooked +
+ * protectionRedirected`, per the locked "damage dealt" rule. This file's fixtures have no
+ * protector, no incoming block and no transform, so the two coincide here and every number below
+ * is unchanged by that. `leechFunnelBasis.integration.test.ts` is where they are pulled apart.
  *
  * Harness mirrors twoTeamBattle.test.ts / positionalDamage.integration.test.ts: positioned
  * actors, `healTargetId` to unlock the enemy roster, a passive damage-dealt heal leech on
