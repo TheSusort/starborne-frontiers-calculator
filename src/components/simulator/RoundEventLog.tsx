@@ -51,6 +51,7 @@ const colorForKind = (kind: CombatLogEntryKind): string => {
             return 'text-theme-text-secondary';
         case 'cleanse':
         case 'purge':
+        case 'steal':
         case 'charge-changed':
         case 'buff-expired':
         case 'debuff-resisted':
@@ -196,6 +197,9 @@ const formatters: Record<
     // a cast-time cleanse has no target → collapses to "AEGIS: cleansed N" (unchanged).
     cleanse: sourceTargetNoteLine,
     purge: noteLine,
+    // "{thief} → {source}: stole Protection" — the source→target shape, because unlike a purge a
+    // steal has a destination that matters.
+    steal: sourceTargetNoteLine,
     'charge-changed': noteLine,
     'buff-expired': noteLine,
     'debuff-resisted': (entry, ctx) => {

@@ -44,6 +44,11 @@ export type CombatLogEntryKind =
     | 'control'
     | 'cleanse'
     | 'purge'
+    /** A buff steal moved something. Distinct from 'purge': a purge DESTROYS, a steal TRANSFERS,
+     *  and the row names what moved rather than counting it — a player losing Protection needs to
+     *  know it was Protection. Added in the #465 follow-up; before it, steals produced no log
+     *  entry at all and were therefore invisible to the kit fingerprints too. */
+    | 'steal'
     | 'charge-changed'
     | 'death'
     | 'detonation'
