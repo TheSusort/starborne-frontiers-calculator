@@ -51,8 +51,8 @@ Test files are **out of scope** — #457 already swept all 388 of them.
 ## The classifier is a finder, not a verdict
 
 `docs/kit-audit-tools/comment-sweep/census.mjs` parses each file with `ts.createSourceFile`,
-collects every comment block via leading/trailing trivia ranges, and tests each against five
-regex classes. It **locates candidates**. It does not decide anything.
+collects every comment block via leading/trailing trivia ranges, and tests each against the
+regex classes in `classes.mjs`. It **locates candidates**. It does not decide anything.
 
 Spot-checking proves why the distinction matters. Real hits and false positives sit side by side:
 

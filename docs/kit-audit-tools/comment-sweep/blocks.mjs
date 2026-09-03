@@ -18,6 +18,14 @@ import fs from 'fs';
 import { CLASSES } from './classes.mjs';
 
 
+const requireInt = (flag, value) => {
+    if (value === undefined || !/^\d+$/.test(value)) {
+        console.error(`${flag} requires a non-negative integer (got ${value ?? 'nothing'})`);
+        process.exit(2);
+    }
+    return Number(value);
+};
+
 const argv = process.argv.slice(2);
 let json = false;
 let from = 0;
@@ -25,8 +33,11 @@ let to = Infinity;
 const files = [];
 for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--json') json = true;
-    else if (argv[i] === '--from') from = Number(argv[++i]);
-    else if (argv[i] === '--to') to = Number(argv[++i]);
+    // Validate: `Number(undefined)` is NaN, and every comparison against NaN is false, so a
+    // missing or non-numeric bound silently disables range filtering and returns the WHOLE file
+    // — a batch agent would then sweep outside its assigned range without any error.
+    else if (argv[i] === '--from') from = requireInt('--from', argv[++i]);
+    else if (argv[i] === '--to') to = requireInt('--to', argv[++i]);
     else files.push(argv[i]);
 }
 

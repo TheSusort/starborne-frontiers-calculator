@@ -17,7 +17,7 @@
 export const CLASSES = {
     // Dead workstream labels. Covers BOTH `SP-4c-2d` (digit) and `SP-U` (letter) forms.
     'workstream-label':
-        /\b(SP-[A-Za-z0-9][\w-]*|Sub-project [A-Z]\b|Task \d+\w*|Tasks \d+[-–]\d+|Phase \d+\w*|D-PR\d+|PR\d+[a-z]?\b|Wave \d+|[Ss]hip-kit W\d+|W\d+ Task|epic PR\d+|epic [A-Z]\d?\b|A2 Task|H\d T\d|C\d[a-z]?[\d-]* T\d|bySide PR\d+|\bW\d\b)/,
+        /\b(SP-[A-Za-z0-9][\w-]*|[Ss]ub-project [A-Z]\b|Task \d+\w*|Tasks \d+[-–]\d+|Phase \d+\w*|D-PR\d+|PR\d+[a-z]?\b|Wave \d+|[Ss]hip-kit W\d+|W\d+ Task|epic PR\d+|epic [A-Z]\d?\b|A2 Task|H\d T\d|C\d[a-z]?[\d-]* T\d|bySide PR\d+|\bW\d\b)/,
 
     // "This is not wired yet" claims. The single highest-yield class: mid-workstream notes that
     // were never swept when the workstream landed, so they now describe shipped code as pending.

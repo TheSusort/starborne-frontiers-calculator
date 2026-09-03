@@ -688,7 +688,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             stacks: 0,
             maxStacks: b.maxStacks,
             // Scheduled enemy debuffs ride the attacker's cadence: one `'attacker'` contribution
-            // under #436's uniform granter rule, and this is the only enemy accum map ever seeded.
+            // under #436's uniform granter rule. This loop seeds the DEFAULT_ENEMY_TARGET map
+            // only; `registerAbilityStatuses` seeds the per-victim enemy accum maps separately.
             contributions: [{ granterId: 'attacker', rate: b.stacks, trigger: b.stackTrigger! }],
         });
     }

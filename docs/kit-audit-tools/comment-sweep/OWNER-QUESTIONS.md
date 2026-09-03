@@ -116,8 +116,6 @@ And `triggers.ts`'s own heal/shield SCOPE NOTE says the opposite about the same 
 "Adaptive Plating's shield off each hit's damage taken … every hit legitimately contributes its
 own share."
 
-**The question:** confirm that a damage-taken reactive with NO text-stated cap (e.g. Bloodthirst,
-which carries `procChance` but no `oncePerRound`) is *meant* to fire per hit rather than per
-attack. If yes — which is what the incoming-proc-granularity rule implies — then nothing needs
-fixing and both comments simply need correcting, with the `buildEquipmentAbilities.ts` one as a
-small follow-up outside this PR.
+**Follow-up (outside this PR's file scope):** `buildEquipmentAbilities.ts:836-838` still carries
+the identical false premise as Adaptive Plating's written justification. Correct it to say the cap
+comes from the implant's own text, not from an imagined N-times over-fire.

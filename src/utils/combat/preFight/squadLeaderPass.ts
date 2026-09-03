@@ -1,5 +1,5 @@
 /**
- * Squad-leader pre-fight pass (sub-project F, PR F1).
+ * Squad-leader pre-fight pass.
  *
  * Resolves each side's `SquadLeaderSelection` against the SQUAD_LEADERS data and folds
  * the leader's active effects into that side's PreFightUnits. Game rules (binding):
