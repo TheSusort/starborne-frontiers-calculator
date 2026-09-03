@@ -78,9 +78,16 @@ describe('statusRich `buff-expired` placement asymmetry is seed noise', () => {
         ['Sefuba', 3, 126],
         ['Amartya', 14, 933],
     ])(
-        '%s: focus fires at +%i, and the ENEMY placement fires at +%i — not a path gap',
+        '%s: focus and team fire at +%i, and the ENEMY placement fires at +%i — not a path gap',
         (name, focusOffset, enemyOffset) => {
             expect(emitsBuffExpired(name, 'focus', focusOffset)).toBe(true);
+            // TEAM is asserted alongside focus, not left to the docstring. The sweep filed TWO
+            // rows per ship — `focus→enemy` AND `team→enemy` — so a triage that only exercised
+            // focus would refute half the finding and take the other half on trust. It also
+            // checks this file's own claim that focus and team fire on byte-identical seed sets,
+            // which is what identifies them as two placements differing only by player-array
+            // index rather than two genuinely different paths.
+            expect(emitsBuffExpired(name, 'team', focusOffset)).toBe(true);
             // The finding's own claim, reproduced: at the seed the sweep looked at, `enemy` is
             // silent. Without this the test below could pass for a ship that simply always emits.
             expect(emitsBuffExpired(name, 'enemy', focusOffset)).toBe(false);
