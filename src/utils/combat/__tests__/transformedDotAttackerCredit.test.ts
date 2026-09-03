@@ -262,6 +262,9 @@ describe('team symmetry: an enemy attacker is credited for the ally hit its vict
         );
 
         expect(dealt(result, 'aggressor', 'ally')).toBeGreaterThan(0);
+        // And NOT to the ally itself. `simulateDPS` sums the team-damage series over the
+        // player-side ids' `perTargetDealt`, so a self-credit here read as team output the squad
+        // never produced — measured at 20,000 of phantom team damage for this fixture.
         expect(dealt(result, 'ally', 'ally')).toBe(0);
         // An enemy-dealt DoT on a player victim is NOT the focus's outgoing DPS.
         expect(result.rawTotals.generic).toBe(0);
