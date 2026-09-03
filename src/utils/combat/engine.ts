@@ -1222,7 +1222,11 @@ export function tickDoTs(args: {
          *  applier is not the actor that dealt the damage (a `convertHitToSelfDot` entry). Callers
          *  book display numbers under `dealtCreditId ?? sourceId` and mechanics under `sourceId`.
          *  Absent for every corrosion/inferno tick and every applied generic one. */
-        dealtCreditId?: string
+        dealtCreditId?: string,
+        /** The entry's `convertedFromHit`: this tick re-books a direct hit the victim converted,
+         *  so it is NOBODY's damage dealt and must proc no damage-dealt leech. Read that field's
+         *  doc for the ruling. Absent/false on every applied DoT. */
+        convertedFromHit?: boolean
     ) => void;
     /** Vortex Veil: % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0. */
@@ -1312,6 +1316,7 @@ export function tickDoTs(args: {
         d: number;
         pre: number;
         dealtCreditId?: string;
+        convertedFromHit?: boolean;
     }> = [];
     for (const e of args.genericDoTEntries) {
         const d = (e.perTickAmount ?? 0) * e.stacks;
@@ -1325,6 +1330,7 @@ export function tickDoTs(args: {
             d,
             pre,
             ...(e.dealtCreditId ? { dealtCreditId: e.dealtCreditId } : {}),
+            ...(e.convertedFromHit ? { convertedFromHit: true } : {}),
         });
         genericSum += d;
         genericStacks += e.stacks;
@@ -1332,8 +1338,8 @@ export function tickDoTs(args: {
     if (genericSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
         const factor = 1 - reductionPct / 100;
-        for (const { sourceId, d, pre, dealtCreditId } of genericCredits)
-            args.credit(sourceId, 'generic', d * factor, pre, dealtCreditId);
+        for (const { sourceId, d, pre, dealtCreditId, convertedFromHit } of genericCredits)
+            args.credit(sourceId, 'generic', d * factor, pre, dealtCreditId, convertedFromHit);
         // Generic DoTs are untiered (absolute per-tick) → single tier-0 group.
         args.emitTicked('generic', genericSum * factor, genericStacks, 0);
     }
@@ -1954,6 +1960,8 @@ interface DamageAccountingSink {
  * `turns` vs the status's fixed spread), and the accounting MUST NOT diverge between them:
  *  - the DoT is credited to the victim itself (`sourceId: victim.id`), so the existing generic-DoT
  *    tick sites pick it up with no extra wiring, and its damage is never attributed to the attacker;
+ *  - `convertedFromHit: true` marks it as NOBODY's damage dealt, so its ticks pay no damage-dealt
+ *    leech to the converter either — read that field's doc for the ruling;
  *  - reversing the `.incoming` the funnel already recorded is what makes the battle sim's HP
  *    derivation (incoming − shield − barrier) net to zero real HP loss for this hit — the damage
  *    instead lands over time, each tick recording its own `.incoming`;
@@ -2029,6 +2037,11 @@ function convertHitToSelfDot(
         // `dealtCreditId` carries the DISPLAY axis — read `ActiveDoTStack.dealtCreditId`'s doc.
         sourceId: victim.id,
         ...(attackerId ? { dealtCreditId: attackerId } : {}),
+        // Owner ruling 2026-09-03: a converted tick is NOBODY's damage dealt, so it buys the
+        // CONVERTER no leech either — read `ActiveDoTStack.convertedFromHit`'s doc. Set here
+        // rather than inferred from `sourceId === victim.id` or from `dealtCreditId`, neither of
+        // which identifies a conversion on its own.
+        convertedFromHit: true,
         perTickAmount: damage / rounds,
         // #358 ADDENDUM 3 (C4): this slice's raw contribution was ALREADY booked, at full size, by
         // the funnel's `addIncomingRaw` a few lines above the call site — see the block comment.
@@ -10676,7 +10689,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                             }),
                         // Sum the ticked damage across all appliers; route it as INCOMING to the tank
                         // (NOT into a player damage row). expireStacks inside tickDoTs ages the entries.
-                        credit: (sourceId, dotType, damage, preMitigation) => {
+                        credit: (
+                            sourceId,
+                            dotType,
+                            damage,
+                            preMitigation,
+                            _dealtCreditId,
+                            convertedFromHit
+                        ) => {
                             tankDotDamage += damage;
                             tankDotDamagePreMit += preMitigation;
                             // The applier is threaded through, so its standing damage-dealt leech
@@ -10684,12 +10704,20 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // sibling per-victim branch below uses. `dotType` IS a LeechChannel
                             // subset, so it passes straight through.
                             //
+                            // EXCEPT on a converted entry: a hit the heal target transformed into
+                            // a self-DoT is nobody's damage dealt, so it pays no damage-dealt
+                            // leech to the converter (which is this entry's `sourceId`) — read
+                            // `ActiveDoTStack.convertedFromHit`'s doc for the ruling. The sibling
+                            // per-victim branch below carries the same skip.
+                            //
                             // The aggregate `tankDotDamage` above is still what
                             // `applyIncomingToTarget` books; this proc writes HEAL buckets and
                             // pools only and never touches a damage number, so no DoT figure
                             // moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so the
                             // owner's heal-crit gate draws once per entry — matching instance 1.
-                            procStandingLeechesPerVictim(sourceId, damage, dotType);
+                            if (!convertedFromHit) {
+                                procStandingLeechesPerVictim(sourceId, damage, dotType);
+                            }
                         },
                         // Vortex Veil: reduce the carrier's incoming DoT ticks when the tank
                         // equips it. The condition 'dot-inferno-corrosion' gates on dotType being
@@ -10796,7 +10824,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     stacks,
                                     tier,
                                 }),
-                            credit: (sourceId, dotType, damage, preMitigation, dealtCreditId) => {
+                            credit: (
+                                sourceId,
+                                dotType,
+                                damage,
+                                preMitigation,
+                                dealtCreditId,
+                                convertedFromHit
+                            ) => {
                                 total += damage;
                                 totalPreMit += preMitigation;
                                 // DISPLAY axis. `dealtCreditId` is set only on a
@@ -10842,8 +10877,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // MECHANICS axis — deliberately `sourceId`, never `creditedTo`:
                                 // a hit the victim converted into a DoT is not the attacker's
                                 // "damage dealt", so it buys the attacker no leech however the
-                                // number is displayed.
-                                procStandingLeechesPerVictim(sourceId, damage, dotType);
+                                // number is displayed. And by the same ruling it buys the
+                                // CONVERTER — which is that `sourceId` — nothing either, so a
+                                // converted entry procs no damage-dealt leech at all. Read
+                                // `ActiveDoTStack.convertedFromHit`'s doc; the sibling
+                                // heal-target branch above carries the same skip.
+                                if (!convertedFromHit) {
+                                    procStandingLeechesPerVictim(sourceId, damage, dotType);
+                                }
                             },
                             // Vortex Veil: reduce this carrier's incoming DoT ticks.
                             incomingDotReductionPct: (dotType) =>

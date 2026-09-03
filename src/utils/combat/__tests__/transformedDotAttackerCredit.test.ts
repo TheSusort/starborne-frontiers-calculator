@@ -3,7 +3,7 @@
  *
  * Voron/Orel's `transform-incoming-to-dot` and Oleander's name-keyed `Hit Mitigation` both replace
  * an incoming direct hit with a generic self-DoT via `convertHitToSelfDot`, which stamps
- * `sourceId: victim.id`. That id is the MECHANICS axis — what leech/proc basis reads — and it must
+ * `sourceId: victim.id`. That id is the MECHANICS axis — what proc basis reads — and it must
  * stay on the victim, because a DoT transform is not the attacker's "damage dealt". But the DISPLAY
  * axis (`perTargetDealt`, `perActorDot` → `RoundData.genericDamage` → `rawTotals.generic`) followed
  * the same id, so the attacker's damage against a transforming enemy was credited to the enemy
@@ -28,6 +28,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
+import { createEventBus } from '../events';
 import { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -208,8 +209,9 @@ describe('the MECHANICS axis: a transformed hit pays the attacker no leech, by e
         //
         // The DISPLAY row is 20,000 and the leech is 0, which is the whole point of the split:
         //  • the TICKS bought nothing because `procStandingLeechesPerVictim` reads `sourceId`,
-        //    which `convertHitToSelfDot` stamped with the victim. Were the ticks on the mechanics
-        //    axis too, this run would pay 20,000 × 20% = 4,000.
+        //    which `convertHitToSelfDot` stamped with the victim — so they could never route back
+        //    to the attacker. (They buy the VICTIM nothing either; the block at the end of this
+        //    file owns that half.)
         //  • the FIRING HIT bought nothing because the leech's basis is now the funnel's recorded
         //    intake, and a transform nets itself out of that. It used to be the pre-funnel hit, so
         //    this run paid the full 6,000 for damage that never landed — the same figure `plain`
@@ -283,5 +285,142 @@ describe('team symmetry: an enemy attacker is credited for the ally hit its vict
         expect(dealt(result, 'ally', 'ally')).toBe(0);
         // An enemy-dealt DoT on a player victim is NOT the focus's outgoing DPS.
         expect(result.rawTotals.generic).toBe(0);
+    });
+});
+
+// ── A converted tick is NOBODY's damage dealt (owner ruling 2026-09-03) ───────
+
+/**
+ * The ruling: a hit converted into a self-DoT pays a "% of damage dealt" leech to NO ONE — not to
+ * the ship that threw it (the block above pins that half), and not to the ship that converted it.
+ *
+ * The converting ship is the DoT entry's `sourceId`, so a standing damage-dealt leech on that ship
+ * was paying out on every tick of damage it was TAKING. In-fight: Oleander grants Hit Mitigation to
+ * the team, a Magnolia-shape ally converts a 5,000 hit, and for the next three rounds it repairs
+ * 20% of each 1,667 tick — healing off its own incoming damage.
+ *
+ * Both DoT-tick branches have to move together, so there is one case per branch:
+ *  • the converter is NOT the heal target -> the per-victim branch;
+ *  • the converter IS the heal target (the healing-mode tank, and the DPS focus, which always
+ *    matches `healTarget`) -> the heal-target branch.
+ *
+ * NON-VACUITY: in both cases the converter also throws its own direct attack every round, so its
+ * standing leech is demonstrably live and the post-fix figure is that control's payout EXACTLY —
+ * not a zero that would also be produced by a leech that never registered.
+ */
+const CONVERTER_ATTACK = 1000;
+const CONVERTER_LEECH_PCT = 20;
+/** One direct hit's payout, ×ROUNDS — the live-instrument control both cases assert against. */
+const CONTROL_LEECH = (CONVERTER_ATTACK * CONVERTER_LEECH_PCT * ROUNDS) / 100;
+/** What the ticks would pay if the converter's leech read them: 20% of the 12 ticks it absorbs. */
+const TICK_LEECH = (TICK * 12 * CONVERTER_LEECH_PCT) / 100;
+
+/** Every `reactive-heal-performed` amount a standing leech paid `casterId`, in resolution order.
+ *  A leech is not a cast, so it emits the REACTIVE event — subscribing to `heal-performed` would
+ *  observe an empty array and every assertion below would pass vacuously. */
+const leechHeals = (input: CombatEngineInput, casterId: string): number[] => {
+    const out: number[] = [];
+    const bus = createEventBus();
+    bus.on('reactive-heal-performed', (e) => {
+        if (e.casterId === casterId) out.push(e.amount);
+    });
+    runCombat({ ...input, bus });
+    return out;
+};
+
+const sum = (xs: number[]): number => xs.reduce((a, b) => a + b, 0);
+
+/** 'voron' transforms, carries the standing leech, and also throws its own hit at the focus. */
+const convertingEnemy = (): EnemyAttacker => ({
+    id: 'voron',
+    stats: { attack: CONVERTER_ATTACK, crit: 0, critDamage: 0, defence: 0, hp: HP, speed: 1000 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            transformPassive,
+            leechPassive(CONVERTER_LEECH_PCT),
+            { slot: 'active', abilities: [basicAttack()] },
+        ],
+    },
+});
+
+/** The player-side twin: a walked ally that transforms, leeches, and attacks. */
+const convertingAlly = (): TeamActor => ({
+    id: 'ally',
+    speed: 500,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position: 'M2',
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    walk: {
+        shipSkills: {
+            slots: [
+                transformPassive,
+                leechPassive(CONVERTER_LEECH_PCT),
+                { slot: 'active', abilities: [basicAttack()] },
+            ],
+        },
+        stats: {
+            attack: CONVERTER_ATTACK,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp: HP,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+describe('a converted DoT tick pays the CONVERTING ship no damage-dealt leech', () => {
+    it('per-victim branch: an enemy that converts the focus’s hit leeches only off its own attacks', () => {
+        idc = 0;
+        const heals = leechHeals(
+            PLAYER_ATTACKS({
+                enemyAttackers: [convertingEnemy()],
+                mode: 'healing',
+                // NOT the converter, so its ticks take the per-victim branch.
+                healTargetId: 'attacker',
+            }),
+            'voron'
+        );
+
+        // CONTROL: the leech is live — voron's own CONVERTER_ATTACK hit pays every round.
+        expect(heals.length).toBeGreaterThanOrEqual(ROUNDS);
+        // And that is ALL it pays. Pre-fix this read CONTROL_LEECH + TICK_LEECH.
+        expect(sum(heals)).toBeCloseTo(CONTROL_LEECH, 6);
+        expect(TICK_LEECH).toBeGreaterThan(0);
+    });
+
+    it('heal-target branch: an ally that converts an enemy hit leeches only off its own attacks', () => {
+        idc = 0;
+        const heals = leechHeals(
+            PLAYER_ATTACKS({
+                attack: 0,
+                enemyAttackers: [offensiveEnemy()],
+                teamActors: [convertingAlly()],
+                position: 'M4',
+                mode: 'healing',
+                // The converter IS the heal target, so its ticks take the heal-target branch.
+                healTargetId: 'ally',
+            }),
+            'ally'
+        );
+
+        expect(heals.length).toBeGreaterThanOrEqual(ROUNDS);
+        expect(sum(heals)).toBeCloseTo(CONTROL_LEECH, 6);
     });
 });

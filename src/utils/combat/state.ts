@@ -88,15 +88,34 @@ export interface ActiveDoTStack {
     perTickPreMitigation?: number;
     /**
      * DISPLAY attribution, when it differs from `sourceId`. `sourceId` is the MECHANICS axis —
-     * whose leech/proc basis the tick feeds — and for a `convertHitToSelfDot` entry it is the
-     * VICTIM, because a hit the victim converted is not the attacker's "damage dealt". The
-     * attacker still dealt the damage that became this DoT, so the per-victim credit channel
-     * (`perTargetDealt`) and the focus's own generic channel book under this id instead.
+     * whose proc basis the tick feeds — and for a `convertHitToSelfDot` entry it is the VICTIM,
+     * because a hit the victim converted is not the attacker's "damage dealt". The attacker still
+     * dealt the damage that became this DoT, so the per-victim credit channel (`perTargetDealt`)
+     * and the focus's own generic channel book under this id instead.
+     *
+     * Neither id buys a damage-DEALT leech on such an entry — see `convertedFromHit` below.
      *
      * Absent on every DoT whose applier and dealer are the same actor (corrosion, inferno, any
      * applied generic), where every reader falls back to `sourceId`.
      */
     dealtCreditId?: string;
+    /**
+     * This entry is a direct hit the VICTIM converted into a self-DoT (`convertHitToSelfDot`:
+     * Voron/Orel's `transform-incoming-to-dot`, Oleander's `Hit Mitigation`), not a DoT anybody
+     * applied.
+     *
+     * Owner ruling 2026-09-03: a converted tick is NOBODY's damage dealt — not the converting
+     * ship's and not the ship that threw the hit. So a tick carrying this flag procs no
+     * damage-DEALT leech at all, on either DoT-tick branch. Without it the converting ship, which
+     * is this entry's `sourceId`, healed off damage it was TAKING.
+     *
+     * Distinct from `dealtCreditId`, which is absent whenever the conversion had no single
+     * attacker (an aggregate intake) and so cannot stand in for this flag.
+     *
+     * Absent on every applied DoT (corrosion, inferno, any applied generic), where the tick is its
+     * applier's damage dealt in the ordinary way.
+     */
+    convertedFromHit?: boolean;
     /** Named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
     family?: string;
     /** Survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */
