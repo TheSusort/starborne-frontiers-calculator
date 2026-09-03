@@ -327,6 +327,12 @@ describe('a stolen stack really redirects: the thief soaks for its own allies (r
         const plain = runCombat(build(false));
         const withSteal = runCombat(build(true));
 
+        // ORDER IS PART OF WHAT THIS ASSERTS, and it is not assumed: the thief can only have
+        // soaked anything if the steal resolved BEFORE the aggressor's hit. A run where the
+        // aggressor (speed 1, the slowest actor on the board) went first would leave the thief at
+        // 0 incoming and fail here. So this assertion IS the turn-order proof, not a claim resting
+        // on one.
+        //
         // The thief now appears in `protectorsFor` despite carrying no Protection grant of its own.
         expect(incomingOf(withSteal, 'attacker')).toBeGreaterThan(0);
         // And the ally's own intake fell by exactly what moved — a redirect reassigns damage, it
@@ -416,5 +422,120 @@ describe('a top-up steal takes only the deficit and the source keeps the rest (r
 
         expect(stacks.attacker).toBe(1);
         expect(stacks.holder).toBe(10);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// Tithonus's fan-out: a stolen STACK is DUPLICATED to every recipient, not split or conserved.
+//
+// Owner ruled 2026-09-03, asked with this exact example: Tithonus steals from a Meatshield holding
+// 3 and grants the stolen buff "to self and all adjacent allies" — Meatshield loses ONE stack and
+// Tithonus's side gains ONE EACH. So Protection stacks are deliberately NOT conserved through this
+// clause; the ruling is that it behaves exactly like the timed-buff fan-out already does (one entry
+// becomes N copies), and the fact that a stack is a countable resource does not change it.
+//
+// This branch had NO test before — the fixtures above never combine a stack steal with
+// `grantAdjacentAllies`, so the arm was unobserved and either answer would have gone green.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('a stolen Protection stack is DUPLICATED to every recipient (owner ruling 2026-09-03)', () => {
+    /** Focus at M4 with an ally at M3 — the adjacency pair `buffStealCastPath.test.ts` uses. */
+    const adjacentAlly = (): TeamActorEngineInput => teamActor('ally', 'M3');
+
+    it('the source loses ONE stack while the caster AND its adjacent ally each gain one', () => {
+        const { stacks } = runAndReadStacks(
+            {
+                ...THIEF_BASE(
+                    [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                ab({
+                                    type: 'buff-steal',
+                                    target: 'enemy',
+                                    config: {
+                                        type: 'buff-steal',
+                                        count: 1,
+                                        grantAdjacentAllies: true,
+                                    },
+                                }),
+                            ],
+                        },
+                    ],
+                    [auraEnemy(3)]
+                ),
+                attack: 0,
+                position: 'M4',
+                teamActors: [adjacentAlly()],
+            },
+            ['holder', 'attacker', 'ally']
+        );
+
+        // ONE leaves the source...
+        expect(stacks.holder).toBe(2);
+        // ...and TWO arrive, one per recipient. That asymmetry is the ruling, not a bug: assert it
+        // explicitly so a future "fix" that conserves stacks has to argue with the owner's answer
+        // rather than with a silent fixture.
+        expect(stacks.attacker).toBe(1);
+        expect(stacks.ally).toBe(1);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// TEAM SYMMETRY for the top-up direction. `firstEnemyWithBuffId` closes over the side-relative
+// `tb.opposingRoster`, so it SHOULD be symmetric for free — but "symmetric by construction" is the
+// same reasoning that produced a false reach claim one PR ago, so it is measured here instead.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('team symmetry: an ENEMY caster tops itself up off a PLAYER holder', () => {
+    it('the enemy reaches its threshold and the player ally loses exactly the deficit', () => {
+        const { stacks } = runAndReadStacks(
+            {
+                ...THIEF_BASE(
+                    // The focus itself is inert — it is only here because the engine always mints
+                    // playerTeam[0]; the PLAYER holder is the team actor below.
+                    [{ slot: 'active', abilities: [] }],
+                    [
+                        {
+                            id: 'enemy-topper',
+                            stats: {
+                                attack: 0,
+                                crit: 0,
+                                critDamage: 0,
+                                defence: 0,
+                                hp: HUGE_HP,
+                                speed: 300,
+                            },
+                            chargeCount: 0,
+                            startCharged: false,
+                            position: 'M4',
+                            affinity: 'antimatter',
+                            target: parsedTarget('front'),
+                            pattern: basePattern(),
+                            shipSkills: {
+                                slots: [
+                                    { slot: 'passive', abilities: [protectionAura(1)] },
+                                    {
+                                        slot: 'active',
+                                        abilities: [topUpSteal('Protection', 3)],
+                                    },
+                                ],
+                            },
+                        },
+                    ]
+                ),
+                attack: 0,
+                teamActors: [
+                    teamActor('player-holder', 'M4', [
+                        { slot: 'passive', abilities: [protectionAura(10)] },
+                    ]),
+                ],
+                healTargetId: 'player-holder',
+            },
+            ['enemy-topper', 'player-holder']
+        );
+
+        expect(stacks['enemy-topper']).toBe(3);
+        expect(stacks['player-holder']).toBe(8);
     });
 });

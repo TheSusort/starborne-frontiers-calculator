@@ -1671,9 +1671,16 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 if (!STACK_STEALABLE_STATUSES.has(buffName)) continue;
                 let available = Math.max(0, Math.floor(held));
                 while (available > 0 && stolenStacks.length < stackBudget) {
-                    // ONE stack leaves the source per stack stolen, but EVERY recipient gains one —
-                    // the same fan-out rule the timed transfer above uses (Tithonus grants the
-                    // stolen buff to itself AND its adjacent allies; it is not a split).
+                    // ONE stack leaves the source per stack stolen, but EVERY recipient gains one.
+                    //
+                    // ⚠️ STACKS ARE THEREFORE NOT CONSERVED through a `grantAdjacentAllies` steal,
+                    // and that is a RULING, not a leftover. Asked with the concrete case (Tithonus
+                    // steals from a Meatshield holding 3 and grants "to self and all adjacent
+                    // allies", 2 allies present) the owner ruled 2026-09-03: the source loses ONE
+                    // and Tithonus's side gains ONE EACH. It duplicates exactly as the timed
+                    // transfer above does, and a stack being a countable resource does not change
+                    // it. Do not "fix" this into a conserving transfer — pinned by
+                    // `protectionSteal.integration.test.ts`'s fan-out case.
                     adjustSelfBuffStacks(sourceId, buffName, -1);
                     for (const recipientId of recipientIds) {
                         adjustSelfBuffStacks(recipientId, buffName, +1);
