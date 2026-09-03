@@ -58,7 +58,9 @@ export function emptyActorHealing(): ActorHealing {
 /** One applied DoT application (an "entry"): N stacks of one tier, ticking down.
  *  `sourceId` is the applier (per-actor attribution): inferno ticks resolve the
  *  applier's current-round effective attack/dotMult/affinityMult, and the damage attributes
- *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage). */
+ *  to that actor's per-round contributions (focus actor → row fields, others → teamDamage) —
+ *  unless the entry carries `dealtCreditId`, which splits the display attribution off the
+ *  applier. See its doc below. */
 export interface ActiveDoTStack {
     stacks: number;
     tier: number;
@@ -84,6 +86,17 @@ export interface ActiveDoTStack {
      * tick identically on both axes, which is what `?? perTickAmount` downstream means.
      */
     perTickPreMitigation?: number;
+    /**
+     * DISPLAY attribution, when it differs from `sourceId`. `sourceId` is the MECHANICS axis —
+     * whose leech/proc basis the tick feeds — and for a `convertHitToSelfDot` entry it is the
+     * VICTIM, because a hit the victim converted is not the attacker's "damage dealt". The
+     * attacker still dealt the damage that became this DoT, so the per-victim credit channel
+     * (`perTargetDealt`) and the focus's own generic channel book under this id instead.
+     *
+     * Absent on every DoT whose applier and dealer are the same actor (corrosion, inferno, any
+     * applied generic), where every reader falls back to `sourceId`.
+     */
+    dealtCreditId?: string;
     /** Named DoT family for counting/display (e.g. 'Acidic Decay'). Undefined = plain type. */
     family?: string;
     /** Survives the Cheat-Death DoT-array wipe and any DoT cleanse (Acidic Decay). */

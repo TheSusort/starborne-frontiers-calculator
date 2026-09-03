@@ -207,10 +207,19 @@ export interface RoundData {
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;
-    /** SP-E: absolute-per-tick generic DoT damage this round (Voron/Orel transform, Acidic Decay
-     *  family). Optional and set ONLY when nonzero — generic DoTs are never auto-applied from
-     *  skill text in this task, so every existing round/golden stays byte-identical (field absent,
-     *  legacy RoundData shape preserved). Mirrors corrosionDamage/infernoDamage once populated. */
+    /**
+     * Absolute-per-tick generic DoT damage this round: a direct hit the VICTIM converted into a
+     * DoT (`convertHitToSelfDot` — Voron/Orel's transform, Oleander's Hit Mitigation), credited
+     * to whoever threw the converted hit.
+     *
+     * DIAGNOSTIC, not a display row. Unlike corrosionDamage/infernoDamage this damage is already
+     * INSIDE `directDamage` — the owner's ruling is that a converted hit stays part of the normal
+     * Direct total rather than earning a fifth tooltip row. So a consumer summing the rows must
+     * NOT add this one, and a consumer asking "how much of Direct arrived as a converted hit?"
+     * reads it.
+     *
+     * Set ONLY when nonzero, so a round in which nothing was converted keeps the legacy shape.
+     */
     genericDamage?: number;
     /** Detonation damage this round: Bomb detonations + DoT detonations (game-categorised together). */
     detonationDamage: number;
@@ -784,8 +793,10 @@ export function simulateDPS(input: DPSSimulationInput): DPSSimulationResult {
         runningFocusDamage += perRoundFocusDamage[i];
         r.cumulativeDamage = Math.round(runningFocusDamage);
 
-        const nonDirect =
-            r.corrosionDamage + r.infernoDamage + (r.genericDamage ?? 0) + r.detonationDamage;
+        // `genericDamage` is deliberately NOT subtracted: it has no tooltip row of its own, so
+        // carving it out here would delete it from the display entirely. It is FOLDED INTO
+        // Direct — read `RoundData.genericDamage`'s doc for the rule.
+        const nonDirect = r.corrosionDamage + r.infernoDamage + r.detonationDamage;
         // Clamped: the subtrahends come from independently-rounded engine folds, and the
         // channel's known exclusions can make the remainder go slightly negative rather than
         // meaning "the focus dealt negative direct damage".
