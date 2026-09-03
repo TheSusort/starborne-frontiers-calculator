@@ -5046,12 +5046,17 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
     };
 
-    // PER-VICTIM damage-TAKEN leech proc for the POSITIONAL enemy branch
-    // (enemy→player). THIS IS THE ONLY TAKEN-LEECH PROC (#374). It runs once per FOOTPRINT
-    // VICTIM (wired via drivePositionalApply's
-    // `onVictimResolved` at the enemy site), procing THAT victim's OWN taken-leeches
-    // (takenLeechesByOwner.get(victim.id)) off the damage it actually took, applying to the
-    // victim's OWN pool.
+    // PER-VICTIM damage-TAKEN leech proc for the POSITIONAL apply path, on BOTH SIDES.
+    // THIS IS THE ONLY TAKEN-LEECH PROC (#374). It runs once per FOOTPRINT VICTIM, procing THAT
+    // victim's OWN taken-leeches (takenLeechesByOwner.get(victim.id)) off the damage it actually
+    // took, applying to the victim's OWN pool.
+    //
+    // ⚠️ NOT "the enemy branch (enemy→player)", which is what this block used to say. Its ONE call
+    // site is `procLeechesForVictim`, and all three attack sites (focus / walked team / enemy)
+    // route through that seam — so a PLAYER attacking an enemy procs that ENEMY victim's taken
+    // leech, exactly as the enemy site procs a player victim's. The old wording described the
+    // pre-#374 state, whose whole defect was that each side ran only one of its two leeches;
+    // `leechFunnelBasis.integration.test.ts`'s team-symmetry block measures the enemy-victim arm.
     //
     // SEMANTICS, per victim:
     //   - Barrier carve-out: skip entirely if the victim was `barriered` (its hit was fully

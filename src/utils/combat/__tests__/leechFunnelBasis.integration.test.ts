@@ -372,7 +372,14 @@ describe('a standing leech pays off the damage the funnel RECORDED (locked rule,
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // TAKEN direction — an enemy attacks a player ally, and THAT ally's own taken leech pays out.
-// The taken proc is wired only at the enemy positional site, so the victim must be a player.
+//
+// A PLAYER victim is not a requirement, only a convenience: `procLeechesForVictim` fires BOTH
+// directions and all three attack sites route through it, so an ENEMY victim's taken leech procs
+// too. (`procTakenLeechesPerVictim`'s own docblock still opens "for the POSITIONAL enemy branch
+// (enemy→player)" — that predates the seam, and #374's whole point was that each side was running
+// only one of its two leeches.) The enemy-victim row is asserted at the end of this block; the
+// enemy-attacks-player shape is used for the arithmetic because the focus ship can carry the
+// Protection accumulator, which a team actor cannot.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 /** A walked player team actor: a pure victim stat block carrying `passive` slots. */
@@ -569,8 +576,9 @@ describe('a damage-TAKEN leech counts what the victim actually took (owner rulin
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 /** Voron/Orel's STANDING transform: every incoming hit becomes a self-DoT, not just the next one.
- *  A one-shot `Hit Mitigation` cannot be used here — it is consumed by the firing hit, which runs
- *  first, and would leave the passive-slot instance landing normally. */
+ *  A one-shot `Hit Mitigation` cannot be used here — MEASURED at the end of this file: it is spent
+ *  on the firing hit and leaves the passive-slot instance landing normally, so a one-shot fixture
+ *  observes the instance's basis not at all. */
 const transformingAnchor = (): EnemyAttacker => ({
     id: 'anchor',
     stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 1 },
@@ -670,5 +678,77 @@ describe('the passive-slot damage instance leeches off the funnel too', () => {
         expect(
             leechHeals(passiveInstanceInput({ withInstance: true, transform: true }), 'attacker')
         ).toHaveLength(0);
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// Team symmetry for the TAKEN direction, and the ordering fact the block above relies on.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe("team symmetry: an ENEMY victim's taken leech reads the same funnel figure", () => {
+    it('fires at all — the taken proc is not enemy-site-only', () => {
+        // Disproves the claim `procTakenLeechesPerVictim`'s docblock still makes. The player focus
+        // attacks 'anchor', which carries the taken leech: a PLAYER→ENEMY site, and it procs.
+        const heals = leechHeals(
+            {
+                ...dealtInput(1),
+                enemyAttackers: [
+                    passiveEnemyAt('anchor', 'M4', [takenLeechHealPassive()]),
+                    passiveEnemyAt('covered', 'M3'),
+                ],
+            },
+            'anchor'
+        );
+
+        expect(heals).toHaveLength(1);
+        expect(heals[0]).toBeCloseTo((ATTACK * LEECH_PCT) / 100, 6);
+    });
+
+    it('and drops the Protection-redirected slice, exactly as a player victim does', () => {
+        // 'covered' holds Protection, so part of every hit on 'anchor' moves to it. Same 0.7x as
+        // the player-victim row — the ruling is a game rule, not a side-specific one.
+        const alone = leechHeals(
+            {
+                ...dealtInput(1),
+                enemyAttackers: [
+                    passiveEnemyAt('anchor', 'M4', [takenLeechHealPassive()]),
+                    passiveEnemyAt('covered', 'M3'),
+                ],
+            },
+            'anchor'
+        );
+        const withProtector = leechHeals(
+            {
+                ...dealtInput(1),
+                enemyAttackers: [
+                    passiveEnemyAt('anchor', 'M4', [takenLeechHealPassive()]),
+                    passiveEnemyAt('covered', 'M3', [protectionAuraPassive(3)]),
+                ],
+            },
+            'anchor'
+        );
+
+        expect(alone).toHaveLength(1);
+        expect(withProtector).toHaveLength(1);
+        expect(withProtector[0]).toBeCloseTo(0.7 * alone[0], 4);
+    });
+});
+
+describe('MEASUREMENT: a one-shot block is spent on the firing hit, not the passive instance', () => {
+    it("leaves exactly the passive-slot instance's own proc behind", () => {
+        // This is why the passive-instance block above needs Voron's STANDING transform rather
+        // than a one-shot `Hit Mitigation`. Not reasoned from line order — measured: the single
+        // surviving proc is 20% of 60% x 5000 = 600, i.e. the INSTANCE's, with the firing hit's
+        // 1000 gone. A one-shot fixture therefore cannot observe the instance's basis at all.
+        const heals = leechHeals(
+            {
+                ...passiveInstanceInput({ withInstance: true }),
+                enemyAttackers: [mitigatingAnchor(), passiveEnemyAt('covered', 'M3')],
+            },
+            'attacker'
+        );
+
+        expect(heals).toHaveLength(1);
+        expect(heals[0]).toBeCloseTo((ATTACK * 0.6 * LEECH_PCT) / 100, 6);
     });
 });

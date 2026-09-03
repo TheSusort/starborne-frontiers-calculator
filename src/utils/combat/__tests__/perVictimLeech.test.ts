@@ -202,6 +202,11 @@ describe('E2 T3 — per-victim standing leech on the positional path', () => {
  * Task-1 closures. The Barrier carve-out and requiresHpDamage gate are evaluated PER VICTIM
  * (they mirrored the non-positional block, which #374 deleted).
  *
+ * The ENEMY site is this file's subject, not the proc's only reach: the taken direction now runs
+ * through `procLeechesForVictim`, which all three attack sites share, so an ENEMY victim's taken
+ * leech procs under a PLAYER's attack too. Measured in
+ * `leechFunnelBasis.integration.test.ts`'s team-symmetry block.
+ *
  * Harness: a positioned, OFFENSIVE enemy at M1 firing `front` with a Line-Range-1 AoE. The
  * front-most player (focus 'attacker' at M4) is the origin victim (full damage); the M3 team
  * player ('player-team') is the covered victim (half damage). ONE player carries a passive
