@@ -1216,7 +1216,12 @@ export function tickDoTs(args: {
         sourceId: string,
         dotType: TickableDoTType,
         damage: number,
-        preMitigation: number
+        preMitigation: number,
+        /** The entry's `dealtCreditId` when it carries one: DISPLAY attribution for a tick whose
+         *  applier is not the actor that dealt the damage (a `convertHitToSelfDot` entry). Callers
+         *  book display numbers under `dealtCreditId ?? sourceId` and mechanics under `sourceId`.
+         *  Absent for every corrosion/inferno tick and every applied generic one. */
+        dealtCreditId?: string
     ) => void;
     /** Vortex Veil: % reduction applied to this carrier's DoT ticks of the given type.
      *  Absent → 0. */
@@ -1301,7 +1306,12 @@ export function tickDoTs(args: {
     // or affinity, so it ticks even before the applier's first turn this run).
     let genericSum = 0;
     let genericStacks = 0;
-    const genericCredits: Array<{ sourceId: string; d: number; pre: number }> = [];
+    const genericCredits: Array<{
+        sourceId: string;
+        d: number;
+        pre: number;
+        dealtCreditId?: string;
+    }> = [];
     for (const e of args.genericDoTEntries) {
         const d = (e.perTickAmount ?? 0) * e.stacks;
         // #358 ADDENDUM 3 (C4): a generic entry created by `convertHitToSelfDot` carries the
@@ -1309,15 +1319,20 @@ export function tickDoTs(args: {
         // other generic DoT (Acidic Decay and friends), which folds no defence and so ticks the
         // same amount on both axes.
         const pre = (e.perTickPreMitigation ?? e.perTickAmount ?? 0) * e.stacks;
-        genericCredits.push({ sourceId: e.sourceId, d, pre });
+        genericCredits.push({
+            sourceId: e.sourceId,
+            d,
+            pre,
+            ...(e.dealtCreditId ? { dealtCreditId: e.dealtCreditId } : {}),
+        });
         genericSum += d;
         genericStacks += e.stacks;
     }
     if (genericSum > 0) {
         const reductionPct = args.incomingDotReductionPct?.('generic') ?? 0;
         const factor = 1 - reductionPct / 100;
-        for (const { sourceId, d, pre } of genericCredits)
-            args.credit(sourceId, 'generic', d * factor, pre);
+        for (const { sourceId, d, pre, dealtCreditId } of genericCredits)
+            args.credit(sourceId, 'generic', d * factor, pre, dealtCreditId);
         // Generic DoTs are untiered (absolute per-tick) → single tier-0 group.
         args.emitTicked('generic', genericSum * factor, genericStacks, 0);
     }
@@ -1998,14 +2013,21 @@ function convertHitToSelfDot(
     victim: CombatActor,
     sink: DamageAccountingSink,
     damage: number,
-    rounds: number
+    rounds: number,
+    /** Who threw the hit being converted. Omitted/empty (an aggregate intake with no single
+     *  attacker) leaves `dealtCreditId` absent, and every display reader falls back to
+     *  `sourceId`. */
+    attackerId?: string
 ): number {
     if (rounds <= 0) return 0;
     victim.genericDoTEntries.push({
         stacks: 1,
         tier: 0,
         remainingRounds: rounds,
+        // The MECHANICS axis stays on the victim: a converted hit buys the attacker no leech.
+        // `dealtCreditId` carries the DISPLAY axis — read `ActiveDoTStack.dealtCreditId`'s doc.
         sourceId: victim.id,
+        ...(attackerId ? { dealtCreditId: attackerId } : {}),
         perTickAmount: damage / rounds,
         // #358 ADDENDUM 3 (C4): this slice's raw contribution was ALREADY booked, at full size, by
         // the funnel's `addIncomingRaw` a few lines above the call site — see the block comment.
@@ -2108,13 +2130,20 @@ export function runCombat(rawInput: CombatEngineInput): {
         totalConditional: number;
         /** Total non-focus player (team) damage across all rounds — adapter summary. */
         teamTotal: number;
-        /** Total generic (absolute-per-tick) DoT damage across all rounds, FOCUS-only like the
-         *  other rawTotals. Fed by `convertHitToSelfDot` — the Voron/Orel
-         *  `transform-incoming-to-dot` ability and the name-keyed Hit Mitigation one-shot — which
-         *  books the entry on the VICTIM with `sourceId: victim.id`, so this is nonzero whenever
-         *  the focus itself transforms an incoming hit. The APPLIED-debuff path never reaches it:
-         *  the skill-text parser emits no `type:'generic'` debuff. Nothing on
-         *  `DPSSimulationSummary` surfaces this field. */
+        /**
+         * Total generic (absolute-per-tick) DoT damage the FOCUS DEALT across all rounds, like the
+         * other rawTotals. Fed by `convertHitToSelfDot` — Voron/Orel's `transform-incoming-to-dot`
+         * and the name-keyed Hit Mitigation one-shot — so it is nonzero when the focus hits a
+         * victim that CONVERTS the hit, and the ticks are credited back to the focus through the
+         * entry's `dealtCreditId`. The focus transforming a hit it TOOK does not reach here: that
+         * is incoming damage, and the per-victim tick credit is gated to enemy victims.
+         *
+         * The APPLIED-debuff path never reaches it either — the skill-text parser emits no
+         * `type:'generic'` debuff.
+         *
+         * `DPSSimulationSummary` has no row of its own for this: `dpsSimulator` folds the same
+         * damage into the Direct total (see `RoundData.genericDamage`).
+         */
         generic: number;
     };
     // There is deliberately NO `enemyOutcome` (`survived` / `roundsToKill` / `finalHpPct`) on this
@@ -6143,7 +6172,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                             victim,
                             sink,
                             damage,
-                            transform.config.turns
+                            transform.config.turns,
+                            attackerId
                         );
                         // Only zero `damage` on a REAL conversion (see convertHitToSelfDot's
                         // CALLER CONTRACT). `turns` is parser-derived; `detectTransformToDot`
@@ -6235,7 +6265,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     victim,
                     sink,
                     damage,
-                    HIT_MITIGATION_DOT_ROUNDS
+                    HIT_MITIGATION_DOT_ROUNDS,
+                    cause?.killerId
                 );
                 damage = 0;
                 consumeHitMitigation(statusEngine, victim.id);
@@ -10695,25 +10726,31 @@ export function runCombat(rawInput: CombatEngineInput): {
                                     stacks,
                                     tier,
                                 }),
-                            credit: (sourceId, dotType, damage, preMitigation) => {
+                            credit: (sourceId, dotType, damage, preMitigation, dealtCreditId) => {
                                 total += damage;
                                 totalPreMit += preMitigation;
+                                // DISPLAY axis. `dealtCreditId` is set only on a
+                                // `convertHitToSelfDot` entry, where the applier is the victim
+                                // itself but the damage was dealt by whoever threw the converted
+                                // hit — read `ActiveDoTStack.dealtCreditId`'s doc. Every other
+                                // entry falls back to the applier.
+                                const creditedTo = dealtCreditId ?? sourceId;
                                 tickDealtBySource.set(
-                                    sourceId,
-                                    (tickDealtBySource.get(sourceId) ?? 0) + damage
+                                    creditedTo,
+                                    (tickDealtBySource.get(creditedTo) ?? 0) + damage
                                 );
-                                // Only PLAYER-applied DoTs ticking on an ENEMY victim are the
+                                // Only PLAYER-dealt DoTs ticking on an ENEMY victim are the
                                 // focus player's outgoing DPS → surface via perActorDot (keyed
-                                // by the DoT APPLIER; the C1 fold reads perActorDot[focus]).
-                                // Enemy-applied DoTs on a player victim are NOT the focus's DPS.
+                                // by the DEALER; the C1 fold reads perActorDot[focus]).
+                                // Enemy-dealt DoTs on a player victim are NOT the focus's DPS.
                                 if (!sideIsPlayer) {
-                                    const e = perActorDot.get(sourceId) ?? {
+                                    const e = perActorDot.get(creditedTo) ?? {
                                         corrosion: 0,
                                         inferno: 0,
                                         generic: 0,
                                     };
                                     e[dotType] += damage;
-                                    perActorDot.set(sourceId, e);
+                                    perActorDot.set(creditedTo, e);
                                 }
                                 // This DoT-tick branch procs the
                                 // APPLIER's standing damage-dealt leech too, via the same
@@ -10731,6 +10768,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 // proc touches HEAL buckets/pools only, so no damage number
                                 // moves. Cadence: `tickDoTs` calls `credit` once per ENTRY, so
                                 // the owner's heal-crit gate draws once per entry here too.
+                                //
+                                // MECHANICS axis — deliberately `sourceId`, never `creditedTo`:
+                                // a hit the victim converted into a DoT is not the attacker's
+                                // "damage dealt", so it buys the attacker no leech however the
+                                // number is displayed.
                                 procStandingLeechesPerVictim(sourceId, damage, dotType);
                             },
                             // Vortex Veil: reduce this carrier's incoming DoT ticks.
@@ -12407,7 +12449,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         const corrosionDamage = focus.corrosion + (focusDot?.corrosion ?? 0);
         const infernoDamage = focus.inferno + (focusDot?.inferno ?? 0);
         // Mirrors corrosionDamage/infernoDamage. Its only producer is `convertHitToSelfDot`
-        // (`transform-incoming-to-dot`, Hit Mitigation) — see `rawTotals.generic`'s doc.
+        // (`transform-incoming-to-dot`, Hit Mitigation), whose ticks reach the focus through the
+        // entry's `dealtCreditId` rather than its `sourceId` — see `rawTotals.generic`'s doc.
         const genericDamage = focus.generic + (focusDot?.generic ?? 0);
         const focusPositionalDetonation = perActorDetonation.get(focusActorId) ?? 0;
         const detonationDamage = focus.detonation + focusPositionalDetonation;

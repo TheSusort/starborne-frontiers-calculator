@@ -1257,8 +1257,9 @@ function applyNewDoTs(args: {
     corrosionEntries: ActiveDoTStack[];
     infernoEntries: ActiveDoTStack[];
     /** Generic (absolute per-tick) DoT entries. Nothing in `dotsConfig` produces
-     *  `type:'generic'` today — the parser never emits it — but this branch exists so a future
-     *  transform (Voron/Orel) can share this one apply entry point. */
+     *  `type:'generic'` today — the parser never emits it. The live producer of generic entries is
+     *  `convertHitToSelfDot` in the engine, which does NOT come through here: an APPLIED generic
+     *  DoT is dealt by its applier, so an entry made here needs no `dealtCreditId`. */
     genericDoTEntries: ActiveDoTStack[];
     pendingBombs: PendingBomb[];
     emitDotApplied: (dotType: DoTType, stacks: number, tier: number) => void;

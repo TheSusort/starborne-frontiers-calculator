@@ -57,12 +57,9 @@ describe('the Direct damage row on a positional run', () => {
         expect(withDot.length).toBeGreaterThan(0); // the fixture is not vacuous
 
         for (const r of rounds) {
-            const parts =
-                r.directDamage +
-                r.corrosionDamage +
-                r.infernoDamage +
-                (r.genericDamage ?? 0) +
-                r.detonationDamage;
+            // No `genericDamage` term: converted-hit damage is folded INTO `directDamage`
+            // (see its doc), so adding it here would double-count it.
+            const parts = r.directDamage + r.corrosionDamage + r.infernoDamage + r.detonationDamage;
             // Each part is rounded independently, so allow the accumulated half-unit drift only.
             expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
             expect(r.directDamage).toBeGreaterThan(0);
@@ -93,12 +90,9 @@ describe('the Direct damage row on a positional run', () => {
         expect(withDetonation.length).toBeGreaterThan(0); // the fixture is not vacuous
 
         for (const r of rounds) {
-            const parts =
-                r.directDamage +
-                r.corrosionDamage +
-                r.infernoDamage +
-                (r.genericDamage ?? 0) +
-                r.detonationDamage;
+            // No `genericDamage` term: converted-hit damage is folded INTO `directDamage`
+            // (see its doc), so adding it here would double-count it.
+            const parts = r.directDamage + r.corrosionDamage + r.infernoDamage + r.detonationDamage;
             // Each part is rounded independently, so allow the accumulated half-unit drift only.
             expect(Math.abs(parts - r.totalRoundDamage)).toBeLessThanOrEqual(2);
         }
