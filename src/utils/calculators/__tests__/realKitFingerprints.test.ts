@@ -83,7 +83,15 @@ describe('kit fingerprints', () => {
             // forward of it are front-most and absorb every attack), so it cannot satisfy the
             // incoming-damage invariant and is deliberately excluded from it. Its own guard is
             // "the previously-dark slot produced fresh tokens", asserted in `suite health`.
-            if (scenario === 'supportAnchor') continue;
+            //
+            // `statusRich` is excluded for the reason the SCENARIOS doc gives: the corpus-wide
+            // invariants are asserted over `SCENARIOS` only, and keeping a conditional arm out of
+            // that array excludes it with no exemption list to go stale. It presses the focus
+            // HARDER than `plain` (the fillers carry Attack Up and the focus carries Defense
+            // Down), so the real hazard is the focus DYING and truncating its own fingerprint —
+            // guarded directly, per-mechanic, in `kitFingerprintScenarios.test.ts` rather than
+            // folded into a corpus-wide reduce here.
+            if (scenario === 'supportAnchor' || scenario === 'statusRich') continue;
             const rows = result.rounds
                 .flatMap((r) => r.ships)
                 .filter((s) => s.actorId === FOCUS_ACTOR_ID);
@@ -308,11 +316,17 @@ describe('suite health', () => {
     /** The coverage LEDGER. Every kind listed here is produced by at least one corpus ship today;
      *  losing any one of them is a coverage regression that must be explained, not re-blessed.
      *
-     *  The five `CombatLogEntryKind`s NOT here, and why none is a tuning failure:
-     *   - `cleanse` / `purge`: need a debuff on the player side / a buff on the enemy side to
-     *     remove. The filler ships apply neither, and status seeding is the deliberately deferred
-     *     fourth scenario. 21 corpus ships cleanse and 15 purge, so this is the single biggest
-     *     remaining hole.
+     *  ⚠️ `cleanse` / `purge` / `steal` ARE NOW HERE, and the note that used to sit in this block
+     *  is gone because it came true. It read: "need a debuff on the player side / a buff on the
+     *  enemy side to remove. The filler ships apply neither, and status seeding is the deliberately
+     *  deferred fourth scenario ... the single biggest remaining hole." That scenario is now built
+     *  — `statusRich` (kitFingerprintScenarios) — and it closed all THREE at once, since they share
+     *  one cause: a clause that CONSUMES a status does nothing on a clean board. Measured before
+     *  building it: those three tokens appeared ZERO times across all 150 committed fingerprints.
+     *  Re-measured by parse, the corpus carries 4 steal / 14 purge / 19 cleanse ships, 36 distinct
+     *  (Tithonus carries both a purge and a steal) — each now runs a `statusRich` arm.
+     *
+     *  The three `CombatLogEntryKind`s STILL not here, and why none is a tuning failure:
      *   - `detonation`: `buildCombatLog` books that entry to the bomb's VICTIM, not to the actor
      *     that detonated it, so it can never appear in a focus-actor fingerprint unless the focus
      *     is itself bombed — which needs an enemy that plants bombs, i.e. non-inert filler.
@@ -328,14 +342,17 @@ describe('suite health', () => {
         'buff',
         'buff-expired',
         'charge-changed',
+        'cleanse',
         'control',
         'debuff',
         'debuff-resisted',
         'dot-applied',
         'dot-ticked',
         'heal',
+        'purge',
         'shield',
         'shield-destroyed',
+        'steal',
     ] as const;
 
     it('is non-vacuous: every ship produces tokens', () => {
