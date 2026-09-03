@@ -9,6 +9,12 @@
  * the same id, so the attacker's damage against a transforming enemy was credited to the enemy
  * damaging itself and the attacker's own number read 0.
  *
+ * The mechanics half has since been finished on the OTHER path: the firing hit's own leech used to
+ * scale off the pre-funnel hit, so a fully-transformed attack still paid out. It now reads the
+ * funnel's recorded intake and pays 0 — see `leechFunnelBasis.integration.test.ts`, which owns
+ * that rule. The leech assertion below became a strict `0` with that change, which makes it a
+ * sharper witness for THIS file's axis split than the equality it replaced.
+ *
  * `ActiveDoTStack.dealtCreditId` splits the two: the entry records who dealt the damage that became
  * the DoT, and only the display bookings read it.
  *
@@ -176,7 +182,7 @@ describe('a transformed hit credits the ATTACKER on the display axis', () => {
     });
 });
 
-describe('the MECHANICS axis does not move: a transformed hit still pays no attacker leech', () => {
+describe('the MECHANICS axis: a transformed hit pays the attacker no leech, by either route', () => {
     const withLeech = (withTransform: boolean): CombatEngineInput =>
         PLAYER_ATTACKS({
             enemyAttackers: [enemyVictim(withTransform)],
@@ -187,7 +193,7 @@ describe('the MECHANICS axis does not move: a transformed hit still pays no atta
             healTargetId: 'attacker',
         });
 
-    it('adds no leech on top of the firing hit, however the ticks are displayed', () => {
+    it('pays NOTHING off a transformed hit — neither the firing hit nor the ticks', () => {
         idc = 0;
         const transformed = runCombat(withLeech(true));
         idc = 0;
@@ -198,13 +204,22 @@ describe('the MECHANICS axis does not move: a transformed hit still pays no atta
         expect(dealt(transformed, 'attacker', 'voron')).toBeCloseTo(TICK * 12, 6);
         expect(dealt(plain, 'attacker', 'voron')).toBe(DIRECT_HIT * ROUNDS);
 
-        // And they pay the attacker the SAME leech. The transformed run's 20,000 of tick credit
-        // bought exactly nothing extra — `procStandingLeechesPerVictim` still reads `sourceId`,
-        // which stayed on the victim. Were the ticks on the mechanics axis too, this run would
-        // pay an extra 20,000 × 20% = 4,000.
-        const paid = sumHeal(transformed, 'attacker');
-        expect(paid).toBeCloseTo(sumHeal(plain, 'attacker'), 6);
-        expect(paid).toBeCloseTo(DIRECT_HIT * ROUNDS * 0.2, 6);
+        // And the transformed run pays the attacker NOTHING, on either route.
+        //
+        // The DISPLAY row is 20,000 and the leech is 0, which is the whole point of the split:
+        //  • the TICKS bought nothing because `procStandingLeechesPerVictim` reads `sourceId`,
+        //    which `convertHitToSelfDot` stamped with the victim. Were the ticks on the mechanics
+        //    axis too, this run would pay 20,000 × 20% = 4,000.
+        //  • the FIRING HIT bought nothing because the leech's basis is now the funnel's recorded
+        //    intake, and a transform nets itself out of that. It used to be the pre-funnel hit, so
+        //    this run paid the full 6,000 for damage that never landed — the same figure `plain`
+        //    pays below, which is why the old equality assertion here could not tell the two
+        //    routes apart. `leechFunnelBasis.integration.test.ts` owns that basis rule; this file
+        //    keeps the sharper witness the fix made available.
+        expect(sumHeal(transformed, 'attacker')).toBe(0);
+        // CONTROL: the same kit against a non-transforming victim pays in full, so the 0 above is
+        // the transform and not a dead leech.
+        expect(sumHeal(plain, 'attacker')).toBeCloseTo(DIRECT_HIT * ROUNDS * 0.2, 6);
     });
 });
 

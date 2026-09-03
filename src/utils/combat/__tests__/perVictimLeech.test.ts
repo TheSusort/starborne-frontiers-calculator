@@ -8,9 +8,14 @@
  * own standing leech never fired.
  *
  * E2 wires an `onVictimResolved` callback at the player→enemy positional sites that procs
- * the ACTING attacker's standing leeches off EACH footprint victim's dealt damage. Because
- * the per-victim `damage` is already role-scaled (origin full, covered half), leeching off
- * `damage` per victim yields exactly `origin dealt + 0.5×covered dealt`.
+ * the ACTING attacker's standing leeches off EACH footprint victim's dealt damage. Because the
+ * per-victim hit is already role-scaled (origin full, covered half) and the role scaling survives
+ * the funnel, the per-victim basis yields exactly `origin dealt + 0.5×covered dealt`.
+ *
+ * The basis itself is the FUNNEL's figure, not the hit as thrown — `incomingBooked +
+ * protectionRedirected`, per the locked "damage dealt" rule. This file's fixtures have no
+ * protector, no incoming block and no transform, so the two coincide here and every number below
+ * is unchanged by that. `leechFunnelBasis.integration.test.ts` is where they are pulled apart.
  *
  * Harness mirrors twoTeamBattle.test.ts / positionalDamage.integration.test.ts: positioned
  * actors, `healTargetId` to unlock the enemy roster, a passive damage-dealt heal leech on
@@ -196,6 +201,11 @@ describe('E2 T3 — per-victim standing leech on the positional path', () => {
  * `{shieldBefore, hpDamage, barriered}` outcome, applying to the victim's OWN pool via the
  * Task-1 closures. The Barrier carve-out and requiresHpDamage gate are evaluated PER VICTIM
  * (they mirrored the non-positional block, which #374 deleted).
+ *
+ * The ENEMY site is this file's subject, not the proc's only reach: the taken direction now runs
+ * through `procLeechesForVictim`, which all three attack sites share, so an ENEMY victim's taken
+ * leech procs under a PLAYER's attack too. Measured in
+ * `leechFunnelBasis.integration.test.ts`'s team-symmetry block.
  *
  * Harness: a positioned, OFFENSIVE enemy at M1 firing `front` with a Line-Range-1 AoE. The
  * front-most player (focus 'attacker' at M4) is the origin victim (full damage); the M3 team
