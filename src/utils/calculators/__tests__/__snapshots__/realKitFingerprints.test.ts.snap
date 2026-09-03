@@ -495,7 +495,6 @@ exports[`kit fingerprints > Chakara 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "buff-expired",
     "charge-changed",
     "purge:charged",
   ],
@@ -747,10 +746,10 @@ exports[`kit fingerprints > Curator 1`] = `
   "statusRich": [
     "attack:active",
     "attack:charged",
-    "buff-expired",
     "charge-changed",
     "debuff",
     "debuff-resisted",
+    "purge",
   ],
   "wounded": [
     "attack:active",
@@ -878,7 +877,6 @@ exports[`kit fingerprints > Faust 1`] = `
     "charge-changed",
   ],
   "statusRich": [
-    "buff-expired",
     "charge-changed",
   ],
   "supportAnchor": [
@@ -980,6 +978,7 @@ exports[`kit fingerprints > Fuying 1`] = `
     "buff-expired",
     "buff:active",
     "charge-changed",
+    "cleanse",
   ],
   "wounded": [
     "buff",
@@ -1418,7 +1417,6 @@ exports[`kit fingerprints > Iridium 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",
@@ -1632,7 +1630,6 @@ exports[`kit fingerprints > Laika 1`] = `
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "attack:charged",
     "charge-changed",
     "cleanse:active",
@@ -1743,7 +1740,6 @@ exports[`kit fingerprints > Lev 1`] = `
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "buff",
     "buff-expired",
     "buff:charged",
@@ -1863,7 +1859,6 @@ exports[`kit fingerprints > Lodolite 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "buff-expired",
     "charge-changed",
     "purge:charged",
   ],
@@ -3548,7 +3543,6 @@ exports[`kit fingerprints > Sustainer 1`] = `
   ],
   "statusRich": [
     "attack",
-    "attack:active",
     "attack:charged",
     "buff",
     "buff-expired",
@@ -3964,7 +3958,6 @@ exports[`kit fingerprints > Voron 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
-    "buff-expired",
     "charge-changed",
     "debuff",
     "dot-ticked",

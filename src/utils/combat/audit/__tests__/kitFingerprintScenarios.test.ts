@@ -543,13 +543,23 @@ describe('statusRich scenario', () => {
         ['AEGIS', 'cleanse'],
         ['Purifier', 'cleanse'],
         ['Hayyan', 'cleanse'],
+        // FUYING IS THE REGRESSION WITNESS for the half-vacuity this arm shipped with first. Her
+        // pattern is `Wings-Support-Not-Self`, so her cleanse NEVER touches herself — she is the
+        // only ship shape that can tell "the debuff reached the whole side" apart from "the debuff
+        // reached the focus". With the filler on `Pattern-Base` she resolved recipients
+        // [Jempol, Rookie], scaled count 1, and removed 0. If this row goes red the filler's
+        // footprint has collapsed again, and every self-inclusive cleanse above will still pass.
+        ['Fuying', 'cleanse'],
     ])('NON-VACUITY (cleanse): %s produces %s, which no other scenario can', (name, token) => {
-        // AEGIS/Purifier/Hayyan are the reason the filler debuffs the WHOLE opposing side rather
-        // than just the focus: a census of the 19 cleanse ships found 9 carrying `target: 'ally'`
-        // — the single designated ALLY, not the caster — so a focus-only debuff would have left
-        // half the mechanic uncovered and the arm silently half-vacuous.
         expect(tokensFor(name, 'statusRich')).toContain(token);
         expect(tokensFor(name, 'plain').some((t) => t.startsWith('cleanse'))).toBe(false);
+    });
+
+    it('NON-VACUITY (reactive purge): Curator needs the filler CHARGED skill to exist', () => {
+        // `on-enemy-charged-cast` — no inert filler has a charge skill at all, so this trigger was
+        // unraisable and Curator's purge stayed silent even with buffs on the board.
+        expect(tokensFor('Curator', 'statusRich').some((x) => x.startsWith('purge'))).toBe(true);
+        expect(tokensFor('Curator', 'plain').some((x) => x.startsWith('purge'))).toBe(false);
     });
 
     it('MEATSHIELD is the deliberate exception: no steal token, per the locked ruling', () => {
@@ -573,26 +583,27 @@ describe('statusRich scenario', () => {
      *  - MEATSHIELD  — locked ruling (owner, 2026-09-03): only an ENEMY STEALING them can put him
      *                  below 3 Protection stacks, and the statusRich fillers buff/debuff but never
      *                  steal. Correct silence, not a hole.
-     *  - CURATOR     — passive purge on `on-enemy-charged-cast`. The fillers have no charge skill
-     *                  at all (statusRich changes only their ACTIVE text), so the trigger cannot
-     *                  fire. Closable by giving the filler a charged skill — a bigger change.
      *  - FAUST       — passive purge on `on-destroyed`, i.e. it fires when FAUST dies. The focus
      *                  surviving 20 rounds is a hard requirement of this suite, so this is
      *                  unreachable by construction — the same class as the `death` / `cheat-death`
      *                  entries in realKitFingerprints' EXPECTED_KINDS ledger.
      *  - NAYRA       — charged purge gated on `target-repaired-this-round`. The fillers never
      *                  repair, so the condition is never satisfied.
-     *  - AMARTYA     — charged purge whose count is `countScaling` on critDamage per 50, so at
-     *                  canonical base stats the scaled count floors to 0 and the purge removes
-     *                  nothing. A gearing artefact of the fixture, not a kit defect.
-     *  - FUYING      — active + charged cleanse, `target: 'ally'`, no conditions. This one is NOT
-     *                  explained: every player-side ship IS debuffed by the fillers, so an
-     *                  ally-scoped cleanse should find a target. Worth investigating on its own —
-     *                  it may be a real recipient-resolution defect of the kind
-     *                  `project_ally_scoped_target_resolution_sites` catalogues.
+     *  - AMARTYA     — charged purge whose count is `countScaling` on critDamage per 50. MEASURED:
+     *                  her base critDamage is 30, so `floor(30/50) = 0` and the purge removes
+     *                  nothing even though she does cast the skill. An artefact of the canonical
+     *                  (un-geared) placement, NOT a kit defect — and NOT a general blind spot
+     *                  either: 33 corpus ships have base critDamage >= 50, so `per: 50` scaling is
+     *                  alive in this suite for most of them.
+     *
+     *  CURATOR and FUYING were on this list and are not any more, and BOTH were defects in the ARM
+     *  rather than in their kits — see the filler doc in `kitFingerprintScenarios` for what each
+     *  needed. Curator: a filler CHARGED skill, without which `on-enemy-charged-cast` was
+     *  unraisable. Fuying: a filler footprint wide enough for an `all-enemies` debuff to reach an
+     *  ALLY, without which every self-EXCLUDING cleanse was silently blind.
      */
-    it('pins the six ships whose clause is still silent, each for a known reason', () => {
-        const STILL_SILENT = ['Amartya', 'Curator', 'Faust', 'Fuying', 'Meatshield', 'Nayra'];
+    it('pins the four ships whose clause is still silent, each for a known reason', () => {
+        const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra'];
         const silent = statusRichNames()
             .filter((name) => {
                 const tokens = tokensFor(name, 'statusRich');

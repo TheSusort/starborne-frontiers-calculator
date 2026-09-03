@@ -234,22 +234,43 @@ function fillerPlacement(
  * damage formula against exactly that number, and the filler-inertness guard still reads the
  * unmodified ships.
  *
- * WHY THE DEBUFF IS BOARD-WIDE AND NOT JUST ON THE SUBJECT. Fillers resolve onto the FOCUS, so a
- * single-target debuff would land on the subject alone — and a CENSUS of the corpus's 19 cleanse
- * ships (2026-09-03) says that is not enough: 9 of them carry `target: 'ally'`, the single
- * designated ALLY, which is not the caster. Those ships would have cleansed nothing and the arm
- * would have been silently vacuous for half the mechanic it exists to cover. `self` (8 ships) and
- * `all-allies` (3) would have been fine either way. Debuffing the whole opposing side covers all
- * three scopes.
+ * WHY THE DEBUFF MUST REACH THE WHOLE OPPOSING SIDE. Fillers resolve onto the FOCUS, so a
+ * single-target debuff lands on the subject alone — and a CENSUS of the corpus's 19 cleanse ships
+ * (2026-09-03) says that is not enough: 9 carry `target: 'ally'`, the designated ALLY, which is NOT
+ * the caster. `self` (8) and `all-allies` (3) would have been fine either way.
+ *
+ * ⚠️ AND `to all enemies` IN THE TEXT IS NOT SUFFICIENT ON ITS OWN — this is the trap that made the
+ * first cut of this arm HALF-VACUOUS. An `all-enemies` debuff clause fans out over the cast's
+ * FOOTPRINT (`resolveDebuffRecipientIds` / `aoeVictimIds`), and the inert filler's pattern is
+ * `Pattern-Base`: one cell. So the debuff still reached only the focus, every self-inclusive
+ * cleanse fired, and every self-EXCLUDING one (Fuying, Purifier — `Wings-Support-Not-Self`) still
+ * cleansed nothing. MEASURED by instrumenting the cleanse loop: Fuying resolved recipients
+ * `[Jempol, Rookie]` with a scaled count of 1 and removed 0, because those allies carried no
+ * debuff. `Pattern-All` on the filler is what actually makes the clause board-wide.
+ *
+ * THE CHARGED SKILL exists for one trigger: Curator's purge fires on `on-enemy-charged-cast`, and
+ * no inert filler can raise it because none has a charge skill at all.
  *
  * Both statuses are TIMED and REMOVABLE, which is what makes them stealable/purgeable/cleansable:
  * an unremovable name (`UNREMOVABLE_STATUSES`) or a durationless aura would be skipped by every one
  * of the three mechanics. 2 turns so they are re-applied faster than they expire.
  */
+
 const STATUS_RICH_FILLER_ACTIVE =
     'This Unit deals <unit-damage>90% damage</unit-damage> and inflicts ' +
     '<unit-skill>Defense Down II</unit-skill> to all enemies for 2 turns.<br /><br />' +
     'This Unit gains <unit-skill>Attack Up II</unit-skill> for 2 turns.';
+
+/** The statusRich filler's CHARGED skill. It exists to raise ONE trigger: Curator's purge fires on
+ *  `on-enemy-charged-cast`, which no inert filler could ever raise because none has a charge skill.
+ *
+ *  ⚠️ IT CARRIES THE SELF-BUFF TOO, and leaving it out cost real coverage. A ship with a charge
+ *  skill alternates — it banks charge on its actives and spends it on the charged — so a charged
+ *  skill without the self-buff means the filler does NOT re-buff itself on those turns. MEASURED:
+ *  omitting it silently dropped TITHONUS's `steal:charged` token, because on the turn his charged
+ *  fired his primary target happened to hold no `Attack Up II` to take. Identical clauses on both
+ *  skills is what makes the filler's status output independent of which skill it casts. */
+const STATUS_RICH_FILLER_CHARGED = STATUS_RICH_FILLER_ACTIVE;
 
 /** A filler that carries a stealable/purgeable self-buff and inflicts a cleansable debuff on the
  *  whole opposing side. Used ONLY by `statusRich`, and on BOTH sides — which makes the scenario
@@ -260,7 +281,13 @@ function statusRichFillerPlacement(
     attack: number
 ): BattlePlacement {
     const base = fillerShip(name);
-    const ship: Ship = { ...base, activeSkillText: STATUS_RICH_FILLER_ACTIVE };
+    const ship: Ship = {
+        ...base,
+        activeSkillText: STATUS_RICH_FILLER_ACTIVE,
+        activePattern: 'Pattern-All',
+        chargeSkillText: STATUS_RICH_FILLER_CHARGED,
+        chargeSkillCharge: 3,
+    };
     const placed = canonicalPlacement(ship, position);
     return { ...placed, statOverrides: { ...placed.statOverrides, hp: FILLER_HP, attack } };
 }
