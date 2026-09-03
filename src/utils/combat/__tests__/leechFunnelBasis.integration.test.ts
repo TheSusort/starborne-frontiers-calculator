@@ -19,13 +19,23 @@
  *  `SubAttackOutcome.deliveredDamage` carries for Bloodthirst (see
  *  `damageDealtBasis.integration.test.ts`, which pins the identical rule for the reactive path).
  *
- *  TAKEN (Malvex/Quixilver shields). RULED by the owner 2026-09-03: "damage taken" is the number
- *  displayed ON THE VICTIM, so a redirected slice belongs to the protector and a transformed slice
- *  is not taken yet. The basis is `incomingBooked` ALONE — no `protectionRedirected` term, which is
- *  exactly where it parts company with the dealt direction. The owner's in-game measurement of the
- *  plain case (a Nosorog hit of 781 produced 117 shield = 15%) fixes the percentage and confirms
- *  the displayed number is the basis, but cannot separate the two candidates on its own: with no
- *  protector and no transform, pre-funnel and post-funnel are the same number.
+ *  TAKEN (Malvex/Quixilver shields). RULED by the owner 2026-09-03 and then MEASURED IN GAME the
+ *  same day — the same Nosorog hit on the same Malvex, with and without a Meatshield on the team:
+ *
+ *      Meatshield    shown on Malvex    shield gained    ratio
+ *      absent        1115               167              15.0%
+ *      present        781               117              15.0%
+ *
+ *  781 / 1115 = 70.0%: three stacks of Protection took 30%, the number DISPLAYED on Malvex dropped
+ *  with it, and the shield tracked the displayed number in both rows. Had the basis been the hit as
+ *  thrown, the protected row would have read 167 like the unprotected one. So "damage taken" is the
+ *  victim's own post-cascade intake — the basis is `incomingBooked` ALONE, with no
+ *  `protectionRedirected` term, and that is exactly where it parts company with the dealt
+ *  direction. A transformed slice is likewise not taken yet (unmeasured, but the same reading).
+ *
+ *  Note what made that pair decisive and either row alone useless: the plain row fixes only the
+ *  percentage, because with no protector and no transform the pre-funnel and post-funnel numbers
+ *  ARE the same number. The candidates only separate once the funnel actually moves something.
  *
  * MEASURED before this file existed (both directions on the pre-funnel `damage`):
  *
@@ -514,8 +524,9 @@ describe('a damage-TAKEN leech counts what the victim actually took (owner rulin
         expect(alone).toHaveLength(1);
         expect(protectedRun).toHaveLength(1);
         // MEASURED pre-fix: these two were EQUAL — the victim was paid for a slice its protector
-        // ate. Ruled 2026-09-03: "damage taken" is the number displayed on the victim, so 3 stacks
-        // of Protection leave it 70%.
+        // ate. The 0.7 factor is not a fixture convenience: it is the in-game ratio, from the same
+        // Nosorog hit on the same Malvex with and without a Meatshield (1115 -> 167 became
+        // 781 -> 117, and 781/1115 = 70.0%). Three stacks here for the same reason.
         //
         // This is the row where the two directions part company: the DEALT basis adds
         // `protectionRedirected` back and stays flat, the TAKEN basis does not and drops to 0.7x.
