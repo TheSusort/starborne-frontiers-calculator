@@ -873,6 +873,32 @@ export const AbilityCard: React.FC<Props> = ({
                                 })
                             }
                         />
+                        <Input
+                            label="Named buff (top-up)"
+                            helpLabel="Meatshield's shape: steal only this status, up to the threshold below. Leave blank for a normal 'steal N buffs'."
+                            value={config.buffName ?? ''}
+                            onChange={(e) =>
+                                updateConfig({
+                                    ...config,
+                                    buffName: e.target.value.trim() || undefined,
+                                })
+                            }
+                        />
+                        <Input
+                            label="Up to stacks"
+                            helpLabel="The threshold the caster tops itself up TO. Only the deficit moves, and the source keeps the rest. Needs the named buff above."
+                            type="number"
+                            min={1}
+                            value={config.upToStacks ?? ''}
+                            onChange={(e) =>
+                                updateConfig({
+                                    ...config,
+                                    upToStacks: e.target.value
+                                        ? toNumber(e.target.value)
+                                        : undefined,
+                                })
+                            }
+                        />
                     </div>
                 );
 

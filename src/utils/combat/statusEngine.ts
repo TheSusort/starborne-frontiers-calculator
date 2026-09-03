@@ -3,7 +3,7 @@ import { Condition, SkillSlot } from '../../types/abilities';
 import type { FactionKey } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
-import { UNREMOVABLE_STATUSES } from './cheatDeathBuffs';
+import { UNREMOVABLE_STATUSES, STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
 import { isBuffProtection } from './buffProtectionBuffs';
 
 export interface ActiveBuff {
@@ -317,7 +317,32 @@ export interface StatusEngine {
      *  appear on EVERY recipient (Tithonus grants the same stolen buff to itself AND all
      *  adjacent allies, not a fan-out split). Returns the buff names actually moved. Unknown
      *  `sourceId`, or a source with no eligible buffs → [] (no-op). */
-    steal(sourceId: string, recipientIds: string[], count: number): string[];
+    steal(
+        sourceId: string,
+        recipientIds: string[],
+        count: number,
+        stackStealable?: ReadonlyMap<string, number>
+    ): string[];
+    /** Signed per-owner adjustment to a NAMED status's stack count, independent of which store
+     *  granted it. THE one thing that makes an AURA-granted count mutable: an aura's reported
+     *  stacks come from its STATIC `payload.stacks` and `auraSelfMaps` is written only at actor
+     *  construction, so nothing else in this engine can move a Meatshield's Protection off 3.
+     *
+     *  A ledger rather than a mutation, deliberately. Two ships of the same kind may share one
+     *  registered payload object, so editing `payload.stacks` would move BOTH Meatshields in a
+     *  mirror match; a per-owner delta cannot. It also gives a thief that carries no grant of its
+     *  own (a Pallas) somewhere to hold an acquired stack.
+     *
+     *  Read back through {@link selfBuffStackAdjustment}, which `selfBuffStacksForOwner` folds in
+     *  and clamps at >= 0 — so an over-large negative delta reads as 0 rather than going negative.
+     *  Deltas are NOT reflected in the NAME-based reads (`selfBuffNamesForOwners` and friends): a
+     *  stolen stack is visible to the stack mechanic (Protection's damage transfer, the only
+     *  production consumer today) but does not make the thief answer an `enemy-buff` name gate.
+     *  Documented limitation, not an oversight — widen it when a mechanic needs the name. */
+    adjustSelfBuffStacks(ownerId: string, buffName: string, delta: number): void;
+    /** The accumulated delta written by {@link adjustSelfBuffStacks}. 0 for an unknown owner or an
+     *  untouched name. Signed — callers clamp the TOTAL, not this term. */
+    selfBuffStackAdjustment(ownerId: string, buffName: string): number;
     /** Register all buff/debuff abilities once at creation (classified by `kind`).
      *  `ownerId` routes self-side statuses to the correct per-owner store (defaults to 'attacker').
      *  `enemyTargetId` routes enemy-side accum/aura statuses to the correct per-target store
@@ -1541,19 +1566,42 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  recipient already holds a stronger/longer version of the same buff family. Returns the
      *  buff names actually removed from the source (grants are best-effort per recipient and do
      *  not affect this return value). Unknown sourceId / nothing eligible → []. */
-    const steal = (sourceId: string, recipientIds: string[], count: number): string[] => {
+    // Per-owner signed stack ledger — see the interface doc for why this is a delta and not a
+    // mutation of the registered payload.
+    const stackAdjustments = new Map<string, Map<string, number>>();
+    const adjustSelfBuffStacks = (ownerId: string, buffName: string, delta: number): void => {
+        if (delta === 0) return;
+        let byName = stackAdjustments.get(ownerId);
+        if (!byName) {
+            byName = new Map<string, number>();
+            stackAdjustments.set(ownerId, byName);
+        }
+        byName.set(buffName, (byName.get(buffName) ?? 0) + delta);
+    };
+    const selfBuffStackAdjustment = (ownerId: string, buffName: string): number =>
+        stackAdjustments.get(ownerId)?.get(buffName) ?? 0;
+
+    const steal = (
+        sourceId: string,
+        recipientIds: string[],
+        count: number,
+        stackStealable?: ReadonlyMap<string, number>
+    ): string[] => {
         const timedMap = selfMaps.get(sourceId);
-        if (!timedMap) return [];
         const candidates: { seq: number; key: string; s: BuffState }[] = [];
-        for (const [key, s] of timedMap) {
+        // A source with no timed store can still hold a stack-stealable status (Meatshield's
+        // Protection is an aura), so this no longer returns early — it just contributes no timed
+        // candidates. Same reason the `limit === 0` early return below is gone.
+        for (const [key, s] of timedMap ?? []) {
             if (isUnremovable(s.buffName, s.turnsRemaining)) continue;
             candidates.push({ seq: s.appliedSeq, key, s });
         }
         candidates.sort((a, b) => b.seq - a.seq);
         const limit = Math.max(0, Math.min(count, candidates.length));
-        if (limit === 0) return [];
         const stolen = candidates.slice(0, limit).map(({ key, s }) => {
-            timedMap.delete(key);
+            // Optional-chained only to satisfy the narrowing: a candidate exists ONLY if the loop
+            // above iterated `timedMap`, so it is non-undefined on every path that reaches here.
+            timedMap?.delete(key);
             return {
                 buffName: s.buffName,
                 turnsRemaining: s.turnsRemaining,
@@ -1605,7 +1653,37 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 });
             }
         }
-        return stolen.map((s) => s.buffName);
+        // STACK-STEALABLE statuses (Protection), with whatever budget the timed entries left.
+        // Ranked BELOW every timed candidate on purpose: the steal takes the NEWEST stealable buff,
+        // and a start-of-combat grant is the oldest thing a ship carries. That ordering is what
+        // keeps every shipped Pallas/Thresh/Tithonus steal pointed at exactly the buff it took
+        // before — Protection is only reached once nothing timed is left to take.
+        //
+        // `stackStealable` is supplied by the CALLER (how many stacks the source holds right now),
+        // not computed here: aggregating a stack count across all four stores means evaluating
+        // aura conditions against a neutral context, which is `selfBuffStacksForOwner`'s job in
+        // triggers.ts. Keeping that single aggregator and passing its answer in avoids both a
+        // duplicate implementation and a statusEngine → triggers import cycle.
+        const stolenStacks: string[] = [];
+        const stackBudget = count - limit;
+        if (stackBudget > 0 && stackStealable) {
+            for (const [buffName, held] of stackStealable) {
+                if (!STACK_STEALABLE_STATUSES.has(buffName)) continue;
+                let available = Math.max(0, Math.floor(held));
+                while (available > 0 && stolenStacks.length < stackBudget) {
+                    // ONE stack leaves the source per stack stolen, but EVERY recipient gains one —
+                    // the same fan-out rule the timed transfer above uses (Tithonus grants the
+                    // stolen buff to itself AND its adjacent allies; it is not a split).
+                    adjustSelfBuffStacks(sourceId, buffName, -1);
+                    for (const recipientId of recipientIds) {
+                        adjustSelfBuffStacks(recipientId, buffName, +1);
+                    }
+                    available--;
+                    stolenStacks.push(buffName);
+                }
+            }
+        }
+        return [...stolen.map((s) => s.buffName), ...stolenStacks];
     };
 
     // --- Ability-status API ---
@@ -1977,6 +2055,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         extendAllBuffsDuration,
         purge,
         steal,
+        adjustSelfBuffStacks,
+        selfBuffStackAdjustment,
         registerAbilityStatuses,
         applyTimedAbilityStatus,
         activeAbilityStatuses,

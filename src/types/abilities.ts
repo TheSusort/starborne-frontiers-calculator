@@ -967,6 +967,21 @@ export type AbilityConfig =
            *  (same application, same remaining duration — NOT a fan-out split). Absent → caster
            *  only (Pallas/Thresh). */
           grantAdjacentAllies?: boolean;
+          /** Meatshield's charged clause: "If this Unit has less than 3 stacks of Protection, it
+           *  steals Protection until this Unit has 3 stacks of Protection."
+           *
+           *  A TOP-UP steal, and the pair is all-or-nothing — both fields together or neither.
+           *  `buffName` restricts the theft to that one status; `upToStacks` is the THRESHOLD the
+           *  caster is topping itself up to, NOT a count: the number actually moved is
+           *  `upToStacks − (stacks the caster already holds)`, bounded by what the source has, so
+           *  a caster already at the threshold steals nothing and the clause is a no-op. `count`
+           *  is ignored on this shape (the deficit replaces it).
+           *
+           *  Owner ruling 2026-09-03: the transfer is stack-by-stack and the SOURCE KEEPS THE
+           *  REST — a caster at 1 stack topping up against a Lionheart holding 10 takes exactly 2
+           *  and leaves 8. Only a status in `STACK_STEALABLE_STATUSES` can be moved this way. */
+          buffName?: string;
+          upToStacks?: number;
       }
     | {
           type: 'control';

@@ -2657,7 +2657,16 @@ export function selfBuffStacksForOwner(
         )
             total += s.active.stacks ?? 1;
     }
-    return total;
+    // The per-owner stack LEDGER, folded last and clamped here rather than at the write.
+    // It is what makes an AURA-granted count mutable at all: an aura reports its STATIC
+    // `payload.stacks` and `auraSelfMaps` is written only at construction, so a stolen
+    // Meatshield stack shows up here and nowhere else. Signed, so it also carries the
+    // ACQUIRED stacks of a thief that holds no grant of its own (a Pallas), which contributes
+    // nothing to any of the three store reads above.
+    //
+    // CLAMPED AT THE TOTAL, not per term: a delta more negative than the stores hold reads as 0
+    // rather than dragging a sum negative and cancelling another owner's stacks downstream.
+    return Math.max(0, total + statusEngine.selfBuffStackAdjustment(ownerId, buffName));
 }
 
 /** Enemy-debuff NAMES carried in the per-TARGET store keyed by `targetId` (an actor's
