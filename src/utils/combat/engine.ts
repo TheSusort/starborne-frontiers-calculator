@@ -8919,6 +8919,16 @@ export function runCombat(rawInput: CombatEngineInput): {
             return {
                 runtime: rt,
                 enemyMostBuffsId,
+                // Source resolver for a TOP-UP buff-steal (Meatshield's charged Protection
+                // clause). Same `aliveOpposing()` thunk, same unmemoized-on-purpose reasoning as
+                // `enemyMostBuffsId` above: rosters mutate in place as actors die, and an earlier
+                // clause in the same cast can change who holds the status. Reads stacks through
+                // `selfBuffStacksForOwner`, the same canonical aggregator `protectorsFor` uses, so
+                // an aura-granted, accumulating or stolen stack all count identically.
+                firstEnemyWithBuffId: (buffName: string): string | undefined =>
+                    aliveOpposing().find(
+                        (v) => selfBuffStacksForOwner(statusEngine, v.id, buffName) > 0
+                    )?.id,
                 // #403: resolve a debuff clause's SELECTOR target to one live opposing actor.
                 // Closes over the same three resolvers the reactive ctx uses and the same
                 // `tb.opposingRoster` the eager `enemyMostBuffsId` above uses — team-symmetric for

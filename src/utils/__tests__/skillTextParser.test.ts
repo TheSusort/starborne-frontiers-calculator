@@ -55,6 +55,7 @@ import {
     detectProtectionTransformToDot,
     detectTransformToDot,
     parseOverRepairRedirect,
+    detectTopUpBuffSteal,
 } from '../skillTextParser';
 import type { Ship } from '../../types/ship';
 import { buildShipAbilities } from '../abilities/buildShipAbilities';
@@ -4230,6 +4231,9 @@ describe('parseBuffSteal (PR10)', () => {
     });
 
     it('does NOT match Meatshield\'s named-buff-count steal ("it steals Protection until…") — a distinct shape with no "N buff(s)" token', () => {
+        // Still [] — and no longer because the shape is unmodeled. It has its OWN detector now
+        // (detectTopUpBuffSteal, exercised below); this assertion pins that the two do not
+        // cannibalize each other, exactly as the steals/purges pair above does.
         expect(parseBuffSteal(MEATSHIELD_PASSIVE_RAW)).toEqual([]);
     });
 
@@ -5302,5 +5306,53 @@ describe('parseOverRepairRedirect', () => {
             s.abilities.some((a) => a.trigger === 'on-own-repair-to-ally' && a.type === 'heal')
         );
         expect(inCastSkills).toBe(false);
+    });
+});
+
+describe("detectTopUpBuffSteal (Meatshield's charged Protection clause)", () => {
+    it('parses the real RAW charged text: Protection, up to 3 stacks', () => {
+        expect(detectTopUpBuffSteal(MEATSHIELD_PASSIVE_RAW)).toEqual([
+            { buffName: 'Protection', upToStacks: 3 },
+        ]);
+    });
+
+    it('captures the NAME from the text rather than a whitelist', () => {
+        // So a future ship's own threshold clause parses with no parser change. Whether the named
+        // status can actually be MOVED is an engine-side question (STACK_STEALABLE_STATUSES), and
+        // a config naming something else resolves to a no-op rather than a wrong steal.
+        expect(
+            detectTopUpBuffSteal(
+                'If this Unit has less than 5 stacks of Titanite Plating, it steals Titanite Plating until this Unit has 5 stacks of Titanite Plating.'
+            )
+        ).toEqual([{ buffName: 'Titanite Plating', upToStacks: 5 }]);
+    });
+
+    it('rejects a sentence whose two halves DISAGREE on the threshold', () => {
+        // "less than 3 … until it has 5" is not this mechanic. Guessing which number is meant is
+        // how a wrong-parse defect ships, so the detector declines instead.
+        expect(
+            detectTopUpBuffSteal(
+                'If this Unit has less than 3 stacks of Protection, it steals Protection until this Unit has 5 stacks of Protection.'
+            )
+        ).toEqual([]);
+    });
+
+    it('rejects a sentence whose two halves name DIFFERENT statuses', () => {
+        expect(
+            detectTopUpBuffSteal(
+                'If this Unit has less than 3 stacks of Protection, it steals Protection until this Unit has 3 stacks of Overload.'
+            )
+        ).toEqual([]);
+    });
+
+    it('does NOT match the generic "steals N buffs" shape', () => {
+        expect(detectTopUpBuffSteal(PALLAS_CHARGED_RAW)).toEqual([]);
+        expect(detectTopUpBuffSteal(TITHONUS_CHARGED_RAW)).toEqual([]);
+    });
+
+    it('returns [] for null/undefined/empty text', () => {
+        expect(detectTopUpBuffSteal(null)).toEqual([]);
+        expect(detectTopUpBuffSteal(undefined)).toEqual([]);
+        expect(detectTopUpBuffSteal('')).toEqual([]);
     });
 });

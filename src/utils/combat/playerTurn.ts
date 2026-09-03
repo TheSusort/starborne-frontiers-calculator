@@ -49,10 +49,12 @@ import { synthesizeResisted } from './shared';
 import {
     buildActorConditionContext,
     selfBuffNamesForOwners,
+    selfBuffStacksForOwner,
     LIVE_TRIGGERS,
     TURN_SHADOW_CHANNELS,
     type ReactiveAbility,
 } from './triggers';
+import { STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
 import { reduceBombsOnVictim } from './bombCountdown';
 import { recipientCarriesBlockBuff } from './blockBuffBuffs';
 import { BARRIER_BUFFS } from './barrierBuffs';
@@ -840,6 +842,19 @@ export interface PlayerTurnArgs {
      *  for non-positional/DPS callers with no opposing roster to tally; the condition then keeps
      *  its manual `manualCount ?? 1` fallback. See ConditionContext's doc on the field. */
     enemyDestroyedCount?: number;
+    /** Resolves the SOURCE of a top-up buff-steal (Meatshield's charged Protection clause) —
+     *  the first LIVE opposing actor holding at least one stack of `buffName`, in the alive
+     *  opposing roster's own order. Supplied by engine.ts's `buildTurnArgs`, closing over the same
+     *  side-relative `tb.opposingRoster` every other selector here uses, so it is team-symmetric
+     *  for free.
+     *
+     *  Owner ruling 2026-09-02: the source is "the first enemy with Protection, following the
+     *  regular targeting rule". The caller reads that as: prefer the cast's OWN resolved target
+     *  when it holds the status (that IS the regular targeting rule), and only otherwise fall to
+     *  this scan. Absent (DPS/non-positional, no opposing roster) → the clause is confined to the
+     *  resolved target, which is the same nothing it got before. NOT memoized, for the reason the
+     *  sibling selectors are not: an earlier clause in the same cast can change who holds what. */
+    firstEnemyWithBuffId?: (buffName: string) => string | undefined;
     /** #403: resolves one of the three enemy SELECTOR kinds to a live opposing actor id, for a
      *  debuff clause whose ability `target` is 'enemy-most-buffs' / 'enemy-highest-attack' /
      *  'enemy-highest-speed'. Supplied by engine.ts's `buildTurnArgs` (team-symmetric — it closes
@@ -1464,6 +1479,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyMostBuffsId,
+        firstEnemyWithBuffId,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         liveCountsMeasurable,
@@ -4073,7 +4089,72 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 const recipients = ab.config.grantAdjacentAllies
                     ? [actor.id, ...(adjacentAllyIds ?? [])]
                     : [actor.id];
-                statusEngine.steal(targetId, recipients, ab.config.count);
+                // MEATSHIELD'S TOP-UP SHAPE: "if this Unit has less than N stacks of X, it
+                // steals X until this Unit has N stacks of X." The amount moved is the caster's
+                // own DEFICIT, not `count`, and the clause is a no-op once the caster is at the
+                // threshold — which per the owner's ruling 1 (2026-09-03) is its normal state,
+                // since nothing but an enemy steal can put it below.
+                // BOTH fields, and a sane threshold. A persisted/authored config can carry
+                // anything (a fractional or zero `upToStacks`, or a `buffName` with no threshold),
+                // and a HALF-specified pair must not fall through to the generic path below —
+                // that would steal an arbitrary buff for a clause that names one status. Guarded
+                // here as well as in the editor because the editor is not the only writer.
+                if (
+                    ab.config.buffName !== undefined &&
+                    ab.config.upToStacks !== undefined &&
+                    Number.isInteger(ab.config.upToStacks) &&
+                    ab.config.upToStacks > 0
+                ) {
+                    const { buffName, upToStacks } = ab.config;
+                    const held = selfBuffStacksForOwner(statusEngine, actor.id, buffName);
+                    const deficit = upToStacks - held;
+                    if (deficit > 0) {
+                        // "Following the regular targeting rule": the cast's own resolved target
+                        // when IT holds the status, otherwise the first live opposing holder.
+                        const sourceId =
+                            selfBuffStacksForOwner(statusEngine, targetId, buffName) > 0
+                                ? targetId
+                                : firstEnemyWithBuffId?.(buffName);
+                        if (sourceId !== undefined) {
+                            const availableAtSource = selfBuffStacksForOwner(
+                                statusEngine,
+                                sourceId,
+                                buffName
+                            );
+                            if (availableAtSource > 0) {
+                                // The SOURCE KEEPS THE REST (ruling 2): move only the deficit, and
+                                // only as much of it as the source actually has.
+                                //
+                                // `stealStacks`, NOT `steal`: the generic path spends its budget on
+                                // TIMED candidates first, so routing a NAMED clause through it
+                                // stole a timed buff off the source and moved one stack too few.
+                                // Caught in review on PR #465; pinned by the regression case in
+                                // `protectionSteal.integration.test.ts`.
+                                statusEngine.stealStacks(
+                                    sourceId,
+                                    [actor.id],
+                                    buffName,
+                                    deficit,
+                                    availableAtSource
+                                );
+                            }
+                        }
+                    }
+                    continue;
+                }
+                // How many stacks of each STACK-STEALABLE status the source holds right now.
+                // Computed HERE and passed in, rather than inside statusEngine.steal: the count
+                // has to aggregate all four status stores AND evaluate aura conditions against a
+                // neutral context, which is exactly what `selfBuffStacksForOwner` does. Passing
+                // its answer keeps ONE aggregator and avoids a statusEngine → triggers cycle.
+                // Empty for every source holding none, which is every ship but Meatshield and
+                // Lionheart — so this is inert on the rest of the corpus.
+                const stackStealable = new Map<string, number>();
+                for (const name of STACK_STEALABLE_STATUSES) {
+                    const held = selfBuffStacksForOwner(statusEngine, targetId, name);
+                    if (held > 0) stackStealable.set(name, held);
+                }
+                statusEngine.steal(targetId, recipients, ab.config.count, stackStealable);
             }
         }
     }

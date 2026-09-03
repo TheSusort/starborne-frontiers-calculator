@@ -5010,8 +5010,8 @@ export function parsePurge(text: string | null | undefined): {
 // captured generically like purge's count for future-proofing. Deliberately requires the
 // "buff(s)" token so Meatshield's NAMED-buff steal ("it steals Protection until this Unit has
 // 3 stacks of Protection" — no "buff" token, no count) does NOT match: that clause is a
-// distinct shape (steals a specific named buff up to a stack threshold, no explicit source),
-// left unmodeled by this mechanic (see parseBuffSteal's doc comment).
+// distinct shape (steals a specific named buff up to a stack threshold, no explicit source) and
+// is handled by its own detector, detectTopUpBuffSteal.
 const STEAL_RE = /\bsteals?\s+(\d+|an?)\s+buffs?\b/gi;
 
 // "granting it to self and all adjacent allies" — Tithonus's charged skill: the stolen buff is
@@ -5028,9 +5028,9 @@ const STEAL_GRANT_ADJACENT_RE = /granting\s+it\s+to\s+self\s+and\s+all\s+adjacen
  * same `targetId` a purge/damage ability would use.
  *
  * Does NOT match Meatshield's "it steals Protection until this Unit has 3 stacks of Protection"
- * (a NAMED-buff, stack-threshold steal with no explicit source and no "buff(s)" token) — a
- * distinct shape deliberately left unmodeled by this mechanic (see the skill-model-gap-sweep
- * epic notes). Reference data: docs/ship-skills.csv.
+ * (a NAMED-buff, stack-threshold steal with no explicit source and no "buff(s)" token). That is a
+ * genuinely distinct shape and it has its OWN detector — {@link detectTopUpBuffSteal} below —
+ * because the amount moved is a DEFICIT rather than a count. Reference data: docs/ship-skills.csv.
  */
 export function parseBuffSteal(
     text: string | null | undefined
@@ -5049,6 +5049,45 @@ export function parseBuffSteal(
         results.push({ count, grantAdjacentAllies });
     }
     return results;
+}
+
+/**
+ * Meatshield's charged clause: "If this Unit has less than 3 stacks of Protection, it steals
+ * Protection until this Unit has 3 stacks of Protection."
+ *
+ * A TOP-UP steal, structurally unlike {@link parseBuffSteal}'s "steals N buffs": there is no
+ * "buff(s)" token, no explicit source, the status is NAMED, and the amount moved is the caster's
+ * own DEFICIT against a threshold rather than a count. Both halves of the sentence must agree —
+ * the same status name and the same number on the gate and on the target threshold — or this
+ * returns nothing. A mismatch means the text is some other shape, and inventing a reading for it
+ * is exactly how a wrong-parse defect ships.
+ *
+ * The name is captured from the text, not matched against a whitelist, so a future ship's
+ * "until this Unit has 5 stacks of X" parses without a parser change. Whether X can actually be
+ * MOVED is a separate, engine-side question: only a status in `STACK_STEALABLE_STATUSES` transfers
+ * per stack, and a config naming anything else resolves to a no-op rather than a wrong steal.
+ *
+ * Corpus census: exactly ONE ship matches this shape — Meatshield's charged skill. Verified with
+ * `grep -ic "until this unit has [0-9]* stacks" docs/ship-skills.csv`.
+ */
+const TOP_UP_STEAL_RE =
+    /\bif\s+this\s+unit\s+has\s+less\s+than\s+(\d+)\s+stacks?\s+of\s+([^,.]+?)\s*,\s*it\s+steals\s+[^.]*?\buntil\s+this\s+unit\s+has\s+(\d+)\s+stacks?\s+of\s+([^,.]+?)\s*(?:\.|$)/i;
+
+export function detectTopUpBuffSteal(
+    text: string | null | undefined
+): { buffName: string; upToStacks: number }[] {
+    if (!text) return [];
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const m = TOP_UP_STEAL_RE.exec(plain);
+    if (!m) return [];
+    const gateStacks = parseInt(m[1], 10);
+    const upToStacks = parseInt(m[3], 10);
+    const norm = (v: string): string => v.trim().toLowerCase();
+    // Both halves must agree. A gate of "less than 3" paired with a threshold of anything but 3,
+    // or two different status names, is not this mechanic.
+    if (!gateStacks || !upToStacks || gateStacks !== upToStacks) return [];
+    if (norm(m[2]) !== norm(m[4])) return [];
+    return [{ buffName: m[2].trim(), upToStacks }];
 }
 
 // I6: "<subject> is Purged of (N|all) buffs" — Lodolite's charged skill: "Then, the enemy with

@@ -873,6 +873,45 @@ export const AbilityCard: React.FC<Props> = ({
                                 })
                             }
                         />
+                        {/* The top-up pair is ALL-OR-NOTHING. A half-specified pair would fall
+                            through to the generic "steal N buffs" path and take an arbitrary buff
+                            for a clause that names one status, so both fields are cleared together
+                            unless the name is present AND the threshold is a positive integer.
+                            The engine re-checks the same invariant — the editor is not the only
+                            writer of a persisted config. */}
+                        <Input
+                            label="Named buff (top-up)"
+                            helpLabel="Meatshield's shape: steal only this status, up to the threshold beside it. Leave blank for a normal 'steal N buffs'."
+                            value={config.buffName ?? ''}
+                            onChange={(e) => {
+                                const buffName = e.target.value.trim() || undefined;
+                                updateConfig({
+                                    ...config,
+                                    buffName,
+                                    upToStacks: buffName ? config.upToStacks : undefined,
+                                });
+                            }}
+                        />
+                        <Input
+                            label="Up to stacks"
+                            helpLabel="The threshold the caster tops itself up TO. Only the deficit moves, and the source keeps the rest. Requires the named buff, and must be a whole number above 0."
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={config.upToStacks ?? ''}
+                            onChange={(e) => {
+                                const raw = toNumber(e.target.value);
+                                const upToStacks =
+                                    e.target.value && Number.isInteger(raw) && raw > 0
+                                        ? raw
+                                        : undefined;
+                                updateConfig({
+                                    ...config,
+                                    upToStacks,
+                                    buffName: upToStacks ? config.buffName : undefined,
+                                });
+                            }}
+                        />
                     </div>
                 );
 

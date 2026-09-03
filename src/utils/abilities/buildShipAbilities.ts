@@ -115,6 +115,7 @@ import {
     parseCleanse,
     parsePurge,
     parseBuffSteal,
+    detectTopUpBuffSteal,
     detectPassiveVoicePurge,
     detectPurgeStripsShield,
     parseHealNoCrit,
@@ -2539,6 +2540,33 @@ function abilitiesFromText(
                         type: 'buff-steal',
                         count: st.count,
                         ...(st.grantAdjacentAllies ? { grantAdjacentAllies: true } : {}),
+                    },
+                    autoFilled: true,
+                },
+                pos: stealPos >= 0 ? stealPos : MAX_POS,
+            });
+        }
+        // Meatshield's TOP-UP steal, the same slot gate: "If this Unit has less than 3 stacks of
+        // Protection, it steals Protection until this Unit has 3 stacks of Protection." A
+        // separate detector because the amount moved is the caster's DEFICIT, not a count — see
+        // detectTopUpBuffSteal. `count: 0` is deliberate and inert: the engine branch keyed on
+        // `buffName`/`upToStacks` computes the deficit itself and never reads `count`, and a 0
+        // would make the generic path a no-op if that branch were ever removed, rather than
+        // silently stealing one arbitrary buff.
+        for (const st of detectTopUpBuffSteal(text)) {
+            const stealPos = text.search(/steal/i);
+            out.push({
+                ability: {
+                    id: nextId(),
+                    type: 'buff-steal',
+                    target: 'enemy',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: {
+                        type: 'buff-steal',
+                        count: 0,
+                        buffName: st.buffName,
+                        upToStacks: st.upToStacks,
                     },
                     autoFilled: true,
                 },
