@@ -245,3 +245,88 @@ describe('Lionheart Protection — clear-on-redirect guard: chunk.total === 0 mu
         expect(lionheartR1).toBeGreaterThan(0);
     });
 });
+
+// ───────────────────────────────────────────────────────────────────────────────────────
+// THE STOLEN-STACK LEDGER FOLLOWS THE BUFF'S OWN LIFECYCLE.
+//
+// A buff steal records its stack movement as a signed per-owner delta (`adjustSelfBuffStacks`)
+// that `selfBuffStacksForOwner` folds in, because an accumulating/aura-granted count cannot be
+// mutated in place. That delta must be cleared wherever the buff it adjusts is cleared —
+// `removeSelfBuffByName`, which zeroes the accumulating entry precisely so `beginRound` can
+// re-accrue it. A delta that survives that reset becomes a permanent per-theft tax: Lionheart
+// re-grants his full 10 stacks at the top of round 2 but reads 9, so his redirect covers 90%
+// instead of 100% and the ally he is protecting eats the remaining tenth — forever, compounding
+// with every further theft.
+describe('Lionheart Protection — a stolen stack does not tax the next round-start re-grant', () => {
+    /** An enemy thief that fires Pallas's "steals 1 buff" ONCE, on its charged opener, and never
+     *  again (its active slot is empty and the charge does not re-arm inside two rounds). Faster
+     *  than the attacker below so the theft lands BEFORE the round-1 redirect clears Lionheart's
+     *  pool — steal-then-clear is the ordering that leaves a delta behind to survive the reset. */
+    const chargedThief = (id: string): EnemyAttacker => ({
+        id,
+        stats: { attack: 0, crit: 0, critDamage: 0, speed: 300 },
+        chargeCount: 3,
+        startCharged: true,
+        position: 'M3',
+        shipSkills: {
+            slots: [
+                { slot: 'active', abilities: [] },
+                {
+                    slot: 'charged',
+                    abilities: [
+                        {
+                            id: 'thief-steal',
+                            type: 'buff-steal',
+                            target: 'enemy',
+                            trigger: 'on-cast',
+                            conditions: [],
+                            config: { type: 'buff-steal', count: 1 },
+                        },
+                    ],
+                },
+            ],
+        },
+    });
+
+    /** Lionheart front-most in row M so the thief (also row M) resolves HIM; the undefended ally
+     *  is front-most in row T with its own attacker there. Protection is not adjacency-scoped, so
+     *  Lionheart still soaks for the ally across rows. */
+    const ledgerInput = (withThief: boolean): CombatEngineInput => ({
+        ...BASE_INPUT,
+        numRounds: 2,
+        teamActors: [
+            { ...teamActor('ally-1', 0), position: 'T4' },
+            {
+                ...teamActor('lionheart', LIONHEART_DEFENCE, [lionheartProtectionPassive()]),
+                position: 'M4',
+            },
+        ],
+        enemyAttackers: [
+            { ...manualEnemy('enemy-A', ENEMY_ATTACK), position: 'T3' },
+            ...(withThief ? [chargedThief('thief')] : []),
+        ],
+    });
+
+    it('CONTROL: with no thief, a full 10 stacks cover the ally completely in BOTH rounds', () => {
+        const res = runCombat(ledgerInput(false));
+
+        expect(res.rounds[0]?.perActorIncoming?.['ally-1']?.incoming ?? 0).toBeCloseTo(0, 4);
+        expect(res.rounds[1]?.perActorIncoming?.['ally-1']?.incoming ?? 0).toBeCloseTo(0, 4);
+    });
+
+    it('round 2 re-grants the FULL 10 even though a stack was stolen in round 1', () => {
+        const res = runCombat(ledgerInput(true));
+
+        const allyR1 = res.rounds[0]?.perActorIncoming?.['ally-1']?.incoming ?? 0;
+        const allyR2 = res.rounds[1]?.perActorIncoming?.['ally-1']?.incoming ?? 0;
+
+        // Round 1 is the INSTRUMENT: the theft really landed, so Lionheart covered only 9/10 of
+        // the hit and the ally took the remaining tenth. Without this the round-2 assertion could
+        // pass because nothing was ever stolen.
+        expect(allyR1).toBeGreaterThan(0);
+        // Round 2: the redirect cleared Lionheart's pool in round 1 and `beginRound` re-granted
+        // all 10, so the ally is covered in full again. With the delta surviving that reset he
+        // reads 9 and the ally keeps taking the same tenth, round after round.
+        expect(allyR2).toBeCloseTo(0, 4);
+    });
+});
