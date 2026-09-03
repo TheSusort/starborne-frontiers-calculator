@@ -52,6 +52,8 @@ const ENTRY_DISPLAY_RANK: Record<CombatLogEntryKind, number> = {
     control: 0,
     cleanse: 0,
     purge: 0,
+    // Rank 0 with its purge sibling: a steal is part of what the skill DID, not a consequence.
+    steal: 0,
     bomb: 0,
     // 1 — charge bookkeeping for the turn.
     'charge-changed': 1,
@@ -920,6 +922,36 @@ const handlers: Partial<{ [K in CombatEventType]: Handler<K> }> = {
             targets: [{ targetId: e.targetId }],
             reactions: [],
             note: `purged ${e.count}`,
+            ...(ctx.consumePendingSkill() ?? {}),
+        };
+        ctx.attachEntry(entry);
+    },
+
+    /**
+     * A steal NAMES what it took, where a purge only counts it. That asymmetry is deliberate: a
+     * purge destroys anonymous "buffs" and the count is the whole story, but a player whose
+     * Protection just walked across the board needs to know it was Protection.
+     *
+     * Repeats in `buffNames` are STACKS of one status (a top-up reports its deficit that way), so
+     * they collapse to "Protection x2" rather than listing the name twice. Distinct names stay
+     * listed — Tithonus can take one buff and hand it to three ships, and the row describes what
+     * MOVED, not how many recipients received it.
+     *
+     * `targetId` is the SOURCE, which for a named top-up is resolved by the clause itself and is
+     * not necessarily the cast's own target — so this row can legitimately name a ship the
+     * attack rows do not.
+     */
+    'steal-performed': (e, ctx) => {
+        if (!ctx.currentTurn && !ctx.currentRound) return;
+        const counts = new Map<string, number>();
+        for (const name of e.buffNames) counts.set(name, (counts.get(name) ?? 0) + 1);
+        const summary = [...counts].map(([name, n]) => (n > 1 ? `${name} x${n}` : name)).join(', ');
+        const entry: CombatLogEntry = {
+            kind: 'steal',
+            actorId: e.casterId,
+            targets: [{ targetId: e.targetId }],
+            reactions: [],
+            note: `stole ${summary}`,
             ...(ctx.consumePendingSkill() ?? {}),
         };
         ctx.attachEntry(entry);

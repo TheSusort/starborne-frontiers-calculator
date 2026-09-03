@@ -4130,13 +4130,29 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                                 // stole a timed buff off the source and moved one stack too few.
                                 // Caught in review on PR #465; pinned by the regression case in
                                 // `protectionSteal.integration.test.ts`.
-                                statusEngine.stealStacks(
+                                const movedStacks = statusEngine.stealStacks(
                                     sourceId,
                                     [actor.id],
                                     buffName,
                                     deficit,
                                     availableAtSource
                                 );
+                                // Suppressed when nothing moved, mirroring `purge-performed`'s
+                                // 0-removed suppression: a steal that took nothing opens no row.
+                                // `buffNames` repeats the name once per STACK, which is how the
+                                // log renders "Protection x2" for a 2-stack deficit.
+                                if (movedStacks > 0) {
+                                    bus.emit({
+                                        type: 'steal-performed',
+                                        casterId: actor.id,
+                                        // The SOURCE this clause resolved for itself — not
+                                        // necessarily the cast's own target.
+                                        targetId: sourceId,
+                                        recipientIds: [actor.id],
+                                        buffNames: Array(movedStacks).fill(buffName),
+                                        round: r,
+                                    });
+                                }
                             }
                         }
                     }
@@ -4154,7 +4170,31 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                     const held = selfBuffStacksForOwner(statusEngine, targetId, name);
                     if (held > 0) stackStealable.set(name, held);
                 }
-                statusEngine.steal(targetId, recipients, ab.config.count, stackStealable);
+                const stolenNames = statusEngine.steal(
+                    targetId,
+                    recipients,
+                    ab.config.count,
+                    stackStealable
+                );
+                // Same suppression rule as the top-up above and as `purge-performed`. Emitting the
+                // NAMES rather than a count is the point of the event: this is the only channel
+                // that can tell a player their Protection changed hands. Before it existed, buff
+                // steal produced no log row at all and the kit fingerprints — which record the set
+                // of log entry KINDS per actor — could not see the mechanic, so Pallas/Thresh/
+                // Tithonus had never had a golden observing their steals.
+                if (stolenNames.length > 0) {
+                    bus.emit({
+                        type: 'steal-performed',
+                        casterId: actor.id,
+                        targetId,
+                        // Tithonus's clause DUPLICATES to its adjacent allies rather than
+                        // splitting (owner ruling 2026-09-03), so every recipient holds the full
+                        // `buffNames` set — a reader must not divide one by the other.
+                        recipientIds: recipients,
+                        buffNames: stolenNames,
+                        round: r,
+                    });
+                }
             }
         }
     }

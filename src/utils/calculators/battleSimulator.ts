@@ -355,6 +355,7 @@ export const LOG_EVENT_TYPES = [
     'control-applied',
     'cleanse-performed',
     'purge-performed',
+    'steal-performed',
     'ship-destroyed',
     // Log-only reactive procs (drain-time damage/heal/cleanse that emit no
     // ability-performed/heal-performed/cleanse-performed). Every LOG-ONLY twin MUST be listed

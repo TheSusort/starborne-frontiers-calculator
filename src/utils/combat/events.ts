@@ -460,6 +460,38 @@ export type CombatEvent =
           count: number;
           round: number;
       } & ReactiveStamp)
+    /** A buff STEAL moved something. Sibling of `purge-performed`, and like it, SUPPRESSED when
+     *  nothing actually moved (an empty return from `statusEngine.steal` / `stealStacks` opens no
+     *  log row).
+     *
+     *  WHY THIS EXISTS. Buff steal shipped in PR10 with no event at all, which cost two things
+     *  that only became visible once Protection became stealable (#465): the combat log could not
+     *  show a steal — a player watched a buff vanish with no row explaining it — and the kit
+     *  FINGERPRINT suites, which record the set of combat-log entry KINDS per actor, were
+     *  structurally blind to the whole mechanic. Pallas, Thresh and Tithonus had never had a
+     *  golden observing their steals.
+     *
+     *  `casterId` = the thief. `targetId` = the SOURCE it took from — not necessarily the cast's
+     *  own target, since a named top-up resolves its own source. `recipientIds` is who ended up
+     *  holding the result: the caster alone for Pallas/Thresh, the caster PLUS its adjacent allies
+     *  for Tithonus, whose clause DUPLICATES rather than splits (owner ruling 2026-09-03), so a
+     *  reader must not infer "one buff moved per recipient".
+     *
+     *  `buffNames` is what actually moved, in the order it moved — repeated names are meaningful:
+     *  two entries of 'Protection' means two STACKS, which is how a top-up reports its deficit.
+     *
+     *  NO REACTIVE TRIGGER SUBSCRIBES TO THIS, deliberately: no corpus ship reacts to a steal in
+     *  either direction. Wiring an `on-buff-stolen` surface before a kit needs it would be a dead
+     *  channel of the kind that has bitten this engine repeatedly. Carries `ReactiveStamp` anyway
+     *  so a future reactive EMITTER nests correctly in the log. */
+    | ({
+          type: 'steal-performed';
+          casterId: string;
+          targetId: string;
+          recipientIds: string[];
+          buffNames: string[];
+          round: number;
+      } & ReactiveStamp)
     | {
           type: 'dot-ticked';
           targetId: string;
