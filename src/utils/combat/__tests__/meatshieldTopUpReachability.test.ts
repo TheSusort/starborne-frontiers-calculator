@@ -27,7 +27,7 @@ import { runCombat, CombatEngineInput } from '../engine';
 import { selfBuffStacksForOwner } from '../triggers';
 import type { StatusEngine } from '../statusEngine';
 import type { Ability, ShipSkills } from '../../../types/abilities';
-import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
+import type { ParsedTarget, ParsedPattern, SkillTargeting } from '../../targetingParser';
 import { parseShipTargeting } from '../../targetingParser';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
@@ -36,14 +36,29 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 const HUGE_HP = 1_000_000_000;
 
 /** The real Meatshield: skill text from `docs/ship-skills.csv`, targeting from the ship snapshot,
- *  abilities from the production parser. NOTHING about his kit is authored here. */
+ *  abilities from the production parser. NOTHING about his kit is authored here.
+ *
+ *  THROWS rather than falling back if the real targeting is not the ally-side one these cases are
+ *  about. A default like `?? enemyFacing()` would quietly convert him into an enemy-facing caster,
+ *  `targetId` would bind, and every case below would pass through the target-holds-it arm without
+ *  ever exercising the no-victim fallback — green, and observing nothing. */
 const realMeatshield = (): {
     skills: ShipSkills;
-    targeting: ReturnType<typeof parseShipTargeting>;
+    targeting: { active: SkillTargeting; charged: SkillTargeting };
 } => {
     const ship = buildTraceShip('Meatshield');
     if (!ship) throw new Error('Meatshield is missing from the reference data in this worktree');
-    return { skills: buildShipAbilities(ship), targeting: parseShipTargeting(ship) };
+    const { active, charged } = parseShipTargeting(ship);
+    if (!active || !charged) {
+        throw new Error('Meatshield has no parsed active/charged targeting in this worktree');
+    }
+    if (charged.target.side !== 'ally' || charged.target.selection !== 'self') {
+        throw new Error(
+            `Meatshield's charged targeting is ${charged.target.side}/${charged.target.selection}, ` +
+                'not ally/self — these cases test the no-victim path and no longer apply'
+        );
+    }
+    return { skills: buildShipAbilities(ship), targeting: { active, charged } };
 };
 
 /** Pallas's shape — "steals 1 buff from the primary target" — authored, because the thief is the
@@ -96,8 +111,8 @@ describe.skipIf(!csvAvailable())("Meatshield's top-up steal is reachable from hi
         });
         // The reachability premise, read from the real targeting rather than assumed: his charged
         // cast points at HIMSELF, so no opposing actor is ever bound as `targetId`.
-        expect(targeting.charged?.target.side).toBe('ally');
-        expect(targeting.charged?.target.selection).toBe('self');
+        expect(targeting.charged.target.side).toBe('ally');
+        expect(targeting.charged.target.selection).toBe('self');
     });
 
     it('CONTROL: an enemy thief really does take one of his stacks (the instrument works)', () => {
@@ -157,11 +172,10 @@ function meatshieldVsThief({ charged }: { charged: boolean }): CombatEngineInput
         healTargetId: 'attacker',
         mode: 'healing',
         position: 'M1',
-        target: targeting.active?.target ?? enemyFacing(),
-        pattern: targeting.active?.pattern ?? basePattern(),
-        ...(targeting.charged
-            ? { chargedTarget: targeting.charged.target, chargedPattern: targeting.charged.pattern }
-            : {}),
+        target: targeting.active.target,
+        pattern: targeting.active.pattern,
+        chargedTarget: targeting.charged.target,
+        chargedPattern: targeting.charged.pattern,
         enemyAttackers: [
             {
                 id: 'thief',
@@ -215,14 +229,10 @@ function thiefVsEnemyMeatshield(): CombatEngineInput {
                 startCharged: true,
                 position: 'M4',
                 affinity: 'antimatter',
-                target: targeting.active?.target ?? enemyFacing(),
-                pattern: targeting.active?.pattern ?? basePattern(),
-                ...(targeting.charged
-                    ? {
-                          chargedTarget: targeting.charged.target,
-                          chargedPattern: targeting.charged.pattern,
-                      }
-                    : {}),
+                target: targeting.active.target,
+                pattern: targeting.active.pattern,
+                chargedTarget: targeting.charged.target,
+                chargedPattern: targeting.charged.pattern,
                 shipSkills: skills,
             },
         ],
