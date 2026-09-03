@@ -847,10 +847,30 @@ export type CombatEvent =
           attackerId: string;
           round: number;
           didCrit?: boolean;
-          /** Direct damage this SUB-ATTACK dealt to this victim — NOT the per-TURN aggregate.
-           *  Present only when a damage aggregate is in scope. Tenacity's >25%-max-HP filter reads
-           *  this, and it needs ONE hit's damage rather than the cast's. */
+          /** Direct damage this SUB-ATTACK dealt to this victim, AS THROWN — NOT the per-TURN
+           *  aggregate, and NOT what the victim ended up taking. Pre-funnel: a Protection cascade
+           *  may have moved a slice of it to a protector, an incoming-block proc may have shaved
+           *  one. Present only when a damage aggregate is in scope. The combat log's splash
+           *  `amount` reads this. Anything sized on what the victim TOOK reads `takenDamage`
+           *  below. */
           damage?: number;
+          /** What this victim actually TOOK from this sub-attack: the funnel's own recorded
+           *  intake (`VictimDamageOutcome.incomingBooked`) — post-Protection-cascade,
+           *  post-incoming-block, excluding a slice deferred into a DoT, and INCLUDING damage a
+           *  shield absorbed.
+           *
+           *  Owner ruling 2026-09-03: this is the basis for `basis:'damage-taken'` reactives
+           *  (Adaptive Plating) AND for the `requireIncomingDamageFracOfMaxHp` threshold gate
+           *  (Tenacity) — one figure, both uses; the split was offered and declined. It matches
+           *  the taken-leech basis ruled in PR #464.
+           *
+           *  A SEPARATE field from `damage` for the same reason `ability-performed` carries
+           *  `deliveredDamage` beside its own `damage`: `damage` drives the log and moving it
+           *  would move every golden. Legitimately 0 (a fully redirected hit), so consumers must
+           *  test for `undefined`, never falsiness. Present only on the positional path — the
+           *  non-positional emit has no funnel outcome in scope, so consumers fall back to
+           *  `damage` there. */
+          takenDamage?: number;
           /** True when the victim was the directly-targeted (primary) target of the
            *  attack, false/absent for splash/covered AoE victims. The non-positional emit only
            *  ever sees the focus victim, so it is always true there; `emitPerVictimAttacked`

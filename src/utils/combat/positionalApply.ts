@@ -285,8 +285,12 @@ export function applyPositionalDamage(args: {
      * whole thing into a DoT. A consumer that needs a damage-proportional BASIS must derive it from
      * `outcome` — {@link VictimDamageOutcome.incomingBooked} for what this victim took, plus
      * {@link VictimDamageOutcome.protectionRedirected} for what the attacker dealt elsewhere. It is
-     * left as the raw hit because the hook's other consumers legitimately want it: the `attacked`
-     * suppression asks only WHETHER a transform fired, not for a magnitude.
+     * left as the raw hit because the hook's other consumers legitimately want it: the combat
+     * log's splash `amount` reports the hit as thrown.
+     *
+     * The engine's own `attacked` signal reads BOTH: `damage` for the log-facing field and
+     * `incomingBooked` for `attacked.takenDamage`, which is what a damage-taken reactive and the
+     * >25%-max-HP gate scale off (owner ruling 2026-09-03).
      */
     onVictimResolved?: (
         victim: CombatActor,

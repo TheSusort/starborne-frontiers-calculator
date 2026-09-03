@@ -167,19 +167,21 @@ export interface Intent {
         subAttackIndex?: number;
         /** The damage of the triggering event, used by a reactive heal/shield to scale off
          *  that hit rather than the owner's max HP. Two consumers: `basis:'damage-dealt'`
-         *  (ability-performed.damage — damage the owner DEALT, e.g. Bloodthirst) and
-         *  `basis:'damage-taken'` (attacked.damage — damage the owner TOOK, e.g. Adaptive
-         *  Plating). Both are PER SUB-ATTACK, not per turn: `attacked.damage` is the slice one
-         *  sub-attack dealt to this victim (see its doc in `events.ts`), and a damage-taken
+         *  (ability-performed — damage the owner DEALT, e.g. Bloodthirst) and
+         *  `basis:'damage-taken'` (attacked — damage the owner TOOK, e.g. Adaptive
+         *  Plating). Both are PER SUB-ATTACK, not per turn: the stamp is the slice one
+         *  sub-attack dealt to this victim (see `attacked.damage`'s doc in `events.ts`), and a damage-taken
          *  reactive rolls once per incoming hit — which is the intended granularity, not an
          *  over-fire to be capped. Adaptive Plating carries `oncePerRound` because its own game
          *  text says "limited to once per round"; a reactive whose text says no such thing
          *  (Bloodthirst) rolls on every sub-attack.
-         *  For `basis:'damage-dealt'` the on-crit listener prefers the event's
-         *  `deliveredDamage` — what the sub-attack actually delivered, including a Protection
-         *  cascade's redirected chunk and excluding a DoT-transformed portion. `damage` remains the
-         *  fallback for the non-positional paths; a DPS run is positional and takes the
-         *  `deliveredDamage` branch. */
+         *  Each direction prefers the FUNNEL's own figure over the pre-funnel `damage`, falling
+         *  back to `damage` only on the non-positional paths (a DPS run is positional and takes
+         *  the funnel branch). The two directions read DIFFERENT funnel figures, deliberately:
+         *  damage-dealt takes `ability-performed.deliveredDamage`, which INCLUDES a Protection
+         *  cascade's redirected chunk (the attacker dealt it); damage-taken takes
+         *  `attacked.takenDamage`, which EXCLUDES it (the protector took it, not the owner).
+         *  Both exclude a DoT-transformed portion. */
         triggerDamage?: number;
         /** The triggering hit's crit outcome (on-attacked -> attacked.didCrit), read by the
          *  reactive cleanse executor to pick `critCount` over `count` (Reactive Ward). */
@@ -1144,18 +1146,22 @@ export function registerReactiveListeners(args: {
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
+                        // What the owner actually TOOK from this hit — owner ruling 2026-09-03,
+                        // the basis for BOTH consumers below. `?? e.damage` is the
+                        // non-positional path, which stamps no funnel figure. Read
+                        // `attacked.takenDamage`'s doc in `events.ts`.
+                        const taken = e.takenDamage ?? e.damage;
                         const fracGate = ra.ability.requireIncomingDamageFracOfMaxHp;
                         if (fracGate !== undefined) {
                             const maxHp = maxHpOf?.(ownerId);
-                            if (e.damage === undefined || !maxHp || e.damage <= fracGate * maxHp)
-                                return;
+                            if (taken === undefined || !maxHp || taken <= fracGate * maxHp) return;
                         }
                         enqueue({
                             ...intent,
                             eventCtx: {
                                 counterTargetId: e.attackerId,
                                 didCrit: e.didCrit,
-                                triggerDamage: e.damage,
+                                triggerDamage: taken,
                                 isPrimaryTarget: e.isPrimaryTarget,
                                 shieldWasHit: e.shieldWasHit,
                                 // Which of the attacker's consecutive attacks this hit

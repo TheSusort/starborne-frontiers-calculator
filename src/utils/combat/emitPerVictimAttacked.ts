@@ -22,7 +22,10 @@ export function emitPerVictimAttacked(args: {
     round: number;
     attackerId: string;
     primaryId: string;
-    victims: Map<string, { damage: number; shieldWasHit: boolean; hitOutcomes: boolean[] }>;
+    victims: Map<
+        string,
+        { damage: number; takenDamage?: number; shieldWasHit: boolean; hitOutcomes: boolean[] }
+    >;
     /** The sub-attack `victims` belongs to — stamped onto every event it emits. */
     subAttackIndex?: number;
 }): void {
@@ -36,6 +39,7 @@ export function emitPerVictimAttacked(args: {
             isPrimaryTarget: victimId === args.primaryId,
             shieldWasHit: sig.shieldWasHit,
             damage: sig.damage,
+            ...(sig.takenDamage !== undefined ? { takenDamage: sig.takenDamage } : {}),
             ...(args.subAttackIndex !== undefined ? { subAttackIndex: args.subAttackIndex } : {}),
         });
     }

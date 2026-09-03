@@ -9278,7 +9278,11 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         /** One footprint victim's `attacked` signal within ONE sub-attack. */
         interface PositionalVictimSignal {
+            /** The hit AS THROWN (pre-funnel) — what `attacked.damage` carries. */
             damage: number;
+            /** What the victim TOOK (the funnel's `incomingBooked`) — what `attacked.takenDamage`
+             *  carries. Read that event field's doc for why the two are separate. */
+            takenDamage: number;
             shieldWasHit: boolean;
             hitOutcomes: boolean[];
         }
@@ -9429,10 +9433,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                         }
                         const prev = bySubAttack.get(victim.id) ?? {
                             damage: 0,
+                            takenDamage: 0,
                             shieldWasHit: false,
                             hitOutcomes: [],
                         };
                         prev.damage += damage;
+                        // The funnel's own figure for this victim, accumulated beside the thrown
+                        // one. `onVictimResolved`'s outcome is an `AppliedVictimDamage` here, so
+                        // `incomingBooked` is always present; the fallback mirrors
+                        // `positionalApply`'s own for a caller that supplies none.
+                        prev.takenDamage +=
+                            outcome.incomingBooked ?? damage - (outcome.transformedToDot ?? 0);
                         prev.shieldWasHit =
                             prev.shieldWasHit ||
                             (!outcome.barriered &&
