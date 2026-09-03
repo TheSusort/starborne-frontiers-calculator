@@ -7,6 +7,8 @@ Oracle baseline before any edit: **GREEN** (37842 tokens identical).
 
 ---
 
+## Per-block entries
+
 ### engine.ts:161-171 [history-claim]
 CLAIM: "The dummy actor that used to host that bucket is gone; the bucket is not. Keeping the
 literal 'enemy' keeps the event stream byte-identical across the deletion… the same lie
@@ -556,24 +558,24 @@ UNREACHABLE, where a second producer exists that the author was not thinking abo
     owner"** — `reactivePerOwner` in the same function builds from
     `teamRuntimeById.get(t.id)!.reactiveAbilities` and hands them to `registerReactiveListeners`.
 
-12. **`rawTotals.generic` / `totalGenericRaw`: "Always 0 today (generic DoTs are never
+11. **`rawTotals.generic` / `totalGenericRaw`: "Always 0 today (generic DoTs are never
     auto-applied from skill text in this task)"** — `convertHitToSelfDot` (engine.ts:1997) is a
     live producer, reached at engine.ts:6190-6198 from a `transform-incoming-to-dot` ability that
     the parser DOES emit (`skillTextParser.ts:3143`, Voron/Orel) and from Hit Mitigation
     (Oleander); the ticks credit `focus.generic` → `totalGenericRaw` (engine.ts:12810). The
     companion "not consumed by DPSSimulationSummary" half IS true.
 
-13. **`healingRounds` seam: "target HP can only reach 0 via enemy attacks"** — the #362
+12. **`healingRounds` seam: "target HP can only reach 0 via enemy attacks"** — the #362
     reversed-repair branch in the same function damages the heal target through an ally's repair.
 
 Plus one false COUNT:
 
-14. **`ReactiveSideCtx`: "The four side-specific fields the reactive intent drain needs"** — the
+13. **`ReactiveSideCtx`: "The four side-specific fields the reactive intent drain needs"** — the
     interface declares roughly eighteen.
 
 And one recorded for the 4500+ owner (edit reverted, out of my range):
 
-15. **`incomingHealAmpAbilitiesById`: "Consumed by the heal-apply fold (a later task) — nothing
+14. **`incomingHealAmpAbilitiesById`: "Consumed by the heal-apply fold (a later task) — nothing
     reads it yet"** (old line 4527-4528) — `incomingHealAmpAbilitiesOf` is read at
     engine.ts:3823 via `incomingHealAmpForRecipient`.
 
@@ -581,7 +583,7 @@ And one recorded for the 4500+ owner (edit reverted, out of my range):
 
 **None.** No comment in lines 1-4499 asserted a MECHANIC that the adjacent code visibly does not
 perform. Every false claim found — including the two always-zero / unreachable-state claims
-(items 12-13) — was settled by grep against a named producer or reader, never by inference about
+(items 11-12) — was settled by grep against a named producer or reader, never by inference about
 how the game ought to behave; each was therefore safe to rewrite. Nothing needed an owner ruling.
 
 Two adjacent observations, offered as notes rather than questions:
@@ -610,7 +612,7 @@ Two adjacent observations, offered as notes rather than questions:
   149). Four are deliberate keeps — current lines 279 (intra-cast clause order), 978-980
   (`dedupeByBuffName`), 2776 (applier-has-no-ctx) and 3615 (`repairCountBySource`'s "used to
   trigger", i.e. "is used to"). The other two are OUT OF MY RANGE and were left untouched: current
-  4412 = original 4527 (`incomingHealAmpAbilitiesById`, which is FALSE — see item 15) and current
+  4412 = original 4527 (`incomingHealAmpAbilitiesById`, which is FALSE — see item 14) and current
   4463 = original 4579 (`Wave 4 Task 8`). NOTE: because the file shrank by ~120 lines,
   `--to 4499` now reaches past original line 4499; the two out-of-range hits appear only for that
   reason.
