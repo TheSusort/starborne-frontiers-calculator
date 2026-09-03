@@ -884,7 +884,23 @@ export const AbilityCard: React.FC<Props> = ({
                             helpLabel="Meatshield's shape: steal only this status, up to the threshold beside it. Leave blank for a normal 'steal N buffs'."
                             value={config.buffName ?? ''}
                             onChange={(e) => {
+                                // The typed value is kept VERBATIM. This input is controlled, so
+                                // trimming on change rewrites the DOM value on every keystroke
+                                // and an interior space can never survive being typed — which
+                                // locks the field to single-word statuses ("Titanite Plating" is
+                                // unreachable). Surrounding whitespace is normalized on blur.
+                                // A value that is ONLY whitespace still reads as ABSENT, so the
+                                // all-or-nothing pair below can never be half-saved.
+                                const buffName = e.target.value.trim() ? e.target.value : undefined;
+                                updateConfig({
+                                    ...config,
+                                    buffName,
+                                    upToStacks: buffName ? config.upToStacks : undefined,
+                                });
+                            }}
+                            onBlur={(e) => {
                                 const buffName = e.target.value.trim() || undefined;
+                                if (buffName === config.buffName) return;
                                 updateConfig({
                                     ...config,
                                     buffName,

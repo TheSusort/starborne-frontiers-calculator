@@ -1,3 +1,4 @@
+import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AbilityCard } from '../AbilityCard';
@@ -1229,5 +1230,79 @@ describe('AbilityCard target options (#407)', () => {
         };
         render(<AbilityCard ability={chargeAbility} onChange={vi.fn()} onRemove={vi.fn()} />);
         expect(openTargetOptions()).toEqual(['Self', 'All allies', 'Enemy']);
+    });
+});
+
+// The top-up buff-steal names a STATUS, and real status names contain spaces ("Titanite
+// Plating"). Trimming inside a CONTROLLED input's onChange rewrites the DOM value on every
+// keystroke, so the interior space is stripped the moment it is typed and a multi-word name can
+// never be entered at all. Whitespace still has to be normalized — on blur, where it does not
+// fight the caret.
+describe('AbilityCard — the top-up buff-steal name accepts multi-word statuses', () => {
+    const stealAbility: Ability = {
+        id: 'a-steal',
+        type: 'buff-steal',
+        target: 'enemy',
+        trigger: 'on-cast',
+        conditions: [],
+        config: { type: 'buff-steal', count: 1, buffName: undefined, upToStacks: undefined },
+    };
+
+    /** The editor is CONTROLLED: without feeding the ability back the input value never changes
+     *  and the bug is invisible. */
+    const Harness = ({ initial }: { initial: Ability }): React.ReactElement => {
+        const [ability, setAbility] = React.useState(initial);
+        return <AbilityCard ability={ability} onChange={setAbility} onRemove={vi.fn()} />;
+    };
+
+    /** Keystroke-by-keystroke, reading the live DOM value back each time — exactly what a user's
+     *  keyboard does to a controlled input. A single bulk `change` would hide the defect. */
+    const typeInto = (input: HTMLInputElement, text: string): void => {
+        for (const ch of text) {
+            fireEvent.change(input, { target: { value: input.value + ch } });
+        }
+    };
+
+    it('keeps the interior space while typing a two-word status name', () => {
+        render(<Harness initial={stealAbility} />);
+        const input = screen.getByLabelText<HTMLInputElement>('Named buff (top-up)');
+
+        typeInto(input, 'Titanite Plating');
+
+        expect(input.value).toBe('Titanite Plating');
+    });
+
+    it('normalizes surrounding whitespace on blur, not on every keystroke', () => {
+        render(<Harness initial={stealAbility} />);
+        const input = screen.getByLabelText<HTMLInputElement>('Named buff (top-up)');
+
+        fireEvent.change(input, { target: { value: 'Titanite Plating  ' } });
+        expect(input.value).toBe('Titanite Plating  ');
+
+        fireEvent.blur(input);
+        expect(input.value).toBe('Titanite Plating');
+    });
+
+    it('clears the name/threshold pair together when the name is blanked on blur', () => {
+        const seeded: Ability = {
+            ...stealAbility,
+            config: { type: 'buff-steal', count: 1, buffName: 'Protection', upToStacks: 3 },
+        };
+        const onChange = vi.fn();
+        render(<AbilityCard ability={seeded} onChange={onChange} onRemove={vi.fn()} />);
+        const input = screen.getByLabelText<HTMLInputElement>('Named buff (top-up)');
+
+        fireEvent.change(input, { target: { value: '   ' } });
+        fireEvent.blur(input);
+
+        expect(onChange).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                config: expect.objectContaining({
+                    type: 'buff-steal',
+                    buffName: undefined,
+                    upToStacks: undefined,
+                }),
+            })
+        );
     });
 });
