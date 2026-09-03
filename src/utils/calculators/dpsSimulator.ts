@@ -201,9 +201,11 @@ export interface RoundData {
      *  RE-DERIVED BY SUBTRACTION on the DPS path, not read from the engine's row: the positional
      *  apply suppresses `creditDamage(actor,'direct',…)`, so the engine's own `directDamage`
      *  reads ~0 for a real-enemy run. `simulateDPS` recomputes it as the focus's `perTargetDealt`
-     *  total minus the honest per-kind rows below (corrosion + inferno + generic + detonation),
-     *  clamped at 0. It is the ONLY per-kind row that needs this — see the derivation comment in
-     *  `simulateDPS` for why reading `perTargetDealt` directly would double-count DoT ticks. */
+     *  total minus the honest per-kind rows below (corrosion + inferno + detonation), clamped at
+     *  0. `genericDamage` is deliberately NOT one of the subtrahends — it is folded INTO this
+     *  total rather than carved out of it; see `genericDamage`'s own doc below. It is the ONLY
+     *  per-kind row that needs this — see the derivation comment in `simulateDPS` for why reading
+     *  `perTargetDealt` directly would double-count DoT ticks. */
     directDamage: number;
     corrosionDamage: number;
     infernoDamage: number;

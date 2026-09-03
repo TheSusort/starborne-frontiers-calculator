@@ -3916,6 +3916,16 @@ const DocumentationPage: React.FC = () => {
                                         mistaken for one that did — nor for one that never happened.
                                     </li>
                                     <li>
+                                        <strong>Buff steals name what moved:</strong> When a ship
+                                        steals a buff — Pallas, Thresh and Tithonus can all do this
+                                        — the row names the thief, the ship it took from, and the
+                                        buff itself, e.g. &quot;stole Protection&quot;. Taking
+                                        multiple stacks of the same buff in one steal reads
+                                        &quot;stole Protection x2&quot; rather than listing it
+                                        twice. A steal that finds nothing to take opens no row at
+                                        all.
+                                    </li>
+                                    <li>
                                         <strong>Buff grants show who cast them:</strong> A buff
                                         entry is attributed to the ship that granted it, with the
                                         ally that received it listed as the target — so a support

@@ -1958,10 +1958,14 @@ interface DamageAccountingSink {
  * share — the ability-based Voron/Orel `transform-incoming-to-dot` and the name-keyed
  * `Hit Mitigation` one-shot. The two steps differ only in where `rounds` comes from (the ability's
  * `turns` vs the status's fixed spread), and the accounting MUST NOT diverge between them:
- *  - the DoT is credited to the victim itself (`sourceId: victim.id`), so the existing generic-DoT
- *    tick sites pick it up with no extra wiring, and its damage is never attributed to the attacker;
- *  - `convertedFromHit: true` marks it as NOBODY's damage dealt, so its ticks pay no damage-dealt
- *    leech to the converter either — read that field's doc for the ruling;
+ *  - the DoT is credited to the victim itself (`sourceId: victim.id`) on the MECHANICS axis, so
+ *    the existing generic-DoT tick sites pick it up with no extra wiring. The DISPLAY axis is
+ *    separate: `dealtCreditId: attackerId` (stamped a few lines below) attributes the tick's
+ *    damage back to whoever threw the converted hit, so the attacker's on-screen number does not
+ *    read 0 against a transforming victim — see `ActiveDoTStack.dealtCreditId`'s doc for the
+ *    two-axis split;
+ *  - `convertedFromHit: true` marks it as NOBODY's damage dealt, so its ticks pay a damage-dealt
+ *    leech to neither the attacker nor the converter — read that field's doc for the ruling;
  *  - reversing the `.incoming` the funnel already recorded is what makes the battle sim's HP
  *    derivation (incoming − shield − barrier) net to zero real HP loss for this hit — the damage
  *    instead lands over time, each tick recording its own `.incoming`;

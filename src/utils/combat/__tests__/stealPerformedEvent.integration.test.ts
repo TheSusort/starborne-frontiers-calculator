@@ -12,8 +12,12 @@
  *     a steal. Pallas, Thresh and Tithonus have had steal abilities for many releases and not one
  *     fingerprint covered them.
  *
- * So the goldens MOVE with this change, and that movement is the deliverable rather than a cost:
- * every ship that actually steals in its fixture gains a `steal` token it should always have had.
+ * NO GOLDEN MOVED when this event shipped (PR #466) — measured, not assumed: no fingerprint
+ * scenario at the time carried a stealable buff at all (`richEnemy` seeded a depletable SHIELD
+ * POOL on enemy actors, not buffs), so Pallas/Thresh/Tithonus cast their charged skills, stole
+ * nothing, and gained no token. Coverage arrived one PR later (#467, the `statusRich` scenario
+ * arm), which is what finally gives an enemy a stealable buff. There are exactly 3 `steal` tokens
+ * in `realKitFingerprints.test.ts.snap` today, all `steal:charged`.
  *
  * ⚠️ THE TRAP THIS FILE EXISTS TO CATCH. `battleSimulator.ts` carries an explicit event
  * SUBSCRIPTION LIST, and its own comment warns that `buildCombatLog` has a handler keyed on the

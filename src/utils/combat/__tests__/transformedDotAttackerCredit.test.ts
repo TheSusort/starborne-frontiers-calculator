@@ -153,10 +153,14 @@ describe('a transformed hit credits the ATTACKER on the display axis', () => {
         idc = 0;
         const result = runCombat(PLAYER_ATTACKS());
 
-        // ANTI-VACUITY: the transform really fired — the direct hit itself lands for 0 every round.
-        expect(
-            result.rounds.every((r) => (r.perTargetDealt?.['attacker']?.['voron'] ?? 0) >= 0)
-        ).toBe(true);
+        // ANTI-VACUITY: the transform really fired. Round 0's direct hit credits the attacker
+        // with 0, not DIRECT_HIT — ticks only start landing from round 1 (see the comment below).
+        // The untransformed control test further down shows the counterfactual: with the
+        // transform off, `dealt(result, 'attacker', 'voron')` for the WHOLE run is
+        // `DIRECT_HIT * ROUNDS`, i.e. every round (round 0 included) books the full DIRECT_HIT
+        // immediately. If `convertHitToSelfDot` stopped firing here, round 0 would book
+        // DIRECT_HIT the same way and this assertion would go red.
+        expect(result.rounds[0].perTargetDealt?.['attacker']?.['voron'] ?? 0).toBe(0);
         expect(dealt(result, 'voron', 'voron')).toBe(0);
         // Ticks: 0, 1×TICK, 2×TICK, then 3×TICK for the remaining rounds (a new 3-round entry per
         // round, three overlapping at steady state).
