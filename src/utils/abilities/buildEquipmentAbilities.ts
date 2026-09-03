@@ -833,9 +833,19 @@ const IMPLANT_ABILITIES: Partial<Record<string, ImplantAbilityBuilder>> = {
     // H3.2: Adaptive Plating — when directly damaged, X% chance to gain a Shield equal to Y% of
     // the damage taken, limited to once per round. `on-attacked` is the "directly damaged" trigger
     // (DoTs route through dot-applied, never on-attacked). basis 'damage-taken' scales off the
-    // triggering hit's damage (eventCtx.triggerDamage, H3.1). oncePerRound caps the grant to ONE per
-    // round — the `attacked` event's damage is the per-attack aggregate and on-attacked fires once
-    // per hit, so without the gate an N-hit attack would grant N times. No common/rare variants.
+    // triggering hit's damage (eventCtx.triggerDamage, H3.1). No common/rare variants.
+    //
+    // On a multi-hit attack the shield is Y% of the ONE hit that triggered it, not Y% of the
+    // attack's total — the shape `oncePerRound` + `damage-taken` produce on the positional path,
+    // which is the path the sim runs.
+    //
+    // `oncePerRound` is load-bearing, but NOT because `attacked.damage` is a per-attack aggregate:
+    // what that field carries is path-dependent, and `emitAttacked`'s own doc is the one place that
+    // rule lives. Read it before reasoning about the basis. The gate is required because
+    // `emitAttacked` emits one event per `hitOutcomes` entry, so the non-positional caller — which
+    // passes the whole cast's outcomes alongside the attack's aggregate damage — re-emits that
+    // aggregate once per hit; without the gate an N-hit attack there would grant N full-size
+    // shields.
     ADAPTIVE_PLATING: (rarity) => {
         const procChance = ADAPTIVE_PLATING_PROC[rarity];
         const pct = ADAPTIVE_PLATING_PCT[rarity];
