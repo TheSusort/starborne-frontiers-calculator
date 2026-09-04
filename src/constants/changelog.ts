@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Upgrade analysis: a new coverage grid shows farming headroom by role and slot.',
+    'Upgrade analysis: role cards and slot tabs now lead with the biggest headroom.',
     'Factions: the Tianchao faction is now called Tianchen, matching the game.',
     'Ship search: searching Tianchao still finds Tianchen ships.',
     'Combat simulator: the round log now names buff steals, collapsing repeated stacks.',
@@ -35,8 +37,6 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: damage-taken reactions and Tenacity now read what the ship actually took.',
     'Combat simulator: a converting ship no longer leeches off damage it absorbs.',
     "Combat simulator: Asphyxiator's crit-landed debuffs now last one turn longer.",
-    'Upgrade analysis: a new coverage grid shows farming headroom by role and slot.',
-    'Upgrade analysis: role cards and slot tabs now lead with the biggest headroom.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

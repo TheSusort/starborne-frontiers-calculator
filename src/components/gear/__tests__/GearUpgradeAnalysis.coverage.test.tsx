@@ -226,4 +226,54 @@ describe('GearUpgradeAnalysis coverage grid', () => {
         const weaponTab = within(defenderCard!).getByRole('button', { name: 'Weapon' });
         expect(weaponTab).toHaveAttribute('aria-current', 'page');
     });
+
+    it("renders a role card's slot tabs in coverage.slotOrderByRole order, with All Slots first", async () => {
+        // ATTACKER's mocked order is the reverse of GEAR_SLOT_ORDER; DEFENDER
+        // stays identity-ordered so only ATTACKER's card is a useful witness.
+        const reversedAttackerOrder = [...GEAR_SLOT_NAMES].reverse();
+        buildCoverageMatrixMock.mockReturnValue(
+            makeMatrix({
+                roleOrder: ['ATTACKER', 'DEFENDER'],
+                slotOrderByRole: {
+                    ATTACKER: reversedAttackerOrder,
+                    DEFENDER: [...GEAR_SLOT_NAMES],
+                },
+                weaponCount: 5,
+                weaponHeadroom: 0.42,
+            })
+        );
+
+        render(
+            <GearUpgradeAnalysis
+                inventory={[]}
+                shipRoles={['ATTACKER', 'DEFENDER']}
+                mode="analysis"
+                initialStats={['security']}
+            />
+        );
+
+        await act(async () => {
+            await vi.runAllTimersAsync();
+        });
+
+        const attackerCard = document.getElementById('role-card-ATTACKER');
+        expect(attackerCard).toBeInTheDocument();
+
+        // Scope to the tab nav itself so result-card buttons (Edit, etc.)
+        // in the currently-selected slot's results can't pollute the order.
+        const tabNav = within(attackerCard!).getByRole('navigation', { name: 'Tabs' });
+        const tabLabels = within(tabNav)
+            .getAllByRole('button')
+            .map((button) => button.getAttribute('aria-label'));
+
+        expect(tabLabels).toEqual([
+            'All Slots',
+            'Thrusters',
+            'Software',
+            'Sensors',
+            'Generator',
+            'Hull',
+            'Weapon',
+        ]);
+    });
 });
