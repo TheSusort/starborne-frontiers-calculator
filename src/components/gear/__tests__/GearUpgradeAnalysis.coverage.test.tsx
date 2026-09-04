@@ -74,12 +74,12 @@ function makeMatrix({
     roleOrder,
     slotOrderByRole,
     weaponCount,
-    weaponHeadroom,
+    weaponPriority,
 }: {
     roleOrder: ('ATTACKER' | 'DEFENDER')[];
     slotOrderByRole: Record<'ATTACKER' | 'DEFENDER', (typeof GEAR_SLOT_NAMES)[number][]>;
     weaponCount: number;
-    weaponHeadroom: number;
+    weaponPriority: number;
 }): CoverageMatrix {
     const cells = {} as CoverageMatrix['cells'];
     for (const role of roleOrder) {
@@ -89,7 +89,7 @@ function makeMatrix({
                 role,
                 slot,
                 count: slot === 'weapon' ? weaponCount : 1,
-                headroom: slot === 'weapon' ? weaponHeadroom : 0.1,
+                priority: slot === 'weapon' ? weaponPriority : 0.1,
                 rank: index + 1,
             };
         });
@@ -114,7 +114,7 @@ describe('GearUpgradeAnalysis coverage grid', () => {
                     DEFENDER: [...GEAR_SLOT_NAMES],
                 },
                 weaponCount: 5,
-                weaponHeadroom: 0.42,
+                weaponPriority: 0.42,
             })
         );
     });
@@ -157,7 +157,7 @@ describe('GearUpgradeAnalysis coverage grid', () => {
                     DEFENDER: [...GEAR_SLOT_NAMES],
                 },
                 weaponCount: 5,
-                weaponHeadroom: 0.42,
+                weaponPriority: 0.42,
             })
         );
 
@@ -238,7 +238,7 @@ describe('GearUpgradeAnalysis coverage grid', () => {
                     DEFENDER: [...GEAR_SLOT_NAMES],
                 },
                 weaponCount: 5,
-                weaponHeadroom: 0.42,
+                weaponPriority: 0.42,
             })
         );
 

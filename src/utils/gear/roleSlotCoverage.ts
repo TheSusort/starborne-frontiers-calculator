@@ -1,16 +1,25 @@
 import type { GearPiece } from '../../types/gear';
-import type { BaseStats, PercentageOnlyStats, Stat } from '../../types/stats';
+import type {
+    BaseStats,
+    FlexibleStats,
+    PercentageOnlyStats,
+    Stat,
+    StatName,
+    StatType,
+} from '../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../types/stats';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { GEAR_SLOT_ORDER, type GearSlotName } from '../../constants/gearTypes';
+import { GEAR_SLOT_ORDER, GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
+import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats } from '../../constants/roleBaseStats';
 import { calculateRoleScore } from '../autogear/priorityScore';
+import { calculateMainStatValue } from './mainStatValueFetcher';
 
 /** Only fully-levelled gear counts as supply. */
 export const COVERAGE_MIN_LEVEL = 16;
 
-/** How deep into the quality tail the headroom gap looks. */
+/** Top marginals sampled per (role, slot), zero-padded up to this size. */
 export const COVERAGE_SAMPLE_SIZE = 20;
 
 /**
@@ -67,29 +76,145 @@ export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number 
     return calculateRoleScore(role, withPiece) - getBaselineScore(role);
 }
 
+/** Build a bare stat-carrying piece so `scorePieceForRole` can score one candidate stat. */
+function scoreCandidateStat(stat: Stat, role: ShipTypeName): number {
+    return scorePieceForRole(
+        {
+            id: 'ideal-candidate',
+            slot: 'weapon',
+            level: COVERAGE_MIN_LEVEL,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: null,
+            subStats: [stat],
+            setBonus: null,
+        },
+        role
+    );
+}
+
+function makeStat(name: StatName, type: StatType, value: number): Stat {
+    return type === 'percentage'
+        ? { name, value, type: 'percentage' }
+        : { name: name as FlexibleStats, value, type: 'flat' };
+}
+
 /**
- * How much farming headroom a set of marginal scores implies, in [0, 1].
- *
- * 0 means the top of the distribution is filled in — the best piece is no
- * better than the next 19, so further drops will not move the needle.
- * 1 means all the quality sits in one piece (or there is no piece at all).
- *
- * Substats roll randomly, so the spread of the top order statistics shrinks
- * as the sample grows: this measures how deep into the tail the player has
- * already sampled, which raw counts cannot.
+ * The type a stat rolls as when it is this slot's main stat: percentage-only
+ * stats (crit, critDamage, ...) are always percentage; flat slots (weapon,
+ * hull, generator) roll their main stat flat; the three percentage slots
+ * (sensor, software, thrusters) roll it as a share of the reference block.
  */
-export function computeHeadroom(marginals: number[]): number {
+function mainStatType(slot: GearSlotName, statName: StatName): StatType {
+    if (PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)) return 'percentage';
+    return slot === 'weapon' || slot === 'hull' || slot === 'generator' ? 'flat' : 'percentage';
+}
+
+/**
+ * The best-scoring main stat this slot can carry for `role`, at level 16,
+ * 6-star legendary. Ties broken by `availableMainStats` order.
+ */
+function pickIdealMainStat(role: ShipTypeName, slot: GearSlotName): Stat | null {
+    let best: { stat: Stat; score: number } | null = null;
+    for (const name of GEAR_SLOTS[slot].availableMainStats) {
+        const type = mainStatType(slot, name);
+        const stat = makeStat(
+            name,
+            type,
+            calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
+        );
+        const score = scoreCandidateStat(stat, role);
+        if (!best || score > best.score) best = { stat, score };
+    }
+    return best?.stat ?? null;
+}
+
+/**
+ * The four best-scoring legendary-max substats for `role`, excluding
+ * `excludeName` (the slot's chosen main stat). A stat with both a flat and a
+ * percentage roll (e.g. attack) takes whichever variant scores higher — both
+ * are legal rolls. Greedy per stat: each candidate is scored on its own, not
+ * combined with the others first, since this is a normaliser and a monotone
+ * approximation is enough (see the amendment brief for why an exhaustive
+ * search over combinations is not worth its cost here).
+ */
+function pickIdealSubstats(role: ShipTypeName, excludeName: StatName | null): Stat[] {
+    const scored: { stat: Stat; score: number }[] = [];
+    for (const name of Object.keys(SUBSTAT_RANGES) as StatName[]) {
+        if (name === excludeName) continue;
+        const ranges = SUBSTAT_RANGES[name];
+        let best: { stat: Stat; score: number } | null = null;
+        for (const type of ['flat', 'percentage'] as StatType[]) {
+            const range = ranges[type];
+            if (!range) continue;
+            const stat = makeStat(name, type, range.legendary.max);
+            const score = scoreCandidateStat(stat, role);
+            if (!best || score > best.score) best = { stat, score };
+        }
+        if (best) scored.push(best);
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 4).map((entry) => entry.stat);
+}
+
+interface IdealPiece {
+    piece: GearPiece;
+    /** `scorePieceForRole(piece, role)`. <= 0 means nothing this slot can carry helps this role. */
+    idealMarginal: number;
+}
+
+/** (role, slot) never changes, so the ideal piece is computed once and cached. */
+const idealPieceCache = new Map<string, IdealPiece>();
+
+function getIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPiece {
+    const key = `${role}:${slot}`;
+    const cached = idealPieceCache.get(key);
+    if (cached) return cached;
+
+    const mainStat = pickIdealMainStat(role, slot);
+    const subStats = pickIdealSubstats(role, mainStat?.name ?? null);
+    const piece: GearPiece = {
+        id: `ideal-${role}-${slot}`,
+        slot,
+        level: COVERAGE_MIN_LEVEL,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat,
+        subStats,
+        setBonus: null,
+    };
+    const result: IdealPiece = { piece, idealMarginal: scorePieceForRole(piece, role) };
+    idealPieceCache.set(key, result);
+    return result;
+}
+
+/**
+ * How much of this (role, slot)'s ceiling the player's owned pieces cover,
+ * in [0, 1], as `1 - priority`.
+ *
+ * `idealMarginal` is the marginal of a level-16, 6-star legendary piece built
+ * from the best-scoring stats this slot can carry for this role — see
+ * `getIdealPiece`. Comparing every player's pieces against the same ceiling,
+ * rather than against each other, is what makes roles comparable: a role
+ * whose score formula reads a rare stat and a role that reads common ones are
+ * no longer judged by how bunched their own top pieces are.
+ *
+ * The mean is over the top `COVERAGE_SAMPLE_SIZE` marginals, zero-padded up
+ * to that size — not divided by however many pieces exist. Owning fewer than
+ * 20 pieces must not inflate the average: a single max-roll piece is not "20
+ * max-roll pieces sampled once", it is 1 real value and 19 unfarmed slots.
+ */
+export function computePriority(marginals: number[], idealMarginal: number): number {
+    if (idealMarginal <= 0) return 0;
+
     const sample = [...marginals].sort((a, b) => b - a).slice(0, COVERAGE_SAMPLE_SIZE);
-    if (sample.length <= 1) return 1;
+    // Zero-padded up to COVERAGE_SAMPLE_SIZE: divide by the fixed sample
+    // size, not by `sample.length`, so a thin sample is not treated as a
+    // small-but-complete population.
+    const mean = sample.reduce((sum, value) => sum + value, 0) / COVERAGE_SAMPLE_SIZE;
 
-    const best = sample[0];
-    if (best <= 0) return 1;
-
-    const rest = sample.slice(1);
-    const restMean = rest.reduce((sum, value) => sum + value, 0) / rest.length;
-
-    const gap = (best - restMean) / best;
-    return Math.min(1, Math.max(0, gap));
+    const coverage = mean / idealMarginal;
+    return Math.min(1, Math.max(0, 1 - coverage));
 }
 
 export interface CoverageCell {
@@ -97,22 +222,23 @@ export interface CoverageCell {
     slot: GearSlotName;
     /** Level-16 pieces owned in this slot. Equipped pieces included. */
     count: number;
-    /** 0 = saturated, 1 = all the quality sits in one piece (or none owned). */
-    headroom: number;
+    /** 0 = fully covered, 1 = nothing usable owned (or nothing this slot can carry helps the role). */
+    priority: number;
     /**
-     * 1 = most headroom within this slot column. Competition ranking: equal
-     * headroom shares a rank, and the next distinct value's rank skips ahead
-     * by the number of entries tied ahead of it (1,1,1,4,...). A column
-     * where every role ties — e.g. an empty inventory — gives every role rank 1.
+     * 1 = highest priority within this slot column. Competition ranking:
+     * equal priority shares a rank, and the next distinct value's rank skips
+     * ahead by the number of entries tied ahead of it (1,1,1,4,...). A
+     * column where every role ties — e.g. an empty inventory — gives every
+     * role rank 1.
      */
     rank: number;
 }
 
 export interface CoverageMatrix {
     cells: Record<ShipTypeName, Record<GearSlotName, CoverageCell>>;
-    /** Roles, most headroom first. */
+    /** Roles, highest priority first. */
     roleOrder: ShipTypeName[];
-    /** Each role's slots, most headroom first. */
+    /** Each role's slots, highest priority first. */
     slotOrderByRole: Record<ShipTypeName, GearSlotName[]>;
 }
 
@@ -127,6 +253,16 @@ function compareByThenOrder<T>(key: (item: T) => number, order: readonly T[]) {
         return gap !== 0 ? gap : order.indexOf(a) - order.indexOf(b);
     };
 }
+
+/**
+ * Two `value()` results this close count as tied. Different role scoring
+ * formulas run different arithmetic paths over bit-identical stat blocks, so
+ * a conceptual tie can come back as e.g. `2.9e-16` instead of an exact `0`.
+ * Priority is clamped to `[0, 1]`, so an absolute epsilon is the right
+ * comparison — a relative one would blow up exactly where this noise
+ * actually shows up, near zero.
+ */
+const TIE_EPSILON = 1e-9;
 
 /**
  * Competition ranking ("1,1,1,4,..."): items with an equal `value` share the
@@ -144,7 +280,8 @@ export function competitionRank<T>(
     const ranks = new Map<T, number>();
     sorted.forEach((item, index) => {
         const previous = sorted[index - 1];
-        const tiedWithPrevious = previous !== undefined && value(previous) === value(item);
+        const tiedWithPrevious =
+            previous !== undefined && Math.abs(value(previous) - value(item)) <= TIE_EPSILON;
         ranks.set(item, tiedWithPrevious ? (ranks.get(previous) as number) : index + 1);
     });
     return ranks;
@@ -153,10 +290,11 @@ export function competitionRank<T>(
 /**
  * Build the role x slot coverage matrix from the inventory.
  *
- * Ranking is per slot COLUMN, never across slots: flat slots (weapon, hull,
- * generator) have a fixed main stat, so their scores vary only by substat and
- * their gaps are inherently narrower than the percentage slots. Ranked raw,
- * they would read as permanently saturated for every player.
+ * Ranking is per slot COLUMN, never across slots: the grid answers "which
+ * role most needs THIS slot", and `computePriority` already normalises each
+ * (role, slot) cell independently against its own ideal-piece ceiling, so
+ * ranking within a column compares roles that are already on equal footing
+ * for that slot without needing a cross-slot bridge.
  */
 export function buildCoverageMatrix(inventory: GearPiece[]): CoverageMatrix {
     const roles = Object.keys(SHIP_TYPES);
@@ -174,22 +312,23 @@ export function buildCoverageMatrix(inventory: GearPiece[]): CoverageMatrix {
         for (const slot of GEAR_SLOT_ORDER) {
             const pieces = piecesBySlot.get(slot) ?? [];
             const marginals = pieces.map((piece) => scorePieceForRole(piece, role));
+            const { idealMarginal } = getIdealPiece(role, slot);
             cells[role][slot] = {
                 role,
                 slot,
                 count: pieces.length,
-                headroom: computeHeadroom(marginals),
+                priority: computePriority(marginals, idealMarginal),
                 rank: 0, // assigned below
             };
         }
     }
 
     // Rank each slot column independently with competition ranking: equal
-    // headroom shares a rank, and the next distinct value's rank skips ahead
+    // priority shares a rank, and the next distinct value's rank skips ahead
     // by the number of entries tied ahead of it (1,1,1,4,...). A fully tied
     // column — e.g. an empty inventory — gives every role rank 1.
     for (const slot of GEAR_SLOT_ORDER) {
-        const ranks = competitionRank(roles, (role) => cells[role][slot].headroom, roles);
+        const ranks = competitionRank(roles, (role) => cells[role][slot].priority, roles);
         for (const role of roles) cells[role][slot].rank = ranks.get(role) as number;
     }
 

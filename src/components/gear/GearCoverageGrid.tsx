@@ -36,11 +36,11 @@ const CoverageCellButton: React.FC<{
         type="button"
         onClick={onClick}
         data-testid={`coverage-cell-${cell.role}-${cell.slot}`}
-        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${cell.count} at level 16, ${Math.round(cell.headroom * 100)} percent headroom`}
+        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${cell.count} at level 16, ${Math.round(cell.priority * 100)} percent headroom`}
         className={`rounded-sm px-1 py-1.5 text-center transition-opacity hover:opacity-80 ${rankClass(cell.rank, roleCount)}`}
     >
         <span className="block text-xs font-semibold">{cell.count}</span>
-        <span className="block text-xxs opacity-80">{Math.round(cell.headroom * 100)}%</span>
+        <span className="block text-xxs opacity-80">{Math.round(cell.priority * 100)}%</span>
     </button>
 );
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     scorePieceForRole,
-    computeHeadroom,
+    computePriority,
     competitionRank,
     buildCoverageMatrix,
     COVERAGE_MIN_LEVEL,
@@ -146,65 +146,102 @@ describe('scorePieceForRole', () => {
     });
 });
 
-describe('computeHeadroom', () => {
-    it('is 1 when you own nothing', () => {
-        expect(computeHeadroom([])).toBe(1);
+describe('computePriority', () => {
+    // The amendment's degenerate-case table, in order.
+    it('is 1 when you own nothing in the slot', () => {
+        expect(computePriority([], 100)).toBe(1);
     });
 
-    it('is 1 when you own a single piece, with nothing to compare against', () => {
-        expect(computeHeadroom([50])).toBe(1);
+    it('is 0 when idealMarginal is exactly 0 — nothing this slot can carry helps the role', () => {
+        // Distinguishes this from the empty-inventory case above: an empty
+        // sample alone must NOT be enough to return 1.
+        expect(computePriority([], 0)).toBe(0);
+        expect(computePriority([50, 60], 0)).toBe(0);
     });
 
-    it('is 1 when the best piece is worthless', () => {
-        expect(computeHeadroom([0, 0, 0])).toBe(1);
-        expect(computeHeadroom([-5, -10])).toBe(1);
+    it('is 0 when idealMarginal is negative', () => {
+        expect(computePriority([], -5)).toBe(0);
     });
 
-    it('is 0 when every piece is identical', () => {
-        expect(computeHeadroom([40, 40, 40, 40])).toBe(0);
+    it('is 0 when 20 or more owned pieces already match the ideal', () => {
+        const ideal = 100;
+        expect(computePriority(Array<number>(20).fill(ideal), ideal)).toBe(0);
+        expect(computePriority(Array<number>(25).fill(ideal), ideal)).toBe(0);
     });
 
-    it("is the best piece's lead over the mean of the rest, as a share of the best", () => {
-        // best 100, rest mean 50 -> (100 - 50) / 100
-        expect(computeHeadroom([100, 50, 50])).toBeCloseTo(0.5, 10);
+    it('clamps to 0 when the greedy ideal-piece approximation undershoots (mean > idealMarginal)', () => {
+        // The ideal piece is a monotone approximation, not an exhaustive
+        // search, so real owned pieces can occasionally beat it.
+        expect(computePriority(Array<number>(20).fill(150), 100)).toBe(0);
     });
 
-    it('does not need sorted input', () => {
-        expect(computeHeadroom([50, 100, 50])).toBeCloseTo(0.5, 10);
+    it('never exceeds 1, even with marginals worse than the role baseline', () => {
+        // A negative marginal pulls the mean below 0, which would push
+        // coverage negative and 1 - coverage above 1 without the clamp.
+        expect(computePriority([-1000], 100)).toBe(1);
     });
 
-    it('ignores everything past the sample size', () => {
-        // 1 best + 19 equals fills the sample; the trailing zeros must not count.
-        const sample = [100, ...Array<number>(COVERAGE_SAMPLE_SIZE - 1).fill(100)];
-        const withTail = [...sample, ...Array<number>(50).fill(0)];
-        expect(computeHeadroom(withTail)).toBe(0);
+    it('zero-pads up to COVERAGE_SAMPLE_SIZE rather than dividing by the sample length', () => {
+        // One ideal piece: mean = idealMarginal / 20, so coverage is a bare
+        // 5% and priority is correspondingly still very high. Twenty ideal
+        // pieces: mean = idealMarginal, fully covered, priority 0. Dividing
+        // by `sample.length` instead of the fixed 20 would report both as
+        // fully covered (mean == idealMarginal either way).
+        const ideal = 100;
+        const onePiece = computePriority([ideal], ideal);
+        const twentyPieces = computePriority(Array<number>(20).fill(ideal), ideal);
+        expect(onePiece).toBeCloseTo(0.95, 10);
+        expect(twentyPieces).toBe(0);
+        expect(onePiece).toBeGreaterThan(twentyPieces);
+    });
+
+    it('does not let a sample past COVERAGE_SAMPLE_SIZE affect the mean', () => {
+        const ideal = 100;
+        const withoutTail = computePriority(Array<number>(20).fill(ideal), ideal);
+        const withTail = computePriority(
+            [...Array<number>(20).fill(ideal), ...Array<number>(50).fill(0)],
+            ideal
+        );
+        expect(withTail).toBe(withoutTail);
     });
 
     it('samples the top entries, not the first ones it is given', () => {
-        // Twenty 1s followed by five 100s. Sorting before truncating keeps all
-        // five 100s; truncating first would keep only the 1s and report a
-        // fully saturated 0.
-        const marginals = [...Array<number>(20).fill(1), ...Array<number>(5).fill(100)];
-        const rest = [100, 100, 100, 100, ...Array<number>(15).fill(1)];
-        const expected = (100 - rest.reduce((sum, v) => sum + v, 0) / rest.length) / 100;
+        const ideal = 100;
+        const marginals = [...Array<number>(20).fill(1), ...Array<number>(5).fill(ideal)];
+        // Sorting before truncating keeps the five ideal-scoring pieces;
+        // truncating first would keep only the 1s.
+        const sortedFirst = computePriority(marginals, ideal);
+        const truncatedFirst = computePriority(marginals.slice(0, 20), ideal);
+        expect(sortedFirst).not.toBe(truncatedFirst);
+    });
 
-        expect(computeHeadroom(marginals)).toBeCloseTo(expected, 10);
-        expect(computeHeadroom(marginals)).not.toBe(0);
+    it('does not need sorted input', () => {
+        expect(computePriority([1, 100, 1], 100)).toBe(computePriority([100, 1, 1], 100));
     });
 
     it('does not mutate its argument', () => {
         const marginals = [10, 50, 20];
-        computeHeadroom(marginals);
+        computePriority(marginals, 100);
         expect(marginals).toEqual([10, 50, 20]);
     });
 
-    it('reports near-total headroom for one good piece and a weak tail', () => {
-        expect(computeHeadroom([100, 1, 1, 1])).toBeGreaterThan(0.98);
+    it('normalises by the given idealMarginal, not a fixed constant', () => {
+        // Same marginals (40), two different ideals: coverage must track
+        // whichever idealMarginal is passed in, not a hardcoded reference.
+        expect(computePriority(Array<number>(20).fill(40), 200)).toBeCloseTo(0.8, 10);
+        expect(computePriority(Array<number>(20).fill(40), 40)).toBe(0);
     });
 
-    it('never leaves the unit interval', () => {
-        // A negative tail must clamp rather than push the gap above 1.
-        expect(computeHeadroom([100, -1000])).toBe(1);
+    it('scores 20 uniformly mediocre pieces at a higher priority than 20 max-roll pieces — the superseded metric got this backwards', () => {
+        // The old dispersion-based headroom metric reported 0.000 for BOTH
+        // groups (identical values within each group have zero spread), so
+        // it could not tell "flat and terrible" from "flat and finished".
+        // Here mediocre supply must read as needing MORE farming, not less.
+        const ideal = 100;
+        const mediocre = computePriority(Array<number>(20).fill(20), ideal);
+        const maxRoll = computePriority(Array<number>(20).fill(ideal), ideal);
+        expect(mediocre).toBeGreaterThan(maxRoll);
+        expect(maxRoll).toBe(0);
     });
 });
 
@@ -251,6 +288,23 @@ describe('competitionRank', () => {
         expect(ranks.get('a')).toBe(1);
         expect(ranks.get('b')).toBe(1);
     });
+
+    it('treats values within floating-point noise of each other as tied', () => {
+        // Different role scoring formulas run different arithmetic paths
+        // over bit-identical input, so a conceptual tie can come back as
+        // e.g. 5 and 5 + 2.9e-16 instead of two exact 5s.
+        const values: Record<string, number> = { a: 5, b: 5 + 1e-13 };
+        const ranks = competitionRank(Object.keys(values), (item) => values[item], ['a', 'b']);
+        expect(ranks.get('a')).toBe(1);
+        expect(ranks.get('b')).toBe(1);
+    });
+
+    it('does not treat a real gap as a tie just because it is small', () => {
+        const values: Record<string, number> = { a: 5, b: 5.001 };
+        const ranks = competitionRank(Object.keys(values), (item) => values[item], ['a', 'b']);
+        expect(ranks.get('b')).toBe(1);
+        expect(ranks.get('a')).toBe(2);
+    });
 });
 
 describe('buildCoverageMatrix', () => {
@@ -265,11 +319,11 @@ describe('buildCoverageMatrix', () => {
         }
     });
 
-    it('reports an empty inventory in the static role order', () => {
+    it('reports an empty inventory in the static role order, priority 1 everywhere', () => {
         const matrix = buildCoverageMatrix([]);
         expect(matrix.roleOrder).toEqual(Object.keys(SHIP_TYPES));
         expect(matrix.cells.ATTACKER.weapon.count).toBe(0);
-        expect(matrix.cells.ATTACKER.weapon.headroom).toBe(1);
+        expect(matrix.cells.ATTACKER.weapon.priority).toBe(1);
     });
 
     it('counts only level-16 pieces', () => {
@@ -301,7 +355,7 @@ describe('buildCoverageMatrix', () => {
     });
 
     it('gives every cell rank 1 when the whole slot column ties', () => {
-        // No gear at all: every cell in every column is headroom 1, a full
+        // No gear at all: every cell in every column is priority 1, a full
         // tie. Competition ranking gives every tied entry the SAME rank, so
         // this must not reproduce 1..12 the way an unconditional index+1
         // ranking would.
@@ -313,106 +367,65 @@ describe('buildCoverageMatrix', () => {
         }
     });
 
-    it('gives rank 1 to the role with the most headroom in that column', () => {
-        const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
-        const byRank = Object.keys(SHIP_TYPES).sort(
-            (x, y) => matrix.cells[x].weapon.rank - matrix.cells[y].weapon.rank
-        );
-        expect(matrix.cells[byRank[0]].weapon.headroom).toBeGreaterThanOrEqual(
-            matrix.cells[byRank[1]].weapon.headroom
-        );
-    });
-
-    it('gives an untouched role a strictly better sensor rank than a saturated one', () => {
-        // 20 identical attacker-flavoured sensors (crit + critDamage). Only
-        // ATTACKER, DEBUFFER and SUPPORTER read crit/critDamage in their
-        // score formula (directly, via hacking*dps, and via the heal crit
-        // multiplier respectively), so every piece scores an identical
-        // nonzero marginal for those three -> headroom ~0 (saturated). Every
-        // other role never reads crit/critDamage, so every piece scores a
-        // marginal of exactly 0 for them -> headroom exactly 1 via
-        // computeHeadroom's best<=0 branch, tied with every other untouched
-        // role. See the `competitionRank` describe block above for the
-        // exact-tie / skip-by-tie-count behaviour on clean values.
+    it('gives an untouched role a strictly better software rank than a saturated one', () => {
+        // calculateDebufferScore reads hacking multiplicatively
+        // (priorityScore.ts) and calculateDefenderScore never reads it.
+        // Twenty absurdly-strong hacking pieces push DEBUFFER's mean far
+        // past any real ideal-piece marginal (clamped to fully covered),
+        // while DEFENDER's marginal for every one of them stays exactly 0,
+        // leaving it at the untouched priority of 1.
         const stack = Array.from({ length: 20 }, (_, i) =>
             makeGear({
-                id: `sensor-${i}`,
-                slot: 'sensor',
-                mainStat: { name: 'crit', value: 25, type: 'percentage' },
-                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+                id: `sw-${i}`,
+                slot: 'software',
+                mainStat: { name: 'hacking', value: 1_000_000, type: 'flat' },
             })
         );
         const matrix = buildCoverageMatrix(stack);
-        expect(matrix.cells.DEFENDER.sensor.headroom).toBe(1);
-        expect(matrix.cells.DEFENDER.sensor.rank).toBe(1);
-        expect(matrix.cells.ATTACKER.sensor.headroom).toBeCloseTo(0, 10);
-        expect(matrix.cells.ATTACKER.sensor.rank).toBeGreaterThan(
-            matrix.cells.DEFENDER.sensor.rank
+        expect(matrix.cells.DEFENDER.software.priority).toBe(1);
+        expect(matrix.cells.DEFENDER.software.rank).toBe(1);
+        expect(matrix.cells.DEBUFFER.software.priority).toBe(0);
+        expect(matrix.cells.DEBUFFER.software.rank).toBeGreaterThan(
+            matrix.cells.DEFENDER.software.rank
         );
     });
 
     it("puts a role's saturated slot last in its own slot order", () => {
-        // A deep, uniform stack of attacker-flavoured sensors: ATTACKER's
-        // sensor column fills in (headroom collapses to ~0), so sensor must
-        // sort to the back of ATTACKER's own slot order.
+        // Same absurd-hacking-software stack: DEBUFFER's software column is
+        // fully covered (priority 0) while its other five slot columns are
+        // untouched (priority 1, tied with every other role), so software
+        // must sort to the back of DEBUFFER's own slot order.
         const stack = Array.from({ length: 20 }, (_, i) =>
             makeGear({
-                id: `sensor-${i}`,
-                slot: 'sensor',
-                mainStat: { name: 'crit', value: 25, type: 'percentage' },
-                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+                id: `sw-${i}`,
+                slot: 'software',
+                mainStat: { name: 'hacking', value: 1_000_000, type: 'flat' },
             })
         );
         const matrix = buildCoverageMatrix(stack);
-        expect(matrix.cells.ATTACKER.sensor.headroom).toBeLessThan(0.1);
-        expect(matrix.slotOrderByRole.ATTACKER[matrix.slotOrderByRole.ATTACKER.length - 1]).toBe(
-            'sensor'
+        expect(matrix.cells.DEBUFFER.software.priority).toBe(0);
+        expect(matrix.slotOrderByRole.DEBUFFER[matrix.slotOrderByRole.DEBUFFER.length - 1]).toBe(
+            'software'
         );
     });
 
     it('orders roles by mean column rank, not by the static order', () => {
-        // Twenty identical attacker-flavoured sensors (crit + critDamage) and
-        // nothing else.
-        //
-        // ATTACKER, DEBUFFER and SUPPORTER are "live" for these pieces
-        // (crit/critDamage feeds their score formula), so every identical
-        // piece scores an identical nonzero marginal for them -> headroom
-        // ~0. Each role's own arithmetic path rounds that to a slightly
-        // different float (measured: ATTACKER ~1e-16, DEBUFFER/SUPPORTER
-        // exactly 0), so competition ranking does not treat all three as
-        // tied — ATTACKER lands on rank 10, DEBUFFER/SUPPORTER tie at rank
-        // 11. The other 9 roles never read crit/critDamage, so every piece
-        // scores an exact 0 marginal for them -> headroom exactly 1 -> rank
-        // 1 (a real tie, backed by computeHeadroom's best<=0 branch, not
-        // arithmetic that can round differently per role).
-        //
-        // The five empty columns are a full 12-way tie, so every role gets
-        // rank 1 there too — competition ranking, unlike unconditional
-        // index+1 ranking, does not let SHIP_TYPES index leak into a tied
-        // column's rank.
-        //
-        // Mean rank = (sensorRank + 5*1) / 6: 1 for the 9 untouched roles,
-        // 2.5 for ATTACKER (sensor rank 10), 16/6 for DEBUFFER/SUPPORTER
-        // (sensor rank 11). Every untouched role still beats every live
-        // role, so the live roles are pushed to the back regardless of the
-        // 10-vs-11 split — a static roleOrder would instead put ATTACKER
-        // (SHIP_TYPES index 0) first.
+        // Same absurd-hacking-software stack. DEBUFFER's mean rank across
+        // the 6 slot columns is worse than an untouched role's (one column
+        // at a high rank number, five at rank 1, versus rank 1 everywhere),
+        // so DEBUFFER must sort behind an untouched role regardless of
+        // SHIP_TYPES's static index order.
         const stack = Array.from({ length: 20 }, (_, i) =>
             makeGear({
-                id: `sensor-${i}`,
-                slot: 'sensor',
-                mainStat: { name: 'crit', value: 25, type: 'percentage' },
-                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+                id: `sw-${i}`,
+                slot: 'software',
+                mainStat: { name: 'hacking', value: 1_000_000, type: 'flat' },
             })
         );
         const matrix = buildCoverageMatrix(stack);
-        const untouchedRolesInOrder = Object.keys(SHIP_TYPES).filter(
-            (role) => !['ATTACKER', 'DEBUFFER', 'SUPPORTER'].includes(role)
-        );
-        const liveRolesInOrder = ['ATTACKER', 'DEBUFFER', 'SUPPORTER'];
-
-        expect(matrix.roleOrder).toEqual([...untouchedRolesInOrder, ...liveRolesInOrder]);
-        expect(matrix.roleOrder[0]).toBe('DEFENDER');
+        const debufferIndex = matrix.roleOrder.indexOf('DEBUFFER');
+        const defenderIndex = matrix.roleOrder.indexOf('DEFENDER');
+        expect(defenderIndex).toBeLessThan(debufferIndex);
         expect(matrix.roleOrder).not.toEqual(Object.keys(SHIP_TYPES));
     });
 
@@ -431,5 +444,33 @@ describe('buildCoverageMatrix', () => {
                 matrix.cells.ATTACKER[order[i]].rank
             );
         }
+    });
+
+    it('a stronger single piece for a role never yields a higher priority than a weaker one', () => {
+        // Monotonicity check against the real, code-computed ideal piece
+        // (not a synthetic idealMarginal): a piece with better substats must
+        // not leave the slot reading as MORE in need of farming.
+        const strong = buildCoverageMatrix([
+            makeGear({
+                id: 'strong',
+                mainStat: { name: 'attack', value: 140, type: 'flat' },
+                subStats: [
+                    { name: 'attack', value: 100, type: 'flat' },
+                    { name: 'crit', value: 8, type: 'percentage' },
+                    { name: 'critDamage', value: 8, type: 'percentage' },
+                    { name: 'hp', value: 600, type: 'flat' },
+                ],
+            }),
+        ]);
+        const weak = buildCoverageMatrix([
+            makeGear({
+                id: 'weak',
+                mainStat: { name: 'attack', value: 70, type: 'flat' },
+                subStats: [],
+            }),
+        ]);
+        expect(strong.cells.ATTACKER.weapon.priority).toBeLessThanOrEqual(
+            weak.cells.ATTACKER.weapon.priority
+        );
     });
 });

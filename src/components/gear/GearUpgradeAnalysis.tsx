@@ -835,7 +835,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                             id: slotName,
                             label: GEAR_SLOTS[slotName].label,
                             badge: `${coverage.cells[role][slotName].count} · ${Math.round(
-                                coverage.cells[role][slotName].headroom * 100
+                                coverage.cells[role][slotName].priority * 100
                             )}%`,
                         })),
                     ];
