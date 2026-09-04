@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { scorePieceForRole, COVERAGE_MIN_LEVEL, COVERAGE_SAMPLE_SIZE } from '../roleSlotCoverage';
 import { GearPiece } from '../../../types/gear';
+import { calculateRoleScore } from '../../autogear/priorityScore';
+import { ROLE_BASE_STATS } from '../../../constants/roleBaseStats';
 
 /** Minimal level-16 legendary piece. Override what a test cares about. */
 function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
@@ -74,12 +76,21 @@ describe('scorePieceForRole', () => {
     });
 
     it('adds a percentage-only stat directly, not as a share of the baseline', () => {
-        // crit is stored as an integer percentage: +10 means 10 points of crit.
-        const a = makeGear({ id: 'a', mainStat: { name: 'crit', value: 10, type: 'percentage' } });
-        const b = makeGear({ id: 'b', mainStat: { name: 'crit', value: 20, type: 'percentage' } });
-        const deltaLow = scorePieceForRole(a, 'ATTACKER');
-        const deltaHigh = scorePieceForRole(b, 'ATTACKER');
-        expect(deltaHigh).toBeGreaterThan(deltaLow);
+        // ATTACKER's baseline crit is 20 and crit is stored as an integer
+        // percentage, so a +20 crit piece must land the block at crit 40.
+        // Scaling it as a share of the baseline instead would land it at 24 —
+        // the second assertion is what makes this test able to fail.
+        const piece = makeGear({ mainStat: { name: 'crit', value: 20, type: 'percentage' } });
+        const baselineScore = calculateRoleScore('ATTACKER', ROLE_BASE_STATS.ATTACKER);
+        const direct =
+            calculateRoleScore('ATTACKER', { ...ROLE_BASE_STATS.ATTACKER, crit: 40 }) -
+            baselineScore;
+        const scaledShare =
+            calculateRoleScore('ATTACKER', { ...ROLE_BASE_STATS.ATTACKER, crit: 24 }) -
+            baselineScore;
+
+        expect(scorePieceForRole(piece, 'ATTACKER')).toBeCloseTo(direct, 10);
+        expect(scorePieceForRole(piece, 'ATTACKER')).not.toBeCloseTo(scaledShare, 10);
     });
 
     it('counts substats as well as the main stat', () => {
