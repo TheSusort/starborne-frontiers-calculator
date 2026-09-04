@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
     scorePieceForRole,
     computeHeadroom,
+    buildCoverageMatrix,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
 } from '../roleSlotCoverage';
 import { GearPiece } from '../../../types/gear';
 import { calculateRoleScore } from '../../autogear/priorityScore';
 import { ROLE_BASE_STATS } from '../../../constants/roleBaseStats';
+import { SHIP_TYPES } from '../../../constants/shipTypes';
+import { GEAR_SLOT_ORDER } from '../../../constants/gearTypes';
 
 /** Minimal level-16 legendary piece. Override what a test cares about. */
 function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
@@ -201,5 +204,113 @@ describe('computeHeadroom', () => {
     it('never leaves the unit interval', () => {
         // A negative tail must clamp rather than push the gap above 1.
         expect(computeHeadroom([100, -1000])).toBe(1);
+    });
+});
+
+describe('buildCoverageMatrix', () => {
+    it('covers every role and every gear slot', () => {
+        const matrix = buildCoverageMatrix([]);
+        const roles = Object.keys(SHIP_TYPES);
+        expect(matrix.roleOrder).toHaveLength(roles.length);
+        expect(Object.keys(matrix.cells)).toHaveLength(roles.length);
+        for (const role of roles) {
+            expect(Object.keys(matrix.cells[role])).toEqual(GEAR_SLOT_ORDER);
+            expect(matrix.slotOrderByRole[role]).toHaveLength(GEAR_SLOT_ORDER.length);
+        }
+    });
+
+    it('reports an empty inventory as no gear, in the static role order', () => {
+        const matrix = buildCoverageMatrix([]);
+        expect(matrix.hasAnyGear).toBe(false);
+        expect(matrix.roleOrder).toEqual(Object.keys(SHIP_TYPES));
+        expect(matrix.cells.ATTACKER.weapon.count).toBe(0);
+        expect(matrix.cells.ATTACKER.weapon.headroom).toBe(1);
+    });
+
+    it('counts only level-16 pieces', () => {
+        const inventory = [
+            makeGear({ id: 'a', level: 16 }),
+            makeGear({ id: 'b', level: 15 }),
+            makeGear({ id: 'c', level: 1 }),
+        ];
+        const matrix = buildCoverageMatrix(inventory);
+        expect(matrix.cells.ATTACKER.weapon.count).toBe(1);
+        expect(matrix.hasAnyGear).toBe(true);
+    });
+
+    it('counts equipped pieces, which are still supply', () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a', shipId: 'ship-1' })]);
+        expect(matrix.cells.ATTACKER.weapon.count).toBe(1);
+    });
+
+    it('files each piece under its own slot only', () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a', slot: 'hull' })]);
+        expect(matrix.cells.ATTACKER.hull.count).toBe(1);
+        expect(matrix.cells.ATTACKER.weapon.count).toBe(0);
+    });
+
+    it('ignores implant slots', () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a', slot: 'implant_major' })]);
+        for (const slot of GEAR_SLOT_ORDER) {
+            expect(matrix.cells.ATTACKER[slot].count).toBe(0);
+        }
+    });
+
+    it('ranks 1 to 12 within each slot column, with no gaps', () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
+        for (const slot of GEAR_SLOT_ORDER) {
+            const ranks = Object.keys(SHIP_TYPES)
+                .map((role) => matrix.cells[role][slot].rank)
+                .sort((x, y) => x - y);
+            expect(ranks).toEqual(Object.keys(SHIP_TYPES).map((_, i) => i + 1));
+        }
+    });
+
+    it('gives rank 1 to the role with the most headroom in that column', () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
+        const byRank = Object.keys(SHIP_TYPES).sort(
+            (x, y) => matrix.cells[x].weapon.rank - matrix.cells[y].weapon.rank
+        );
+        expect(matrix.cells[byRank[0]].weapon.headroom).toBeGreaterThanOrEqual(
+            matrix.cells[byRank[1]].weapon.headroom
+        );
+    });
+
+    it('breaks ties with the static SHIP_TYPES order', () => {
+        // No gear at all: every cell is headroom 1, so every column is a full tie.
+        const matrix = buildCoverageMatrix([]);
+        const roles = Object.keys(SHIP_TYPES);
+        roles.forEach((role, index) => {
+            expect(matrix.cells[role].weapon.rank).toBe(index + 1);
+        });
+    });
+
+    it('puts the role with the thinnest overall coverage first', () => {
+        // One role-agnostic piece per slot for everyone, plus a deep, uniform
+        // stack of attacker-flavoured sensors: ATTACKER's sensor column fills
+        // in, so ATTACKER must not lead the order.
+        const stack = Array.from({ length: 20 }, (_, i) =>
+            makeGear({
+                id: `sensor-${i}`,
+                slot: 'sensor',
+                mainStat: { name: 'crit', value: 25, type: 'percentage' },
+                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+            })
+        );
+        const matrix = buildCoverageMatrix(stack);
+        expect(matrix.cells.ATTACKER.sensor.headroom).toBeLessThan(0.1);
+        expect(matrix.slotOrderByRole.ATTACKER[matrix.slotOrderByRole.ATTACKER.length - 1]).toBe(
+            'sensor'
+        );
+    });
+
+    it("orders a role's slots by that role's column ranks", () => {
+        const matrix = buildCoverageMatrix([makeGear({ id: 'a' })]);
+        const order = matrix.slotOrderByRole.ATTACKER;
+        for (let i = 1; i < order.length; i++) {
+            expect(matrix.cells.ATTACKER[order[i - 1]].rank).toBeLessThanOrEqual(
+                matrix.cells.ATTACKER[order[i]].rank
+            );
+        }
     });
 });
