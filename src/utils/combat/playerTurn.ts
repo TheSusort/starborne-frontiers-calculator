@@ -842,19 +842,22 @@ export interface PlayerTurnArgs {
      *  for non-positional/DPS callers with no opposing roster to tally; the condition then keeps
      *  its manual `manualCount ?? 1` fallback. See ConditionContext's doc on the field. */
     enemyDestroyedCount?: number;
-    /** Resolves the SOURCE of a top-up buff-steal (Meatshield's charged Protection clause) —
-     *  the first LIVE opposing actor holding at least one stack of `buffName`, in the alive
-     *  opposing roster's own order. Supplied by engine.ts's `buildTurnArgs`, closing over the same
-     *  side-relative `tb.opposingRoster` every other selector here uses, so it is team-symmetric
-     *  for free.
+    /** Resolves the SOURCE of a top-up buff-steal (Meatshield's charged Protection clause) — the
+     *  LIVE opposing actor holding at least one stack of `buffName` that ranks first by board
+     *  position (`positionTurnRank`; read its doc for the ordering). Supplied by engine.ts's
+     *  `buildTurnArgs`, closing over the same side-relative `tb.opposingRoster` every other
+     *  selector here uses, so it is team-symmetric for free.
      *
      *  Owner ruling 2026-09-02: the source is "the first enemy with Protection, following the
      *  regular targeting rule". The caller reads that as: prefer the cast's OWN resolved target
      *  when it holds the status (that IS the regular targeting rule), and only otherwise fall to
-     *  this scan. Absent (DPS/non-positional, no opposing roster) → the clause is confined to the
-     *  resolved target, which is the same nothing it got before. NOT memoized, for the reason the
-     *  sibling selectors are not: an earlier clause in the same cast can change who holds what. */
-    firstEnemyWithBuffId?: (buffName: string) => string | undefined;
+     *  this scan. Ruling 2026-09-04 settled what "first" means when several enemies hold it —
+     *  board position, the same tiebreak the speed order uses, and the whole deficit comes from
+     *  that one ship rather than being split. Absent (DPS/non-positional, no opposing roster) →
+     *  the clause is confined to the resolved target, which is the same nothing it got before.
+     *  NOT memoized, for the reason the sibling selectors are not: an earlier clause in the same
+     *  cast can change who holds what. */
+    buffHolderIdByPosition?: (buffName: string) => string | undefined;
     /** #403: resolves one of the three enemy SELECTOR kinds to a live opposing actor id, for a
      *  debuff clause whose ability `target` is 'enemy-most-buffs' / 'enemy-highest-attack' /
      *  'enemy-highest-speed'. Supplied by engine.ts's `buildTurnArgs` (team-symmetric — it closes
@@ -1479,7 +1482,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         targetRepairedThisRound: targetRepairedThisRoundArg = false,
         targetId,
         enemyMostBuffsId,
-        firstEnemyWithBuffId,
+        buffHolderIdByPosition,
         adjacentAllyIds,
         adjacentEnemyIdsFor,
         liveCountsMeasurable,
@@ -4123,7 +4126,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         targetId !== undefined &&
                         selfBuffStacksForOwner(statusEngine, targetId, buffName) > 0
                             ? targetId
-                            : firstEnemyWithBuffId?.(buffName);
+                            : buffHolderIdByPosition?.(buffName);
                     if (sourceId !== undefined) {
                         const availableAtSource = selfBuffStacksForOwner(
                             statusEngine,

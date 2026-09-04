@@ -50,6 +50,7 @@ import {
     PendingBomb,
     createActor,
     selectNextBySpeed,
+    positionTurnRank,
     MAX_SELECTION_TICKS,
     emptyActorDamage,
     emptyActorHealing,
@@ -8925,10 +8926,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // clause in the same cast can change who holds the status. Reads stacks through
                 // `selfBuffStacksForOwner`, the same canonical aggregator `protectorsFor` uses, so
                 // an aura-granted, accumulating or stolen stack all count identically.
-                firstEnemyWithBuffId: (buffName: string): string | undefined =>
-                    aliveOpposing().find(
-                        (v) => selfBuffStacksForOwner(statusEngine, v.id, buffName) > 0
-                    )?.id,
+                //
+                // BOARD POSITION picks between multiple holders, not roster order: position is
+                // the game's tiebreak wherever one is needed, so this reuses `positionTurnRank`
+                // (read its doc for the ordering) rather than restating the rule. A position-less
+                // actor ranks last there, so it is chosen only when nothing positioned holds the
+                // status. The whole deficit comes from that ONE ship; it is never split.
+                buffHolderIdByPosition: (buffName: string): string | undefined =>
+                    aliveOpposing()
+                        .filter((v) => selfBuffStacksForOwner(statusEngine, v.id, buffName) > 0)
+                        .reduce<CombatActor | undefined>(
+                            (best, v) =>
+                                best === undefined ||
+                                positionTurnRank(v.position) < positionTurnRank(best.position)
+                                    ? v
+                                    : best,
+                            undefined
+                        )?.id,
                 // #403: resolve a debuff clause's SELECTOR target to one live opposing actor.
                 // Closes over the same three resolvers the reactive ctx uses and the same
                 // `tb.opposingRoster` the eager `enemyMostBuffsId` above uses — team-symmetric for

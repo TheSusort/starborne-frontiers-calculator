@@ -482,7 +482,7 @@ describe('a stolen Protection stack is DUPLICATED to every recipient (owner ruli
 });
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// TEAM SYMMETRY for the top-up direction. `firstEnemyWithBuffId` closes over the side-relative
+// TEAM SYMMETRY for the top-up direction. `buffHolderIdByPosition` closes over the side-relative
 // `tb.opposingRoster`, so it SHOULD be symmetric for free — but "symmetric by construction" is the
 // same reasoning that produced a false reach claim one PR ago, so it is measured here instead.
 // ══════════════════════════════════════════════════════════════════════════════════════════════

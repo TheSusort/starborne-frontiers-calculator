@@ -8,7 +8,7 @@
  *   his targeting is `self` → his casts resolve `{ side: 'ally', selection: 'self' }` →
  *   `resolvePositionalTarget` returns `null` for an ally-side target → `selectTurnTarget` hands
  *   back `tgt: undefined` → `buildTurnArgs` omits `targetId`. So the clause must run on a turn
- *   with NO bound victim, resolving its own source through `firstEnemyWithBuffId`.
+ *   with NO bound victim, resolving its own source through `buffHolderIdByPosition`.
  *
  * `protectionSteal.integration.test.ts` hand-authors the config onto a fixture whose targeting
  * resolves an enemy, which covers the transfer rules and NOTHING of the chain above.
@@ -32,6 +32,10 @@ import { parseShipTargeting } from '../../targetingParser';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
+import type { Position } from '../../../types/encounters';
+
+type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
 
 const HUGE_HP = 1_000_000_000;
 
@@ -78,6 +82,31 @@ const enemyFacing = (selection: ParsedTarget['selection'] = 'front'): ParsedTarg
     selection,
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
+
+/** Meatshield's own grant shape — "gains 3 stacks of Protection" — as an aura, authored onto a
+ *  BYSTANDER so a fight can hold more than one Protection holder. */
+const protectionAura = (stacks: number): Ability => ({
+    id: 'bystander-protection',
+    type: 'buff',
+    target: 'self',
+    trigger: 'on-cast',
+    conditions: [],
+    config: { type: 'buff', buffName: 'Protection', parsedEffects: {}, stacks, isStackable: true },
+});
+
+/** A holder that does nothing but stand on a cell carrying Protection. Slowest on the board so it
+ *  never acts between the theft and the top-up. */
+const bystanderHolder = (id: string, position: Position, stacks = 3): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    affinity: 'antimatter',
+    target: enemyFacing(),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'passive', abilities: [protectionAura(stacks)] }] },
+});
 
 /** Run and read every named actor's Protection through the canonical aggregator — the same number
  *  `protectorsFor` acts on, not a parallel bookkeeping channel. */
@@ -146,7 +175,15 @@ describe.skipIf(!csvAvailable())("Meatshield's top-up steal is reachable from hi
 
 /** The focus IS the real Meatshield; the enemy is an authored thief that outspeeds him, so within
  *  the single round the theft happens BEFORE his cast. */
-function meatshieldVsThief({ charged }: { charged: boolean }): CombatEngineInput {
+function meatshieldVsThief({
+    charged,
+    thiefPosition = 'M4',
+    alsoHolding = [],
+}: {
+    charged: boolean;
+    thiefPosition?: Position;
+    alsoHolding?: EnemyAttacker[];
+}): CombatEngineInput {
     const { skills, targeting } = realMeatshield();
     return {
         attack: 1000,
@@ -176,18 +213,22 @@ function meatshieldVsThief({ charged }: { charged: boolean }): CombatEngineInput
         pattern: targeting.active.pattern,
         chargedTarget: targeting.charged.target,
         chargedPattern: targeting.charged.pattern,
+        // The thief is FIRST in roster order on purpose: every position case below puts the
+        // position-preferred holder LATER in this array, so a selector that scanned roster order
+        // would answer `thief` and the assertions would read differently.
         enemyAttackers: [
             {
                 id: 'thief',
                 stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HUGE_HP, speed: 300 },
                 chargeCount: 0,
                 startCharged: false,
-                position: 'M4',
+                position: thiefPosition,
                 affinity: 'antimatter',
                 target: enemyFacing(),
                 pattern: basePattern(),
                 shipSkills: { slots: [{ slot: 'active', abilities: [genericBuffSteal()] }] },
             },
+            ...alsoHolding,
         ],
     };
 }
@@ -236,5 +277,120 @@ function thiefVsEnemyMeatshield(): CombatEngineInput {
                 shipSkills: skills,
             },
         ],
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+// WHICH holder gets robbed when several enemies carry the status: BOARD POSITION decides, never
+// roster order. Position is the game's tiebreak wherever one is needed — the same rule the speed
+// order uses — so the resolver reads `positionTurnRank` (read its doc in `state.ts` for the
+// ordering). The whole deficit comes from that ONE ship; it is never split across holders.
+//
+// Every case here puts the position-preferred holder SECOND in the roster, behind a thief that
+// also holds a stack. A resolver that scanned roster order would rob the thief in all of them, so
+// these cases fail if the position reduce is replaced by a `.find()`.
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+
+describe('a top-up robs the holder that ranks first by BOARD POSITION', () => {
+    /** Both live holders after the thief's opener: the thief (one stolen stack) and the bystander
+     *  (three of its own). Meatshield's deficit is 1, so exactly one stack moves — and WHICH ship
+     *  loses it is the whole assertion. */
+    const runTwoHolders = (
+        thiefPosition: Position,
+        bystanderPosition: Position
+    ): Record<string, number> =>
+        runAndReadStacks(
+            meatshieldVsThief({
+                charged: true,
+                thiefPosition,
+                alsoHolding: [bystanderHolder('bystander', bystanderPosition)],
+            }),
+            ['attacker', 'thief', 'bystander']
+        );
+
+    it('the whole TOP row outranks the whole MID row: T1 beats M1', () => {
+        const stacks = runTwoHolders('M1', 'T1');
+
+        expect(stacks.attacker).toBe(3);
+        expect(stacks.bystander).toBe(2);
+        expect(stacks.thief).toBe(1);
+    });
+
+    it('row beats column: a TOP-4 holder outranks a MID-1 holder', () => {
+        const stacks = runTwoHolders('M1', 'T4');
+
+        expect(stacks.attacker).toBe(3);
+        expect(stacks.bystander).toBe(2);
+        expect(stacks.thief).toBe(1);
+    });
+
+    it('within one row the lowest column wins: T1 beats T2', () => {
+        const stacks = runTwoHolders('T2', 'T1');
+
+        expect(stacks.attacker).toBe(3);
+        expect(stacks.bystander).toBe(2);
+        expect(stacks.thief).toBe(1);
+    });
+
+    it('and it really can land on the thief — when HE is the better-placed holder', () => {
+        // The mirror of the first case, so the assertion is not just "always the bystander". Here
+        // roster order and position agree, which is exactly why it proves nothing on its own.
+        const stacks = runTwoHolders('T1', 'M1');
+
+        expect(stacks.attacker).toBe(3);
+        expect(stacks.thief).toBe(0);
+        expect(stacks.bystander).toBe(3);
+    });
+
+    it('TEAM SYMMETRY: an enemy-side Meatshield picks its source by position too', () => {
+        const stacks = runAndReadStacks(enemyMeatshieldVsTwoPlayerHolders(), [
+            'attacker',
+            'ally-holder',
+            'meatshield',
+        ]);
+
+        expect(stacks.meatshield).toBe(3);
+        // The player-side ally at T1 outranks the focus thief at M1, so IT pays — even though the
+        // focus is first in the player roster by construction (`playerTeam[0]`).
+        expect(stacks['ally-holder']).toBe(2);
+        expect(stacks.attacker).toBe(1);
+    });
+});
+
+/** The mirror board: Meatshield on the ENEMY roster, and TWO player-side holders — the focus thief
+ *  (one stolen stack, at M1) and a better-placed ally at T1. The focus is unavoidably first in the
+ *  player roster, so the ally can only be chosen by position. */
+function enemyMeatshieldVsTwoPlayerHolders(): CombatEngineInput {
+    const allyHolder: TeamActor = {
+        id: 'ally-holder',
+        speed: 1,
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        role: 'ATTACKER',
+        position: 'T1',
+        walk: {
+            shipSkills: { slots: [{ slot: 'passive', abilities: [protectionAura(3)] }] },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: HUGE_HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    };
+    return {
+        ...thiefVsEnemyMeatshield(),
+        teamActors: [allyHolder],
     };
 }
