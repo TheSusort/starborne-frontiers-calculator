@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { GearUpgradeAnalysis } from '../GearUpgradeAnalysis';
+import { buildCoverageMatrix } from '../../../utils/gear/roleSlotCoverage';
 
 // Mock all context hooks and the analysis utility
 vi.mock('../../../utils/gear/potentialCalculator', () => ({
@@ -44,6 +45,14 @@ vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null })
 vi.mock('../../../contexts/AuthProvider', () => ({
     useAuth: () => ({ user: null }),
 }));
+
+// GearUpgradeAnalysis calls the real buildCoverageMatrix synchronously on
+// every render (it drives the coverage grid and role/slot card order).
+// roleSlotCoverage.ts's ideal-piece search is cached at module scope but
+// cold on first use, and now scores every live gear set alongside main
+// stat/substats — warm it here, once, during module setup rather than
+// inside any one test's timeout window.
+buildCoverageMatrix([]);
 
 describe('GearUpgradeAnalysis auto-start', () => {
     beforeEach(() => {

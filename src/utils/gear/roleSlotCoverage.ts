@@ -13,6 +13,7 @@ import { SHIP_TYPES } from '../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats } from '../../constants/roleBaseStats';
+import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
 import { calculateRoleScore } from '../autogear/priorityScore';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { UPGRADE_LEVELS } from './potentialCalculator';
@@ -61,16 +62,55 @@ function getBaselineScore(role: ShipTypeName): number {
 }
 
 /**
+ * Add this piece's SHARE of its set bonus to a stat block: the set's own
+ * `stats`, each divided by the pieces needed to activate it (`minPieces`,
+ * defaulting to 2 when absent — `GEAR_SETS[x]?.minPieces || 2` reads the same
+ * default `potentialCalculator.ts` uses, but THAT module applies the FULL
+ * bonus, only halved for a 4-piece set — a different, full-credit heuristic
+ * for a different feature; do not conflate the two). A 2-piece set like
+ * Abyssal Assault (`attack 15%`, `critDamage 5%`) credits each piece half
+ * here; a 4-piece set credits a quarter. This is the piece's real marginal
+ * contribution to a COMPLETED set, not the set's full bonus — the same
+ * amortised amount applies whether the piece is real or the ideal, so the
+ * coverage ratio stays honest about roll quality rather than rewarding set
+ * membership outright.
+ *
+ * `GearSetName` also covers implant names (`ImplantName`), and one key,
+ * `AMBUSH`, exists in both `GEAR_SETS` and `IMPLANTS` with different stats —
+ * so this gates on `slot` being a real gear slot (`GEAR_SLOTS`, never an
+ * `implant_*` slot) before it will touch `GEAR_SETS`, not just on the name
+ * resolving to something. A set naming anything else not in `GEAR_SETS`, or
+ * a `GEAR_SETS` entry with no `stats` (several set names describe a
+ * proc/passive with no stat payload — see `gearSets.ts`), contributes
+ * nothing.
+ */
+function addSetBonusShare(
+    setBonus: GearSetName | null,
+    slot: GearSlotName,
+    target: BaseStats,
+    reference: BaseStats
+): void {
+    if (!setBonus) return;
+    if (!(slot in GEAR_SLOTS)) return;
+    const set = GEAR_SETS[setBonus];
+    if (!set?.stats?.length) return;
+
+    const minPieces = set.minPieces || 2;
+    for (const stat of set.stats) {
+        addStat({ ...stat, value: stat.value / minPieces }, target, reference);
+    }
+}
+
+/**
  * How much this piece raises the role's dummy baseline score.
  *
  * Deliberately NOT the dummy path in potentialCalculator: that one rebaselines
  * crit to `100 - the piece's own crit`, which is fair for a within-piece
  * before/after delta and useless across pieces (it neutralises crit entirely).
  *
- * Set bonuses and calibration are excluded. A set bonus is a constant added
- * to every piece carrying that set, so including it would make the gap
- * measure the set/non-set boundary rather than roll quality; calibration is
- * bound to one specific ship, and this scoring is role-generic.
+ * Calibration is excluded: it is bound to one specific ship, and this scoring
+ * is role-generic. The set bonus is credited at its amortised share — see
+ * `addSetBonusShare`.
  */
 export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number {
     const baseline = getBaseRoleStats(role);
@@ -78,6 +118,7 @@ export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number 
 
     if (piece.mainStat) addStat(piece.mainStat, withPiece, baseline);
     for (const sub of piece.subStats ?? []) addStat(sub, withPiece, baseline);
+    addSetBonusShare(piece.setBonus, piece.slot, withPiece, baseline);
 
     return calculateRoleScore(role, withPiece) - getBaselineScore(role);
 }
@@ -164,23 +205,65 @@ function distributeRolls(total: number, slots: number): number[][] {
 }
 
 /**
+ * Does giving `role`'s baseline the WHOLE (un-amortised) `stats` of a set
+ * change its role score at all? `ROLE_BASE_STATS` already carries realistic,
+ * non-zero values for every stat name a role's formula actually reads (e.g.
+ * DEFENDER's non-zero `security` baseline) — a name the formula never reads
+ * cannot become "live" only because some OTHER gear also touches it. Proven
+ * directly for a role like ATTACKER, whose score is `calculateDPS`, a
+ * function of exactly attack/crit/critDamage/defensePenetration and nothing
+ * else (`priorityScore.ts`) — every other stat name is provably inert for it
+ * regardless of what carries it.
+ */
+function isSetLiveForRole(role: ShipTypeName, setName: GearSetName): boolean {
+    const set = GEAR_SETS[setName];
+    if (!set?.stats.length) return false;
+    const baseline = getBaseRoleStats(role);
+    const withSet: BaseStats = { ...baseline };
+    for (const stat of set.stats) addStat(stat, withSet, baseline);
+    return Math.abs(calculateRoleScore(role, withSet) - calculateRoleScore(role, baseline)) > 1e-9;
+}
+
+/**
+ * Per-role: `null` (no set) plus every `GEAR_SETS` name that can possibly
+ * move this role's score — see `isSetLiveForRole`. Pruning the obviously-dead
+ * sets per role (e.g. FORTITUDE's pure `hp` bonus for ATTACKER) is what keeps
+ * the (mainStat x set x substat-combo) ideal search below tractable: without
+ * it, every one of the ~20 non-empty sets multiplies the whole substat search
+ * for every role, most of which cannot possibly change that role's score.
+ */
+const idealSetCandidatesByRole = new Map<ShipTypeName, (GearSetName | null)[]>();
+
+function idealSetCandidatesFor(role: ShipTypeName): (GearSetName | null)[] {
+    const cached = idealSetCandidatesByRole.get(role);
+    if (cached) return cached;
+
+    const liveNames = Object.keys(GEAR_SETS).filter((name) => isSetLiveForRole(role, name));
+    const candidates: (GearSetName | null)[] = [null, ...liveNames];
+    idealSetCandidatesByRole.set(role, candidates);
+    return candidates;
+}
+
+/**
  * The highest-scoring legal level-16, 6-star legendary substat block for
- * `role`, given the slot's chosen `mainStat`.
+ * `role`, given the slot's chosen `mainStat` and `setBonus`.
  *
  * Exhaustive, not greedy: every `LEGENDARY_SUBSTAT_SLOTS`-combination of
  * legal (name, type) pairs, crossed with every way to distribute
  * `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls across those slots, is
- * assembled into a full piece and scored with `scorePieceForRole`; the
- * maximum is kept. A greedy per-slot assignment is not provably exact here —
- * several role formulas read crit x critDamage or an effective-HP product,
- * so a roll's marginal value on one slot depends on what already sits in the
- * others. `roleSlotCoverage.test.ts`'s "the ideal is a true ceiling"
- * property test is what would catch a shortfall against a legal piece this
- * search failed to try.
+ * assembled into a full piece (carrying `setBonus`, credited at its amortised
+ * share via `scorePieceForRole`) and scored; the maximum is kept. A greedy
+ * per-slot assignment is not provably exact here — several role formulas
+ * read crit x critDamage or an effective-HP product, so a roll's marginal
+ * value on one slot depends on what already sits in the others, including
+ * what the set bonus already contributes. `roleSlotCoverage.test.ts`'s "the
+ * ideal is a true ceiling" property test is what would catch a shortfall
+ * against a legal piece this search failed to try.
  */
-function pickIdealSubstats(
+function computeIdealSubstats(
     role: ShipTypeName,
-    mainStat: Stat | null
+    mainStat: Stat | null,
+    setBonus: GearSetName | null
 ): { stats: Stat[]; score: number } {
     const pairs = candidateSubstatPairs(mainStat);
     const combos = combinations(pairs, LEGENDARY_SUBSTAT_SLOTS);
@@ -201,13 +284,37 @@ function pickIdealSubstats(
                 rarity: 'legendary',
                 mainStat,
                 subStats: stats,
-                setBonus: null,
+                setBonus,
             };
             const score = scorePieceForRole(piece, role);
             if (!best || score > best.score) best = { stats, score };
         }
     }
     return best ?? { stats: [], score: 0 };
+}
+
+/**
+ * Memoised `computeIdealSubstats`, keyed on (role, mainStat name+type+value,
+ * setBonus) rather than (role, slot, ...): `calculateMainStatValue` ignores
+ * slot, so the same (name, type) main stat option recurs across slots (e.g.
+ * `attack` percentage is legal on sensor, software AND thrusters) and would
+ * otherwise re-run this exhaustive search once per slot that offers it.
+ */
+const idealSubstatsCache = new Map<string, { stats: Stat[]; score: number }>();
+
+function pickIdealSubstats(
+    role: ShipTypeName,
+    mainStat: Stat | null,
+    setBonus: GearSetName | null
+): { stats: Stat[]; score: number } {
+    const mainStatKey = mainStat ? `${mainStat.name}:${mainStat.type}:${mainStat.value}` : 'none';
+    const key = `${role}:${mainStatKey}:${setBonus ?? 'none'}`;
+    const cached = idealSubstatsCache.get(key);
+    if (cached) return cached;
+
+    const result = computeIdealSubstats(role, mainStat, setBonus);
+    idealSubstatsCache.set(key, result);
+    return result;
 }
 
 /**
@@ -221,20 +328,28 @@ const idealMarginalCache = new Map<string, IdealMarginal>();
 
 /**
  * The best-scoring level-16, 6-star legendary piece this slot can carry for
- * `role`: every main stat this slot can carry, crossed with
- * `pickIdealSubstats`' own exhaustive substat search FOR THAT MAIN STAT, is
- * scored, and the maximum kept. Main stat and substats are searched jointly,
- * not main-stat-first-then-substats: two main stat candidates can tie (or
- * nearly tie) on their own bare marginal while differing sharply once a real
- * substat block sits on top of them (e.g. a role that reads one stat
- * multiplicatively against a common one), so picking the main stat in
- * isolation can strand the search on the wrong branch.
+ * `role`: every main stat this slot can carry, crossed with every set
+ * `idealSetCandidatesFor(role)` returns live, crossed with
+ * `pickIdealSubstats`' own exhaustive substat search for that (main stat,
+ * set) pair, is scored, and the maximum kept. Main stat, set and substats
+ * are searched jointly, not main-stat-first-then-substats: two candidates can
+ * tie (or nearly tie) on their own bare marginal while differing sharply once
+ * a real substat block sits on top of them (e.g. a role that reads one stat
+ * multiplicatively against a common one), so picking any one of them in
+ * isolation can strand the search on the wrong branch. A real piece carrying
+ * whichever set wins here cannot score higher than this: it is the same
+ * amortised share, added through the same `scorePieceForRole`.
  */
 function pickIdealPiece(
     role: ShipTypeName,
     slot: GearSlotName
-): { mainStat: Stat | null; subStats: Stat[]; score: number } {
-    let best: { mainStat: Stat | null; subStats: Stat[]; score: number } | null = null;
+): { mainStat: Stat | null; subStats: Stat[]; setBonus: GearSetName | null; score: number } {
+    let best: {
+        mainStat: Stat | null;
+        subStats: Stat[];
+        setBonus: GearSetName | null;
+        score: number;
+    } | null = null;
     for (const name of GEAR_SLOTS[slot].availableMainStats) {
         const type = mainStatType(slot, name);
         const mainStat = makeStat(
@@ -242,10 +357,14 @@ function pickIdealPiece(
             type,
             calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
         );
-        const { stats: subStats, score } = pickIdealSubstats(role, mainStat);
-        if (!best || score > best.score) best = { mainStat, subStats, score };
+        for (const setBonus of idealSetCandidatesFor(role)) {
+            const { stats: subStats, score } = pickIdealSubstats(role, mainStat, setBonus);
+            if (!best || score > best.score) best = { mainStat, subStats, setBonus, score };
+        }
     }
-    return best ?? { mainStat: null, subStats: pickIdealSubstats(role, null).stats, score: 0 };
+    if (best) return best;
+    const { stats: subStats, score } = pickIdealSubstats(role, null, null);
+    return { mainStat: null, subStats, setBonus: null, score };
 }
 
 export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal {

@@ -16,6 +16,7 @@ import { SHIP_TYPES, ShipTypeName } from '../../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, GearSlotName } from '../../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../../constants/statValues';
 import { calculateMainStatValue } from '../mainStatValueFetcher';
+import { GEAR_SETS, GearSetName } from '../../../constants/gearSets';
 import type { Stat, StatName, StatType } from '../../../types/stats';
 
 /** Minimal level-16 legendary piece. Override what a test cares about. */
@@ -158,10 +159,84 @@ describe('scorePieceForRole', () => {
         );
     });
 
-    it('ignores the set bonus', () => {
-        const plain = makeGear({ id: 'plain', setBonus: null });
-        const withSet = makeGear({ id: 'set', setBonus: 'CRITICAL' });
-        expect(scorePieceForRole(withSet, 'ATTACKER')).toBe(scorePieceForRole(plain, 'ATTACKER'));
+    describe('set bonus credit', () => {
+        it('outscores an identical setless piece by exactly its amortised share', () => {
+            // ATTACK: attack 15%, no minPieces on the entry -> defaults to 2,
+            // so each piece is credited half: attack 7.5%. Derived
+            // independently of scorePieceForRole (a bare toBeGreaterThan
+            // would also pass for the OLD full-credit or wrong-fraction
+            // heuristics; matching this exact figure is what rules those out).
+            const plain = makeGear({ id: 'plain', setBonus: null });
+            const withSet = makeGear({ id: 'set', setBonus: 'ATTACK' });
+            const baseline = ROLE_BASE_STATS.ATTACKER;
+            const creditedShare =
+                calculateRoleScore('ATTACKER', { ...baseline, attack: baseline.attack * 1.075 }) -
+                calculateRoleScore('ATTACKER', baseline);
+
+            expect(scorePieceForRole(withSet, 'ATTACKER')).toBeGreaterThan(
+                scorePieceForRole(plain, 'ATTACKER')
+            );
+            expect(
+                scorePieceForRole(withSet, 'ATTACKER') - scorePieceForRole(plain, 'ATTACKER')
+            ).toBeCloseTo(creditedShare, 8);
+        });
+
+        it('credits a 2-piece set half its stats and a 4-piece set a quarter', () => {
+            // ATTACK (minPieces absent -> 2): half of attack 15% is 7.5%.
+            // BURNER (minPieces 4): a quarter of attack 15% is 3.75%. Both
+            // sets carry only `attack`, so the two shares are directly
+            // comparable without any other stat's contribution in the way.
+            const plain = makeGear({ id: 'plain' });
+            const twoPiece = makeGear({ id: 'two-piece', setBonus: 'ATTACK' });
+            const fourPiece = makeGear({ id: 'four-piece', setBonus: 'BURNER' });
+            const baseline = ROLE_BASE_STATS.ATTACKER;
+            const halfShare =
+                calculateRoleScore('ATTACKER', { ...baseline, attack: baseline.attack * 1.075 }) -
+                calculateRoleScore('ATTACKER', baseline);
+            const quarterShare =
+                calculateRoleScore('ATTACKER', { ...baseline, attack: baseline.attack * 1.0375 }) -
+                calculateRoleScore('ATTACKER', baseline);
+
+            expect(
+                scorePieceForRole(twoPiece, 'ATTACKER') - scorePieceForRole(plain, 'ATTACKER')
+            ).toBeCloseTo(halfShare, 8);
+            expect(
+                scorePieceForRole(fourPiece, 'ATTACKER') - scorePieceForRole(plain, 'ATTACKER')
+            ).toBeCloseTo(quarterShare, 8);
+        });
+
+        it('credits nothing for a set with no stats', () => {
+            // DECIMATION describes a pure proc ("10% extra DoT damage") with
+            // an empty `stats` array — nothing for scorePieceForRole to add.
+            expect(GEAR_SETS.DECIMATION.stats).toHaveLength(0);
+            const plain = makeGear({ id: 'plain', setBonus: null });
+            const decimation = makeGear({ id: 'decimation', setBonus: 'DECIMATION' });
+            expect(scorePieceForRole(decimation, 'ATTACKER')).toBe(
+                scorePieceForRole(plain, 'ATTACKER')
+            );
+        });
+
+        it('never credits an implant-slotted piece, even when its name collides with a real GEAR_SETS key', () => {
+            // AMBUSH is a key in BOTH GEAR_SETS (attack 10%, speed 5%) and
+            // IMPLANTS (an unrelated implant). A piece in an implant slot
+            // must not pick up the gear-set stats just because the name
+            // resolves in GEAR_SETS — the credit is gated on the piece
+            // actually sitting in a real gear slot.
+            expect(GEAR_SETS.AMBUSH).toBeDefined();
+            const implantPlain = makeGear({
+                id: 'implant-plain',
+                slot: 'implant_major',
+                setBonus: null,
+            });
+            const implantWithAmbush = makeGear({
+                id: 'implant-ambush',
+                slot: 'implant_major',
+                setBonus: 'AMBUSH',
+            });
+            expect(scorePieceForRole(implantWithAmbush, 'ATTACKER')).toBe(
+                scorePieceForRole(implantPlain, 'ATTACKER')
+            );
+        });
     });
 
     it('ignores calibration, which is bound to one ship', () => {
@@ -413,6 +488,10 @@ describe('competitionRank', () => {
 
 describe('buildCoverageMatrix', () => {
     it('covers every role and every gear slot', () => {
+        // First real exercise of getIdealMarginal in this file, so it pays
+        // the one-time, module-cached cost of the full (role x slot) ideal
+        // search (~3s with sets in play) — same reasoning as the explicit
+        // timeout on "the ideal is a true ceiling" tests below.
         const matrix = buildCoverageMatrix([]);
         const roles = Object.keys(SHIP_TYPES);
         expect(matrix.roleOrder).toHaveLength(roles.length);
@@ -421,7 +500,7 @@ describe('buildCoverageMatrix', () => {
             expect(Object.keys(matrix.cells[role])).toEqual(GEAR_SLOT_ORDER);
             expect(matrix.slotOrderByRole[role]).toHaveLength(GEAR_SLOT_ORDER.length);
         }
-    });
+    }, 20000);
 
     it('reports an empty inventory in the static role order, priority 1 everywhere', () => {
         const matrix = buildCoverageMatrix([]);
@@ -477,8 +556,11 @@ describe('buildCoverageMatrix', () => {
      * confirmed against the exhaustive search, not guessed: main stat
      * `hacking` (flat, the only legal type), subs `attack` flat once,
      * `attack` percentage stacked through all 4 upgrade rolls, `crit` and
-     * `critDamage` once each. `calculateDebufferScore` reads hacking
-     * multiplicatively against dps (priorityScore.ts) and
+     * `critDamage` once each, and the EXPLOIT set (`hacking` flat 20,
+     * `attack` percentage 10, minPieces absent -> credited half: `hacking`
+     * flat 10, `attack` percentage 5) — the best-for-DEBUFFER set for this
+     * (main stat, substat) combination. `calculateDebufferScore` reads
+     * hacking multiplicatively against dps (priorityScore.ts) and
      * `calculateDefenderScore` never reads hacking or attack, so this same
      * piece scores 0 for DEFENDER — a real, legal saturating stack for one
      * role and an inert one for the other, without an illegal stat value.
@@ -493,6 +575,7 @@ describe('buildCoverageMatrix', () => {
                 { name: 'crit', value: 8, type: 'percentage' },
                 { name: 'critDamage', value: 8, type: 'percentage' },
             ],
+            setBonus: 'EXPLOIT',
         });
 
     it('gives an untouched role a strictly better software rank than a saturated one', () => {
@@ -503,7 +586,11 @@ describe('buildCoverageMatrix', () => {
         const matrix = buildCoverageMatrix(stack);
         expect(matrix.cells.DEFENDER.software.priority).toBe(1);
         expect(matrix.cells.DEFENDER.software.rank).toBe(1);
-        expect(matrix.cells.DEBUFFER.software.priority).toBe(0);
+        // Not toBe(0): the marginal is recomputed on two different paths (the
+        // owned pieces vs. the cached ideal), so float arithmetic over
+        // bit-identical stats is not guaranteed bit-exact — see the "internal
+        // ideal piece" tests' own note on this.
+        expect(matrix.cells.DEBUFFER.software.priority).toBeLessThan(1e-9);
         expect(matrix.cells.DEBUFFER.software.rank).toBeGreaterThan(
             matrix.cells.DEFENDER.software.rank
         );
@@ -511,7 +598,7 @@ describe('buildCoverageMatrix', () => {
 
     it("puts a role's saturated slot last in its own slot order", () => {
         // Same ideal-matching software stack: DEBUFFER's software column is
-        // fully covered (priority 0) while its other five slot columns are
+        // fully covered (priority ~0) while its other five slot columns are
         // untouched (priority 1, tied with every other role), so software
         // must sort to the back of DEBUFFER's own slot order.
         const stack = Array.from({ length: 20 }, (_, i) => ({
@@ -519,7 +606,7 @@ describe('buildCoverageMatrix', () => {
             id: `sw-${i}`,
         }));
         const matrix = buildCoverageMatrix(stack);
-        expect(matrix.cells.DEBUFFER.software.priority).toBe(0);
+        expect(matrix.cells.DEBUFFER.software.priority).toBeLessThan(1e-9);
         expect(matrix.slotOrderByRole.DEBUFFER[matrix.slotOrderByRole.DEBUFFER.length - 1]).toBe(
             'software'
         );
@@ -607,20 +694,26 @@ describe('buildCoverageMatrix', () => {
 
         // The weapon slot only ever offers `attack` as a main stat, so this
         // main stat is not what distinguishes the two replicas below; the
-        // substat composition is. Substat slots now carry the 4 upgrade
-        // rolls a level-16 legendary piece actually gets (increases, not new
-        // substats — see LEGENDARY_SUBSTAT_INCREASES's doc), so a slot can
-        // sit above its own single-roll legendary max.
-        it('reads the ATTACKER weapon ideal as attack main, hp/attack%/crit%/critDamage% subs', () => {
+        // substat (and now set) composition is. Substat slots carry the 4
+        // upgrade rolls a level-16 legendary piece actually gets (increases,
+        // not new substats — see LEGENDARY_SUBSTAT_INCREASES's doc), so a
+        // slot can sit above its own single-roll legendary max.
+        it('reads the ATTACKER weapon ideal as attack main, hp/attack%/crit%/critDamage% subs + Abyssal Assault', () => {
+            // Best-for-ATTACKER set: Abyssal Assault (attack 15%, critDamage
+            // 5%, minPieces absent -> credited half: attack 7.5%, critDamage
+            // 2.5%) beats every other live set for this exact substat combo —
+            // confirmed against an independent exhaustive (mainStat x set x
+            // substat-combo) search, not guessed.
             const attackerIdeal = makeGear({
                 id: 'attacker-ideal-replica',
                 mainStat: { name: 'attack', value: 1000, type: 'flat' },
                 subStats: [
                     { name: 'hp', value: 600, type: 'flat' }, // 1 roll (no increases landed here)
-                    { name: 'attack', value: 21, type: 'percentage' }, // 3 rolls (+2 increases)
-                    { name: 'crit', value: 24, type: 'percentage' }, // 3 rolls (+2 increases)
+                    { name: 'attack', value: 14, type: 'percentage' }, // 2 rolls (+1 increase)
+                    { name: 'crit', value: 32, type: 'percentage' }, // 4 rolls (+3 increases)
                     { name: 'critDamage', value: 8, type: 'percentage' }, // 1 roll
                 ],
+                setBonus: 'ABYSSAL_ASSAULT',
             });
 
             const one = buildCoverageMatrix([attackerIdeal]);
@@ -642,10 +735,11 @@ describe('buildCoverageMatrix', () => {
                         mainStat: { name: 'attack', value: 1000, type: 'flat' },
                         subStats: [
                             { name: 'hp', value: 600, type: 'flat' },
-                            { name: 'attack', value: 21, type: 'percentage' },
-                            { name: 'crit', value: 24, type: 'percentage' },
+                            { name: 'attack', value: 14, type: 'percentage' },
+                            { name: 'crit', value: 32, type: 'percentage' },
                             { name: 'critDamage', value: 8, type: 'percentage' },
                         ],
+                        setBonus: 'ABYSSAL_ASSAULT',
                     })
                 )
             );
@@ -655,20 +749,24 @@ describe('buildCoverageMatrix', () => {
             expect(twenty.cells.ATTACKER.weapon.priority).toBeLessThan(1e-9);
         });
 
-        it('reads the DEFENDER_SECURITY weapon ideal as attack main, hp/hp%/defence%/security(x5) subs', () => {
+        it('reads the DEFENDER_SECURITY weapon ideal as attack main, hp/hp%/defence%/security subs + Protection', () => {
             // calculateDefenderSecurityScore multiplies effective-HP survival
-            // by security, so security is worth stacking every upgrade roll
-            // it can get: all 4 increases land on the same security slot,
-            // reaching 5x its own 8-flat single-roll legendary max (40).
+            // by security, so security is still worth stacking most upgrade
+            // rolls — but Protection (defence 10%, security 20 flat,
+            // minPieces absent -> credited half: defence 5%, security 10)
+            // beats every other live set here, and claims one of the 4
+            // upgrade-roll increases for `hp%` instead of all 4 landing on
+            // `security` the way the setless ideal did.
             const securityIdeal = makeGear({
                 id: 'security-ideal-replica',
                 mainStat: { name: 'attack', value: 1000, type: 'flat' },
                 subStats: [
                     { name: 'hp', value: 600, type: 'flat' }, // 1 roll
-                    { name: 'hp', value: 7, type: 'percentage' }, // 1 roll
+                    { name: 'hp', value: 14, type: 'percentage' }, // 2 rolls (+1 increase)
                     { name: 'defence', value: 7, type: 'percentage' }, // 1 roll
-                    { name: 'security', value: 40, type: 'flat' }, // 5 rolls (+4 increases)
+                    { name: 'security', value: 32, type: 'flat' }, // 4 rolls (+3 increases)
                 ],
+                setBonus: 'PROTECTION',
             });
 
             const one = buildCoverageMatrix([securityIdeal]);
@@ -715,6 +813,22 @@ describe('the ideal is a true ceiling', () => {
     const LEGENDARY_UPGRADE_INCREASES = 4;
 
     /**
+     * `null` (no set) plus every `GEAR_SETS` name, including the empty-stats
+     * ones (a no-op set is a legal real piece too) and `AMBUSH` (the name
+     * that collides with an implant — irrelevant here since every piece this
+     * function builds carries a real gear `slot`). Cycled across the
+     * pieces below rather than crossed with every (mainStat, substat-combo)
+     * pair: a full cross multiplies an already-large piece count by ~30 and
+     * blows this file's default test timeout, whereas cycling gives every
+     * set a wide, varied sample of substat combinations to pair with — for
+     * any (role, slot), the search that actually finds the ideal
+     * (`pickIdealPiece` in `roleSlotCoverage.ts`) already crosses sets with
+     * substat combos exhaustively, so this ceiling check does not need to
+     * repeat that in full to catch a regression in it.
+     */
+    const SET_CYCLE: (GearSetName | null)[] = [null, ...Object.keys(GEAR_SETS)];
+
+    /**
      * Every realistic legal level-16, 6-star legendary piece `slot` can
      * carry: every legal main stat (with its correct flat/percentage type),
      * crossed with every legal 4-of-N distinct (name, type) substat
@@ -722,7 +836,8 @@ describe('the ideal is a true ceiling', () => {
      * `GearPieceForm` rule), crossed with every way the piece's 4 upgrade
      * rolls can land across those 4 slots (a slot can carry up to 5 rolls of
      * its own single-roll legendary max — see `potentialCalculator.ts`'s
-     * `UPGRADE_LEVELS.legendary`).
+     * `UPGRADE_LEVELS.legendary`), each also carrying a set bonus cycled from
+     * `SET_CYCLE` (see its own doc for why cycled rather than crossed).
      */
     function realisticPiecesForSlot(slot: GearSlotName): GearPiece[] {
         const pieces: GearPiece[] = [];
@@ -771,7 +886,7 @@ describe('the ideal is a true ceiling', () => {
                         rarity: 'legendary',
                         mainStat,
                         subStats,
-                        setBonus: null,
+                        setBonus: SET_CYCLE[pieces.length % SET_CYCLE.length],
                     });
                 }
             }

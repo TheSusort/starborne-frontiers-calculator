@@ -16,6 +16,13 @@ import { GearPiece } from '../../../types/gear';
 // environment.
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 
+// roleSlotCoverage.ts's ideal-piece search is cached at module scope but
+// cold on first use, and now scores every live gear set alongside main
+// stat/substats (~3s cold). Every test below calls the real
+// buildCoverageMatrix directly — warm the cache here, once, during module
+// setup rather than inside whichever test happens to run first.
+buildCoverageMatrix([]);
+
 function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
     return {
         id: 'gear-1',

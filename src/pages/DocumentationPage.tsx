@@ -1040,9 +1040,9 @@ const DocumentationPage: React.FC = () => {
                                         and scrolls to the role card once you have run an analysis
                                     </li>
                                     <li>
-                                        Set bonuses are not counted in this comparison, so a role
-                                        whose kit wants a specific set may still want set pieces the
-                                        grid does not credit
+                                        A piece carrying a set bonus is credited its share of that
+                                        set: the set&apos;s stats divided by the pieces needed to
+                                        activate it
                                     </li>
                                     <li>
                                         Results are displayed per role, sorted by score improvement
