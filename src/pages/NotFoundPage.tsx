@@ -139,7 +139,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
     },
     'xian-ren': {
         terminalLines: [
-            '> ATTEMPTING TO LOCATE TIANCHAO CELL...',
+            '> ATTEMPTING TO LOCATE TIANCHEN CELL...',
             '> CROSS-REFERENCING KNOWN NETWORKS...',
             '> RESULT: NO RECORD EXISTS.',
         ],
@@ -455,7 +455,7 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
     filmaunt: {
         terminalLines: [
             '> QUERYING FILMAUNT UNIVERSITY — ALUMNI RECORDS...',
-            '> CROSS-REFERENCING TIANCHAO INTELLIGENCE NETWORK...',
+            '> CROSS-REFERENCING TIANCHEN INTELLIGENCE NETWORK...',
             '> RESULT: QUERY HAS BEEN NOTED.',
         ],
         barLabel: '[THREAD FLAGGED]',
