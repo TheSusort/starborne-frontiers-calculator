@@ -8,6 +8,12 @@ vi.mock('../../../utils/gear/potentialCalculator', () => ({
     baselineStatsCache: { clear: vi.fn() },
     baselineBreakdownCache: { clear: vi.fn() },
     simulateUpgrade: vi.fn(),
+    // roleSlotCoverage.ts reads this at module scope (legendary substat/
+    // upgrade-roll counts for its ideal-piece search) — real shape from
+    // potentialCalculator.ts's own UPGRADE_LEVELS.legendary.
+    UPGRADE_LEVELS: {
+        legendary: { increases: [4, 8, 12, 16], additions: [], initialSubstats: 4 },
+    },
 }));
 
 vi.mock('../../../hooks/useGearUpgrades', () => ({

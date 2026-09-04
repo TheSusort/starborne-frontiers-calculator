@@ -15,6 +15,7 @@ import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats } from '../../constants/roleBaseStats';
 import { calculateRoleScore } from '../autogear/priorityScore';
 import { calculateMainStatValue } from './mainStatValueFetcher';
+import { UPGRADE_LEVELS } from './potentialCalculator';
 
 /** Only fully-levelled gear counts as supply. */
 export const COVERAGE_MIN_LEVEL = 16;
@@ -81,23 +82,6 @@ export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number 
     return calculateRoleScore(role, withPiece) - getBaselineScore(role);
 }
 
-/** Build a bare stat-carrying piece so `scorePieceForRole` can score one candidate stat. */
-function scoreCandidateStat(stat: Stat, role: ShipTypeName): number {
-    return scorePieceForRole(
-        {
-            id: 'ideal-candidate',
-            slot: 'weapon',
-            level: COVERAGE_MIN_LEVEL,
-            stars: 6,
-            rarity: 'legendary',
-            mainStat: null,
-            subStats: [stat],
-            setBonus: null,
-        },
-        role
-    );
-}
-
 function makeStat(name: StatName, type: StatType, value: number): Stat {
     return type === 'percentage'
         ? { name, value, type: 'percentage' }
@@ -125,52 +109,105 @@ export function mainStatType(slot: GearSlotName, statName: StatName): StatType {
 }
 
 /**
- * The best-scoring main stat this slot can carry for `role`, at level 16,
- * 6-star legendary. Ties broken by `availableMainStats` order.
+ * A level-16, 6-star legendary piece carries `UPGRADE_LEVELS.legendary
+ * .initialSubstats` distinct (name, type) substat slots, then
+ * `UPGRADE_LEVELS.legendary.increases.length` further upgrade rolls land on
+ * those SAME slots as the piece levels up — `simulateUpgrade` in
+ * `potentialCalculator.ts` bumps an EXISTING substat's value with a fresh
+ * roll off its own range table, it never adds a new substat past the
+ * initial set. A slot that draws every increase tops out at
+ * `(1 + LEGENDARY_SUBSTAT_INCREASES)` times its own single-roll legendary
+ * max (e.g. a critDamage substat that lands all 4 increases reaches 5x its
+ * 8% single-roll max — 40%).
  */
-function pickIdealMainStat(role: ShipTypeName, slot: GearSlotName): Stat | null {
-    let best: { stat: Stat; score: number } | null = null;
-    for (const name of GEAR_SLOTS[slot].availableMainStats) {
-        const type = mainStatType(slot, name);
-        const stat = makeStat(
-            name,
-            type,
-            calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
-        );
-        const score = scoreCandidateStat(stat, role);
-        if (!best || score > best.score) best = { stat, score };
+const LEGENDARY_SUBSTAT_SLOTS = UPGRADE_LEVELS.legendary.initialSubstats;
+const LEGENDARY_SUBSTAT_INCREASES = UPGRADE_LEVELS.legendary.increases.length;
+
+/**
+ * Every (name, type) pair legal as a substat, excluding only the piece's own
+ * main stat (name, type) — the exact rule `GearPieceForm` enforces
+ * (`excludedStats={[{ name: mainStat.name, type: mainStat.type }]}`). The
+ * OTHER type variant of the main stat's own name stays selectable: an
+ * `attack`-flat weapon main stat can still carry an `attack`-percentage
+ * substat, and both may sit on the same piece as two of its four slots.
+ */
+function candidateSubstatPairs(mainStat: Stat | null): { name: StatName; type: StatType }[] {
+    const pairs: { name: StatName; type: StatType }[] = [];
+    for (const name of Object.keys(SUBSTAT_RANGES) as StatName[]) {
+        for (const type of Object.keys(SUBSTAT_RANGES[name]) as StatType[]) {
+            if (mainStat && mainStat.name === name && mainStat.type === type) continue;
+            pairs.push({ name, type });
+        }
     }
-    return best?.stat ?? null;
+    return pairs;
+}
+
+/** Every k-element subset of `items`, as arrays in `items`' relative order. */
+function combinations<T>(items: T[], k: number): T[][] {
+    if (k === 0) return [[]];
+    if (items.length < k) return [];
+    const [first, ...rest] = items;
+    const withFirst = combinations(rest, k - 1).map((combo) => [first, ...combo]);
+    return [...withFirst, ...combinations(rest, k)];
+}
+
+/** Every way to split `total` indistinguishable rolls across `slots` non-negative integer buckets. */
+function distributeRolls(total: number, slots: number): number[][] {
+    if (slots === 1) return [[total]];
+    const result: number[][] = [];
+    for (let take = 0; take <= total; take++) {
+        for (const rest of distributeRolls(total - take, slots - 1)) {
+            result.push([take, ...rest]);
+        }
+    }
+    return result;
 }
 
 /**
- * The four best-scoring legendary-max substats for `role`, excluding
- * `excludeName` (the slot's chosen main stat). A stat with both a flat and a
- * percentage roll (e.g. attack) takes whichever variant scores higher — both
- * are legal rolls. Greedy per stat: each candidate is scored on its own, not
- * combined with the others first. Measured exact against the current stat
- * tables: brute-forcing every (role, slot) pair over every main-stat
- * candidate x every C(7,4) distinct substat-name combination x every
- * flat/percentage variant reproduces this greedy selection in all 72 cells
- * (ratio 1.0000, worst shortfall 0.00%).
+ * The highest-scoring legal level-16, 6-star legendary substat block for
+ * `role`, given the slot's chosen `mainStat`.
+ *
+ * Exhaustive, not greedy: every `LEGENDARY_SUBSTAT_SLOTS`-combination of
+ * legal (name, type) pairs, crossed with every way to distribute
+ * `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls across those slots, is
+ * assembled into a full piece and scored with `scorePieceForRole`; the
+ * maximum is kept. A greedy per-slot assignment is not provably exact here —
+ * several role formulas read crit x critDamage or an effective-HP product,
+ * so a roll's marginal value on one slot depends on what already sits in the
+ * others. `roleSlotCoverage.test.ts`'s "the ideal is a true ceiling"
+ * property test is what would catch a shortfall against a legal piece this
+ * search failed to try.
  */
-function pickIdealSubstats(role: ShipTypeName, excludeName: StatName | null): Stat[] {
-    const scored: { stat: Stat; score: number }[] = [];
-    for (const name of Object.keys(SUBSTAT_RANGES) as StatName[]) {
-        if (name === excludeName) continue;
-        const ranges = SUBSTAT_RANGES[name];
-        let best: { stat: Stat; score: number } | null = null;
-        for (const type of ['flat', 'percentage'] as StatType[]) {
-            const range = ranges[type];
-            if (!range) continue;
-            const stat = makeStat(name, type, range.legendary.max);
-            const score = scoreCandidateStat(stat, role);
-            if (!best || score > best.score) best = { stat, score };
+function pickIdealSubstats(
+    role: ShipTypeName,
+    mainStat: Stat | null
+): { stats: Stat[]; score: number } {
+    const pairs = candidateSubstatPairs(mainStat);
+    const combos = combinations(pairs, LEGENDARY_SUBSTAT_SLOTS);
+    const rollDistributions = distributeRolls(LEGENDARY_SUBSTAT_INCREASES, LEGENDARY_SUBSTAT_SLOTS);
+
+    let best: { stats: Stat[]; score: number } | null = null;
+    for (const combo of combos) {
+        for (const rolls of rollDistributions) {
+            const stats = combo.map((pair, i) => {
+                const max = SUBSTAT_RANGES[pair.name][pair.type].legendary.max;
+                return makeStat(pair.name, pair.type, (1 + rolls[i]) * max);
+            });
+            const piece: GearPiece = {
+                id: 'ideal-candidate',
+                slot: 'weapon',
+                level: COVERAGE_MIN_LEVEL,
+                stars: 6,
+                rarity: 'legendary',
+                mainStat,
+                subStats: stats,
+                setBonus: null,
+            };
+            const score = scorePieceForRole(piece, role);
+            if (!best || score > best.score) best = { stats, score };
         }
-        if (best) scored.push(best);
     }
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, 4).map((entry) => entry.stat);
+    return best ?? { stats: [], score: 0 };
 }
 
 /**
@@ -182,24 +219,41 @@ type IdealMarginal = number;
 /** (role, slot) never changes, so the ideal marginal is computed once and cached. */
 const idealMarginalCache = new Map<string, IdealMarginal>();
 
-function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal {
+/**
+ * The best-scoring level-16, 6-star legendary piece this slot can carry for
+ * `role`: every main stat this slot can carry, crossed with
+ * `pickIdealSubstats`' own exhaustive substat search FOR THAT MAIN STAT, is
+ * scored, and the maximum kept. Main stat and substats are searched jointly,
+ * not main-stat-first-then-substats: two main stat candidates can tie (or
+ * nearly tie) on their own bare marginal while differing sharply once a real
+ * substat block sits on top of them (e.g. a role that reads one stat
+ * multiplicatively against a common one), so picking the main stat in
+ * isolation can strand the search on the wrong branch.
+ */
+function pickIdealPiece(
+    role: ShipTypeName,
+    slot: GearSlotName
+): { mainStat: Stat | null; subStats: Stat[]; score: number } {
+    let best: { mainStat: Stat | null; subStats: Stat[]; score: number } | null = null;
+    for (const name of GEAR_SLOTS[slot].availableMainStats) {
+        const type = mainStatType(slot, name);
+        const mainStat = makeStat(
+            name,
+            type,
+            calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
+        );
+        const { stats: subStats, score } = pickIdealSubstats(role, mainStat);
+        if (!best || score > best.score) best = { mainStat, subStats, score };
+    }
+    return best ?? { mainStat: null, subStats: pickIdealSubstats(role, null).stats, score: 0 };
+}
+
+export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal {
     const key = `${role}:${slot}`;
     const cached = idealMarginalCache.get(key);
     if (cached !== undefined) return cached;
 
-    const mainStat = pickIdealMainStat(role, slot);
-    const subStats = pickIdealSubstats(role, mainStat?.name ?? null);
-    const piece: GearPiece = {
-        id: `ideal-${role}-${slot}`,
-        slot,
-        level: COVERAGE_MIN_LEVEL,
-        stars: 6,
-        rarity: 'legendary',
-        mainStat,
-        subStats,
-        setBonus: null,
-    };
-    const idealMarginal = scorePieceForRole(piece, role);
+    const idealMarginal = pickIdealPiece(role, slot).score;
     idealMarginalCache.set(key, idealMarginal);
     return idealMarginal;
 }
@@ -220,13 +274,34 @@ function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal
  * Owning fewer pieces than `sampleSize` must not inflate the average: a
  * single max-roll piece is not "N max-roll pieces sampled once", it is 1 real
  * value and N-1 unfarmed slots.
+ *
+ * A real marginal above `idealMarginal` means the ideal-piece model is
+ * under-estimating this ceiling, not that the slot is saturated:
+ * `coverage = mean / idealMarginal` would exceed 1 and the
+ * `Math.min(1, Math.max(0, 1 - coverage))` clamp below silently swallows the
+ * overshoot into a plain 0% priority. Non-production throws so the defect is
+ * loud; production only logs and lets the clamp degrade, matching
+ * `scorePieceUpgrade.ts`'s missing-baseline pattern.
  */
 export function computePriority(
     marginals: number[],
     idealMarginal: number,
-    sampleSize: number = COVERAGE_SAMPLE_SIZE
+    sampleSize: number = COVERAGE_SAMPLE_SIZE,
+    context?: { role: ShipTypeName; slot: GearSlotName }
 ): number {
     if (idealMarginal <= 0) return 0;
+
+    const exceedingMarginal = marginals.find((marginal) => marginal > idealMarginal);
+    if (exceedingMarginal !== undefined) {
+        const where = context ? ` for ${context.role}/${context.slot}` : '';
+        const message =
+            `computePriority: a real marginal (${exceedingMarginal}) exceeds idealMarginal ` +
+            `(${idealMarginal})${where} — the ideal-piece model under-estimates this ceiling.`;
+        if (process.env.NODE_ENV !== 'production') {
+            throw new Error(message);
+        }
+        console.error(`[coverage] ${message}`);
+    }
 
     const sample = [...marginals].sort((a, b) => b - a).slice(0, sampleSize);
     const mean = sample.reduce((sum, value) => sum + value, 0) / sampleSize;
@@ -342,7 +417,7 @@ export function buildCoverageMatrix(
                 role,
                 slot,
                 count: pieces.length,
-                priority: computePriority(marginals, idealMarginal, sampleSize),
+                priority: computePriority(marginals, idealMarginal, sampleSize, { role, slot }),
                 rank: 0, // assigned below
             };
         }
