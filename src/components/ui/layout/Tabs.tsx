@@ -4,6 +4,8 @@ interface Tab {
     id: string;
     label: string;
     dataTutorial?: string;
+    /** Optional secondary content shown after the label, e.g. a count. */
+    badge?: React.ReactNode;
 }
 
 interface TabsProps {
@@ -33,7 +35,14 @@ export const Tabs: React.FC<TabsProps> = ({ tabs, activeTab, onChange }) => {
                             `}
                             aria-current={activeTab === tab.id ? 'page' : undefined}
                         >
-                            {tab.label}
+                            <span className="flex items-center gap-2">
+                                <span>{tab.label}</span>
+                                {tab.badge !== undefined && (
+                                    <span className="text-xxs text-theme-text-secondary font-normal">
+                                        {tab.badge}
+                                    </span>
+                                )}
+                            </span>
                         </button>
                     ))}
                 </nav>
