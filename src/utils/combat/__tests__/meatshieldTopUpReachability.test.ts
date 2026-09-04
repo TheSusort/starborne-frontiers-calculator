@@ -22,7 +22,7 @@
  * enemy thief, and an ENEMY-side Meatshield robbed by the player. One `buildTurnArgs` feeds all
  * three turn sites, so the fix is symmetric by construction — these pin it.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { selfBuffStacksForOwner } from '../triggers';
 import type { StatusEngine } from '../statusEngine';
@@ -123,7 +123,21 @@ const runAndReadStacks = (input: CombatEngineInput, ids: string[]): Record<strin
     return stacks;
 };
 
-describe.skipIf(!csvAvailable())("Meatshield's top-up steal is reachable from his real kit", () => {
+/** The reference data these cases are built from is gitignored, so its absence is a BROKEN
+ *  WORKTREE, not a reason to pass. `describe.skipIf` would delete the whole suite silently — the
+ *  precise shape of vacuity this file exists to rule out. Same guard as
+ *  `realKitFingerprints.test.ts`. */
+const requireReferenceData = (): void => {
+    if (!csvAvailable()) {
+        throw new Error(
+            'docs/ship-skills.csv is missing — copy the gitignored reference data into this ' +
+                'worktree. These cases read the REAL Meatshield kit and cannot run without it.'
+        );
+    }
+};
+
+describe("Meatshield's top-up steal is reachable from his real kit", () => {
+    beforeAll(requireReferenceData);
     it('PRECONDITION: the real kit really carries the top-up config on a SELF-targeted cast', () => {
         const { skills, targeting } = realMeatshield();
         const topUps = skills.slots.flatMap((s) =>
@@ -292,6 +306,8 @@ function thiefVsEnemyMeatshield(): CombatEngineInput {
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 describe('a top-up robs the holder that ranks first by BOARD POSITION', () => {
+    beforeAll(requireReferenceData);
+
     /** Both live holders after the thief's opener: the thief (one stolen stack) and the bystander
      *  (three of its own). Meatshield's deficit is 1, so exactly one stack moves — and WHICH ship
      *  loses it is the whole assertion. */
