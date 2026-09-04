@@ -285,10 +285,10 @@ describe('buildCoverageMatrix', () => {
         });
     });
 
-    it('puts the role with the thinnest overall coverage first', () => {
-        // One role-agnostic piece per slot for everyone, plus a deep, uniform
-        // stack of attacker-flavoured sensors: ATTACKER's sensor column fills
-        // in, so ATTACKER must not lead the order.
+    it("puts a role's saturated slot last in its own slot order", () => {
+        // A deep, uniform stack of attacker-flavoured sensors: ATTACKER's
+        // sensor column fills in (headroom collapses to ~0), so sensor must
+        // sort to the back of ATTACKER's own slot order.
         const stack = Array.from({ length: 20 }, (_, i) =>
             makeGear({
                 id: `sensor-${i}`,
@@ -302,6 +302,56 @@ describe('buildCoverageMatrix', () => {
         expect(matrix.slotOrderByRole.ATTACKER[matrix.slotOrderByRole.ATTACKER.length - 1]).toBe(
             'sensor'
         );
+    });
+
+    it('orders roles by mean column rank, not by the static order', () => {
+        // Twenty identical attacker-flavoured sensors (crit + critDamage) and
+        // nothing else.
+        //
+        // A role's score only moves with these pieces when its formula reads
+        // crit/critDamage: directly for ATTACKER's DPS, through DEBUFFER's
+        // hacking*dps term (DEBUFFER's baseline hacking is 200, not 0), and
+        // through SUPPORTER's heal crit multiplier. Every other role's
+        // formula never reads crit/critDamage, so the pieces are exactly
+        // inert there: marginal 0, which is computeHeadroom's best<=0 branch
+        // -> headroom 1. For the three "live" roles the pieces are
+        // identical, so their tied marginals give headroom 0 too (gap 0),
+        // same as full saturation.
+        //
+        // So the sensor column has 9 roles tied at headroom 1 (ranked 1-9,
+        // in static SHIP_TYPES order) and ATTACKER/DEBUFFER/SUPPORTER tied
+        // at headroom 0 (ranked 10-12, also in static order: index 0, 3, 8
+        // -> ATTACKER rank 10, DEBUFFER rank 11, SUPPORTER rank 12).
+        //
+        // The five empty columns are a full tie, so every role's rank there
+        // is just its SHIP_TYPES index + 1.
+        //
+        // Mean rank = (sensorRank + 5*(index+1)) / 6. DEFENDER (index 1,
+        // sensor rank 1) works out to 11/6 and leads. ATTACKER (index 0,
+        // sensor rank 10) works out to 15/6, beating DEFENDER_SECURITY
+        // (index 2, sensor rank 2, 17/6) even though its sensor rank is far
+        // worse, because its empty-column rank (1) is the best of anyone's.
+        // Static order would have put ATTACKER first.
+        const stack = Array.from({ length: 20 }, (_, i) =>
+            makeGear({
+                id: `sensor-${i}`,
+                slot: 'sensor',
+                mainStat: { name: 'crit', value: 25, type: 'percentage' },
+                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+            })
+        );
+        const matrix = buildCoverageMatrix(stack);
+
+        expect(matrix.roleOrder[0]).toBe('DEFENDER');
+        expect(matrix.roleOrder[1]).toBe('ATTACKER');
+        expect(matrix.roleOrder).not.toEqual(Object.keys(SHIP_TYPES));
+    });
+
+    it("falls back to GEAR_SLOT_ORDER when a role's slots all tie", () => {
+        const matrix = buildCoverageMatrix([]);
+        for (const role of Object.keys(SHIP_TYPES)) {
+            expect(matrix.slotOrderByRole[role]).toEqual(GEAR_SLOT_ORDER);
+        }
     });
 
     it("orders a role's slots by that role's column ranks", () => {
