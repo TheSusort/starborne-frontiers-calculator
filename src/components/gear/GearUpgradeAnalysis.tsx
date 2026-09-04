@@ -21,6 +21,7 @@ import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { GEAR_ANALYSIS_TUTORIAL } from '../../constants/tutorialSteps';
 import { buildCoverageMatrix } from '../../utils/gear/roleSlotCoverage';
+import { usePersistedCoverageSampleSize } from '../../hooks/usePersistedCoverageSampleSize';
 import { GearPieceDisplay } from './GearPieceDisplay';
 import { GearCoverageGrid } from './GearCoverageGrid';
 
@@ -100,9 +101,19 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         [inventory]
     );
 
+    // The grid's own parameter — deliberately not part of the Upgrade Config
+    // offcanvas, which shapes the upgrade search rather than this
+    // filter-independent grid.
+    const [coverageSampleSize, setCoverageSampleSize] = usePersistedCoverageSampleSize(
+        'gear-coverage-sample-size'
+    );
+
     // Inventory-only, so it is available before any Analyze run. Drives the
     // coverage grid, the role card order and each card's slot tab order.
-    const coverage = useMemo(() => buildCoverageMatrix(inventory), [inventory]);
+    const coverage = useMemo(
+        () => buildCoverageMatrix(inventory, coverageSampleSize),
+        [inventory, coverageSampleSize]
+    );
 
     // Create engineering stats lookup function
     const getEngineeringStatsForShipType = useMemo(
@@ -787,6 +798,8 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
             {mode === 'analysis' && (
                 <GearCoverageGrid
                     matrix={coverage}
+                    sampleSize={coverageSampleSize}
+                    onSampleSizeChange={setCoverageSampleSize}
                     onCellClick={(role, slot) => {
                         handleSlotChange(role, slot);
                         document

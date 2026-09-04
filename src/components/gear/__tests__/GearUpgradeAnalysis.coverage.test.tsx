@@ -66,6 +66,13 @@ vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null })
 vi.mock('../../../utils/gear/roleSlotCoverage', () => ({
     buildCoverageMatrix: vi.fn(),
     COVERAGE_MIN_LEVEL: 16,
+    COVERAGE_SAMPLE_SIZE: 20,
+}));
+
+// usePersistedCoverageSampleSize reads useAuth; a signed-out user is enough
+// to exercise the grid without pulling in a real AuthProvider.
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: null }),
 }));
 
 const GEAR_SLOT_NAMES = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
@@ -275,5 +282,28 @@ describe('GearUpgradeAnalysis coverage grid', () => {
             'Hull',
             'Weapon',
         ]);
+    });
+
+    it('rebuilds the coverage matrix with the sample size chosen in the grid header', async () => {
+        render(
+            <GearUpgradeAnalysis
+                inventory={[]}
+                shipRoles={['ATTACKER', 'DEFENDER']}
+                mode="analysis"
+            />
+        );
+
+        await act(async () => {
+            await vi.runAllTimersAsync();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Target pieces per slot' }));
+        fireEvent.click(screen.getByRole('option', { name: '100' }));
+
+        // Proves the wiring end-to-end: Select -> persisted state -> the
+        // useMemo dependency array -> a real re-invocation of
+        // buildCoverageMatrix with the new N, not just a prop the grid
+        // received and never used.
+        expect(buildCoverageMatrixMock).toHaveBeenLastCalledWith([], 100);
     });
 });

@@ -283,6 +283,44 @@ describe('computePriority', () => {
         expect(mediocre).toBeGreaterThan(maxRoll);
         expect(maxRoll).toBe(0);
     });
+
+    describe('configurable sample size', () => {
+        // 30 mixed-quality marginals: 20 at the ideal ceiling, 10 at half of
+        // it. A slot holding more than 20 pieces but fewer than a larger N
+        // must read a HIGHER priority at that larger N — the top-20 window
+        // alone is fully covered (mean == ideal, priority 0), but widening
+        // the window to 50 (zero-padded) pulls in the weaker 10 and 20 more
+        // unfarmed zero-pad slots, dragging the mean down and priority up.
+        const ideal = 100;
+        const mixedQuality = [...Array<number>(20).fill(ideal), ...Array<number>(10).fill(50)];
+
+        it('reaches the sampleSize argument: N=50 reads a higher priority than the default N=20', () => {
+            const atDefault = computePriority(mixedQuality, ideal);
+            const atFifty = computePriority(mixedQuality, ideal, 50);
+            expect(atDefault).toBe(0);
+            expect(atFifty).toBeGreaterThan(atDefault);
+            // mean over 50 = (20*100 + 10*50 + 20*0) / 50 = 50, coverage 0.5, priority 0.5
+            expect(atFifty).toBeCloseTo(0.5, 10);
+        });
+
+        it('zero-pads to the passed sampleSize, not the default', () => {
+            // One ideal piece: at N=10, mean = ideal/10 (priority 0.9); at
+            // N=200, mean = ideal/200 (priority 0.995). Both must read as
+            // near-total priority, and the larger N must read closer to 1.
+            const onePiece = [ideal];
+            const atTen = computePriority(onePiece, ideal, 10);
+            const atTwoHundred = computePriority(onePiece, ideal, 200);
+            expect(atTen).toBeCloseTo(0.9, 10);
+            expect(atTwoHundred).toBeCloseTo(0.995, 10);
+            expect(atTwoHundred).toBeGreaterThan(atTen);
+        });
+
+        it('defaults to COVERAGE_SAMPLE_SIZE when no sampleSize argument is given', () => {
+            expect(computePriority(mixedQuality, ideal)).toBe(
+                computePriority(mixedQuality, ideal, COVERAGE_SAMPLE_SIZE)
+            );
+        });
+    });
 });
 
 describe('competitionRank', () => {
@@ -550,6 +588,12 @@ describe('buildCoverageMatrix', () => {
                 1 - 1 / COVERAGE_SAMPLE_SIZE,
                 10
             );
+
+            // Threading a non-default sampleSize through buildCoverageMatrix
+            // itself (not just computePriority) — a hardcoded 20 at this call
+            // site would fail this assertion even with computePriority fixed.
+            const oneAtFifty = buildCoverageMatrix([attackerIdeal], 50);
+            expect(oneAtFifty.cells.ATTACKER.weapon.priority).toBeCloseTo(1 - 1 / 50, 10);
 
             const twenty = buildCoverageMatrix(
                 Array.from({ length: COVERAGE_SAMPLE_SIZE }, (_, i) =>

@@ -1020,11 +1020,18 @@ const DocumentationPage: React.FC = () => {
                                         directly, so it is there before you run an analysis
                                     </li>
                                     <li>
-                                        <strong>Priority</strong> compares your best 20 pieces for
-                                        that role and slot against 20 perfect pieces for it. A high
-                                        percentage means farming that role and slot would help; a
-                                        low percentage means you are already close to the best you
-                                        can get
+                                        <strong>Priority</strong> compares your best pieces for that
+                                        role and slot against the same number of perfect pieces for
+                                        it. A high percentage means farming that role and slot would
+                                        help; a low percentage means you are already close to the
+                                        best you can get
+                                    </li>
+                                    <li>
+                                        The grid header&apos;s{' '}
+                                        <strong>Target pieces per slot</strong> control sets how
+                                        many pieces that comparison samples (default 20); raising it
+                                        asks a harder question of a deep inventory, so priority
+                                        reads higher across the board
                                     </li>
                                     <li>
                                         Role cards and each card&apos;s slot tabs are ordered by

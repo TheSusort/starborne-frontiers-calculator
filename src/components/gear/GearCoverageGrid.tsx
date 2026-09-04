@@ -6,11 +6,21 @@ import {
     CoverageCell,
     CoverageMatrix,
 } from '../../utils/gear/roleSlotCoverage';
+import { COVERAGE_SAMPLE_SIZE_STEPS } from '../../hooks/usePersistedCoverageSampleSize';
+import { Select } from '../ui';
 
 interface Props {
     matrix: CoverageMatrix;
     onCellClick: (role: ShipTypeName, slot: GearSlotName) => void;
+    /** How many of a slot's best pieces to sample per (role, slot) cell. */
+    sampleSize: number;
+    onSampleSizeChange: (value: number) => void;
 }
+
+const SAMPLE_SIZE_OPTIONS = COVERAGE_SAMPLE_SIZE_STEPS.map((step) => ({
+    value: String(step),
+    label: String(step),
+}));
 
 /**
  * Colour buckets by the cell's own `priority` value on a fixed absolute
@@ -44,18 +54,34 @@ const CoverageCellButton: React.FC<{
     </button>
 );
 
-export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
+export const GearCoverageGrid: React.FC<Props> = ({
+    matrix,
+    onCellClick,
+    sampleSize,
+    onSampleSizeChange,
+}) => {
     const firstRole = matrix.roleOrder[0];
 
     return (
         <div className="card space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
-                <h3 className="text-lg font-medium">Coverage</h3>
-                <span className="text-xs text-theme-text-secondary">
-                    Level-16 pieces owned, and how much farming each role and slot would pay off. A
-                    high percentage means it would help; a low one means you are close to the best
-                    you can get.
-                </span>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                <div className="space-y-1">
+                    <h3 className="text-lg font-medium">Coverage</h3>
+                    <span className="text-xs text-theme-text-secondary block">
+                        Level-16 pieces owned, and how much farming each role and slot would pay
+                        off. A high percentage means it would help; a low one means you are close to
+                        the best you can get.
+                    </span>
+                </div>
+                <div className="w-full sm:w-40 shrink-0">
+                    <Select
+                        label="Target pieces per slot"
+                        value={String(sampleSize)}
+                        onChange={(value) => onSampleSizeChange(Number(value))}
+                        options={SAMPLE_SIZE_OPTIONS}
+                        data-testid="coverage-sample-size-select"
+                    />
+                </div>
             </div>
             <div className="text-xs text-theme-text-secondary">
                 Colour reflects the percentage directly, on a fixed scale, so it means the same

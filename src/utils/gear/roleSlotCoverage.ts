@@ -19,7 +19,12 @@ import { calculateMainStatValue } from './mainStatValueFetcher';
 /** Only fully-levelled gear counts as supply. */
 export const COVERAGE_MIN_LEVEL = 16;
 
-/** Top marginals sampled per (role, slot), zero-padded up to this size. */
+/**
+ * Default top-marginals sample size per (role, slot), zero-padded up to this
+ * size. `computePriority` and `buildCoverageMatrix` both take this as an
+ * overridable `sampleSize` argument — this constant is only the fallback
+ * when the caller does not pass one.
+ */
 export const COVERAGE_SAMPLE_SIZE = 20;
 
 /**
@@ -210,16 +215,21 @@ function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal
  * whose score formula reads a rare stat and a role that reads common ones are
  * no longer judged by how bunched their own top pieces are.
  *
- * The mean is over the top `COVERAGE_SAMPLE_SIZE` marginals, zero-padded up
- * to that size — not divided by however many pieces exist. Owning fewer than
- * 20 pieces must not inflate the average: a single max-roll piece is not "20
- * max-roll pieces sampled once", it is 1 real value and 19 unfarmed slots.
+ * The mean is over the top `sampleSize` marginals (default `COVERAGE_SAMPLE_SIZE`),
+ * zero-padded up to that size — not divided by however many pieces exist.
+ * Owning fewer pieces than `sampleSize` must not inflate the average: a
+ * single max-roll piece is not "N max-roll pieces sampled once", it is 1 real
+ * value and N-1 unfarmed slots.
  */
-export function computePriority(marginals: number[], idealMarginal: number): number {
+export function computePriority(
+    marginals: number[],
+    idealMarginal: number,
+    sampleSize: number = COVERAGE_SAMPLE_SIZE
+): number {
     if (idealMarginal <= 0) return 0;
 
-    const sample = [...marginals].sort((a, b) => b - a).slice(0, COVERAGE_SAMPLE_SIZE);
-    const mean = sample.reduce((sum, value) => sum + value, 0) / COVERAGE_SAMPLE_SIZE;
+    const sample = [...marginals].sort((a, b) => b - a).slice(0, sampleSize);
+    const mean = sample.reduce((sum, value) => sum + value, 0) / sampleSize;
 
     const coverage = mean / idealMarginal;
     return Math.min(1, Math.max(0, 1 - coverage));
@@ -303,8 +313,15 @@ export function competitionRank<T>(
  * (role, slot) cell independently against its own ideal-piece ceiling, so
  * ranking within a column compares roles that are already on equal footing
  * for that slot without needing a cross-slot bridge.
+ *
+ * `sampleSize` (default `COVERAGE_SAMPLE_SIZE`) is forwarded to
+ * `computePriority` for every cell — see that function's doc for what it
+ * controls.
  */
-export function buildCoverageMatrix(inventory: GearPiece[]): CoverageMatrix {
+export function buildCoverageMatrix(
+    inventory: GearPiece[],
+    sampleSize: number = COVERAGE_SAMPLE_SIZE
+): CoverageMatrix {
     const roles = Object.keys(SHIP_TYPES);
 
     const piecesBySlot = new Map<GearSlotName, GearPiece[]>();
@@ -325,7 +342,7 @@ export function buildCoverageMatrix(inventory: GearPiece[]): CoverageMatrix {
                 role,
                 slot,
                 count: pieces.length,
-                priority: computePriority(marginals, idealMarginal),
+                priority: computePriority(marginals, idealMarginal, sampleSize),
                 rank: 0, // assigned below
             };
         }

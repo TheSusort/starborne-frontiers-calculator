@@ -33,6 +33,12 @@ vi.mock('../../../hooks/useTutorialTrigger', () => ({
 // Sidebar imports /favicon.ico?url which is not available in test environment
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 
+// usePersistedCoverageSampleSize reads useAuth; a signed-out user is enough
+// to exercise the grid without pulling in a real AuthProvider.
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: null }),
+}));
+
 describe('GearUpgradeAnalysis auto-start', () => {
     beforeEach(() => {
         vi.useFakeTimers();
