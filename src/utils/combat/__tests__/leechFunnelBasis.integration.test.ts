@@ -356,8 +356,8 @@ describe('a standing leech pays off the damage the funnel RECORDED (locked rule,
     it('a hit transformed wholesale into a DoT pays NOTHING (locked: "if dot, no heal")', () => {
         // MEASURED pre-fix: this paid the FULL pct x the pre-funnel hit — a leech off damage that
         // never landed. The deferred amount re-books per tick on the DoT path instead, where the
-        // entry's `sourceId` is the VICTIM, so it feeds the victim's leech and never the
-        // attacker's (`transformedDotAttackerCredit.test.ts` pins that axis).
+        // entry is marked `convertedFromHit` and so pays a damage-dealt leech to NOBODY — not the
+        // attacker, not the converter (`transformedDotAttackerCredit.test.ts` pins both halves).
         //
         // A repair whose gross is 0 opens no combat-log row, so the observable is the ABSENCE of
         // the event, not an `amount: 0`. The control above supplies the "the cast still fired"

@@ -27,6 +27,16 @@ export function emitAttacked(args: {
      */
     damage: number;
     /**
+     * What the victim actually TOOK from that attack — the funnel's recorded intake. Supplied by
+     * the positional callers, which have the funnel outcome in scope; OMITTED by the
+     * non-positional one, whose consumers fall back to `damage`. Read the event field's own doc
+     * for the ruling that makes it the basis for damage-taken reactives and the >25%-max-HP gate.
+     *
+     * Emitted whenever supplied, INCLUDING 0 — a fully redirected hit really is 0 taken, and
+     * dropping it would let the readers' `?? damage` fallback resurrect the raw figure.
+     */
+    takenDamage?: number;
+    /**
      * Which sub-attack of the attacker's cast these events belong to.
      * Carried on the event so a victim-side once-per-attack rider guard can reset between the
      * attacker's consecutive attacks instead of collapsing all N into one grant.
@@ -48,6 +58,7 @@ export function emitAttacked(args: {
         isPrimaryTarget,
         shieldWasHit,
         damage,
+        takenDamage,
         subAttackIndex,
     } = args;
     hitOutcomes.forEach((hitCrit, hitIndex) => {
@@ -60,6 +71,7 @@ export function emitAttacked(args: {
             ...(shieldWasHit ? { shieldWasHit: true } : {}),
             ...(hitCrit ? { didCrit: true } : {}),
             ...(damage > 0 ? { damage } : {}),
+            ...(takenDamage !== undefined ? { takenDamage } : {}),
             subAttackIndex: subAttackIndex ?? hitIndex,
         });
     });
