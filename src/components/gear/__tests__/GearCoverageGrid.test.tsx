@@ -2,9 +2,13 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GearCoverageGrid } from '../GearCoverageGrid';
-import { buildCoverageMatrix } from '../../../utils/gear/roleSlotCoverage';
-import { SHIP_TYPES } from '../../../constants/shipTypes';
-import { GEAR_SLOT_ORDER, GEAR_SLOTS } from '../../../constants/gearTypes';
+import {
+    buildCoverageMatrix,
+    CoverageCell,
+    CoverageMatrix,
+} from '../../../utils/gear/roleSlotCoverage';
+import { SHIP_TYPES, ShipTypeName } from '../../../constants/shipTypes';
+import { GEAR_SLOT_ORDER, GEAR_SLOTS, GearSlotName } from '../../../constants/gearTypes';
 import { GearPiece } from '../../../types/gear';
 
 function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
@@ -19,6 +23,33 @@ function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
         setBonus: null,
         ...overrides,
     };
+}
+
+/**
+ * A CoverageMatrix fixture built directly (not through `buildCoverageMatrix`)
+ * so ranks and priorities can be set independently per cell. Every cell
+ * defaults to priority 0.5 / rank 1 / count 10; pass overrides keyed
+ * `"ROLE:slot"` to control specific cells.
+ */
+function makeMatrix(overrides: Record<string, Partial<CoverageCell>> = {}): CoverageMatrix {
+    const roles: ShipTypeName[] = Object.keys(SHIP_TYPES);
+    const cells: Record<ShipTypeName, Record<GearSlotName, CoverageCell>> = {};
+    for (const role of roles) {
+        cells[role] = {};
+        for (const slot of GEAR_SLOT_ORDER) {
+            cells[role][slot] = {
+                role,
+                slot,
+                count: 10,
+                priority: 0.5,
+                rank: 1,
+                ...overrides[`${role}:${slot}`],
+            };
+        }
+    }
+    const slotOrderByRole: Record<ShipTypeName, GearSlotName[]> = {};
+    for (const role of roles) slotOrderByRole[role] = [...GEAR_SLOT_ORDER];
+    return { cells, roleOrder: roles, slotOrderByRole };
 }
 
 describe('GearCoverageGrid', () => {
@@ -36,12 +67,26 @@ describe('GearCoverageGrid', () => {
         }
     });
 
-    it('shows the level-16 count and priority in each cell', () => {
+    it('shows the level-16 count once per column, in the header, not the cell', () => {
         const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
         render(<GearCoverageGrid matrix={matrix} onCellClick={() => {}} />);
+
+        const weaponCount = matrix.cells.ATTACKER.weapon.count;
+        expect(screen.getByTestId('coverage-header-weapon')).toHaveTextContent(String(weaponCount));
+
         const cell = screen.getByTestId('coverage-cell-ATTACKER-weapon');
-        expect(cell).toHaveTextContent('2');
-        expect(cell).toHaveTextContent('%');
+        const expectedPriority = `${Math.round(matrix.cells.ATTACKER.weapon.priority * 100)}%`;
+        expect(cell.textContent).toBe(expectedPriority);
+    });
+
+    it("names the role, slot and priority in a cell's aria-label, without a count", () => {
+        const matrix = makeMatrix({ 'ATTACKER:weapon': { priority: 0.42, count: 188, rank: 1 } });
+        render(<GearCoverageGrid matrix={matrix} onCellClick={() => {}} />);
+        const cell = screen.getByTestId('coverage-cell-ATTACKER-weapon');
+        expect(cell).toHaveAccessibleName(/Attacker/);
+        expect(cell).toHaveAccessibleName(/Weapon/);
+        expect(cell).toHaveAccessibleName(/42 percent/);
+        expect(cell.getAttribute('aria-label')).not.toMatch(/188/);
     });
 
     it('reports the role and slot when a cell is clicked', async () => {
@@ -60,5 +105,31 @@ describe('GearCoverageGrid', () => {
         render(<GearCoverageGrid matrix={reordered} onCellClick={() => {}} />);
         const labels = screen.getAllByTestId(/^coverage-role-/);
         expect(labels[0]).toHaveTextContent(SHIP_TYPES[reordered.roleOrder[0]].name);
+    });
+
+    it('colours a cell from its own priority value, not its rank within the column', () => {
+        // Two cells share the same 20% priority but sit at opposite ranks in
+        // different (12-role) columns — value-based colour must treat them
+        // the same. Rank 1 vs. rank 12 also differ enough under the OLD
+        // rank-bucketing code (bucket 0 vs. bucket 4) to make this a real
+        // discriminator, not an accidental pass.
+        const matrix = makeMatrix({
+            'ATTACKER:weapon': { priority: 0.2, rank: 1 },
+            'DEFENDER:hull': { priority: 0.2, rank: 12 },
+            // Rank 1 (top of its column) but 0% priority: a tied, fully-covered
+            // column must NOT render as the reddest "farm this now" colour.
+            'SUPPORTER:generator': { priority: 0, rank: 1 },
+        });
+        render(<GearCoverageGrid matrix={matrix} onCellClick={() => {}} />);
+
+        const weaponCell = screen.getByTestId('coverage-cell-ATTACKER-weapon');
+        const hullCell = screen.getByTestId('coverage-cell-DEFENDER-hull');
+        const zeroCell = screen.getByTestId('coverage-cell-SUPPORTER-generator');
+
+        expect(weaponCell.className).toContain('bg-yellow-800/60');
+        expect(hullCell.className).toContain('bg-yellow-800/60');
+
+        expect(zeroCell.className).toContain('bg-green-800/60');
+        expect(zeroCell.className).not.toContain('bg-red-900/70');
     });
 });

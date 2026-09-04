@@ -1014,10 +1014,10 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        A coverage grid at the top shows how many level 16 pieces
-                                        you own for each gear slot, and how much each is worth
-                                        farming. It reads your inventory directly, so it is there
-                                        before you run an analysis
+                                        A coverage grid at the top shows, once per gear slot, how
+                                        many level 16 pieces you own, and for each role and slot how
+                                        much farming it would pay off. It reads your inventory
+                                        directly, so it is there before you run an analysis
                                     </li>
                                     <li>
                                         <strong>Priority</strong> compares your best 20 pieces for

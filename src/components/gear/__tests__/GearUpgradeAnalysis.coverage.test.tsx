@@ -65,6 +65,7 @@ vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null })
 
 vi.mock('../../../utils/gear/roleSlotCoverage', () => ({
     buildCoverageMatrix: vi.fn(),
+    COVERAGE_MIN_LEVEL: 16,
 }));
 
 const GEAR_SLOT_NAMES = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;

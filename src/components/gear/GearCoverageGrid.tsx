@@ -1,51 +1,51 @@
 import React from 'react';
 import { SHIP_TYPES, ShipTypeName } from '../../constants/shipTypes';
 import { GEAR_SLOTS, GEAR_SLOT_ORDER, GearSlotName } from '../../constants/gearTypes';
-import { CoverageCell, CoverageMatrix } from '../../utils/gear/roleSlotCoverage';
+import {
+    COVERAGE_MIN_LEVEL,
+    CoverageCell,
+    CoverageMatrix,
+} from '../../utils/gear/roleSlotCoverage';
 
 interface Props {
     matrix: CoverageMatrix;
     onCellClick: (role: ShipTypeName, slot: GearSlotName) => void;
 }
 
-// Colour buckets by rank within the slot column, highest priority first. Rank
-// is used rather than the raw priority so the scale stays informative for a
-// player whose whole inventory is thin, or whose whole inventory is deep.
-const RANK_CLASSES = [
-    'bg-red-900/70 text-red-100',
-    'bg-orange-800/70 text-orange-100',
-    'bg-yellow-800/60 text-yellow-100',
-    'bg-lime-800/60 text-lime-100',
-    'bg-green-800/60 text-green-100',
-];
-
-function rankClass(rank: number, roleCount: number): string {
-    const bucket = Math.min(
-        RANK_CLASSES.length - 1,
-        Math.floor(((rank - 1) / roleCount) * RANK_CLASSES.length)
-    );
-    return RANK_CLASSES[bucket];
+/**
+ * Colour buckets by the cell's own `priority` value on a fixed absolute
+ * scale, so the same percentage is the same colour in every column and
+ * colour can never disagree with the number shown. `cell.rank` (competition
+ * rank within its slot column) still drives role-card and slot-tab order
+ * elsewhere — it is deliberately not used for colour here, since a tied
+ * column (e.g. every role at 0%) would otherwise paint its rank-1 entries
+ * the reddest class despite there being nothing to farm.
+ */
+function priorityClass(priority: number): string {
+    if (priority >= 0.5) return 'bg-red-900/70 text-red-100';
+    if (priority >= 0.3) return 'bg-orange-800/70 text-orange-100';
+    if (priority >= 0.15) return 'bg-yellow-800/60 text-yellow-100';
+    if (priority >= 0.05) return 'bg-lime-800/60 text-lime-100';
+    return 'bg-green-800/60 text-green-100';
 }
 
 const CoverageCellButton: React.FC<{
     cell: CoverageCell;
-    roleCount: number;
     onClick: () => void;
-}> = ({ cell, roleCount, onClick }) => (
+}> = ({ cell, onClick }) => (
     <button
         type="button"
         onClick={onClick}
         data-testid={`coverage-cell-${cell.role}-${cell.slot}`}
-        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${cell.count} at level 16, ${Math.round(cell.priority * 100)} percent priority to farm`}
-        className={`rounded-sm px-1 py-1.5 text-center transition-opacity hover:opacity-80 ${rankClass(cell.rank, roleCount)}`}
+        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${Math.round(cell.priority * 100)} percent priority to farm`}
+        className={`rounded-sm px-1 py-2 text-center transition-opacity hover:opacity-80 ${priorityClass(cell.priority)}`}
     >
-        <span className="block text-xs font-semibold">{cell.count}</span>
-        <span className="block text-xxs opacity-80">{Math.round(cell.priority * 100)}%</span>
+        <span className="block text-sm font-semibold">{Math.round(cell.priority * 100)}%</span>
     </button>
 );
 
 export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
-    const roleCount = matrix.roleOrder.length;
+    const firstRole = matrix.roleOrder[0];
 
     return (
         <div className="card space-y-3">
@@ -58,8 +58,8 @@ export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
                 </span>
             </div>
             <div className="text-xs text-theme-text-secondary">
-                Colour ranks each slot column: reddest has the highest priority in that column,
-                greenest is closest to the best you can get.
+                Colour reflects the percentage directly, on a fixed scale, so it means the same
+                thing in every column.
             </div>
 
             <div className="overflow-x-auto">
@@ -73,9 +73,13 @@ export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
                     {GEAR_SLOT_ORDER.map((slot) => (
                         <div
                             key={slot}
+                            data-testid={`coverage-header-${slot}`}
                             className="text-xxs uppercase tracking-wide text-theme-text-secondary text-center pb-1"
                         >
-                            {GEAR_SLOTS[slot].label}
+                            <div>{GEAR_SLOTS[slot].label}</div>
+                            <div className="normal-case opacity-80">
+                                {matrix.cells[firstRole][slot].count} at {COVERAGE_MIN_LEVEL}
+                            </div>
                         </div>
                     ))}
 
@@ -91,7 +95,6 @@ export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
                                 <CoverageCellButton
                                     key={slot}
                                     cell={matrix.cells[role][slot]}
-                                    roleCount={roleCount}
                                     onClick={() => onCellClick(role, slot)}
                                 />
                             ))}
