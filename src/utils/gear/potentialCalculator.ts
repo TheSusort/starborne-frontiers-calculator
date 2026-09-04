@@ -15,73 +15,13 @@ import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { calculateTotalStats, StatBreakdown } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
+import { ROLE_BASE_STATS, getBaseRoleStats } from '../../constants/roleBaseStats';
 import { Ship } from '../../types/ship';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { isCalibrationEligible, getCalibratedMainStat } from './calibrationCalculator';
 import { USE_FAST_POTENTIAL, VERIFY_FAST_POTENTIAL } from './fastPotential/featureFlag';
 // eslint-disable-next-line import/no-cycle
 import { fastAnalyzePotentialUpgrades } from './fastPotential/fastAnalyze';
-
-// Role-specific base stats representing typical ship base stats (before gear).
-// Using midpoints of known ranges so percentage gear stats are weighted correctly.
-const ROLE_BASE_STATS: Partial<Record<ShipTypeName, BaseStats>> = {
-    ATTACKER: {
-        hp: 22000,
-        attack: 6250,
-        defence: 5000,
-        hacking: 0,
-        security: 0,
-        speed: 130,
-        crit: 20,
-        critDamage: 80,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    DEFENDER: {
-        hp: 25000,
-        attack: 3000,
-        defence: 5000,
-        hacking: 0,
-        security: 90,
-        speed: 110,
-        crit: 10,
-        critDamage: 20,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    DEBUFFER: {
-        hp: 16500,
-        attack: 4400,
-        defence: 2500,
-        hacking: 200,
-        security: 33,
-        speed: 125,
-        crit: 12,
-        critDamage: 20,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    SUPPORTER: {
-        hp: 20000,
-        attack: 3000,
-        defence: 3250,
-        hacking: 0,
-        security: 0,
-        speed: 99,
-        crit: 12,
-        critDamage: 22,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-};
-
-// Map variant roles to their base role for dummy stats
-function getBaseRoleStats(role: ShipTypeName): BaseStats {
-    if (role.startsWith('DEFENDER')) return ROLE_BASE_STATS.DEFENDER!;
-    if (role.startsWith('DEBUFFER')) return ROLE_BASE_STATS.DEBUFFER!;
-    if (role.startsWith('SUPPORTER')) return ROLE_BASE_STATS.SUPPORTER!;
-    return ROLE_BASE_STATS.ATTACKER!;
-}
 
 export const UPGRADE_LEVELS = {
     rare: {
@@ -411,7 +351,7 @@ function calculateGearStats(
     }
 
     // Fallback to dummy-based calculation using role-specific base stats
-    const roleStats = shipRole ? getBaseRoleStats(shipRole) : ROLE_BASE_STATS.ATTACKER!;
+    const roleStats = shipRole ? getBaseRoleStats(shipRole) : ROLE_BASE_STATS.ATTACKER;
 
     // Use overrideBaseCrit if provided (ensures consistent baseline across current vs upgraded comparisons)
     // Otherwise calculate from this piece's crit
