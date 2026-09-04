@@ -176,6 +176,24 @@ describe('computeHeadroom', () => {
         expect(computeHeadroom(withTail)).toBe(0);
     });
 
+    it('samples the top entries, not the first ones it is given', () => {
+        // Twenty 1s followed by five 100s. Sorting before truncating keeps all
+        // five 100s; truncating first would keep only the 1s and report a
+        // fully saturated 0.
+        const marginals = [...Array<number>(20).fill(1), ...Array<number>(5).fill(100)];
+        const rest = [100, 100, 100, 100, ...Array<number>(15).fill(1)];
+        const expected = (100 - rest.reduce((sum, v) => sum + v, 0) / rest.length) / 100;
+
+        expect(computeHeadroom(marginals)).toBeCloseTo(expected, 10);
+        expect(computeHeadroom(marginals)).not.toBe(0);
+    });
+
+    it('does not mutate its argument', () => {
+        const marginals = [10, 50, 20];
+        computeHeadroom(marginals);
+        expect(marginals).toEqual([10, 50, 20]);
+    });
+
     it('reports near-total headroom for one good piece and a weak tail', () => {
         expect(computeHeadroom([100, 1, 1, 1])).toBeGreaterThan(0.98);
     });
