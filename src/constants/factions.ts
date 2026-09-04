@@ -42,7 +42,13 @@ const FACTION_DEFS = {
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426138149044374.webp',
     },
     TIANCHAO: {
-        name: 'Tianchao',
+        name: 'Tianchen',
+        // The game renamed this faction Tianchao -> Tianchen in its frontend only, keeping the old
+        // spelling in its data. `ship_templates` was migrated to the new spelling, but the alias is
+        // NOT dead: scripts/update-ship-skills.ts re-imports skill text from the
+        // frontiers.cubedweb.net API, which still says Tianchao, so any run of it puts the old
+        // spelling back. Deleting this alias makes that revert silently widen Fuying's ally scope.
+        aliases: ['Tianchao'],
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426140946636820.webp',
     },
     XAOC: {
@@ -59,6 +65,36 @@ export type FactionKey = keyof typeof FACTION_DEFS;
 
 /** Runtime companion to `FactionKey`, for validation at trust boundaries. */
 export const FACTION_KEYS = Object.keys(FACTION_DEFS) as readonly FactionKey[];
+
+/**
+ * Every spelling a faction is known by — the display `name` first, then its `aliases`.
+ *
+ * Two consumers, and the first is why a bare `name` is not enough:
+ *  • Skill-text parsing. Skill text is game data and can name a faction by a spelling the UI has
+ *    already moved off (Tianchao/Tianchen). A parser that reads `name` alone stops recognising the
+ *    old spelling the moment the UI is renamed, and a recipient phrase that no longer matches does
+ *    not fail loudly — it drops the faction scope, so an ally-scoped grant reaches EVERY ally.
+ *  • Ship search, via `factionMatchesSearch`.
+ *
+ * Display — labels, sort keys, icon alt text — reads `name` directly and must NOT come through
+ * here; a faction shows one name in the UI.
+ */
+export function factionSpellings(key: FactionKey): readonly string[] {
+    const def: Faction = FACTION_DEFS[key];
+    return def.aliases ? [def.name, ...def.aliases] : [def.name];
+}
+
+/**
+ * Whether a search query hits any spelling of a faction — so a player who still knows a faction by
+ * its old name finds its ships. `faction` is the loose `Ship.faction` string; an unrecognised one
+ * matches nothing.
+ */
+export function factionMatchesSearch(faction: string | undefined, query: string): boolean {
+    const key = asFactionKey(faction);
+    if (key === undefined) return false;
+    const q = query.toLowerCase();
+    return factionSpellings(key).some((spelling) => spelling.toLowerCase().includes(q));
+}
 
 /**
  * Narrows a loose faction string (`Ship.faction`, which is `FactionName` = `string`) to a real

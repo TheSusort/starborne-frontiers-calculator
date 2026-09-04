@@ -12,6 +12,7 @@ import { useShipComparison } from '../../hooks/useShipComparison';
 import {
     SHIP_TYPES,
     FACTIONS,
+    factionMatchesSearch,
     RARITY_ORDER,
     RARITIES,
     ALL_STAT_NAMES,
@@ -275,7 +276,7 @@ export const ShipIndexPage: React.FC = () => {
             const matchesSearch =
                 searchQuery === '' ||
                 ship.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                FACTIONS[ship.faction].name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                factionMatchesSearch(ship.faction, searchQuery) ||
                 SHIP_TYPES[ship.type].name.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 (ship.activeSkillText?.toLowerCase().includes(searchQuery.toLowerCase()) ??
                     false) ||

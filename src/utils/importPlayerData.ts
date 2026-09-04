@@ -588,7 +588,10 @@ const getFaction = (faction: string): FactionName => {
             return 'MARAUDERS';
         case 'Terran':
             return 'TERRAN_COMBINE';
+        // Both spellings: the game renamed the faction Tianchao -> Tianchen in its frontend, and an
+        // unmapped value falls through to the TERRAN_COMBINE default below rather than erroring.
         case 'Tianchao':
+        case 'Tianchen':
             return 'TIANCHAO';
         case 'XAOC':
             return 'XAOC';

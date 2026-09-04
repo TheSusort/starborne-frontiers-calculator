@@ -225,7 +225,7 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                         },
                         affinity: ship.affinity,
                         role: ship.type,
-                        // #363: faction-scoped ally grants (Fuying's Tianchao Stealth) resolve the
+                        // #363: faction-scoped ally grants (Fuying's Tianchen Stealth) resolve the
                         // recipient's faction from here.
                         faction: asFactionKey(ship.faction),
                         buffs: t.buffs.filter((b) => !b.autoFilled),

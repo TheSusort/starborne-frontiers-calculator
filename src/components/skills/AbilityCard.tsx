@@ -163,7 +163,7 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
     { value: 'SUPPORTER', label: 'Supporter' },
 ];
 
-// #363: recipient FACTION scope options for an ally-scoped grant ("grants Tianchao allies
+// #363: recipient FACTION scope options for an ally-scoped grant ("grants Tianchen allies
 // Stealth"). Derived from FACTION_KEYS so a new faction cannot be forgotten here.
 const FACTION_FILTER_OPTIONS: { value: FactionKey; label: string }[] = FACTION_KEYS.map((key) => ({
     value: key,

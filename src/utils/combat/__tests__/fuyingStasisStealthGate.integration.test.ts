@@ -10,7 +10,7 @@
  * debuff, so it fired on ANY ally being damaged. Measured in the `plain` fingerprint scenario at
  * this branch's base (`9eb6974b`): 40 `Stasis` log mentions (20 applications + 20 expiries) with
  * ZERO Stealth anywhere on the board. The faction fix earlier on this branch made it more visibly
- * wrong, not less — a team with no Tianchao ally now never has anyone Stealthed, and it still
+ * wrong, not less — a team with no Tianchen ally now never has anyone Stealthed, and it still
  * fired.
  *
  * OWNER RULINGS this file encodes (2026-08-22 — do not re-derive from code or sibling ships):
@@ -71,7 +71,7 @@ const fuyingShip = (): Ship => {
 /** Her R4 passive row, verbatim from docs/ship-skills.csv (the DR-aura sentence, then the
  *  reactive one, separated by the row's own `<br />` paragraph break). */
 const FUYING_PASSIVE_R4 =
-    'All Tianchao allies with <unit-skill>Stealth</unit-skill> take ' +
+    'All Tianchen allies with <unit-skill>Stealth</unit-skill> take ' +
     '<unit-damage>30% less direct damage</unit-damage>.<br /><br />\n' +
     'When an ally in <unit-skill>Stealth</unit-skill> within the active pattern is directly ' +
     'damaged, this Unit inflicts <unit-skill>Stasis</unit-skill> for 1 turn onto the enemy.';

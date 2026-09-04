@@ -6,7 +6,7 @@ import { resolveSupportRecipients } from './supportRecipients';
  * #363 — which actors an ALLY-SCOPED `incoming-reduction` ability protects.
  *
  * Every pre-#363 member of the incoming family is `target: 'self'`, so the engine's per-actor
- * incoming-effects map only ever keyed an ability onto its own carrier. Fuying's "All Tianchao
+ * incoming-effects map only ever keyed an ability onto its own carrier. Fuying's "All Tianchen
  * allies with Stealth take 30% less direct damage" is the corpus's first ally-scoped one, and it
  * has to be keyed onto its RECIPIENTS instead — the victim-side read is
  * `incomingAbilitiesOf(victim.id)`.
@@ -25,7 +25,7 @@ import { resolveSupportRecipients } from './supportRecipients';
  *
  * Narrowing is the same shared composition every other #363 site uses (footprint, then faction):
  *  - `footprintAllyIds` is consulted ONLY when the ability is `patternScoped` (OWNER-RULED
- *    2026-08-22: a Stealthed Tianchao ally standing OUTSIDE Fuying's active pattern takes FULL
+ *    2026-08-22: a Stealthed Tianchen ally standing OUTSIDE Fuying's active pattern takes FULL
  *    damage). `undefined` means "do not narrow" per this codebase's convention — a non-positional
  *    or non-support pattern leaves the aura team-wide rather than silencing it.
  *  - an actor whose faction is unknown NEVER matches a filter (conservative: the aura can only

@@ -146,7 +146,7 @@ import {
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
-import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
+import { FACTION_KEYS, factionSpellings, type FactionKey } from '../../constants/factions';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -937,7 +937,7 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         });
     }
 
-    // Fuying (#363): "All Tianchao allies with Stealth take N% less direct damage." The corpus's
+    // Fuying (#363): "All Tianchen allies with Stealth take N% less direct damage." The corpus's
     // first ALLY-scoped reduction — every arm above reduces damage on the CARRIER. The faction is
     // captured from the recipient phrase, so 'Tianchao Precision II' (a buff NAME) cannot reach
     // this arm: the pattern requires 'allies' right after the faction word.
@@ -950,8 +950,11 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
             plain
         );
     if (allyAuraM) {
-        const key = FACTION_KEYS.find(
-            (k) => FACTIONS[k].name.toLowerCase() === allyAuraM[1].trim().toLowerCase()
+        // Matched against every spelling the corpus uses for the faction (`factionSpellings`),
+        // not just its display name — the game data can lag a frontend rename.
+        const word = allyAuraM[1].trim().toLowerCase();
+        const key = FACTION_KEYS.find((k) =>
+            factionSpellings(k).some((n) => n.toLowerCase() === word)
         );
         // Unrecognised faction word → emit NOTHING, so audit:skills keeps reporting the clause
         // rather than silently applying an unfiltered ally-wide aura. Same closed-alternation
@@ -963,7 +966,7 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
                 pct: parseFloat(allyAuraM[2]),
                 target: 'all-allies',
                 factionFilter: [key],
-                // OWNER-RULED 2026-08-22: the aura IS pattern-limited — a Stealthed Tianchao ally
+                // OWNER-RULED 2026-08-22: the aura IS pattern-limited — a Stealthed Tianchen ally
                 // standing OUTSIDE Fuying's active pattern takes FULL damage. The limit is
                 // MECHANICAL, not textual: it governs the whole passive even though the words
                 // "within the active pattern" sit only in the passive's SECOND sentence (the
@@ -3380,7 +3383,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         if (conditions.length) {
             ability.conditions = conditions;
         }
-        // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchao allies
+        // #363 (Fuying): recipient FACTION scope on an ally-scoped grant ("grants Tianchen allies
         // Stealth"). Attached ONLY when the clause actually names one, so every other ship's
         // ability object stays byte-identical (verified corpus-wide: the detector fires on Fuying
         // alone). Gated on an ally-scoped target — a self-grant has no recipient set to narrow,

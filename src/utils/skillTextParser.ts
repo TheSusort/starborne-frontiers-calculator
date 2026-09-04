@@ -21,7 +21,7 @@ import {
     RecipientFilter,
 } from '../types/abilities';
 import type { ShipRoleCategory } from '../constants/shipTypes';
-import { FACTIONS, FACTION_KEYS, type FactionKey } from '../constants/factions';
+import { FACTION_KEYS, factionSpellings, type FactionKey } from '../constants/factions';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
 
@@ -6085,9 +6085,18 @@ export function detectGrantRecipientFilter(
 // all 31 buff-name clauses out with no ship-name special-casing. Note that "allies" appearing
 // anywhere later in the clause is NOT enough — Los's "grants XAOC Swiftness III to all allies"
 // carries both the faction-named buff and a team receiver, and must not read as a faction scope.
+//
+// The faction words come from `factionSpellings`, not `FACTIONS[key].name` — the corpus can still
+// write a spelling the UI has renamed away from, and a scope that stops matching widens silently.
 const FACTION_SCOPE_RES: readonly (readonly [FactionKey, RegExp])[] = FACTION_KEYS.map(
     (key) =>
-        [key, new RegExp(`\\b${escapeRegExp(FACTIONS[key].name)}\\s+all(?:y|ies)\\b`, 'i')] as const
+        [
+            key,
+            new RegExp(
+                `\\b(?:${factionSpellings(key).map(escapeRegExp).join('|')})\\s+all(?:y|ies)\\b`,
+                'i'
+            ),
+        ] as const
 );
 
 /**

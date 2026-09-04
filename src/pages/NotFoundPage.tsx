@@ -139,15 +139,15 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
     },
     'xian-ren': {
         terminalLines: [
-            '> ATTEMPTING TO LOCATE TIANCHAO CELL...',
+            '> ATTEMPTING TO LOCATE TIANCHEN CELL...',
             '> CROSS-REFERENCING KNOWN NETWORKS...',
             '> RESULT: NO RECORD EXISTS.',
         ],
         barLabel: '[TRAIL GONE COLD]',
         barColorClass: 'text-violet-400',
         title: 'SELL A LIE, VOID ONE THOUSAND TRUTHS',
-        subtitle: 'Tianchao never trades in falsehoods.',
-        body: `There is no page here. There has never been a page here.\n\nThis is not deception. Tianchao never trades in falsehoods. There are simply layers. Peeling back one layer of intent reveals another, and another below that.\n\nThe page you are looking for may exist. It may be three steps ahead of you. It may already know you were coming.\n\nOperatives of the clan are chameleons. This URL is a chameleon.\n\nYou were followed here. You will not notice the agent until they choose to be noticed.`,
+        subtitle: 'Tianchen never trades in falsehoods.',
+        body: `There is no page here. There has never been a page here.\n\nThis is not deception. Tianchen never trades in falsehoods. There are simply layers. Peeling back one layer of intent reveals another, and another below that.\n\nThe page you are looking for may exist. It may be three steps ahead of you. It may already know you were coming.\n\nOperatives of the clan are chameleons. This URL is a chameleon.\n\nYou were followed here. You will not notice the agent until they choose to be noticed.`,
     },
     nightcorps: {
         terminalLines: [
@@ -455,14 +455,14 @@ const EASTER_EGGS: Record<string, EasterEggConfig> = {
     filmaunt: {
         terminalLines: [
             '> QUERYING FILMAUNT UNIVERSITY — ALUMNI RECORDS...',
-            '> CROSS-REFERENCING TIANCHAO INTELLIGENCE NETWORK...',
+            '> CROSS-REFERENCING TIANCHEN INTELLIGENCE NETWORK...',
             '> RESULT: QUERY HAS BEEN NOTED.',
         ],
         barLabel: '[THREAD FLAGGED]',
         barColorClass: 'text-indigo-300',
         title: 'FILMAUNT UNIVERSITY',
         subtitle: 'Prestigious. Rigorous. Independently audited. Entirely above suspicion.',
-        body: `Filmaunt University has produced some of the finest engineers in the galaxy.\n\nIt has also, on at least four documented occasions, employed faculty members later found to have significant ties to the Tianchao Clan. The investigations into each were thorough, well-funded, and ultimately inconclusive. The faculty members in question were never charged.\n\nOne of them supervised a student project that produced a working model of weaponized AI — adaptive, autonomous, capable of learning from engagement. The student believed she was contributing to a private defense research initiative. The project was completed. The work was published. The professor was arrested.\n\nThe student's name is not in this file.\n\nFilmaunt University issued a statement condemning the use of academic research for unauthorized purposes. The statement was well-written.\n\nThe Clan does not confirm or deny affiliation with any academic institution.\n\nThe thread you used to find this query has been flagged. This is not unusual. Most threads that lead here are flagged.\n\nIt does not mean anything, necessarily.`,
+        body: `Filmaunt University has produced some of the finest engineers in the galaxy.\n\nIt has also, on at least four documented occasions, employed faculty members later found to have significant ties to the Tianchen Clan. The investigations into each were thorough, well-funded, and ultimately inconclusive. The faculty members in question were never charged.\n\nOne of them supervised a student project that produced a working model of weaponized AI — adaptive, autonomous, capable of learning from engagement. The student believed she was contributing to a private defense research initiative. The project was completed. The work was published. The professor was arrested.\n\nThe student's name is not in this file.\n\nFilmaunt University issued a statement condemning the use of academic research for unauthorized purposes. The statement was well-written.\n\nThe Clan does not confirm or deny affiliation with any academic institution.\n\nThe thread you used to find this query has been flagged. This is not unusual. Most threads that lead here are flagged.\n\nIt does not mean anything, necessarily.`,
     },
     'pecunia-sit-potentia': {
         terminalLines: [

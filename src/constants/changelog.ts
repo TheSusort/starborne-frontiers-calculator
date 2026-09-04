@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Factions: the Tianchao faction is now called Tianchen, matching the game.',
+    'Ship search: searching Tianchao still finds Tianchen ships.',
     'Combat simulator: the round log now names buff steals, collapsing repeated stacks.',
     'Combat simulator: Protection can now be stolen, and the thief really protects its allies.',
     "Combat simulator: Meatshield's charged skill now steals Protection back up to 3 stacks.",

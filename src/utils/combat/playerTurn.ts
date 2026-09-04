@@ -925,7 +925,7 @@ export interface PlayerTurnArgs {
      *  supplies in production, so the fallback is exercised only by tests that hand-build args. */
     forceDetonateBomb?: (victim: CombatActor, sourceId: string, damage: number) => void;
     /** #363 (Fuying): actor id → faction, for the recipient FACTION intersection applied to a
-     *  `factionFilter`'d ally scope ("grants Tianchao allies Stealth"). Supplied by engine.ts's
+     *  `factionFilter`'d ally scope ("grants Tianchen allies Stealth"). Supplied by engine.ts's
      *  `buildTurnArgs` from the side-agnostic `factionByActorId` map, so an ENEMY-side caster
      *  narrows to its OWN side's matching allies with no mirrored branch. Returns `undefined` for
      *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
@@ -2756,7 +2756,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // [actor.id] (self routing) for any caller that omitted it (statusEngine fixtures).
         // #363: the status's own recipient FACTION scope, copied off the source ability at
         // registration. This is the CAST path for a faction-scoped grant (Fuying's "grants
-        // Tianchao allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
+        // Tianchen allies Stealth" is a finite-duration buff → a timed-by-slot status), so the
         // intersection has to happen HERE — the ability object is out of scope by now, which is
         // why the filter rides the status rather than being read through `source`.
         // Board-adjacency scope (`allyScope`), the sibling of `factionFilter` above and narrowed

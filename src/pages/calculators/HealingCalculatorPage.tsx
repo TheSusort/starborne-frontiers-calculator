@@ -171,7 +171,7 @@ const HealingCalculatorPage: React.FC = () => {
     // healer ship instead (healerRole below).
     const [targetRole, setTargetRole] = useState<ShipTypeName | undefined>(undefined);
     // #363: selected heal-target ship's faction (explicit-target case). Decides whether a
-    // faction-scoped ally grant reaches it (Fuying's "grants Tianchao allies Stealth"). Undefined
+    // faction-scoped ally grant reaches it (Fuying's "grants Tianchen allies Stealth"). Undefined
     // → no ship picked → unknown faction → never a recipient of one (conservative).
     const [targetFaction, setTargetFaction] = useState<FactionKey | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
