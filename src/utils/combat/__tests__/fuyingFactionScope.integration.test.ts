@@ -1,7 +1,7 @@
 /**
- * #363 Gap 1 — Fuying's Stealth grant honours its Tianchao recipient scope.
+ * #363 Gap 1 — Fuying's Stealth grant honours its Tianchen recipient scope.
  *
- * Her active reads "grants Tianchao allies Stealth for 1 turn", but the faction word was
+ * Her active reads "grants Tianchen allies Stealth for 1 turn", but the faction word was
  * discarded: the ability built with `target: 'all-allies'` and reached every ally. Stealth is a
  * TARGETING-IMMUNITY status, so the over-grant did not merely inflate a number — it made allies
  * unselectable who should be selectable.
@@ -61,22 +61,27 @@ const fuyingShip = () => {
 
 const FUYING_ACTIVE =
     'This Unit <unit-aid>cleanses 1 debuff</unit-aid>, grants ' +
-    '<unit-skill>Security Up III</unit-skill> for 2 turns and grants Tianchao allies ' +
+    '<unit-skill>Security Up III</unit-skill> for 2 turns and grants Tianchen allies ' +
     '<unit-skill>Stealth</unit-skill> for 1 turn.';
 
+/** The same row in the faction's PREVIOUS spelling. `update-ship-skills.ts` re-imports skill text
+ *  from an upstream that still writes Tianchao, so this is a live input shape, not history — see
+ *  the `aliases` note in constants/factions.ts. */
+const FUYING_ACTIVE_LEGACY_FACTION = FUYING_ACTIVE.replace('Tianchen allies', 'Tianchao allies');
+
 describe('Fuying faction-scoped Stealth grant (#363) — parser', () => {
-    it('reads Tianchao off the RECIPIENT phrase', () => {
+    it('reads Tianchen off the RECIPIENT phrase', () => {
         expect(detectGrantFactionScope(FUYING_ACTIVE, 'Stealth')).toEqual(['TIANCHAO']);
     });
 
-    it('reads BOTH spellings of a renamed faction off the recipient phrase', () => {
-        // The UI calls TIANCHAO "Tianchen"; the skill corpus still writes "Tianchao". Both must
-        // resolve to the same key, or whichever spelling the detector has lost drops the scope and
-        // the grant silently reaches every ally. The test above pins the corpus spelling; this
-        // pins the display one, so neither can regress alone.
-        const renamed = FUYING_ACTIVE.replace('Tianchao allies', 'Tianchen allies');
-        expect(renamed).not.toEqual(FUYING_ACTIVE);
-        expect(detectGrantFactionScope(renamed, 'Stealth')).toEqual(['TIANCHAO']);
+    it('reads the faction’s PREVIOUS spelling off the recipient phrase too', () => {
+        // Both spellings must resolve to the same key. Whichever one the detector loses drops the
+        // scope, and a dropped scope does not fail loudly — the grant reaches EVERY ally. The test
+        // above pins the current spelling; this one pins the alias, so neither regresses alone.
+        expect(FUYING_ACTIVE_LEGACY_FACTION).not.toEqual(FUYING_ACTIVE); // the flip really happened
+        expect(detectGrantFactionScope(FUYING_ACTIVE_LEGACY_FACTION, 'Stealth')).toEqual([
+            'TIANCHAO',
+        ]);
     });
 
     it('does NOT read a faction out of a faction-NAMED buff', () => {
@@ -97,8 +102,8 @@ describe('Fuying faction-scoped Stealth grant (#363) — parser', () => {
     });
 
     it('scopes to the buff’s OWN clause span, not the whole sentence', () => {
-        // Fuying's sibling grant sits in the SAME sentence as the Tianchao one. Reading the whole
-        // text (rather than `buffGrantSpan`'s span) would leak Tianchao onto it and silently mute
+        // Fuying's sibling grant sits in the SAME sentence as the Tianchen one. Reading the whole
+        // text (rather than `buffGrantSpan`'s span) would leak Tianchen onto it and silently mute
         // a grant that really does reach every ally.
         expect(detectGrantFactionScope(FUYING_ACTIVE, 'Security Up III')).toBeUndefined();
     });
@@ -208,7 +213,7 @@ describe('Fuying faction-scoped Stealth grant (#363) — corpus inertness', () =
         // Guards the ONE thing this detector must get right: a faction inside a buff NAME is not
         // a recipient scope. Measured over all 149 ships (2026-08-22): 4 recipient-scoped clauses
         // (Fuying's active Stealth grant + the three refit tiers of her damage-reduction aura,
-        // which repeat the same "All Tianchao allies with Stealth" phrase) vs 31 clauses where a
+        // which repeat the same "All Tianchen allies with Stealth" phrase) vs 31 clauses where a
         // faction word is part of a buff name. The task brief predicted 3/31+1 — it counted two
         // aura tiers where the corpus has three; the 35-clause total is the same either way.
         const scoped =
@@ -397,7 +402,7 @@ describe('Fuying faction-scoped Stealth grant (#363) — engine wiring', () => {
             'ally-xaoc',
             'attacker',
         ]);
-        // The scoped grant: the Tianchao ally AND the Tianchao caster; never the XAOC ally, never
+        // The scoped grant: the Tianchen ally AND the Tianchen caster; never the XAOC ally, never
         // the faction-less manual one (unknown never matches).
         expect(recipientsOf(buffs, 'Stealth')).toEqual(['ally-tianchao', 'attacker']);
     });
@@ -446,14 +451,14 @@ describe('Fuying faction-scoped Stealth grant (#363) — engine wiring', () => {
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // #363 Gap 2 — the ALLY-SCOPED Stealth damage-reduction aura.
 //
-// "All Tianchao allies with Stealth take 30% less direct damage" (R4; R2/R3 read 15%). It was not
+// "All Tianchen allies with Stealth take 30% less direct damage" (R4; R2/R3 read 15%). It was not
 // applied AT ALL: every pre-existing member of the `incoming-reduction` family
 // (Iridium/Anemone/Wusheng/Panon/Tormenter/Voron) reduces damage on the CARRIER, so the engine's
 // per-actor incoming-effects map only ever keyed each actor's OWN passive-slot abilities and the
 // victim-side read never saw a teammate's aura.
 //
 // OWNER RULINGS this section encodes (2026-08-22) — ground truth, not derived from the clause text:
-//  1. The aura is PATTERN-LIMITED (`patternScoped: true`). A Stealthed Tianchao ally standing
+//  1. The aura is PATTERN-LIMITED (`patternScoped: true`). A Stealthed Tianchen ally standing
 //     OUTSIDE Fuying's active pattern takes FULL damage. The limit is MECHANICAL: it governs the
 //     whole passive even though the words "within the active pattern" sit only in the passive's
 //     SECOND sentence (the Stasis reactive), and at R2 the aura ships alone with no pattern phrase
@@ -488,15 +493,15 @@ describe('Fuying Stealth DR aura (#363) — build', () => {
         });
     });
 
-    it('resolves the aura’s faction word under BOTH spellings of the renamed faction', () => {
+    it('resolves the aura’s faction word under the faction’s PREVIOUS spelling', () => {
         // The aura arm reads its faction word off the text with its own lookup, separate from
-        // `detectGrantFactionScope`. The UI calls TIANCHAO "Tianchen" while the corpus still writes
-        // "Tianchao"; an arm that knows only one spelling drops `factionFilter` on the other and
-        // the aura silently protects every ally. The corpus spelling is pinned by the test above.
-        const renamed =
-            'All Tianchen allies with <unit-skill>Stealth</unit-skill> take ' +
+        // `detectGrantFactionScope`, so the alias needs pinning at both sites. An arm that knows
+        // only the current spelling drops `factionFilter` on the old one and the aura silently
+        // protects every ally. The current spelling is pinned by the corpus test above.
+        const legacyFaction =
+            'All Tianchao allies with <unit-skill>Stealth</unit-skill> take ' +
             '<unit-damage>30% less direct damage</unit-damage>.';
-        const ship = { refits: [], activeSkillText: renamed } as unknown as Ship;
+        const ship = { refits: [], activeSkillText: legacyFaction } as unknown as Ship;
         const aura = buildShipAbilities(ship)
             .slots.flatMap((s) => s.abilities)
             .find((a) => a.config.type === 'incoming-reduction' && a.target === 'all-allies');
@@ -646,7 +651,7 @@ describe('Fuying Stealth DR aura (#363) — recipient set', () => {
     };
     const factionOf = (id: string): FactionKey | undefined => FACTIONS_BY_ID[id];
 
-    it('is footprint ∩ Tianchao', () => {
+    it('is footprint ∩ Tianchen', () => {
         expect(
             allyScopedIncomingRecipients({
                 ability: auraOf(),
@@ -811,7 +816,7 @@ const corrosion = (): ActiveDoTStack => ({
 
 const auraBoard = (opts: { aura: boolean; m3Faction?: FactionKey }): CombatEngineInput => ({
     // Fuying herself is the focus, so `pattern` below IS her support pattern (the engine reads
-    // `input.pattern` for the focus actor) and `faction` is her Tianchao membership.
+    // `input.pattern` for the focus actor) and `faction` is her Tianchen membership.
     attack: 0,
     crit: 0,
     critDamage: 0,
@@ -918,14 +923,14 @@ describe('Fuying Stealth DR aura (#363) — engine, on a real board', () => {
         }
     });
 
-    it('reduces a DIRECT hit on the Stealthed Tianchao ally INSIDE her pattern by exactly 30%', () => {
+    it('reduces a DIRECT hit on the Stealthed Tianchen ally INSIDE her pattern by exactly 30%', () => {
         expect(withAura().direct.get('ally-m3')!).toBeCloseTo(
             0.7 * noAura().direct.get('ally-m3')!,
             5
         );
     });
 
-    it('a Stealthed Tianchao ally OUTSIDE her pattern takes FULL damage (owner ruling 1)', () => {
+    it('a Stealthed Tianchen ally OUTSIDE her pattern takes FULL damage (owner ruling 1)', () => {
         // The assertion that distinguishes the shipped implementation from the reverted spec's
         // version, which argued the aura was not pattern-limited.
         expect(withAura().direct.get('ally-m1')!).toBe(noAura().direct.get('ally-m1')!);
@@ -1087,7 +1092,7 @@ describe("Fuying Stealth DR aura (#363) — the OWNER's own incoming list stays 
 // side-agnostic by construction (`bySide`/`factionByActorId` carry no player/enemy branch) and the
 // changelog claims enemy Fuyings protect their own side the same way. Mirrors the player-side
 // "engine, on a real board" section above, with the sides swapped: an enemy Fuying, at her real
-// support position/pattern, with a Stealthed enemy Tianchao ally inside her footprint — hit by a
+// support position/pattern, with a Stealthed enemy Tianchen ally inside her footprint — hit by a
 // PLAYER attack instead of an enemy one.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -1174,12 +1179,12 @@ const runEnemyAuraBoard = (opts: { aura: boolean }): number => {
 };
 
 describe('Fuying Stealth DR aura (#363) — engine, enemy-side mirror (item 4)', () => {
-    it('PRE-CONDITION: the enemy Tianchao ally is actually hit directly, both with and without the aura', () => {
+    it('PRE-CONDITION: the enemy Tianchen ally is actually hit directly, both with and without the aura', () => {
         expect(runEnemyAuraBoard({ aura: false })).toBeGreaterThan(0);
         expect(runEnemyAuraBoard({ aura: true })).toBeGreaterThan(0);
     });
 
-    it('an ENEMY Fuying protects her own (enemy-side) Stealthed Tianchao ally by the same 30%, team-symmetrically', () => {
+    it('an ENEMY Fuying protects her own (enemy-side) Stealthed Tianchen ally by the same 30%, team-symmetrically', () => {
         const noAura = runEnemyAuraBoard({ aura: false });
         const withAura = runEnemyAuraBoard({ aura: true });
         expect(withAura).toBeCloseTo(0.7 * noAura, 5);
@@ -1189,7 +1194,7 @@ describe('Fuying Stealth DR aura (#363) — engine, enemy-side mirror (item 4)',
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 // #363 review follow-up (Fix 1) — THE AURA STOPS WHEN ITS CARRIER DIES.
 //
-// OWNER-RULED 2026-08-22. In a fight: round 2, Fuying alive, a Stealthed Tianchao ally takes
+// OWNER-RULED 2026-08-22. In a fight: round 2, Fuying alive, a Stealthed Tianchen ally takes
 // 10,000 → 7,000. Round 3, Fuying destroyed, the same hit on the same still-Stealthed ally →
 // the full 10,000.
 //

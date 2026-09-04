@@ -1167,7 +1167,7 @@ export interface Ability {
      *  ShipTypeName — 'DEBUFFER' matches every DEBUFFER_* variant). Absent → any
      *  ally. A filter with an UNKNOWN ally role never matches (conservative). */
     roleFilter?: ShipRoleCategory[];
-    /** #363 (Fuying): recipient FACTION filter for an ally-scoped grant — "grants Tianchao
+    /** #363 (Fuying): recipient FACTION filter for an ally-scoped grant — "grants Tianchen
      *  allies Stealth". Applied as an INTERSECTION after footprint narrowing
      *  (`resolveSupportRecipients`), so it composes with the pattern rather than replacing it.
      *  Absent → any ally.

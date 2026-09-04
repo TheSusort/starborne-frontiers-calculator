@@ -74,7 +74,7 @@ function recipientsOf(events: CombatEvent[], name: string): string[] {
 }
 
 /** A Fuying-shaped focus attacker casting the faction-scoped grant, with two minimal team
- *  actors — one Tianchao, one XAOC — as her allies. `rounds: 1` is enough: the ability fires
+ *  actors — one Tianchen, one XAOC — as her allies. `rounds: 1` is enough: the ability fires
  *  on-cast every round, and round 1 is all this needs. */
 const baseInput = (): DPSSimulationInput => ({
     attack: 0,
@@ -124,7 +124,7 @@ const baseInput = (): DPSSimulationInput => ({
 });
 
 describe('DPS calculator faction threading (#363 follow-up)', () => {
-    it('a Fuying-shaped focus actor grants a faction-scoped buff only to the Tianchao team actor', () => {
+    it('a Fuying-shaped focus actor grants a faction-scoped buff only to the Tianchen team actor', () => {
         const events: CombatEvent[] = [];
         simulateDPS({ ...baseInput(), bus: collect(events) });
 
@@ -135,7 +135,7 @@ describe('DPS calculator faction threading (#363 follow-up)', () => {
             'ally-xaoc',
             'attacker',
         ]);
-        // The scoped grant: the Tianchao ally and the Tianchao focus itself; never the XAOC ally.
+        // The scoped grant: the Tianchen ally and the Tianchen focus itself; never the XAOC ally.
         expect(recipientsOf(events, 'Stealth')).toEqual(['ally-tianchao', 'attacker']);
     });
 
@@ -144,7 +144,7 @@ describe('DPS calculator faction threading (#363 follow-up)', () => {
         const { faction: _drop, ...withoutFaction } = baseInput();
         simulateDPS({ ...withoutFaction, bus: collect(events) });
 
-        // Still reaches the Tianchao ally — its OWN faction is threaded independently via
+        // Still reaches the Tianchen ally — its OWN faction is threaded independently via
         // `teamActors`, which was already wired before this fix.
         expect(recipientsOf(events, 'Stealth')).toContain('ally-tianchao');
         // But the focus itself is now unknown-faction and drops out of its own grant — this is

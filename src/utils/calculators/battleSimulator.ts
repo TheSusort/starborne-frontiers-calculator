@@ -1116,7 +1116,7 @@ export function simulateBattle(
             // role-filtered classification ("non-defender ally" gate).
             role: plan.role,
             // #363: thread the ship faction for faction-scoped ally grants (Fuying's "grants
-            // Tianchao allies Stealth"). Narrowed at this boundary rather than cast — an
+            // Tianchen allies Stealth"). Narrowed at this boundary rather than cast — an
             // unrecognised value must read as UNKNOWN, not as a key that matches nothing.
             faction: asFactionKey(plan.faction),
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
@@ -1162,7 +1162,7 @@ export function simulateBattle(
                 // with the teamActors branch above.
                 role: plan.role,
                 // #363: thread the ship faction (team symmetry with the teamActors branch) so an
-                // ENEMY-side Fuying scopes her Stealth grant to enemy Tianchao allies.
+                // ENEMY-side Fuying scopes her Stealth grant to enemy Tianchen allies.
                 faction: asFactionKey(plan.faction),
                 // SP-F F4: thread the ship name for the live `ally-on-team` roster check.
                 name: plan.name,

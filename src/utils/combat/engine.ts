@@ -781,7 +781,7 @@ export interface EnemyActorInput {
     name?: string;
     /** #363: this enemy attacker's faction, for `factionFilter`'d ally scopes (factionByActorId).
      *  Mirrors `role`'s contract: absent → unknown faction → never matches a filter
-     *  (conservative), so an enemy-side Fuying's Tianchao grant reaches only the enemy allies
+     *  (conservative), so an enemy-side Fuying's Tianchen grant reaches only the enemy allies
      *  whose faction the caller supplied. */
     faction?: FactionKey;
 }
@@ -2300,10 +2300,10 @@ export function runCombat(rawInput: CombatEngineInput): {
     // lazy-created per owner).
     const playerIds = [focusActorId, ...teamActors.map((t) => t.id)];
 
-    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying's Tianchao Stealth
+    // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying's Tianchen Stealth
     // grant). Side-agnostic BY KEY, exactly like roleByActorId/nameByActorId (built further
     // down): seeded from the focus actor, every walked team actor, and every enemy attacker, so
-    // an ENEMY-side Fuying scopes to enemy Tianchao allies with no mirrored branch and no `side`
+    // an ENEMY-side Fuying scopes to enemy Tianchen allies with no mirrored branch and no `side`
     // check. An actor absent from this map has an UNKNOWN faction and never matches a filter
     // (conservative) — the same contract roleByActorId/matchesRoleCategory already run on.
     // Populated by every caller that supplies factions — the healing team sim AND the DPS
@@ -4351,7 +4351,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // keyed onto its own carrier here. The second pass below is its sole authority —
                 // it is the only place that applies the aura's footprint + faction narrowing, and
                 // collecting it here too would hand the carrier an un-narrowed copy (Fuying is
-                // Tianchao, so the faction filter would pass, and her Not-Self pattern's exclusion
+                // Tianchen, so the faction filter would pass, and her Not-Self pattern's exclusion
                 // of her own cell would be silently bypassed). Deliberately narrow to
                 // 'incoming-reduction': every equipment/skill-text member of the other four
                 // families is `target: 'self'`, so nothing else changes.
@@ -4372,7 +4372,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (incoming.length) incomingAbilitiesById.set(rt.actor.id, incoming);
     }
 
-    // #363 (Fuying): the corpus's first ALLY-scoped incoming reduction — "All Tianchao allies with
+    // #363 (Fuying): the corpus's first ALLY-scoped incoming reduction — "All Tianchen allies with
     // Stealth take 30% less direct damage". Every other member of this family reduces damage on the
     // CARRIER, so the map above has never needed to fan out: it keys each actor's OWN passive-slot
     // abilities, and the victim-side read (`incomingAbilitiesOf(victim.id)`) therefore never saw a
@@ -4381,7 +4381,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Recipients = the carrier's living same-side roster, narrowed by the SAME shared composition
     // every other #363 site uses (`resolveSupportRecipients`: footprint first, then faction):
     //
-    //  • FOOTPRINT — the aura carries `patternScoped`, OWNER-RULED 2026-08-22: a Stealthed Tianchao
+    //  • FOOTPRINT — the aura carries `patternScoped`, OWNER-RULED 2026-08-22: a Stealthed Tianchen
     //    ally standing OUTSIDE Fuying's active pattern takes FULL damage. `footprintAllyIdsFor`
     //    returns `undefined` for a non-positional / non-support pattern, which per this codebase's
     //    convention means "do not narrow" — so a non-positional fixture still sees the aura.
@@ -9009,9 +9009,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 adjacentEnemyIdsFor: (anchorId: string): string[] =>
                     bySide(isEnemySide(anchorId) ? 'enemy' : 'player').adjacentAllyIdsFor(anchorId),
                 // #363: actor id → faction, for the recipient FACTION intersection on a
-                // `factionFilter`'d ally scope (Fuying's "grants Tianchao allies Stealth").
+                // `factionFilter`'d ally scope (Fuying's "grants Tianchen allies Stealth").
                 // The SAME side-agnostic map the roster is seeded into above — no `a.side`
-                // dispatch, so an enemy-side Fuying scopes to enemy Tianchao allies for free.
+                // dispatch, so an enemy-side Fuying scopes to enemy Tianchen allies for free.
                 factionOf,
                 // Every victim-derived member lives in this ONE conditional spread.
                 // `tgt` is absent exactly when an ally-targeted cast resolved nobody on the

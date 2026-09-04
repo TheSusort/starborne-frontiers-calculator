@@ -69,11 +69,11 @@ describe('a second-sentence grant reads its own clause, not the first sentence (
 
     it('takes its recipient faction from the sentence that grants it', () => {
         // Fuying's real shape, split across two sentences: the caster's own grant has no faction
-        // scope, the team grant is Tianchao-only. Pre-fix neither carried one, because sentence
+        // scope, the team grant is Tianchen-only. Pre-fix neither carried one, because sentence
         // one names no faction and both grants read sentence one.
         const abilities = buffAbilities(
             'This Unit grants itself <unit-skill>Stealth</unit-skill> for 2 turns. ' +
-                'This Unit grants Tianchao allies <unit-skill>Stealth</unit-skill> for 1 turn.'
+                'This Unit grants Tianchen allies <unit-skill>Stealth</unit-skill> for 1 turn.'
         );
 
         expect(abilities).toHaveLength(2);

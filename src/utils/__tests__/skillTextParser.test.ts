@@ -141,7 +141,7 @@ describe('parseSkillDamage', () => {
         // only — so "30% less direct damage" slipped past it and parseInt returned 30, minting a
         // phantom outgoing damage{30} ability from an INCOMING-reduction aura (#363).
         const text =
-            'All Tianchao allies with <unit-skill>Stealth</unit-skill> take <unit-damage>30% less direct damage</unit-damage>.';
+            'All Tianchen allies with <unit-skill>Stealth</unit-skill> take <unit-damage>30% less direct damage</unit-damage>.';
         expect(parseSkillDamage(text)).toBe(0);
     });
 

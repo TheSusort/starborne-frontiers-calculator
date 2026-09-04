@@ -43,8 +43,11 @@ const FACTION_DEFS = {
     },
     TIANCHAO: {
         name: 'Tianchen',
-        // The game renamed this faction Tianchao -> Tianchen in its frontend only; its data keeps
-        // the old spelling, so the skill corpus still writes "Tianchao allies".
+        // The game renamed this faction Tianchao -> Tianchen in its frontend only, keeping the old
+        // spelling in its data. `ship_templates` was migrated to the new spelling, but the alias is
+        // NOT dead: scripts/update-ship-skills.ts re-imports skill text from the
+        // frontiers.cubedweb.net API, which still says Tianchao, so any run of it puts the old
+        // spelling back. Deleting this alias makes that revert silently widen Fuying's ally scope.
         aliases: ['Tianchao'],
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426140946636820.webp',
     },

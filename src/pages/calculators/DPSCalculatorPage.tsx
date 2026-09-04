@@ -483,7 +483,7 @@ const DPSCalculatorPage: React.FC = () => {
                     ]),
                     affinity: ship.affinity,
                     // #363 follow-up: thread the picked ship's faction for faction-scoped ally
-                    // grants (Fuying's "grants Tianchao allies Stealth") — mirrors the healing
+                    // grants (Fuying's "grants Tianchen allies Stealth") — mirrors the healing
                     // page's selectShipForConfig/selectShipForTeamSlot.
                     faction: asFactionKey(ship.faction),
                     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),

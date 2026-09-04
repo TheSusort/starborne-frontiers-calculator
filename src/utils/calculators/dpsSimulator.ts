@@ -100,7 +100,7 @@ export interface DPSSimulationInput {
     /** Enemy turn-order speed. Default 50 — the enemy acts last at default speeds. */
     enemySpeed?: number;
     /** #363 follow-up: the focus attacker's own ship faction, for `factionFilter`'d ally scopes
-     *  (Fuying's "grants Tianchao allies Stealth"). Team actors carry their own `faction` on
+     *  (Fuying's "grants Tianchen allies Stealth"). Team actors carry their own `faction` on
      *  `TeamActorInput` (already threaded — `deriveTeamEngineActors` spreads it through
      *  unchanged). Absent (manual config, no ship picked) → unknown faction → the focus never
      *  matches a faction filter (conservative), mirroring the healing adapter's `healerFaction`. */

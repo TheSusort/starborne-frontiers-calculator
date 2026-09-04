@@ -7,7 +7,7 @@
  * require a literal 'buffs'/'debuffs' token, and Fuying's clause names a STATUS, not that token.
  *
  * OWNER RULING (2026-08-22), ground truth: the extension reaches every ally in her active
- * pattern, FACTION-BLIND — unlike her active Stealth grant, which is Tianchao-scoped. Her text
+ * pattern, FACTION-BLIND — unlike her active Stealth grant, which is Tianchen-scoped. Her text
  * names no faction in this clause, so the built ability carries NO `factionFilter`.
  *
  * This is `extend-status` (Sokol/Ripper/Lev's existing generic mechanic), not a new ability
@@ -500,8 +500,8 @@ describe('Fuying’s named Stealth extension — production engine wiring (#363)
     it('scopes both ways, faction-blind, and by name — all in one production-routed cast', () => {
         const ability = fuyingStealthExtendAbility();
         const fuyingRuntime = makeFuyingRuntime(ability, FUYING_POSITION);
-        const allyOutside = makeAlly('ally-outside', 'M1'); // Tianchao-eligible position, OUTSIDE footprint
-        const allyXaoc = makeAlly('ally-xaoc', 'M2'); // INSIDE footprint, NON-Tianchao
+        const allyOutside = makeAlly('ally-outside', 'M1'); // Tianchen-eligible position, OUTSIDE footprint
+        const allyXaoc = makeAlly('ally-xaoc', 'M2'); // INSIDE footprint, NON-Tianchen
         const allyTianchao = makeAlly('ally-tianchao', 'M3'); // INSIDE footprint
 
         const statusEngine = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
@@ -550,8 +550,8 @@ describe('Fuying’s named Stealth extension — production engine wiring (#363)
 
         // Requirement 2: scoped both ways — outside the pattern gets nothing...
         expect(selfBuffTurns(statusEngine, 'ally-outside', 'Stealth')).toBe(1);
-        // ...and faction-blind — a NON-Tianchao ally INSIDE the pattern DOES get it (this is what
-        // distinguishes this clause from her active Tianchao-scoped grant).
+        // ...and faction-blind — a NON-Tianchen ally INSIDE the pattern DOES get it (this is what
+        // distinguishes this clause from her active Tianchen-scoped grant).
         expect(selfBuffTurns(statusEngine, 'ally-xaoc', 'Stealth')).toBe(2);
 
         // Requirement 3: the name filter — the sibling buff on the SAME extended ally is untouched.
