@@ -1,0 +1,127 @@
+import { describe, it, expect } from 'vitest';
+import { scorePieceForRole, COVERAGE_MIN_LEVEL, COVERAGE_SAMPLE_SIZE } from '../roleSlotCoverage';
+import { GearPiece } from '../../../types/gear';
+
+/** Minimal level-16 legendary piece. Override what a test cares about. */
+function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
+    return {
+        id: 'gear-1',
+        slot: 'weapon',
+        level: COVERAGE_MIN_LEVEL,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: { name: 'attack', value: 1000, type: 'flat' },
+        subStats: [],
+        setBonus: null,
+        ...overrides,
+    };
+}
+
+describe('constants', () => {
+    it('samples the top 20 level-16 pieces', () => {
+        expect(COVERAGE_SAMPLE_SIZE).toBe(20);
+        expect(COVERAGE_MIN_LEVEL).toBe(16);
+    });
+});
+
+describe('scorePieceForRole', () => {
+    it('returns a positive marginal for a piece that helps the role', () => {
+        expect(scorePieceForRole(makeGear(), 'ATTACKER')).toBeGreaterThan(0);
+    });
+
+    it('gives an attacker nothing for a stat the attacker score never reads', () => {
+        // calculateAttackerScore is calculateDPS plus stat bonuses, and
+        // calculateDPS reads only attack, crit, critDamage and
+        // defensePenetration (priorityScore.ts:53, :127). healModifier is
+        // therefore provably inert for this role, so the marginal is exactly 0.
+        const healPiece = makeGear({
+            id: 'heal',
+            slot: 'sensor',
+            mainStat: { name: 'healModifier', value: 30, type: 'percentage' },
+        });
+        expect(scorePieceForRole(healPiece, 'ATTACKER')).toBe(0);
+    });
+
+    it('scores a role-relevant piece above an inert one', () => {
+        const critPiece = makeGear({
+            id: 'crit',
+            slot: 'sensor',
+            mainStat: { name: 'crit', value: 30, type: 'percentage' },
+        });
+        const healPiece = makeGear({
+            id: 'heal',
+            slot: 'sensor',
+            mainStat: { name: 'healModifier', value: 30, type: 'percentage' },
+        });
+        expect(scorePieceForRole(critPiece, 'ATTACKER')).toBeGreaterThan(
+            scorePieceForRole(healPiece, 'ATTACKER')
+        );
+    });
+
+    it('treats a percentage flexible stat as a share of the role baseline', () => {
+        // ATTACKER baseline attack is 6250, so +10% attack must beat a flat +100.
+        const percentPiece = makeGear({
+            id: 'pct',
+            mainStat: { name: 'attack', value: 10, type: 'percentage' },
+        });
+        const flatPiece = makeGear({
+            id: 'flat',
+            mainStat: { name: 'attack', value: 100, type: 'flat' },
+        });
+        expect(scorePieceForRole(percentPiece, 'ATTACKER')).toBeGreaterThan(
+            scorePieceForRole(flatPiece, 'ATTACKER')
+        );
+    });
+
+    it('adds a percentage-only stat directly, not as a share of the baseline', () => {
+        // crit is stored as an integer percentage: +10 means 10 points of crit.
+        const a = makeGear({ id: 'a', mainStat: { name: 'crit', value: 10, type: 'percentage' } });
+        const b = makeGear({ id: 'b', mainStat: { name: 'crit', value: 20, type: 'percentage' } });
+        const deltaLow = scorePieceForRole(a, 'ATTACKER');
+        const deltaHigh = scorePieceForRole(b, 'ATTACKER');
+        expect(deltaHigh).toBeGreaterThan(deltaLow);
+    });
+
+    it('counts substats as well as the main stat', () => {
+        const bare = makeGear({ id: 'bare' });
+        const loaded = makeGear({
+            id: 'loaded',
+            subStats: [
+                { name: 'crit', value: 15, type: 'percentage' },
+                { name: 'critDamage', value: 20, type: 'percentage' },
+            ],
+        });
+        expect(scorePieceForRole(loaded, 'ATTACKER')).toBeGreaterThan(
+            scorePieceForRole(bare, 'ATTACKER')
+        );
+    });
+
+    it('ignores the set bonus', () => {
+        const plain = makeGear({ id: 'plain', setBonus: null });
+        const withSet = makeGear({ id: 'set', setBonus: 'CRITICAL' });
+        expect(scorePieceForRole(withSet, 'ATTACKER')).toBe(scorePieceForRole(plain, 'ATTACKER'));
+    });
+
+    it('ignores calibration, which is bound to one ship', () => {
+        const plain = makeGear({ id: 'plain' });
+        const calibrated = makeGear({ id: 'cal', calibration: { shipId: 'ship-1' } });
+        expect(scorePieceForRole(calibrated, 'ATTACKER')).toBe(
+            scorePieceForRole(plain, 'ATTACKER')
+        );
+    });
+
+    it('scores the same piece differently for different roles', () => {
+        const hacking = makeGear({
+            id: 'hack',
+            slot: 'software',
+            mainStat: { name: 'hacking', value: 300, type: 'flat' },
+        });
+        expect(scorePieceForRole(hacking, 'DEBUFFER')).toBeGreaterThan(
+            scorePieceForRole(hacking, 'DEFENDER')
+        );
+    });
+
+    it('tolerates a piece with no main stat', () => {
+        expect(() => scorePieceForRole(makeGear({ mainStat: null }), 'ATTACKER')).not.toThrow();
+    });
+});
