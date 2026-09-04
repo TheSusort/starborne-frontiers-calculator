@@ -27,7 +27,9 @@
  *    `vulnerable_versions` range.
  *
  * It never fails open: any transport error, non-200, or unparseable body exits non-zero with a
- * clear message, so a genuinely broken endpoint is loud rather than silently "green".
+ * clear message, so a genuinely broken endpoint is loud rather than silently "green". A transient
+ * status (429, or any 5xx — the endpoint answers 503 during registry outages) is retried on a
+ * short backoff ladder first; exhausting it still exits non-zero.
  *
  * Usage: node scripts/audit.mjs [--audit-level=high] [--include-dev]
  */
@@ -118,22 +120,55 @@ function buildPayload() {
     return Object.fromEntries([...byName].map(([name, versions]) => [name, [...versions]]));
 }
 
-/** POST the payload and decode the reply, gunzipping when the registry omits content-encoding. */
+/** Retried once per entry, so a first attempt plus these delays. */
+const RETRY_DELAYS_MS = [1000, 3000, 9000, 20000];
+
+/** Per-attempt ceiling. This is what bounds the ladder: an outage was measured taking ~5 minutes
+ *  to answer 503 at all (CI run 33857779042), so without a cap five attempts would run ~25
+ *  minutes and the retry would trade one false failure for a stalled gate. With it, the worst
+ *  case is 5×30s of waiting plus 33s of backoff. */
+const ATTEMPT_TIMEOUT_MS = 30000;
+
+const isTransient = (status) => status === 429 || status >= 500;
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** POST the payload and decode the reply, gunzipping when the registry omits content-encoding.
+ *
+ *  A transport error, a timeout, or a transient status is retried on the ladder above: the
+ *  registry's advisory endpoint answers 503 during outages, and failing the build for one is a
+ *  false alarm about the dependency tree. Exhausting the retries still exits non-zero — this never
+ *  fails open, so a sustained outage is loud rather than silently "green". A non-transient status
+ *  (4xx other than 429) is a request-shape problem and fails immediately. */
 async function fetchAdvisories(payload) {
+    const body = JSON.stringify(payload);
     let res;
-    try {
-        res = await fetch(BULK_ENDPOINT, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-    } catch (err) {
-        console.error(`audit: could not reach ${BULK_ENDPOINT} — ${err.message}`);
-        process.exit(2);
-    }
-    if (!res.ok) {
-        console.error(`audit: advisory endpoint returned ${res.status} ${res.statusText}`);
-        process.exit(2);
+    for (let attempt = 0; ; attempt++) {
+        let transientReason;
+        try {
+            res = await fetch(BULK_ENDPOINT, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body,
+                signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+            });
+            if (res.ok) break;
+            if (!isTransient(res.status)) {
+                console.error(`audit: advisory endpoint returned ${res.status} ${res.statusText}`);
+                process.exit(2);
+            }
+            transientReason = `${res.status} ${res.statusText}`;
+        } catch (err) {
+            transientReason = err.message;
+        }
+        if (attempt >= RETRY_DELAYS_MS.length) {
+            console.error(
+                `audit: advisory endpoint unavailable after ${attempt + 1} attempts — ${transientReason}`
+            );
+            process.exit(2);
+        }
+        const delay = RETRY_DELAYS_MS[attempt];
+        console.error(`audit: ${transientReason} — retrying in ${delay}ms`);
+        await sleep(delay);
     }
     const buf = Buffer.from(await res.arrayBuffer());
     // 1f 8b = gzip magic. The registry currently sends gzip WITHOUT declaring it, so sniff the
