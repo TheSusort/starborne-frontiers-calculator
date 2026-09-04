@@ -60,3 +60,28 @@ export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number 
 
     return calculateRoleScore(role, withPiece) - getBaselineScore(role);
 }
+
+/**
+ * How much farming headroom a set of marginal scores implies, in [0, 1].
+ *
+ * 0 means the top of the distribution is filled in — the best piece is no
+ * better than the next 19, so further drops will not move the needle.
+ * 1 means all the quality sits in one piece (or there is no piece at all).
+ *
+ * Substats roll randomly, so the spread of the top order statistics shrinks
+ * as the sample grows: this measures how deep into the tail the player has
+ * already sampled, which raw counts cannot.
+ */
+export function computeHeadroom(marginals: number[]): number {
+    const sample = [...marginals].sort((a, b) => b - a).slice(0, COVERAGE_SAMPLE_SIZE);
+    if (sample.length <= 1) return 1;
+
+    const best = sample[0];
+    if (best <= 0) return 1;
+
+    const rest = sample.slice(1);
+    const restMean = rest.reduce((sum, value) => sum + value, 0) / rest.length;
+
+    const gap = (best - restMean) / best;
+    return Math.min(1, Math.max(0, gap));
+}

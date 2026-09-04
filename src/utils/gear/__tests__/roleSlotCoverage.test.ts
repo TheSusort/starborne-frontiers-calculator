@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { scorePieceForRole, COVERAGE_MIN_LEVEL, COVERAGE_SAMPLE_SIZE } from '../roleSlotCoverage';
+import {
+    scorePieceForRole,
+    computeHeadroom,
+    COVERAGE_MIN_LEVEL,
+    COVERAGE_SAMPLE_SIZE,
+} from '../roleSlotCoverage';
 import { GearPiece } from '../../../types/gear';
 import { calculateRoleScore } from '../../autogear/priorityScore';
 import { ROLE_BASE_STATS } from '../../../constants/roleBaseStats';
@@ -134,5 +139,49 @@ describe('scorePieceForRole', () => {
 
     it('tolerates a piece with no main stat', () => {
         expect(() => scorePieceForRole(makeGear({ mainStat: null }), 'ATTACKER')).not.toThrow();
+    });
+});
+
+describe('computeHeadroom', () => {
+    it('is 1 when you own nothing', () => {
+        expect(computeHeadroom([])).toBe(1);
+    });
+
+    it('is 1 when you own a single piece, with nothing to compare against', () => {
+        expect(computeHeadroom([50])).toBe(1);
+    });
+
+    it('is 1 when the best piece is worthless', () => {
+        expect(computeHeadroom([0, 0, 0])).toBe(1);
+        expect(computeHeadroom([-5, -10])).toBe(1);
+    });
+
+    it('is 0 when every piece is identical', () => {
+        expect(computeHeadroom([40, 40, 40, 40])).toBe(0);
+    });
+
+    it("is the best piece's lead over the mean of the rest, as a share of the best", () => {
+        // best 100, rest mean 50 -> (100 - 50) / 100
+        expect(computeHeadroom([100, 50, 50])).toBeCloseTo(0.5, 10);
+    });
+
+    it('does not need sorted input', () => {
+        expect(computeHeadroom([50, 100, 50])).toBeCloseTo(0.5, 10);
+    });
+
+    it('ignores everything past the sample size', () => {
+        // 1 best + 19 equals fills the sample; the trailing zeros must not count.
+        const sample = [100, ...Array<number>(COVERAGE_SAMPLE_SIZE - 1).fill(100)];
+        const withTail = [...sample, ...Array<number>(50).fill(0)];
+        expect(computeHeadroom(withTail)).toBe(0);
+    });
+
+    it('reports near-total headroom for one good piece and a weak tail', () => {
+        expect(computeHeadroom([100, 1, 1, 1])).toBeGreaterThan(0.98);
+    });
+
+    it('never leaves the unit interval', () => {
+        // A negative tail must clamp rather than push the gap above 1.
+        expect(computeHeadroom([100, -1000])).toBe(1);
     });
 });
