@@ -185,7 +185,6 @@ describe('scorePieceForRole', () => {
 });
 
 describe('computePriority', () => {
-    // The amendment's degenerate-case table, in order.
     it('is 1 when you own nothing in the slot', () => {
         expect(computePriority([], 100)).toBe(1);
     });
@@ -207,9 +206,13 @@ describe('computePriority', () => {
         expect(computePriority(Array<number>(25).fill(ideal), ideal)).toBe(0);
     });
 
-    it('clamps to 0 when the greedy ideal-piece approximation undershoots (mean > idealMarginal)', () => {
-        // The ideal piece is a monotone approximation, not an exhaustive
-        // search, so real owned pieces can occasionally beat it.
+    it('clamps to 0 when the sampled mean exceeds idealMarginal', () => {
+        // idealMarginal bounds a piece built from the roll tables at legendary
+        // max; imported data is not bound by those tables (a stat can come in
+        // above its table's legendary max), so owned marginals can still land
+        // above it. This guards that case, not the ideal piece's own
+        // composition — the negative-marginal clamp below covers the other
+        // out-of-range direction.
         expect(computePriority(Array<number>(20).fill(150), 100)).toBe(0);
     });
 
@@ -270,11 +273,10 @@ describe('computePriority', () => {
         expect(computePriority(Array<number>(20).fill(40), 40)).toBe(0);
     });
 
-    it('scores 20 uniformly mediocre pieces at a higher priority than 20 max-roll pieces — the superseded metric got this backwards', () => {
-        // The old dispersion-based headroom metric reported 0.000 for BOTH
-        // groups (identical values within each group have zero spread), so
-        // it could not tell "flat and terrible" from "flat and finished".
-        // Here mediocre supply must read as needing MORE farming, not less.
+    it('scores 20 uniformly mediocre pieces at a higher priority than 20 max-roll pieces', () => {
+        // Priority is relative to idealMarginal, not to the spread within the
+        // owned sample, so uniformly mediocre supply reads as needing MORE
+        // farming than uniformly max-roll supply, never the same.
         const ideal = 100;
         const mediocre = computePriority(Array<number>(20).fill(20), ideal);
         const maxRoll = computePriority(Array<number>(20).fill(ideal), ideal);
@@ -507,8 +509,91 @@ describe('buildCoverageMatrix', () => {
                 subStats: [],
             }),
         ]);
-        expect(strong.cells.ATTACKER.weapon.priority).toBeLessThanOrEqual(
+        // A single piece, however strong, cannot saturate a 20-slot sample,
+        // so a strictly better piece must read a strictly lower priority.
+        expect(strong.cells.ATTACKER.weapon.priority).toBeLessThan(
             weak.cells.ATTACKER.weapon.priority
         );
+    });
+
+    describe('the internal ideal piece', () => {
+        // pickIdealMainStat/pickIdealSubstats/getIdealMarginal are not
+        // exported, so these pin their output indirectly: a hand-built
+        // replica of the level-16, 6-star legendary ideal piece is fed
+        // through buildCoverageMatrix as the only owned piece. If the
+        // replica's stats truly are what the ideal-piece selection computes,
+        // its own marginal (scored by the same scorePieceForRole the ideal
+        // piece is scored by) IS idealMarginal, so one owned copy must read
+        // priority 1 - 1/COVERAGE_SAMPLE_SIZE exactly, and COVERAGE_SAMPLE_SIZE
+        // owned copies must fully saturate. A wrong main stat, a wrong
+        // substat, or a wrong flat/percentage variant changes the real
+        // idealMarginal without changing the replica's marginal, so the
+        // ratio — and the assertion — stops landing on that exact value.
+
+        // The weapon slot only ever offers `attack` as a main stat, so this
+        // main stat is not what distinguishes the two replicas below; the
+        // substat composition is.
+        it('reads the ATTACKER weapon ideal as attack/crit/critDamage/hp/defence', () => {
+            const attackerIdeal = makeGear({
+                id: 'attacker-ideal-replica',
+                mainStat: { name: 'attack', value: 1000, type: 'flat' },
+                subStats: [
+                    { name: 'crit', value: 8, type: 'percentage' },
+                    { name: 'critDamage', value: 8, type: 'percentage' },
+                    { name: 'hp', value: 600, type: 'flat' },
+                    { name: 'defence', value: 140, type: 'flat' },
+                ],
+            });
+
+            const one = buildCoverageMatrix([attackerIdeal]);
+            expect(one.cells.ATTACKER.weapon.priority).toBeCloseTo(
+                1 - 1 / COVERAGE_SAMPLE_SIZE,
+                10
+            );
+
+            const twenty = buildCoverageMatrix(
+                Array.from({ length: COVERAGE_SAMPLE_SIZE }, (_, i) =>
+                    makeGear({
+                        id: `attacker-ideal-replica-${i}`,
+                        mainStat: { name: 'attack', value: 1000, type: 'flat' },
+                        subStats: [
+                            { name: 'crit', value: 8, type: 'percentage' },
+                            { name: 'critDamage', value: 8, type: 'percentage' },
+                            { name: 'hp', value: 600, type: 'flat' },
+                            { name: 'defence', value: 140, type: 'flat' },
+                        ],
+                    })
+                )
+            );
+            // Not toBe(0): the same marginal is recomputed on two different
+            // paths (the owned piece vs. the cached ideal piece), and float
+            // arithmetic over bit-identical stats is not guaranteed bit-exact.
+            expect(twenty.cells.ATTACKER.weapon.priority).toBeLessThan(1e-9);
+        });
+
+        it('reads the DEFENDER_SECURITY weapon ideal as attack/security/hp%/defence%/hacking', () => {
+            // calculateDefenderSecurityScore multiplies effective-HP survival
+            // by security, so — unlike ATTACKER — hp and defence are NOT
+            // inert here, and they resolve to their percentage roll (a share
+            // of the DEFENDER baseline) rather than their flat roll, since
+            // percentage scores higher against that baseline. This pins that
+            // selection together with the security substat itself.
+            const securityIdeal = makeGear({
+                id: 'security-ideal-replica',
+                mainStat: { name: 'attack', value: 1000, type: 'flat' },
+                subStats: [
+                    { name: 'security', value: 8, type: 'flat' },
+                    { name: 'hp', value: 7, type: 'percentage' },
+                    { name: 'defence', value: 7, type: 'percentage' },
+                    { name: 'hacking', value: 8, type: 'flat' },
+                ],
+            });
+
+            const one = buildCoverageMatrix([securityIdeal]);
+            expect(one.cells.DEFENDER_SECURITY.weapon.priority).toBeCloseTo(
+                1 - 1 / COVERAGE_SAMPLE_SIZE,
+                10
+            );
+        });
     });
 });

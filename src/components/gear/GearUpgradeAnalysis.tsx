@@ -834,9 +834,13 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                         ...coverage.slotOrderByRole[role].map((slotName) => ({
                             id: slotName,
                             label: GEAR_SLOTS[slotName].label,
-                            badge: `${coverage.cells[role][slotName].count} · ${Math.round(
-                                coverage.cells[role][slotName].priority * 100
-                            )}%`,
+                            badge: (
+                                <span title="Owned level-16+ pieces in this slot · % still needing farming">
+                                    {`${coverage.cells[role][slotName].count} · ${Math.round(
+                                        coverage.cells[role][slotName].priority * 100
+                                    )}%`}
+                                </span>
+                            ),
                         })),
                     ];
 
