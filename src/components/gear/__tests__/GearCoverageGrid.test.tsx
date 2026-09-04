@@ -36,7 +36,7 @@ describe('GearCoverageGrid', () => {
         }
     });
 
-    it('shows the level-16 count and headroom in each cell', () => {
+    it('shows the level-16 count and priority in each cell', () => {
         const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
         render(<GearCoverageGrid matrix={matrix} onCellClick={() => {}} />);
         const cell = screen.getByTestId('coverage-cell-ATTACKER-weapon');

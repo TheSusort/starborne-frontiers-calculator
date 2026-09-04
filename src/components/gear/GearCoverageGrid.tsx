@@ -8,9 +8,9 @@ interface Props {
     onCellClick: (role: ShipTypeName, slot: GearSlotName) => void;
 }
 
-// Colour buckets by rank within the slot column, worst-covered first. Rank is
-// used rather than the raw headroom so the scale stays informative for a player
-// whose whole inventory is thin, or whose whole inventory is deep.
+// Colour buckets by rank within the slot column, highest priority first. Rank
+// is used rather than the raw priority so the scale stays informative for a
+// player whose whole inventory is thin, or whose whole inventory is deep.
 const RANK_CLASSES = [
     'bg-red-900/70 text-red-100',
     'bg-orange-800/70 text-orange-100',
@@ -36,7 +36,7 @@ const CoverageCellButton: React.FC<{
         type="button"
         onClick={onClick}
         data-testid={`coverage-cell-${cell.role}-${cell.slot}`}
-        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${cell.count} at level 16, ${Math.round(cell.priority * 100)} percent headroom`}
+        aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${cell.count} at level 16, ${Math.round(cell.priority * 100)} percent priority to farm`}
         className={`rounded-sm px-1 py-1.5 text-center transition-opacity hover:opacity-80 ${rankClass(cell.rank, roleCount)}`}
     >
         <span className="block text-xs font-semibold">{cell.count}</span>
@@ -52,13 +52,14 @@ export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
             <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
                 <h3 className="text-lg font-medium">Coverage</h3>
                 <span className="text-xs text-theme-text-secondary">
-                    Level-16 pieces owned, and how much better your best one is than the next 19.
-                    High percentages are worth farming; low ones are already saturated.
+                    Level-16 pieces owned, and how much farming each role and slot would pay off. A
+                    high percentage means it would help; a low one means you are close to the best
+                    you can get.
                 </span>
             </div>
             <div className="text-xs text-theme-text-secondary">
-                Colour ranks each slot column: reddest has the most headroom in that column,
-                greenest is the most saturated.
+                Colour ranks each slot column: reddest has the highest priority in that column,
+                greenest is closest to the best you can get.
             </div>
 
             <div className="overflow-x-auto">

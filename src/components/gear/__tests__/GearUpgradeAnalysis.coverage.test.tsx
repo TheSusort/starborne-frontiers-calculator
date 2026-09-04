@@ -148,7 +148,7 @@ describe('GearUpgradeAnalysis coverage grid', () => {
 
     it('orders role cards by coverage.roleOrder, not by the static shipRoles prop order', async () => {
         // shipRoles is given ATTACKER-first; the mocked matrix says DEFENDER
-        // has more farming headroom overall, so DEFENDER's card must render first.
+        // has higher farming priority overall, so DEFENDER's card must render first.
         buildCoverageMatrixMock.mockReturnValue(
             makeMatrix({
                 roleOrder: ['DEFENDER', 'ATTACKER'],
@@ -185,7 +185,7 @@ describe('GearUpgradeAnalysis coverage grid', () => {
         ).toBeTruthy();
     });
 
-    it('badges each slot tab with the coverage cell count and headroom percentage', async () => {
+    it('badges each slot tab with the coverage cell count and priority percentage', async () => {
         render(
             <GearUpgradeAnalysis
                 inventory={[]}

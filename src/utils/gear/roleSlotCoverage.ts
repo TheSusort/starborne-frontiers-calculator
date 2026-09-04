@@ -100,13 +100,22 @@ function makeStat(name: StatName, type: StatType, value: number): Stat {
 }
 
 /**
- * The type a stat rolls as when it is this slot's main stat: percentage-only
- * stats (crit, critDamage, ...) are always percentage; flat slots (weapon,
- * hull, generator) roll their main stat flat; the three percentage slots
- * (sensor, software, thrusters) roll it as a share of the reference block.
+ * The type a stat rolls as when it is this slot's main stat.
+ *
+ * Percentage-only stats (crit, critDamage, ...) are always percentage.
+ * `hacking`, `security` and `speed` are always flat as a MAIN stat,
+ * regardless of slot: imported game data rolls them flat even on the
+ * percentage slots (sensor, software, thrusters), and `calculateMainStatValue`
+ * sends them through their own flat-magnitude tables (`HACK_SEC_STATS`,
+ * `SPD_STATS`); marking them percentage here would route them into
+ * `PERCENTAGE_STATS` instead, which holds a magnitude for a different stat
+ * family. Every other flexible stat (hp, attack, defence) rolls flat on the
+ * three flat slots (weapon, hull, generator) and percentage on the three
+ * percentage slots (sensor, software, thrusters).
  */
-function mainStatType(slot: GearSlotName, statName: StatName): StatType {
+export function mainStatType(slot: GearSlotName, statName: StatName): StatType {
     if (PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)) return 'percentage';
+    if (statName === 'hacking' || statName === 'security' || statName === 'speed') return 'flat';
     return slot === 'weapon' || slot === 'hull' || slot === 'generator' ? 'flat' : 'percentage';
 }
 

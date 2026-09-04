@@ -6,8 +6,8 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
-    'Upgrade analysis: a new coverage grid shows farming headroom by role and slot.',
-    'Upgrade analysis: role cards and slot tabs now lead with the biggest headroom.',
+    'Upgrade analysis: a new coverage grid shows farming priority by role and slot.',
+    'Upgrade analysis: role cards and slot tabs now lead with the highest priority.',
     'Factions: the Tianchao faction is now called Tianchen, matching the game.',
     'Ship search: searching Tianchao still finds Tianchen ships.',
     'Combat simulator: the round log now names buff steals, collapsing repeated stacks.',

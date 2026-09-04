@@ -4,6 +4,7 @@ import {
     computePriority,
     competitionRank,
     buildCoverageMatrix,
+    mainStatType,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
 } from '../roleSlotCoverage';
@@ -32,6 +33,43 @@ describe('constants', () => {
     it('samples the top 20 level-16 pieces', () => {
         expect(COVERAGE_SAMPLE_SIZE).toBe(20);
         expect(COVERAGE_MIN_LEVEL).toBe(16);
+    });
+});
+
+describe('mainStatType', () => {
+    it('is always flat for hacking, security and speed, even on percentage slots', () => {
+        // Real imported game data rolls these three flat on every slot that
+        // can carry them, including the percentage slots (sensor, software,
+        // thrusters) — `calculateMainStatValue` routes them through their own
+        // flat-magnitude tables, not the percentage table.
+        for (const slot of ['sensor', 'software', 'thrusters'] as const) {
+            expect(mainStatType(slot, 'hacking')).toBe('flat');
+            expect(mainStatType(slot, 'security')).toBe('flat');
+            expect(mainStatType(slot, 'speed')).toBe('flat');
+        }
+        for (const slot of ['weapon', 'hull', 'generator'] as const) {
+            expect(mainStatType(slot, 'hacking')).toBe('flat');
+            expect(mainStatType(slot, 'security')).toBe('flat');
+            expect(mainStatType(slot, 'speed')).toBe('flat');
+        }
+    });
+
+    it('is percentage-only for crit/critDamage regardless of slot', () => {
+        expect(mainStatType('weapon', 'crit')).toBe('percentage');
+        expect(mainStatType('software', 'critDamage')).toBe('percentage');
+    });
+
+    it('follows the slot rule for hp, attack and defence', () => {
+        for (const slot of ['weapon', 'hull', 'generator'] as const) {
+            expect(mainStatType(slot, 'hp')).toBe('flat');
+            expect(mainStatType(slot, 'attack')).toBe('flat');
+            expect(mainStatType(slot, 'defence')).toBe('flat');
+        }
+        for (const slot of ['sensor', 'software', 'thrusters'] as const) {
+            expect(mainStatType(slot, 'hp')).toBe('percentage');
+            expect(mainStatType(slot, 'attack')).toBe('percentage');
+            expect(mainStatType(slot, 'defence')).toBe('percentage');
+        }
     });
 });
 
