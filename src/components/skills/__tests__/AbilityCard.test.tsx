@@ -1050,7 +1050,7 @@ describe('AbilityCard', () => {
         it('renders the control for an ally-plural target', () => {
             render(<AbilityCard ability={buffAllAllies} onChange={vi.fn()} onRemove={vi.fn()} />);
             expect(screen.getByText('Recipient faction filter')).toBeInTheDocument();
-            expect(screen.getByLabelText('Tianchao')).toBeInTheDocument();
+            expect(screen.getByLabelText('Tianchen')).toBeInTheDocument();
             expect(screen.getByLabelText('XAOC')).toBeInTheDocument();
         });
 
@@ -1079,7 +1079,7 @@ describe('AbilityCard', () => {
             const onChange = vi.fn();
             const ability: Ability = { ...buffAllAllies, factionFilter: ['TIANCHAO'] };
             render(<AbilityCard ability={ability} onChange={onChange} onRemove={vi.fn()} />);
-            fireEvent.click(screen.getByLabelText('Tianchao'));
+            fireEvent.click(screen.getByLabelText('Tianchen'));
             const updated = onChange.mock.calls[0][0] as Ability;
             expect(updated.factionFilter).toBeUndefined();
             expect(Object.prototype.hasOwnProperty.call(updated, 'factionFilter')).toBe(false);
@@ -1088,7 +1088,7 @@ describe('AbilityCard', () => {
         it('checking a faction calls onChange with that faction added to factionFilter', () => {
             const onChange = vi.fn();
             render(<AbilityCard ability={buffAllAllies} onChange={onChange} onRemove={vi.fn()} />);
-            fireEvent.click(screen.getByLabelText('Tianchao'));
+            fireEvent.click(screen.getByLabelText('Tianchen'));
             expect(onChange).toHaveBeenCalledWith(
                 expect.objectContaining({ factionFilter: ['TIANCHAO'] })
             );

@@ -146,7 +146,7 @@ import {
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
-import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
+import { FACTION_KEYS, factionSpellings, type FactionKey } from '../../constants/factions';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -950,8 +950,11 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
             plain
         );
     if (allyAuraM) {
-        const key = FACTION_KEYS.find(
-            (k) => FACTIONS[k].name.toLowerCase() === allyAuraM[1].trim().toLowerCase()
+        // Matched against every spelling the corpus uses for the faction (`factionSpellings`),
+        // not just its display name — the game data can lag a frontend rename.
+        const word = allyAuraM[1].trim().toLowerCase();
+        const key = FACTION_KEYS.find((k) =>
+            factionSpellings(k).some((n) => n.toLowerCase() === word)
         );
         // Unrecognised faction word → emit NOTHING, so audit:skills keeps reporting the clause
         // rather than silently applying an unfiltered ally-wide aura. Same closed-alternation

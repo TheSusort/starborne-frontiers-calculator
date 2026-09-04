@@ -39,8 +39,12 @@ export interface Ship {
 }
 
 export interface Faction {
+    /** The frontend spelling, shown everywhere in the UI. */
     name: FactionName;
     iconUrl: string;
+    /** Other spellings this faction is known by — a previous name the game data or a player may
+     *  still use. Consumed by `factionSpellings`, whose doc holds the rule. */
+    aliases?: readonly string[];
 }
 
 export interface ShipType {

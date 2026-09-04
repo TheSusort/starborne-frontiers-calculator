@@ -11,6 +11,7 @@ import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import {
     FACTIONS,
+    factionMatchesSearch,
     GearSlotName,
     RARITIES,
     SHIP_TYPES,
@@ -210,7 +211,7 @@ export const ShipInventory: React.FC<Props> = ({
                 searchQuery === '' ||
                 ship.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 SHIP_TYPES[ship.type]?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                FACTIONS[ship.faction]?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                factionMatchesSearch(ship.faction, searchQuery) ||
                 ship.affinity?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 buildTargetingSearchText(ship).includes(searchQuery.toLowerCase());
             const matchesTargeting = matchesTargetingFilters(ship, {

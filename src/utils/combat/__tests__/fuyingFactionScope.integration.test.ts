@@ -69,6 +69,16 @@ describe('Fuying faction-scoped Stealth grant (#363) — parser', () => {
         expect(detectGrantFactionScope(FUYING_ACTIVE, 'Stealth')).toEqual(['TIANCHAO']);
     });
 
+    it('reads BOTH spellings of a renamed faction off the recipient phrase', () => {
+        // The UI calls TIANCHAO "Tianchen"; the skill corpus still writes "Tianchao". Both must
+        // resolve to the same key, or whichever spelling the detector has lost drops the scope and
+        // the grant silently reaches every ally. The test above pins the corpus spelling; this
+        // pins the display one, so neither can regress alone.
+        const renamed = FUYING_ACTIVE.replace('Tianchao allies', 'Tianchen allies');
+        expect(renamed).not.toEqual(FUYING_ACTIVE);
+        expect(detectGrantFactionScope(renamed, 'Stealth')).toEqual(['TIANCHAO']);
+    });
+
     it('does NOT read a faction out of a faction-NAMED buff', () => {
         // Anjian's shape: the faction word belongs to the buff name, not to a recipient.
         const anjian =
@@ -206,7 +216,10 @@ describe('Fuying faction-scoped Stealth grant (#363) — corpus inertness', () =
                 .flatMap((r) => [r.active, r.charge, ...r.passives])
                 .join('\n')
                 .match(
-                    /\b(?:Tianchao|XAOC|Binderburg|Everliving|Gelecek|Marauders|MPL|Atlas Syndicate|Frontier Legion|Terran Combine)\s+all(?:y|ies)\b/gi
+                    // Deliberately hand-enumerated rather than derived from FACTIONS — an oracle
+                    // that reads the constant under test measures nothing. TIANCHAO appears twice
+                    // because the corpus may write either spelling of its rename.
+                    /\b(?:Tianchao|Tianchen|XAOC|Binderburg|Everliving|Gelecek|Marauders|MPL|Atlas Syndicate|Frontier Legion|Terran Combine)\s+all(?:y|ies)\b/gi
                 ) ?? [];
         expect(scoped).toHaveLength(4);
     });
@@ -473,6 +486,22 @@ describe('Fuying Stealth DR aura (#363) — build', () => {
             pct: 30,
             critFamily: false,
         });
+    });
+
+    it('resolves the aura’s faction word under BOTH spellings of the renamed faction', () => {
+        // The aura arm reads its faction word off the text with its own lookup, separate from
+        // `detectGrantFactionScope`. The UI calls TIANCHAO "Tianchen" while the corpus still writes
+        // "Tianchao"; an arm that knows only one spelling drops `factionFilter` on the other and
+        // the aura silently protects every ally. The corpus spelling is pinned by the test above.
+        const renamed =
+            'All Tianchen allies with <unit-skill>Stealth</unit-skill> take ' +
+            '<unit-damage>30% less direct damage</unit-damage>.';
+        const ship = { refits: [], activeSkillText: renamed } as unknown as Ship;
+        const aura = buildShipAbilities(ship)
+            .slots.flatMap((s) => s.abilities)
+            .find((a) => a.config.type === 'incoming-reduction' && a.target === 'all-allies');
+        expect(aura).toBeDefined();
+        expect(aura!.factionFilter).toEqual(['TIANCHAO']);
     });
 
     it('does not disturb the self-scoped members of the family (Wusheng keeps target self)', () => {

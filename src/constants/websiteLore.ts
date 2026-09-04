@@ -63,9 +63,9 @@ His thoughts were ground to a halt by a tell-tale buzzing in his ears and the fe
 
 Esandra was looking at him sternly from the corner of her eye. Ah. Right. FedBak. He tuned back in to Whittacker's rambling.
 
-"...if something actually has stealth equipment like that, it's probably just the Tianchao yanking your chains. God knows they've been oddly silent as of late."
+"...if something actually has stealth equipment like that, it's probably just the Tianchen yanking your chains. God knows they've been oddly silent as of late."
 
-"No, that was an early misconception," Anton broke in. "Tianchao stealth works by redirecting most detectable waves around their ships, but you can still pick them up using extremely long form radar or very exact equipment with no interruptions. The Bludgeon periodically drops off all scanners, like it never existed. The running theory is that it's somehow detecting and actively counteracting our methods of detection in real time. It also never engages first, which is abnormal for any kind of Tianchao ambush," he added as an afterthought.
+"No, that was an early misconception," Anton broke in. "Tianchen stealth works by redirecting most detectable waves around their ships, but you can still pick them up using extremely long form radar or very exact equipment with no interruptions. The Bludgeon periodically drops off all scanners, like it never existed. The running theory is that it's somehow detecting and actively counteracting our methods of detection in real time. It also never engages first, which is abnormal for any kind of Tianchen ambush," he added as an afterthought.
 
 Whittaker stared at him for a moment. "Facinatin'."
 
@@ -447,7 +447,7 @@ Marauders are famed for their disregard of life, both for their victims and amon
         slug: 'everliving_pt2',
         body: `## History:
 
-"Immortality" as we know it was first achieved halfway through the 22nd century, through experiments with what is now known as Consciousness Transference Technology (CTT). The final breakthrough came from a team of Martian researchers financially supported by a handful of Commonwealth states, known as "the Samsara Project", who in 2159 managed to successfully transfer the mind of a terminally ill volunteer into the body of an unidentified 13 year old boy. While the procedure, and indeed the existence of the Samsara project, was not announced to the public until well after its success, Tianchao's research into the organization's history has revealed it to be the culminating moment in a long road of dangerous, questionably legal, and carefully concealed human experimentation.
+"Immortality" as we know it was first achieved halfway through the 22nd century, through experiments with what is now known as Consciousness Transference Technology (CTT). The final breakthrough came from a team of Martian researchers financially supported by a handful of Commonwealth states, known as "the Samsara Project", who in 2159 managed to successfully transfer the mind of a terminally ill volunteer into the body of an unidentified 13 year old boy. While the procedure, and indeed the existence of the Samsara project, was not announced to the public until well after its success, Tianchen's research into the organization's history has revealed it to be the culminating moment in a long road of dangerous, questionably legal, and carefully concealed human experimentation.
 
 Previous experiments by the team firmly established that the procedure to move a consciousness between bodies carried a high risk of madness in the transferred mind. Further research discovered that this danger increased exponentially with the age of the host bodies, and for safety's sake even a successful procedure would have to be repeated time and time again with new hosts. Nevertheless, after the first successful test the project's leadership and major sponsors began to line up for the procedure, to secure their own chance at renewed youth and eternal life.
 
@@ -463,7 +463,7 @@ One of Everliving's ongoing goals is the refinement of the Consciousness Transfe
 
 As Everliving's biotechnology improved and the wealth and status of the Children grew, the group took increased pains to safeguard their research and robustly defend their interests. This included the development of their own warships and bases of operation. In recent decades, Everliving has come under increased scrutiny following a major leak in 2384 surrounding its ties to the Marauders. While criticism of the group within the Commonwealth has been muted, the Union of Sol and the Lunar Directorate have both strongly condemned Everliving as a corrupt organization and an abhorrent perversion of nature. However, this would not be the first time the Children have faced public disapproval, and it is unlikely to be the last. Thoroughly embedded into both the government of the Martian Commonwealth and the MPL's board of directors, while the organization of Everliving may be vulnerable to criticism, the Children have worked to make themselves virtually untouchable.
 
-While unbiased information on Everliving's current projects is difficult to secure at any given moment, tracing their affiliated organizations is often one of the best ways to track their interests. For instance, the MPL's aggressive foray into the Spiral Expanse at the behest of its Chair of the Board, Child of Mars Gwayne Erebus, should be watched with suspicion. The relative lack of regulations or law enforcement on the Frontier would be an ideal arena for Everliving to continue their research unimpeded, and Tianchao scouts have confirmed the presence of Everliving ships moving through the region.
+While unbiased information on Everliving's current projects is difficult to secure at any given moment, tracing their affiliated organizations is often one of the best ways to track their interests. For instance, the MPL's aggressive foray into the Spiral Expanse at the behest of its Chair of the Board, Child of Mars Gwayne Erebus, should be watched with suspicion. The relative lack of regulations or law enforcement on the Frontier would be an ideal arena for Everliving to continue their research unimpeded, and Tianchen scouts have confirmed the presence of Everliving ships moving through the region.
 
 [Further information has been restricted]`,
         sourceUrl: 'https://starborne.com/post/everliving_pt2',
@@ -639,71 +639,71 @@ The first of the Sovereign Six to successfully complete the construction of thei
         sourceUrl: 'https://starborne.com/post/terran_combine_pt1',
     },
     {
-        title: 'Tianchao - History',
+        title: 'Tianchen - History',
         slug: 'tianchao_pt2',
         body: `## History:
 
-The exact origin of the Tianchao clan is lost to time and the devastation of Earth, but sources within the organization place their origin in south-eastern Eurasia. Rumors disseminated by other factions suggest that the clan's roots can be traced back to one of the region's organized crime networks.
+The exact origin of the Tianchen clan is lost to time and the devastation of Earth, but sources within the organization place their origin in south-eastern Eurasia. Rumors disseminated by other factions suggest that the clan's roots can be traced back to one of the region's organized crime networks.
 
 [Paragraph restricted]
 
-The first confirmed mention of Tianchao comes from the year 2180, when a large part of the clan fled from the Lunar reorganization of Earth to settle on Mars. The complex web of infighting and political struggles between member states of the Martian Commonwealth (particularly between the Children of Mars) provided ample demand for the clan's unique services. Over the following decades, Tianchao massively expanded its wealth and influence by brokering information. While maintaining a careful air of neutrality, clever maneuvering led them to become a major power throughout the wider Solar system. This situation lasted well into the Early Interstellar Age, when Tianchao operatives discovered Everliving's role in creating what would later become the "Marauder-modifications" and related brainwashing technologies.
+The first confirmed mention of Tianchen comes from the year 2180, when a large part of the clan fled from the Lunar reorganization of Earth to settle on Mars. The complex web of infighting and political struggles between member states of the Martian Commonwealth (particularly between the Children of Mars) provided ample demand for the clan's unique services. Over the following decades, Tianchen massively expanded its wealth and influence by brokering information. While maintaining a careful air of neutrality, clever maneuvering led them to become a major power throughout the wider Solar system. This situation lasted well into the Early Interstellar Age, when Tianchen operatives discovered Everliving's role in creating what would later become the "Marauder-modifications" and related brainwashing technologies.
 
-This data also revealed that Tianchao had been directly targeted by the Children of Mars. Brainwashed (also known as 'imprinted') operatives had infiltrated the clan, and [Information restricted]. To Tianchao, the fact that their fellow clansmen had been enslaved was unforgivable.
+This data also revealed that Tianchen had been directly targeted by the Children of Mars. Brainwashed (also known as 'imprinted') operatives had infiltrated the clan, and [Information restricted]. To Tianchen, the fact that their fellow clansmen had been enslaved was unforgivable.
 
 As always, their response remained in the shadows. Anonymous tips about Marauder convoys were delivered to frontline authorities. Select space stations began to suffer from unexpected communication failures before abruptly falling off the grid. Seemingly random uprisings occurred with unusual frequency in Martian colonies. These actions achieved the desired result: Marauder activity plummeted, and the Children of Mars suffered extensive financial losses.
 
-Throughout this period, the Tianchao name took on a new meaning. Cursed among slavers, it was whispered like a prayer by their victims. Stoking the fires of revolt from the sidelines, the clan's operations grew. On the Frontier a new tapestry of cooperation, smuggling, and vigilantism was being expertly woven.
+Throughout this period, the Tianchen name took on a new meaning. Cursed among slavers, it was whispered like a prayer by their victims. Stoking the fires of revolt from the sidelines, the clan's operations grew. On the Frontier a new tapestry of cooperation, smuggling, and vigilantism was being expertly woven.
 
-The next step would come decades later, when clan agents uncovered the MPL's secret plan to construct their own Dyson Sphere, and the clan's leadership sensed an opportunity to land a decisive blow. Even today, the operation to infiltrate and undermine the MPL Dyson project is regarded as the crown jewel of Tianchao's cunning.
+The next step would come decades later, when clan agents uncovered the MPL's secret plan to construct their own Dyson Sphere, and the clan's leadership sensed an opportunity to land a decisive blow. Even today, the operation to infiltrate and undermine the MPL Dyson project is regarded as the crown jewel of Tianchen's cunning.
 
-Several cells' worth of Tianchao agents were planted in the project, and when the Sphere was brought online in 2344, communication within the entire system immediately went dark. Command of the Sphere's TRB-generators was rerouted while the project's leadership was simultaneously assassinated or taken hostage by their own servants and kitchen staff.
+Several cells' worth of Tianchen agents were planted in the project, and when the Sphere was brought online in 2344, communication within the entire system immediately went dark. Command of the Sphere's TRB-generators was rerouted while the project's leadership was simultaneously assassinated or taken hostage by their own servants and kitchen staff.
 
-Effectively locked out of Sphere systems, the local MPL ships were left unable to launch as a Tianchao black-ops fleet uncloaked and opened fire. Within minutes, they activated the TRB-generators, and a major clan armada bridged into the system. Realizing that the battle was already lost, the MPL forces surrendered, and Tianchao successfully pulled off the largest and most ambitious heist in human history.
+Effectively locked out of Sphere systems, the local MPL ships were left unable to launch as a Tianchen black-ops fleet uncloaked and opened fire. Within minutes, they activated the TRB-generators, and a major clan armada bridged into the system. Realizing that the battle was already lost, the MPL forces surrendered, and Tianchen successfully pulled off the largest and most ambitious heist in human history.
 
-Both sides of the conflict did their best to keep the incident under wraps, as it was a major embarrassment for the MPL, and Tianchao already held secrecy as their modus operandi. A few months later, the clan declared independence as a major galactic faction by demonstrating its command of an interstellar transport network, without revealing the location or origin of their bridges. Then, as briefly as it emerged, the clan receded once more into the shadows of the Frontier.
+Both sides of the conflict did their best to keep the incident under wraps, as it was a major embarrassment for the MPL, and Tianchen already held secrecy as their modus operandi. A few months later, the clan declared independence as a major galactic faction by demonstrating its command of an interstellar transport network, without revealing the location or origin of their bridges. Then, as briefly as it emerged, the clan receded once more into the shadows of the Frontier.
 
-[Information regarding more recent Tianchao operations has been restricted.]`,
+[Information regarding more recent Tianchen operations has been restricted.]`,
         sourceUrl: 'https://starborne.com/post/tianchao_pt2',
     },
     {
-        title: 'Tianchao - Background Briefing',
+        title: 'Tianchen - Background Briefing',
         slug: 'tianchao_pt1',
         body: `## Executive Summary:
 
-With a history that stretches back as far as Old Earth, the Tianchao clan has always dealt in secrets. Fronted by the legitimate Tianchao Organization, the clan's true power as an information broker is made up of an intricate network of independent spy cells, headed by a largely anonymous council.
+With a history that stretches back as far as Old Earth, the Tianchen clan has always dealt in secrets. Fronted by the legitimate Tianchen Organization, the clan's true power as an information broker is made up of an intricate network of independent spy cells, headed by a largely anonymous council.
 
-Tianchao agents are faceless, highly skilled, and lethally efficient. Having little to no direct contact with members from other cells, they are often asked to play a role without knowing the details of the plot. At times their orders may seem counter-intuitive, but there is no ambiguity at the clan's highest levels. Behind every action lies the hand of Xian Ren, the "immortal one", and their inner circle who guide the clan's fortunes from the shadows.
+Tianchen agents are faceless, highly skilled, and lethally efficient. Having little to no direct contact with members from other cells, they are often asked to play a role without knowing the details of the plot. At times their orders may seem counter-intuitive, but there is no ambiguity at the clan's highest levels. Behind every action lies the hand of Xian Ren, the "immortal one", and their inner circle who guide the clan's fortunes from the shadows.
 
 ## Faction Goals & Values:
 
-The Tianchao clan is defined by their ongoing fight against social and technological control, though their precise ideology is constantly under refinement. Many current members of Tianchao have previously been exiled or enslaved by other factions, so securing justice for past transgressions and protecting the clan's interests from outside interference are often high priorities.
+The Tianchen clan is defined by their ongoing fight against social and technological control, though their precise ideology is constantly under refinement. Many current members of Tianchen have previously been exiled or enslaved by other factions, so securing justice for past transgressions and protecting the clan's interests from outside interference are often high priorities.
 
-On one hand, the clan's highest values are individual freedom and autonomy. On the other, defending these values requires strict secrecy and personal loyalty. Tianchao is a network of compartmentalized cells governed by a rigid hierarchy and sense of duty. Its agents may be asked to lay down their lives at any time, trusting that their sacrifice represents a small but essential play in a much larger plan.
+On one hand, the clan's highest values are individual freedom and autonomy. On the other, defending these values requires strict secrecy and personal loyalty. Tianchen is a network of compartmentalized cells governed by a rigid hierarchy and sense of duty. Its agents may be asked to lay down their lives at any time, trusting that their sacrifice represents a small but essential play in a much larger plan.
 
 ## Culture:
 
-Tianchao never trades in falsehoods, as its leadership is well aware that their reputation for providing reliable information is their greatest asset. An often quoted aphorism within the clan is "sell a lie, void one thousand truths."
+Tianchen never trades in falsehoods, as its leadership is well aware that their reputation for providing reliable information is their greatest asset. An often quoted aphorism within the clan is "sell a lie, void one thousand truths."
 
-However, the inner workings of Tianchao itself are often complex and always veiled by secrecy. Peeling back one layer of intent merely reveals another, and another below that. To outsiders, the clan's operations may appear arbitrary, but in truth Tianchao always moves with purpose, furthering plans calculated several steps in advance. Clients are accepted or denied based on a secret internal agenda, and often the clan itself will make the first move towards a prospective buyer.
+However, the inner workings of Tianchen itself are often complex and always veiled by secrecy. Peeling back one layer of intent merely reveals another, and another below that. To outsiders, the clan's operations may appear arbitrary, but in truth Tianchen always moves with purpose, furthering plans calculated several steps in advance. Clients are accepted or denied based on a secret internal agenda, and often the clan itself will make the first move towards a prospective buyer.
 
-At the heart of all the clan's operations are its agents. Their exploits are legendary even outside the clan, and have inspired everything from dramas to fashion across the galaxy. On the ground, Tianchao operatives are chameleons, blending in seamlessly with any target culture. Their dedication to spycraft and the clan's purpose is extreme, with agents often undergoing extensive facial reconstruction and body modifications before undertaking a mission.
+At the heart of all the clan's operations are its agents. Their exploits are legendary even outside the clan, and have inspired everything from dramas to fashion across the galaxy. On the ground, Tianchen operatives are chameleons, blending in seamlessly with any target culture. Their dedication to spycraft and the clan's purpose is extreme, with agents often undergoing extensive facial reconstruction and body modifications before undertaking a mission.
 
-Because they spend so much of their lives as "someone else", many agents adopt an ostentatious personal style when not on assignment. Incorporating a mix of Old Earth influences, they prefer bold colors, jewelry, and cybernetic ornamentation. Given the dominant role that agents play within Tianchao culture, this aesthetic has come to define the community as a whole.
+Because they spend so much of their lives as "someone else", many agents adopt an ostentatious personal style when not on assignment. Incorporating a mix of Old Earth influences, they prefer bold colors, jewelry, and cybernetic ornamentation. Given the dominant role that agents play within Tianchen culture, this aesthetic has come to define the community as a whole.
 
 ## Political and Social Organization:
 
-The Tianchao clan consists of an organized network of independent cells. Operatives form close bonds within their immediate cell, while remaining largely unaware of the existence or location of other clan members. Cells with closer contact to the clan's center of power tend to hold even stricter informational hierarchies, where the descendents and proteges of the original Tianchao members form a well-protected inner circle. Like a lizard abandoning its tail, a compromised cell can be instantly cut loose without damage to the wider network or its leadership.
+The Tianchen clan consists of an organized network of independent cells. Operatives form close bonds within their immediate cell, while remaining largely unaware of the existence or location of other clan members. Cells with closer contact to the clan's center of power tend to hold even stricter informational hierarchies, where the descendents and proteges of the original Tianchen members form a well-protected inner circle. Like a lizard abandoning its tail, a compromised cell can be instantly cut loose without damage to the wider network or its leadership.
 
-Information gathered by Tianchao agents is encrypted using a complex combination of biometric and quantum data ports. Highly sensitive data is stored directly within an agent's neural pathways. Once the transfer of information has taken place, those parts of the agent's brain are wiped clean. This practice not only prevents the theft of the information, but also the possible coercion or defection of the agent, a lesson learned from the time the Children of Mars managed an infiltration.
+Information gathered by Tianchen agents is encrypted using a complex combination of biometric and quantum data ports. Highly sensitive data is stored directly within an agent's neural pathways. Once the transfer of information has taken place, those parts of the agent's brain are wiped clean. This practice not only prevents the theft of the information, but also the possible coercion or defection of the agent, a lesson learned from the time the Children of Mars managed an infiltration.
 
-Overlaying this clandestine spy network is the visible face of "The Tianchao Organization", an information services conglomerate that acts as both an intermediary and a front for the clan's agenda. It also controls some of the more overt activities such as contracting out some of the clan's fighter squads to interested commanders. The connections between the visible and invisible sides of Tianchao are many, but for both sections true power always remains with the core leadership.
+Overlaying this clandestine spy network is the visible face of "The Tianchen Organization", an information services conglomerate that acts as both an intermediary and a front for the clan's agenda. It also controls some of the more overt activities such as contracting out some of the clan's fighter squads to interested commanders. The connections between the visible and invisible sides of Tianchen are many, but for both sections true power always remains with the core leadership.
 
 ## Technology and Specialities:
 
-While Tianchao has long maintained a technological advantage in the areas of stealth combat and data security, the clan does not consider these a significant edge. Instead, the clan's pride lies in its impressive training practices. Attention to social-cultural anthropology, psychological manipulation, and spycraft allow clan members to infiltrate any group or society with ease. A Tianchao agent can be thought of as a thespian, linguist, psychologist, and soldier all in one.
+While Tianchen has long maintained a technological advantage in the areas of stealth combat and data security, the clan does not consider these a significant edge. Instead, the clan's pride lies in its impressive training practices. Attention to social-cultural anthropology, psychological manipulation, and spycraft allow clan members to infiltrate any group or society with ease. A Tianchen agent can be thought of as a thespian, linguist, psychologist, and soldier all in one.
 
-Tianchao ships are often sleek and fast craft that trade in heavy armor for the ability to outmaneuver and ambush opposing forces. Tianchao is the leading faction in the application of  stealth technology, based on sensor spoofing and signal manipulation, that allows their ships to avoid enemy fire and choose their engagements. Combined with their ability to disrupt enemy systems and precise strikes, this makes Tianchao fleets supreme ambushers.`,
+Tianchen ships are often sleek and fast craft that trade in heavy armor for the ability to outmaneuver and ambush opposing forces. Tianchen is the leading faction in the application of  stealth technology, based on sensor spoofing and signal manipulation, that allows their ships to avoid enemy fire and choose their engagements. Combined with their ability to disrupt enemy systems and precise strikes, this makes Tianchen fleets supreme ambushers.`,
         sourceUrl: 'https://starborne.com/post/tianchao_pt1',
     },
     {
@@ -717,7 +717,7 @@ Interestingly, it seems that establishing the Atlas Syndicate went directly agai
 
 In 2347, the Syndicate purchased its own Dyson Sphere from a group of independent commanders. This acquisition remains a point of pride for the Syndicate and its employees, many of whom are still quick to point out that while the MPL labored for years to build their own Sphere, Atlas simply had to authorize a bank transfer. With Sphere in hand, Atlas formally declared their independence from Luna. This decision was made with the Directorate's blessing, as Atlas had outgrown the need for government backing and would require the freedom to operate within independent systems in order to remain competitive. What's more, as a member of the so-called "Sovereign Six" (then five), an independent Atlas could serve as an even more effective counterweight to the MPL.
 
-At the same time, some members of the corporate hierarchy began to see the Syndicate's commitment to the rule of law as a hindrance. During a period where public perception of the Tianchao Clan had soured amongst the galaxy's elites, a demand arose for alternative information brokers and private intelligence services. In response, Atlas secretly formed its own espionage agency, the shadowy organization known as Nightcorps. Operating with near-autonomy and a chilling ruthlessness, Nightcorps quickly made its presence felt on the Frontier, and was responsible for the irradiation of several Deadzone systems.
+At the same time, some members of the corporate hierarchy began to see the Syndicate's commitment to the rule of law as a hindrance. During a period where public perception of the Tianchen Clan had soured amongst the galaxy's elites, a demand arose for alternative information brokers and private intelligence services. In response, Atlas secretly formed its own espionage agency, the shadowy organization known as Nightcorps. Operating with near-autonomy and a chilling ruthlessness, Nightcorps quickly made its presence felt on the Frontier, and was responsible for the irradiation of several Deadzone systems.
 
 The connection between Atlas and Nightcorps remains a carefully guarded secret, but on numerous occasions information obtained by Nightcorps has been purposefully leaked by the Syndicate's leadership. One of the most prominent of these occurred in 2354, when a group of "independent commanders" first reported that Marauders had been making use of MPL technology. Investigation into this rumor would ultimately lead to the Marauder's creation being linked to several prominent members of Martian society, and deal a massive blow to Mars' credibility and reputation.
 
@@ -757,7 +757,7 @@ While the Atlas Syndicate focuses primarily on legal and financial services, it 
 
 Chief among the Syndicate's operations is the Atlas Bank. As the largest financial institution in the history of humanity it provides loans to commanders, governments, and entire factions alike. While technically only one offshoot of the Syndicate, the Bank provides Atlas with an enormous amount of political power and myriad of professional connections to help bolster their ongoing growth.
 
-As a last point of interest, Atlas' largest independent subsidiary, Nightcorps, is unique in that its affiliation with the Syndicate is a carefully guarded secret. It serves as the backbone of Atlas' information network, allowing them to offer information brokering and espionage services second only to those of the Tianchao Clan in quality. Outside of its obvious value in generating revenue, Nightcorps' services also enable the Syndicate to make business decisions with excellent, and oftentimes classified, intel.
+As a last point of interest, Atlas' largest independent subsidiary, Nightcorps, is unique in that its affiliation with the Syndicate is a carefully guarded secret. It serves as the backbone of Atlas' information network, allowing them to offer information brokering and espionage services second only to those of the Tianchen Clan in quality. Outside of its obvious value in generating revenue, Nightcorps' services also enable the Syndicate to make business decisions with excellent, and oftentimes classified, intel.
 
 ## Technology and Specialities:
 
@@ -865,7 +865,7 @@ In fact, it was against XAOC that the Legion scored its first decisive military 
 
 For more than 60 years, the Legion existed as something akin to a nomadic tribe, executing contracts and accumulating a record of battles and victories. The situation might have continued if wider galactic events had not conspired to change the Legion's fortunes.
 
-With more independent factions, including the Tianchao Clan and XAOC, gaining possession of their own Dyson Spheres, the balance of power on the Frontier shifted. To Lunar authorities, the Frontier Legion seemed like their best chance to exert a balancing influence.
+With more independent factions, including the Tianchen Clan and XAOC, gaining possession of their own Dyson Spheres, the balance of power on the Frontier shifted. To Lunar authorities, the Frontier Legion seemed like their best chance to exert a balancing influence.
 
 On March 3, 2345, the Directorate officially granted ownership of the Ain system and its Sphere to the Legion. Rather than take direct control of the planet, the Legion instead coordinated the election of a democratic government, helping the colony to finally realize its dream of freedom. Established as a benevolent protector of the Ain system, the Legion had at last found its true home - the very one it had arisen from four generations earlier.
 
@@ -1015,7 +1015,7 @@ Ezekiel snorts.
 
 "Good old Grimes. I knew I came to the right person."
 
-Grimes glances at the man, forcing himself to focus. Ezekiel was a friend, an ally from his time on the frontier during the Beta program, but as a commander he was always in deep with the Tianchao, and that was sometimes more trouble than it was worth. It dawns on Grimes that his friend's presence was not an accident.
+Grimes glances at the man, forcing himself to focus. Ezekiel was a friend, an ally from his time on the frontier during the Beta program, but as a commander he was always in deep with the Tianchen, and that was sometimes more trouble than it was worth. It dawns on Grimes that his friend's presence was not an accident.
 
 "What is it you want Zeke?"
 
