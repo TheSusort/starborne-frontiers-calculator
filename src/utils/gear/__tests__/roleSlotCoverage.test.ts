@@ -8,6 +8,7 @@ import {
     getIdealMarginal,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
+    resetIdealPieceCachesForTests,
 } from '../roleSlotCoverage';
 import { GearPiece } from '../../../types/gear';
 import { calculateRoleScore } from '../../autogear/priorityScore';
@@ -490,8 +491,8 @@ describe('buildCoverageMatrix', () => {
     it('covers every role and every gear slot', () => {
         // First real exercise of getIdealMarginal in this file, so it pays
         // the one-time, module-cached cost of the full (role x slot) ideal
-        // search (~3s with sets in play) — same reasoning as the explicit
-        // timeout on "the ideal is a true ceiling" tests below.
+        // search — see "cold ideal-piece build performance" below for the
+        // actual budget this is expected to stay under.
         const matrix = buildCoverageMatrix([]);
         const roles = Object.keys(SHIP_TYPES);
         expect(matrix.roleOrder).toHaveLength(roles.length);
@@ -956,5 +957,21 @@ describe('the ideal is a true ceiling', () => {
             }));
             expect(() => buildCoverageMatrix(pieces)).not.toThrow();
         }
+    });
+});
+
+describe('cold ideal-piece build performance', () => {
+    it('builds all 72 (role, slot) ideal pieces from a cold cache well under budget', () => {
+        // Regression guard for the ~3s UI freeze the grid used to cause on
+        // first paint (every ideal is built, and only then, cached). The
+        // real budget for the whole matrix is 250ms; this asserts a much
+        // more generous 1000ms so it isn't flaky on a loaded CI runner or a
+        // slow dev machine — it exists to catch a regression back toward
+        // an exhaustive (unpruned) search, not to enforce the tight budget.
+        resetIdealPieceCachesForTests();
+        const start = performance.now();
+        buildCoverageMatrix([]);
+        const elapsed = performance.now() - start;
+        expect(elapsed).toBeLessThan(1000);
     });
 });

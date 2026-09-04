@@ -165,16 +165,81 @@ const LEGENDARY_SUBSTAT_SLOTS = UPGRADE_LEVELS.legendary.initialSubstats;
 const LEGENDARY_SUBSTAT_INCREASES = UPGRADE_LEVELS.legendary.increases.length;
 
 /**
- * Every (name, type) pair legal as a substat, excluding only the piece's own
- * main stat (name, type) — the exact rule `GearPieceForm` enforces
- * (`excludedStats={[{ name: mainStat.name, type: mainStat.type }]}`). The
- * OTHER type variant of the main stat's own name stays selectable: an
+ * Does adding a large amount of `name` (any legal type) to `role`'s bare
+ * baseline (no main stat, no set, no other substats) change its role score
+ * at all? Every real stat block a piece can ever produce is `baseline` plus
+ * a sum of non-negative additions (main stat, set share, substats — see
+ * `addStat`/`scorePieceForRole`), and every `calculateRoleScore` formula is
+ * non-decreasing in every stat name it reads (more attack/crit/hacking/...
+ * never lowers a role's score). So a name that cannot move the score off
+ * the bare floor cannot move it off any RICHER prefix either — this probe
+ * at the floor is safe to reuse for every (mainStat, set) combination a
+ * search considers, not just the one it happened to run against.
+ *
+ * The probe amount is the largest a single legendary substat slot can ever
+ * reach: `(1 + LEGENDARY_SUBSTAT_INCREASES)` times its single-roll max, the
+ * same ceiling `computeIdealSubstats` itself builds candidate stats from.
+ */
+function isNameLiveForRole(role: ShipTypeName, name: StatName): boolean {
+    const baseline = getBaseRoleStats(role);
+    const baselineScore = calculateRoleScore(role, baseline);
+    for (const type of Object.keys(SUBSTAT_RANGES[name]) as StatType[]) {
+        const max = SUBSTAT_RANGES[name][type].legendary.max;
+        const probeValue = (1 + LEGENDARY_SUBSTAT_INCREASES) * max;
+        const withProbe: BaseStats = { ...baseline };
+        addStat(makeStat(name, type, probeValue), withProbe, baseline);
+        if (Math.abs(calculateRoleScore(role, withProbe) - baselineScore) > 1e-9) return true;
+    }
+    return false;
+}
+
+/**
+ * Per-role: every `SUBSTAT_RANGES` name that can possibly move this role's
+ * score — see `isNameLiveForRole`. This is what keeps the substat
+ * combination search small: a role formula reads only a handful of stat
+ * names (e.g. ATTACKER: attack/crit/critDamage), so most of the 8 substat
+ * names are dead weight for it and never need to enter the combination
+ * search at all.
+ */
+const liveSubstatNamesByRole = new Map<ShipTypeName, Set<StatName>>();
+
+function liveSubstatNamesFor(role: ShipTypeName): Set<StatName> {
+    const cached = liveSubstatNamesByRole.get(role);
+    if (cached) return cached;
+
+    const live = new Set<StatName>();
+    for (const name of Object.keys(SUBSTAT_RANGES) as StatName[]) {
+        if (isNameLiveForRole(role, name)) live.add(name);
+    }
+    liveSubstatNamesByRole.set(role, live);
+    return live;
+}
+
+/**
+ * Every (name, type) pair legal as a substat for `role`, excluding only the
+ * piece's own main stat (name, type) — the exact rule `GearPieceForm`
+ * enforces (`excludedStats={[{ name: mainStat.name, type: mainStat.type }]}`).
+ * The OTHER type variant of the main stat's own name stays selectable: an
  * `attack`-flat weapon main stat can still carry an `attack`-percentage
  * substat, and both may sit on the same piece as two of its four slots.
+ *
+ * Restricted to `liveSubstatNamesFor(role)`: a dead name would only ever tie
+ * (never beat) a live one for a combination slot, so dropping it from the
+ * search cannot change the best reachable score — see `isNameLiveForRole`.
+ * When fewer than `LEGENDARY_SUBSTAT_SLOTS` live pairs remain, the ideal
+ * piece necessarily carries a dead filler substat in its remaining slot(s)
+ * (a real piece always has exactly `LEGENDARY_SUBSTAT_SLOTS` substats), but
+ * that filler's identity cannot affect the score, so `computeIdealSubstats`
+ * does not need to search which dead pair fills it.
  */
-function candidateSubstatPairs(mainStat: Stat | null): { name: StatName; type: StatType }[] {
+function candidateSubstatPairs(
+    role: ShipTypeName,
+    mainStat: Stat | null
+): { name: StatName; type: StatType }[] {
+    const live = liveSubstatNamesFor(role);
     const pairs: { name: StatName; type: StatType }[] = [];
     for (const name of Object.keys(SUBSTAT_RANGES) as StatName[]) {
+        if (!live.has(name)) continue;
         for (const type of Object.keys(SUBSTAT_RANGES[name]) as StatType[]) {
             if (mainStat && mainStat.name === name && mainStat.type === type) continue;
             pairs.push({ name, type });
@@ -248,26 +313,48 @@ function idealSetCandidatesFor(role: ShipTypeName): (GearSetName | null)[] {
  * The highest-scoring legal level-16, 6-star legendary substat block for
  * `role`, given the slot's chosen `mainStat` and `setBonus`.
  *
- * Exhaustive, not greedy: every `LEGENDARY_SUBSTAT_SLOTS`-combination of
- * legal (name, type) pairs, crossed with every way to distribute
- * `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls across those slots, is
- * assembled into a full piece (carrying `setBonus`, credited at its amortised
- * share via `scorePieceForRole`) and scored; the maximum is kept. A greedy
- * per-slot assignment is not provably exact here — several role formulas
- * read crit x critDamage or an effective-HP product, so a roll's marginal
- * value on one slot depends on what already sits in the others, including
- * what the set bonus already contributes. `roleSlotCoverage.test.ts`'s "the
- * ideal is a true ceiling" property test is what would catch a shortfall
- * against a legal piece this search failed to try.
+ * Exhaustive over live pairs, not greedy: every `slotCount`-combination of
+ * `candidateSubstatPairs` (already pruned to names that can move `role`'s
+ * score, and capped at `LEGENDARY_SUBSTAT_SLOTS`), crossed with every way to
+ * distribute `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls across those slots,
+ * is assembled into a full piece (carrying `setBonus`, credited at its
+ * amortised share via `scorePieceForRole`) and scored; the maximum is kept.
+ * A greedy per-slot assignment is not provably exact here — several role
+ * formulas read crit x critDamage or an effective-HP product, so a roll's
+ * marginal value on one slot depends on what already sits in the others,
+ * including what the set bonus already contributes; only the DEAD-pair
+ * pruning above is provably order-independent (see `isNameLiveForRole`).
+ * `roleSlotCoverage.test.ts`'s "the ideal is a true ceiling" property test is
+ * what would catch a shortfall against a legal piece this search failed to
+ * try.
  */
 function computeIdealSubstats(
     role: ShipTypeName,
     mainStat: Stat | null,
     setBonus: GearSetName | null
 ): { stats: Stat[]; score: number } {
-    const pairs = candidateSubstatPairs(mainStat);
-    const combos = combinations(pairs, LEGENDARY_SUBSTAT_SLOTS);
-    const rollDistributions = distributeRolls(LEGENDARY_SUBSTAT_INCREASES, LEGENDARY_SUBSTAT_SLOTS);
+    const pairs = candidateSubstatPairs(role, mainStat);
+
+    // Fewer live pairs than substat slots: every slot is dead filler (see
+    // `candidateSubstatPairs`), so the score is just the bare main
+    // stat + set piece — no combination or roll search needed.
+    if (pairs.length === 0) {
+        const piece: GearPiece = {
+            id: 'ideal-candidate',
+            slot: 'weapon',
+            level: COVERAGE_MIN_LEVEL,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat,
+            subStats: [],
+            setBonus,
+        };
+        return { stats: [], score: scorePieceForRole(piece, role) };
+    }
+
+    const slotCount = Math.min(pairs.length, LEGENDARY_SUBSTAT_SLOTS);
+    const combos = combinations(pairs, slotCount);
+    const rollDistributions = distributeRolls(LEGENDARY_SUBSTAT_INCREASES, slotCount);
 
     let best: { stats: Stat[]; score: number } | null = null;
     for (const combo of combos) {
@@ -375,6 +462,21 @@ export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealM
     const idealMarginal = pickIdealPiece(role, slot).score;
     idealMarginalCache.set(key, idealMarginal);
     return idealMarginal;
+}
+
+/**
+ * Test-only: clear every module-scope cache this file's ideal-piece search
+ * populates, so the next `buildCoverageMatrix`/`getIdealMarginal` call is
+ * genuinely cold. All of these caches are keyed on data that never changes
+ * within a process (role base stats, gear sets, substat ranges), so nothing
+ * outside a test needs to call this.
+ */
+export function resetIdealPieceCachesForTests(): void {
+    baselineScoreByRole.clear();
+    liveSubstatNamesByRole.clear();
+    idealSetCandidatesByRole.clear();
+    idealSubstatsCache.clear();
+    idealMarginalCache.clear();
 }
 
 /**
