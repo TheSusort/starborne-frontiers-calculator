@@ -1014,6 +1014,17 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
+                                        A coverage grid at the top shows how many level-16 pieces
+                                        you own for each role/slot combination, and how much farming
+                                        headroom remains — before you run any analysis
+                                    </li>
+                                    <li>
+                                        Role cards and each card&apos;s slot tabs are ordered by
+                                        that same headroom, so the roles and slots most worth
+                                        farming appear first. Clicking a grid cell jumps to that
+                                        role and slot
+                                    </li>
+                                    <li>
                                         Results are displayed per role, sorted by score improvement
                                     </li>
                                     <li>Helps identify high-potential gear worth investing in</li>

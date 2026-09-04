@@ -35,6 +35,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: damage-taken reactions and Tenacity now read what the ship actually took.',
     'Combat simulator: a converting ship no longer leeches off damage it absorbs.',
     "Combat simulator: Asphyxiator's crit-landed debuffs now last one turn longer.",
+    'Upgrade analysis: a new coverage grid shows farming headroom by role and slot.',
+    'Upgrade analysis: role cards and slot tabs now lead with the biggest headroom.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

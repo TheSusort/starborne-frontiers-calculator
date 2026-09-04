@@ -20,7 +20,9 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { GEAR_ANALYSIS_TUTORIAL } from '../../constants/tutorialSteps';
+import { buildCoverageMatrix } from '../../utils/gear/roleSlotCoverage';
 import { GearPieceDisplay } from './GearPieceDisplay';
+import { GearCoverageGrid } from './GearCoverageGrid';
 
 interface Props {
     inventory: GearPiece[];
@@ -97,6 +99,10 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
             },
         [inventory]
     );
+
+    // Inventory-only, so it is available before any Analyze run. Drives the
+    // coverage grid, the role card order and each card's slot tab order.
+    const coverage = useMemo(() => buildCoverageMatrix(inventory), [inventory]);
 
     // Create engineering stats lookup function
     const getEngineeringStatsForShipType = useMemo(
@@ -778,6 +784,18 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                 </Offcanvas>
             )}
 
+            {mode === 'analysis' && (
+                <GearCoverageGrid
+                    matrix={coverage}
+                    onCellClick={(role, slot) => {
+                        handleSlotChange(role, slot);
+                        document
+                            .getElementById(`role-card-${role}`)
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                />
+            )}
+
             {mode === 'analysis' && optimizationProgress && (
                 <ProgressBar
                     current={optimizationProgress.current}
@@ -796,7 +814,10 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
             )}
 
             {mode === 'analysis' &&
-                (selectedRole === 'all' ? shipRoles : [selectedRole]).map((role) => {
+                (selectedRole === 'all'
+                    ? coverage.roleOrder.filter((role) => shipRoles.includes(role))
+                    : [selectedRole]
+                ).map((role) => {
                     const roleResults = results[role] || {};
                     const selectedSlot = selectedSlots[role] || 'all';
                     const currentResults = roleResults[selectedSlot] || [];
@@ -810,16 +831,17 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
                     const slotTabs = [
                         { id: 'all', label: 'All Slots' },
-                        ...Object.entries(GEAR_SLOTS)
-                            .filter(([_, slot]) => !slot.label.includes('Implant'))
-                            .map(([slotName, slot]) => ({
-                                id: slotName,
-                                label: slot.label,
-                            })),
+                        ...coverage.slotOrderByRole[role].map((slotName) => ({
+                            id: slotName,
+                            label: GEAR_SLOTS[slotName].label,
+                            badge: `${coverage.cells[role][slotName].count} · ${Math.round(
+                                coverage.cells[role][slotName].headroom * 100
+                            )}%`,
+                        })),
                     ];
 
                     return (
-                        <div key={role} className="space-y-4 card">
+                        <div key={role} id={`role-card-${role}`} className="space-y-4 card">
                             <h3 className="text-lg font-medium">{SHIP_TYPES[role].name}</h3>
                             <span className="text-sm text-theme-text-secondary">
                                 {SHIP_TYPES[role].description}
