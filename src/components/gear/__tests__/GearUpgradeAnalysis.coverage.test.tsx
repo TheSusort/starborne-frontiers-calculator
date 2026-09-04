@@ -98,7 +98,6 @@ function makeMatrix({
         cells,
         roleOrder,
         slotOrderByRole,
-        hasAnyGear: true,
     };
 }
 

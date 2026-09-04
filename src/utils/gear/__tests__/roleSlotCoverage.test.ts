@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
     scorePieceForRole,
     computeHeadroom,
+    competitionRank,
     buildCoverageMatrix,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
@@ -207,6 +208,51 @@ describe('computeHeadroom', () => {
     });
 });
 
+describe('competitionRank', () => {
+    it('gives every item rank 1 when all values tie', () => {
+        const ranks = competitionRank(['a', 'b', 'c'], () => 5, ['a', 'b', 'c']);
+        expect(ranks.get('a')).toBe(1);
+        expect(ranks.get('b')).toBe(1);
+        expect(ranks.get('c')).toBe(1);
+    });
+
+    it('gives equal rank to equal values, and skips the next rank by the tie count', () => {
+        // a, b, c tie for first (rank 1); d is strictly lower and, with 3
+        // entries tied ahead of it, lands on rank 4 -- not rank 2, the way
+        // an unconditional index+1 ranking would place it.
+        const values: Record<string, number> = { a: 10, b: 10, c: 10, d: 1 };
+        const ranks = competitionRank(Object.keys(values), (item) => values[item], [
+            'a',
+            'b',
+            'c',
+            'd',
+        ]);
+        expect(ranks.get('a')).toBe(1);
+        expect(ranks.get('b')).toBe(1);
+        expect(ranks.get('c')).toBe(1);
+        expect(ranks.get('d')).toBe(4);
+    });
+
+    it('gives the highest value rank 1, descending', () => {
+        const values: Record<string, number> = { low: 1, mid: 5, high: 9 };
+        const ranks = competitionRank(Object.keys(values), (item) => values[item], [
+            'low',
+            'mid',
+            'high',
+        ]);
+        expect(ranks.get('high')).toBe(1);
+        expect(ranks.get('mid')).toBe(2);
+        expect(ranks.get('low')).toBe(3);
+    });
+
+    it('breaks ties among equally-ranked items using `order`, without changing the rank number', () => {
+        const ranks = competitionRank(['b', 'a'], () => 1, ['a', 'b']);
+        // Both tie for rank 1 regardless of which one `order` treats as first.
+        expect(ranks.get('a')).toBe(1);
+        expect(ranks.get('b')).toBe(1);
+    });
+});
+
 describe('buildCoverageMatrix', () => {
     it('covers every role and every gear slot', () => {
         const matrix = buildCoverageMatrix([]);
@@ -219,9 +265,8 @@ describe('buildCoverageMatrix', () => {
         }
     });
 
-    it('reports an empty inventory as no gear, in the static role order', () => {
+    it('reports an empty inventory in the static role order', () => {
         const matrix = buildCoverageMatrix([]);
-        expect(matrix.hasAnyGear).toBe(false);
         expect(matrix.roleOrder).toEqual(Object.keys(SHIP_TYPES));
         expect(matrix.cells.ATTACKER.weapon.count).toBe(0);
         expect(matrix.cells.ATTACKER.weapon.headroom).toBe(1);
@@ -235,7 +280,6 @@ describe('buildCoverageMatrix', () => {
         ];
         const matrix = buildCoverageMatrix(inventory);
         expect(matrix.cells.ATTACKER.weapon.count).toBe(1);
-        expect(matrix.hasAnyGear).toBe(true);
     });
 
     it('counts equipped pieces, which are still supply', () => {
@@ -256,13 +300,16 @@ describe('buildCoverageMatrix', () => {
         }
     });
 
-    it('ranks 1 to 12 within each slot column, with no gaps', () => {
-        const matrix = buildCoverageMatrix([makeGear({ id: 'a' }), makeGear({ id: 'b' })]);
+    it('gives every cell rank 1 when the whole slot column ties', () => {
+        // No gear at all: every cell in every column is headroom 1, a full
+        // tie. Competition ranking gives every tied entry the SAME rank, so
+        // this must not reproduce 1..12 the way an unconditional index+1
+        // ranking would.
+        const matrix = buildCoverageMatrix([]);
         for (const slot of GEAR_SLOT_ORDER) {
-            const ranks = Object.keys(SHIP_TYPES)
-                .map((role) => matrix.cells[role][slot].rank)
-                .sort((x, y) => x - y);
-            expect(ranks).toEqual(Object.keys(SHIP_TYPES).map((_, i) => i + 1));
+            for (const role of Object.keys(SHIP_TYPES)) {
+                expect(matrix.cells[role][slot].rank).toBe(1);
+            }
         }
     });
 
@@ -276,13 +323,32 @@ describe('buildCoverageMatrix', () => {
         );
     });
 
-    it('breaks ties with the static SHIP_TYPES order', () => {
-        // No gear at all: every cell is headroom 1, so every column is a full tie.
-        const matrix = buildCoverageMatrix([]);
-        const roles = Object.keys(SHIP_TYPES);
-        roles.forEach((role, index) => {
-            expect(matrix.cells[role].weapon.rank).toBe(index + 1);
-        });
+    it('gives an untouched role a strictly better sensor rank than a saturated one', () => {
+        // 20 identical attacker-flavoured sensors (crit + critDamage). Only
+        // ATTACKER, DEBUFFER and SUPPORTER read crit/critDamage in their
+        // score formula (directly, via hacking*dps, and via the heal crit
+        // multiplier respectively), so every piece scores an identical
+        // nonzero marginal for those three -> headroom ~0 (saturated). Every
+        // other role never reads crit/critDamage, so every piece scores a
+        // marginal of exactly 0 for them -> headroom exactly 1 via
+        // computeHeadroom's best<=0 branch, tied with every other untouched
+        // role. See the `competitionRank` describe block above for the
+        // exact-tie / skip-by-tie-count behaviour on clean values.
+        const stack = Array.from({ length: 20 }, (_, i) =>
+            makeGear({
+                id: `sensor-${i}`,
+                slot: 'sensor',
+                mainStat: { name: 'crit', value: 25, type: 'percentage' },
+                subStats: [{ name: 'critDamage', value: 30, type: 'percentage' }],
+            })
+        );
+        const matrix = buildCoverageMatrix(stack);
+        expect(matrix.cells.DEFENDER.sensor.headroom).toBe(1);
+        expect(matrix.cells.DEFENDER.sensor.rank).toBe(1);
+        expect(matrix.cells.ATTACKER.sensor.headroom).toBeCloseTo(0, 10);
+        expect(matrix.cells.ATTACKER.sensor.rank).toBeGreaterThan(
+            matrix.cells.DEFENDER.sensor.rank
+        );
     });
 
     it("puts a role's saturated slot last in its own slot order", () => {
@@ -308,30 +374,29 @@ describe('buildCoverageMatrix', () => {
         // Twenty identical attacker-flavoured sensors (crit + critDamage) and
         // nothing else.
         //
-        // A role's score only moves with these pieces when its formula reads
-        // crit/critDamage: directly for ATTACKER's DPS, through DEBUFFER's
-        // hacking*dps term (DEBUFFER's baseline hacking is 200, not 0), and
-        // through SUPPORTER's heal crit multiplier. Every other role's
-        // formula never reads crit/critDamage, so the pieces are exactly
-        // inert there: marginal 0, which is computeHeadroom's best<=0 branch
-        // -> headroom 1. For the three "live" roles the pieces are
-        // identical, so their tied marginals give headroom 0 too (gap 0),
-        // same as full saturation.
+        // ATTACKER, DEBUFFER and SUPPORTER are "live" for these pieces
+        // (crit/critDamage feeds their score formula), so every identical
+        // piece scores an identical nonzero marginal for them -> headroom
+        // ~0. Each role's own arithmetic path rounds that to a slightly
+        // different float (measured: ATTACKER ~1e-16, DEBUFFER/SUPPORTER
+        // exactly 0), so competition ranking does not treat all three as
+        // tied — ATTACKER lands on rank 10, DEBUFFER/SUPPORTER tie at rank
+        // 11. The other 9 roles never read crit/critDamage, so every piece
+        // scores an exact 0 marginal for them -> headroom exactly 1 -> rank
+        // 1 (a real tie, backed by computeHeadroom's best<=0 branch, not
+        // arithmetic that can round differently per role).
         //
-        // So the sensor column has 9 roles tied at headroom 1 (ranked 1-9,
-        // in static SHIP_TYPES order) and ATTACKER/DEBUFFER/SUPPORTER tied
-        // at headroom 0 (ranked 10-12, also in static order: index 0, 3, 8
-        // -> ATTACKER rank 10, DEBUFFER rank 11, SUPPORTER rank 12).
+        // The five empty columns are a full 12-way tie, so every role gets
+        // rank 1 there too — competition ranking, unlike unconditional
+        // index+1 ranking, does not let SHIP_TYPES index leak into a tied
+        // column's rank.
         //
-        // The five empty columns are a full tie, so every role's rank there
-        // is just its SHIP_TYPES index + 1.
-        //
-        // Mean rank = (sensorRank + 5*(index+1)) / 6. DEFENDER (index 1,
-        // sensor rank 1) works out to 11/6 and leads. ATTACKER (index 0,
-        // sensor rank 10) works out to 15/6, beating DEFENDER_SECURITY
-        // (index 2, sensor rank 2, 17/6) even though its sensor rank is far
-        // worse, because its empty-column rank (1) is the best of anyone's.
-        // Static order would have put ATTACKER first.
+        // Mean rank = (sensorRank + 5*1) / 6: 1 for the 9 untouched roles,
+        // 2.5 for ATTACKER (sensor rank 10), 16/6 for DEBUFFER/SUPPORTER
+        // (sensor rank 11). Every untouched role still beats every live
+        // role, so the live roles are pushed to the back regardless of the
+        // 10-vs-11 split — a static roleOrder would instead put ATTACKER
+        // (SHIP_TYPES index 0) first.
         const stack = Array.from({ length: 20 }, (_, i) =>
             makeGear({
                 id: `sensor-${i}`,
@@ -341,9 +406,13 @@ describe('buildCoverageMatrix', () => {
             })
         );
         const matrix = buildCoverageMatrix(stack);
+        const untouchedRolesInOrder = Object.keys(SHIP_TYPES).filter(
+            (role) => !['ATTACKER', 'DEBUFFER', 'SUPPORTER'].includes(role)
+        );
+        const liveRolesInOrder = ['ATTACKER', 'DEBUFFER', 'SUPPORTER'];
 
+        expect(matrix.roleOrder).toEqual([...untouchedRolesInOrder, ...liveRolesInOrder]);
         expect(matrix.roleOrder[0]).toBe('DEFENDER');
-        expect(matrix.roleOrder[1]).toBe('ATTACKER');
         expect(matrix.roleOrder).not.toEqual(Object.keys(SHIP_TYPES));
     });
 

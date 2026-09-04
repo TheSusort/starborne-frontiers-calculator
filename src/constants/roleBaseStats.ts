@@ -5,9 +5,8 @@ import type { ShipTypeName } from './shipTypes';
  * Role-specific base stats representing typical ship base stats (before gear).
  * Midpoints of known ranges, so percentage gear stats are weighted correctly.
  *
- * Lives here, in a leaf module, so the slow potential path, the fast potential
- * path and role/slot coverage all read one table. Importing this from anywhere
- * is safe: it depends on nothing but types.
+ * Lives here, in a leaf module, so any path can import it. Importing this
+ * from anywhere is safe: it depends on nothing but types.
  */
 export const ROLE_BASE_STATS = {
     ATTACKER: {

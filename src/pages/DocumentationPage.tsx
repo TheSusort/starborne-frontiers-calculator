@@ -1015,9 +1015,9 @@ const DocumentationPage: React.FC = () => {
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
                                         A coverage grid at the top shows how many level 16 pieces
-                                        you own for each role and gear slot, and how much farming
-                                        headroom is left. It reads your inventory directly, so it is
-                                        there before you run an analysis
+                                        you own for each gear slot, and how much farming headroom is
+                                        left. It reads your inventory directly, so it is there
+                                        before you run an analysis
                                     </li>
                                     <li>
                                         <strong>Headroom</strong> compares your best piece for that

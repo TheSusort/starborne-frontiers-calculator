@@ -56,6 +56,10 @@ export const GearCoverageGrid: React.FC<Props> = ({ matrix, onCellClick }) => {
                     High percentages are worth farming; low ones are already saturated.
                 </span>
             </div>
+            <div className="text-xs text-theme-text-secondary">
+                Colour ranks each slot column: reddest has the most headroom in that column,
+                greenest is the most saturated.
+            </div>
 
             <div className="overflow-x-auto">
                 <div
