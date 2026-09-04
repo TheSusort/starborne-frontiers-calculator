@@ -2667,14 +2667,24 @@ const DocumentationPage: React.FC = () => {
                                         Thresh, Tithonus) are now modeled as a dedicated Buff Steal
                                         ability in the editor. In a positioned battle the caster
                                         removes the newest buff from its target and takes it for
-                                        itself, keeping that buff&apos;s remaining duration &mdash;
-                                        buffs the target can&apos;t lose (like Protection) are
-                                        skipped. Tithonus&apos; charged skill also grants the stolen
-                                        buff to every adjacent ally, and steals before its own purge
-                                        resolves, so it takes the newest buff before the purge
-                                        strips the rest. Works for both teams. In the single-target
-                                        DPS calculator there is no target holding buffs to steal, so
-                                        the ability is inert and does not change DPS.
+                                        itself, keeping that buff&apos;s remaining duration.
+                                        Protection is stealable too, but only ONE STACK at a time
+                                        and only once the target has no ordinary buff left to take
+                                        &mdash; the thief then genuinely protects its own allies
+                                        with that stack. Tithonus&apos; charged skill also grants
+                                        the stolen buff to every adjacent ally, and steals before
+                                        its own purge resolves, so it takes the newest buff before
+                                        the purge strips the rest. Meatshield&apos;s charged skill
+                                        is a different shape: it steals Protection back until he is
+                                        at 3 stacks, taking only the shortfall and leaving the rest.
+                                        His skill targets himself, so it looks across the board for
+                                        a holder &mdash; when several enemies hold Protection it
+                                        picks the one furthest to the top and back, the same board
+                                        ordering that breaks a speed tie, and the whole shortfall
+                                        comes from that one ship. Works for both teams. In the
+                                        single-target DPS calculator there is no target holding
+                                        buffs to steal, so the ability is inert and does not change
+                                        DPS.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Shields:</span> Shields build

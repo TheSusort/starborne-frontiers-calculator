@@ -1345,6 +1345,40 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         s.stacks = live - 1;
     };
 
+    // Per-owner signed stack ledger — see the interface doc for why this is a delta and not a
+    // mutation of the registered payload.
+    const stackAdjustments = new Map<string, Map<string, number>>();
+    const adjustSelfBuffStacks = (ownerId: string, buffName: string, delta: number): void => {
+        if (delta === 0) return;
+        let byName = stackAdjustments.get(ownerId);
+        if (!byName) {
+            byName = new Map<string, number>();
+            stackAdjustments.set(ownerId, byName);
+        }
+        byName.set(buffName, (byName.get(buffName) ?? 0) + delta);
+    };
+    const selfBuffStackAdjustment = (ownerId: string, buffName: string): number =>
+        stackAdjustments.get(ownerId)?.get(buffName) ?? 0;
+
+    /** Move ONE stack of `buffName` off `sourceId` and onto EVERY id in `recipientIds`.
+     *
+     *  ⚠️ STACKS ARE NOT CONSERVED through a `grantAdjacentAllies` steal, and that is a RULING,
+     *  not a leftover. Asked with the concrete case (Tithonus steals from a Meatshield holding 3
+     *  and grants "to self and all adjacent allies", 2 allies present) the owner ruled
+     *  2026-09-03: the source loses ONE and Tithonus's side gains ONE EACH. It duplicates exactly
+     *  as the timed transfer does, and a stack being a countable resource does not change it. Do
+     *  not "fix" this into a conserving transfer — `protectionSteal.integration.test.ts`'s
+     *  fan-out case pins it.
+     *
+     *  Both stack-moving paths (the generic steal's stack budget and the named `stealStacks`) go
+     *  through here, so the fan-out rule cannot drift between them. */
+    const moveOneStack = (sourceId: string, recipientIds: string[], buffName: string): void => {
+        adjustSelfBuffStacks(sourceId, buffName, -1);
+        for (const recipientId of recipientIds) {
+            adjustSelfBuffStacks(recipientId, buffName, +1);
+        }
+    };
+
     /** Remove a named buff family from ALL of `actorId`'s self stores. The three self-side
      *  doors a buff can arrive through each use a different key:
      *   - timed `selfMaps` are keyed by `deriveFamilyKey(buffName).familyKey`,
@@ -1367,6 +1401,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             accum.appliedSeq = undefined;
         }
         persistentSelfMaps.get(actorId)?.delete(buffName);
+        // The stolen-stack DELTA goes with the stacks it adjusts. It exists to bend a count the
+        // stores cannot express, so it is only meaningful while that count is standing: leaving a
+        // −1 behind after the entry is zeroed taxes the next re-accrual (Lionheart re-grants his
+        // full 10 at the top of the round and would read 9), and leaving a +1 behind would let a
+        // thief keep a stack that was wiped along with everything else it held.
+        stackAdjustments.get(actorId)?.delete(buffName);
     };
 
     /** Spend one hit charge of a hit-counted self-side status. See the interface doc: the return
@@ -1588,21 +1628,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  recipient already holds a stronger/longer version of the same buff family. Returns the
      *  buff names actually removed from the source (grants are best-effort per recipient and do
      *  not affect this return value). Unknown sourceId / nothing eligible → []. */
-    // Per-owner signed stack ledger — see the interface doc for why this is a delta and not a
-    // mutation of the registered payload.
-    const stackAdjustments = new Map<string, Map<string, number>>();
-    const adjustSelfBuffStacks = (ownerId: string, buffName: string, delta: number): void => {
-        if (delta === 0) return;
-        let byName = stackAdjustments.get(ownerId);
-        if (!byName) {
-            byName = new Map<string, number>();
-            stackAdjustments.set(ownerId, byName);
-        }
-        byName.set(buffName, (byName.get(buffName) ?? 0) + delta);
-    };
-    const selfBuffStackAdjustment = (ownerId: string, buffName: string): number =>
-        stackAdjustments.get(ownerId)?.get(buffName) ?? 0;
-
     const steal = (
         sourceId: string,
         recipientIds: string[],
@@ -1693,20 +1718,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 if (!STACK_STEALABLE_STATUSES.has(buffName)) continue;
                 let available = Math.max(0, Math.floor(held));
                 while (available > 0 && stolenStacks.length < stackBudget) {
-                    // ONE stack leaves the source per stack stolen, but EVERY recipient gains one.
-                    //
-                    // ⚠️ STACKS ARE THEREFORE NOT CONSERVED through a `grantAdjacentAllies` steal,
-                    // and that is a RULING, not a leftover. Asked with the concrete case (Tithonus
-                    // steals from a Meatshield holding 3 and grants "to self and all adjacent
-                    // allies", 2 allies present) the owner ruled 2026-09-03: the source loses ONE
-                    // and Tithonus's side gains ONE EACH. It duplicates exactly as the timed
-                    // transfer above does, and a stack being a countable resource does not change
-                    // it. Do not "fix" this into a conserving transfer — pinned by
-                    // `protectionSteal.integration.test.ts`'s fan-out case.
-                    adjustSelfBuffStacks(sourceId, buffName, -1);
-                    for (const recipientId of recipientIds) {
-                        adjustSelfBuffStacks(recipientId, buffName, +1);
-                    }
+                    // ONE stack leaves the source per stack stolen, but EVERY recipient gains one
+                    // — read `moveOneStack`'s doc for the ruling behind that asymmetry.
+                    moveOneStack(sourceId, recipientIds, buffName);
                     available--;
                     stolenStacks.push(buffName);
                 }
@@ -1716,8 +1730,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     };
 
     // The named-only stack transfer — see the interface doc for why this is NOT `steal` with a
-    // flag. Shares `moveOneStack`'s accounting with the generic path so the fan-out and
-    // conservation rules cannot drift between the two.
+    // flag. Routes every stack through `moveOneStack`, the same helper the generic path's stack
+    // budget uses, so the fan-out rule cannot drift between the two.
     const stealStacks = (
         sourceId: string,
         recipientIds: string[],
@@ -1728,12 +1742,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         if (!STACK_STEALABLE_STATUSES.has(buffName)) return 0;
         const movable = Math.min(Math.floor(count), Math.floor(heldAtSource));
         if (!Number.isFinite(movable) || movable <= 0) return 0;
-        for (let i = 0; i < movable; i++) {
-            adjustSelfBuffStacks(sourceId, buffName, -1);
-            for (const recipientId of recipientIds) {
-                adjustSelfBuffStacks(recipientId, buffName, +1);
-            }
-        }
+        for (let i = 0; i < movable; i++) moveOneStack(sourceId, recipientIds, buffName);
         return movable;
     };
 
