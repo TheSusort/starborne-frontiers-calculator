@@ -125,7 +125,19 @@ When building or changing user-facing features, update `src/pages/DocumentationP
 
 ### Changelog Entries
 
-The project uses a weekly release cycle. Features ship continuously but changelog entries are batched. When making a `feat:` or `fix:` commit for something user-facing, add a plain-English description to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
+The project uses a weekly release cycle. Features ship continuously but changelog entries are batched. When making a `feat:` or `fix:` commit for something user-facing, add an entry to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
+
+**Entries are SHORT: an area prefix plus 8–12 words.** `Combat simulator: Asphyxiator's crit-landed debuffs now last one turn longer.` Name what changed and who notices it; the reader is a player skimming a release, not an engineer reviewing the fix.
+
+Do not write:
+
+- **A worked example with numbers.** "a 5,000 hit converted over 3 rounds shows up as roughly 1,670 in each of the next three rounds" — the player will see the number in game.
+- **The before state, beyond the word "now".** "It used to reach the whole team, so an ally on the far side of the board was scored with a buff it never gets." The fix is the news; the bug is not.
+- **Knock-on consequences.** "Because his debuffs now stay on the board longer, his charged skill's Stasis clause starts firing in fights where it previously never came up."
+- **Scope caveats and exclusions.** "Repair-over-time ticks are still not repairs for any of this."
+- **Mechanism.** Which field, which axis, which call site. That belongs in the commit body.
+
+One entry per user-visible change. If a PR changes three things a player would notice separately, write three entries rather than one long one — compactness is per entry, and merging them into a paragraph is what this rule exists to prevent.
 
 ### Code Comments
 
