@@ -3333,8 +3333,13 @@ function passesMaxPerRoundGate(intent: Intent, ctx: IntentExecContext): boolean 
  * skip — NOT a resist (a condition-gated skip mirrors the cast path's "application
  * skipped" semantics; no resisted record is produced).
  */
-/** The CombatEvent `type` tags whose variant intersects ReactiveStamp (events.ts). */
-type StampedEventType =
+/** The CombatEvent `type` tags whose variant intersects ReactiveStamp (events.ts). Exported
+ *  solely so `stampedEventTypeCensus.test.ts` can compile-time-check this list against the
+ *  CombatEvent union itself — see that file for how the check works and why it cannot be
+ *  expressed as a plain runtime assertion (ReactiveStamp's fields are all optional, so
+ *  `Extract<CombatEvent, ReactiveStamp>` structurally matches every variant regardless of
+ *  whether it was actually intersected with `& ReactiveStamp`). */
+export type StampedEventType =
     | 'ability-performed'
     | 'charge-changed'
     | 'heal-performed'
@@ -3351,9 +3356,30 @@ type StampedEventType =
     | 'cleanse-performed'
     | 'purge-performed'
     | 'ship-destroyed'
-    | 'cheat-death-activated';
+    | 'cheat-death-activated'
+    | 'steal-performed'
+    | 'shield-stripped'
+    | 'corrosion-spread'
+    | 'shield-destroyed'
+    | 'shield-destroyed-log'
+    | 'shield-applied-log'
+    | 'cheat-death-log'
+    | 'reversed-repair-log';
 
-const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>([
+/** Forces the array literal passed to it to contain every member of `T` exactly once — a
+ *  missing or duplicated tag is a compile error, not a silent gap. Standard TS
+ *  exhaustive-tuple idiom: `U extends T[]` keeps every element a valid `T`; the conditional
+ *  collapses the parameter to `never` (so no literal type-checks against it) unless `U`'s own
+ *  members already cover the whole of `T`. */
+function exhaustiveArrayOf<T extends string>() {
+    return function <U extends readonly T[]>(
+        array: U & ([T] extends [U[number]] ? unknown : never)
+    ): U {
+        return array;
+    };
+}
+
+const REACTIVE_STAMPED_EVENT_TYPE_LIST = exhaustiveArrayOf<StampedEventType>()([
     'ability-performed',
     'heal-performed',
     'shield-applied',
@@ -3385,7 +3411,29 @@ const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<Stamp
     'reactive-damage-performed',
     'reactive-heal-performed',
     'reactive-cleanse-performed',
+    // Census sweep (#466 follow-up, stampedEventTypeCensus.test.ts): the remaining
+    // CombatEvent variants that intersect ReactiveStamp per events.ts but were missing from
+    // this list. 'steal-performed' is the one PR #466 shipped without adding here (its own
+    // events.ts doc already promised "Carries ReactiveStamp anyway so a future reactive
+    // EMITTER nests correctly"); the rest predate it. None of these currently emit through
+    // `ctx.bus` inside `executeIntent` below — their production emit sites (playerTurn.ts,
+    // engine.ts, lethalHp.ts) all close over the engine's raw, unwrapped bus, so today's
+    // combat log is unaffected either way. They are added so this list keeps its own
+    // contract (every ReactiveStamp-intersecting tag is here) rather than only the ones a
+    // reactive path happens to reach yet.
+    'steal-performed',
+    'shield-stripped',
+    'corrosion-spread',
+    'shield-destroyed',
+    'shield-destroyed-log',
+    'shield-applied-log',
+    'cheat-death-log',
+    'reversed-repair-log',
 ]);
+
+const REACTIVE_STAMPED_EVENT_TYPES: ReadonlySet<CombatEventType> = new Set<StampedEventType>(
+    REACTIVE_STAMPED_EVENT_TYPE_LIST
+);
 
 /** Wrap a bus so every reactive-capable event emitted through it is branded with
  *  `reactive:true` + `duringTurnOf` + `triggerActorId`. Used ONLY for the lifetime of a single
