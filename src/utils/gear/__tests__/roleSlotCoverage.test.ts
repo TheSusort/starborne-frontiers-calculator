@@ -3,6 +3,7 @@ import {
     scorePieceForRole,
     computePriority,
     competitionRank,
+    TIE_EPSILON,
     buildCoverageMatrix,
     mainStatTypesForSlot,
     getIdealMarginal,
@@ -492,6 +493,25 @@ describe('competitionRank', () => {
         const ranks = competitionRank(Object.keys(values), (item) => values[item], ['a', 'b']);
         expect(ranks.get('b')).toBe(1);
         expect(ranks.get('a')).toBe(2);
+    });
+
+    it('does not let a chain of sub-epsilon steps merge the highest and lowest values', () => {
+        // Ranking sorts by descending value, so the tie group opens at c
+        // (the largest) and extends to b (within TIE_EPSILON of c) -- but a
+        // is 1.5 * TIE_EPSILON below c, more than the allowed gap. Comparing
+        // each item only against its immediate predecessor would chain all
+        // three into one tie group (a is also within TIE_EPSILON of b);
+        // comparing against the value that opened the group keeps a out of
+        // it once it drifts past the epsilon from c.
+        const values: Record<string, number> = {
+            a: 5,
+            b: 5 + 0.75 * TIE_EPSILON,
+            c: 5 + 1.5 * TIE_EPSILON,
+        };
+        const ranks = competitionRank(Object.keys(values), (item) => values[item], ['a', 'b', 'c']);
+        expect(ranks.get('c')).toBe(1);
+        expect(ranks.get('b')).toBe(1);
+        expect(ranks.get('a')).toBe(3);
     });
 });
 
@@ -989,7 +1009,9 @@ describe('the ideal is a true ceiling', () => {
         // A companion to the direct assertion above: this exercises the
         // PRODUCTION path (buildCoverageMatrix -> computePriority), so a
         // regression shows up as a thrown tripwire here even if the direct
-        // ceiling assertion above were somehow bypassed.
+        // ceiling assertion above were somehow bypassed. Same order of
+        // work as that test, so it gets the same explicit timeout rather
+        // than relying on the default.
         for (const slot of GEAR_SLOT_ORDER) {
             const pieces = (piecesBySlot.get(slot) ?? []).map((piece, i) => ({
                 ...piece,
@@ -997,7 +1019,7 @@ describe('the ideal is a true ceiling', () => {
             }));
             expect(() => buildCoverageMatrix(pieces)).not.toThrow();
         }
-    });
+    }, 20000);
 });
 
 describe('cold ideal-piece build performance', () => {

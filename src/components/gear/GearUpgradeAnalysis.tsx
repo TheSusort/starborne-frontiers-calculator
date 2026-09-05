@@ -115,6 +115,20 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         [inventory, coverageSampleSize]
     );
 
+    // The grid's own roleOrder, restricted to shipRoles: coverage.roleOrder
+    // spans every SHIP_TYPES role, but shipRoles may be a caller-supplied
+    // subset with no role card at all. A grid row for a role with no
+    // `role-card-<role>` would update selectedSlots on click and then find
+    // nothing to scroll to. Filters, never reorders, so this still matches
+    // the role-card ordering built from the same `coverage.roleOrder`.
+    const visibleCoverage = useMemo(
+        () => ({
+            ...coverage,
+            roleOrder: coverage.roleOrder.filter((role) => shipRoles.includes(role)),
+        }),
+        [coverage, shipRoles]
+    );
+
     // Create engineering stats lookup function
     const getEngineeringStatsForShipType = useMemo(
         () =>
@@ -797,7 +811,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
             {mode === 'analysis' && (
                 <GearCoverageGrid
-                    matrix={coverage}
+                    matrix={visibleCoverage}
                     sampleSize={coverageSampleSize}
                     onSampleSizeChange={setCoverageSampleSize}
                     onCellClick={(role, slot) => {
@@ -854,6 +868,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                     )}%`}
                                 </span>
                             ),
+                            badgeDescription: `${coverage.cells[role][slotName].count} pieces owned at level 16, ${Math.round(coverage.cells[role][slotName].priority * 100)} percent levelling priority`,
                         })),
                     ];
 

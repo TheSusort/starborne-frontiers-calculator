@@ -313,4 +313,55 @@ describe('GearUpgradeAnalysis coverage grid', () => {
         // received and never used.
         expect(buildCoverageMatrixMock).toHaveBeenLastCalledWith([], 100);
     });
+
+    it('only shows grid rows for roles in shipRoles, preserving coverage order', async () => {
+        // The matrix covers three roles (SUPPORTER included), but shipRoles
+        // names only two of them. A grid row with no corresponding
+        // `role-card-<role>` would update selectedSlots on click and then
+        // find nothing to scroll to, so SUPPORTER must not render a row --
+        // and ATTACKER/DEFENDER must keep the matrix's own roleOrder.
+        const base = makeMatrix({
+            roleOrder: ['ATTACKER', 'DEFENDER'],
+            slotOrderByRole: {
+                ATTACKER: [...GEAR_SLOT_NAMES],
+                DEFENDER: [...GEAR_SLOT_NAMES],
+            },
+            weaponCount: 5,
+            weaponPriority: 0.42,
+        });
+        const threeRoleMatrix = {
+            cells: {
+                ...base.cells,
+                SUPPORTER: Object.fromEntries(
+                    GEAR_SLOT_NAMES.map((slot) => [
+                        slot,
+                        { role: 'SUPPORTER', slot, count: 1, priority: 0.1, rank: 1 },
+                    ])
+                ),
+            },
+            roleOrder: ['ATTACKER', 'SUPPORTER', 'DEFENDER'],
+            slotOrderByRole: {
+                ...base.slotOrderByRole,
+                SUPPORTER: [...GEAR_SLOT_NAMES],
+            },
+        } as unknown as CoverageMatrix;
+        buildCoverageMatrixMock.mockReturnValue(threeRoleMatrix);
+
+        render(
+            <GearUpgradeAnalysis
+                inventory={[]}
+                shipRoles={['ATTACKER', 'DEFENDER']}
+                mode="analysis"
+            />
+        );
+
+        await act(async () => {
+            await vi.runAllTimersAsync();
+        });
+
+        expect(screen.getByTestId('coverage-role-ATTACKER')).toBeInTheDocument();
+        expect(screen.getByTestId('coverage-role-DEFENDER')).toBeInTheDocument();
+        expect(screen.queryByTestId('coverage-role-SUPPORTER')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('coverage-cell-SUPPORTER-weapon')).not.toBeInTheDocument();
+    });
 });

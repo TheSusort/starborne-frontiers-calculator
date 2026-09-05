@@ -596,6 +596,12 @@ export const TIE_EPSILON = 1e-9;
  * items tied ahead of it. Highest `value` gets rank 1. `order` only decides
  * which equal-valued item is treated as "first" while building the ranking —
  * it never changes a rank number.
+ *
+ * Each item is compared against the value that opened its tie group, not its
+ * immediate predecessor — comparing only pairwise-adjacent items lets a run
+ * of small steps chain past `TIE_EPSILON` (e.g. `5`, `5 + 0.75 * TIE_EPSILON`,
+ * `5 + 1.5 * TIE_EPSILON` would all merge into one rank even though the first
+ * and last differ by more than the epsilon).
  */
 export function competitionRank<T>(
     items: readonly T[],
@@ -604,11 +610,14 @@ export function competitionRank<T>(
 ): Map<T, number> {
     const sorted = [...items].sort(compareByThenOrder((item) => -value(item), order));
     const ranks = new Map<T, number>();
+    let groupStart: T | undefined;
     sorted.forEach((item, index) => {
-        const previous = sorted[index - 1];
-        const tiedWithPrevious =
-            previous !== undefined && Math.abs(value(previous) - value(item)) <= TIE_EPSILON;
-        ranks.set(item, tiedWithPrevious ? (ranks.get(previous) as number) : index + 1);
+        const tiedWithGroupStart =
+            groupStart !== undefined && Math.abs(value(groupStart) - value(item)) <= TIE_EPSILON;
+        if (!tiedWithGroupStart) {
+            groupStart = item;
+        }
+        ranks.set(item, tiedWithGroupStart ? (ranks.get(groupStart as T) as number) : index + 1);
     });
     return ranks;
 }
