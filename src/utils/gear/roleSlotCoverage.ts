@@ -175,16 +175,20 @@ const LEGENDARY_SUBSTAT_SLOTS = UPGRADE_LEVELS.legendary.initialSubstats;
 const LEGENDARY_SUBSTAT_INCREASES = UPGRADE_LEVELS.legendary.increases.length;
 
 /**
- * Does adding a large amount of `name` (any legal type) to `role`'s bare
- * baseline (no main stat, no set, no other substats) change its role score
- * at all? Every real stat block a piece can ever produce is `baseline` plus
- * a sum of non-negative additions (main stat, set share, substats — see
- * `addStat`/`scorePieceForRole`), and every `calculateRoleScore` formula is
- * non-decreasing in every stat name it reads (more attack/crit/hacking/...
- * never lowers a role's score). So a name that cannot move the score off
- * the bare floor cannot move it off any RICHER prefix either — this probe
- * at the floor is safe to reuse for every (mainStat, set) combination a
- * search considers, not just the one it happened to run against.
+ * Is `name` PREFERRED for `role`: does adding a large amount of it (any legal
+ * type) to `role`'s bare baseline (no main stat, no set, no other substats)
+ * change its role score by more than a small epsilon (`1e-9`)? This is the
+ * derived stand-in for a hardcoded preferred-stats table (do not add one —
+ * `DESIRED_STATS` in `gearSuggestions.ts` covers only a subset of `ShipTypeName`
+ * and would silently mis-rank every role it omits): every real stat block a piece can ever
+ * produce is `baseline` plus a sum of non-negative additions (main stat, set
+ * share, substats — see `addStat`/`scorePieceForRole`), and every
+ * `calculateRoleScore` formula is non-decreasing in every stat name it reads
+ * (more attack/crit/hacking/... never lowers a role's score). So a name that
+ * cannot move the score off the bare floor cannot move it off any RICHER
+ * prefix either — this probe at the floor is safe to reuse for every
+ * (mainStat, set) combination a search considers, not just the one it
+ * happened to run against.
  *
  * The probe amount is the largest a single legendary substat slot can ever
  * reach: `(1 + LEGENDARY_SUBSTAT_INCREASES)` times its single-roll max, the
@@ -204,12 +208,13 @@ function isNameLiveForRole(role: ShipTypeName, name: StatName): boolean {
 }
 
 /**
- * Per-role: every `SUBSTAT_RANGES` name that can possibly move this role's
- * score — see `isNameLiveForRole`. This is what keeps the substat
- * combination search small: a role formula reads only a handful of stat
- * names (e.g. ATTACKER: attack/crit/critDamage), so most of the 8 substat
- * names are dead weight for it and never need to enter the combination
- * search at all.
+ * Per-role: every PREFERRED `SUBSTAT_RANGES` name — see `isNameLiveForRole`.
+ * This is what keeps the substat combination search small (a role formula
+ * reads only a handful of stat names, e.g. ATTACKER: attack/crit/critDamage,
+ * so most of the 8 substat names are dead weight for it and never need to
+ * enter the combination search at all) AND, since `computeIdealSubstats`,
+ * what the MEAN half of the ceiling is averaged over: only allocations built
+ * from these names count as "every roll in a preferred stat".
  */
 const liveSubstatNamesByRole = new Map<ShipTypeName, Set<StatName>>();
 
@@ -226,7 +231,8 @@ function liveSubstatNamesFor(role: ShipTypeName): Set<StatName> {
 }
 
 /**
- * Every (name, type) pair legal as a substat for `role`, excluding only the
+ * Every (name, type) PREFERRED pair legal as a substat for `role` — see
+ * `isNameLiveForRole` for what "preferred" means — excluding only the
  * piece's own main stat (name, type) — the exact rule `GearPieceForm`
  * enforces (`excludedStats={[{ name: mainStat.name, type: mainStat.type }]}`).
  * The OTHER type variant of the main stat's own name stays selectable: an
@@ -320,34 +326,63 @@ function idealSetCandidatesFor(role: ShipTypeName): (GearSetName | null)[] {
 }
 
 /**
- * The highest-scoring legal level-16, 6-star legendary substat block for
- * `role`, given the slot's chosen `mainStat` and `setBonus`.
+ * The exhaustive level-16, 6-star legendary substat search for `role`, given
+ * the slot's chosen `mainStat` and `setBonus`: both the MAX-scoring
+ * allocation (`maxStats`/`maxScore` — the true ceiling, used only as
+ * `computePriority`'s true-impossibility guard) and the MEAN score
+ * (`meanScore`) over every allocation this search considers.
+ *
+ * The mean, not the max, is what `getIdealMarginal` divides by. A single
+ * fixed best-in-slot composition adjudicates a trade-off (e.g. crit rate vs.
+ * crit damage) that this per-slot search has no visibility into: which one
+ * is actually best depends on what the OTHER five gear pieces and five
+ * implants already supply (a crit-rate roll is worth a lot 20 points short
+ * of the 100 crit cap and worth nothing once capped) — see #473. Averaging
+ * over every allocation this search tries treats every one of those
+ * trade-offs as equally live, rather than picking a winner the model has no
+ * basis to pick. A real piece scoring above the mean is normal, not a
+ * defect — only the max, a true ceiling, can never legally be beaten.
  *
  * Exhaustive over live pairs, not greedy: every `slotCount`-combination of
- * `candidateSubstatPairs` (already pruned to names that can move `role`'s
- * score, and capped at `LEGENDARY_SUBSTAT_SLOTS`), crossed with every way to
- * distribute `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls across those slots,
- * is assembled into a full piece (carrying `setBonus`, credited at its
- * amortised share via `scorePieceForRole`) and scored; the maximum is kept.
- * A greedy per-slot assignment is not provably exact here — several role
- * formulas read crit x critDamage or an effective-HP product, so a roll's
- * marginal value on one slot depends on what already sits in the others,
- * including what the set bonus already contributes; only the DEAD-pair
- * pruning above is provably order-independent (see `isNameLiveForRole`).
+ * `candidateSubstatPairs` (already pruned to PREFERRED pairs — (name, type)
+ * candidates that measurably move `role`'s score off its baseline, see
+ * `isNameLiveForRole` — and capped at `LEGENDARY_SUBSTAT_SLOTS`), crossed
+ * with every way to distribute `LEGENDARY_SUBSTAT_INCREASES` upgrade rolls
+ * across those slots, is assembled into a full piece (carrying `setBonus`,
+ * credited at its amortised share via `scorePieceForRole`) and scored; both
+ * the maximum and the running mean are kept from this SAME pass, so the mean
+ * costs nothing extra to compute and the search never runs twice. A greedy
+ * per-slot assignment is not provably exact here — several role formulas
+ * read crit x critDamage or an effective-HP product, so a roll's marginal
+ * value on one slot depends on what already sits in the others, including
+ * what the set bonus already contributes; only the DEAD-pair pruning above
+ * is provably order-independent (see `isNameLiveForRole`).
  * `roleSlotCoverage.test.ts`'s "the ideal is a true ceiling" property test is
  * what would catch a shortfall against a legal piece this search failed to
- * try.
+ * try (checked against `maxScore`, the only quantity a real piece can never
+ * legally exceed).
+ *
+ * A role with fewer than `LEGENDARY_SUBSTAT_SLOTS` preferred pairs (e.g.
+ * `calculateCorrosionDebufferScore` reads `hacking` alone) still describes a
+ * real piece, which always carries exactly `LEGENDARY_SUBSTAT_SLOTS`
+ * substats: `slotCount = min(pairs.length, LEGENDARY_SUBSTAT_SLOTS)` fills
+ * only the preferred slots and leaves the remainder unfilled here, because
+ * ANY non-preferred filler substat scores identically — 0 marginal, by
+ * definition of "preferred" (see `candidateSubstatPairs`). Both the mean and
+ * the max are computed over this same reduced search, so neither is diluted
+ * by having to pick which dead pair fills the leftover slot(s).
  */
 function computeIdealSubstats(
     role: ShipTypeName,
     mainStat: Stat | null,
     setBonus: GearSetName | null
-): { stats: Stat[]; score: number } {
+): { maxStats: Stat[]; maxScore: number; meanScore: number } {
     const pairs = candidateSubstatPairs(role, mainStat);
 
     // Fewer live pairs than substat slots: every slot is dead filler (see
     // `candidateSubstatPairs`), so the score is just the bare main
-    // stat + set piece — no combination or roll search needed.
+    // stat + set piece — no combination or roll search needed, and mean
+    // trivially equals max (there is only one allocation to average).
     if (pairs.length === 0) {
         const piece: GearPiece = {
             id: 'ideal-candidate',
@@ -359,14 +394,18 @@ function computeIdealSubstats(
             subStats: [],
             setBonus,
         };
-        return { stats: [], score: scorePieceForRole(piece, role) };
+        const score = scorePieceForRole(piece, role);
+        return { maxStats: [], maxScore: score, meanScore: score };
     }
 
     const slotCount = Math.min(pairs.length, LEGENDARY_SUBSTAT_SLOTS);
     const combos = combinations(pairs, slotCount);
     const rollDistributions = distributeRolls(LEGENDARY_SUBSTAT_INCREASES, slotCount);
 
-    let best: { stats: Stat[]; score: number } | null = null;
+    let maxStats: Stat[] = [];
+    let maxScore = -Infinity;
+    let sum = 0;
+    let count = 0;
     for (const combo of combos) {
         for (const rolls of rollDistributions) {
             const stats = combo.map((pair, i) => {
@@ -384,10 +423,15 @@ function computeIdealSubstats(
                 setBonus,
             };
             const score = scorePieceForRole(piece, role);
-            if (!best || score > best.score) best = { stats, score };
+            if (score > maxScore) {
+                maxScore = score;
+                maxStats = stats;
+            }
+            sum += score;
+            count += 1;
         }
     }
-    return best ?? { stats: [], score: 0 };
+    return { maxStats, maxScore, meanScore: count > 0 ? sum / count : 0 };
 }
 
 /**
@@ -397,13 +441,16 @@ function computeIdealSubstats(
  * `attack` percentage is legal on sensor, software AND thrusters) and would
  * otherwise re-run this exhaustive search once per slot that offers it.
  */
-const idealSubstatsCache = new Map<string, { stats: Stat[]; score: number }>();
+const idealSubstatsCache = new Map<
+    string,
+    { maxStats: Stat[]; maxScore: number; meanScore: number }
+>();
 
 function pickIdealSubstats(
     role: ShipTypeName,
     mainStat: Stat | null,
     setBonus: GearSetName | null
-): { stats: Stat[]; score: number } {
+): { maxStats: Stat[]; maxScore: number; meanScore: number } {
     const mainStatKey = mainStat ? `${mainStat.name}:${mainStat.type}:${mainStat.value}` : 'none';
     const key = `${role}:${mainStatKey}:${setBonus ?? 'none'}`;
     const cached = idealSubstatsCache.get(key);
@@ -415,17 +462,32 @@ function pickIdealSubstats(
 }
 
 /**
- * `scorePieceForRole(piece, role)` for the ideal piece — see `getIdealMarginal`.
- * <= 0 means nothing this slot can carry helps this role.
+ * The MEAN score (see `computeIdealSubstats`) for the ideal piece — the
+ * metric's actual ceiling, what `computePriority` divides by. <= 0 means
+ * nothing this slot can carry helps this role.
  */
 type IdealMarginal = number;
 
-/** An ideal piece's full composition: what a real piece would need to match it, plus the score it earns. */
+/**
+ * An ideal piece's composition, for display: the mainStat/subStats/setBonus
+ * of the MAX-scoring allocation found for (role, slot) — a mean has no
+ * single composition to show, so this shows the nearest concrete piece,
+ * the true ceiling.
+ *
+ * `score` is the MEAN of every allocation the search considered for this
+ * same (mainStat, setBonus) — this is `getIdealMarginal`'s return value, the
+ * figure the coverage grid actually divides by. `maxScore` is the MAX for
+ * the same combo — `getIdealMaxGuard`'s return value, a true impossibility
+ * ceiling used only by `computePriority`'s tripwire, never by the coverage
+ * math itself. `maxScore >= score` always: the mean can never exceed the
+ * max of the same set of allocations it averages.
+ */
 export interface IdealPieceComposition {
     mainStat: Stat | null;
     subStats: Stat[];
     setBonus: GearSetName | null;
     score: number;
+    maxScore: number;
 }
 
 /**
@@ -453,14 +515,21 @@ function getCachedIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPiece
  * (see `mainStatTypesForSlot`), crossed with every set
  * `idealSetCandidatesFor(role)` returns live, crossed with
  * `pickIdealSubstats`' own exhaustive substat search for that (main stat,
- * set) pair, is scored, and the maximum kept. Main stat, set and substats
- * are searched jointly, not main-stat-first-then-substats: two candidates can
- * tie (or nearly tie) on their own bare marginal while differing sharply once
- * a real substat block sits on top of them (e.g. a role that reads one stat
- * multiplicatively against a common one), so picking any one of them in
- * isolation can strand the search on the wrong branch. A real piece carrying
- * whichever set wins here cannot score higher than this: it is the same
- * amortised share, added through the same `scorePieceForRole`.
+ * set) pair, is scored, and the combo with the highest MAX kept — main stat
+ * and set stay a max, a deliberate choice a player makes when picking a
+ * piece, unlike the four substat ROLLS a player does not choose (see
+ * `computeIdealSubstats`). Main stat, set and substats are searched jointly,
+ * not main-stat-first-then-substats: two candidates can tie (or nearly tie)
+ * on their own bare marginal while differing sharply once a real substat
+ * block sits on top of them (e.g. a role that reads one stat multiplicatively
+ * against a common one), so picking any one of them in isolation can strand
+ * the search on the wrong branch. A real piece carrying whichever set wins
+ * here cannot score higher than `best.maxScore`: it is the same amortised
+ * share, added through the same `scorePieceForRole`.
+ *
+ * The winning combo's `meanScore` (from the SAME `pickIdealSubstats` call,
+ * not a second search) becomes `getIdealMarginal`'s return value — see
+ * `IdealPieceComposition`'s doc for why `score` and `maxScore` diverge.
  */
 function pickIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceComposition {
     let best: IdealPieceComposition | null = null;
@@ -472,14 +541,20 @@ function pickIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceCompo
                 calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
             );
             for (const setBonus of idealSetCandidatesFor(role)) {
-                const { stats: subStats, score } = pickIdealSubstats(role, mainStat, setBonus);
-                if (!best || score > best.score) best = { mainStat, subStats, setBonus, score };
+                const { maxStats, maxScore, meanScore } = pickIdealSubstats(
+                    role,
+                    mainStat,
+                    setBonus
+                );
+                if (!best || maxScore > best.maxScore) {
+                    best = { mainStat, subStats: maxStats, setBonus, score: meanScore, maxScore };
+                }
             }
         }
     }
     if (best) return best;
-    const { stats: subStats, score } = pickIdealSubstats(role, null, null);
-    return { mainStat: null, subStats, setBonus: null, score };
+    const { maxStats, maxScore, meanScore } = pickIdealSubstats(role, null, null);
+    return { mainStat: null, subStats: maxStats, setBonus: null, score: meanScore, maxScore };
 }
 
 export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal {
@@ -487,13 +562,27 @@ export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealM
 }
 
 /**
- * The composition of the level-16, 6-star legendary piece the coverage
- * metric treats as (role, slot)'s ceiling: its main stat, its four substats
- * at their FINAL values (base roll plus whatever upgrade-roll increases
- * `computeIdealSubstats` awarded them), its set bonus (`null` if none beats
- * carrying nothing), and its marginal score. This is the exact piece and the
- * exact score `getIdealMarginal(role, slot)` returns — both read
- * `getCachedIdealPiece`, so they can never disagree.
+ * The MAX score (see `computeIdealSubstats`) for (role, slot)'s ideal piece —
+ * a true ceiling no legal real piece can exceed. Used ONLY as
+ * `computePriority`'s tripwire guard: the coverage math itself divides by
+ * `getIdealMarginal` (the mean), never by this.
+ */
+export function getIdealMaxGuard(role: ShipTypeName, slot: GearSlotName): number {
+    return getCachedIdealPiece(role, slot).maxScore;
+}
+
+/**
+ * The composition of the level-16, 6-star legendary piece the coverage grid
+ * shows for (role, slot): its main stat, its four substats at their FINAL
+ * values (base roll plus whatever upgrade-roll increases `computeIdealSubstats`
+ * awarded them) for the MAX-scoring allocation, its set bonus (`null` if none
+ * beats carrying nothing), and both scores. The metric's actual ceiling —
+ * what `getIdealMarginal(role, slot)` returns and the grid divides by — is
+ * `.score`, the MEAN over every allocation the search considered for this
+ * combo; a mean has no single composition, so this shows the MAX allocation
+ * instead (`.maxScore`, `getIdealMaxGuard`'s return value) as the nearest
+ * concrete piece. `.score` here and `getIdealMarginal(role, slot)` can never
+ * disagree — both read `getCachedIdealPiece`.
  */
 export function describeIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceComposition {
     return getCachedIdealPiece(role, slot);
@@ -530,12 +619,14 @@ function formatIdealComposition(piece: IdealPieceComposition): string {
  * How much of this (role, slot)'s ceiling the player's owned pieces cover,
  * in [0, 1], as `1 - priority`.
  *
- * `idealMarginal` is the marginal of a level-16, 6-star legendary piece built
- * from the best-scoring stats this slot can carry for this role — see
- * `getIdealMarginal`. Comparing every player's pieces against the same ceiling,
- * rather than against each other, is what makes roles comparable: a role
- * whose score formula reads a rare stat and a role that reads common ones are
- * no longer judged by how bunched their own top pieces are.
+ * `idealMarginal` is the MEAN marginal — see `computeIdealSubstats` — over
+ * every legal level-16, 6-star legendary substat allocation this slot's
+ * best-for-role main stat and set can carry, restricted to allocations that
+ * put every roll into one of the role's preferred stats. Comparing every
+ * player's pieces against the same ceiling, rather than against each other,
+ * is what makes roles comparable: a role whose score formula reads a rare
+ * stat and a role that reads common ones are no longer judged by how bunched
+ * their own top pieces are.
  *
  * The mean is over the top `sampleSize` marginals (default `COVERAGE_SAMPLE_SIZE`),
  * zero-padded up to that size — not divided by however many pieces exist.
@@ -543,31 +634,40 @@ function formatIdealComposition(piece: IdealPieceComposition): string {
  * single max-roll piece is not "N max-roll pieces sampled once", it is 1 real
  * value and N-1 unfarmed slots.
  *
- * A real marginal above `idealMarginal` means the ideal-piece model is
- * under-estimating this ceiling, not that the slot is saturated:
- * `coverage = mean / idealMarginal` would exceed 1 and the
- * `Math.min(1, Math.max(0, 1 - coverage))` clamp below silently swallows the
- * overshoot into a plain 0% priority. Non-production throws so the defect is
- * loud; production only logs and lets the clamp degrade, matching
+ * A real marginal above `idealMarginal` (the mean) is NORMAL and expected —
+ * a real piece is one specific allocation, and a good one routinely beats
+ * the average of all the allocations the mean spans — so it is not checked
+ * here. `Math.min(1, Math.max(0, 1 - coverage))` below is what turns that
+ * legitimate overshoot into a plain 0% priority, and that clamp is
+ * load-bearing, not a guard against model error.
+ *
+ * `idealMaxGuard` (default `idealMarginal`, so a caller testing pure
+ * coverage math need not pass one) is the TRUE ceiling — see
+ * `getIdealMaxGuard` — no legal real piece can ever exceed it. A real
+ * marginal above it is a genuine impossibility: the ideal-piece search
+ * failed to try some legal allocation. Non-production throws so that defect
+ * is loud; production only logs and lets the clamp degrade, matching
  * `scorePieceUpgrade.ts`'s missing-baseline pattern.
  */
 export function computePriority(
     marginals: number[],
     idealMarginal: number,
     sampleSize: number = COVERAGE_SAMPLE_SIZE,
-    context?: { role: ShipTypeName; slot: GearSlotName }
+    context?: { role: ShipTypeName; slot: GearSlotName },
+    idealMaxGuard: number = idealMarginal
 ): number {
     if (idealMarginal <= 0) return 0;
 
-    const exceedingMarginal = marginals.find((marginal) => marginal > idealMarginal);
+    const exceedingMarginal = marginals.find((marginal) => marginal > idealMaxGuard);
     if (exceedingMarginal !== undefined) {
         const where = context ? ` for ${context.role}/${context.slot}` : '';
         const idealComposition = context
             ? ` — ideal was ${formatIdealComposition(describeIdealPiece(context.role, context.slot))}`
             : '';
         const message =
-            `computePriority: a real marginal (${exceedingMarginal}) exceeds idealMarginal ` +
-            `(${idealMarginal})${where}${idealComposition} — the ideal-piece model under-estimates this ceiling.`;
+            `computePriority: a real marginal (${exceedingMarginal}) exceeds the max-allocation ` +
+            `guard (${idealMaxGuard})${where}${idealComposition} — the ideal-piece model failed ` +
+            `to try some legal allocation that beats it.`;
         if (process.env.NODE_ENV !== 'production') {
             throw new Error(message);
         }
@@ -693,11 +793,18 @@ export function buildCoverageMatrix(
             const pieces = piecesBySlot.get(slot) ?? [];
             const marginals = pieces.map((piece) => scorePieceForRole(piece, role));
             const idealMarginal = getIdealMarginal(role, slot);
+            const idealMaxGuard = getIdealMaxGuard(role, slot);
             cells[role][slot] = {
                 role,
                 slot,
                 count: pieces.length,
-                priority: computePriority(marginals, idealMarginal, sampleSize, { role, slot }),
+                priority: computePriority(
+                    marginals,
+                    idealMarginal,
+                    sampleSize,
+                    { role, slot },
+                    idealMaxGuard
+                ),
                 rank: 0, // assigned below
             };
         }

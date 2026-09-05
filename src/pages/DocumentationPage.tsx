@@ -1021,10 +1021,11 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         <strong>Priority</strong> compares your best pieces for that
-                                        role and slot against the same number of perfect pieces for
-                                        it. A high percentage means farming that role and slot would
-                                        help; a low percentage means you are already close to the
-                                        best you can get
+                                        role and slot against the same number of typical good pieces
+                                        for it, not the single best possible roll. A high percentage
+                                        means farming that role and slot would help; a low
+                                        percentage means you are already close to the best you can
+                                        get
                                     </li>
                                     <li>
                                         The grid header&apos;s{' '}

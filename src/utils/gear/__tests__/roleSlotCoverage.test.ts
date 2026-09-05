@@ -7,6 +7,7 @@ import {
     buildCoverageMatrix,
     mainStatTypesForSlot,
     getIdealMarginal,
+    getIdealMaxGuard,
     describeIdealPiece,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
@@ -296,20 +297,24 @@ describe('computePriority', () => {
         expect(computePriority(Array<number>(25).fill(ideal), ideal)).toBe(0);
     });
 
-    describe('a real marginal above idealMarginal', () => {
-        // idealMarginal is supposed to be the ceiling; a real marginal above
-        // it (whether from an ideal-model shortfall or from imported data
-        // simply not being bound by the roll tables) means that ceiling is
-        // wrong, not that the slot is saturated. Non-production throws so the
-        // defect is loud; production only logs and clamps, matching
-        // `scorePieceUpgrade.ts`'s missing-baseline pattern.
+    describe('a real marginal above the max-allocation guard', () => {
+        // `idealMaxGuard` (which defaults to `idealMarginal` when the caller
+        // does not pass one — the case exercised here) is supposed to be a
+        // TRUE ceiling; a real marginal above it (whether from an ideal-model
+        // shortfall or from imported data simply not being bound by the roll
+        // tables) means the search failed to try some legal allocation, not
+        // that the slot is saturated. Non-production throws so the defect is
+        // loud; production only logs and clamps, matching
+        // `scorePieceUpgrade.ts`'s missing-baseline pattern. A real marginal
+        // above `idealMarginal` (the MEAN) alone is normal and must NOT throw
+        // — see "the mean ceiling" below for that half of the contract.
         afterEach(() => {
             vi.unstubAllEnvs();
         });
 
         it('throws outside production', () => {
             expect(() => computePriority(Array<number>(20).fill(150), 100)).toThrow(
-                /exceeds idealMarginal/
+                /exceeds the max-allocation guard/
             );
         });
 
@@ -455,6 +460,139 @@ describe('computePriority', () => {
                 computePriority(mixedQuality, ideal, COVERAGE_SAMPLE_SIZE)
             );
         });
+    });
+
+    describe('a separate idealMaxGuard', () => {
+        it('does not throw for a marginal above idealMarginal but at or below the guard', () => {
+            // The exact ATTACKER/weapon max-allocation replica: its marginal
+            // legitimately exceeds the MEAN idealMarginal (895.95... at time
+            // of writing) but never the MAX guard it was built to equal.
+            const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+            const idealMaxGuard = getIdealMaxGuard('ATTACKER', 'weapon');
+            expect(idealMaxGuard).toBeGreaterThan(idealMarginal);
+            expect(() =>
+                computePriority(
+                    [idealMaxGuard],
+                    idealMarginal,
+                    COVERAGE_SAMPLE_SIZE,
+                    { role: 'ATTACKER', slot: 'weapon' },
+                    idealMaxGuard
+                )
+            ).not.toThrow();
+        });
+
+        it('still throws for a marginal that beats even the guard — a true impossibility', () => {
+            const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+            const idealMaxGuard = getIdealMaxGuard('ATTACKER', 'weapon');
+            expect(() =>
+                computePriority(
+                    [idealMaxGuard + 1],
+                    idealMarginal,
+                    COVERAGE_SAMPLE_SIZE,
+                    { role: 'ATTACKER', slot: 'weapon' },
+                    idealMaxGuard
+                )
+            ).toThrow(/exceeds the max-allocation guard/);
+        });
+
+        it('sabotage check: omitting the guard (guard defaults to the mean) spuriously fires on this same ordinary piece', () => {
+            // Demonstrates why the guard must be threaded through explicitly
+            // at the production call site (`buildCoverageMatrix`): a caller
+            // that forgets it and lets the guard default back to the mean
+            // reproduces the exact false positive #473 exists to prevent.
+            const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+            const idealMaxGuard = getIdealMaxGuard('ATTACKER', 'weapon');
+            expect(() =>
+                computePriority(
+                    [idealMaxGuard],
+                    idealMarginal,
+                    COVERAGE_SAMPLE_SIZE,
+                    { role: 'ATTACKER', slot: 'weapon' }
+                    // idealMaxGuard omitted -> defaults to idealMarginal (the mean)
+                )
+            ).toThrow(/exceeds the max-allocation guard/);
+        });
+    });
+});
+
+describe('the mean ceiling', () => {
+    // Required non-vacuity checks for the mean-based redefinition (see #473):
+    // these fail if the metric silently reverted to a max, or to averaging
+    // over allocations the role's score formula does not read.
+
+    it('lands strictly between two differently-scoring preferred allocations, not at the max', () => {
+        // ATTACKER/weapon's 3 preferred pairs (attack%, crit%, critDamage%)
+        // admit 15 legal roll distributions across them; two hand-built
+        // real pieces at opposite ends of that space — all 4 extra rolls
+        // into critDamage vs. all 4 into crit+attack (the true max, per
+        // `describeIdealPiece`) — score very differently. The MEAN the
+        // metric actually divides by must sit strictly inside that range,
+        // never collapse back onto the max end of it.
+        const allCritDamage = makeGear({
+            id: 'all-critdamage',
+            mainStat: { name: 'attack', value: 1000, type: 'flat' },
+            subStats: [
+                { name: 'attack', value: 7, type: 'percentage' },
+                { name: 'crit', value: 8, type: 'percentage' },
+                { name: 'critDamage', value: 40, type: 'percentage' },
+            ],
+            setBonus: 'ABYSSAL_ASSAULT',
+        });
+        const maxAllocation = describeIdealPiece('ATTACKER', 'weapon');
+        const maxPiece = makeGear({
+            id: 'max-allocation',
+            mainStat: maxAllocation.mainStat,
+            subStats: maxAllocation.subStats,
+            setBonus: maxAllocation.setBonus,
+        });
+
+        const low = scorePieceForRole(allCritDamage, 'ATTACKER');
+        const high = scorePieceForRole(maxPiece, 'ATTACKER');
+        expect(low).toBeLessThan(high);
+
+        const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+        expect(idealMarginal).toBeGreaterThan(low);
+        expect(idealMarginal).toBeLessThan(high);
+    });
+
+    it('is not dragged down by allocations into stats ATTACKER never reads', () => {
+        // A broader (WRONG) mean that lets rolls land on a non-preferred
+        // stat (hp, which calculateAttackerScore never reads) alongside the
+        // 3 real preferred ones: every roll spent on hp is wasted relative
+        // to spending it on attack%/crit%/critDamage%, so this broader
+        // average is strictly lower than the real metric. If the ideal-piece
+        // search ever stopped restricting to preferred pairs, the real
+        // metric would collapse onto this same, lower number.
+        function distribute(total: number, slots: number): number[][] {
+            if (slots === 1) return [[total]];
+            const result: number[][] = [];
+            for (let take = 0; take <= total; take++) {
+                for (const rest of distribute(total - take, slots - 1)) {
+                    result.push([take, ...rest]);
+                }
+            }
+            return result;
+        }
+        let sum = 0;
+        let count = 0;
+        for (const [a, c, cd, hp] of distribute(4, 4)) {
+            const piece = makeGear({
+                id: `broad-${a}-${c}-${cd}-${hp}`,
+                mainStat: { name: 'attack', value: 1000, type: 'flat' },
+                subStats: [
+                    { name: 'attack', value: (1 + a) * 7, type: 'percentage' },
+                    { name: 'crit', value: (1 + c) * 8, type: 'percentage' },
+                    { name: 'critDamage', value: (1 + cd) * 8, type: 'percentage' },
+                    { name: 'hp', value: (1 + hp) * 600, type: 'flat' },
+                ],
+                setBonus: 'ABYSSAL_ASSAULT',
+            });
+            sum += scorePieceForRole(piece, 'ATTACKER');
+            count += 1;
+        }
+        const broaderMeanIncludingNonPreferred = sum / count;
+        const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+        expect(idealMarginal).toBeGreaterThan(broaderMeanIncludingNonPreferred);
     });
 });
 
@@ -606,7 +744,9 @@ describe('buildCoverageMatrix', () => {
 
     /**
      * A real level-16, 6-star legendary software piece whose marginal for
-     * DEBUFFER exactly equals `getIdealMarginal('DEBUFFER', 'software')` —
+     * DEBUFFER exactly equals `getIdealMaxGuard('DEBUFFER', 'software')` (the
+     * MAX allocation — see `IdealPieceComposition`'s doc for why the mean
+     * `getIdealMarginal` divides by has no single matching composition) —
      * confirmed against the exhaustive search, not guessed: main stat
      * `hacking` (flat, the only legal type), subs `attack` flat once,
      * `attack` percentage stacked through all 4 upgrade rolls, `crit` and
@@ -731,20 +871,25 @@ describe('buildCoverageMatrix', () => {
     });
 
     describe('the internal ideal piece', () => {
-        // pickIdealPiece/pickIdealSubstats/getIdealMarginal are not exported
-        // (getIdealMarginal alone is — see the "ideal is a true ceiling"
-        // tests below), so these pin the FULL composition indirectly: a
-        // hand-built replica of the level-16, 6-star legendary ideal piece is
-        // fed through buildCoverageMatrix as the only owned piece. If the
-        // replica's stats truly are what the ideal-piece search finds, its
-        // own marginal (scored by the same scorePieceForRole the ideal piece
-        // is scored by) IS idealMarginal, so one owned copy must read
-        // priority 1 - 1/COVERAGE_SAMPLE_SIZE exactly, and COVERAGE_SAMPLE_SIZE
-        // owned copies must fully saturate. A wrong main stat, a wrong
-        // substat, a wrong flat/percentage variant, or a wrong upgrade-roll
-        // split changes the real idealMarginal without changing the
-        // replica's marginal, so the ratio — and the assertion — stops
-        // landing on that exact value.
+        // pickIdealPiece/pickIdealSubstats are not exported (getIdealMarginal,
+        // getIdealMaxGuard and describeIdealPiece are — see the "ideal is a
+        // true ceiling" tests below), so these pin the FULL MAX-allocation
+        // composition indirectly: a hand-built replica of the level-16,
+        // 6-star legendary piece the search should find is fed through
+        // buildCoverageMatrix as the only owned piece. If the replica's
+        // stats truly are what the search finds, its own marginal (scored by
+        // the same scorePieceForRole the ideal piece is scored by) IS
+        // getIdealMaxGuard for this (role, slot). The priority it reads is
+        // then derived from the real getIdealMarginal (the MEAN, which has
+        // no single matching composition — see `IdealPieceComposition`'s
+        // doc) via the documented `1 - (marginal / sampleSize) /
+        // idealMarginal` formula, not a hardcoded constant: the mean moves
+        // whenever the substat search space does, so a hardcoded number
+        // would go stale silently. A wrong main stat, a wrong substat, a
+        // wrong flat/percentage variant, or a wrong upgrade-roll split
+        // changes the real getIdealMaxGuard without changing the replica's
+        // marginal, so the `toBeCloseTo(idealMaxGuard, ...)` check below
+        // stops holding.
 
         // The weapon slot only ever offers `attack` as a main stat, so this
         // main stat is not what distinguishes the two replicas below; the
@@ -770,9 +915,14 @@ describe('buildCoverageMatrix', () => {
                 setBonus: 'ABYSSAL_ASSAULT',
             });
 
+            const idealMaxGuard = getIdealMaxGuard('ATTACKER', 'weapon');
+            const idealMarginal = getIdealMarginal('ATTACKER', 'weapon');
+            const replicaMarginal = scorePieceForRole(attackerIdeal, 'ATTACKER');
+            expect(replicaMarginal).toBeCloseTo(idealMaxGuard, 6);
+
             const one = buildCoverageMatrix([attackerIdeal]);
             expect(one.cells.ATTACKER.weapon.priority).toBeCloseTo(
-                1 - 1 / COVERAGE_SAMPLE_SIZE,
+                1 - replicaMarginal / COVERAGE_SAMPLE_SIZE / idealMarginal,
                 10
             );
 
@@ -780,7 +930,10 @@ describe('buildCoverageMatrix', () => {
             // itself (not just computePriority) — a hardcoded 20 at this call
             // site would fail this assertion even with computePriority fixed.
             const oneAtFifty = buildCoverageMatrix([attackerIdeal], 50);
-            expect(oneAtFifty.cells.ATTACKER.weapon.priority).toBeCloseTo(1 - 1 / 50, 10);
+            expect(oneAtFifty.cells.ATTACKER.weapon.priority).toBeCloseTo(
+                1 - replicaMarginal / 50 / idealMarginal,
+                10
+            );
 
             const twenty = buildCoverageMatrix(
                 Array.from({ length: COVERAGE_SAMPLE_SIZE }, (_, i) =>
@@ -797,10 +950,11 @@ describe('buildCoverageMatrix', () => {
                     })
                 )
             );
-            // Not toBe(0): the same marginal is recomputed on two different
-            // paths (the owned piece vs. the cached ideal piece), and float
-            // arithmetic over bit-identical stats is not guaranteed bit-exact.
-            expect(twenty.cells.ATTACKER.weapon.priority).toBeLessThan(1e-9);
+            // 20 copies at the MAX allocation legitimately exceed the MEAN
+            // idealMarginal by a wide margin (coverage well above 1), so the
+            // clamp lands on exactly 0 — see computePriority's doc on why
+            // that clamp is load-bearing, not a guard against model error.
+            expect(twenty.cells.ATTACKER.weapon.priority).toBe(0);
         });
 
         it('reads the DEFENDER_SECURITY weapon ideal as attack main, hp/hp%/defence%/security subs + Protection', () => {
@@ -823,9 +977,14 @@ describe('buildCoverageMatrix', () => {
                 setBonus: 'PROTECTION',
             });
 
+            const idealMaxGuard = getIdealMaxGuard('DEFENDER_SECURITY', 'weapon');
+            const idealMarginal = getIdealMarginal('DEFENDER_SECURITY', 'weapon');
+            const replicaMarginal = scorePieceForRole(securityIdeal, 'DEFENDER_SECURITY');
+            expect(replicaMarginal).toBeCloseTo(idealMaxGuard, 6);
+
             const one = buildCoverageMatrix([securityIdeal]);
             expect(one.cells.DEFENDER_SECURITY.weapon.priority).toBeCloseTo(
-                1 - 1 / COVERAGE_SAMPLE_SIZE,
+                1 - replicaMarginal / COVERAGE_SAMPLE_SIZE / idealMarginal,
                 10
             );
         });
@@ -956,10 +1115,14 @@ describe('the ideal is a true ceiling', () => {
         GEAR_SLOT_ORDER.map((slot) => [slot, realisticPiecesForSlot(slot)] as const)
     );
 
-    it('the user-reported real weapon (40% critDamage, stacked attack%) does not exceed the ATTACKER weapon ideal', () => {
+    it('the user-reported real weapon (40% critDamage, stacked attack%) does not exceed the ATTACKER weapon max-allocation guard', () => {
         // The exact piece a player reported: 1000 attack flat main stat;
         // critDamage 40% (5 rolls at its 8% legendary max — every upgrade
-        // roll landed here), crit 8%, attack 7%, attack ~150 flat.
+        // roll landed here), crit 8%, attack 7%, attack ~150 flat. Checked
+        // against getIdealMaxGuard (the TRUE ceiling), not getIdealMarginal
+        // (the MEAN): a real piece routinely — and legitimately — beats the
+        // mean under the mean-based redefinition (#473), so only the max
+        // guard can never be exceeded.
         const reportedPiece: GearPiece = {
             id: 'user-reported-attacker-weapon',
             slot: 'weapon',
@@ -975,12 +1138,12 @@ describe('the ideal is a true ceiling', () => {
             ],
             setBonus: null,
         };
-        const ideal = getIdealMarginal('ATTACKER', 'weapon');
+        const guard = getIdealMaxGuard('ATTACKER', 'weapon');
         const marginal = scorePieceForRole(reportedPiece, 'ATTACKER');
-        expect(marginal).toBeLessThanOrEqual(ideal + 1e-6);
+        expect(marginal).toBeLessThanOrEqual(guard + 1e-6);
     });
 
-    it('a real security-main software piece does not exceed the DEFENDER_SECURITY/software ideal (#473 crash repro)', () => {
+    it('a real security-main software piece does not exceed the DEFENDER_SECURITY/software max-allocation guard (#473 crash repro)', () => {
         // The exact shape that crashed the Upgrade Analysis tab against a
         // real 9,464-piece inventory: `GEAR_SLOTS.software.availableMainStats`
         // was missing `security` entirely, so the ideal search could never
@@ -989,6 +1152,8 @@ describe('the ideal is a true ceiling', () => {
         // 6-star legendary software piece with `security` flat at its 100
         // max, plus strong survival substats (hp flat/percentage, defence%,
         // a second security roll) beat the old under-built ideal by 7.5%.
+        // Checked against getIdealMaxGuard — see the sibling test's note on
+        // why the mean is the wrong thing to check this against.
         const softwareSecurityPiece: GearPiece = {
             id: 'crash-repro-security-software',
             slot: 'software',
@@ -1004,23 +1169,26 @@ describe('the ideal is a true ceiling', () => {
             ],
             setBonus: 'PROTECTION',
         };
-        const ideal = getIdealMarginal('DEFENDER_SECURITY', 'software');
+        const guard = getIdealMaxGuard('DEFENDER_SECURITY', 'software');
         const marginal = scorePieceForRole(softwareSecurityPiece, 'DEFENDER_SECURITY');
-        expect(marginal).toBeLessThanOrEqual(ideal + 1e-6);
+        expect(marginal).toBeLessThanOrEqual(guard + 1e-6);
     });
 
-    it('no realistic legal piece, in any slot, exceeds its (role, slot) ideal for any role', () => {
+    it('no realistic legal piece, in any slot, exceeds its (role, slot) max-allocation guard for any role', () => {
         // A single assertion over the worst violation found, not one
         // `expect` per candidate piece x role x slot (well over a
         // million) — vitest's per-assertion bookkeeping dominates the
-        // runtime at that count, dwarfing the actual arithmetic.
+        // runtime at that count, dwarfing the actual arithmetic. Checked
+        // against getIdealMaxGuard: a realistic piece is expected to, and
+        // routinely does, exceed getIdealMarginal (the mean) — that is the
+        // whole point of the mean-based redefinition, not a defect.
         let worst: { role: ShipTypeName; slot: GearSlotName; overshoot: number } | null = null;
         for (const role of roles) {
             for (const slot of GEAR_SLOT_ORDER) {
-                const ideal = getIdealMarginal(role, slot);
+                const guard = getIdealMaxGuard(role, slot);
                 for (const piece of piecesBySlot.get(slot) ?? []) {
                     const marginal = scorePieceForRole(piece, role);
-                    const overshoot = marginal - ideal;
+                    const overshoot = marginal - guard;
                     if (overshoot > 1e-6 && (!worst || overshoot > worst.overshoot)) {
                         worst = { role, slot, overshoot };
                     }
@@ -1063,11 +1231,15 @@ describe('describeIdealPiece', () => {
         }
     });
 
-    it('returns a composition that itself scores to the reported score', () => {
+    it('returns a composition that itself scores to the reported maxScore', () => {
         // Feeding the reported mainStat/subStats/setBonus back through the
         // same scoring path the search itself uses proves the composition
         // is genuinely what was found, not a coincidentally-matching stand-in.
-        const { mainStat, subStats, setBonus, score } = describeIdealPiece('ATTACKER', 'weapon');
+        // The composition IS the MAX allocation (a mean has no single
+        // composition to show — see `IdealPieceComposition`'s doc), so it
+        // scores back to `maxScore`, not `score` (the mean `getIdealMarginal`
+        // returns).
+        const { mainStat, subStats, setBonus, maxScore } = describeIdealPiece('ATTACKER', 'weapon');
         const piece: GearPiece = {
             id: 'described-ideal-replica',
             slot: 'weapon',
@@ -1078,7 +1250,7 @@ describe('describeIdealPiece', () => {
             subStats,
             setBonus,
         };
-        expect(scorePieceForRole(piece, 'ATTACKER')).toBeCloseTo(score, 6);
+        expect(scorePieceForRole(piece, 'ATTACKER')).toBeCloseTo(maxScore, 6);
     });
 });
 
