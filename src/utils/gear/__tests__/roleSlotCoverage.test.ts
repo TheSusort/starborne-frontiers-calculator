@@ -7,6 +7,7 @@ import {
     buildCoverageMatrix,
     mainStatTypesForSlot,
     getIdealMarginal,
+    describeIdealPiece,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
     resetIdealPieceCachesForTests,
@@ -321,6 +322,29 @@ describe('computePriority', () => {
             ).toThrow(/ATTACKER\/weapon/);
         });
 
+        it('includes the ideal composition in the message when a context is given', () => {
+            // Built from the real describeIdealPiece result rather than a
+            // hardcoded string, so this stays valid if the ideal-piece search
+            // ever changes what it finds for ATTACKER/weapon.
+            const ideal = describeIdealPiece('ATTACKER', 'weapon');
+            let thrown: Error | undefined;
+            try {
+                computePriority(Array<number>(20).fill(150), 100, COVERAGE_SAMPLE_SIZE, {
+                    role: 'ATTACKER',
+                    slot: 'weapon',
+                });
+            } catch (error) {
+                thrown = error as Error;
+            }
+            expect(thrown).toBeDefined();
+            const message = thrown!.message;
+            expect(message).toContain(`main ${ideal.mainStat!.name} ${ideal.mainStat!.value}`);
+            expect(message).toContain(ideal.setBonus ?? 'set none');
+            for (const sub of ideal.subStats) {
+                expect(message).toContain(`${sub.name} ${sub.value}`);
+            }
+        });
+
         it('clamps to 0 in production instead of throwing', () => {
             vi.stubEnv('NODE_ENV', 'production');
             expect(computePriority(Array<number>(20).fill(150), 100)).toBe(0);
@@ -517,10 +541,11 @@ describe('competitionRank', () => {
 
 describe('buildCoverageMatrix', () => {
     it('covers every role and every gear slot', () => {
-        // First real exercise of getIdealMarginal in this file, so it pays
-        // the one-time, module-cached cost of the full (role x slot) ideal
-        // search — see "cold ideal-piece build performance" below for the
-        // actual budget this is expected to stay under.
+        // Exercises the full (role x slot) ideal-piece search — each pair is
+        // computed once and module-cached, so only the first test to touch a
+        // given (role, slot) pays that cost. See "cold ideal-piece build
+        // performance" below for the actual budget a genuinely cold run is
+        // expected to stay under.
         const matrix = buildCoverageMatrix([]);
         const roles = Object.keys(SHIP_TYPES);
         expect(matrix.roleOrder).toHaveLength(roles.length);
@@ -1020,6 +1045,41 @@ describe('the ideal is a true ceiling', () => {
             expect(() => buildCoverageMatrix(pieces)).not.toThrow();
         }
     }, 20000);
+});
+
+describe('describeIdealPiece', () => {
+    // The inspector exists to let a real player eyeball the ideal against
+    // game knowledge, so the one property that keeps it honest is that its
+    // score can never drift from the score the metric actually divides by —
+    // both must read the exact same cached search result.
+    it('agrees with getIdealMarginal on score for all 72 (role, slot) pairs', () => {
+        // Pins the loop itself running all 72 iterations, not just passing
+        // vacuously on an empty or short-circuited one.
+        expect.assertions(72);
+        for (const role of Object.keys(SHIP_TYPES)) {
+            for (const slot of GEAR_SLOT_ORDER) {
+                expect(describeIdealPiece(role, slot).score).toBe(getIdealMarginal(role, slot));
+            }
+        }
+    });
+
+    it('returns a composition that itself scores to the reported score', () => {
+        // Feeding the reported mainStat/subStats/setBonus back through the
+        // same scoring path the search itself uses proves the composition
+        // is genuinely what was found, not a coincidentally-matching stand-in.
+        const { mainStat, subStats, setBonus, score } = describeIdealPiece('ATTACKER', 'weapon');
+        const piece: GearPiece = {
+            id: 'described-ideal-replica',
+            slot: 'weapon',
+            level: COVERAGE_MIN_LEVEL,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat,
+            subStats,
+            setBonus,
+        };
+        expect(scorePieceForRole(piece, 'ATTACKER')).toBeCloseTo(score, 6);
+    });
 });
 
 describe('cold ideal-piece build performance', () => {

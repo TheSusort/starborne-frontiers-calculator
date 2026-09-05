@@ -420,8 +420,32 @@ function pickIdealSubstats(
  */
 type IdealMarginal = number;
 
-/** (role, slot) never changes, so the ideal marginal is computed once and cached. */
-const idealMarginalCache = new Map<string, IdealMarginal>();
+/** An ideal piece's full composition: what a real piece would need to match it, plus the score it earns. */
+export interface IdealPieceComposition {
+    mainStat: Stat | null;
+    subStats: Stat[];
+    setBonus: GearSetName | null;
+    score: number;
+}
+
+/**
+ * (role, slot) never changes, so the ideal piece — composition and score
+ * together — is computed once and cached. `getIdealMarginal` and
+ * `describeIdealPiece` both read THIS map, never `pickIdealPiece` directly,
+ * so a score and a composition read for the same (role, slot) can never come
+ * from two different searches.
+ */
+const idealPieceCache = new Map<string, IdealPieceComposition>();
+
+function getCachedIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceComposition {
+    const key = `${role}:${slot}`;
+    const cached = idealPieceCache.get(key);
+    if (cached) return cached;
+
+    const piece = pickIdealPiece(role, slot);
+    idealPieceCache.set(key, piece);
+    return piece;
+}
 
 /**
  * The best-scoring level-16, 6-star legendary piece this slot can carry for
@@ -438,16 +462,8 @@ const idealMarginalCache = new Map<string, IdealMarginal>();
  * whichever set wins here cannot score higher than this: it is the same
  * amortised share, added through the same `scorePieceForRole`.
  */
-function pickIdealPiece(
-    role: ShipTypeName,
-    slot: GearSlotName
-): { mainStat: Stat | null; subStats: Stat[]; setBonus: GearSetName | null; score: number } {
-    let best: {
-        mainStat: Stat | null;
-        subStats: Stat[];
-        setBonus: GearSetName | null;
-        score: number;
-    } | null = null;
+function pickIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceComposition {
+    let best: IdealPieceComposition | null = null;
     for (const name of GEAR_SLOTS[slot].availableMainStats) {
         for (const type of mainStatTypesForSlot(slot, name)) {
             const mainStat = makeStat(
@@ -467,13 +483,20 @@ function pickIdealPiece(
 }
 
 export function getIdealMarginal(role: ShipTypeName, slot: GearSlotName): IdealMarginal {
-    const key = `${role}:${slot}`;
-    const cached = idealMarginalCache.get(key);
-    if (cached !== undefined) return cached;
+    return getCachedIdealPiece(role, slot).score;
+}
 
-    const idealMarginal = pickIdealPiece(role, slot).score;
-    idealMarginalCache.set(key, idealMarginal);
-    return idealMarginal;
+/**
+ * The composition of the level-16, 6-star legendary piece the coverage
+ * metric treats as (role, slot)'s ceiling: its main stat, its four substats
+ * at their FINAL values (base roll plus whatever upgrade-roll increases
+ * `computeIdealSubstats` awarded them), its set bonus (`null` if none beats
+ * carrying nothing), and its marginal score. This is the exact piece and the
+ * exact score `getIdealMarginal(role, slot)` returns — both read
+ * `getCachedIdealPiece`, so they can never disagree.
+ */
+export function describeIdealPiece(role: ShipTypeName, slot: GearSlotName): IdealPieceComposition {
+    return getCachedIdealPiece(role, slot);
 }
 
 /**
@@ -488,7 +511,19 @@ export function resetIdealPieceCachesForTests(): void {
     liveSubstatNamesByRole.clear();
     idealSetCandidatesByRole.clear();
     idealSubstatsCache.clear();
-    idealMarginalCache.clear();
+    idealPieceCache.clear();
+}
+
+/** `stat` as `name value` with a `%` suffix for a percentage stat, bare for flat. `null` prints as `none`. */
+function formatStat(stat: Stat | null): string {
+    if (!stat) return 'none';
+    return `${stat.name} ${stat.value}${stat.type === 'percentage' ? '%' : ''}`;
+}
+
+/** An ideal piece's composition as one clause, for the `computePriority` tripwire message. */
+function formatIdealComposition(piece: IdealPieceComposition): string {
+    const subStats = piece.subStats.length ? piece.subStats.map(formatStat).join(', ') : 'none';
+    return `main ${formatStat(piece.mainStat)}, subs [${subStats}], set ${piece.setBonus ?? 'none'}`;
 }
 
 /**
@@ -527,9 +562,12 @@ export function computePriority(
     const exceedingMarginal = marginals.find((marginal) => marginal > idealMarginal);
     if (exceedingMarginal !== undefined) {
         const where = context ? ` for ${context.role}/${context.slot}` : '';
+        const idealComposition = context
+            ? ` — ideal was ${formatIdealComposition(describeIdealPiece(context.role, context.slot))}`
+            : '';
         const message =
             `computePriority: a real marginal (${exceedingMarginal}) exceeds idealMarginal ` +
-            `(${idealMarginal})${where} — the ideal-piece model under-estimates this ceiling.`;
+            `(${idealMarginal})${where}${idealComposition} — the ideal-piece model under-estimates this ceiling.`;
         if (process.env.NODE_ENV !== 'production') {
             throw new Error(message);
         }
