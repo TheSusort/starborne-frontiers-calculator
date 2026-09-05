@@ -187,6 +187,70 @@ describe('GearCoverageGrid', () => {
         expect(zeroCell.className).not.toContain('bg-red-900/70');
     });
 
+    it('spans the full colour scale when every priority sits in a narrow high band', () => {
+        // Target 100 on a real inventory compresses every cell into ~49%-89%
+        // (see PR description) — a fixed absolute scale saturates there and
+        // paints the grid one colour. Colouring by this grid's own min/max
+        // must still use both ends of the scale even though the raw spread
+        // (0.09) is narrow.
+        const matrix = makeMatrix({
+            'ATTACKER:weapon': { priority: 0.8 },
+            'DEFENDER:hull': { priority: 0.89 },
+        });
+        // Every other cell defaults to priority 0.5 in `makeMatrix`, so pull
+        // them into the same narrow band the two probes sit in.
+        for (const role of Object.keys(SHIP_TYPES)) {
+            for (const slot of GEAR_SLOT_ORDER) {
+                if (role === 'ATTACKER' && slot === 'weapon') continue;
+                if (role === 'DEFENDER' && slot === 'hull') continue;
+                matrix.cells[role][slot] = { ...matrix.cells[role][slot], priority: 0.85 };
+            }
+        }
+        render(
+            <GearCoverageGrid
+                matrix={matrix}
+                onCellClick={() => {}}
+                sampleSize={100}
+                onSampleSizeChange={() => {}}
+            />
+        );
+
+        const lowCell = screen.getByTestId('coverage-cell-ATTACKER-weapon');
+        const highCell = screen.getByTestId('coverage-cell-DEFENDER-hull');
+
+        expect(lowCell.className).toContain('bg-green-800/60');
+        expect(highCell.className).toContain('bg-red-900/70');
+    });
+
+    it('renders a fully-tied grid in one neutral colour, not the reddest extreme', () => {
+        // Every cell at an identical priority (e.g. an empty inventory, or a
+        // target so high every slot saturates) must not divide-by-zero its
+        // way into painting everything the top colour — the rank-based
+        // scheme this replaced did exactly that by giving every tied cell
+        // rank 1.
+        const matrix = makeMatrix({});
+        for (const role of Object.keys(SHIP_TYPES)) {
+            for (const slot of GEAR_SLOT_ORDER) {
+                matrix.cells[role][slot] = { ...matrix.cells[role][slot], priority: 0.37 };
+            }
+        }
+        render(
+            <GearCoverageGrid
+                matrix={matrix}
+                onCellClick={() => {}}
+                sampleSize={20}
+                onSampleSizeChange={() => {}}
+            />
+        );
+
+        const someCell = screen.getByTestId('coverage-cell-ATTACKER-weapon');
+        const anotherCell = screen.getByTestId('coverage-cell-DEFENDER-hull');
+
+        expect(someCell.className).toContain('bg-yellow-800/60');
+        expect(someCell.className).not.toContain('bg-red-900/70');
+        expect(anotherCell.className).toBe(someCell.className);
+    });
+
     describe('sample size control', () => {
         it('shows the current sample size in a labelled control', () => {
             render(

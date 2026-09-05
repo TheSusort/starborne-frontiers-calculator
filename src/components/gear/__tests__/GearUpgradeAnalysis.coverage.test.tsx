@@ -73,6 +73,7 @@ vi.mock('../../../utils/gear/roleSlotCoverage', () => ({
     buildCoverageMatrix: vi.fn(),
     COVERAGE_MIN_LEVEL: 16,
     COVERAGE_SAMPLE_SIZE: 20,
+    TIE_EPSILON: 1e-9,
 }));
 
 // usePersistedCoverageSampleSize reads useAuth; a signed-out user is enough

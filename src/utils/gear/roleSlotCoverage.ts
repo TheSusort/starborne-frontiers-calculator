@@ -588,7 +588,7 @@ function compareByThenOrder<T>(key: (item: T) => number, order: readonly T[]) {
  * comparison — a relative one would blow up exactly where this noise
  * actually shows up, near zero.
  */
-const TIE_EPSILON = 1e-9;
+export const TIE_EPSILON = 1e-9;
 
 /**
  * Competition ranking ("1,1,1,4,..."): items with an equal `value` share the

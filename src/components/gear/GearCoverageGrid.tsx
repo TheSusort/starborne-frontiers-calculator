@@ -5,6 +5,7 @@ import {
     COVERAGE_MIN_LEVEL,
     CoverageCell,
     CoverageMatrix,
+    TIE_EPSILON,
 } from '../../utils/gear/roleSlotCoverage';
 import { COVERAGE_SAMPLE_SIZE_STEPS } from '../../hooks/usePersistedCoverageSampleSize';
 import { Select } from '../ui';
@@ -23,32 +24,59 @@ const SAMPLE_SIZE_OPTIONS = COVERAGE_SAMPLE_SIZE_STEPS.map((step) => ({
 }));
 
 /**
- * Colour buckets by the cell's own `priority` value on a fixed absolute
- * scale, so the same percentage is the same colour in every column and
- * colour can never disagree with the number shown. `cell.rank` (competition
- * rank within its slot column) still drives role-card and slot-tab order
- * elsewhere — it is deliberately not used for colour here, since a tied
- * column (e.g. every role at 0%) would otherwise paint its rank-1 entries
- * the reddest class despite there being nothing to farm.
+ * Five colour classes, lowest priority (least worth farming) to highest.
+ * `priorityClass` picks an index into this by where a cell's priority sits
+ * between the grid's own min and max, so the band names stay fixed while
+ * what counts as "the reddest 20%" moves with the grid.
  */
-function priorityClass(priority: number): string {
-    if (priority >= 0.5) return 'bg-red-900/70 text-red-100';
-    if (priority >= 0.3) return 'bg-orange-800/70 text-orange-100';
-    if (priority >= 0.15) return 'bg-yellow-800/60 text-yellow-100';
-    if (priority >= 0.05) return 'bg-lime-800/60 text-lime-100';
-    return 'bg-green-800/60 text-green-100';
+const PRIORITY_CLASSES = [
+    'bg-green-800/60 text-green-100',
+    'bg-lime-800/60 text-lime-100',
+    'bg-yellow-800/60 text-yellow-100',
+    'bg-orange-800/70 text-orange-100',
+    'bg-red-900/70 text-red-100',
+];
+
+const NEUTRAL_PRIORITY_CLASS = PRIORITY_CLASSES[2];
+
+/**
+ * Colour buckets a cell by where its priority sits between the lowest and
+ * highest priority actually present in the grid (`min`/`max`), not by a
+ * fixed absolute scale. Raising "Target pieces per slot" raises every
+ * priority, so a fixed scale saturates: at a high target every cell clears
+ * the old top threshold and the whole grid renders one colour, discarding
+ * the real spread that is still there. `cell.rank` (competition rank within
+ * its slot column) still drives role-card and slot-tab order elsewhere — it
+ * is deliberately not used for colour here.
+ *
+ * A degenerate range (`max - min` within `TIE_EPSILON`, the coverage
+ * module's own tie tolerance) must not divide by ~zero or fall through to
+ * an extreme class: every cell renders the neutral middle band instead.
+ * This is the specific failure of the rank-based scheme removed earlier in
+ * this branch — it gave every tied cell rank 1 and painted a fully-tied
+ * column entirely red — and it must not reappear in this new form.
+ */
+function priorityClass(priority: number, min: number, max: number): string {
+    const range = max - min;
+    if (range <= TIE_EPSILON) return NEUTRAL_PRIORITY_CLASS;
+
+    const t = (priority - min) / range;
+    const index = Math.min(PRIORITY_CLASSES.length - 1, Math.floor(t * PRIORITY_CLASSES.length));
+    return PRIORITY_CLASSES[index];
 }
 
 const CoverageCellButton: React.FC<{
     cell: CoverageCell;
+    min: number;
+    max: number;
     onClick: () => void;
-}> = ({ cell, onClick }) => (
+}> = ({ cell, min, max, onClick }) => (
     <button
         type="button"
         onClick={onClick}
         data-testid={`coverage-cell-${cell.role}-${cell.slot}`}
         aria-label={`${SHIP_TYPES[cell.role].name} ${GEAR_SLOTS[cell.slot].label}: ${Math.round(cell.priority * 100)} percent priority to farm`}
-        className={`rounded-sm px-1 py-2 text-center transition-opacity hover:opacity-80 ${priorityClass(cell.priority)}`}
+        className={`rounded-sm px-1 py-2 text-center transition-opacity hover:opacity-80 ${priorityClass(cell.priority, min, max)}`}
     >
         <span className="block text-sm font-semibold">{Math.round(cell.priority * 100)}%</span>
     </button>
@@ -61,6 +89,22 @@ export const GearCoverageGrid: React.FC<Props> = ({
     onSampleSizeChange,
 }) => {
     const firstRole = matrix.roleOrder[0];
+
+    // Min/max across every cell, computed once per render rather than per
+    // cell — `priorityClass` needs the whole grid's range to place a single
+    // cell within it.
+    const { min, max } = React.useMemo(() => {
+        let min = Infinity;
+        let max = -Infinity;
+        for (const role of matrix.roleOrder) {
+            for (const slot of GEAR_SLOT_ORDER) {
+                const { priority } = matrix.cells[role][slot];
+                if (priority < min) min = priority;
+                if (priority > max) max = priority;
+            }
+        }
+        return { min, max };
+    }, [matrix]);
 
     return (
         <div className="card space-y-3">
@@ -84,8 +128,8 @@ export const GearCoverageGrid: React.FC<Props> = ({
                 </div>
             </div>
             <div className="text-xs text-theme-text-secondary">
-                Colour reflects the percentage directly, on a fixed scale, so it means the same
-                thing in every column.
+                Colour is relative to the highest- and lowest-priority cells in your own grid; the
+                percentage shown on each cell is always the absolute value.
             </div>
 
             <div className="overflow-x-auto">
@@ -121,6 +165,8 @@ export const GearCoverageGrid: React.FC<Props> = ({
                                 <CoverageCellButton
                                     key={slot}
                                     cell={matrix.cells[role][slot]}
+                                    min={min}
+                                    max={max}
                                     onClick={() => onCellClick(role, slot)}
                                 />
                             ))}
