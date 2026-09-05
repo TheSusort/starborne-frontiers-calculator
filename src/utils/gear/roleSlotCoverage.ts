@@ -130,23 +130,33 @@ function makeStat(name: StatName, type: StatType, value: number): Stat {
 }
 
 /**
- * The type a stat rolls as when it is this slot's main stat.
+ * Every type `statName` can legally roll as THIS slot's main stat.
  *
  * Percentage-only stats (crit, critDamage, ...) are always percentage.
- * `hacking`, `security` and `speed` are always flat as a MAIN stat,
- * regardless of slot: imported game data rolls them flat even on the
- * percentage slots (sensor, software, thrusters), and `calculateMainStatValue`
+ * `hacking`, `security` and `speed` are always flat as a MAIN stat, on every
+ * slot that can carry them: no real inventory sample has ever produced a
+ * percentage-typed one, `SUBSTAT_RANGES` (the same table `candidateSubstatPairs`
+ * reads) has no `percentage` key for any of the three, and `calculateMainStatValue`
  * sends them through their own flat-magnitude tables (`HACK_SEC_STATS`,
- * `SPD_STATS`); marking them percentage here would route them into
+ * `SPD_STATS`) — marking one percentage here would route it into
  * `PERCENTAGE_STATS` instead, which holds a magnitude for a different stat
- * family. Every other flexible stat (hp, attack, defence) rolls flat on the
- * three flat slots (weapon, hull, generator) and percentage on the three
- * percentage slots (sensor, software, thrusters).
+ * family.
+ *
+ * Every other flexible stat (hp, attack, defence) rolls flat-only on the
+ * three fixed slots (weapon, hull, generator) — real inventories never show
+ * a percentage main stat there, matching each of those slots offering only
+ * its own single stat name. On the three flexible slots (sensor, software,
+ * thrusters) real inventories show BOTH types for the same (slot, name): a
+ * software `hp:percentage` piece and a software `hp:flat` piece both exist.
+ * So there both types are legal candidates and the ideal search tries both,
+ * keeping whichever scores higher for the role — the same way it already
+ * tries every legal (name, type) substat pair.
  */
-export function mainStatType(slot: GearSlotName, statName: StatName): StatType {
-    if (PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)) return 'percentage';
-    if (statName === 'hacking' || statName === 'security' || statName === 'speed') return 'flat';
-    return slot === 'weapon' || slot === 'hull' || slot === 'generator' ? 'flat' : 'percentage';
+export function mainStatTypesForSlot(slot: GearSlotName, statName: StatName): StatType[] {
+    if (PERCENTAGE_ONLY_STATS.includes(statName as PercentageOnlyStats)) return ['percentage'];
+    if (statName === 'hacking' || statName === 'security' || statName === 'speed') return ['flat'];
+    if (slot === 'weapon' || slot === 'hull' || slot === 'generator') return ['flat'];
+    return ['flat', 'percentage'];
 }
 
 /**
@@ -415,7 +425,8 @@ const idealMarginalCache = new Map<string, IdealMarginal>();
 
 /**
  * The best-scoring level-16, 6-star legendary piece this slot can carry for
- * `role`: every main stat this slot can carry, crossed with every set
+ * `role`: every main stat this slot can carry, in every legal type variant
+ * (see `mainStatTypesForSlot`), crossed with every set
  * `idealSetCandidatesFor(role)` returns live, crossed with
  * `pickIdealSubstats`' own exhaustive substat search for that (main stat,
  * set) pair, is scored, and the maximum kept. Main stat, set and substats
@@ -438,15 +449,16 @@ function pickIdealPiece(
         score: number;
     } | null = null;
     for (const name of GEAR_SLOTS[slot].availableMainStats) {
-        const type = mainStatType(slot, name);
-        const mainStat = makeStat(
-            name,
-            type,
-            calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
-        );
-        for (const setBonus of idealSetCandidatesFor(role)) {
-            const { stats: subStats, score } = pickIdealSubstats(role, mainStat, setBonus);
-            if (!best || score > best.score) best = { mainStat, subStats, setBonus, score };
+        for (const type of mainStatTypesForSlot(slot, name)) {
+            const mainStat = makeStat(
+                name,
+                type,
+                calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL)
+            );
+            for (const setBonus of idealSetCandidatesFor(role)) {
+                const { stats: subStats, score } = pickIdealSubstats(role, mainStat, setBonus);
+                if (!best || score > best.score) best = { mainStat, subStats, setBonus, score };
+            }
         }
     }
     if (best) return best;

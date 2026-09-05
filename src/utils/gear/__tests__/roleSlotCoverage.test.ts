@@ -4,7 +4,7 @@ import {
     computePriority,
     competitionRank,
     buildCoverageMatrix,
-    mainStatType,
+    mainStatTypesForSlot,
     getIdealMarginal,
     COVERAGE_MIN_LEVEL,
     COVERAGE_SAMPLE_SIZE,
@@ -42,39 +42,47 @@ describe('constants', () => {
     });
 });
 
-describe('mainStatType', () => {
-    it('is always flat for hacking, security and speed, even on percentage slots', () => {
-        // Real imported game data rolls these three flat on every slot that
-        // can carry them, including the percentage slots (sensor, software,
-        // thrusters) — `calculateMainStatValue` routes them through their own
-        // flat-magnitude tables, not the percentage table.
+describe('mainStatTypesForSlot', () => {
+    it('is always flat-only for hacking, security and speed, even on percentage slots', () => {
+        // Real imported game data never shows a percentage-typed one, and
+        // `SUBSTAT_RANGES` (the same table the substat search reads) has no
+        // `percentage` key for any of the three — `calculateMainStatValue`
+        // would route a fabricated percentage variant through the wrong
+        // magnitude table entirely.
         for (const slot of ['sensor', 'software', 'thrusters'] as const) {
-            expect(mainStatType(slot, 'hacking')).toBe('flat');
-            expect(mainStatType(slot, 'security')).toBe('flat');
-            expect(mainStatType(slot, 'speed')).toBe('flat');
+            expect(mainStatTypesForSlot(slot, 'hacking')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'security')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'speed')).toEqual(['flat']);
         }
         for (const slot of ['weapon', 'hull', 'generator'] as const) {
-            expect(mainStatType(slot, 'hacking')).toBe('flat');
-            expect(mainStatType(slot, 'security')).toBe('flat');
-            expect(mainStatType(slot, 'speed')).toBe('flat');
+            expect(mainStatTypesForSlot(slot, 'hacking')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'security')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'speed')).toEqual(['flat']);
         }
     });
 
     it('is percentage-only for crit/critDamage regardless of slot', () => {
-        expect(mainStatType('weapon', 'crit')).toBe('percentage');
-        expect(mainStatType('software', 'critDamage')).toBe('percentage');
+        expect(mainStatTypesForSlot('weapon', 'crit')).toEqual(['percentage']);
+        expect(mainStatTypesForSlot('software', 'critDamage')).toEqual(['percentage']);
     });
 
-    it('follows the slot rule for hp, attack and defence', () => {
+    it('is flat-only for hp, attack and defence on the fixed slots (weapon, hull, generator)', () => {
+        // Real inventories never show a percentage main stat on these three
+        // slots — each offers only its own single stat name.
         for (const slot of ['weapon', 'hull', 'generator'] as const) {
-            expect(mainStatType(slot, 'hp')).toBe('flat');
-            expect(mainStatType(slot, 'attack')).toBe('flat');
-            expect(mainStatType(slot, 'defence')).toBe('flat');
+            expect(mainStatTypesForSlot(slot, 'hp')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'attack')).toEqual(['flat']);
+            expect(mainStatTypesForSlot(slot, 'defence')).toEqual(['flat']);
         }
+    });
+
+    it('allows BOTH flat and percentage for hp, attack and defence on the flexible slots', () => {
+        // Real inventories show both: e.g. a software hp:percentage piece
+        // (max 50) AND a software hp:flat piece (max 3000) both exist.
         for (const slot of ['sensor', 'software', 'thrusters'] as const) {
-            expect(mainStatType(slot, 'hp')).toBe('percentage');
-            expect(mainStatType(slot, 'attack')).toBe('percentage');
-            expect(mainStatType(slot, 'defence')).toBe('percentage');
+            expect(mainStatTypesForSlot(slot, 'hp')).toEqual(['flat', 'percentage']);
+            expect(mainStatTypesForSlot(slot, 'attack')).toEqual(['flat', 'percentage']);
+            expect(mainStatTypesForSlot(slot, 'defence')).toEqual(['flat', 'percentage']);
         }
     });
 });
@@ -831,10 +839,12 @@ describe('the ideal is a true ceiling', () => {
 
     /**
      * Every realistic legal level-16, 6-star legendary piece `slot` can
-     * carry: every legal main stat (with its correct flat/percentage type),
-     * crossed with every legal 4-of-N distinct (name, type) substat
-     * combination (excluding only the main stat's own exact pair — the
-     * `GearPieceForm` rule), crossed with every way the piece's 4 upgrade
+     * carry: every legal main stat, in every legal type variant it can roll
+     * as (see `mainStatTypesForSlot` — both flat and percentage for a
+     * flexible stat on a flexible slot, e.g. software `hp:flat` AND
+     * `hp:percentage`), crossed with every legal 4-of-N distinct (name, type)
+     * substat combination (excluding only the main stat's own exact pair —
+     * the `GearPieceForm` rule), crossed with every way the piece's 4 upgrade
      * rolls can land across those 4 slots (a slot can carry up to 5 rolls of
      * its own single-roll legendary max — see `potentialCalculator.ts`'s
      * `UPGRADE_LEVELS.legendary`), each also carrying a set bonus cycled from
@@ -848,47 +858,48 @@ describe('the ideal is a true ceiling', () => {
         );
 
         for (const name of GEAR_SLOTS[slot].availableMainStats) {
-            const type = mainStatType(slot, name);
-            const mainStat: Stat =
-                type === 'percentage'
-                    ? {
-                          name,
-                          value: calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL),
-                          type,
-                      }
-                    : ({
-                          name,
-                          value: calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL),
-                          type,
-                      } as Stat);
+            for (const type of mainStatTypesForSlot(slot, name)) {
+                const mainStat: Stat =
+                    type === 'percentage'
+                        ? {
+                              name,
+                              value: calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL),
+                              type,
+                          }
+                        : ({
+                              name,
+                              value: calculateMainStatValue(name, type, 6, COVERAGE_MIN_LEVEL),
+                              type,
+                          } as Stat);
 
-            const pairs: { name: StatName; type: StatType }[] = [];
-            for (const subName of Object.keys(SUBSTAT_RANGES) as StatName[]) {
-                for (const subType of Object.keys(SUBSTAT_RANGES[subName]) as StatType[]) {
-                    if (mainStat.name === subName && mainStat.type === subType) continue;
-                    pairs.push({ name: subName, type: subType });
+                const pairs: { name: StatName; type: StatType }[] = [];
+                for (const subName of Object.keys(SUBSTAT_RANGES) as StatName[]) {
+                    for (const subType of Object.keys(SUBSTAT_RANGES[subName]) as StatType[]) {
+                        if (mainStat.name === subName && mainStat.type === subType) continue;
+                        pairs.push({ name: subName, type: subType });
+                    }
                 }
-            }
 
-            for (const combo of combinations(pairs, LEGENDARY_SUBSTAT_SLOTS)) {
-                for (const rolls of rollDistributions) {
-                    const subStats: Stat[] = combo.map((pair, i) => {
-                        const max = SUBSTAT_RANGES[pair.name][pair.type].legendary.max;
-                        const value = (1 + rolls[i]) * max;
-                        return pair.type === 'percentage'
-                            ? { name: pair.name, value, type: 'percentage' }
-                            : ({ name: pair.name, value, type: 'flat' } as Stat);
-                    });
-                    pieces.push({
-                        id: `realistic-${slot}-${name}-${type}`,
-                        slot,
-                        level: COVERAGE_MIN_LEVEL,
-                        stars: 6,
-                        rarity: 'legendary',
-                        mainStat,
-                        subStats,
-                        setBonus: SET_CYCLE[pieces.length % SET_CYCLE.length],
-                    });
+                for (const combo of combinations(pairs, LEGENDARY_SUBSTAT_SLOTS)) {
+                    for (const rolls of rollDistributions) {
+                        const subStats: Stat[] = combo.map((pair, i) => {
+                            const max = SUBSTAT_RANGES[pair.name][pair.type].legendary.max;
+                            const value = (1 + rolls[i]) * max;
+                            return pair.type === 'percentage'
+                                ? { name: pair.name, value, type: 'percentage' }
+                                : ({ name: pair.name, value, type: 'flat' } as Stat);
+                        });
+                        pieces.push({
+                            id: `realistic-${slot}-${name}-${type}`,
+                            slot,
+                            level: COVERAGE_MIN_LEVEL,
+                            stars: 6,
+                            rarity: 'legendary',
+                            mainStat,
+                            subStats,
+                            setBonus: SET_CYCLE[pieces.length % SET_CYCLE.length],
+                        });
+                    }
                 }
             }
         }
@@ -921,6 +932,35 @@ describe('the ideal is a true ceiling', () => {
         };
         const ideal = getIdealMarginal('ATTACKER', 'weapon');
         const marginal = scorePieceForRole(reportedPiece, 'ATTACKER');
+        expect(marginal).toBeLessThanOrEqual(ideal + 1e-6);
+    });
+
+    it('a real security-main software piece does not exceed the DEFENDER_SECURITY/software ideal (#473 crash repro)', () => {
+        // The exact shape that crashed the Upgrade Analysis tab against a
+        // real 9,464-piece inventory: `GEAR_SLOTS.software.availableMainStats`
+        // was missing `security` entirely, so the ideal search could never
+        // build a software piece with a `security` main stat — the exact
+        // stat DEFENDER_SECURITY's score multiplies against. A level-16,
+        // 6-star legendary software piece with `security` flat at its 100
+        // max, plus strong survival substats (hp flat/percentage, defence%,
+        // a second security roll) beat the old under-built ideal by 7.5%.
+        const softwareSecurityPiece: GearPiece = {
+            id: 'crash-repro-security-software',
+            slot: 'software',
+            level: COVERAGE_MIN_LEVEL,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'security', value: 100, type: 'flat' },
+            subStats: [
+                { name: 'hp', value: 600, type: 'flat' },
+                { name: 'hp', value: 14, type: 'percentage' },
+                { name: 'defence', value: 7, type: 'percentage' },
+                { name: 'security', value: 32, type: 'flat' },
+            ],
+            setBonus: 'PROTECTION',
+        };
+        const ideal = getIdealMarginal('DEFENDER_SECURITY', 'software');
+        const marginal = scorePieceForRole(softwareSecurityPiece, 'DEFENDER_SECURITY');
         expect(marginal).toBeLessThanOrEqual(ideal + 1e-6);
     });
 
