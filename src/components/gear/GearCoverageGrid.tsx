@@ -8,7 +8,12 @@ import {
     TIE_EPSILON,
 } from '../../utils/gear/roleSlotCoverage';
 import { COVERAGE_SAMPLE_SIZE_STEPS } from '../../hooks/usePersistedCoverageSampleSize';
-import { Select } from '../ui';
+import { usePersistedPreference } from '../../hooks/usePersistedPreference';
+import { Select, CollapsibleAccordion, ChevronDownIcon } from '../ui';
+
+const isBoolean = (value: unknown): value is boolean => typeof value === 'boolean';
+
+const COVERAGE_GRID_CONTENT_ID = 'gear-coverage-grid-content';
 
 interface Props {
     matrix: CoverageMatrix;
@@ -89,6 +94,11 @@ export const GearCoverageGrid: React.FC<Props> = ({
     onSampleSizeChange,
 }) => {
     const firstRole = matrix.roleOrder[0];
+    const [isOpen, setIsOpen] = usePersistedPreference(
+        'gear-coverage-grid-expanded',
+        true,
+        isBoolean
+    );
 
     // Min/max across every cell, computed once per render rather than per
     // cell — `priorityClass` needs the whole grid's range to place a single
@@ -107,73 +117,95 @@ export const GearCoverageGrid: React.FC<Props> = ({
     }, [matrix]);
 
     return (
-        <div className="card space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-                <div className="space-y-1">
-                    <h3 className="text-lg font-medium">Coverage</h3>
-                    <span className="text-xs text-theme-text-secondary block">
-                        Level-16 pieces owned, and how much farming each role and slot would pay
-                        off. A high percentage means it would help; a low one means you are close to
-                        the best you can get.
-                    </span>
-                </div>
-                <div className="w-full sm:w-40 shrink-0">
-                    <Select
-                        label="Target pieces per slot"
-                        value={String(sampleSize)}
-                        onChange={(value) => onSampleSizeChange(Number(value))}
-                        options={SAMPLE_SIZE_OPTIONS}
-                        data-testid="coverage-sample-size-select"
-                    />
-                </div>
-            </div>
-            <div className="text-xs text-theme-text-secondary">
-                Colour is relative to the highest- and lowest-priority cells in your own grid; the
-                percentage shown on each cell is always the absolute value.
-            </div>
-
-            <div className="overflow-x-auto">
-                <div
-                    className="grid gap-1 min-w-max"
-                    style={{
-                        gridTemplateColumns: `minmax(9rem, auto) repeat(${GEAR_SLOT_ORDER.length}, minmax(3.5rem, 1fr))`,
-                    }}
-                >
-                    <div className="sticky left-0 bg-dark z-10" />
-                    {GEAR_SLOT_ORDER.map((slot) => (
-                        <div
-                            key={slot}
-                            data-testid={`coverage-header-${slot}`}
-                            className="text-xxs uppercase tracking-wide text-theme-text-secondary text-center pb-1"
-                        >
-                            <div>{GEAR_SLOTS[slot].label}</div>
-                            <div className="normal-case opacity-80">
-                                {matrix.cells[firstRole][slot].count} at {COVERAGE_MIN_LEVEL}
-                            </div>
+        // `card` supplies the border/background; padding is zeroed here and
+        // owned separately by the toggle button and by `CollapsibleAccordion`
+        // (which wraps its own children in `p-4 bg-dark`) so the two don't
+        // stack into a double-padded, double-backgrounded gap between them.
+        <div className="card p-0">
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                aria-expanded={isOpen}
+                aria-controls={COVERAGE_GRID_CONTENT_ID}
+                aria-label="Coverage grid"
+                data-testid="coverage-grid-toggle"
+                className="w-full flex items-center justify-between gap-2 p-4 text-left hover:bg-dark-lighter transition-colors"
+            >
+                <h3 className="text-lg font-medium">Coverage</h3>
+                <ChevronDownIcon
+                    className={`w-4 h-4 text-theme-text-secondary flex-shrink-0 transition-transform duration-200 ${
+                        isOpen ? 'rotate-180' : ''
+                    }`}
+                />
+            </button>
+            <CollapsibleAccordion isOpen={isOpen} id={COVERAGE_GRID_CONTENT_ID}>
+                <div className="space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                        <span className="text-xs text-theme-text-secondary block">
+                            Level-16 pieces owned, and how much farming each role and slot would pay
+                            off. A high percentage means it would help; a low one means you are
+                            close to the best you can get.
+                        </span>
+                        <div className="w-full sm:w-40 shrink-0">
+                            <Select
+                                label="Target pieces per slot"
+                                value={String(sampleSize)}
+                                onChange={(value) => onSampleSizeChange(Number(value))}
+                                options={SAMPLE_SIZE_OPTIONS}
+                                data-testid="coverage-sample-size-select"
+                            />
                         </div>
-                    ))}
+                    </div>
+                    <div className="text-xs text-theme-text-secondary">
+                        Colour is relative to the highest- and lowest-priority cells in your own
+                        grid; the percentage shown on each cell is always the absolute value.
+                    </div>
 
-                    {matrix.roleOrder.map((role) => (
-                        <React.Fragment key={role}>
-                            <div
-                                data-testid={`coverage-role-${role}`}
-                                className="sticky left-0 bg-dark z-10 pr-2 flex items-center justify-end text-xs text-theme-text-secondary"
-                            >
-                                {SHIP_TYPES[role].name}
-                            </div>
+                    <div className="overflow-x-auto">
+                        <div
+                            className="grid gap-1 min-w-max"
+                            style={{
+                                gridTemplateColumns: `minmax(9rem, auto) repeat(${GEAR_SLOT_ORDER.length}, minmax(3.5rem, 1fr))`,
+                            }}
+                        >
+                            <div className="sticky left-0 bg-dark z-10" />
                             {GEAR_SLOT_ORDER.map((slot) => (
-                                <CoverageCellButton
+                                <div
                                     key={slot}
-                                    cell={matrix.cells[role][slot]}
-                                    min={min}
-                                    max={max}
-                                    onClick={() => onCellClick(role, slot)}
-                                />
+                                    data-testid={`coverage-header-${slot}`}
+                                    className="text-xxs uppercase tracking-wide text-theme-text-secondary text-center pb-1"
+                                >
+                                    <div>{GEAR_SLOTS[slot].label}</div>
+                                    <div className="normal-case opacity-80">
+                                        {matrix.cells[firstRole][slot].count} at{' '}
+                                        {COVERAGE_MIN_LEVEL}
+                                    </div>
+                                </div>
                             ))}
-                        </React.Fragment>
-                    ))}
+
+                            {matrix.roleOrder.map((role) => (
+                                <React.Fragment key={role}>
+                                    <div
+                                        data-testid={`coverage-role-${role}`}
+                                        className="sticky left-0 bg-dark z-10 pr-2 flex items-center justify-end text-xs text-theme-text-secondary"
+                                    >
+                                        {SHIP_TYPES[role].name}
+                                    </div>
+                                    {GEAR_SLOT_ORDER.map((slot) => (
+                                        <CoverageCellButton
+                                            key={slot}
+                                            cell={matrix.cells[role][slot]}
+                                            min={min}
+                                            max={max}
+                                            onClick={() => onCellClick(role, slot)}
+                                        />
+                                    ))}
+                                </React.Fragment>
+                            ))}
+                        </div>
+                    </div>
                 </div>
-            </div>
+            </CollapsibleAccordion>
         </div>
     );
 };

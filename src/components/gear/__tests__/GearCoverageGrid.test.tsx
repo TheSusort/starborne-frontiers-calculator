@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { GearCoverageGrid } from '../GearCoverageGrid';
@@ -15,6 +15,14 @@ import { GearPiece } from '../../../types/gear';
 // whose favicon.ico?url asset import is not available in the test
 // environment.
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
+
+// The grid's collapsed state is persisted via `usePersistedPreference`,
+// which reads `useAuth`.
+let mockUser: { id: string } | null = null;
+let mockLoading = false;
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: mockUser, loading: mockLoading }),
+}));
 
 function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
     return {
@@ -58,6 +66,12 @@ function makeMatrix(overrides: Record<string, Partial<CoverageCell>> = {}): Cove
 }
 
 describe('GearCoverageGrid', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        mockUser = null;
+        mockLoading = false;
+    });
+
     it('renders one column header per gear slot', () => {
         render(
             <GearCoverageGrid
@@ -294,6 +308,79 @@ describe('GearCoverageGrid', () => {
             fireEvent.click(screen.getByLabelText('Target pieces per slot'));
             const optionLabels = screen.getAllByRole('option').map((option) => option.textContent);
             expect(optionLabels).toEqual(['10', '20', '50', '100', '200']);
+        });
+    });
+
+    describe('collapsing', () => {
+        it('is expanded by default, showing the grid', () => {
+            render(
+                <GearCoverageGrid
+                    matrix={buildCoverageMatrix([])}
+                    onCellClick={() => {}}
+                    sampleSize={20}
+                    onSampleSizeChange={() => {}}
+                />
+            );
+            expect(screen.getByTestId('coverage-grid-toggle')).toHaveAttribute(
+                'aria-expanded',
+                'true'
+            );
+            expect(screen.getByTestId('coverage-cell-DEFENDER-hull')).toBeVisible();
+        });
+
+        it('hides the grid when the header is toggled closed, and shows it again when reopened', async () => {
+            render(
+                <GearCoverageGrid
+                    matrix={buildCoverageMatrix([])}
+                    onCellClick={() => {}}
+                    sampleSize={20}
+                    onSampleSizeChange={() => {}}
+                />
+            );
+            const toggle = screen.getByTestId('coverage-grid-toggle');
+            const cell = screen.getByTestId('coverage-cell-DEFENDER-hull');
+            expect(cell).toBeVisible();
+
+            await userEvent.click(toggle);
+            expect(toggle).toHaveAttribute('aria-expanded', 'false');
+            expect(cell).not.toBeVisible();
+
+            await userEvent.click(toggle);
+            expect(toggle).toHaveAttribute('aria-expanded', 'true');
+            expect(cell).toBeVisible();
+        });
+
+        it('points aria-controls at the region it toggles', () => {
+            render(
+                <GearCoverageGrid
+                    matrix={buildCoverageMatrix([])}
+                    onCellClick={() => {}}
+                    sampleSize={20}
+                    onSampleSizeChange={() => {}}
+                />
+            );
+            const toggle = screen.getByTestId('coverage-grid-toggle');
+            const controlsId = toggle.getAttribute('aria-controls');
+            expect(controlsId).toBeTruthy();
+            expect(document.getElementById(controlsId as string)).not.toBeNull();
+        });
+
+        it('adopts a stored collapsed state on mount', () => {
+            mockUser = { id: 'user-1' };
+            localStorage.setItem('gear-coverage-grid-expanded', 'false');
+            render(
+                <GearCoverageGrid
+                    matrix={buildCoverageMatrix([])}
+                    onCellClick={() => {}}
+                    sampleSize={20}
+                    onSampleSizeChange={() => {}}
+                />
+            );
+            expect(screen.getByTestId('coverage-grid-toggle')).toHaveAttribute(
+                'aria-expanded',
+                'false'
+            );
+            expect(screen.getByTestId('coverage-cell-DEFENDER-hull')).not.toBeVisible();
         });
     });
 });
