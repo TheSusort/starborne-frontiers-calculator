@@ -1014,6 +1014,38 @@ const DocumentationPage: React.FC = () => {
                                 </p>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
+                                        A coverage grid at the top shows, once per gear slot, how
+                                        many level 16 pieces you own, and for each role and slot how
+                                        much farming it would pay off. It reads your inventory
+                                        directly, so it is there before you run an analysis
+                                    </li>
+                                    <li>
+                                        <strong>Priority</strong> compares your best pieces for that
+                                        role and slot against the same number of typical good pieces
+                                        for it, not the single best possible roll. A high percentage
+                                        means farming that role and slot would help; a low
+                                        percentage means you are already close to the best you can
+                                        get
+                                    </li>
+                                    <li>
+                                        The grid header&apos;s{' '}
+                                        <strong>Target pieces per slot</strong> control sets how
+                                        many pieces that comparison samples (default 20); raising it
+                                        asks a harder question of a deep inventory, so priority
+                                        reads higher across the board
+                                    </li>
+                                    <li>
+                                        Role cards and each card&apos;s slot tabs are ordered by
+                                        that same priority, so whatever is most worth farming comes
+                                        first. Clicking a grid cell selects that slot&apos;s tab,
+                                        and scrolls to the role card once you have run an analysis
+                                    </li>
+                                    <li>
+                                        A piece carrying a set bonus is credited its share of that
+                                        set: the set&apos;s stats divided by the pieces needed to
+                                        activate it
+                                    </li>
+                                    <li>
                                         Results are displayed per role, sorted by score improvement
                                     </li>
                                     <li>Helps identify high-potential gear worth investing in</li>

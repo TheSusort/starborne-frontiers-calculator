@@ -8,6 +8,12 @@ vi.mock('../../../utils/gear/potentialCalculator', () => ({
     baselineStatsCache: { clear: vi.fn() },
     baselineBreakdownCache: { clear: vi.fn() },
     simulateUpgrade: vi.fn(),
+    // roleSlotCoverage.ts reads this at module scope (legendary substat/
+    // upgrade-roll counts for its ideal-piece search) — real shape from
+    // potentialCalculator.ts's own UPGRADE_LEVELS.legendary.
+    UPGRADE_LEVELS: {
+        legendary: { increases: [4, 8, 12, 16], additions: [], initialSubstats: 4 },
+    },
 }));
 
 vi.mock('../../../hooks/useGearUpgrades', () => ({
@@ -32,6 +38,12 @@ vi.mock('../../../hooks/useTutorialTrigger', () => ({
 
 // Sidebar imports /favicon.ico?url which is not available in test environment
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
+
+// usePersistedCoverageSampleSize reads useAuth; a signed-out user is enough
+// to exercise the grid without pulling in a real AuthProvider.
+vi.mock('../../../contexts/AuthProvider', () => ({
+    useAuth: () => ({ user: null }),
+}));
 
 describe('GearUpgradeAnalysis auto-start', () => {
     beforeEach(() => {

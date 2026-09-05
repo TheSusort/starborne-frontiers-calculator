@@ -6,6 +6,7 @@ import { createStatVector, baseStatsToStatVector } from '../../fastScoring/statV
 import { calculateTotalStats, type StatBreakdown } from '../../ship/statsCalculator';
 // eslint-disable-next-line import/no-cycle
 import { baselineBreakdownCache } from '../potentialCalculator';
+import { getBaseRoleStats } from '../../../constants/roleBaseStats';
 
 /**
  * Per-slot baseline vectors. All three fields are driven by the slow path's
@@ -72,71 +73,6 @@ export interface BuildPotentialContextInput {
     readonly getGearPiece: ((id: string) => GearPiece | undefined) | undefined;
     readonly getEngineeringStatsForShipType:
         ((shipType: ShipTypeName) => EngineeringStat | undefined) | undefined;
-}
-
-// Module-local: the slow path's ROLE_BASE_STATS is not exported; the spec
-// (Invariants) says the fast path reuses the same values. Duplicating them
-// here is preferable to exporting from potentialCalculator (which would
-// couple the module ordering and also mean every fast-path change must go
-// through a barrel). If ROLE_BASE_STATS in potentialCalculator.ts ever
-// changes, this table MUST be updated in lockstep — equivalence tests will
-// catch any drift immediately.
-const ROLE_BASE_STATS_FAST = {
-    ATTACKER: {
-        hp: 22000,
-        attack: 6250,
-        defence: 5000,
-        hacking: 0,
-        security: 0,
-        speed: 130,
-        crit: 20,
-        critDamage: 80,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    DEFENDER: {
-        hp: 25000,
-        attack: 3000,
-        defence: 5000,
-        hacking: 0,
-        security: 90,
-        speed: 110,
-        crit: 10,
-        critDamage: 20,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    DEBUFFER: {
-        hp: 16500,
-        attack: 4400,
-        defence: 2500,
-        hacking: 200,
-        security: 33,
-        speed: 125,
-        crit: 12,
-        critDamage: 20,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-    SUPPORTER: {
-        hp: 20000,
-        attack: 3000,
-        defence: 3250,
-        hacking: 0,
-        security: 0,
-        speed: 99,
-        crit: 12,
-        critDamage: 22,
-        healModifier: 0,
-        defensePenetration: 0,
-    },
-} as const satisfies Record<string, BaseStats>;
-
-function getBaseRoleStats(role: ShipTypeName): BaseStats {
-    if (role.startsWith('DEFENDER')) return ROLE_BASE_STATS_FAST.DEFENDER;
-    if (role.startsWith('DEBUFFER')) return ROLE_BASE_STATS_FAST.DEBUFFER;
-    if (role.startsWith('SUPPORTER')) return ROLE_BASE_STATS_FAST.SUPPORTER;
-    return ROLE_BASE_STATS_FAST.ATTACKER;
 }
 
 export function buildPotentialContext(input: BuildPotentialContextInput): PotentialContext {

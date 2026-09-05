@@ -27,7 +27,10 @@ export const GEAR_SLOTS: Record<string, GearSlot> = {
     },
     software: {
         label: 'Software',
-        availableMainStats: ['hp', 'attack', 'defence', 'hacking', 'speed'],
+        // Matches `SLOT_MAIN_STATS` in `constants/stats.ts` (the form's own
+        // source of truth) and real imported inventories: software rolls
+        // `security`, never `speed` — `speed` is a thrusters-only main stat.
+        availableMainStats: ['hp', 'attack', 'defence', 'hacking', 'security'],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
     thrusters: {
