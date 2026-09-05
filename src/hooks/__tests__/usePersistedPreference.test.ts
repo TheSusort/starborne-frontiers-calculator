@@ -75,6 +75,29 @@ describe('usePersistedPreference', () => {
         expect(localStorage.getItem(KEY)).toBe('false');
     });
 
+    it('does not destroy a saved value when auth resolves to signed-out, after being unresolved at mount', () => {
+        // Regression for the `loading` guard specifically: without it, the
+        // unresolved-at-mount pass consumes the "first resolve" branch (it
+        // can't tell "not yet known" apart from "signed out"), so the real
+        // resolve-to-signed-out pass falls through to the unconditional
+        // `localStorage.setItem` and stamps the default over the saved value.
+        localStorage.setItem(KEY, JSON.stringify(false));
+        mockLoading = true;
+        mockUser = null;
+
+        const { result, rerender } = renderHook(() => usePersistedPreference(KEY, true, isBoolean));
+
+        // Auth is still resolving: no write yet.
+        expect(localStorage.getItem(KEY)).toBe('false');
+
+        // Auth resolves to signed-out (mockUser stays null).
+        mockLoading = false;
+        rerender();
+
+        expect(result.current[0]).toBe(true);
+        expect(localStorage.getItem(KEY)).toBe('false');
+    });
+
     it('does not destroy a saved value on a mid-session sign-in with no remount', () => {
         localStorage.setItem(KEY, JSON.stringify(false));
         mockLoading = false;
