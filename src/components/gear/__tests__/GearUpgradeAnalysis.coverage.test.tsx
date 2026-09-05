@@ -364,4 +364,28 @@ describe('GearUpgradeAnalysis coverage grid', () => {
         expect(screen.queryByTestId('coverage-role-SUPPORTER')).not.toBeInTheDocument();
         expect(screen.queryByTestId('coverage-cell-SUPPORTER-weapon')).not.toBeInTheDocument();
     });
+
+    it("shows only the selected role's grid row when the Role Filter narrows to one role", async () => {
+        // Same failure mode as the shipRoles case above, but driven by the
+        // Role Filter (selectedRole) instead: a grid row for a role with no
+        // rendered `role-card-<role>` would update selectedSlots on click and
+        // then find nothing to scroll to. With initialRole set to DEFENDER,
+        // only DEFENDER's card renders, so only DEFENDER's row may render.
+        render(
+            <GearUpgradeAnalysis
+                inventory={[]}
+                shipRoles={['ATTACKER', 'DEFENDER']}
+                mode="analysis"
+                initialRole="DEFENDER"
+            />
+        );
+
+        await act(async () => {
+            await vi.runAllTimersAsync();
+        });
+
+        expect(screen.getByTestId('coverage-role-DEFENDER')).toBeInTheDocument();
+        expect(screen.queryByTestId('coverage-role-ATTACKER')).not.toBeInTheDocument();
+        expect(screen.queryByTestId('coverage-cell-ATTACKER-weapon')).not.toBeInTheDocument();
+    });
 });

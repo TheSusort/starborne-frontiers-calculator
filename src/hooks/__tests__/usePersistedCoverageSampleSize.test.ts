@@ -37,31 +37,31 @@ describe('usePersistedCoverageSampleSize', () => {
 
     it('reads a valid stored value when signed in', () => {
         mockUser = { id: 'user-1' };
-        localStorage.setItem(KEY, '100');
+        localStorage.setItem(`${KEY}:user-1`, '100');
         const { result } = renderHook(() => usePersistedCoverageSampleSize(KEY));
         expect(result.current[0]).toBe(100);
     });
 
     it('falls back to the default when the stored value is not one of the allowed steps', () => {
         mockUser = { id: 'user-1' };
-        localStorage.setItem(KEY, '37');
+        localStorage.setItem(`${KEY}:user-1`, '37');
         const { result } = renderHook(() => usePersistedCoverageSampleSize(KEY));
         expect(result.current[0]).toBe(COVERAGE_SAMPLE_SIZE);
     });
 
     it('falls back to the default when the stored value is not a number at all', () => {
         mockUser = { id: 'user-1' };
-        localStorage.setItem(KEY, 'not-a-number');
+        localStorage.setItem(`${KEY}:user-1`, 'not-a-number');
         const { result } = renderHook(() => usePersistedCoverageSampleSize(KEY));
         expect(result.current[0]).toBe(COVERAGE_SAMPLE_SIZE);
     });
 
-    it('persists a change to localStorage', () => {
+    it('persists a change to the user-scoped localStorage key', () => {
         mockUser = { id: 'user-1' };
         const { result } = renderHook(() => usePersistedCoverageSampleSize(KEY));
         act(() => result.current[1](200));
         expect(result.current[0]).toBe(200);
-        expect(localStorage.getItem(KEY)).toBe('200');
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('200');
     });
 
     it('offers exactly the fixed steps 10, 20, 50, 100, 200', () => {
@@ -72,14 +72,14 @@ describe('usePersistedCoverageSampleSize', () => {
         // Regression for the race where an unresolved `user` at mount was
         // indistinguishable from "signed out", so the effect immediately
         // overwrote a previously saved value (e.g. 100) with the default.
-        localStorage.setItem(KEY, '100');
+        localStorage.setItem(`${KEY}:user-1`, '100');
         mockLoading = true;
         mockUser = null;
 
         const { result, rerender } = renderHook(() => usePersistedCoverageSampleSize(KEY));
 
         // Auth is still resolving: neither a read nor a write may have happened.
-        expect(localStorage.getItem(KEY)).toBe('100');
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('100');
 
         // Auth resolves to a signed-in user.
         mockLoading = false;
@@ -87,7 +87,7 @@ describe('usePersistedCoverageSampleSize', () => {
         rerender();
 
         expect(result.current[0]).toBe(100);
-        expect(localStorage.getItem(KEY)).toBe('100');
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('100');
     });
 
     it('does not destroy a saved value on a mid-session sign-in with no remount', () => {
@@ -98,7 +98,7 @@ describe('usePersistedCoverageSampleSize', () => {
         // hydrated yet" flag would treat the sign-in as already-hydrated and
         // overwrite the newly-current user's stored value with the
         // signed-out default still sitting in state.
-        localStorage.setItem(KEY, '100');
+        localStorage.setItem(`${KEY}:user-1`, '100');
         mockLoading = false;
         mockUser = null;
 
@@ -106,13 +106,13 @@ describe('usePersistedCoverageSampleSize', () => {
 
         // Resolved signed-out: starts at the default, storage untouched.
         expect(result.current[0]).toBe(COVERAGE_SAMPLE_SIZE);
-        expect(localStorage.getItem(KEY)).toBe('100');
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('100');
 
         // Signs in, in place.
         mockUser = { id: 'user-1' };
         rerender();
 
         expect(result.current[0]).toBe(100);
-        expect(localStorage.getItem(KEY)).toBe('100');
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('100');
     });
 });

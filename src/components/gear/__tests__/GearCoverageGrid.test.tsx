@@ -265,6 +265,25 @@ describe('GearCoverageGrid', () => {
         expect(anotherCell.className).toBe(someCell.className);
     });
 
+    it('renders an empty state instead of crashing when roleOrder is empty', () => {
+        // roleOrder is empty when shipRoles is empty, or (after the Role
+        // Filter fix) when it excludes every role. The header counts used to
+        // read `matrix.cells[roleOrder[0]]`, which has nothing to read from
+        // once roleOrder has no first element.
+        const matrix = makeMatrix();
+        const empty = { ...matrix, roleOrder: [] };
+        render(
+            <GearCoverageGrid
+                matrix={empty}
+                onCellClick={() => {}}
+                sampleSize={20}
+                onSampleSizeChange={() => {}}
+            />
+        );
+        expect(screen.getByTestId('coverage-grid-empty')).toBeInTheDocument();
+        expect(screen.queryByTestId(/^coverage-role-/)).not.toBeInTheDocument();
+    });
+
     describe('sample size control', () => {
         it('shows the current sample size in a labelled control', () => {
             render(
@@ -367,7 +386,7 @@ describe('GearCoverageGrid', () => {
 
         it('adopts a stored collapsed state on mount', () => {
             mockUser = { id: 'user-1' };
-            localStorage.setItem('gear-coverage-grid-expanded', 'false');
+            localStorage.setItem('gear-coverage-grid-expanded:user-1', 'false');
             render(
                 <GearCoverageGrid
                     matrix={buildCoverageMatrix([])}

@@ -93,6 +93,7 @@ export const GearCoverageGrid: React.FC<Props> = ({
     sampleSize,
     onSampleSizeChange,
 }) => {
+    const hasRoles = matrix.roleOrder.length > 0;
     const firstRole = matrix.roleOrder[0];
     const [isOpen, setIsOpen] = usePersistedPreference(
         'gear-coverage-grid-expanded',
@@ -161,49 +162,62 @@ export const GearCoverageGrid: React.FC<Props> = ({
                         grid; the percentage shown on each cell is always the absolute value.
                     </div>
 
-                    <div className="overflow-x-auto">
-                        <div
-                            className="grid gap-1 min-w-max"
-                            style={{
-                                gridTemplateColumns: `minmax(9rem, auto) repeat(${GEAR_SLOT_ORDER.length}, minmax(3.5rem, 1fr))`,
-                            }}
-                        >
-                            <div className="sticky left-0 bg-dark z-10" />
-                            {GEAR_SLOT_ORDER.map((slot) => (
-                                <div
-                                    key={slot}
-                                    data-testid={`coverage-header-${slot}`}
-                                    className="text-xxs uppercase tracking-wide text-theme-text-secondary text-center pb-1"
-                                >
-                                    <div>{GEAR_SLOTS[slot].label}</div>
-                                    <div className="normal-case opacity-80">
-                                        {matrix.cells[firstRole][slot].count} at{' '}
-                                        {COVERAGE_MIN_LEVEL}
-                                    </div>
-                                </div>
-                            ))}
-
-                            {matrix.roleOrder.map((role) => (
-                                <React.Fragment key={role}>
+                    {hasRoles ? (
+                        <div className="overflow-x-auto">
+                            <div
+                                className="grid gap-1 min-w-max"
+                                style={{
+                                    gridTemplateColumns: `minmax(9rem, auto) repeat(${GEAR_SLOT_ORDER.length}, minmax(3.5rem, 1fr))`,
+                                }}
+                            >
+                                <div className="sticky left-0 bg-dark z-10" />
+                                {GEAR_SLOT_ORDER.map((slot) => (
                                     <div
-                                        data-testid={`coverage-role-${role}`}
-                                        className="sticky left-0 bg-dark z-10 pr-2 flex items-center justify-end text-xs text-theme-text-secondary"
+                                        key={slot}
+                                        data-testid={`coverage-header-${slot}`}
+                                        className="text-xxs uppercase tracking-wide text-theme-text-secondary text-center pb-1"
                                     >
-                                        {SHIP_TYPES[role].name}
+                                        <div>{GEAR_SLOTS[slot].label}</div>
+                                        <div className="normal-case opacity-80">
+                                            {matrix.cells[firstRole][slot].count} at{' '}
+                                            {COVERAGE_MIN_LEVEL}
+                                        </div>
                                     </div>
-                                    {GEAR_SLOT_ORDER.map((slot) => (
-                                        <CoverageCellButton
-                                            key={slot}
-                                            cell={matrix.cells[role][slot]}
-                                            min={min}
-                                            max={max}
-                                            onClick={() => onCellClick(role, slot)}
-                                        />
-                                    ))}
-                                </React.Fragment>
-                            ))}
+                                ))}
+
+                                {matrix.roleOrder.map((role) => (
+                                    <React.Fragment key={role}>
+                                        <div
+                                            data-testid={`coverage-role-${role}`}
+                                            className="sticky left-0 bg-dark z-10 pr-2 flex items-center justify-end text-xs text-theme-text-secondary"
+                                        >
+                                            {SHIP_TYPES[role].name}
+                                        </div>
+                                        {GEAR_SLOT_ORDER.map((slot) => (
+                                            <CoverageCellButton
+                                                key={slot}
+                                                cell={matrix.cells[role][slot]}
+                                                min={min}
+                                                max={max}
+                                                onClick={() => onCellClick(role, slot)}
+                                            />
+                                        ))}
+                                    </React.Fragment>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    ) : (
+                        // No role has a row to show (an empty `shipRoles`, or a Role
+                        // Filter that excludes every role). The per-slot header counts
+                        // read from the first row's cells, so there is nothing safe to
+                        // show there either — render a plain empty state instead.
+                        <div
+                            data-testid="coverage-grid-empty"
+                            className="text-xs text-theme-text-secondary text-center py-4"
+                        >
+                            No roles to show coverage for.
+                        </div>
+                    )}
                 </div>
             </CollapsibleAccordion>
         </div>
