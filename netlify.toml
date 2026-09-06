@@ -9,6 +9,19 @@
   # would silently skip them and break the build on a missing `vite`. Pin the behaviour here.
   NPM_FLAGS = "--include=dev"
 
+  # Puppeteer (the prerenderer's browser) caches Chrome under $HOME/.cache/puppeteer by
+  # default. Netlify's build image caches `node_modules` wholesale but only `.cache/pip` out
+  # of $HOME, so that default is wiped between builds and the `npx puppeteer browsers install
+  # chrome` in the build command re-downloads Chrome every time (~175 MB zipped, linux64).
+  # Moving the cache inside `node_modules` makes it survive, so that install is a no-op on any
+  # build that restored the cache. Netlify applies the same fix to Cypress: its
+  # run-build-functions.sh defaults CYPRESS_CACHE_FOLDER to `./node_modules/.cache/CypressBinary`.
+  #
+  # Safe against the install step: Netlify runs `npm install`, never `npm ci`, and restores
+  # node_modules BEFORE installing, so nothing wipes the directory. Keep the explicit install
+  # in the build command — it is what repopulates the cache after a cleared-cache build.
+  PUPPETEER_CACHE_DIR = "./node_modules/.cache/puppeteer"
+
 # Security headers
 [[headers]]
   for = "/*"
