@@ -1,6 +1,10 @@
 [build]
   command = "npx puppeteer browsers install chrome && npm run build"
   publish = "dist"
+  # Cancels the build when a commit cannot possibly change the deployed site.
+  # EXIT 0 CANCELS — read scripts/netlify-ignore.sh before changing anything here;
+  # its contract is pinned by src/__tests__/scripts/netlifyIgnore.test.ts.
+  ignore = "bash scripts/netlify-ignore.sh"
 
 [build.environment]
   # vite and its plugins live in devDependencies (they are build tooling, never shipped —
