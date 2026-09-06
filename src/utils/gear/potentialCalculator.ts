@@ -15,7 +15,7 @@ import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { calculateTotalStats, StatBreakdown } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
-import { ROLE_BASE_STATS, getBaseRoleStats } from '../../constants/roleBaseStats';
+import { getScoringBaselineStats } from '../../constants/roleBaseStats';
 import { Ship } from '../../types/ship';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { isCalibrationEligible, getCalibratedMainStat } from './calibrationCalculator';
@@ -189,7 +189,6 @@ function calculateGearStats(
     getEngineeringStatsForShipType?: (shipType: ShipTypeName) => EngineeringStat | undefined,
     includePiece: boolean = true,
     cachedBaseline?: BaseStats | null,
-    overrideBaseCrit?: number,
     shipRole?: ShipTypeName
 ): BaseStats {
     // If ship is provided, use ship's actual stats and equipment
@@ -350,32 +349,13 @@ function calculateGearStats(
         return breakdown.final;
     }
 
-    // Fallback to dummy-based calculation using role-specific base stats
-    const roleStats = shipRole ? getBaseRoleStats(shipRole) : ROLE_BASE_STATS.ATTACKER;
-
-    // Use overrideBaseCrit if provided (ensures consistent baseline across current vs upgraded comparisons)
-    // Otherwise calculate from this piece's crit
-    let baseCrit: number;
-    if (overrideBaseCrit !== undefined) {
-        baseCrit = overrideBaseCrit;
-    } else {
-        let totalGearCrit = 0;
-        if (piece.mainStat?.name === 'crit') {
-            totalGearCrit += piece.mainStat.value;
-        }
-        piece.subStats?.forEach((stat) => {
-            if (stat.name === 'crit') {
-                totalGearCrit += stat.value;
-            }
-        });
-        baseCrit = Math.max(0, 100 - totalGearCrit);
-    }
+    // Fallback to dummy-based calculation using the role's geared scoring
+    // baseline (crit/critDamage near the geared cap, not the bare chassis —
+    // see getScoringBaselineStats).
+    const roleStats = getScoringBaselineStats(shipRole ?? 'ATTACKER');
 
     const breakdown = calculateTotalStats(
-        {
-            ...roleStats,
-            crit: baseCrit,
-        },
+        roleStats,
         // Single piece of gear
         { [piece.slot]: piece.id },
         // Gear piece getter
@@ -593,23 +573,6 @@ function slowAnalyzePotentialUpgrades(
         // Use cached baseline if available (for specific slot analysis or "all" analysis)
         let currentStats: BaseStats;
 
-        // For the dummy path, compute baseCrit once from the CURRENT piece's crit.
-        // This same baseCrit is used for both current and upgraded comparisons so that
-        // crit improvements are properly weighted (upgraded piece with more crit scores higher).
-        let pieceCritBaseline: number | undefined;
-        if (!ship) {
-            let totalGearCrit = 0;
-            if (piece.mainStat?.name === 'crit') {
-                totalGearCrit += piece.mainStat.value;
-            }
-            piece.subStats?.forEach((stat) => {
-                if (stat.name === 'crit') {
-                    totalGearCrit += stat.value;
-                }
-            });
-            pieceCritBaseline = Math.max(0, 100 - totalGearCrit);
-        }
-
         // Try to get cached baseline for this piece's slot (works for both specific slot and "all" analysis)
         let pieceBaseline: BaseStats | null = null;
         if (ship && piece.slot && !piece.slot.includes('implant')) {
@@ -639,7 +602,6 @@ function slowAnalyzePotentialUpgrades(
                     getEngineeringStatsForShipType,
                     false, // Don't include the piece for current stats
                     pieceBaseline || cachedBaselineStats,
-                    pieceCritBaseline,
                     shipRole
                 );
                 gearStatsCache.set(cacheKey, currentStats);
@@ -676,7 +638,6 @@ function slowAnalyzePotentialUpgrades(
                 getEngineeringStatsForShipType,
                 true, // Include the upgraded piece for potential stats
                 upgradedPieceBaseline || cachedBaselineStats,
-                pieceCritBaseline, // Same baseline crit as current piece for fair comparison
                 shipRole
             );
 

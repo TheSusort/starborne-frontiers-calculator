@@ -12,7 +12,7 @@ import type { ShipTypeName } from '../../constants/shipTypes';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
-import { getBaseRoleStats } from '../../constants/roleBaseStats';
+import { getBaseRoleStats, getScoringBaselineStats } from '../../constants/roleBaseStats';
 import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
 import { calculateRoleScore } from '../autogear/priorityScore';
 import { calculateMainStatValue } from './mainStatValueFetcher';
@@ -56,7 +56,7 @@ const baselineScoreByRole = new Map<ShipTypeName, number>();
 function getBaselineScore(role: ShipTypeName): number {
     const cached = baselineScoreByRole.get(role);
     if (cached !== undefined) return cached;
-    const score = calculateRoleScore(role, getBaseRoleStats(role));
+    const score = calculateRoleScore(role, getScoringBaselineStats(role));
     baselineScoreByRole.set(role, score);
     return score;
 }
@@ -102,23 +102,25 @@ function addSetBonusShare(
 }
 
 /**
- * How much this piece raises the role's dummy baseline score.
- *
- * Deliberately NOT the dummy path in potentialCalculator: that one rebaselines
- * crit to `100 - the piece's own crit`, which is fair for a within-piece
- * before/after delta and useless across pieces (it neutralises crit entirely).
+ * How much this piece raises the role's scoring-baseline score
+ * (`getScoringBaselineStats` — a fixed geared reference, the same for every
+ * piece scored against a given role; see #475). The PERCENTAGE reference a
+ * percentage-typed stat scales against stays the bare `getBaseRoleStats`, so
+ * a `+7% attack` roll always applies to the ship's real base attack
+ * regardless of how the scoring baseline models crit/critDamage.
  *
  * Calibration is excluded: it is bound to one specific ship, and this scoring
  * is role-generic. The set bonus is credited at its amortised share — see
  * `addSetBonusShare`.
  */
 export function scorePieceForRole(piece: GearPiece, role: ShipTypeName): number {
-    const baseline = getBaseRoleStats(role);
-    const withPiece: BaseStats = { ...baseline };
+    const percentRef = getBaseRoleStats(role);
+    const scoringBaseline = getScoringBaselineStats(role);
+    const withPiece: BaseStats = { ...scoringBaseline };
 
-    if (piece.mainStat) addStat(piece.mainStat, withPiece, baseline);
-    for (const sub of piece.subStats ?? []) addStat(sub, withPiece, baseline);
-    addSetBonusShare(piece.setBonus, piece.slot, withPiece, baseline);
+    if (piece.mainStat) addStat(piece.mainStat, withPiece, percentRef);
+    for (const sub of piece.subStats ?? []) addStat(sub, withPiece, percentRef);
+    addSetBonusShare(piece.setBonus, piece.slot, withPiece, percentRef);
 
     return calculateRoleScore(role, withPiece) - getBaselineScore(role);
 }

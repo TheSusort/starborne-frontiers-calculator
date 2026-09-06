@@ -1,7 +1,8 @@
 /**
  * USE_FAST_POTENTIAL — when true, routes analyzePotentialUpgrades through
- * fastAnalyzePotentialUpgrades. Defaults to false on first merge; flipped in
- * Phase 5 once equivalence tests and user-side benchmarks look good.
+ * fastAnalyzePotentialUpgrades. It IS true, so a test that means to compare
+ * the two paths must mock this module false, or it compares the fast path
+ * against itself — see `__tests__/equivalence.test.ts`.
  */
 export const USE_FAST_POTENTIAL = true;
 

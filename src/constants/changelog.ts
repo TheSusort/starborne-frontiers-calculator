@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    "Upgrade analysis: excess crit rate no longer inflates a piece's value.",
+    "Upgrade analysis: the coverage grid's ideal pieces no longer stack crit rate.",
     'Upgrade analysis: the Role Filter now narrows the coverage grid to that role too.',
     'Upgrade analysis: coverage grid preferences no longer follow you between accounts.',
     'Upgrade analysis: the coverage grid can now be collapsed to save space.',

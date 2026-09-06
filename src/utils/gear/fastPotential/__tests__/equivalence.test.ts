@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+// USE_FAST_POTENTIAL is true, which makes analyzePotentialUpgrades() ITSELF
+// resolve to fastAnalyzePotentialUpgrades
+// — so without this mock, every "slow vs fast" comparison below silently
+// compares the fast path to itself and can never fail. Forcing it false here
+// routes analyzePotentialUpgrades through the real slow path so this file
+// tests what its name says.
+vi.mock('../featureFlag', () => ({ USE_FAST_POTENTIAL: false, VERIFY_FAST_POTENTIAL: false }));
 import {
     analyzePotentialUpgrades,
     baselineBreakdownCache,
@@ -8,6 +15,7 @@ import { fastAnalyzePotentialUpgrades } from '../fastAnalyze';
 import type { ShipTypeName, GearSlotName } from '../../../../constants';
 import type { StatName } from '../../../../types/stats';
 import type { GearPiece } from '../../../../types/gear';
+import { getScoringBaselineStats } from '../../../../constants/roleBaseStats';
 import {
     generateEligibleInventory,
     seededRandom,
@@ -354,5 +362,185 @@ describe('equivalence: explicit edge cases', () => {
             33
         );
         expect(fast.map((r) => r.piece.id)).toEqual(slow.map((r) => r.piece.id));
+    });
+});
+
+describe('dummy mode: the geared crit/critDamage scoring reference (#475)', () => {
+    // Dummy mode (no ship) always includes the analysed piece in its OWN
+    // "current" stats (potentialCalculator's dummy branch builds equipment
+    // from `{ [piece.slot]: piece.id }` regardless of the includePiece flag),
+    // so `currentScore` is a deterministic function of the piece alone — no
+    // RNG pinning needed for these assertions.
+    const plainSensor: GearPiece = {
+        id: 'plain-sensor',
+        slot: 'sensor',
+        level: 12,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: { name: 'attack', value: 50, type: 'percentage' },
+        subStats: [],
+        setBonus: null,
+    };
+    const sensorWithCritSubstat: GearPiece = {
+        ...plainSensor,
+        id: 'sensor-with-crit-substat',
+        subStats: [{ name: 'crit', value: 8, type: 'percentage' }],
+    };
+
+    // Derived from the accessor, never hardcoded: the probes below only mean
+    // anything relative to wherever the scoring reference currently sits, and
+    // a literal here silently stops straddling the cap the moment that moves.
+    const CRIT_HEADROOM = 100 - getScoringBaselineStats('ATTACKER').crit;
+    const CRIT_UNDER_CAP = CRIT_HEADROOM * 0.75;
+    const CRIT_AT_CAP = CRIT_HEADROOM + 0.01;
+
+    function makeCritMainSensor(critValue: number): GearPiece {
+        return {
+            id: `crit-main-${critValue}`,
+            slot: 'sensor',
+            level: 12,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'crit', value: critValue, type: 'percentage' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const critDamageHeavyWeapon: GearPiece = {
+        id: 'critdamage-heavy-weapon',
+        slot: 'weapon',
+        level: 12,
+        stars: 6,
+        rarity: 'legendary',
+        mainStat: { name: 'attack', value: 1000, type: 'flat' },
+        subStats: [
+            { name: 'critDamage', value: 40, type: 'percentage' },
+            { name: 'crit', value: 8, type: 'percentage' },
+            { name: 'attack', value: 7, type: 'percentage' },
+        ],
+        setBonus: null,
+    };
+    const critRateStackedWeapon: GearPiece = {
+        ...critDamageHeavyWeapon,
+        id: 'critrate-stacked-weapon',
+        subStats: [
+            { name: 'crit', value: 40, type: 'percentage' },
+            { name: 'critDamage', value: 8, type: 'percentage' },
+            { name: 'attack', value: 7, type: 'percentage' },
+        ],
+    };
+
+    it("scores an otherwise-identical piece differently once a +8 crit substat is added — the old baseline cancelled every piece's own crit to a fixed ~100 total", () => {
+        const [plain] = analyzePotentialUpgrades(
+            [plainSensor],
+            'ATTACKER',
+            1,
+            'sensor',
+            'legendary',
+            1
+        );
+        const [withCrit] = analyzePotentialUpgrades(
+            [sensorWithCritSubstat],
+            'ATTACKER',
+            1,
+            'sensor',
+            'legendary',
+            1
+        );
+        expect(withCrit.currentScore).not.toBeCloseTo(plain.currentScore, 6);
+    });
+
+    it('a +30 crit main-stat sensor gains only the points that fit under the 100 cap, not the full 30', () => {
+        // ATTACKER's geared scoring reference leaves a few points of crit
+        // headroom below calculateCritMultiplier's cap (stats.crit >= 100);
+        // `getScoringBaselineStats` owns the exact figure. A piece whose own
+        // crit stays under that headroom scores measurably lower than one
+        // that reaches the cap, and everything past the cap buys nothing, so
+        // two pieces that both cross it score IDENTICALLY.
+        const [under] = analyzePotentialUpgrades(
+            [makeCritMainSensor(CRIT_UNDER_CAP)],
+            'ATTACKER',
+            1,
+            'sensor',
+            'legendary',
+            1
+        );
+        const [atCap] = analyzePotentialUpgrades(
+            [makeCritMainSensor(CRIT_AT_CAP)],
+            'ATTACKER',
+            1,
+            'sensor',
+            'legendary',
+            1
+        );
+        const [wayOverCap] = analyzePotentialUpgrades(
+            [makeCritMainSensor(30)],
+            'ATTACKER',
+            1,
+            'sensor',
+            'legendary',
+            1
+        );
+        expect(under.currentScore).toBeLessThan(atCap.currentScore);
+        expect(wayOverCap.currentScore).toBeCloseTo(atCap.currentScore, 6);
+    });
+
+    describe('fast/slow parity on the same fixtures', () => {
+        const fixtures: GearPiece[] = [
+            plainSensor,
+            sensorWithCritSubstat,
+            makeCritMainSensor(CRIT_UNDER_CAP),
+            makeCritMainSensor(CRIT_AT_CAP),
+            makeCritMainSensor(30),
+            critDamageHeavyWeapon,
+            critRateStackedWeapon,
+        ];
+
+        it.each(fixtures)('slow and fast agree on currentScore for piece $id', (piece) => {
+            const [slow] = analyzePotentialUpgrades(
+                [piece],
+                'ATTACKER',
+                1,
+                piece.slot,
+                'legendary',
+                1
+            );
+            const [fast] = fastAnalyzePotentialUpgrades(
+                [piece],
+                'ATTACKER',
+                1,
+                piece.slot,
+                'legendary',
+                1
+            );
+            assertFloatsClose(fast.currentScore, slow.currentScore, { relative: true });
+        });
+
+        // One case per role whose scoring baseline moved. SUPPORTER reaches
+        // crit through a different formula than ATTACKER/DEBUFFER (heal crit,
+        // not DPS), so agreement on an attacker proves nothing about it.
+        it.each(['ATTACKER', 'DEBUFFER', 'SUPPORTER'] as const)(
+            'slow and fast agree on currentScore in dummy mode for role %s',
+            (role) => {
+                const [slow] = analyzePotentialUpgrades(
+                    [sensorWithCritSubstat],
+                    role,
+                    1,
+                    'sensor',
+                    'legendary',
+                    1
+                );
+                const [fast] = fastAnalyzePotentialUpgrades(
+                    [sensorWithCritSubstat],
+                    role,
+                    1,
+                    'sensor',
+                    'legendary',
+                    1
+                );
+                assertFloatsClose(fast.currentScore, slow.currentScore, { relative: true });
+            }
+        );
     });
 });
