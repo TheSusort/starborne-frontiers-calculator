@@ -6,6 +6,9 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Ship inventory: your list or image view choice now survives a reload.',
+    "Ship inventory: signing back in now restores your account's saved view choice.",
+    'Upgrade analysis: signing back in now restores your saved coverage grid preferences.',
     "Upgrade analysis: excess crit rate no longer inflates a piece's value.",
     "Upgrade analysis: the coverage grid's ideal pieces no longer stack crit rate.",
     'Upgrade analysis: the Role Filter now narrows the coverage grid to that role too.',
