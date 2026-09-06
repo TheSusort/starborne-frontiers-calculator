@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 A gear and ship calculator for Starborne Frontiers game. Users can import their game data (ships, gear, engineering stats), calculate optimal gear loadouts using autogear algorithms, and manage their fleet.
@@ -9,9 +7,6 @@ A gear and ship calculator for Starborne Frontiers game. Users can import their 
 ## Development Commands
 
 ```bash
-npm run fetch:ship-data    # Update ship data from external source
-npm run fetch:ship-skills  # Update ship skill text from external source
-npm run fetch-buffs        # Update buff data from external source
 npm run admin:import -- --file <path> --email <user@email.com>  # Import game data on behalf of a user (uses SUPABASE_SERVICE_ROLE_KEY)
 ```
 
@@ -23,11 +18,7 @@ npm run admin:import -- --file <path> --email <user@email.com>  # Import game da
 
 ### Autogear System
 
-**Location:** `src/utils/autogear/`
-
-**Strategies** (`strategies/` folder): `GreedyStrategy` (fast single-pass), `TwoPassStrategy` (default, considers set bonuses). All implement `AutogearStrategy` interface.
-
-**Progress Tracking:** `ProgressTracker` with event emitters for UI updates. Autogear is CPU-intensive — use Web Workers for heavy calculations.
+Lives in `src/utils/autogear/` — see that folder's `CLAUDE.md` for strategies and progress tracking.
 
 ### Ship Template Proposals System
 
@@ -78,38 +69,10 @@ TailwindCSS utility-first, dark theme by default. Avoid inline styles unless dyn
 
 **IMPORTANT:** Always use existing UI components from `src/components/ui/` instead of writing raw HTML elements with inline Tailwind classes.
 
-**Containers & Layout:**
+Read `src/components/ui/` (plus its `layout/`, `tables/`, `charts/`, `icons/` subfolders) for what exists before adding markup. Two things the file listing does not tell you:
 
-- Use the `card` CSS class (`bg-dark border border-dark-border p-4`) for any boxed/grouped content — never hand-roll card styles
-- `Modal` / `ConfirmModal` for dialogs — never build custom modal markup
-- `Offcanvas` for sliding panels
-- `CollapsibleForm` / `CollapsibleAccordion` for expandable sections
-- `Tabs` for tab navigation
-- `PageLayout` for page-level structure
-- `Tooltip` for hover info (portal-based, auto-repositioning)
-
-**Form Controls:**
-
-- `Button` (variants: `primary` | `secondary` | `danger` | `link`, sizes: `xs` | `sm` | `md` | `lg`)
-- `Input` / `Textarea` / `Select` / `Checkbox` / `CheckboxGroup` — all support `label`, `error`, and `helpLabel` props
-- `SearchInput` for search fields
-- `RoleSelector` for ship role dropdowns (wraps `Select`)
-
-**Data Display:**
-
-- `StatCard` for metric cards (with color variants)
-- `DataTable` for tabular data
-- `BaseChart` / `ChartTooltip` for Recharts visualizations
-- `Pagination` for paged lists
-- `Loader` / `ProgressBar` for loading states
-
-**Other:**
-
-- `Dropdown` / `DropdownItem` for action menus
-- `IconBadge` for icon badges
-- `SectionHeader` for section titles
-- Icons live in `src/components/ui/icons/` — check there before adding new icon markup
-- `FilterPanel` + `usePersistedFilters` for filter/sort UI with localStorage persistence
+- The `card` CSS class (`bg-dark border border-dark-border p-4`) is the boxed/grouped-content primitive — it is a class, not a component
+- `FilterPanel` is not in `ui/` — it lives in `src/components/filters/` and pairs with the `usePersistedFilters` hook for filter/sort UI with localStorage persistence
 
 **Rules:**
 
@@ -173,7 +136,7 @@ around it. A comment that no longer matches the code is worse than no comment: a
 
 ## Testing
 
-**Framework:** Vitest + React Testing Library. Focus on utility functions (autogear scoring, stat calculations) and data transformations (import pipeline).
+Focus on utility functions (autogear scoring, stat calculations) and data transformations (import pipeline).
 
 ## Database Migrations
 
@@ -186,15 +149,9 @@ around it. A comment that no longer matches the code is worse than no comment: a
 - Sign-in: `app:migration:start` → sync localStorage → Supabase → `app:migration:end`
 - Sign-out: `app:signout` (contexts listen and preserve localStorage)
 
-Always dispatch `app:migration:end` even on error.
-
 ## Admin Panel
 
-**Access:** `users.is_admin = true`
-
-- **Analytics Tab:** Daily usage, top users (`get_top_active_users` RPC), total users
-- **System Health Tab:** Table size monitoring (500 MB Supabase limit, ~15% overhead)
-- **Templates Tab:** Review/approve ship template proposals
+Access is `users.is_admin = true`. The System Health tab budgets against a 500 MB Supabase limit with ~15% overhead.
 
 ## External Integrations
 
