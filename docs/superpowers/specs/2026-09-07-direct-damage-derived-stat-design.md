@@ -78,6 +78,8 @@ Mirrors the recipe already proven by `effectiveHp` (PR #75).
 | `src/constants/stats.ts` | `MULTIPLIER_NORMALIZERS` key type widens `keyof BaseStats` → `LimitableStat`, staying `Partial<Record<LimitableStat, number>>` — NEVER `Record<string, number>`, which would drop the compile-time key check; add `effectiveHp` AND `directDamage` entries |
 | `src/components/autogear/StatBonusForm.tsx` | offer derived stats in the stat list; labels via `getLimitStatLabel` |
 | `src/components/autogear/StatBonusRow.tsx` | label via `getLimitStatLabel` |
+| `src/components/stats/StatPriorityForm.tsx` | add `directDamage` to the hand-curated `AVAILABLE_STATS` — it is NOT derived from a stat table, so a new derived stat must be added by hand. A `DERIVED_STAT_LABELS`-driven test now guards it |
+| `src/utils/communityBuildSummary.ts`, `src/components/autogear/SharedBuildFields.tsx`, `src/components/autogear/AutogearConfigList.tsx` | the stat-BONUS label sites — swap `STATS[...]` for `getLimitStatLabel`. The stat-PRIORITY sites in two of these files were already derived-aware, which is why these were easy to miss |
 
 `resolveLimitStatValue` is already exported and re-exported through `src/utils/autogear/scoring.ts`
 (the barrel `GeneticStrategy` imports from), so no new plumbing is needed for the strategies.
@@ -201,8 +203,19 @@ export function previewStatBonus(
   scope, and stat bonuses are not set-dependent, so they pass through cleanly.
 
 `AutogearPage` already calls `calculateTotalStats` for the selected ship, and `AutogearSettings`
-already receives `selectedShip` and `selectedShipRole` — so the inputs are in hand and the form
-receives computed numbers rather than doing any scoring itself.
+already receives `selectedShip` and `selectedShipRole` — so the inputs are in hand.
+
+**As shipped, the form receives a `previewFor?: (bonus: StatBonus) => StatBonusPreview` CALLBACK,
+not precomputed numbers.** The preview has to track the in-progress stat, percentage and mode,
+which only the form holds. The scoring still happens outside the component, in `previewStatBonus`,
+so the testability this section is about is preserved.
+
+**Also as shipped: the first row is labelled `Role score, current gear`, not "this ship's score".**
+It reports `calculateRoleScore` (the bare formula) over the ship's CURRENTLY EQUIPPED gear, whereas
+the optimizer's fitness is `calculatePriorityScore` — that formula times `(1 - penalties/100)`,
+with `setCount` and `arcaneSiegeMultiplier` supplied, over stats that have had arena modifiers and
+fleet buffs applied. The delta and the base/delta ratio survive all of it (the penalty factor is
+multiplicative); only an absolute label would over-claim.
 
 Reuses existing `ui/` primitives only; no new component. The form already renders a guidance `<p>`
 and additive/multiplier tooltips.

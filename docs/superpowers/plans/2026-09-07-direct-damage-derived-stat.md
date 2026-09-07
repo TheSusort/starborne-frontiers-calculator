@@ -929,8 +929,7 @@ import { STATS, ALL_STAT_NAMES } from '../../constants';
 import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../constants/stats';
 import { LimitableStat } from '../../types/stats';
 
-/** Real stats first, then the derived composites. Same list the stat-priority form offers,
- *  so the two surfaces stay consistent. */
+/** Real stats first, then the derived composites. */
 const BONUS_STATS: LimitableStat[] = [
     ...ALL_STAT_NAMES,
     ...(Object.keys(DERIVED_STAT_LABELS) as Array<keyof typeof DERIVED_STAT_LABELS>),
@@ -1092,13 +1091,9 @@ import type { StatBonusPreview } from '../../utils/autogear/priorityScore';
 Compute it inside the component, after the existing state declarations:
 
 ```tsx
-    // Capture the narrowed stat alongside the preview. Inside the JSX guard below,
-    // TypeScript cannot re-narrow `selectedStat` away from `LimitableStat | ''` from the
-    // `preview` check alone, so the label render needs this instead of the state value.
-    const previewStat: LimitableStat | null = selectedStat || null;
     const preview =
-        previewFor && previewStat
-            ? previewFor({ stat: previewStat, percentage: percentage || 0, mode })
+        previewFor && selectedStat
+            ? previewFor({ stat: selectedStat, percentage: percentage || 0, mode })
             : null;
 ```
 
@@ -1111,13 +1106,13 @@ Render it directly after the Mode block's closing `</div>`, before the submit bu
                         <>
                             <div className="flex justify-between gap-4">
                                 <span className="text-theme-text-secondary">
-                                    This ship&apos;s score
+                                    Role score, current gear
                                 </span>
                                 <span>{Math.round(preview.baseScore).toLocaleString()}</span>
                             </div>
                             <div className="flex justify-between gap-4">
                                 <span className="text-theme-text-secondary">
-                                    {previewStat && getLimitStatLabel(previewStat)}{' '}
+                                    {getLimitStatLabel(selectedStat)}{' '}
                                     {Math.round(preview.statValue).toLocaleString()} ×{' '}
                                     {percentage || 0}%
                                 </span>
