@@ -46,10 +46,19 @@ describe('validateSharedAutogearBuild', () => {
         expect(validateSharedAutogearBuild(build)).toBeNull();
     });
 
-    it('rejects a derived stat in statBonuses (bonuses are real stats only)', () => {
+    it('accepts a derived stat in statBonuses', () => {
         const build = {
             ...structuredClone(validBuild),
             statBonuses: [{ stat: 'effectiveHp', percentage: 10, mode: 'additive' }],
+        };
+        expect(validateSharedAutogearBuild(build)?.statBonuses[0].stat).toBe('effectiveHp');
+    });
+
+    // Fleet buffs model a real in-game buff on a real stat, unlike stat bonuses.
+    it('rejects a derived stat in fleetBuffs', () => {
+        const build = {
+            ...structuredClone(validBuild),
+            fleetBuffs: [{ stat: 'effectiveHp', percentage: 10 }],
         };
         expect(validateSharedAutogearBuild(build)).toBeNull();
     });

@@ -93,9 +93,7 @@ const DERIVED_STAT_ENTRIES: Array<[string, string]> = Object.entries(DERIVED_STA
     ([key, def]) => [key, def.label]
 );
 
-/** Valid for stat bonuses/fleet buffs — real `StatName`s only. */
-const STAT_NAME_INDEX = buildReverseStatIndex(STAT_NAME_ENTRIES);
-/** Valid for stat priorities — `StatName`s plus derived limit stats (effectiveHp). */
+/** Valid for stat priorities and stat bonuses — `StatName`s plus derived stats. */
 const LIMITABLE_STAT_INDEX = buildReverseStatIndex([...STAT_NAME_ENTRIES, ...DERIVED_STAT_ENTRIES]);
 
 const isStatNameKey = (key: string): boolean => Object.prototype.hasOwnProperty.call(STATS, key);
@@ -142,10 +140,10 @@ const normalizeLegacyStatPriorities = (raw: unknown): unknown => {
 /**
  * Legacy `stat_bonuses` rows may use the shape of the old, now-deleted
  * `AIRecommendation` type: `{ stat, weight }` instead of `{ stat, percentage }`,
- * AND/OR hold a display label (e.g. `'heal modifier'`) instead of a
- * `StatName` key — never a derived stat here, unlike stat priorities.
- * Map `weight` forward only when `percentage` is absent — never accepted by
- * the schema itself, only adapted here on the way in.
+ * AND/OR hold a display label (e.g. `'heal modifier'`, `'Direct Damage'`)
+ * instead of a `LimitableStat` key. Map `weight` forward only when
+ * `percentage` is absent — never accepted by the schema itself, only adapted
+ * here on the way in.
  */
 const normalizeLegacyStatBonuses = (raw: unknown): unknown => {
     if (!Array.isArray(raw)) return raw;
@@ -160,7 +158,7 @@ const normalizeLegacyStatBonuses = (raw: unknown): unknown => {
                 : (entry as Record<string, unknown>);
         if (!('stat' in withPercentage)) return withPercentage;
         const { stat, ...rest } = withPercentage;
-        return { ...rest, stat: resolveLegacyStat(stat, STAT_NAME_INDEX, isStatNameKey) };
+        return { ...rest, stat: resolveLegacyStat(stat, LIMITABLE_STAT_INDEX, isLimitableStatKey) };
     });
 };
 
