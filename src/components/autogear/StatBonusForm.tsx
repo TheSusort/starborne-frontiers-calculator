@@ -1,14 +1,25 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button, Select, Input, Tooltip } from '../ui';
 import { StatBonus } from '../../types/autogear';
-import { STATS, ALL_STAT_NAMES } from '../../constants';
-import { StatName } from '../../types/stats';
+import { ALL_STAT_NAMES } from '../../constants';
+import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../constants/stats';
+import { LimitableStat } from '../../types/stats';
+import type { StatBonusPreview } from '../../utils/autogear/priorityScore';
+
+/** Real stats first, then the derived composites. */
+const BONUS_STATS: LimitableStat[] = [
+    ...ALL_STAT_NAMES,
+    ...(Object.keys(DERIVED_STAT_LABELS) as Array<keyof typeof DERIVED_STAT_LABELS>),
+];
 
 interface StatBonusFormProps {
     onAdd: (bonus: StatBonus) => void;
     editingValue?: StatBonus;
     onSave?: (bonus: StatBonus) => void;
     onCancel?: () => void;
+    /** Computes what the in-progress bonus contributes. Omitted when no ship is selected,
+     *  in which case no preview renders. */
+    previewFor?: (bonus: StatBonus) => StatBonusPreview;
 }
 
 export const StatBonusForm: React.FC<StatBonusFormProps> = ({
@@ -16,8 +27,9 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     editingValue,
     onSave,
     onCancel,
+    previewFor,
 }) => {
-    const [selectedStat, setSelectedStat] = useState<StatName | ''>('');
+    const [selectedStat, setSelectedStat] = useState<LimitableStat | ''>('');
     const [percentage, setPercentage] = useState<number>(0);
     const [mode, setMode] = useState<'additive' | 'multiplier'>('additive');
     const additiveRef = useRef<HTMLSpanElement>(null);
@@ -25,9 +37,14 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     const [showAdditiveTip, setShowAdditiveTip] = useState(false);
     const [showMultiplierTip, setShowMultiplierTip] = useState(false);
 
+    const preview =
+        previewFor && selectedStat
+            ? previewFor({ stat: selectedStat, percentage: percentage || 0, mode })
+            : null;
+
     useEffect(() => {
         if (editingValue) {
-            setSelectedStat(editingValue.stat as StatName);
+            setSelectedStat(editingValue.stat);
             setPercentage(editingValue.percentage);
             setMode(editingValue.mode ?? 'additive');
         } else {
@@ -60,12 +77,12 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                 <Select
                     label="Stat"
                     className="flex-1 min-w-[8rem]"
-                    options={ALL_STAT_NAMES.map((key) => ({
+                    options={BONUS_STATS.map((key) => ({
                         value: key,
-                        label: STATS[key].label,
+                        label: getLimitStatLabel(key),
                     }))}
                     value={selectedStat}
-                    onChange={(value) => setSelectedStat(value as StatName)}
+                    onChange={(value) => setSelectedStat(value as LimitableStat)}
                     noDefaultSelection
                 />
                 <div className="w-24">
@@ -136,8 +153,46 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                         </Tooltip>
                     </div>
                 </div>
+                {preview && (
+                    <div className="card w-full text-xs space-y-1" data-testid="stat-bonus-preview">
+                        {preview.applies ? (
+                            <>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-theme-text-secondary">
+                                        Role score, current gear
+                                    </span>
+                                    <span>{Math.round(preview.baseScore).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-theme-text-secondary">
+                                        {selectedStat && getLimitStatLabel(selectedStat)}{' '}
+                                        {Math.round(preview.statValue).toLocaleString()} ×{' '}
+                                        {percentage || 0}%
+                                    </span>
+                                    <span>
+                                        {preview.newScore >= preview.baseScore ? '+' : ''}
+                                        {Math.round(
+                                            preview.newScore - preview.baseScore
+                                        ).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4 border-t border-dark-border pt-1">
+                                    <span className="text-theme-text-secondary">
+                                        Resulting score
+                                    </span>
+                                    <span>{Math.round(preview.newScore).toLocaleString()}</span>
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-theme-text-secondary">
+                                Stat bonuses only apply when a role is selected — without one,
+                                scoring uses your stat priorities and ignores bonuses.
+                            </p>
+                        )}
+                    </div>
+                )}
                 {editingValue ? (
-                    <div className="flex gap-2 mt-auto">
+                    <div className="flex gap-2 mt-auto ml-auto">
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
                         </Button>
@@ -150,7 +205,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                         type="submit"
                         disabled={!selectedStat}
                         variant="secondary"
-                        className="mt-auto"
+                        className="mt-auto ml-auto"
                     >
                         Add
                     </Button>

@@ -167,7 +167,7 @@ describe('configToSharedBuild', () => {
         shipRole: 'ATTACKER' as const,
         statPriorities: [{ stat: 'crit' as const, minLimit: 100 }],
         setPriorities: [{ setName: 'CRITICAL', count: 4 }],
-        statBonuses: [{ stat: 'attack', percentage: 30, mode: 'additive' as const }],
+        statBonuses: [{ stat: 'attack' as const, percentage: 30, mode: 'additive' as const }],
         fleetBuffs: [{ stat: 'attack' as const, percentage: 30 }],
         excludedImplantTypes: ['MARTYRDOM'],
         optimizeImplants: true,

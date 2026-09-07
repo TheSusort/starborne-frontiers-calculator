@@ -48,6 +48,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: damage-taken reactions and Tenacity now read what the ship actually took.',
     'Combat simulator: a converting ship no longer leeches off damage it absorbs.',
     "Combat simulator: Asphyxiator's crit-landed debuffs now last one turn longer.",
+    'Autogear: a stat bonus now previews the score it adds before you save it.',
+    'Autogear: new Direct Damage stat combines attack, crit, crit power and defense penetration.',
+    'Autogear: Effective HP now works as a stat bonus, not just a requirement.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

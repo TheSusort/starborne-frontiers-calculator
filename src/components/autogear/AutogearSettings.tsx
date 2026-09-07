@@ -20,6 +20,8 @@ import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { ArenaSeason } from '../../types/arena';
+import { BaseStats } from '../../types/stats';
+import { previewStatBonus } from '../../utils/autogear/scoring';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
 import { SetPriorityRow } from './SetPriorityRow';
@@ -58,6 +60,7 @@ function formatRuleSummary(rule: {
 
 interface AutogearSettingsProps {
     selectedShip: Ship | null;
+    selectedShipStats: BaseStats | null;
     selectedShipRole: ShipTypeName | null;
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
@@ -247,6 +250,7 @@ const SetPriorityForm: React.FC<{
 
 export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     selectedShip,
+    selectedShipStats,
     selectedShipRole,
     priorities,
     ignoreEquipped,
@@ -962,6 +966,19 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 })()}
                             {tweakView.type === 'statBonus' && (
                                 <StatBonusForm
+                                    previewFor={
+                                        selectedShipStats
+                                            ? (bonus) =>
+                                                  previewStatBonus(
+                                                      selectedShipStats,
+                                                      selectedShipRole,
+                                                      bonus,
+                                                      statBonuses.filter(
+                                                          (_, i) => i !== tweakView.editIndex
+                                                      )
+                                                  )
+                                            : undefined
+                                    }
                                     onAdd={(b) => {
                                         onAddStatBonus(b);
                                         backToList();

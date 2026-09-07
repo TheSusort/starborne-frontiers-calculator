@@ -278,6 +278,19 @@ export const AutogearPage: React.FC = () => {
         return targets;
     }, [donorContext, ships]);
 
+    const selectedShipStats = useMemo(() => {
+        if (!shipSettings) return null;
+        return calculateTotalStats(
+            shipSettings.baseStats,
+            shipSettings.equipment,
+            getGearPiece,
+            shipSettings.refits,
+            shipSettings.implants,
+            getEngineeringStatsForShipType(shipSettings.type),
+            shipSettings.id
+        ).final;
+    }, [shipSettings, getGearPiece, getEngineeringStatsForShipType]);
+
     const availableImplantTypes = useMemo(() => {
         const seen = new Set<string>();
         const result: { key: string; name: string; label: string }[] = [];
@@ -1495,6 +1508,7 @@ export const AutogearPage: React.FC = () => {
                     isOpen={showSettingsModal}
                     onClose={() => setShowSettingsModal(false)}
                     selectedShip={shipSettings}
+                    selectedShipStats={selectedShipStats}
                     selectedShipRole={shipSettings ? getShipConfig(shipSettings.id).shipRole : null}
                     selectedAlgorithm={
                         shipSettings

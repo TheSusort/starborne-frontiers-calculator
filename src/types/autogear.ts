@@ -23,7 +23,9 @@ export interface GearSuggestion {
 }
 
 export interface StatBonus {
-    stat: string;
+    /** A real `StatName` or a derived stat (`effectiveHp`, `directDamage`) — resolved
+     *  through `resolveLimitStatValue`, so a derived stat weighs correctly here. */
+    stat: LimitableStat;
     percentage: number;
     mode?: 'additive' | 'multiplier';
 }

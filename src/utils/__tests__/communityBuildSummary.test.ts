@@ -103,4 +103,13 @@ describe('communityBuildSummary', () => {
     it('returns just the role when nothing else is configured', () => {
         expect(communityBuildSummary(base)).toBe('Attacker');
     });
+
+    it('labels a derived-stat bonus with its human name, not the raw key', () => {
+        const summary = communityBuildSummary({
+            ...base,
+            statBonuses: [{ stat: 'directDamage', percentage: 60, mode: 'multiplier' }],
+        });
+        expect(summary).toContain('Direct Damage 60% multiplier');
+        expect(summary).not.toContain('directDamage');
+    });
 });

@@ -10,10 +10,13 @@ import type { SharedAutogearBuild } from '../types/communityRecommendation';
 const isKeyOf = (record: object, key: string): boolean =>
     Object.prototype.hasOwnProperty.call(record, key);
 
-/** Real gear/base stats — valid for stat bonuses and fleet buffs. */
+/** Real gear/base stats — valid for fleet buffs, which model an actual in-game buff on an
+ *  actual stat. NOT used for stat bonuses; those accept derived stats too. */
 const statNameSchema = z.string().refine((v) => isKeyOf(STATS, v), { message: 'Unknown stat' });
 
-/** Base stats plus derived limit stats (effectiveHp) — valid for stat priorities. */
+/** Base stats plus derived stats (effectiveHp, directDamage) — valid for stat priorities
+ *  AND stat bonuses. A strict superset of statNameSchema, so widening a field to this
+ *  never invalidates previously-stored data. */
 const limitableStatSchema = z
     .string()
     .refine((v) => isKeyOf(STATS, v) || isKeyOf(DERIVED_STAT_LABELS, v), {
@@ -93,7 +96,7 @@ const setPrioritySchema = z.union([
 ]);
 
 const statBonusSchema = z.object({
-    stat: statNameSchema,
+    stat: limitableStatSchema,
     percentage: boundedNumberSchema,
     mode: z.enum(['additive', 'multiplier']).optional(),
 });

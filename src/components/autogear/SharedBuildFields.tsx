@@ -3,7 +3,6 @@ import { SHIP_TYPES } from '../../constants/shipTypes';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { STATS, getLimitStatLabel } from '../../constants/stats';
-import type { StatName } from '../../types/stats';
 import type { SharedAutogearBuild } from '../../types/communityRecommendation';
 
 interface SharedBuildFieldsProps {
@@ -82,8 +81,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                 <Section title="Stat Bonuses">
                     {config.statBonuses.map((bonus, index) => (
                         <div key={index} data-testid="community-build-bonus">
-                            {STATS[bonus.stat as StatName]?.label ?? bonus.stat} ({' '}
-                            {bonus.percentage}
+                            {getLimitStatLabel(bonus.stat)} ( {bonus.percentage}
                             {'%) — '}
                             <span className="text-xs text-theme-text-secondary">
                                 {bonus.mode === 'multiplier' ? 'Multiplier' : 'Additive'}

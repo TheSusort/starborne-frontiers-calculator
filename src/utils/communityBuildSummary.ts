@@ -1,8 +1,7 @@
 import { SHIP_TYPES } from '../constants/shipTypes';
 import { GEAR_SETS } from '../constants/gearSets';
 import { IMPLANTS } from '../constants/implants';
-import { STATS, getLimitStatLabel } from '../constants/stats';
-import type { StatName } from '../types/stats';
+import { getLimitStatLabel } from '../constants/stats';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
 
 // Every lookup below is keyed by community-authored data, so every one falls
@@ -53,7 +52,7 @@ export const communityBuildSummary = (build: SharedAutogearBuild): string => {
             build.statBonuses
                 .map(
                     (bonus) =>
-                        `${STATS[bonus.stat as StatName]?.label ?? bonus.stat} ${bonus.percentage}% ${
+                        `${getLimitStatLabel(bonus.stat)} ${bonus.percentage}% ${
                             bonus.mode === 'multiplier' ? 'multiplier' : 'additive'
                         }`
                 )

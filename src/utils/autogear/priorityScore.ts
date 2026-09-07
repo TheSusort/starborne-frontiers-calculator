@@ -25,12 +25,16 @@ export function calculateEffectiveHP(
 }
 
 /**
- * Resolve the value to compare against a stat limit. Base stats pass through;
- * derived stats (effectiveHp) are computed from the build's stats on the fly.
+ * Resolve a `LimitableStat` for a build, for use as a priority limit or a stat bonus.
+ * Base stats pass through; derived stats (effectiveHp, directDamage) are computed from the
+ * build's stats on the fly.
  */
 export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): number {
     if (stat === 'effectiveHp') {
         return calculateEffectiveHP(stats.hp, stats.defence, stats.damageReduction ?? 0);
+    }
+    if (stat === 'directDamage') {
+        return calculateDirectDamage(stats);
     }
     return stats[stat] || 0;
 }
@@ -76,6 +80,18 @@ function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): numb
     return baseDPS;
 }
 
+/**
+ * The offensive twin of `calculateEffectiveHP`: one number combining attack, crit rate,
+ * crit power and defense penetration, for use as the `directDamage` derived stat.
+ *
+ * Deliberately omits `arcaneSiegeMultiplier`. That is gear-set dependent, and a derived
+ * stat is resolved from a stat block alone — the same reason `calculateRoleScore` takes no
+ * set params.
+ */
+export function calculateDirectDamage(stats: BaseStats): number {
+    return calculateDPS(stats);
+}
+
 export function calculateHealingPerHit(stats: BaseStats): number {
     return (stats.hp || 0) * ((stats.hpRegen || 0) / 100) * calculateCritMultiplier(stats);
 }
@@ -89,7 +105,7 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
     if (!statBonuses || statBonuses.length === 0) return 0;
     return statBonuses.reduce((total, bonus) => {
         if (bonus.mode === 'multiplier') return total;
-        const statValue = stats[bonus.stat as keyof BaseStats] || 0;
+        const statValue = resolveLimitStatValue(stats, bonus.stat);
         return total + statValue * (bonus.percentage / 100);
     }, 0);
 }
@@ -97,7 +113,15 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
 // Normalizers for multiplier mode so that 50% means roughly
 // "this stat weighs about as much as the base role score"
 // regardless of the stat's raw value range.
-const MULTIPLIER_NORMALIZERS: Partial<Record<keyof BaseStats, number>> = {
+//
+// Each entry sits at roughly the stat's GEARED value, not its bare-chassis value
+// (attack 10,000 against a bare 6,250; hp 50,000 against a bare 22,000). The two derived
+// entries follow the same reading — `derivedStatBonuses.test.ts` pins them.
+//
+// Keyed `LimitableStat`, not `keyof BaseStats`, so derived stats are expressible. It must
+// stay a `Partial<Record<LimitableStat, …>>` — a `Record<string, number>` would drop the
+// compile-time key check.
+const MULTIPLIER_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     hp: 50000,
     attack: 10000,
     defence: 7000,
@@ -106,6 +130,8 @@ const MULTIPLIER_NORMALIZERS: Partial<Record<keyof BaseStats, number>> = {
     crit: 80,
     critDamage: 130,
     speed: 130,
+    effectiveHp: 120000,
+    directDamage: 6000,
 };
 
 // Returns the normalized multiplier sum from multiplier bonuses.
@@ -118,8 +144,8 @@ export function calculateMultiplierFactor(stats: BaseStats, statBonuses?: StatBo
     const multiplierBonuses = statBonuses.filter((b) => b.mode === 'multiplier');
     if (multiplierBonuses.length === 0) return 0;
     return multiplierBonuses.reduce((total, bonus) => {
-        const statValue = stats[bonus.stat as keyof BaseStats] || 0;
-        const normalizer = MULTIPLIER_NORMALIZERS[bonus.stat as keyof BaseStats] || 1;
+        const statValue = resolveLimitStatValue(stats, bonus.stat);
+        const normalizer = MULTIPLIER_NORMALIZERS[bonus.stat] || 1;
         return total + (statValue / normalizer) * (bonus.percentage / 100);
     }, 0);
 }
@@ -500,37 +526,82 @@ export function calculatePriorityScore(
  * engineering stats are global per role and gear-set composition is out of scope here.
  * Sub-roles that reward full sets (SUPPORTER_BUFFER, DEBUFFER_CORROSION, etc.) will score
  * slightly lower than reality, but the relative ranking between engineering tracks is correct.
+ * `statBonuses` pass through to the role formula regardless — they are not set-dependent.
  *
  * @see calculatePriorityScore - The role switch in that function mirrors the one here.
  * MAINTENANCE: When a new ShipTypeName is added, both switches must be updated.
  */
-export function calculateRoleScore(role: ShipTypeName, stats: BaseStats): number {
+export function calculateRoleScore(
+    role: ShipTypeName,
+    stats: BaseStats,
+    statBonuses?: StatBonus[]
+): number {
     switch (role) {
         case 'ATTACKER':
-            return calculateAttackerScore(stats);
+            return calculateAttackerScore(stats, statBonuses);
         case 'DEFENDER':
-            return calculateDefenderScore(stats);
+            return calculateDefenderScore(stats, statBonuses);
         case 'DEFENDER_SECURITY':
-            return calculateDefenderSecurityScore(stats);
+            return calculateDefenderSecurityScore(stats, statBonuses);
         case 'DEBUFFER':
-            return calculateDebufferScore(stats);
+            return calculateDebufferScore(stats, statBonuses);
         case 'DEBUFFER_DEFENSIVE':
-            return calculateDefensiveDebufferScore(stats);
+            return calculateDefensiveDebufferScore(stats, statBonuses);
         case 'DEBUFFER_DEFENSIVE_SECURITY':
-            return calculateDefensiveSecurityDebufferScore(stats);
+            return calculateDefensiveSecurityDebufferScore(stats, statBonuses);
         case 'DEBUFFER_BOMBER':
-            return calculateBomberDebufferScore(stats);
+            return calculateBomberDebufferScore(stats, statBonuses);
         case 'DEBUFFER_CORROSION':
-            return calculateCorrosionDebufferScore(stats);
+            return calculateCorrosionDebufferScore(stats, undefined, statBonuses);
         case 'SUPPORTER':
-            return calculateHealerScore(stats);
+            return calculateHealerScore(stats, statBonuses);
         case 'SUPPORTER_BUFFER':
-            return calculateBufferScore(stats);
+            return calculateBufferScore(stats, undefined, statBonuses);
         case 'SUPPORTER_OFFENSIVE':
-            return calculateOffensiveSupporterScore(stats);
+            return calculateOffensiveSupporterScore(stats, undefined, statBonuses);
         case 'SUPPORTER_SHIELD':
-            return calculateShieldSupporterScore(stats);
+            return calculateShieldSupporterScore(stats, undefined, statBonuses);
         default:
             return 0;
     }
+}
+
+export interface StatBonusPreview {
+    /** The bonus stat's value on these stats — derived stats resolved, not indexed. */
+    statValue: number;
+    /** Role score with `otherBonuses` applied and this bonus absent. */
+    baseScore: number;
+    /** Role score with `otherBonuses` AND this bonus applied. */
+    newScore: number;
+    /** False when no role is selected. `calculatePriorityScore` applies stat bonuses only
+     *  inside the role formulas — with no role it uses `calculateDefaultScore`, which takes
+     *  none — so a bonus really does nothing in manual mode. */
+    applies: boolean;
+}
+
+/**
+ * What one stat bonus contributes to a ship's score, for display beside the bonus form.
+ *
+ * The figures are MARGINAL: `baseScore` already includes `otherBonuses`, so the delta is
+ * the effect of the bonus being edited rather than of the whole set. Role base scores span
+ * orders of magnitude (an attacker's is ~3,000 while a bomber's is ~1,250,000), which is why
+ * the same percentage behaves so differently and why this is worth showing rather than
+ * normalizing away.
+ */
+export function previewStatBonus(
+    stats: BaseStats,
+    role: ShipTypeName | null,
+    bonus: StatBonus,
+    otherBonuses: StatBonus[] = []
+): StatBonusPreview {
+    const statValue = resolveLimitStatValue(stats, bonus.stat);
+    if (!role) {
+        return { statValue, baseScore: 0, newScore: 0, applies: false };
+    }
+    return {
+        statValue,
+        baseScore: calculateRoleScore(role, stats, otherBonuses),
+        newScore: calculateRoleScore(role, stats, [...otherBonuses, bonus]),
+        applies: true,
+    };
 }

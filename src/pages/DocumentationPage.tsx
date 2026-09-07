@@ -1380,9 +1380,12 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text">
                                         Define minimum and maximum values for specific stats. The
                                         algorithm will try to keep stats within these ranges while
-                                        optimizing the overall build. You can also limit{' '}
-                                        <strong>Effective HP</strong> — a derived survivability
-                                        value combining HP, Defense, and damage reduction.
+                                        optimizing the overall build. You can also limit two derived
+                                        stats: <strong>Effective HP</strong> — a survivability value
+                                        combining HP, Defense, and damage reduction — and{' '}
+                                        <strong>Direct Damage</strong> — an offensive value
+                                        combining attack, crit rate, crit power, and defense
+                                        penetration.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Each row has an <strong>Edit</strong> button (opens the form
@@ -1435,12 +1438,28 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text">
                                         Add bonus effects that contribute to the role score. For
                                         example, an attacker that gains extra damage equal to 10% of
-                                        HP.
+                                        HP. <strong>Effective HP</strong> and{' '}
+                                        <strong>Direct Damage</strong> can be used as bonus stats
+                                        too, not just as stat priorities. A Direct Damage bonus is
+                                        how you tell the optimizer that crit matters for a ship
+                                        whose role formula does not read crit — some bombers, for
+                                        instance.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Each row has an <strong>Edit</strong> button (opens the form
                                         pre-filled) and supports inline number editing — click any
                                         number to change it directly.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Stat bonuses need a <strong>role</strong> selected to have
+                                        any effect — with no role, scoring uses stat priorities only
+                                        and ignores bonuses.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Once you pick a stat, the form previews the score it adds to
+                                        the selected ship before you save it — the same percentage
+                                        can be decisive on one role and negligible on another, since
+                                        role base scores differ by orders of magnitude.
                                     </p>
                                 </div>
 
