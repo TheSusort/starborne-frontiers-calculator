@@ -32,6 +32,9 @@ export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): nu
     if (stat === 'effectiveHp') {
         return calculateEffectiveHP(stats.hp, stats.defence, stats.damageReduction ?? 0);
     }
+    if (stat === 'directDamage') {
+        return calculateDirectDamage(stats);
+    }
     return stats[stat] || 0;
 }
 
@@ -74,6 +77,18 @@ function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): numb
     }
 
     return baseDPS;
+}
+
+/**
+ * The offensive twin of `calculateEffectiveHP`: one number combining attack, crit rate,
+ * crit power and defense penetration, for use as the `directDamage` derived stat.
+ *
+ * Deliberately omits `arcaneSiegeMultiplier`. That is gear-set dependent, and a derived
+ * stat is resolved from a stat block alone — the same reason `calculateRoleScore` takes no
+ * set params.
+ */
+export function calculateDirectDamage(stats: BaseStats): number {
+    return calculateDPS(stats);
 }
 
 export function calculateHealingPerHit(stats: BaseStats): number {

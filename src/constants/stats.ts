@@ -137,12 +137,13 @@ export const STAT_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     critDamage: 50, // Normalize around 50%
     speed: 100, // Normalize around 100
     effectiveHp: 30000, // effectiveHP runs ~1.3-5x raw hp; normalize above hp's 10k
-    // Add other stats as needed
+    directDamage: 3000, // attack x crit multiplier x def-pen factor; ~the ATTACKER scoring baseline
 };
 
 // Labels for derived limit stats (not present in STATS, which is keyed by StatName).
 export const DERIVED_STAT_LABELS: Record<DerivedStatName, { label: string; shortLabel: string }> = {
     effectiveHp: { label: 'Effective HP', shortLabel: 'EHP' },
+    directDamage: { label: 'Direct Damage', shortLabel: 'DMG' },
 };
 
 /** Display label for any limitable stat, including derived ones. */
