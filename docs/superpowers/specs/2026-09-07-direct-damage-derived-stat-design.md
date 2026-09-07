@@ -82,6 +82,16 @@ Mirrors the recipe already proven by `effectiveHp` (PR #75).
 `resolveLimitStatValue` is already exported and re-exported through `src/utils/autogear/scoring.ts`
 (the barrel `GeneticStrategy` imports from), so no new plumbing is needed for the strategies.
 
+### The contribution preview
+
+| file | change |
+| --- | --- |
+| `src/utils/autogear/priorityScore.ts` | widen `calculateRoleScore(role, stats)` → `(role, stats, statBonuses?)`; add `previewStatBonus(stats, role, bonus, otherBonuses)` |
+| `src/utils/autogear/scoring.ts` | re-export `previewStatBonus` from the barrel (import AND export blocks — the pattern `resolveLimitStatValue` already follows) |
+| `src/pages/manager/AutogearPage.tsx` | pass the selected ship's `calculateTotalStats` result down (it already computes one for the suggestion diff) |
+| `src/components/autogear/AutogearSettings.tsx` | compute the preview from `selectedShip` / `selectedShipRole` / `statBonuses` and pass the numbers to the form |
+| `src/components/autogear/StatBonusForm.tsx` | render the preview block; see "Score magnitude" below |
+
 ### Fleet buffs stay real-stats-only
 
 Owner ruling: fleet buffs stay as they are. A fleet buff models an actual in-game buff on an actual
@@ -144,18 +154,58 @@ three with a test** asserting the reference build's `directDamage`/`effectiveHp`
 normalizer, so a later change to the crit targets or the defense curve fails loudly instead of
 silently re-weighting every shared build.
 
-## Known limitation to surface in the UI
+## Score magnitude is SHOWN, never normalized away
 
 Role base scores differ by orders of magnitude: an attacker's is ~3,200 while a bomber's
-`hacking × attack` is ~1,250,000. `applyAdditiveBonuses` adds a raw stat value to the base score, so
-an additive `directDamage` bonus on a bomber contributes ~3,215 against 1.25M — invisible.
-**Multiplier mode is the mode that works for a bomber**, and it is the mode this feature exists for.
+`hacking x attack` is ~1,250,000. `applyAdditiveBonuses` adds a raw stat value to the base score, so
+the same "20%" is decisive on an attacker and invisible on a bomber.
 
-This is pre-existing behaviour, not new (an additive `attack` bonus on a bomber is equally inert),
-and fixing the scale mismatch across role formulas is out of scope. But since the whole point here
-is bombers, `StatBonusForm`'s existing explanatory copy should note that multiplier mode is the one
-that shifts a score whose base is large. No new component — the form already renders a `<p>` of
-guidance and already has additive/multiplier tooltips.
+**Rescaling the role base scores to a common range is explicitly rejected** (owner ruling). Additive
+mode's semantic — "this stat contributes X% of its raw value to the score" — is deliberate, and
+normalizing the base scores would destroy exactly that. The formulas stay as they are.
+
+Instead the form **shows the magnitude** so the user can pick a percentage that does what they mean.
+As the bonus is typed, `StatBonusForm` renders the marginal effect of that one bonus:
+
+```
+Stat: [ HP  v ]   %: [ 20 ]   Mode: (o) Additive  ( ) Multiplier
+
+  This ship's base score:  3,215
+  HP 22,000 x 20%       = +4,400
+  -> score 3,215 -> 7,615  (+137%)
+```
+
+Live and exact per ship and role, so it cannot go stale the way a hardcoded range of typical scores
+would.
+
+### How the preview is computed
+
+A pure helper beside the scoring code, so it is unit-testable without rendering:
+
+```ts
+export function previewStatBonus(
+    stats: BaseStats,
+    role: ShipTypeName | null,
+    bonus: StatBonus,
+    otherBonuses: StatBonus[]
+): { statValue: number; baseScore: number; newScore: number };
+```
+
+- `statValue` is `resolveLimitStatValue(stats, bonus.stat)` — so a derived stat previews correctly.
+- `baseScore` is the score with `otherBonuses` only; `newScore` adds `bonus`. The delta is therefore
+  the **marginal** effect of the bonus being edited, which is what the user is deciding about, and
+  it stays correct when several bonuses are already configured.
+- This requires widening `calculateRoleScore(role, stats)` to
+  `calculateRoleScore(role, stats, statBonuses?)`. Consistent with that function's existing
+  docstring: it omits `setCount`/`arcaneSiegeMultiplier` because gear-set composition is out of
+  scope, and stat bonuses are not set-dependent, so they pass through cleanly.
+
+`AutogearPage` already calls `calculateTotalStats` for the selected ship, and `AutogearSettings`
+already receives `selectedShip` and `selectedShipRole` — so the inputs are in hand and the form
+receives computed numbers rather than doing any scoring itself.
+
+Reuses existing `ui/` primitives only; no new component. The form already renders a guidance `<p>`
+and additive/multiplier tooltips.
 
 ## Testing
 
@@ -174,13 +224,19 @@ guidance and already has additive/multiplier tooltips.
   `directDamage` key.
 - Fast-path equivalence: `fastScore` and the slow path agree for a config carrying a derived-stat
   bonus.
+- `previewStatBonus`: `newScore - baseScore` equals the bonus's real contribution for additive AND
+  multiplier mode; the delta is MARGINAL (unchanged when unrelated `otherBonuses` are added); and a
+  `directDamage` bonus previews a non-zero `statValue` where a naive `stats[stat]` read would give 0.
+- `calculateRoleScore(role, stats)` with no third argument returns byte-identical results to before
+  the widening, for every `ShipTypeName`.
 
 ## Docs and changelog
 
 - `src/pages/DocumentationPage.tsx` — document the new stat and that derived stats work as bonuses.
-- `src/constants/changelog.ts` `UNRELEASED_CHANGES` — two entries:
+- `src/constants/changelog.ts` `UNRELEASED_CHANGES` — three entries:
   - `Autogear: new Direct Damage stat weighs attack, crit, crit power and defense penetration together.`
   - `Autogear: Effective HP can now be used as a stat bonus, not just a requirement.`
+  - `Autogear: stat bonuses now preview what they add to a ship's score.`
 
 ## Out of scope
 
@@ -189,4 +245,6 @@ guidance and already has additive/multiplier tooltips.
 - Deriving the weight automatically from the kit text. The measured share depends on def pen and the
   opponent's defense, neither of which the app knows, so a derived default would be confidently
   wrong. The player picks.
-- The role-formula scale mismatch (attacker ~3.2k vs bomber ~1.25M base scores).
+- Normalizing or rescaling the role base scores to a common range. Rejected by owner ruling: it
+  would break additive mode's "X% of the stat's raw value" semantic, which is the point of that
+  mode. The magnitude is surfaced in the UI instead.
