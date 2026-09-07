@@ -112,6 +112,10 @@ const TARGET_MAP: Record<string, { side: TargetSide; selection: TargetSelection 
     self: { side: 'ally', selection: 'self' },
 };
 
+/** Every value `parseTarget` accepts. Anything else throws, so a UI offering a
+ *  target choice must derive its options from this rather than restating them. */
+export const TARGET_VALUES: readonly string[] = Object.keys(TARGET_MAP);
+
 export function parseTarget(raw: string): ParsedTarget {
     const key = raw.trim().toLowerCase();
     const mapped = TARGET_MAP[key];

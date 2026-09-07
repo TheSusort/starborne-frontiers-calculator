@@ -238,6 +238,10 @@ export interface NewShipTemplateData {
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
     thirdPassiveSkillText: string;
+    activeTarget: string;
+    activePattern: string;
+    chargedTarget: string;
+    chargedPattern: string;
     definitionId: string;
 }
 
@@ -274,6 +278,12 @@ export const addShipTemplate = async (
             first_passive_skill_text: templateData.firstPassiveSkillText || null,
             second_passive_skill_text: templateData.secondPassiveSkillText || null,
             third_passive_skill_text: templateData.thirdPassiveSkillText || null,
+            // An empty charged column is meaningful: parseShipTargeting reads it as
+            // "same as active" for that axis, so empty must persist as null.
+            active_target: templateData.activeTarget || null,
+            active_pattern: templateData.activePattern || null,
+            charged_target: templateData.chargedTarget || null,
+            charged_pattern: templateData.chargedPattern || null,
             definition_id: templateData.definitionId || null,
             base_stats: {
                 hp: templateData.hp,
@@ -333,6 +343,11 @@ export const updateShipTemplate = async (
                 first_passive_skill_text: templateData.firstPassiveSkillText || null,
                 second_passive_skill_text: templateData.secondPassiveSkillText || null,
                 third_passive_skill_text: templateData.thirdPassiveSkillText || null,
+                // Empty means "same as active" for that axis — read `addShipTemplate`'s note.
+                active_target: templateData.activeTarget || null,
+                active_pattern: templateData.activePattern || null,
+                charged_target: templateData.chargedTarget || null,
+                charged_pattern: templateData.chargedPattern || null,
                 definition_id: templateData.definitionId || null,
                 base_stats: {
                     hp: templateData.hp,

@@ -295,6 +295,10 @@ export const AdminPanel: React.FC = () => {
             firstPassiveSkillText: template.first_passive_skill_text || '',
             secondPassiveSkillText: template.second_passive_skill_text || '',
             thirdPassiveSkillText: template.third_passive_skill_text || '',
+            activeTarget: template.active_target || '',
+            activePattern: template.active_pattern || '',
+            chargedTarget: template.charged_target || '',
+            chargedPattern: template.charged_pattern || '',
             definitionId: template.definition_id || '',
         };
     };
