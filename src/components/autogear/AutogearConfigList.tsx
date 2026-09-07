@@ -4,7 +4,6 @@ import { GEAR_SETS, ShipTypeName } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { STATS, getLimitStatLabel } from '../../constants/stats';
-import { StatName } from '../../types/stats';
 
 interface AutogearConfigListProps {
     shipRole: ShipTypeName | null;
@@ -107,7 +106,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                     <>
                         {statBonuses.map((bonus, index) => (
                             <span key={index}>
-                                {STATS[bonus.stat as StatName]?.label}{' '}
+                                {getLimitStatLabel(bonus.stat)}{' '}
                                 {bonus.mode === 'multiplier' ? '×' : '+'}
                                 {bonus.percentage}%
                             </span>

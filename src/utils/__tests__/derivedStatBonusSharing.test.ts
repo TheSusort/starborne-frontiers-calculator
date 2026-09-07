@@ -37,7 +37,7 @@ describe('derived stats in shared builds', () => {
     });
 
     // Fleet buffs model a real in-game buff on a real stat. There is no fleet buff of
-    // "direct damage", and widening them was explicitly out of scope.
+    // "direct damage".
     it('REJECTS a directDamage FLEET BUFF', () => {
         expect(
             validateSharedAutogearBuild(
@@ -55,8 +55,8 @@ describe('derived stats in shared builds', () => {
     });
 });
 
-// Copied verbatim from communityBuildLegacyShapes.test.ts's makeRow — that helper
-// reproduces shapes verified against real production rows.
+// Same shape as communityBuildLegacyShapes.test.ts's makeRow, which is verified
+// against real production rows.
 const makeRow = (over: Partial<CommunityRecommendation> = {}): CommunityRecommendation => ({
     id: 'r1',
     ship_name: 'Demolisher',
