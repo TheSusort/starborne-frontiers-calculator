@@ -5,8 +5,7 @@ import { ALL_STAT_NAMES } from '../../constants';
 import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../constants/stats';
 import { LimitableStat } from '../../types/stats';
 
-/** Real stats first, then the derived composites. Same list the stat-priority form offers,
- *  so the two surfaces stay consistent. */
+/** Real stats first, then the derived composites. */
 const BONUS_STATS: LimitableStat[] = [
     ...ALL_STAT_NAMES,
     ...(Object.keys(DERIVED_STAT_LABELS) as Array<keyof typeof DERIVED_STAT_LABELS>),
