@@ -4,6 +4,7 @@ import { StatBonus } from '../../types/autogear';
 import { ALL_STAT_NAMES } from '../../constants';
 import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../constants/stats';
 import { LimitableStat } from '../../types/stats';
+import type { StatBonusPreview } from '../../utils/autogear/priorityScore';
 
 /** Real stats first, then the derived composites. */
 const BONUS_STATS: LimitableStat[] = [
@@ -16,6 +17,9 @@ interface StatBonusFormProps {
     editingValue?: StatBonus;
     onSave?: (bonus: StatBonus) => void;
     onCancel?: () => void;
+    /** Computes what the in-progress bonus contributes. Omitted when no ship is selected,
+     *  in which case no preview renders. */
+    previewFor?: (bonus: StatBonus) => StatBonusPreview;
 }
 
 export const StatBonusForm: React.FC<StatBonusFormProps> = ({
@@ -23,6 +27,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     editingValue,
     onSave,
     onCancel,
+    previewFor,
 }) => {
     const [selectedStat, setSelectedStat] = useState<LimitableStat | ''>('');
     const [percentage, setPercentage] = useState<number>(0);
@@ -31,6 +36,15 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     const multiplierRef = useRef<HTMLSpanElement>(null);
     const [showAdditiveTip, setShowAdditiveTip] = useState(false);
     const [showMultiplierTip, setShowMultiplierTip] = useState(false);
+
+    // Capture the narrowed stat alongside the preview. Inside the JSX guard below,
+    // TypeScript cannot re-narrow `selectedStat` away from `LimitableStat | ''` from the
+    // `preview` check alone, so the label render needs this instead of the state value.
+    const previewStat: LimitableStat | null = selectedStat || null;
+    const preview =
+        previewFor && previewStat
+            ? previewFor({ stat: previewStat, percentage: percentage || 0, mode })
+            : null;
 
     useEffect(() => {
         if (editingValue) {
@@ -143,6 +157,44 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                         </Tooltip>
                     </div>
                 </div>
+                {preview && (
+                    <div className="card w-full text-xs space-y-1" data-testid="stat-bonus-preview">
+                        {preview.applies ? (
+                            <>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-theme-text-secondary">
+                                        This ship&apos;s score
+                                    </span>
+                                    <span>{Math.round(preview.baseScore).toLocaleString()}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-theme-text-secondary">
+                                        {previewStat && getLimitStatLabel(previewStat)}{' '}
+                                        {Math.round(preview.statValue).toLocaleString()} ×{' '}
+                                        {percentage || 0}%
+                                    </span>
+                                    <span>
+                                        {preview.newScore >= preview.baseScore ? '+' : ''}
+                                        {Math.round(
+                                            preview.newScore - preview.baseScore
+                                        ).toLocaleString()}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between gap-4 border-t border-dark-border pt-1">
+                                    <span className="text-theme-text-secondary">
+                                        Resulting score
+                                    </span>
+                                    <span>{Math.round(preview.newScore).toLocaleString()}</span>
+                                </div>
+                            </>
+                        ) : (
+                            <p className="text-theme-text-secondary">
+                                Stat bonuses only apply when a role is selected — without one,
+                                scoring uses your stat priorities and ignores bonuses.
+                            </p>
+                        )}
+                    </div>
+                )}
                 {editingValue ? (
                     <div className="flex gap-2 mt-auto">
                         <Button type="button" variant="secondary" onClick={onCancel}>
