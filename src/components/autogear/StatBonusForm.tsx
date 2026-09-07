@@ -1,8 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Button, Select, Input, Tooltip } from '../ui';
 import { StatBonus } from '../../types/autogear';
-import { STATS, ALL_STAT_NAMES } from '../../constants';
-import { StatName } from '../../types/stats';
+import { ALL_STAT_NAMES } from '../../constants';
+import { DERIVED_STAT_LABELS, getLimitStatLabel } from '../../constants/stats';
+import { LimitableStat } from '../../types/stats';
+
+/** Real stats first, then the derived composites. Same list the stat-priority form offers,
+ *  so the two surfaces stay consistent. */
+const BONUS_STATS: LimitableStat[] = [
+    ...ALL_STAT_NAMES,
+    ...(Object.keys(DERIVED_STAT_LABELS) as Array<keyof typeof DERIVED_STAT_LABELS>),
+];
 
 interface StatBonusFormProps {
     onAdd: (bonus: StatBonus) => void;
@@ -17,7 +25,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     onSave,
     onCancel,
 }) => {
-    const [selectedStat, setSelectedStat] = useState<StatName | ''>('');
+    const [selectedStat, setSelectedStat] = useState<LimitableStat | ''>('');
     const [percentage, setPercentage] = useState<number>(0);
     const [mode, setMode] = useState<'additive' | 'multiplier'>('additive');
     const additiveRef = useRef<HTMLSpanElement>(null);
@@ -27,7 +35,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
 
     useEffect(() => {
         if (editingValue) {
-            setSelectedStat(editingValue.stat as StatName);
+            setSelectedStat(editingValue.stat);
             setPercentage(editingValue.percentage);
             setMode(editingValue.mode ?? 'additive');
         } else {
@@ -60,12 +68,12 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                 <Select
                     label="Stat"
                     className="flex-1 min-w-[8rem]"
-                    options={ALL_STAT_NAMES.map((key) => ({
+                    options={BONUS_STATS.map((key) => ({
                         value: key,
-                        label: STATS[key].label,
+                        label: getLimitStatLabel(key),
                     }))}
                     value={selectedStat}
-                    onChange={(value) => setSelectedStat(value as StatName)}
+                    onChange={(value) => setSelectedStat(value as LimitableStat)}
                     noDefaultSelection
                 />
                 <div className="w-24">

@@ -8,8 +8,7 @@ import {
     InlineNumberEdit,
 } from '../ui';
 import { StatBonus } from '../../types/autogear';
-import { STATS } from '../../constants';
-import { StatName } from '../../types/stats';
+import { getLimitStatLabel } from '../../constants/stats';
 
 interface StatBonusRowProps {
     bonus: StatBonus;
@@ -63,7 +62,7 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
                 )}
             </div>
             <span>
-                {STATS[bonus.stat as StatName]?.label ?? bonus.stat} ({' '}
+                {getLimitStatLabel(bonus.stat)} ({' '}
                 <InlineNumberEdit
                     value={bonus.percentage}
                     onSave={(v) => v !== undefined && onUpdate({ ...bonus, percentage: v })}
