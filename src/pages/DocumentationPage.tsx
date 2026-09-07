@@ -1442,6 +1442,12 @@ const DocumentationPage: React.FC = () => {
                                         pre-filled) and supports inline number editing — click any
                                         number to change it directly.
                                     </p>
+                                    <p className="text-theme-text mt-2">
+                                        Once you pick a stat, the form previews the score it adds to
+                                        the selected ship before you save it — the same percentage
+                                        can be decisive on one role and negligible on another, since
+                                        role base scores differ by orders of magnitude.
+                                    </p>
                                 </div>
 
                                 <div className="card">

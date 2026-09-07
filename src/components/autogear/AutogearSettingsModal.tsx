@@ -5,12 +5,14 @@ import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/aut
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
+import { BaseStats } from '../../types/stats';
 import { AutogearSettings } from './AutogearSettings';
 
 interface AutogearSettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
     selectedShip: Ship | null;
+    selectedShipStats: BaseStats | null;
     selectedShipRole: ShipTypeName | null;
     selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];

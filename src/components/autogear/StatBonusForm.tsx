@@ -196,7 +196,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                     </div>
                 )}
                 {editingValue ? (
-                    <div className="flex gap-2 mt-auto">
+                    <div className="flex gap-2 mt-auto ml-auto">
                         <Button type="button" variant="secondary" onClick={onCancel}>
                             Cancel
                         </Button>
@@ -209,7 +209,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                         type="submit"
                         disabled={!selectedStat}
                         variant="secondary"
-                        className="mt-auto"
+                        className="mt-auto ml-auto"
                     >
                         Add
                     </Button>
