@@ -143,4 +143,30 @@ describe('usePersistedPreference', () => {
 
         expect(result.current[0]).toBe(true);
     });
+
+    it('does not clobber a saved value when the SAME account signs back in with no remount', () => {
+        // A sign-out leaves the in-memory value alone but stops persisting it.
+        // Signing back into the same account must re-adopt that account's
+        // stored value: the identity is unchanged, so a hook that only
+        // re-reads on a CHANGE of identity would skip the read and fall
+        // straight through to the write, pushing the signed-out session's
+        // in-memory value over what the account actually has saved.
+        mockUser = { id: 'user-1' };
+        localStorage.setItem(`${KEY}:user-1`, JSON.stringify(false));
+        const { result, rerender } = renderHook(() => usePersistedPreference(KEY, true, isBoolean));
+        expect(result.current[0]).toBe(false);
+
+        // Signs out, then changes the value in-session (persists nothing).
+        mockUser = null;
+        rerender();
+        act(() => result.current[1](true));
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('false');
+
+        // Signs back into the SAME account, in place.
+        mockUser = { id: 'user-1' };
+        rerender();
+
+        expect(localStorage.getItem(`${KEY}:user-1`)).toBe('false');
+        expect(result.current[0]).toBe(false);
+    });
 });

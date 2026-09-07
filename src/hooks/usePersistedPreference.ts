@@ -27,14 +27,20 @@ import { useAuth } from '../contexts/AuthProvider';
  * user's stored value with whatever was in state, the same destructive write
  * this hook exists to prevent. Comparing identities means ANY transition to
  * a truthy, not previously adopted user id re-reads storage before writing
- * anything. A stored value that fails `isValid` (corrupted, or from a shape
+ * anything.
+ *
+ * Signing out clears the adoption, so signing back in re-reads storage even
+ * for the SAME account. Without that, the identity is unchanged across the
+ * round trip, the re-read is skipped, and the first write pushes whatever
+ * the signed-out session left in memory over the value that account has
+ * saved. A stored value that fails `isValid` (corrupted, or from a shape
  * this build no longer offers) falls back to `defaultValue` rather than
  * being trusted.
  *
- * Migration note: this key was unscoped before this change. Existing users
- * have a value stored under the bare `key`; that value is now orphaned and
- * every account resets to `defaultValue` once, the same as a first-time
- * user. Accepted for a UI preference — not worth migration code.
+ * Nothing reads the bare, unscoped `key`. A value stored under one by an
+ * older build is therefore orphaned rather than migrated, and that account
+ * starts at `defaultValue` once, the same as a first-time user — accepted
+ * for a UI preference, not worth migration code.
  */
 export function usePersistedPreference<T>(
     key: string,
@@ -64,9 +70,9 @@ export function usePersistedPreference<T>(
 
         if (identity === null) {
             if (adoptedFor.current === undefined) {
-                adoptedFor.current = null;
                 setValue(defaultValue);
             }
+            adoptedFor.current = null;
             // No shared, unauthenticated key to write to — a signed-out
             // session (including one that just signed out of an account)
             // never persists.

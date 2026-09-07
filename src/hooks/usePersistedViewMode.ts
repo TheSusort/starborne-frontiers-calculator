@@ -1,18 +1,17 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthProvider';
+import { usePersistedPreference } from './usePersistedPreference';
 
 type ViewMode = 'list' | 'image';
 
-export const usePersistedViewMode = (key: string, defaultValue: ViewMode = 'list') => {
-    const { user } = useAuth();
-    const [viewMode, setViewMode] = useState<ViewMode>(() => {
-        const stored = user ? localStorage.getItem(key) : null;
-        return (stored as ViewMode) || defaultValue;
-    });
+function isViewMode(value: unknown): value is ViewMode {
+    return value === 'list' || value === 'image';
+}
 
-    useEffect(() => {
-        localStorage.setItem(key, viewMode);
-    }, [key, viewMode]);
-
-    return [viewMode, setViewMode] as const;
-};
+/**
+ * Persists the ship inventory's list/image view choice, via
+ * `usePersistedPreference` — see that hook's doc for why persistence is
+ * gated on hydration. A stored value that is not a `ViewMode` (corrupted,
+ * or from a shape this build no longer offers) falls back to `defaultValue`
+ * rather than being trusted.
+ */
+export const usePersistedViewMode = (key: string, defaultValue: ViewMode = 'list') =>
+    usePersistedPreference(key, defaultValue, isViewMode);
