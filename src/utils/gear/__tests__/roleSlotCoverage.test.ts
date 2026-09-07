@@ -15,7 +15,7 @@ import {
 } from '../roleSlotCoverage';
 import { GearPiece } from '../../../types/gear';
 import { calculateRoleScore } from '../../autogear/priorityScore';
-import { ROLE_BASE_STATS } from '../../../constants/roleBaseStats';
+import { getScoringBaselineStats } from '../../../constants/roleBaseStats';
 import { SHIP_TYPES, ShipTypeName } from '../../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, GearSlotName } from '../../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../../constants/statValues';
@@ -140,17 +140,24 @@ describe('scorePieceForRole', () => {
     });
 
     it('adds a percentage-only stat directly, not as a share of the baseline', () => {
-        // ATTACKER's baseline crit is 20 and crit is stored as an integer
-        // percentage, so a +20 crit piece must land the block at crit 40.
-        // Scaling it as a share of the baseline instead would land it at 24 —
-        // the second assertion is what makes this test able to fail.
-        const piece = makeGear({ mainStat: { name: 'crit', value: 20, type: 'percentage' } });
-        const baselineScore = calculateRoleScore('ATTACKER', ROLE_BASE_STATS.ATTACKER);
+        // The scoring baseline is the geared reference (getScoringBaselineStats),
+        // not the bare chassis, and a percentage-only stat is stored as an
+        // integer percentage and added directly regardless of its `type`
+        // field. Uses critDamage rather than crit: the geared ATTACKER
+        // baseline sits crit close enough to the 100 cap that a direct-add vs.
+        // scaled-share crit comparison would land both candidates above 100
+        // and get identically clamped by calculateCritMultiplier, proving
+        // nothing — critDamage has no such cap.
+        const piece = makeGear({
+            mainStat: { name: 'critDamage', value: 20, type: 'percentage' },
+        });
+        const baseline = getScoringBaselineStats('ATTACKER');
+        const baselineScore = calculateRoleScore('ATTACKER', baseline);
         const direct =
-            calculateRoleScore('ATTACKER', { ...ROLE_BASE_STATS.ATTACKER, crit: 40 }) -
+            calculateRoleScore('ATTACKER', { ...baseline, critDamage: baseline.critDamage + 20 }) -
             baselineScore;
         const scaledShare =
-            calculateRoleScore('ATTACKER', { ...ROLE_BASE_STATS.ATTACKER, crit: 24 }) -
+            calculateRoleScore('ATTACKER', { ...baseline, critDamage: baseline.critDamage * 1.2 }) -
             baselineScore;
 
         expect(scorePieceForRole(piece, 'ATTACKER')).toBeCloseTo(direct, 10);
@@ -180,7 +187,7 @@ describe('scorePieceForRole', () => {
             // heuristics; matching this exact figure is what rules those out).
             const plain = makeGear({ id: 'plain', setBonus: null });
             const withSet = makeGear({ id: 'set', setBonus: 'ATTACK' });
-            const baseline = ROLE_BASE_STATS.ATTACKER;
+            const baseline = getScoringBaselineStats('ATTACKER');
             const creditedShare =
                 calculateRoleScore('ATTACKER', { ...baseline, attack: baseline.attack * 1.075 }) -
                 calculateRoleScore('ATTACKER', baseline);
@@ -201,7 +208,7 @@ describe('scorePieceForRole', () => {
             const plain = makeGear({ id: 'plain' });
             const twoPiece = makeGear({ id: 'two-piece', setBonus: 'ATTACK' });
             const fourPiece = makeGear({ id: 'four-piece', setBonus: 'BURNER' });
-            const baseline = ROLE_BASE_STATS.ATTACKER;
+            const baseline = getScoringBaselineStats('ATTACKER');
             const halfShare =
                 calculateRoleScore('ATTACKER', { ...baseline, attack: baseline.attack * 1.075 }) -
                 calculateRoleScore('ATTACKER', baseline);
@@ -272,6 +279,61 @@ describe('scorePieceForRole', () => {
 
     it('tolerates a piece with no main stat', () => {
         expect(() => scorePieceForRole(makeGear({ mainStat: null }), 'ATTACKER')).not.toThrow();
+    });
+
+    it('ranks a realistic best-in-slot attacker weapon (critDamage-heavy) above an equal crit-rate-stacked piece (#475)', () => {
+        // A geared attacker's scoring baseline sits crit near the 100 cap
+        // (getScoringBaselineStats), so a crit-rate roll past the remaining
+        // headroom buys nothing while crit damage keeps compounding — the
+        // opposite of the bare
+        // 20/80 chassis, which prefers crit rate ~4:1 for the same roll
+        // budget (see the issue's own worked example, #475). Both pieces
+        // spend the identical roll budget (one main stat, four substats,
+        // same attack allocation), differing only in which of crit/critDamage
+        // gets the big roll and which gets the small one.
+        const critDamageHeavy = makeGear({
+            id: 'critdamage-heavy',
+            mainStat: { name: 'attack', value: 1000, type: 'flat' },
+            subStats: [
+                { name: 'critDamage', value: 40, type: 'percentage' },
+                { name: 'crit', value: 8, type: 'percentage' },
+                { name: 'attack', value: 7, type: 'percentage' },
+                { name: 'attack', value: 150, type: 'flat' },
+            ],
+        });
+        const critRateStacked = makeGear({
+            id: 'critrate-stacked',
+            mainStat: { name: 'attack', value: 1000, type: 'flat' },
+            subStats: [
+                { name: 'crit', value: 40, type: 'percentage' },
+                { name: 'critDamage', value: 8, type: 'percentage' },
+                { name: 'attack', value: 7, type: 'percentage' },
+                { name: 'attack', value: 150, type: 'flat' },
+            ],
+        });
+        expect(scorePieceForRole(critDamageHeavy, 'ATTACKER')).toBeGreaterThan(
+            scorePieceForRole(critRateStacked, 'ATTACKER')
+        );
+    });
+
+    it('scores DEFENDER and DEBUFFER_BOMBER identically to before the geared reference — bounds the blast radius', () => {
+        // calculateDefenderScore's crit path is gated on hpRegen (0 in the
+        // bare table) and calculateBomberDebufferScore never reads crit at
+        // all, so a piece with heavy crit/critDamage substats must produce
+        // the EXACT same score these roles always did — byte-identical, not
+        // approximately, since getScoringBaselineStats returns the bare
+        // table unchanged for both (see roleBaseStats.test.ts).
+        const critHeavyPiece = makeGear({
+            id: 'crit-heavy-piece',
+            mainStat: { name: 'attack', value: 1000, type: 'flat' },
+            subStats: [
+                { name: 'crit', value: 40, type: 'percentage' },
+                { name: 'critDamage', value: 40, type: 'percentage' },
+                { name: 'hp', value: 600, type: 'flat' },
+            ],
+        });
+        expect(scorePieceForRole(critHeavyPiece, 'DEFENDER')).toBe(18.004636621561758);
+        expect(scorePieceForRole(critHeavyPiece, 'DEBUFFER_BOMBER')).toBe(200000);
     });
 });
 
@@ -903,13 +965,20 @@ describe('buildCoverageMatrix', () => {
             // 2.5%) beats every other live set for this exact substat combo —
             // confirmed against an independent exhaustive (mainStat x set x
             // substat-combo) search, not guessed.
+            //
+            // The scoring baseline already sits crit near its geared target
+            // (getScoringBaselineStats, #475), so all 4 upgrade rolls go to
+            // attack% instead of crit%: a single legendary crit roll only
+            // adds a few points of a mostly-saturated stat, while the same
+            // roll compounds fully through attack. crit% and critDamage%
+            // each keep their single-roll base value.
             const attackerIdeal = makeGear({
                 id: 'attacker-ideal-replica',
                 mainStat: { name: 'attack', value: 1000, type: 'flat' },
                 subStats: [
-                    { name: 'hp', value: 600, type: 'flat' }, // 1 roll (no increases landed here)
-                    { name: 'attack', value: 14, type: 'percentage' }, // 2 rolls (+1 increase)
-                    { name: 'crit', value: 32, type: 'percentage' }, // 4 rolls (+3 increases)
+                    { name: 'hp', value: 600, type: 'flat' }, // 1 roll (dead filler — see candidateSubstatPairs)
+                    { name: 'attack', value: 35, type: 'percentage' }, // 5 rolls (all 4 increases)
+                    { name: 'crit', value: 8, type: 'percentage' }, // 1 roll
                     { name: 'critDamage', value: 8, type: 'percentage' }, // 1 roll
                 ],
                 setBonus: 'ABYSSAL_ASSAULT',
@@ -942,8 +1011,8 @@ describe('buildCoverageMatrix', () => {
                         mainStat: { name: 'attack', value: 1000, type: 'flat' },
                         subStats: [
                             { name: 'hp', value: 600, type: 'flat' },
-                            { name: 'attack', value: 14, type: 'percentage' },
-                            { name: 'crit', value: 32, type: 'percentage' },
+                            { name: 'attack', value: 35, type: 'percentage' },
+                            { name: 'crit', value: 8, type: 'percentage' },
                             { name: 'critDamage', value: 8, type: 'percentage' },
                         ],
                         setBonus: 'ABYSSAL_ASSAULT',

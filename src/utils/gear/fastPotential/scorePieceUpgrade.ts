@@ -84,24 +84,7 @@ export function scorePieceApplied(
     // baseline.setCount matches, enforced in buildPotentialContext.
     for (let i = 0; i < wc.length; i++) wc[i] = sc[i];
 
-    // 3. Dummy-mode crit baseline adjustment.
-    //    Slow-path reference: potentialCalculator.ts:646-656 + 724.
-    //    The slow path sets baseStats.crit = max(0, 100 - gearCrit) BEFORE the
-    //    piece stats are applied on top, so the post-apply crit sums to ~100
-    //    (baseline + gear contributions cancel). The fast path must follow the
-    //    same order: seed workspace.crit with the baseline here, then step 5's
-    //    applyStat calls add the piece's crit contributions back on top.
-    //    With-ship uses the ship's actual crit (already in afterGear); skip.
-    if (!ctx.withShip) {
-        let gearCrit = 0;
-        if (piece.mainStat?.name === 'crit') gearCrit += piece.mainStat.value;
-        if (piece.subStats) {
-            for (const s of piece.subStats) if (s.name === 'crit') gearCrit += s.value;
-        }
-        w[STAT_INDEX.crit] = Math.max(0, 100 - gearCrit);
-    }
-
-    // 4. Resolve the piece's main stat for application (calibration).
+    // 3. Resolve the piece's main stat for application (calibration).
     //    Only with-ship mode checks calibration; dummy never applies.
     let mainStat: Stat | undefined = piece.mainStat ?? undefined;
     if (
@@ -114,13 +97,13 @@ export function scorePieceApplied(
         mainStat = getCalibratedMainStat(piece) ?? undefined;
     }
 
-    // 5. Apply main + substats to workspace.
+    // 4. Apply main + substats to workspace.
     if (mainStat) applyStat(mainStat, w, ctx.percentRef);
     if (piece.subStats) {
         for (const s of piece.subStats) applyStat(s, w, ctx.percentRef);
     }
 
-    // 6. Set bonus handling — diverges by mode.
+    // 5. Set bonus handling — diverges by mode.
     if (piece.setBonus) {
         const setId = ctx.setNameToId.get(piece.setBonus);
         const setDef = GEAR_SETS[piece.setBonus];
@@ -154,7 +137,7 @@ export function scorePieceApplied(
         }
     }
 
-    // 7. Hand off to the canonical scorer.
+    // 6. Hand off to the canonical scorer.
     const stats = statVectorToBaseStats(w);
     const baseScore = calculatePriorityScore(stats, [], ctx.shipRole);
     return baseScore + getMainStatBonus(piece, ctx.selectedStats, baseScore);

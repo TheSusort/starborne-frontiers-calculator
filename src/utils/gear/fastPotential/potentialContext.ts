@@ -6,7 +6,7 @@ import { createStatVector, baseStatsToStatVector } from '../../fastScoring/statV
 import { calculateTotalStats, type StatBreakdown } from '../../ship/statsCalculator';
 // eslint-disable-next-line import/no-cycle
 import { baselineBreakdownCache } from '../potentialCalculator';
-import { getBaseRoleStats } from '../../../constants/roleBaseStats';
+import { getBaseRoleStats, getScoringBaselineStats } from '../../../constants/roleBaseStats';
 
 /**
  * Per-slot baseline vectors. All three fields are driven by the slow path's
@@ -17,7 +17,9 @@ export interface SlotBaseline {
      * afterGear vector — base + refits + engineering + all gear EXCEPT this
      * slot's. Starting vector for the upgrade-scoring path.
      * With-ship: Float64Array of baselineBreakdown.afterGear.
-     * Dummy: Float64Array of ROLE_BASE_STATS[baseRole].
+     * Dummy: Float64Array of the role's geared scoring baseline
+     * (`getScoringBaselineStats`) — crit/critDamage seeded near the geared
+     * cap, NOT the bare `ROLE_BASE_STATS[baseRole]` (#475).
      */
     readonly afterGearVector: Float64Array;
 
@@ -154,8 +156,11 @@ export function buildPotentialContext(input: BuildPotentialContextInput): Potent
             }
             baselinesBySlot.set(slotName, { afterGearVector, finalVector, setCount });
         } else {
-            // Dummy mode
-            const afterGearVector = baseStatsToStatVector(getBaseRoleStats(shipRole));
+            // Dummy mode — afterGearVector uses the geared scoring baseline
+            // (crit/critDamage near cap); percentRef above stays the bare
+            // table, since a percentage gear roll scales off the ship's real
+            // base stat regardless of how geared it ends up (#475).
+            const afterGearVector = baseStatsToStatVector(getScoringBaselineStats(shipRole));
             baselinesBySlot.set(slotName, {
                 afterGearVector,
                 finalVector: null,
