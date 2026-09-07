@@ -158,7 +158,7 @@ describe('toCommunityBuild — real legacy row shapes', () => {
         expect(
             toCommunityBuild(
                 makeRow({
-                    stat_bonuses: [{ stat: 'not a real stat', percentage: 5 }],
+                    stat_bonuses: [{ stat: 'not a real stat', percentage: 5 } as never],
                 })
             )
         ).toBeNull();

@@ -148,7 +148,7 @@ describe('CommunityBuildDetails', () => {
 
     it('does not crash on an unknown stat key from a foreign payload', () => {
         expect(() =>
-            renderDetails(makeBuild({ statBonuses: [{ stat: 'mystery', percentage: 5 }] }))
+            renderDetails(makeBuild({ statBonuses: [{ stat: 'mystery', percentage: 5 } as never] }))
         ).not.toThrow();
     });
 

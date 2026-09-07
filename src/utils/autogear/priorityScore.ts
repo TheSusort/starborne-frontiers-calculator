@@ -25,8 +25,9 @@ export function calculateEffectiveHP(
 }
 
 /**
- * Resolve the value to compare against a stat limit. Base stats pass through;
- * derived stats (effectiveHp) are computed from the build's stats on the fly.
+ * Resolve a `LimitableStat` for a build, for use as a priority limit or a stat bonus.
+ * Base stats pass through; derived stats (effectiveHp, directDamage) are computed from the
+ * build's stats on the fly.
  */
 export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): number {
     if (stat === 'effectiveHp') {
@@ -104,7 +105,7 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
     if (!statBonuses || statBonuses.length === 0) return 0;
     return statBonuses.reduce((total, bonus) => {
         if (bonus.mode === 'multiplier') return total;
-        const statValue = stats[bonus.stat as keyof BaseStats] || 0;
+        const statValue = resolveLimitStatValue(stats, bonus.stat);
         return total + statValue * (bonus.percentage / 100);
     }, 0);
 }
@@ -112,7 +113,15 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
 // Normalizers for multiplier mode so that 50% means roughly
 // "this stat weighs about as much as the base role score"
 // regardless of the stat's raw value range.
-const MULTIPLIER_NORMALIZERS: Partial<Record<keyof BaseStats, number>> = {
+//
+// Each entry sits at roughly the stat's GEARED value, not its bare-chassis value
+// (attack 10,000 against a bare 6,250; hp 50,000 against a bare 22,000). The two derived
+// entries follow the same reading — `statNormalizerReferences.test.ts` pins them.
+//
+// Keyed `LimitableStat`, not `keyof BaseStats`, so derived stats are expressible. It must
+// stay a `Partial<Record<LimitableStat, …>>` — a `Record<string, number>` would drop the
+// compile-time key check.
+const MULTIPLIER_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     hp: 50000,
     attack: 10000,
     defence: 7000,
@@ -121,6 +130,8 @@ const MULTIPLIER_NORMALIZERS: Partial<Record<keyof BaseStats, number>> = {
     crit: 80,
     critDamage: 130,
     speed: 130,
+    effectiveHp: 120000,
+    directDamage: 6000,
 };
 
 // Returns the normalized multiplier sum from multiplier bonuses.
@@ -133,8 +144,8 @@ export function calculateMultiplierFactor(stats: BaseStats, statBonuses?: StatBo
     const multiplierBonuses = statBonuses.filter((b) => b.mode === 'multiplier');
     if (multiplierBonuses.length === 0) return 0;
     return multiplierBonuses.reduce((total, bonus) => {
-        const statValue = stats[bonus.stat as keyof BaseStats] || 0;
-        const normalizer = MULTIPLIER_NORMALIZERS[bonus.stat as keyof BaseStats] || 1;
+        const statValue = resolveLimitStatValue(stats, bonus.stat);
+        const normalizer = MULTIPLIER_NORMALIZERS[bonus.stat] || 1;
         return total + (statValue / normalizer) * (bonus.percentage / 100);
     }, 0);
 }
