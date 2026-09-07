@@ -1228,10 +1228,17 @@ delta marginal rather than double-counting an edit. Import `previewStatBonus` fr
 Run: `npm start` (dev server on port 3000 — `npm start`, not `run dev`)
 Open the Autogear page, select a ship, give it a role, open Settings → Tweaks → add a stat
 bonus. Confirm: choosing a stat shows the three-row preview; the delta changes as the
-percentage changes; switching Additive/Multiplier changes the delta; clearing the role shows
-the warning copy instead of numbers. Compare an ATTACKER against a DEBUFFER_BOMBER — the same
-percentage should read as decisive on one and negligible on the other. That contrast is the
-feature.
+percentage changes; switching Additive/Multiplier changes the delta. Compare an ATTACKER
+against a DEBUFFER_BOMBER — the same percentage should read as decisive on one and negligible
+on the other. That contrast is the feature.
+
+**The `applies: false` warning cannot be reached from this screen** and must not be listed as
+something to verify here: the whole Tweaks panel is gated on a role being selected
+(`AutogearSettings.tsx`), so clearing the role unmounts the form rather than showing the
+warning. The branch stays as a correct contract for the form as a reusable component —
+`previewStatBonus` accepts `role: null` and returns zeros, so a future caller without the
+branch would render "score 0 → 0", which is wrong rather than merely absent. It is covered by
+a unit test, not by this manual pass.
 
 - [ ] **Step 9: Lint, typecheck, full suite**
 
