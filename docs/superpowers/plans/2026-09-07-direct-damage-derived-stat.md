@@ -1092,9 +1092,13 @@ import type { StatBonusPreview } from '../../utils/autogear/priorityScore';
 Compute it inside the component, after the existing state declarations:
 
 ```tsx
+    // Capture the narrowed stat alongside the preview. Inside the JSX guard below,
+    // TypeScript cannot re-narrow `selectedStat` away from `LimitableStat | ''` from the
+    // `preview` check alone, so the label render needs this instead of the state value.
+    const previewStat: LimitableStat | null = selectedStat || null;
     const preview =
-        previewFor && selectedStat
-            ? previewFor({ stat: selectedStat, percentage: percentage || 0, mode })
+        previewFor && previewStat
+            ? previewFor({ stat: previewStat, percentage: percentage || 0, mode })
             : null;
 ```
 
@@ -1113,7 +1117,7 @@ Render it directly after the Mode block's closing `</div>`, before the submit bu
                             </div>
                             <div className="flex justify-between gap-4">
                                 <span className="text-theme-text-secondary">
-                                    {getLimitStatLabel(selectedStat)}{' '}
+                                    {previewStat && getLimitStatLabel(previewStat)}{' '}
                                     {Math.round(preview.statValue).toLocaleString()} ×{' '}
                                     {percentage || 0}%
                                 </span>
@@ -1278,11 +1282,12 @@ no before-state:
 ```ts
     'Autogear: new Direct Damage stat weighs attack, crit, crit power and defense penetration together.',
     'Autogear: Effective HP can now be used as a stat bonus, not just a requirement.',
-    'Autogear: stat bonuses now preview what they add to a ship&apos;s score.',
+    "Autogear: stat bonuses now preview what they add to a ship's score.",
 ```
 
-Match the file's existing quoting style — check whether neighbouring entries use plain
-apostrophes in double-quoted strings rather than an HTML entity, and follow that.
+Note the third entry uses DOUBLE quotes because it contains an apostrophe — that is the
+existing convention in this array (see the neighbouring `"Upgrade analysis: excess crit rate
+no longer inflates a piece's value."`). Never an HTML entity: this is a TS string, not JSX.
 
 - [ ] **Step 4: Verify the docs page renders**
 
