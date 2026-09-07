@@ -37,13 +37,9 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
     const [showAdditiveTip, setShowAdditiveTip] = useState(false);
     const [showMultiplierTip, setShowMultiplierTip] = useState(false);
 
-    // Capture the narrowed stat alongside the preview. Inside the JSX guard below,
-    // TypeScript cannot re-narrow `selectedStat` away from `LimitableStat | ''` from the
-    // `preview` check alone, so the label render needs this instead of the state value.
-    const previewStat: LimitableStat | null = selectedStat || null;
     const preview =
-        previewFor && previewStat
-            ? previewFor({ stat: previewStat, percentage: percentage || 0, mode })
+        previewFor && selectedStat
+            ? previewFor({ stat: selectedStat, percentage: percentage || 0, mode })
             : null;
 
     useEffect(() => {
@@ -169,7 +165,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                                 </div>
                                 <div className="flex justify-between gap-4">
                                     <span className="text-theme-text-secondary">
-                                        {previewStat && getLimitStatLabel(previewStat)}{' '}
+                                        {selectedStat && getLimitStatLabel(selectedStat)}{' '}
                                         {Math.round(preview.statValue).toLocaleString()} ×{' '}
                                         {percentage || 0}%
                                     </span>

@@ -50,6 +50,7 @@ describe('StatBonusForm contribution preview', () => {
 
         const preview = screen.getByTestId('stat-bonus-preview');
         expect(preview.textContent).toContain('3,215');
+        expect(preview.textContent).toContain('+4,400');
         expect(preview.textContent).toContain('7,615');
     });
 
