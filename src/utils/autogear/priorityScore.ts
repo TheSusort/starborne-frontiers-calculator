@@ -116,7 +116,7 @@ export function applyAdditiveBonuses(stats: BaseStats, statBonuses?: StatBonus[]
 //
 // Each entry sits at roughly the stat's GEARED value, not its bare-chassis value
 // (attack 10,000 against a bare 6,250; hp 50,000 against a bare 22,000). The two derived
-// entries follow the same reading — `statNormalizerReferences.test.ts` pins them.
+// entries follow the same reading — `derivedStatBonuses.test.ts` pins them.
 //
 // Keyed `LimitableStat`, not `keyof BaseStats`, so derived stats are expressible. It must
 // stay a `Partial<Record<LimitableStat, …>>` — a `Record<string, number>` would drop the

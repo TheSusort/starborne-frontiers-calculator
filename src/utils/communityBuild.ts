@@ -120,8 +120,8 @@ const resolveLegacyStat = (
 /**
  * Legacy `stat_priorities[].stat` may hold a display label (e.g. `'crit
  * rate'`, `'defense'`) instead of a `LimitableStat` key. Resolve it via the
- * derived reverse index; stat priorities accept derived limit stats
- * (effectiveHp) in addition to real stats.
+ * derived reverse index; stat priorities accept derived limit stats in
+ * addition to real stats.
  */
 const normalizeLegacyStatPriorities = (raw: unknown): unknown => {
     if (!Array.isArray(raw)) return raw;

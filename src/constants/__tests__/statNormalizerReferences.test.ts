@@ -3,11 +3,16 @@ import { STAT_NORMALIZERS } from '../stats';
 import { getScoringBaselineStats, ROLE_BASE_STATS } from '../roleBaseStats';
 import { calculateDirectDamage, calculateEffectiveHP } from '../../utils/autogear/priorityScore';
 
-// A normalizer decides how heavily a stat bonus weighs, and stat bonuses ride along in
-// SHARED community builds — so a silent change to the crit targets or the defense curve
-// would re-weigh every shared build that uses one. These bounds are wide (they are not
-// asserting an exact formula) but they fail if a reference moves by more than ~2x, which
-// is the point at which a chosen normalizer stops meaning what it was chosen to mean.
+// STAT_NORMALIZERS drives manual-mode stat-PRIORITY scoring (calculateDefaultScore, used
+// only when no role is selected) and implant pre-filtering (implantFilter.ts, which
+// normalizes both the priority and the bonus term when ranking implant candidates). It is
+// NOT read by the optimizer's stat-bonus fitness term (calculateMultiplierFactor /
+// applyAdditiveBonuses in priorityScore.ts) — that reads MULTIPLIER_NORMALIZERS instead
+// (see derivedStatBonuses.test.ts). A wrong normalizer here silently mis-ranks
+// manual-priority gear combos and implant candidates against each other. These bounds are
+// wide (they are not asserting an exact formula) but they fail if a reference moves by
+// more than ~2x, which is the point at which a chosen normalizer stops meaning what it was
+// chosen to mean.
 describe('derived-stat normalizer references', () => {
     it('directDamage at the ATTACKER scoring baseline stays near its limit normalizer', () => {
         const baseline = getScoringBaselineStats('ATTACKER');

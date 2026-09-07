@@ -159,7 +159,7 @@ export const StatBonusForm: React.FC<StatBonusFormProps> = ({
                             <>
                                 <div className="flex justify-between gap-4">
                                     <span className="text-theme-text-secondary">
-                                        This ship&apos;s score
+                                        Role score, current gear
                                     </span>
                                     <span>{Math.round(preview.baseScore).toLocaleString()}</span>
                                 </div>
