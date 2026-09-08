@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.66.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Game Basics: a new page explaining stats, roles, affinities and targeting.',
     'Game Basics: an interactive board shows which ships each targeting rule hits.',
+    'Game Basics: the targeting board now explains pattern clipping at the board edge.',
     'Skill cards: targeting descriptions now say which row a skill hits.',
     'Ship inventory: your list or image view choice now survives a reload.',
     "Ship inventory: signing back in now restores your account's saved view choice.",

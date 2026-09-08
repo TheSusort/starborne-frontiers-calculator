@@ -38,7 +38,7 @@ const Section: React.FC<{
 }> = ({ section, index, children }) => (
     <section id={section.id} className="space-y-4 scroll-mt-24">
         <div className="flex items-center gap-3 border-b border-dark-border pb-3">
-            <span className="font-secondary text-2xl text-theme-text-secondary/50 tabular-nums">
+            <span className="text-2xl font-light text-theme-text-secondary/60 tabular-nums">
                 {stepNumber(index)}
             </span>
             <IconBadge
@@ -99,17 +99,17 @@ const RoleCard: React.FC<{ category: ShipRoleCategory }> = ({ category }) => {
  *  purpose — the sentence underneath stays the readable statement of the same example. */
 const HackingEquation: React.FC = () => {
     const tile = (value: string, label: string) => (
-        <div className="card flex-1 min-w-[6rem] text-center !p-3">
+        <div className="card flex-1 min-w-[5rem] !p-3 flex flex-col justify-center text-center">
             <p className="text-2xl font-secondary text-primary">{value}</p>
             <p className="text-xs text-theme-text-secondary">{label}</p>
         </div>
     );
     return (
-        <div className="flex items-center gap-2 sm:gap-3" aria-hidden="true">
+        <div className="flex items-stretch gap-2 sm:gap-3" aria-hidden="true">
             {tile('80', STATS.hacking.label)}
-            <span className="text-xl text-theme-text-secondary">&minus;</span>
+            <span className="self-center text-xl text-theme-text-secondary">&minus;</span>
             {tile('40', STATS.security.label)}
-            <span className="text-xl text-theme-text-secondary">=</span>
+            <span className="self-center text-xl text-theme-text-secondary">=</span>
             {tile('40%', 'chance to land')}
         </div>
     );
@@ -195,7 +195,7 @@ const BasicsPage: React.FC = () => {
                                                     : 'border-dark-border text-theme-text-secondary hover:text-theme-text hover:border-theme-text-secondary'
                                             }`}
                                         >
-                                            <span className="font-secondary text-xs opacity-60 tabular-nums">
+                                            <span className="text-xs opacity-60 tabular-nums">
                                                 {stepNumber(index)}
                                             </span>
                                             <span>{section.title}</span>
@@ -218,7 +218,7 @@ const BasicsPage: React.FC = () => {
                                             href={`#${section.id}`}
                                             className="flex items-baseline gap-2 py-1 text-sm text-primary hover:text-primary-hover"
                                         >
-                                            <span className="font-secondary text-xs opacity-60 tabular-nums">
+                                            <span className="text-xs opacity-60 tabular-nums">
                                                 {stepNumber(index)}
                                             </span>
                                             <span>{section.title}</span>
@@ -370,13 +370,9 @@ const BasicsPage: React.FC = () => {
                                             size={20}
                                             aria-hidden="true"
                                         />
-                                        <p className="text-sm">
-                                            <strong className="block text-theme-text">
-                                                {term}
-                                            </strong>
-                                            <span className="text-theme-text-secondary">
-                                                {body}
-                                            </span>
+                                        <p className="text-sm text-theme-text-secondary">
+                                            <strong className="text-theme-text">{term}</strong> —{' '}
+                                            {body}
                                         </p>
                                     </div>
                                 ))}

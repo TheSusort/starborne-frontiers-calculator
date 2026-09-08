@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Position } from '../../types/encounters';
 import { Button } from '../ui/Button';
+import { Callout } from '../ui/Callout';
 import { HEX_RADIUS, axialToPixel, hexPoints } from '../ui/hexGeometry';
 import { PATTERN_SHAPES, TARGETING_RULES } from '../../constants/targetingRules';
 import { ALL_POSITIONS, positionToAxial } from '../../utils/targeting/board';
@@ -154,31 +155,43 @@ const TargetingBoard: React.FC = () => {
 
     return (
         <div className="card space-y-4">
-            <div className="flex flex-wrap gap-2">
-                {DEMO_RULES.map((id) => (
-                    <Button
-                        key={id}
-                        size="sm"
-                        variant={id === ruleId ? 'primary' : 'secondary'}
-                        onClick={() => setRuleId(id)}
-                    >
-                        {TARGETING_RULES[id].label}
-                    </Button>
-                ))}
-            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
+                        Targeting rule
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {DEMO_RULES.map((id) => (
+                            <Button
+                                key={id}
+                                size="sm"
+                                variant={id === ruleId ? 'primary' : 'secondary'}
+                                onClick={() => setRuleId(id)}
+                            >
+                                {TARGETING_RULES[id].label}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
 
-            <div className="flex flex-wrap gap-2">
-                {DEMO_PATTERNS.map((p, i) => (
-                    <Button
-                        key={p.shape}
-                        size="sm"
-                        variant={i === patternIndex ? 'primary' : 'secondary'}
-                        onClick={() => setPatternIndex(i)}
-                        disabled={ruleId === 'all'}
-                    >
-                        {PATTERN_SHAPES[p.shape].label}
-                    </Button>
-                ))}
+                <div>
+                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
+                        Pattern
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {DEMO_PATTERNS.map((p, i) => (
+                            <Button
+                                key={p.shape}
+                                size="sm"
+                                variant={i === patternIndex ? 'primary' : 'secondary'}
+                                onClick={() => setPatternIndex(i)}
+                                disabled={ruleId === 'all'}
+                            >
+                                {PATTERN_SHAPES[p.shape].label}
+                            </Button>
+                        ))}
+                    </div>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4 items-center">
@@ -204,12 +217,12 @@ const TargetingBoard: React.FC = () => {
                 </div>
             </div>
 
-            <div>
+            <div className="border-l-2 border-primary pl-3">
                 <p className="font-semibold text-primary">{rule.label}</p>
                 <p className="text-sm text-theme-text">{rule.description}</p>
             </div>
 
-            <div className="flex flex-wrap gap-4 text-xs text-theme-text-secondary">
+            <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-theme-text-secondary border-t border-dark-border pt-3">
                 <span className="inline-flex items-center gap-1">
                     <span className="inline-block w-2 h-2 rounded-sm bg-[#4ade80]" /> Your attacker
                 </span>
@@ -234,6 +247,15 @@ const TargetingBoard: React.FC = () => {
                     Empty space
                 </span>
             </div>
+
+            <Callout variant="rule" title="Patterns are clipped at the edge of the board">
+                <p>
+                    Any cell that falls outside the board is simply not hit. That is why Circle and
+                    Cone look identical from T4 — four of Circle&apos;s six surrounding cells fall
+                    off, so a bigger shape aimed at a corner reaches exactly the same ships as a
+                    smaller one.
+                </p>
+            </Callout>
         </div>
     );
 };

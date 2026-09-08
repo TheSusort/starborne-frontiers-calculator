@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import StatGuideTable, { STAT_GUIDE, NOT_A_GAME_STAT } from '../StatGuideTable';
+import { STAT_GROUPS } from '../statGuideData';
 import { STATS } from '../../../constants/stats';
 import type { StatName } from '../../../types/stats';
 
@@ -35,5 +36,18 @@ describe('StatGuideTable', () => {
             expect(screen.queryByText(STATS[name].label)).not.toBeInTheDocument();
         }
         expect(NOT_A_GAME_STAT).toContain('hpRegen');
+    });
+
+    it('shows every group panel, and puts at least one stat in each', () => {
+        // The grouping is the section's whole readability claim: three ideas, not one list.
+        // An empty panel means a group heading with nothing under it.
+        render(<StatGuideTable />);
+        for (const group of Object.keys(STAT_GROUPS) as (keyof typeof STAT_GROUPS)[]) {
+            expect(screen.getByText(STAT_GROUPS[group].title)).toBeInTheDocument();
+            const inGroup = (Object.keys(STAT_GUIDE) as StatName[]).filter(
+                (name) => STAT_GUIDE[name]!.group === group
+            );
+            expect(inGroup.length, group).toBeGreaterThan(0);
+        }
     });
 });

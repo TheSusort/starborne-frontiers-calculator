@@ -1,7 +1,13 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { SLOT_MAIN_STATS, STATS } from '../../constants/stats';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
+// Imported per-module, not from the `../ui` barrel: the barrel re-exports Sidebar, whose
+// `/favicon.ico?url` import vitest refuses to resolve unless the test stubs Sidebar out.
+import { Button } from '../ui/Button';
+import { Chip } from '../ui/Chip';
+import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import type { Stat } from '../../types/stats';
 
 /** A set with no `minPieces` pays out at 2. */
@@ -19,93 +25,127 @@ const setEffect = (stats: Stat[], description: string | undefined): string => {
     return [statPart, description].filter(Boolean).join(' — ');
 };
 
-const GearBasicsSection: React.FC = () => (
-    <div className="space-y-6">
-        <div className="card overflow-x-auto">
-            <h3 className="font-semibold mb-3">Not every slot rolls every stat</h3>
-            <p className="text-sm text-theme-text-secondary mb-3">
-                The three fixed slots always roll the same primary stat. The other three are where
-                your build actually gets decided — a ship only gets hacking or security from its
-                software slot, and only gets speed from its thrusters.
-            </p>
-            <table className="w-full text-sm text-left">
-                <thead>
-                    <tr className="border-b border-dark-border">
-                        <th scope="col" className="py-2 pr-4 font-semibold">
-                            Slot
-                        </th>
-                        <th scope="col" className="py-2 font-semibold">
-                            Possible primary stats
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {Object.keys(SLOT_MAIN_STATS).map((slot) => (
-                        <tr
-                            key={slot}
-                            data-testid={`slot-row-${slot}`}
-                            className="border-b border-dark-border last:border-0"
-                        >
-                            <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
-                                {GEAR_SLOTS[slot].label}
-                            </td>
-                            <td className="py-2 text-theme-text">
-                                {SLOT_MAIN_STATS[slot].map((s) => STATS[s].label).join(', ')}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+const SLOTS = Object.keys(SLOT_MAIN_STATS);
+/** A slot that rolls exactly one primary stat is a fixed slot — derived, so adding a stat to
+ *  `SLOT_MAIN_STATS` moves the slot between the two groups instead of leaving a stale list. */
+const isFixed = (slot: string): boolean => SLOT_MAIN_STATS[slot].length === 1;
 
-        <div className="card overflow-x-auto">
-            <h3 className="font-semibold mb-3">Sets pay out at 2 or 4 pieces</h3>
-            <p className="text-sm text-theme-text-secondary mb-3">
-                A set bonus only applies once you have enough matching pieces equipped, and most
-                two-piece sets pay out again for each further pair. Six pieces of a two-piece set is
-                three times the bonus.
-            </p>
-            <table className="w-full text-sm text-left">
-                <thead>
-                    <tr className="border-b border-dark-border">
-                        <th scope="col" className="py-2 pr-4 font-semibold">
-                            Set
-                        </th>
-                        <th scope="col" className="py-2 pr-4 font-semibold">
-                            Pieces
-                        </th>
-                        <th scope="col" className="py-2 font-semibold">
-                            Bonus
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {Object.values(GEAR_SETS).map((set) => (
-                        <tr
-                            key={set.name}
-                            data-testid={`set-row-${set.name}`}
-                            className="border-b border-dark-border last:border-0 align-top"
-                        >
-                            <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
-                                {set.name}
-                            </td>
-                            <td className="py-2 pr-4 text-theme-text-secondary">
-                                {piecesFor(set.minPieces)}
-                            </td>
-                            <td className="py-2 text-theme-text">
-                                {setEffect(
-                                    set.stats,
-                                    typeof set.description === 'string'
-                                        ? set.description
-                                        : undefined
-                                )}
-                            </td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+const SlotCard: React.FC<{ slot: string }> = ({ slot }) => (
+    <div data-testid={`slot-row-${slot}`} className="card space-y-2">
+        <h4 className="font-medium text-primary">{GEAR_SLOTS[slot].label}</h4>
+        <div className="flex flex-wrap gap-1.5">
+            {SLOT_MAIN_STATS[slot].map((stat) => (
+                <Chip key={stat} accent={isFixed(slot)}>
+                    {STATS[stat].label}
+                </Chip>
+            ))}
         </div>
     </div>
 );
+
+const GearBasicsSection: React.FC = () => {
+    const [showSets, setShowSets] = useState(false);
+    const setCount = Object.keys(GEAR_SETS).length;
+
+    return (
+        <div className="space-y-6">
+            <div className="space-y-4">
+                <div>
+                    <h3 className="font-semibold mb-1">Not every slot rolls every stat</h3>
+                    <p className="text-sm text-theme-text-secondary">
+                        The three fixed slots always roll the same primary stat. The other three are
+                        where your build actually gets decided — a ship only gets hacking or
+                        security from its software slot, and only gets speed from its thrusters.
+                    </p>
+                </div>
+
+                <div>
+                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-2">
+                        Fixed slots
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        {SLOTS.filter(isFixed).map((slot) => (
+                            <SlotCard key={slot} slot={slot} />
+                        ))}
+                    </div>
+                </div>
+
+                <div>
+                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-2">
+                        Flexible slots
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        {SLOTS.filter((slot) => !isFixed(slot)).map((slot) => (
+                            <SlotCard key={slot} slot={slot} />
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            <div className="card">
+                <h3 className="font-semibold mb-1">Sets pay out at 2 or 4 pieces</h3>
+                <p className="text-sm text-theme-text-secondary mb-3">
+                    A set bonus only applies once you have enough matching pieces equipped, and most
+                    two-piece sets pay out again for each further pair. Six pieces of a two-piece
+                    set is three times the bonus.
+                </p>
+                <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-expanded={showSets}
+                    aria-controls="gear-set-reference"
+                    onClick={() => setShowSets((open) => !open)}
+                    className="inline-flex items-center gap-2"
+                >
+                    {showSets ? 'Hide' : 'Show'} all {setCount} set bonuses
+                    {showSets ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                </Button>
+                <CollapsibleForm isVisible={showSets}>
+                    <div id="gear-set-reference" className="overflow-x-auto mt-3">
+                        <table className="w-full text-sm text-left">
+                            <thead>
+                                <tr className="border-b border-dark-border">
+                                    <th scope="col" className="py-2 pr-4 font-semibold">
+                                        Set
+                                    </th>
+                                    <th scope="col" className="py-2 pr-4 font-semibold">
+                                        Pieces
+                                    </th>
+                                    <th scope="col" className="py-2 font-semibold">
+                                        Bonus
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {Object.values(GEAR_SETS).map((set) => (
+                                    <tr
+                                        key={set.name}
+                                        data-testid={`set-row-${set.name}`}
+                                        className="border-b border-dark-border last:border-0 align-top"
+                                    >
+                                        <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
+                                            {set.name}
+                                        </td>
+                                        <td className="py-2 pr-4 text-theme-text-secondary">
+                                            {piecesFor(set.minPieces)}
+                                        </td>
+                                        <td className="py-2 text-theme-text">
+                                            {setEffect(
+                                                set.stats,
+                                                typeof set.description === 'string'
+                                                    ? set.description
+                                                    : undefined
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </CollapsibleForm>
+            </div>
+        </div>
+    );
+};
 
 export default GearBasicsSection;

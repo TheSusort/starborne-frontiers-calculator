@@ -150,4 +150,13 @@ describe('TargetingBoard', () => {
         }
         expect(screen.queryByRole('button', { name: 'Self' })).not.toBeInTheDocument();
     });
+
+    it('tells the reader a pattern is clipped at the edge of the board', () => {
+        // Circle and Cone render an identical footprint from the T4 anchor (the two tests
+        // above pin that). Without this note it reads as a bug rather than the mechanic.
+        render(<TargetingBoard />);
+        expect(
+            screen.getByText('Patterns are clipped at the edge of the board')
+        ).toBeInTheDocument();
+    });
 });
