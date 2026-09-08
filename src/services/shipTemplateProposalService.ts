@@ -213,6 +213,12 @@ export const rejectProposal = async (
     }
 };
 
+/** A targeting column is either a value the parser accepts or SQL NULL. A blank string
+ *  must not survive: `parsePattern` trims before tokenizing, so '   ' reaches
+ *  `detectShape` as '' and throws, and a blank charged column is truthy enough to
+ *  defeat the "same as active" fallback in `parseShipTargeting`. */
+const nullableTargeting = (value: string): string | null => (value.trim() === '' ? null : value);
+
 export interface NewShipTemplateData {
     name: string;
     affinity: string;
@@ -238,6 +244,10 @@ export interface NewShipTemplateData {
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
     thirdPassiveSkillText: string;
+    activeTarget: string;
+    activePattern: string;
+    chargedTarget: string;
+    chargedPattern: string;
     definitionId: string;
 }
 
@@ -274,6 +284,12 @@ export const addShipTemplate = async (
             first_passive_skill_text: templateData.firstPassiveSkillText || null,
             second_passive_skill_text: templateData.secondPassiveSkillText || null,
             third_passive_skill_text: templateData.thirdPassiveSkillText || null,
+            // An empty charged column is meaningful: parseShipTargeting reads it as
+            // "same as active" for that axis, so empty must persist as null.
+            active_target: nullableTargeting(templateData.activeTarget),
+            active_pattern: nullableTargeting(templateData.activePattern),
+            charged_target: nullableTargeting(templateData.chargedTarget),
+            charged_pattern: nullableTargeting(templateData.chargedPattern),
             definition_id: templateData.definitionId || null,
             base_stats: {
                 hp: templateData.hp,
@@ -333,6 +349,11 @@ export const updateShipTemplate = async (
                 first_passive_skill_text: templateData.firstPassiveSkillText || null,
                 second_passive_skill_text: templateData.secondPassiveSkillText || null,
                 third_passive_skill_text: templateData.thirdPassiveSkillText || null,
+                // Empty means "same as active" for that axis — read `addShipTemplate`'s note.
+                active_target: nullableTargeting(templateData.activeTarget),
+                active_pattern: nullableTargeting(templateData.activePattern),
+                charged_target: nullableTargeting(templateData.chargedTarget),
+                charged_pattern: nullableTargeting(templateData.chargedPattern),
                 definition_id: templateData.definitionId || null,
                 base_stats: {
                     hp: templateData.hp,

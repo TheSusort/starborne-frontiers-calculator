@@ -7,6 +7,7 @@ import { FACTIONS } from '../../constants/factions';
 import { RARITIES } from '../../constants/rarities';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { AffinityName } from '../../types/ship';
+import { TARGET_VALUES, parsePattern } from '../../utils/targetingParser';
 
 export interface ShipTemplateFormData {
     name: string;
@@ -33,6 +34,10 @@ export interface ShipTemplateFormData {
     firstPassiveSkillText: string;
     secondPassiveSkillText: string;
     thirdPassiveSkillText: string;
+    activeTarget: string;
+    activePattern: string;
+    chargedTarget: string;
+    chargedPattern: string;
     definitionId: string;
 }
 
@@ -49,6 +54,38 @@ const AFFINITY_OPTIONS = [
     { value: 'thermal', label: 'Thermal' },
     { value: 'antimatter', label: 'Antimatter' },
 ];
+
+// Targeting options come from the parser's own vocabulary: `parseTarget` throws on
+// anything outside it, so a hand-written list here would drift into unparseable data.
+const ACTIVE_TARGET_OPTIONS = [
+    { value: '', label: '— not set —' },
+    ...TARGET_VALUES.map((v) => ({ value: v, label: v })),
+];
+
+// An empty charged column means "this axis is the same as active" (parseShipTargeting
+// merges per-column), so empty is a meaningful value here, not a missing one.
+const CHARGED_TARGET_OPTIONS = [
+    { value: '', label: '— same as active —' },
+    ...TARGET_VALUES.map((v) => ({ value: v, label: v })),
+];
+
+/** Live feedback for the free-text pattern inputs: patterns are compositional
+ *  (`Pattern-Cone-Range-2-Support`), so they cannot be enumerated in a Select and are
+ *  instead checked against the parser as they are typed. */
+const describePattern = (raw: string): { error?: string; summary?: string } => {
+    if (!raw.trim()) return {};
+    try {
+        const parsed = parsePattern(raw);
+        const mods = Object.entries(parsed.modifiers)
+            .filter(([, v]) => v)
+            .map(([k, v]) => (v === true ? k : `${k}: ${String(v)}`));
+        const parts = [`shape: ${parsed.shape}`, `range: ${String(parsed.range)}`];
+        if (mods.length > 0) parts.push(`modifiers: ${mods.join(', ')}`);
+        return { summary: parts.join(' · ') };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : 'Unparseable pattern' };
+    }
+};
 
 const DEFAULT_FORM_DATA: ShipTemplateFormData = {
     name: '',
@@ -75,6 +112,10 @@ const DEFAULT_FORM_DATA: ShipTemplateFormData = {
     firstPassiveSkillText: '',
     secondPassiveSkillText: '',
     thirdPassiveSkillText: '',
+    activeTarget: '',
+    activePattern: '',
+    chargedTarget: '',
+    chargedPattern: '',
     definitionId: '',
 };
 
@@ -122,6 +163,16 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
         value: t.name,
         label: t.name,
     }));
+
+    const activePatternFeedback = describePattern(formData.activePattern);
+    const chargedPatternFeedback = describePattern(formData.chargedPattern);
+    // parseShipTargeting needs BOTH active columns to produce any targeting at all, so
+    // filling one alone leaves the ship untargeted rather than half-targeted.
+    const activeAxisIncomplete =
+        Boolean(formData.activeTarget) !== Boolean(formData.activePattern.trim());
+    // A stored pattern the parser rejects makes parseShipTargeting throw wherever the sim
+    // reads this ship, so it must never reach the database.
+    const hasPatternError = Boolean(activePatternFeedback.error || chargedPatternFeedback.error);
 
     return (
         <form onSubmit={(e) => void handleSubmit(e)} className="card">
@@ -458,9 +509,63 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     </div>
                 </div>
 
+                {/* Targeting Section */}
+                <div>
+                    <h4 className="text-lg font-semibold mb-3 text-primary">Targeting</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <Select
+                                label="Active Target"
+                                value={formData.activeTarget}
+                                onChange={(value) => updateField('activeTarget', value)}
+                                options={ACTIVE_TARGET_OPTIONS}
+                            />
+                        </div>
+
+                        <div>
+                            <Input
+                                type="text"
+                                label="Active Pattern"
+                                value={formData.activePattern}
+                                onChange={(e) => updateField('activePattern', e.target.value)}
+                                placeholder="e.g., Pattern-Cone-Range-2"
+                                error={activePatternFeedback.error}
+                                hint={activePatternFeedback.summary}
+                            />
+                        </div>
+
+                        <div>
+                            <Select
+                                label="Charged Target"
+                                value={formData.chargedTarget}
+                                onChange={(value) => updateField('chargedTarget', value)}
+                                options={CHARGED_TARGET_OPTIONS}
+                            />
+                        </div>
+
+                        <div>
+                            <Input
+                                type="text"
+                                label="Charged Pattern"
+                                value={formData.chargedPattern}
+                                onChange={(e) => updateField('chargedPattern', e.target.value)}
+                                placeholder="Leave empty to match the active pattern"
+                                error={chargedPatternFeedback.error}
+                                hint={chargedPatternFeedback.summary}
+                            />
+                        </div>
+                    </div>
+                    {activeAxisIncomplete && (
+                        <p className="text-sm text-yellow-500 mt-2">
+                            Active Target and Active Pattern are only used together — with one of
+                            them empty this ship gets no targeting at all.
+                        </p>
+                    )}
+                </div>
+
                 {/* Submit Button */}
                 <div className="flex justify-end pt-4">
-                    <Button type="submit" variant="primary" disabled={loading}>
+                    <Button type="submit" variant="primary" disabled={loading || hasPatternError}>
                         {loading
                             ? mode === 'edit'
                                 ? 'Updating...'

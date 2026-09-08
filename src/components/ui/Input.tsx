@@ -5,13 +5,33 @@ import { InfoIcon } from './icons/InfoIcon';
 interface Props extends React.InputHTMLAttributes<HTMLInputElement> {
     label?: string;
     error?: string;
+    /** Secondary text under the field, for feedback that is not a failure — e.g. a
+     *  parsed interpretation of what was typed. Suppressed while `error` is set, since
+     *  the two occupy the same slot and the failure is the more useful of the pair. */
+    hint?: string;
     labelClassName?: string;
     helpLabel?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, Props>(
-    ({ label, error, labelClassName = '', className = '', helpLabel, ...props }, ref) => {
+    (
+        {
+            label,
+            error,
+            hint,
+            labelClassName = '',
+            className = '',
+            helpLabel,
+            'aria-describedby': ariaDescribedBy,
+            ...props
+        },
+        ref
+    ) => {
         const id = props.id || props.name || `input-${Math.random().toString(36).substring(2, 15)}`;
+        // `error` suppresses `hint`, so at most one feedback element is rendered and one id
+        // is enough. A caller's own aria-describedby is merged, never replaced.
+        const feedbackId = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+        const describedBy = [ariaDescribedBy, feedbackId].filter(Boolean).join(' ') || undefined;
         const [showHelpTooltip, setShowHelpTooltip] = useState(false);
         const infoIconRef = useRef<HTMLDivElement>(null);
 
@@ -58,9 +78,19 @@ export const Input = forwardRef<HTMLInputElement, Props>(
                     ${className}
                 `}
                     id={id}
+                    aria-describedby={describedBy}
                     {...props}
                 />
-                {error && <p className="text-sm text-red-500">{error}</p>}
+                {error && (
+                    <p id={feedbackId} className="text-sm text-red-500">
+                        {error}
+                    </p>
+                )}
+                {!error && hint && (
+                    <p id={feedbackId} className="text-sm text-theme-text-secondary">
+                        {hint}
+                    </p>
+                )}
             </div>
         );
     }
