@@ -60,10 +60,9 @@ export interface DPSSimulationInput {
      *  affinityDamageModifier/affinityCritCap/affinityCritPenalty above, so the two never disagree
      *  (positional plumbing; forwarded to the engine's attackerAffinity). Absent → neutral default. */
     affinity?: AffinityName;
-    /** Attacker hacking stat. Landing chance = clamp(effHacking - enemySecurity, 0, 100) / 100,
-     *  where effHacking scales this stat by the affinity matchup (+25% at advantage, -25% at
-     *  disadvantage) — see `liveDebuffLandingChance` in combat/effectiveStats.ts, which owns the
-     *  formula. Default 200. */
+    /** Attacker hacking stat — the base that `liveDebuffLandingChance`
+     *  (combat/effectiveStats.ts) scales by buffs and the affinity matchup to produce the landing
+     *  chance. That function owns the formula. Default 200. */
     hacking?: number;
     /** Defender security stat. Default 100. */
     enemySecurity?: number;
