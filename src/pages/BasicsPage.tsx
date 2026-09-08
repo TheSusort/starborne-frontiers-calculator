@@ -10,7 +10,7 @@ import {
     ScrollText,
     type LucideIcon,
 } from 'lucide-react';
-import { Callout, Chip, GroupLabel, IconBadge } from '../components/ui';
+import { Callout, Chip, GroupLabel, IconBadge, IconPlate } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import TargetingBoard from '../components/basics/TargetingBoard';
@@ -229,18 +229,6 @@ const NEXT_STEPS: { icon: LucideIcon; body: React.ReactNode }[] = [
     },
 ];
 
-/** An icon-led plate: a glyph in the gutter, one sentence beside it. Used for the two four-item
- *  grids where the items are facts rather than grouped data. */
-const IconPlate: React.FC<{ icon: LucideIcon; children: React.ReactNode }> = ({
-    icon: Icon,
-    children,
-}) => (
-    <div className="card flex gap-3">
-        <Icon className="text-primary shrink-0 mt-0.5" size={18} aria-hidden="true" />
-        <p className="text-sm text-theme-text-secondary">{children}</p>
-    </div>
-);
-
 const BasicsPage: React.FC = () => {
     const location = useLocation();
     const activeId = useScrollSpy(SECTION_IDS);
@@ -284,10 +272,7 @@ const BasicsPage: React.FC = () => {
 
                         {/* The mobile stand-in for the rail: below lg the sticky column is
                             hidden, so the plate on the header carries the index instead. */}
-                        <nav
-                            aria-label="On this page"
-                            className="lg:hidden bg-dark/85 border border-dark-border p-4"
-                        >
+                        <nav aria-label="On this page" className="card lg:hidden bg-dark/85">
                             <GroupLabel className="mb-2 tracking-widest">Contents</GroupLabel>
                             <ol className="grid gap-x-8 sm:grid-cols-2">
                                 {SECTIONS.map((section, index) => (

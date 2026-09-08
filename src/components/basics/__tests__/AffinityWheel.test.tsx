@@ -40,11 +40,29 @@ describe('AffinityWheel', () => {
     });
 
     it('isolates an affinity on tap instead of clearing it', async () => {
-        // mouseenter and focus both fire before click on a focusable node, so a toggle would read
-        // its own hover state and undo the isolation the tap asked for.
+        // mouseenter and focus both fire before click on a focusable node, so a toggle sharing one
+        // state with hover would read its own hover state and undo what the tap asked for.
         render(<AffinityWheel />);
         await userEvent.click(screen.getByRole('button', { name: /^Electric beats/ }));
         expect(screen.getByText('Electric beats Thermal, and loses to Chemical.')).toBeVisible();
+    });
+
+    it('keeps a tapped affinity isolated after the pointer leaves it', async () => {
+        render(<AffinityWheel />);
+        const electric = screen.getByRole('button', { name: /^Electric beats/ });
+        await userEvent.click(electric);
+        await userEvent.unhover(electric);
+        expect(screen.getByText('Electric beats Thermal, and loses to Chemical.')).toBeVisible();
+        expect(electric).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('releases a tapped affinity when it is tapped again', async () => {
+        render(<AffinityWheel />);
+        const electric = screen.getByRole('button', { name: /^Electric beats/ });
+        await userEvent.click(electric);
+        await userEvent.click(electric);
+        await userEvent.unhover(electric);
+        expect(screen.getByText(/Point at an affinity/)).toBeVisible();
     });
 
     it('names each node with the matchups it isolates', () => {

@@ -29,6 +29,10 @@ const setEffect = (stats: Stat[], description: string | undefined): string => {
 /** `id="set-abyssal-assault"`, so a set can be linked to directly from chat or a guide. */
 const slugify = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+/** Whether a URL fragment names a set this page actually renders a row for. */
+const isSetHash = (hash: string): boolean =>
+    Object.values(GEAR_SETS).some((set) => hash === `#set-${slugify(set.name)}`);
+
 const SLOTS = Object.keys(SLOT_MAIN_STATS);
 /** A slot that rolls exactly one primary stat is a fixed slot — derived, so adding a stat to
  *  `SLOT_MAIN_STATS` moves the slot between the two groups instead of leaving a stale list. */
@@ -47,9 +51,11 @@ const SlotCard: React.FC<{ slot: string }> = ({ slot }) => (
 
 const GearBasicsSection: React.FC = () => {
     // A /basics#set-* deep link has to land on a visible row: CollapsibleForm renders a closed
-    // panel at max-h-0, so scrollIntoView on a collapsed set finds nothing to show.
+    // panel at max-h-0, so scrollIntoView on a collapsed set finds nothing to show. The hash is
+    // matched against GEAR_SETS rather than its prefix — a URL is reader-supplied, and #set-nonsense
+    // should not open a table with nothing in it to scroll to.
     const [showSets, setShowSets] = useState(
-        () => typeof window !== 'undefined' && window.location.hash.startsWith('#set-')
+        () => typeof window !== 'undefined' && isSetHash(window.location.hash)
     );
     const setCount = Object.keys(GEAR_SETS).length;
 

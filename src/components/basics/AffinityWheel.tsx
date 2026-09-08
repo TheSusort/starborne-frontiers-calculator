@@ -45,9 +45,12 @@ const HEX_R = 46;
 const EDGE_GAP = HEX_R + 8;
 
 const AffinityWheel: React.FC = () => {
-    /** The node the reader is pointing at, keyboard-focusing or has tapped. Null means the whole
-     *  cycle is shown at equal weight. */
-    const [focus, setFocus] = useState<CycleAffinity | null>(null);
+    /** Two states, because pointing and choosing are different acts: `hovered` is transient and
+     *  dies with the pointer, `pinned` survives it. Collapsing them meant a click read as a hover
+     *  and the isolation vanished the moment the reader moved the mouse to look at the diagram. */
+    const [hovered, setHovered] = useState<CycleAffinity | null>(null);
+    const [pinned, setPinned] = useState<CycleAffinity | null>(null);
+    const focus = hovered ?? pinned;
 
     const beats = focus ? CYCLE.find(([w]) => w === focus)![1] : null;
     const losesTo = focus ? CYCLE.find(([, l]) => l === focus)![0] : null;
@@ -59,6 +62,9 @@ const AffinityWheel: React.FC = () => {
         if (a === focus) return 'focus';
         return a === beats ? 'beaten' : 'beater';
     };
+
+    const togglePinned = (key: CycleAffinity) =>
+        setPinned((current) => (current === key ? null : key));
 
     /** An arrow is lit when the focused node is at either end of it. */
     const arrowLit = (winner: CycleAffinity, loser: CycleAffinity): boolean =>
@@ -117,20 +123,18 @@ const AffinityWheel: React.FC = () => {
                                 <g
                                     key={key}
                                     role="button"
+                                    aria-pressed={pinned === key}
                                     tabIndex={0}
                                     aria-label={`${LABEL[key]} beats ${LABEL[itBeats]}, and loses to ${LABEL[itLosesTo]}`}
-                                    onMouseEnter={() => setFocus(key)}
-                                    onMouseLeave={() => setFocus(null)}
-                                    onFocus={() => setFocus(key)}
-                                    onBlur={() => setFocus(null)}
-                                    // Set, never toggle: mouseenter and focus both fire before
-                                    // click, so a toggle would read its own hover state and
-                                    // clear the isolation the tap was meant to pin.
-                                    onClick={() => setFocus(key)}
+                                    onMouseEnter={() => setHovered(key)}
+                                    onMouseLeave={() => setHovered(null)}
+                                    onFocus={() => setHovered(key)}
+                                    onBlur={() => setHovered(null)}
+                                    onClick={() => togglePinned(key)}
                                     onKeyDown={(event) => {
                                         if (event.key !== 'Enter' && event.key !== ' ') return;
                                         event.preventDefault();
-                                        setFocus(key);
+                                        togglePinned(key);
                                     }}
                                     className="cursor-pointer outline-none [&:focus-visible>polygon]:stroke-primary transition-opacity duration-200 motion-reduce:transition-none"
                                 >
@@ -191,7 +195,7 @@ const AffinityWheel: React.FC = () => {
                     >
                         {focus
                             ? `${LABEL[focus]} beats ${LABEL[beats!]}, and loses to ${LABEL[losesTo!]}.`
-                            : 'Point at an affinity to isolate its matchups.'}
+                            : 'Point at an affinity, or tap one, to isolate its matchups.'}
                     </p>
                 </div>
 
