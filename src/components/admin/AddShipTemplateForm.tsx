@@ -514,14 +514,11 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                     <h4 className="text-lg font-semibold mb-3 text-primary">Targeting</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium text-theme-text mb-1">
-                                Active Target
-                            </label>
                             <Select
+                                label="Active Target"
                                 value={formData.activeTarget}
                                 onChange={(value) => updateField('activeTarget', value)}
                                 options={ACTIVE_TARGET_OPTIONS}
-                                aria-label="Active Target"
                             />
                         </div>
 
@@ -533,23 +530,16 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                                 onChange={(e) => updateField('activePattern', e.target.value)}
                                 placeholder="e.g., Pattern-Cone-Range-2"
                                 error={activePatternFeedback.error}
+                                hint={activePatternFeedback.summary}
                             />
-                            {activePatternFeedback.summary && (
-                                <p className="text-sm text-theme-text-secondary mt-1">
-                                    {activePatternFeedback.summary}
-                                </p>
-                            )}
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-theme-text mb-1">
-                                Charged Target
-                            </label>
                             <Select
+                                label="Charged Target"
                                 value={formData.chargedTarget}
                                 onChange={(value) => updateField('chargedTarget', value)}
                                 options={CHARGED_TARGET_OPTIONS}
-                                aria-label="Charged Target"
                             />
                         </div>
 
@@ -561,12 +551,8 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
                                 onChange={(e) => updateField('chargedPattern', e.target.value)}
                                 placeholder="Leave empty to match the active pattern"
                                 error={chargedPatternFeedback.error}
+                                hint={chargedPatternFeedback.summary}
                             />
-                            {chargedPatternFeedback.summary && (
-                                <p className="text-sm text-theme-text-secondary mt-1">
-                                    {chargedPatternFeedback.summary}
-                                </p>
-                            )}
                         </div>
                     </div>
                     {activeAxisIncomplete && (

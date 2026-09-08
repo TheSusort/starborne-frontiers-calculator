@@ -213,6 +213,12 @@ export const rejectProposal = async (
     }
 };
 
+/** A targeting column is either a value the parser accepts or SQL NULL. A blank string
+ *  must not survive: `parsePattern` trims before tokenizing, so '   ' reaches
+ *  `detectShape` as '' and throws, and a blank charged column is truthy enough to
+ *  defeat the "same as active" fallback in `parseShipTargeting`. */
+const nullableTargeting = (value: string): string | null => (value.trim() === '' ? null : value);
+
 export interface NewShipTemplateData {
     name: string;
     affinity: string;
@@ -280,10 +286,10 @@ export const addShipTemplate = async (
             third_passive_skill_text: templateData.thirdPassiveSkillText || null,
             // An empty charged column is meaningful: parseShipTargeting reads it as
             // "same as active" for that axis, so empty must persist as null.
-            active_target: templateData.activeTarget || null,
-            active_pattern: templateData.activePattern || null,
-            charged_target: templateData.chargedTarget || null,
-            charged_pattern: templateData.chargedPattern || null,
+            active_target: nullableTargeting(templateData.activeTarget),
+            active_pattern: nullableTargeting(templateData.activePattern),
+            charged_target: nullableTargeting(templateData.chargedTarget),
+            charged_pattern: nullableTargeting(templateData.chargedPattern),
             definition_id: templateData.definitionId || null,
             base_stats: {
                 hp: templateData.hp,
@@ -344,10 +350,10 @@ export const updateShipTemplate = async (
                 second_passive_skill_text: templateData.secondPassiveSkillText || null,
                 third_passive_skill_text: templateData.thirdPassiveSkillText || null,
                 // Empty means "same as active" for that axis — read `addShipTemplate`'s note.
-                active_target: templateData.activeTarget || null,
-                active_pattern: templateData.activePattern || null,
-                charged_target: templateData.chargedTarget || null,
-                charged_pattern: templateData.chargedPattern || null,
+                active_target: nullableTargeting(templateData.activeTarget),
+                active_pattern: nullableTargeting(templateData.activePattern),
+                charged_target: nullableTargeting(templateData.chargedTarget),
+                charged_pattern: nullableTargeting(templateData.chargedPattern),
                 definition_id: templateData.definitionId || null,
                 base_stats: {
                     hp: templateData.hp,

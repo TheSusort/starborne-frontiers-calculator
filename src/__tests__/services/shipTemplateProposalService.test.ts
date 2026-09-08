@@ -124,4 +124,45 @@ describe('ship template targeting columns', () => {
             })
         );
     });
+
+    // The form's own emptiness test is `.trim()`-based, so it never blocks a blank
+    // pattern. A blank that reached the column would throw in `parsePattern` and, on a
+    // charged column, would defeat the "same as active" fallback by being truthy.
+    it.each([
+        ['addShipTemplate', mockInsert, (data: NewShipTemplateData) => addShipTemplate(data)],
+        [
+            'updateShipTemplate',
+            mockUpdate,
+            (data: NewShipTemplateData) => updateShipTemplate('PROBE_SHIP', data),
+        ],
+    ] as const)('%s persists whitespace-only targeting fields as null', async (_n, mock, call) => {
+        const write = mock();
+
+        await call({
+            ...TEMPLATE,
+            activeTarget: '   ',
+            activePattern: '\t',
+            chargedTarget: ' ',
+            chargedPattern: '  \n ',
+        });
+
+        expect(write).toHaveBeenCalledWith(
+            expect.objectContaining({
+                active_target: null,
+                active_pattern: null,
+                charged_target: null,
+                charged_pattern: null,
+            })
+        );
+    });
+
+    it('preserves a pattern that merely has surrounding whitespace', async () => {
+        const insert = mockInsert();
+
+        await addShipTemplate({ ...TEMPLATE, activePattern: ' Pattern-Cone-Range-2 ' });
+
+        expect(insert).toHaveBeenCalledWith(
+            expect.objectContaining({ active_pattern: ' Pattern-Cone-Range-2 ' })
+        );
+    });
 });
