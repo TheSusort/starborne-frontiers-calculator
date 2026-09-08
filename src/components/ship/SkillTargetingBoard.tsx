@@ -4,11 +4,12 @@ import { AoeCellRole, PatternCell, toPatternCells } from '../../utils/targeting/
 import { targetingLabel } from '../../utils/targeting/targetingDisplay';
 import { parseEffectScope } from '../../utils/targeting/effectScope';
 import { TARGETING_RULES } from '../../constants/targetingRules';
+import { HEX_RADIUS, axialToPixel, hexPoints } from '../ui/hexGeometry';
 
 // Pointy-top hexes. Center-to-vertex radius; a small gap shrinks the drawn polygon so cells
 // read as separate. The SVG auto-fits its viewBox to the pattern's bounding box, so any
 // footprint centers and scales within the fixed-width left pane.
-const RADIUS = 22;
+const RADIUS = HEX_RADIUS;
 const GAP = 2;
 const PAD = 6; // viewBox margin so the glow filter isn't clipped
 
@@ -44,22 +45,6 @@ const LEGEND: Record<TargetSide, Record<AoeCellRole, { label: string; dot: strin
         caster: { label: 'Caster', dot: 'bg-[#94a3b8]' },
     },
 };
-
-// Pointy-top axial → pixel.
-function axialToPixel(q: number, r: number): [number, number] {
-    return [RADIUS * Math.sqrt(3) * (q + r / 2), RADIUS * 1.5 * r];
-}
-
-function hexPoints(cx: number, cy: number, radius: number): string {
-    const pts: string[] = [];
-    for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 180) * (60 * i - 90);
-        pts.push(
-            `${(cx + radius * Math.cos(a)).toFixed(1)},${(cy + radius * Math.sin(a)).toFixed(1)}`
-        );
-    }
-    return pts.join(' ');
-}
 
 interface SkillTargetingBoardProps {
     targeting: SkillTargeting;
