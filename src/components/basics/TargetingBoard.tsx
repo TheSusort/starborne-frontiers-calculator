@@ -241,7 +241,7 @@ const TargetingBoard: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
-                <div className="hidden lg:block">
+                <div>
                     <p className="text-xs text-theme-text-secondary mb-1">Your fleet</p>
                     <Board
                         idPrefix="player"
