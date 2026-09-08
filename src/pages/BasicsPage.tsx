@@ -39,9 +39,13 @@ const stepNumber = (index: number): string => String(index + 1);
 const Section: React.FC<{
     section: BasicsSection;
     index: number;
+    /** Lets the section run past the 68ch measure. Only the targeting board sets it: the board is
+     *  two 12-cell hex grids side by side and is unreadable squeezed into a prose column. Its own
+     *  prose keeps the measure, so the board is the only thing that is wider. */
+    wide?: boolean;
     children: React.ReactNode;
-}> = ({ section, index, children }) => (
-    <section id={section.id} className="space-y-4 scroll-mt-24">
+}> = ({ section, index, wide = false, children }) => (
+    <section id={section.id} className={`space-y-4 scroll-mt-24 ${wide ? '' : 'max-w-[68ch]'}`}>
         <div className="flex items-center gap-3 border-b border-dark-border pb-3">
             <span
                 aria-hidden="true"
@@ -257,57 +261,6 @@ const BasicsPage: React.FC = () => {
         <>
             <Seo {...SEO_CONFIG.basics} />
             <div className="space-y-8">
-                {/* This page is the front door for a player who has not opened the planner yet,
-                    so it opens on the hangar rather than on a form — the same photographic ground
-                    the sidebar stands on, with the console panel recessed onto it. Rendered
-                    without PageLayout for the same reason HomePage is. */}
-                <header className="relative border border-dark-border overflow-hidden">
-                    <div
-                        aria-hidden="true"
-                        className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-center"
-                    />
-                    <div
-                        aria-hidden="true"
-                        className="absolute inset-0 bg-dark/90 sm:bg-gradient-to-r sm:from-dark sm:via-dark/85 sm:to-dark/40"
-                    />
-                    <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
-                        <div className="max-w-[52ch] space-y-2">
-                            <h1 className="text-2xl font-bold">Game Basics</h1>
-                            <p className="text-sm text-theme-text-secondary">
-                                New to Starborne Frontiers? This is what the game does not tell you:
-                                what every stat is actually for, what each role does, and how the
-                                game decides who gets hit.
-                            </p>
-                        </div>
-
-                        {/* The mobile stand-in for the rail: below lg the sticky column is
-                            hidden, so the plate on the header carries the index instead. */}
-                        <nav
-                            aria-label="On this page"
-                            className="lg:hidden bg-dark/85 border border-dark-border p-4"
-                        >
-                            <GroupLabel className="mb-2 tracking-widest">Contents</GroupLabel>
-                            <ol className="grid gap-x-8 sm:grid-cols-2">
-                                {SECTIONS.map((section, index) => (
-                                    <li key={section.id}>
-                                        <a
-                                            href={`#${section.id}`}
-                                            className="flex items-baseline gap-2 py-2 text-sm text-theme-text"
-                                        >
-                                            <span
-                                                className={`w-3 shrink-0 text-right text-xs tabular-nums ${section.text}`}
-                                            >
-                                                {stepNumber(index)}
-                                            </span>
-                                            <span>{section.title}</span>
-                                        </a>
-                                    </li>
-                                ))}
-                            </ol>
-                        </nav>
-                    </div>
-                </header>
-
                 <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10 lg:items-start">
                     {/* Sticky index. Its active entry takes the SECTION's hue, never Signal
                         Orange — that is what stops it reading as the sidebar's active-nav
@@ -347,15 +300,67 @@ const BasicsPage: React.FC = () => {
                     </nav>
 
                     <div className="space-y-12 min-w-0">
+                        {/* This page is the front door for a player who has not opened the planner yet,
+                        so it opens on the hangar rather than on a form — the same photographic ground
+                        the sidebar stands on, with the console panel recessed onto it. Rendered
+                        without PageLayout for the same reason HomePage is. */}
+                        <header className="relative max-w-[68ch] border border-dark-border overflow-hidden">
+                            <div
+                                aria-hidden="true"
+                                className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-center"
+                            />
+                            <div
+                                aria-hidden="true"
+                                className="absolute inset-0 bg-dark/90 sm:bg-gradient-to-r sm:from-dark sm:via-dark/85 sm:to-dark/40"
+                            />
+                            <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
+                                <div className="max-w-[52ch] space-y-2">
+                                    <h1 className="text-2xl font-bold">Game Basics</h1>
+                                    <p className="text-sm text-theme-text-secondary">
+                                        New to Starborne Frontiers? This is what the game does not
+                                        tell you: what every stat is actually for, what each role
+                                        does, and how the game decides who gets hit.
+                                    </p>
+                                </div>
+
+                                {/* The mobile stand-in for the rail: below lg the sticky column is
+                                hidden, so the plate on the header carries the index instead. */}
+                                <nav
+                                    aria-label="On this page"
+                                    className="lg:hidden bg-dark/85 border border-dark-border p-4"
+                                >
+                                    <GroupLabel className="mb-2 tracking-widest">
+                                        Contents
+                                    </GroupLabel>
+                                    <ol className="grid gap-x-8 sm:grid-cols-2">
+                                        {SECTIONS.map((section, index) => (
+                                            <li key={section.id}>
+                                                <a
+                                                    href={`#${section.id}`}
+                                                    className="flex items-baseline gap-2 py-2 text-sm text-theme-text"
+                                                >
+                                                    <span
+                                                        className={`w-3 shrink-0 text-right text-xs tabular-nums ${section.text}`}
+                                                    >
+                                                        {stepNumber(index)}
+                                                    </span>
+                                                    <span>{section.title}</span>
+                                                </a>
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </nav>
+                            </div>
+                        </header>
                         <Section section={SECTIONS[0]} index={0}>
-                            <Callout className="max-w-[68ch]">
+                            <Callout>
                                 <p>
                                     Ships act in order of <strong>speed</strong>, fastest first.
                                     That is all speed does — it does not give you extra turns, it
                                     decides who moves before whom.
                                 </p>
                             </Callout>
-                            <p className="max-w-[68ch]">
+                            <p>
                                 That still makes it one of the most contested stats in the game,
                                 because moving first is how a debuffer lands its debuff before the
                                 enemy attacks, how a supporter gets a shield up before the hit
@@ -363,11 +368,7 @@ const BasicsPage: React.FC = () => {
                                 push a ship&apos;s turn earlier or shove an enemy&apos;s later —
                                 those are strong for the same reason.
                             </p>
-                            <Callout
-                                variant="rule"
-                                title="Fights are not open-ended"
-                                className="max-w-[68ch]"
-                            >
+                            <Callout variant="rule" title="Fights are not open-ended">
                                 <p>
                                     A fight you have not won after 30 rounds in PvP, or 100 rounds
                                     in PvE, counts as a loss.
@@ -376,17 +377,17 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[1]} index={1}>
-                            <p className="max-w-[68ch]">
+                            <p>
                                 Every ship is an Attacker, Defender, Debuffer or Supporter. The role
                                 is not cosmetic — it tells you which stats are worth putting on the
                                 ship and which are wasted.
                             </p>
-                            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 {ROLE_CATEGORIES.map((category) => (
                                     <RoleCard key={category} category={category} />
                                 ))}
                             </div>
-                            <p className="text-theme-text-secondary max-w-[68ch]">
+                            <p className="text-theme-text-secondary">
                                 This planner&apos;s{' '}
                                 <Link
                                     to="/autogear"
@@ -401,7 +402,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[2]} index={2}>
-                            <Callout variant="mistake" className="max-w-[68ch]">
+                            <Callout variant="mistake">
                                 <p>
                                     The most common new-player mistake is gearing a stat the ship
                                     cannot use. Hacking on a ship with no debuffs does nothing. Crit
@@ -410,7 +411,7 @@ const BasicsPage: React.FC = () => {
                                 </p>
                             </Callout>
                             <StatGuideTable />
-                            <p className="text-theme-text-secondary max-w-[68ch]">
+                            <p className="text-theme-text-secondary">
                                 Defense is the one with a curve: each point reduces incoming damage
                                 a little less than the last, so past a point more HP beats more
                                 defense. The{' '}
@@ -425,7 +426,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[3]} index={3}>
-                            <p className="max-w-[68ch]">
+                            <p>
                                 Every ship has one of four affinities. Three of them beat each other
                                 in a cycle; the fourth, Antimatter, sits outside it and neither
                                 gains nor suffers.
@@ -434,19 +435,19 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[4]} index={4}>
-                            <p className="max-w-[68ch]">
+                            <p>
                                 Debuffs are not guaranteed. Whether one lands is decided by the
                                 attacker&apos;s <strong>hacking</strong> against the target&apos;s{' '}
                                 <strong>security</strong>: every point of hacking above the
                                 target&apos;s security is one percent chance to land.
                             </p>
                             <HackingEquation />
-                            <p className="text-sm text-theme-text-secondary max-w-[68ch]">
+                            <p className="text-sm text-theme-text-secondary">
                                 Your debuffer has <strong>80 hacking</strong>. The enemy has{' '}
                                 <strong>40 security</strong>. 80 − 40 = a{' '}
                                 <strong>40% chance</strong> to apply the debuff.
                             </p>
-                            <Callout variant="tip" className="max-w-[68ch]">
+                            <Callout variant="tip">
                                 <p>
                                     Anything above 100% is wasted — there is no overkill bonus. And
                                     security works the other way: it is the only stat that stops a
@@ -456,7 +457,7 @@ const BasicsPage: React.FC = () => {
                             </Callout>
                         </Section>
 
-                        <Section section={SECTIONS[5]} index={5}>
+                        <Section section={SECTIONS[5]} index={5} wide>
                             <p className="max-w-[68ch]">
                                 Both fleets sit on a board of three <strong>rows</strong> — top,
                                 middle and bottom — with four <strong>positions</strong> in each,
@@ -484,8 +485,8 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[6]} index={6}>
-                            <p className="max-w-[68ch]">Four things override everything above.</p>
-                            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                            <p>Four things override everything above.</p>
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 {OVERRIDES.map(({ icon, term, body }) => (
                                     <IconPlate key={term} icon={icon}>
                                         <strong className="text-theme-text">{term}</strong> — {body}
@@ -499,7 +500,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[8]} index={8}>
-                            <div className="grid gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                            <div className="grid gap-4 sm:grid-cols-2">
                                 {NEXT_STEPS.map(({ icon, body }, index) => (
                                     <IconPlate key={index} icon={icon}>
                                         {body}

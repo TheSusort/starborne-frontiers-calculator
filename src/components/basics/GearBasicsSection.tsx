@@ -67,9 +67,7 @@ const GearBasicsSection: React.FC = () => {
                     </p>
                 </div>
 
-                {/* Both groups across one row from xl: six slots at a glance is the comparison
-                    the section is about, and a wide screen should buy that rather than air. */}
-                <div className="grid gap-4 xl:grid-cols-2">
+                <div className="grid gap-4">
                     <div>
                         <GroupLabel className="mb-2">Fixed slots</GroupLabel>
                         <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
