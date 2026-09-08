@@ -14,7 +14,8 @@ describe('StatGuideTable', () => {
     });
 
     it('has non-empty copy for every documented stat', () => {
-        for (const [name, entry] of Object.entries(STAT_GUIDE)) {
+        for (const name of Object.keys(STAT_GUIDE) as StatName[]) {
+            const entry = STAT_GUIDE[name]!;
             expect(entry.does, `${name}.does`).not.toBe('');
             expect(entry.wants, `${name}.wants`).not.toBe('');
         }

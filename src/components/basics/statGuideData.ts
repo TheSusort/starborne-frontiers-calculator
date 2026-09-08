@@ -1,6 +1,10 @@
 import type { StatName } from '../../types/stats';
 
-/** Stats in STATS that are planner-internal modelling values, not things a player sees or
+/** Lives in this plain `.ts` module (rather than `StatGuideTable.tsx` itself) so non-component
+ *  values can be exported without tripping `react-refresh/only-export-components` — the rule
+ *  fires when a `.tsx` component file also exports non-primitive constants.
+ *
+ *  Stats in STATS that are planner-internal modelling values, not things a player sees or
  *  gears in game. Excluded from the page on purpose; a test asserts every STATS key is either
  *  documented below or listed here.
  *

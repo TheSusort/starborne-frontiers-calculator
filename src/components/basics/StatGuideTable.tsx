@@ -2,7 +2,7 @@ import React from 'react';
 import { STATS } from '../../constants/stats';
 import type { StatName } from '../../types/stats';
 import { STAT_GUIDE } from './statGuideData';
-// Re-export from the data module to satisfy the test's import path
+// Re-export from the data module — see statGuideData.ts for the split rationale
 export { STAT_GUIDE, NOT_A_GAME_STAT } from './statGuideData';
 
 const StatGuideTable: React.FC = () => (
