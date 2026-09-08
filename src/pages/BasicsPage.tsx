@@ -47,7 +47,7 @@ const Section: React.FC<{
                 gradientTo={section.gradientTo}
                 className="shrink-0"
             />
-            <h2 className="text-xl font-semibold">{section.title}</h2>
+            <h2 className="text-2xl font-semibold">{section.title}</h2>
         </div>
         {children}
     </section>
@@ -65,7 +65,7 @@ const RoleCard: React.FC<{ category: ShipRoleCategory }> = ({ category }) => {
                     name={SHIP_TYPES[category].name}
                     className="!w-7"
                 />
-                <h3 className="text-lg font-semibold text-primary">{SHIP_TYPES[category].name}</h3>
+                <h3 className="text-xl font-semibold text-primary">{SHIP_TYPES[category].name}</h3>
             </div>
             <p className="text-sm text-theme-text">{role.job}</p>
             <div>
@@ -119,7 +119,7 @@ const RoleCard: React.FC<{ category: ShipRoleCategory }> = ({ category }) => {
 const HackingEquation: React.FC = () => {
     const tile = (value: string, label: string) => (
         <div className="card flex-1 min-w-[5rem] !p-3 flex flex-col justify-center text-center">
-            <p className="text-2xl font-secondary text-primary">{value}</p>
+            <p className="text-2xl tabular-nums text-primary">{value}</p>
             <p className="text-xs text-theme-text-secondary">{label}</p>
         </div>
     );
@@ -248,14 +248,14 @@ const BasicsPage: React.FC = () => {
                         </nav>
 
                         <Section section={SECTIONS[0]} index={0}>
-                            <Callout>
+                            <Callout className="max-w-[68ch]">
                                 <p>
                                     Ships act in order of <strong>speed</strong>, fastest first.
                                     That is all speed does — it does not give you extra turns, it
                                     decides who moves before whom.
                                 </p>
                             </Callout>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 That still makes it one of the most contested stats in the game,
                                 because moving first is how a debuffer lands its debuff before the
                                 enemy attacks, how a supporter gets a shield up before the hit
@@ -263,7 +263,11 @@ const BasicsPage: React.FC = () => {
                                 push a ship&apos;s turn earlier or shove an enemy&apos;s later —
                                 those are strong for the same reason.
                             </p>
-                            <Callout variant="rule" title="Fights are not open-ended">
+                            <Callout
+                                variant="rule"
+                                title="Fights are not open-ended"
+                                className="max-w-[68ch]"
+                            >
                                 <p>
                                     A fight you have not won after 30 rounds in PvP, or 100 rounds
                                     in PvE, counts as a loss.
@@ -272,7 +276,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[1]} index={1}>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 Every ship is an Attacker, Defender, Debuffer or Supporter. The role
                                 is not cosmetic — it tells you which stats are worth putting on the
                                 ship and which are wasted.
@@ -282,7 +286,7 @@ const BasicsPage: React.FC = () => {
                                     <RoleCard key={category} category={category} />
                                 ))}
                             </div>
-                            <p className="text-theme-text-secondary">
+                            <p className="text-theme-text-secondary max-w-[68ch]">
                                 This planner&apos;s{' '}
                                 <Link
                                     to="/autogear"
@@ -297,7 +301,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[2]} index={2}>
-                            <Callout variant="mistake">
+                            <Callout variant="mistake" className="max-w-[68ch]">
                                 <p>
                                     The most common new-player mistake is gearing a stat the ship
                                     cannot use. Hacking on a ship with no debuffs does nothing. Crit
@@ -306,7 +310,7 @@ const BasicsPage: React.FC = () => {
                                 </p>
                             </Callout>
                             <StatGuideTable />
-                            <p className="text-theme-text-secondary">
+                            <p className="text-theme-text-secondary max-w-[68ch]">
                                 Defense is the one with a curve: each point reduces incoming damage
                                 a little less than the last, so past a point more HP beats more
                                 defense. The{' '}
@@ -321,7 +325,7 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[3]} index={3}>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 Every ship has one of four affinities. Three of them beat each other
                                 in a cycle; the fourth, Antimatter, sits outside it and neither
                                 gains nor suffers.
@@ -330,19 +334,19 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[4]} index={4}>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 Debuffs are not guaranteed. Whether one lands is decided by the
                                 attacker&apos;s <strong>hacking</strong> against the target&apos;s{' '}
                                 <strong>security</strong>: every point of hacking above the
                                 target&apos;s security is one percent chance to land.
                             </p>
                             <HackingEquation />
-                            <p className="text-sm text-theme-text-secondary">
+                            <p className="text-sm text-theme-text-secondary max-w-[68ch]">
                                 Your debuffer has <strong>80 hacking</strong>. The enemy has{' '}
                                 <strong>40 security</strong>. 80 − 40 = a{' '}
                                 <strong>40% chance</strong> to apply the debuff.
                             </p>
-                            <Callout variant="tip">
+                            <Callout variant="tip" className="max-w-[68ch]">
                                 <p>
                                     Anything above 100% is wasted — there is no overkill bonus. And
                                     security works the other way: it is the only stat that stops a
@@ -353,12 +357,12 @@ const BasicsPage: React.FC = () => {
                         </Section>
 
                         <Section section={SECTIONS[5]} index={5}>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 Both fleets sit on a board of three <strong>rows</strong> — top,
                                 middle and bottom — with four <strong>positions</strong> in each,
                                 numbered from the back forward.
                             </p>
-                            <Callout title="Position 4 is the front">
+                            <Callout title="Position 4 is the front" className="max-w-[68ch]">
                                 <p>
                                     A skill does not just pick whoever it likes. Targeting starts in
                                     the <strong>attacking ship&apos;s own row</strong>, steps down a
@@ -367,12 +371,12 @@ const BasicsPage: React.FC = () => {
                                     the row that gets hit.
                                 </p>
                             </Callout>
-                            <p>
+                            <p className="max-w-[68ch]">
                                 Try it — the attacker below sits in the bottom row, and the enemy
                                 has nothing in theirs:
                             </p>
                             <TargetingBoard />
-                            <p className="text-theme-text-secondary">
+                            <p className="text-theme-text-secondary max-w-[68ch]">
                                 When a skill hits more than one ship, the main target takes full
                                 damage and every other ship caught in the pattern takes half, unless
                                 the skill says otherwise.

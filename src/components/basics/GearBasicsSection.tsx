@@ -32,7 +32,7 @@ const isFixed = (slot: string): boolean => SLOT_MAIN_STATS[slot].length === 1;
 
 const SlotCard: React.FC<{ slot: string }> = ({ slot }) => (
     <div data-testid={`slot-row-${slot}`} className="card space-y-2">
-        <h4 className="font-medium text-primary">{GEAR_SLOTS[slot].label}</h4>
+        <h4 className="text-base font-semibold text-primary">{GEAR_SLOTS[slot].label}</h4>
         <div className="flex flex-wrap gap-1.5">
             {SLOT_MAIN_STATS[slot].map((stat) => (
                 <Chip key={stat} accent={isFixed(slot)}>
@@ -51,8 +51,8 @@ const GearBasicsSection: React.FC = () => {
         <div className="space-y-6">
             <div className="space-y-4">
                 <div>
-                    <h3 className="font-semibold mb-1">Not every slot rolls every stat</h3>
-                    <p className="text-sm text-theme-text-secondary">
+                    <h3 className="text-lg font-semibold mb-1">Not every slot rolls every stat</h3>
+                    <p className="text-sm text-theme-text-secondary max-w-[68ch]">
                         The three fixed slots always roll the same primary stat. The other three are
                         where your build actually gets decided — a ship only gets hacking or
                         security from its software slot, and only gets speed from its thrusters.
@@ -83,8 +83,8 @@ const GearBasicsSection: React.FC = () => {
             </div>
 
             <div className="card">
-                <h3 className="font-semibold mb-1">Sets pay out at 2 or 4 pieces</h3>
-                <p className="text-sm text-theme-text-secondary mb-3">
+                <h3 className="text-lg font-semibold mb-1">Sets pay out at 2 or 4 pieces</h3>
+                <p className="text-sm text-theme-text-secondary mb-3 max-w-[68ch]">
                     A set bonus only applies once you have enough matching pieces equipped, and most
                     two-piece sets pay out again for each further pair. Six pieces of a two-piece
                     set is three times the bonus.

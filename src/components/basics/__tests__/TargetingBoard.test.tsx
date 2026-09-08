@@ -64,20 +64,20 @@ describe('TargetingBoard', () => {
 
     it('Back hits the rear-most enemy in that same row', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Back' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Back' }));
         expect(primaries()).toEqual(['T1']);
     });
 
     it('Skip jumps the front-most and hits the one behind it', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Skip' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Skip' }));
         // Occupied top row front-to-back is T4, T3, T1 — skipping T4 anchors on T3, not T1.
         expect(primaries()).toEqual(['T3']);
     });
 
     it('All hits every living enemy', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'All' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'All' }));
         expect(primaries().sort()).toEqual([...DEMO_ENEMIES].sort());
     });
 
@@ -88,7 +88,7 @@ describe('TargetingBoard', () => {
 
     it('a Cone anchored on T4 splashes exactly the occupied cells it covers', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Cone' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Cone' }));
         expect(primaries()).toEqual(['T4']);
         // cone|1| covers T3 and M4 from a T4 anchor. Its third covered cell is off-board.
         expect(splash()).toEqual(['M4', 'T3']);
@@ -96,13 +96,13 @@ describe('TargetingBoard', () => {
 
     it('a Line anchored on T4 splashes only the cell directly behind it', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Line' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Line' }));
         expect(splash()).toEqual(['T3']);
     });
 
     it('a Circle anchored on T4 splashes the same occupied cells as Cone', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Circle' }));
         expect(primaries()).toEqual(['T4']);
         // circle|1| covers 6 neighbor cells from its anchor; from a corner anchor like T4, four
         // of them fall off the board and are never rendered. The two that remain, T3 and M4, are
@@ -114,7 +114,7 @@ describe('TargetingBoard', () => {
 
     it('a Range 3 anchored on T4 splashes occupied cells and marks the empty one covered', async () => {
         render(<TargetingBoard />);
-        await userEvent.click(screen.getByRole('button', { name: 'Range' }));
+        await userEvent.click(screen.getByRole('radio', { name: 'Range' }));
         expect(primaries()).toEqual(['T4']);
         // range|3| covers T3, T2, T1 from a T4 anchor. T1 and T3 are occupied (splash); T2 is
         // empty in DEMO_ENEMIES, so it must show as the distinct "covered but empty" state
@@ -146,9 +146,9 @@ describe('TargetingBoard', () => {
     it('offers the four enemy-side rules and no ally-side ones', () => {
         render(<TargetingBoard />);
         for (const label of ['Front', 'Back', 'Skip', 'All']) {
-            expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+            expect(screen.getByRole('radio', { name: label })).toBeInTheDocument();
         }
-        expect(screen.queryByRole('button', { name: 'Self' })).not.toBeInTheDocument();
+        expect(screen.queryByRole('radio', { name: 'Self' })).not.toBeInTheDocument();
     });
 
     it('tells the reader a pattern is clipped at the edge of the board', () => {

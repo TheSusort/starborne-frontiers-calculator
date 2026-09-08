@@ -108,6 +108,13 @@ const Board: React.FC<BoardProps> = ({ idPrefix, mirror, occupied, caster, hits,
     );
 };
 
+/** Natural-language join: "T4", "T4 and M4", "T4, M4 and B1". */
+const joinWithAnd = (items: string[]): string => {
+    if (items.length <= 1) return items.join('');
+    if (items.length === 2) return `${items[0]} and ${items[1]}`;
+    return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+};
+
 const TargetingBoard: React.FC = () => {
     const [ruleId, setRuleId] = useState<TargetSelection>('front');
     const [patternIndex, setPatternIndex] = useState(0);
@@ -152,18 +159,49 @@ const TargetingBoard: React.FC = () => {
     }, [ruleId, pattern]);
 
     const rule = TARGETING_RULES[ruleId];
+    const patternLabel = PATTERN_SHAPES[pattern.shape].label;
+
+    // Restates `hits` as a sentence, using the same full/half/covered-empty vocabulary as the
+    // visible legend below, so a screen reader gets the outcome the legend's colour swatches
+    // convey to a sighted reader.
+    const outcomeText = useMemo(() => {
+        const byRole = (role: HitRole): Position[] =>
+            ALL_POSITIONS.filter((p) => hits.get(p) === role);
+        const primary = byRole('primary');
+        const splash = byRole('splash');
+        const covered = byRole('coveredEmpty');
+
+        if (primary.length === 0) return `${rule.label}: no living enemy is hit.`;
+        if (ruleId === 'all') {
+            return `${rule.label}: hits ${joinWithAnd(primary)} for full damage.`;
+        }
+
+        const clauses = [`hits ${joinWithAnd(primary)} for full damage`];
+        if (splash.length) clauses.push(`${joinWithAnd(splash)} for half damage`);
+        if (covered.length) {
+            const verb = covered.length > 1 ? 'are' : 'is';
+            clauses.push(`${joinWithAnd(covered)} ${verb} in the pattern, no ship there`);
+        }
+        return `${rule.label}, ${patternLabel}: ${clauses.join('; ')}.`;
+    }, [hits, rule.label, ruleId, patternLabel]);
 
     return (
-        <div className="card space-y-4">
+        <div className="card space-y-4 pb-14 lg:pb-4">
             <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                     <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
                         Targeting rule
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div
+                        role="radiogroup"
+                        aria-label="Targeting rule"
+                        className="flex flex-wrap gap-2"
+                    >
                         {DEMO_RULES.map((id) => (
                             <Button
                                 key={id}
+                                role="radio"
+                                aria-checked={id === ruleId}
                                 size="sm"
                                 variant={id === ruleId ? 'primary' : 'secondary'}
                                 onClick={() => setRuleId(id)}
@@ -178,10 +216,12 @@ const TargetingBoard: React.FC = () => {
                     <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
                         Pattern
                     </p>
-                    <div className="flex flex-wrap gap-2">
+                    <div role="radiogroup" aria-label="Pattern" className="flex flex-wrap gap-2">
                         {DEMO_PATTERNS.map((p, i) => (
                             <Button
                                 key={p.shape}
+                                role="radio"
+                                aria-checked={i === patternIndex}
                                 size="sm"
                                 variant={i === patternIndex ? 'primary' : 'secondary'}
                                 onClick={() => setPatternIndex(i)}
@@ -194,8 +234,14 @@ const TargetingBoard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 items-center">
-                <div>
+            {/* Spoken-only restatement of the boards below — see `outcomeText` for the
+                full/half/covered-empty vocabulary it shares with the visible legend. */}
+            <div aria-live="polite" className="sr-only">
+                {outcomeText}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+                <div className="hidden lg:block">
                     <p className="text-xs text-theme-text-secondary mb-1">Your fleet</p>
                     <Board
                         idPrefix="player"
@@ -206,7 +252,9 @@ const TargetingBoard: React.FC = () => {
                     />
                 </div>
                 <div>
-                    <p className="text-xs text-theme-text-secondary mb-1 text-right">Enemy fleet</p>
+                    <p className="text-xs text-theme-text-secondary mb-1 text-left lg:text-right">
+                        Enemy fleet
+                    </p>
                     <Board
                         idPrefix="enemy"
                         mirror
@@ -248,7 +296,11 @@ const TargetingBoard: React.FC = () => {
                 </span>
             </div>
 
-            <Callout variant="rule" title="Patterns are clipped at the edge of the board">
+            <Callout
+                variant="rule"
+                title="Patterns are clipped at the edge of the board"
+                className="max-w-[68ch]"
+            >
                 <p>
                     Any cell that falls outside the board is simply not hit. That is why Circle and
                     Cone look identical from T4 — four of Circle&apos;s six surrounding cells fall

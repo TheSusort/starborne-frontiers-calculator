@@ -138,7 +138,7 @@ const AffinityWheel: React.FC = () => (
             </div>
         </div>
 
-        <Callout variant="mistake">
+        <Callout variant="mistake" className="max-w-[68ch]">
             <p>
                 That last line is the one that catches people out. Your damage still lands at a
                 disadvantage — 25% smaller, but it lands — and debuffs that roll against hacking
