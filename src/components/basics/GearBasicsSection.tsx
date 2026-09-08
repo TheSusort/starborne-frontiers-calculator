@@ -7,6 +7,7 @@ import { GEAR_SLOTS } from '../../constants/gearTypes';
 // `/favicon.ico?url` import vitest refuses to resolve unless the test stubs Sidebar out.
 import { Button } from '../ui/Button';
 import { Chip } from '../ui/Chip';
+import { GroupLabel } from '../ui/GroupLabel';
 import { CollapsibleForm } from '../ui/layout/CollapsibleForm';
 import type { Stat } from '../../types/stats';
 
@@ -25,6 +26,9 @@ const setEffect = (stats: Stat[], description: string | undefined): string => {
     return [statPart, description].filter(Boolean).join(' — ');
 };
 
+/** `id="set-abyssal-assault"`, so a set can be linked to directly from chat or a guide. */
+const slugify = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 const SLOTS = Object.keys(SLOT_MAIN_STATS);
 /** A slot that rolls exactly one primary stat is a fixed slot — derived, so adding a stat to
  *  `SLOT_MAIN_STATS` moves the slot between the two groups instead of leaving a stale list. */
@@ -32,26 +36,30 @@ const isFixed = (slot: string): boolean => SLOT_MAIN_STATS[slot].length === 1;
 
 const SlotCard: React.FC<{ slot: string }> = ({ slot }) => (
     <div data-testid={`slot-row-${slot}`} className="card space-y-2">
-        <h4 className="text-base font-semibold text-primary">{GEAR_SLOTS[slot].label}</h4>
+        <h4 className="text-sm font-semibold text-primary">{GEAR_SLOTS[slot].label}</h4>
         <div className="flex flex-wrap gap-1.5">
             {SLOT_MAIN_STATS[slot].map((stat) => (
-                <Chip key={stat} accent={isFixed(slot)}>
-                    {STATS[stat].label}
-                </Chip>
+                <Chip key={stat}>{STATS[stat].label}</Chip>
             ))}
         </div>
     </div>
 );
 
 const GearBasicsSection: React.FC = () => {
-    const [showSets, setShowSets] = useState(false);
+    // A /basics#set-* deep link has to land on a visible row: CollapsibleForm renders a closed
+    // panel at max-h-0, so scrollIntoView on a collapsed set finds nothing to show.
+    const [showSets, setShowSets] = useState(
+        () => typeof window !== 'undefined' && window.location.hash.startsWith('#set-')
+    );
     const setCount = Object.keys(GEAR_SETS).length;
 
     return (
         <div className="space-y-6">
             <div className="space-y-4">
                 <div>
-                    <h3 className="text-lg font-semibold mb-1">Not every slot rolls every stat</h3>
+                    <h3 className="text-base font-semibold mb-1">
+                        Not every slot rolls every stat
+                    </h3>
                     <p className="text-sm text-theme-text-secondary max-w-[68ch]">
                         The three fixed slots always roll the same primary stat. The other three are
                         where your build actually gets decided — a ship only gets hacking or
@@ -59,31 +67,31 @@ const GearBasicsSection: React.FC = () => {
                     </p>
                 </div>
 
-                <div>
-                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-2">
-                        Fixed slots
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                        {SLOTS.filter(isFixed).map((slot) => (
-                            <SlotCard key={slot} slot={slot} />
-                        ))}
+                {/* Both groups across one row from xl: six slots at a glance is the comparison
+                    the section is about, and a wide screen should buy that rather than air. */}
+                <div className="grid gap-4 xl:grid-cols-2">
+                    <div>
+                        <GroupLabel className="mb-2">Fixed slots</GroupLabel>
+                        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+                            {SLOTS.filter(isFixed).map((slot) => (
+                                <SlotCard key={slot} slot={slot} />
+                            ))}
+                        </div>
                     </div>
-                </div>
 
-                <div>
-                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-2">
-                        Flexible slots
-                    </p>
-                    <div className="grid gap-3 sm:grid-cols-3">
-                        {SLOTS.filter((slot) => !isFixed(slot)).map((slot) => (
-                            <SlotCard key={slot} slot={slot} />
-                        ))}
+                    <div>
+                        <GroupLabel className="mb-2">Flexible slots</GroupLabel>
+                        <div className="grid gap-3 grid-cols-1 sm:grid-cols-3">
+                            {SLOTS.filter((slot) => !isFixed(slot)).map((slot) => (
+                                <SlotCard key={slot} slot={slot} />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>
 
             <div className="card">
-                <h3 className="text-lg font-semibold mb-1">Sets pay out at 2 or 4 pieces</h3>
+                <h3 className="text-base font-semibold mb-1">Sets pay out at 2 or 4 pieces</h3>
                 <p className="text-sm text-theme-text-secondary mb-3 max-w-[68ch]">
                     A set bonus only applies once you have enough matching pieces equipped, and most
                     two-piece sets pay out again for each further pair. Six pieces of a two-piece
@@ -97,7 +105,7 @@ const GearBasicsSection: React.FC = () => {
                     onClick={() => setShowSets((open) => !open)}
                     className="inline-flex items-center gap-2"
                 >
-                    {showSets ? 'Hide' : 'Show'} all {setCount} set bonuses
+                    All {setCount} set bonuses
                     {showSets ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 </Button>
                 <CollapsibleForm isVisible={showSets}>
@@ -120,8 +128,9 @@ const GearBasicsSection: React.FC = () => {
                                 {Object.values(GEAR_SETS).map((set) => (
                                     <tr
                                         key={set.name}
+                                        id={`set-${slugify(set.name)}`}
                                         data-testid={`set-row-${set.name}`}
-                                        className="border-b border-dark-border last:border-0 align-top"
+                                        className="border-b border-dark-border last:border-0 align-top scroll-mt-24"
                                     >
                                         <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
                                             {set.name}

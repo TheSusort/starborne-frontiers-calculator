@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import AffinityWheel from '../AffinityWheel';
 import { getAffinityMatchup } from '../../../utils/calculators/affinityUtils';
 
@@ -36,5 +37,20 @@ describe('AffinityWheel', () => {
             const [winner, loser] = arrow.split('-');
             expect(getAffinityMatchup(winner as never, loser as never)).toBe('advantage');
         }
+    });
+
+    it('isolates an affinity on tap instead of clearing it', async () => {
+        // mouseenter and focus both fire before click on a focusable node, so a toggle would read
+        // its own hover state and undo the isolation the tap asked for.
+        render(<AffinityWheel />);
+        await userEvent.click(screen.getByRole('button', { name: /^Electric beats/ }));
+        expect(screen.getByText('Electric beats Thermal, and loses to Chemical.')).toBeVisible();
+    });
+
+    it('names each node with the matchups it isolates', () => {
+        render(<AffinityWheel />);
+        expect(
+            screen.getByRole('button', { name: 'Chemical beats Electric, and loses to Thermal' })
+        ).toBeInTheDocument();
     });
 });

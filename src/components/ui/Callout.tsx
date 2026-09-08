@@ -16,6 +16,9 @@ interface VariantStyle {
     accent: string;
 }
 
+/** Three voices, three hues: a locked rule, an error the copy is warning against, and an aside.
+ *  A reader skimming for the rules needs to tell them apart before reading a word, which is why
+ *  this is the one component on the page that spends colour on its own state. */
 const VARIANTS: Record<CalloutVariant, VariantStyle> = {
     rule: {
         icon: Gavel,
@@ -62,9 +65,7 @@ export const Callout: React.FC<CalloutProps> = ({
         >
             <Icon className={`${accent} shrink-0 mt-0.5`} size={18} aria-hidden="true" />
             <div className="min-w-0 space-y-1">
-                <p
-                    className={`${accent} text-xs font-semibold uppercase tracking-wide font-secondary`}
-                >
+                <p className={`${accent} text-xs font-semibold uppercase tracking-wide`}>
                     {title ?? label}
                 </p>
                 <div className="text-sm text-theme-text space-y-2">{children}</div>

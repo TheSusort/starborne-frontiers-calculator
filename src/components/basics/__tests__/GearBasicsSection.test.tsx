@@ -41,4 +41,27 @@ describe('GearBasicsSection', () => {
         // Attack is a 2-piece set (no minPieces field).
         expect(screen.getByTestId('set-row-Attack')).toHaveTextContent('2');
     });
+
+    it('opens the set table when the page was opened on a set deep link', () => {
+        // The panel renders at max-h-0 when closed, so /basics#set-piercer would otherwise scroll
+        // to a clipped row and show the reader nothing.
+        window.location.hash = '#set-piercer';
+        try {
+            render(<GearBasicsSection />);
+            expect(screen.getByRole('button', { name: /set bonuses/i })).toHaveAttribute(
+                'aria-expanded',
+                'true'
+            );
+        } finally {
+            window.location.hash = '';
+        }
+    });
+
+    it('leaves the set table closed when the page was opened without a set deep link', () => {
+        render(<GearBasicsSection />);
+        expect(screen.getByRole('button', { name: /set bonuses/i })).toHaveAttribute(
+            'aria-expanded',
+            'false'
+        );
+    });
 });
