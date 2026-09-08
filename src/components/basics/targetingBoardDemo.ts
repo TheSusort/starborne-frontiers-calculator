@@ -24,14 +24,19 @@ export const DEMO_RULES: TargetSelection[] = ['front', 'back', 'skip', 'all'];
  *  the rule buttons read cleanly. Every signature here resolves without throwing when anchored
  *  on 'T4' — see the "every DEMO_PATTERNS entry resolves" test in TargetingBoard.test.tsx.
  *
- *  `range|3|` (not `circle|1|`) is the fourth demo: from a T4 anchor it covers T3, T2, T1, and
- *  T2 is empty in DEMO_ENEMIES, so it demonstrates the "covered but empty" footprint state under
- *  the default Front rule, instead of requiring the reader to click Skip first. `circle|1|` was
- *  dropped because it covers the identical footprint to `cone|1|` from this anchor — one button
- *  taught nothing the other didn't. */
+ *  `circle|1|` and `cone|1|` resolve to the SAME in-board cells from a T4 anchor (verified via
+ *  resolveCells: both cover exactly {T3, M4}, both occupied) — circle's other four covered cells
+ *  fall off the board from this corner anchor and are never rendered, so the two buttons look
+ *  identical here despite covering different shapes in general. Kept anyway, per product
+ *  decision, rather than dropped as redundant.
+ *
+ *  `range|3|` is the fifth demo: from a T4 anchor it covers T3, T2, T1, and T2 is empty in
+ *  DEMO_ENEMIES, so it demonstrates the "covered but empty" footprint state under the default
+ *  Front rule, instead of requiring the reader to click Skip first. */
 export const DEMO_PATTERNS: { shape: PatternShape; range: number }[] = [
     { shape: 'base', range: 0 },
     { shape: 'cone', range: 1 },
     { shape: 'line', range: 1 },
+    { shape: 'circle', range: 1 },
     { shape: 'range', range: 3 },
 ];

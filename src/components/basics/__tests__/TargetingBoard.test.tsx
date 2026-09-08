@@ -100,6 +100,18 @@ describe('TargetingBoard', () => {
         expect(splash()).toEqual(['T3']);
     });
 
+    it('a Circle anchored on T4 splashes the same occupied cells as Cone', async () => {
+        render(<TargetingBoard />);
+        await userEvent.click(screen.getByRole('button', { name: 'Circle' }));
+        expect(primaries()).toEqual(['T4']);
+        // circle|1| covers 6 neighbor cells from its anchor; from a corner anchor like T4, four
+        // of them fall off the board and are never rendered. The two that remain, T3 and M4, are
+        // the same cells cone|1| covers from T4 — kept as a separate button anyway (product
+        // decision), even though this particular anchor makes the two look identical.
+        expect(splash()).toEqual(['M4', 'T3']);
+        expect(coveredEmpty()).toEqual([]);
+    });
+
     it('a Range 3 anchored on T4 splashes occupied cells and marks the empty one covered', async () => {
         render(<TargetingBoard />);
         await userEvent.click(screen.getByRole('button', { name: 'Range' }));
