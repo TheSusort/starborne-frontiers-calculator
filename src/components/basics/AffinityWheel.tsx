@@ -140,7 +140,7 @@ const AffinityWheel: React.FC = () => (
         <p className="text-sm text-theme-text-secondary">
             That last line is the one that catches people out. Your damage still lands at a
             disadvantage — 25% smaller, but it lands — and debuffs that roll against hacking still
-            get their reduced chance. What stops entirely is every effect that would normally apply
+            get their reduced chance. What stops entirely is every debuff that would normally apply
             with no hacking roll at all: those simply do not happen.
         </p>
     </div>

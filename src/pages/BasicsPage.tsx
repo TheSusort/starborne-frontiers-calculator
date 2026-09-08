@@ -257,9 +257,10 @@ const BasicsPage: React.FC = () => {
                                 target, and ignores stealth completely.
                             </li>
                             <li>
-                                <strong>Stealth</strong> — a stealthed ship cannot be targeted at
-                                all, except by skills that specifically say they can hit stealth,
-                                and by Concentrate Fire.
+                                <strong>Stealth</strong> — a stealthed ship cannot be targeted by an
+                                ordinary skill. Taunt, Provoke and Concentrate Fire all bypass it:
+                                if one of those is forcing the target, stealth does not save the
+                                ship.
                             </li>
                         </ul>
                     </Section>
@@ -271,11 +272,12 @@ const BasicsPage: React.FC = () => {
                     <Section id="next-steps" title="Where to go next">
                         <ul className="list-disc list-inside space-y-2">
                             <li>
-                                Import your game data on the{' '}
-                                <Link to="/ships" className="text-primary hover:text-primary-light">
-                                    Ships
+                                Import your game data using the Import button in the sidebar (also
+                                on the{' '}
+                                <Link to="/" className="text-primary hover:text-primary-light">
+                                    Home
                                 </Link>{' '}
-                                page, and the rest of the planner fills itself in.
+                                page), and the rest of the planner fills itself in.
                             </li>
                             <li>
                                 Let{' '}
