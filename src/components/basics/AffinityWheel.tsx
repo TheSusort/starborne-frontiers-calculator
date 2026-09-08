@@ -1,9 +1,13 @@
 import React from 'react';
 import type { AffinityName } from '../../types/ship';
 
+/** The three cycle members — the fourth `AffinityName`, antimatter, never wins or loses an
+ *  affinity matchup and has no node on the wheel. */
+type CycleAffinity = 'electric' | 'thermal' | 'chemical';
+
 /** The three-way cycle, as `[winner, loser]`. Mirrors ADVANTAGE_OVER in
  *  src/utils/calculators/affinityUtils.ts — a test asserts the two agree. */
-const CYCLE: [AffinityName, AffinityName][] = [
+const CYCLE: [CycleAffinity, CycleAffinity][] = [
     ['electric', 'thermal'],
     ['thermal', 'chemical'],
     ['chemical', 'electric'],
@@ -20,12 +24,12 @@ const LABEL: Record<AffinityName, string> = {
 const COLOR: Record<AffinityName, string> = {
     electric: '#3b82f6',
     thermal: '#f97316',
-    chemical: '#22c55e',
+    chemical: '#16a34a',
     antimatter: '#a855f7',
 };
 
 /** Where each of the three cycle members sits on the wheel, in SVG coordinates. */
-const NODE: Record<'electric' | 'thermal' | 'chemical', { x: number; y: number }> = {
+const NODE: Record<CycleAffinity, { x: number; y: number }> = {
     electric: { x: 110, y: 26 },
     thermal: { x: 196, y: 172 },
     chemical: { x: 24, y: 172 },
@@ -35,7 +39,7 @@ const AffinityWheel: React.FC = () => (
     <div className="card space-y-4">
         <div className="flex flex-col md:flex-row gap-6 items-center">
             <svg
-                viewBox="0 0 220 200"
+                viewBox="-12 0 244 200"
                 role="img"
                 aria-label="Affinity cycle: Electric beats Thermal, Thermal beats Chemical, Chemical beats Electric. Antimatter is unaffected."
                 className="w-full max-w-[240px] h-auto shrink-0"
@@ -57,13 +61,15 @@ const AffinityWheel: React.FC = () => (
                 </defs>
 
                 {CYCLE.map(([winner, loser]) => {
-                    const from = NODE[winner as keyof typeof NODE];
-                    const to = NODE[loser as keyof typeof NODE];
-                    // Shorten both ends so the arrow does not run under the labels.
+                    const from = NODE[winner];
+                    const to = NODE[loser];
+                    // Shorten both ends so the arrow does not run under the labels. 36px
+                    // clears the widest label (8-char "Chemical"/"Electric" at 13px
+                    // font-semibold) with the marker's ~2.5px tip overshoot included.
                     const dx = to.x - from.x;
                     const dy = to.y - from.y;
                     const len = Math.hypot(dx, dy);
-                    const t = 26 / len;
+                    const t = 36 / len;
                     return (
                         <line
                             key={`${winner}-${loser}`}
@@ -79,7 +85,7 @@ const AffinityWheel: React.FC = () => (
                     );
                 })}
 
-                {(Object.keys(NODE) as (keyof typeof NODE)[]).map((key) => (
+                {(Object.keys(NODE) as CycleAffinity[]).map((key) => (
                     <text
                         key={key}
                         x={NODE[key].x}
@@ -132,9 +138,10 @@ const AffinityWheel: React.FC = () => (
         </div>
 
         <p className="text-sm text-theme-text-secondary">
-            That last line is the one that catches people out. At an affinity disadvantage, any
-            effect that is not rolled against hacking simply does not land — a ship can fire its
-            whole kit and apply none of it.
+            That last line is the one that catches people out. Your damage still lands at a
+            disadvantage — 25% smaller, but it lands — and debuffs that roll against hacking still
+            get their reduced chance. What stops entirely is every effect that would normally apply
+            with no hacking roll at all: those simply do not happen.
         </p>
     </div>
 );
