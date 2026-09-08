@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import TargetingBoard, { DEMO_ENEMIES, DEMO_CASTER } from '../TargetingBoard';
+import { DEMO_PATTERNS } from '../targetingBoardDemo';
+import { resolveCells } from '../../../utils/targeting/resolvePattern';
+import type { ParsedPattern } from '../../../utils/targetingParser';
 
 /** Enemy positions currently marked as the main target. */
 const primaries = (): string[] =>
@@ -15,6 +18,14 @@ const splash = (): string[] =>
     screen
         .getAllByTestId(/^enemy-cell-/)
         .filter((el) => el.getAttribute('data-hit') === 'splash')
+        .map((el) => el.getAttribute('data-position')!)
+        .sort();
+
+/** Enemy positions covered by the pattern with no ship there. */
+const coveredEmpty = (): string[] =>
+    screen
+        .getAllByTestId(/^enemy-cell-/)
+        .filter((el) => el.getAttribute('data-hit') === 'coveredEmpty')
         .map((el) => el.getAttribute('data-position')!)
         .sort();
 
@@ -87,6 +98,31 @@ describe('TargetingBoard', () => {
         render(<TargetingBoard />);
         await userEvent.click(screen.getByRole('button', { name: 'Line' }));
         expect(splash()).toEqual(['T3']);
+    });
+
+    it('a Range 3 anchored on T4 splashes occupied cells and marks the empty one covered', async () => {
+        render(<TargetingBoard />);
+        await userEvent.click(screen.getByRole('button', { name: 'Range' }));
+        expect(primaries()).toEqual(['T4']);
+        // range|3| covers T3, T2, T1 from a T4 anchor. T1 and T3 are occupied (splash); T2 is
+        // empty in DEMO_ENEMIES, so it must show as the distinct "covered but empty" state
+        // rather than being dropped from the board entirely.
+        expect(splash()).toEqual(['T1', 'T3']);
+        expect(coveredEmpty()).toEqual(['T2']);
+    });
+
+    it('every DEMO_PATTERNS entry resolves anchored on T4 without throwing', () => {
+        // Guards the assumption DEMO_PATTERNS relies on instead of a runtime try/catch:
+        // every demo signature must exist in OFFSET_TABLES, or resolveCells throws.
+        for (const { shape, range } of DEMO_PATTERNS) {
+            const pattern: ParsedPattern = {
+                raw: `demo-${shape}-${range}`,
+                shape,
+                range,
+                modifiers: {},
+            };
+            expect(() => resolveCells(pattern, 'T4')).not.toThrow();
+        }
     });
 
     it('shows the rule description from TARGETING_RULES, not hardcoded copy', async () => {

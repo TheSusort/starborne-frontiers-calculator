@@ -20,11 +20,18 @@ export const DEMO_ENEMIES: Position[] = ['T1', 'T3', 'T4', 'M2', 'M4'];
  *  selections in TARGETING_RULES (team/others/self) have no row scan to show. */
 export const DEMO_RULES: TargetSelection[] = ['front', 'back', 'skip', 'all'];
 
-/** Pattern shapes this board demonstrates. Every signature below is present in OFFSET_TABLES;
- *  `base|0|` must stay first so it is the default and the rule buttons read cleanly. */
+/** Pattern shapes this board demonstrates. `base|0|` must stay first so it is the default and
+ *  the rule buttons read cleanly. Every signature here resolves without throwing when anchored
+ *  on 'T4' — see the "every DEMO_PATTERNS entry resolves" test in TargetingBoard.test.tsx.
+ *
+ *  `range|3|` (not `circle|1|`) is the fourth demo: from a T4 anchor it covers T3, T2, T1, and
+ *  T2 is empty in DEMO_ENEMIES, so it demonstrates the "covered but empty" footprint state under
+ *  the default Front rule, instead of requiring the reader to click Skip first. `circle|1|` was
+ *  dropped because it covers the identical footprint to `cone|1|` from this anchor — one button
+ *  taught nothing the other didn't. */
 export const DEMO_PATTERNS: { shape: PatternShape; range: number }[] = [
     { shape: 'base', range: 0 },
     { shape: 'cone', range: 1 },
     { shape: 'line', range: 1 },
-    { shape: 'circle', range: 1 },
+    { shape: 'range', range: 3 },
 ];

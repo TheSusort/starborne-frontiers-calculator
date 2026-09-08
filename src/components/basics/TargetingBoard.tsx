@@ -13,14 +13,24 @@ import { DEMO_CASTER, DEMO_ENEMIES, DEMO_PATTERNS, DEMO_RULES } from './targetin
 // a plain module rather than being declared directly in this component file).
 export { DEMO_CASTER, DEMO_ENEMIES };
 
-type HitRole = 'primary' | 'splash';
+type HitRole = 'primary' | 'splash' | 'coveredEmpty';
 
-const FILL: Record<'primary' | 'splash' | 'enemy' | 'caster' | 'empty', string> = {
-    primary: 'fill-[rgba(255,59,92,0.35)] stroke-[#ff3b5c]',
-    splash: 'fill-[rgba(255,138,156,0.22)] stroke-[#ff8a9c]',
-    enemy: 'fill-[rgba(148,163,184,0.14)] stroke-[#94a3b8]',
-    caster: 'fill-[rgba(74,222,128,0.28)] stroke-[#4ade80]',
-    empty: 'fill-transparent stroke-[rgba(148,163,184,0.3)]',
+// Six-state visual vocabulary. `enemy` (a ship, untouched) and `empty` (no ship) must be
+// unmistakable at a glance, not merely a shade of border apart — the section's whole lesson is
+// which enemy cells are occupied. Stroke width and dash are baked in per-role rather than shared
+// across the whole polygon, since `coveredEmpty` needs a dashed outline the other roles don't.
+const FILL: Record<'primary' | 'splash' | 'coveredEmpty' | 'enemy' | 'caster' | 'empty', string> = {
+    primary: 'fill-[rgba(255,59,92,0.35)] stroke-[#ff3b5c] [stroke-width:2]',
+    splash: 'fill-[rgba(255,138,156,0.22)] stroke-[#ff8a9c] [stroke-width:1.5]',
+    // In the pattern's footprint, but no ship sits here: outline only, no fill, so it can
+    // never be mistaken for a hit ship (primary/splash) or an untouched one (enemy).
+    coveredEmpty: 'fill-transparent stroke-[#ff3b5c] [stroke-width:2] [stroke-dasharray:4,3]',
+    // A ship, untouched by the pattern: solid, obvious fill — must read as "a ship is here"
+    // at a glance, not just a slightly brighter border than `empty`.
+    enemy: 'fill-[rgba(148,163,184,0.6)] stroke-[#cbd5e1] [stroke-width:2]',
+    caster: 'fill-[rgba(74,222,128,0.28)] stroke-[#4ade80] [stroke-width:1.5]',
+    // No ship, not covered: a faint outline only — must read as "obviously not a ship".
+    empty: 'fill-transparent stroke-[rgba(148,163,184,0.18)] [stroke-width:1]',
 };
 
 const PAD = 8;
@@ -81,10 +91,7 @@ const Board: React.FC<BoardProps> = ({ idPrefix, mirror, occupied, caster, hits,
                         data-hit={hit ?? 'none'}
                         data-caster={isCaster ? 'true' : 'false'}
                     >
-                        <polygon
-                            points={hexPoints(cx, cy, HEX_RADIUS - 2)}
-                            className={`${style} [stroke-width:1.5]`}
-                        />
+                        <polygon points={hexPoints(cx, cy, HEX_RADIUS - 2)} className={style} />
                         <text
                             x={cx}
                             y={cy + 4}
@@ -128,18 +135,17 @@ const TargetingBoard: React.FC = () => {
 
         // resolveCells works in the SAME axial frame as the board — do not negate its offsets.
         // Mirroring is a pixel-space concern handled by <Board mirror>.
-        let cells: ReturnType<typeof resolveCells>;
-        try {
-            cells = resolveCells(pattern, anchor);
-        } catch {
-            return out; // unknown signature — show the anchor alone rather than crash
-        }
+        const cells = resolveCells(pattern, anchor);
         for (const cell of cells) {
             if (cell.role !== 'covered') continue;
             if (cell.position === anchor) continue;
-            // A covered cell with nobody in it is not a hit; only show ships that take damage.
-            if (!DEMO_ENEMIES.includes(cell.position)) continue;
-            out.set(cell.position, 'splash');
+            // A covered cell shows as a hit (splash) if a ship is there, or as the distinct
+            // "in the pattern, no ship there" state otherwise — the pattern's true footprint
+            // is shown either way, not just the cells that happen to connect.
+            out.set(
+                cell.position,
+                DEMO_ENEMIES.includes(cell.position) ? 'splash' : 'coveredEmpty'
+            );
         }
         return out;
     }, [ruleId, pattern]);
@@ -193,7 +199,7 @@ const TargetingBoard: React.FC = () => {
                         mirror
                         occupied={DEMO_ENEMIES}
                         hits={hits}
-                        ariaLabel={`Enemy fleet, showing which ships a ${rule.label} skill hits.`}
+                        ariaLabel={`Enemy fleet, showing which ships the ${rule.label} rule hits.`}
                     />
                 </div>
             </div>
@@ -216,7 +222,16 @@ const TargetingBoard: React.FC = () => {
                     damage)
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-[#94a3b8]" /> Untouched
+                    <span className="inline-block w-2 h-2 rounded-sm border-2 border-dashed border-[#ff3b5c]" />{' '}
+                    In the pattern, no ship there
+                </span>
+                <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-[#cbd5e1]" /> Enemy ship,
+                    untouched
+                </span>
+                <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm border border-[rgba(148,163,184,0.3)]" />{' '}
+                    Empty space
                 </span>
             </div>
         </div>
