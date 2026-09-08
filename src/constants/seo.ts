@@ -103,6 +103,13 @@ export const SEO_CONFIG = {
             'Browse squad leaders for every faction in Starborne Frontiers and the bonuses each grants across its three upgrade steps.',
         keywords: 'starborne, frontiers, squad leaders, faction bonuses, fleet buffs, database',
     },
+    basics: {
+        title: 'Game Basics - Starborne Frontiers',
+        description:
+            'A new player guide to Starborne Frontiers: what every stat does, what each ship role is for, how affinities and hacking work, and how row targeting decides who gets hit.',
+        keywords:
+            'starborne frontiers, new player guide, beginner guide, ship roles, stats explained, affinities, hacking, security, targeting, rows',
+    },
     documentation: {
         title: 'Documentation',
         description:
