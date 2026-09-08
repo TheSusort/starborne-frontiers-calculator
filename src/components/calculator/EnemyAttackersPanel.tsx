@@ -120,7 +120,7 @@ const EnemyCard: React.FC<{
                     onChange={(e) =>
                         onUpdate({ hacking: Math.max(0, parseInt(e.target.value) || 0) })
                     }
-                    helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%."
+                    helpLabel="The enemy's hacking stat. Landing chance for its debuffs = (enemy hacking − heal-target security), clamped to 0–100%. Affinity shifts the hacking side ±25% — advantage over the heal target raises it, disadvantage lowers it."
                 />
                 <Input
                     label="HP"

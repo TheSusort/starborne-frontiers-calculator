@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Healing calculator: hacking help text now says affinity shifts debuff landing by 25%.',
+    'Documentation: the debuff landing formula now names the affinity hacking swing.',
     'Game Basics: a new page explaining stats, roles, affinities and targeting.',
     'Game Basics: an interactive board shows which ships each targeting rule hits.',
     'Game Basics: the targeting board now explains pattern clipping at the board edge.',
