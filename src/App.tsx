@@ -37,6 +37,7 @@ const HomePage = lazy(() => import('./pages/HomePage'));
 const ShipDetailsPage = lazy(() => import('./pages/manager/ShipDetailsPage'));
 const SharedEncountersPage = lazy(() => import('./pages/SharedEncountersPage'));
 const DocumentationPage = lazy(() => import('./pages/DocumentationPage'));
+const BasicsPage = lazy(() => import('./pages/BasicsPage'));
 const StatisticsPage = lazy(() => import('./pages/manager/StatisticsPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 
@@ -294,6 +295,12 @@ const App: React.FC = () => {
                                                                                         path="/documentation"
                                                                                         element={
                                                                                             <DocumentationPage />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="/basics"
+                                                                                        element={
+                                                                                            <BasicsPage />
                                                                                         }
                                                                                     />
                                                                                     <Route

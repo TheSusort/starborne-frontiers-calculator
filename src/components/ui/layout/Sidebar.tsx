@@ -299,6 +299,7 @@ export const Sidebar: React.FC = () => {
     const publicNavigationLinks = useMemo<NavigationItem[]>(() => {
         const links = [
             { path: '/', label: 'Home' },
+            { path: '/basics', label: 'Game Basics' },
             {
                 path: '/manager',
                 label: 'Manager',

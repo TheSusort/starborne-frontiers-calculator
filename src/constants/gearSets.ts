@@ -86,7 +86,7 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
         name: 'Leech',
         stats: [],
         iconUrl: '/images/gear-sets/leech.webp',
-        description: 'Leach 15% from damage dealt',
+        description: 'Leech 15% from damage dealt',
         color: '#5c1409',
     },
     REPAIR: {

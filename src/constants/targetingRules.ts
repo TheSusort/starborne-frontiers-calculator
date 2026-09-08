@@ -17,7 +17,7 @@ export const TARGETING_RULES: Record<TargetSelection, TargetingRule> = {
     front: {
         id: 'front',
         label: 'Front',
-        description: 'Strikes the front-most enemy in the lane.',
+        description: 'Strikes the front-most enemy in the row.',
     },
     back: {
         id: 'back',

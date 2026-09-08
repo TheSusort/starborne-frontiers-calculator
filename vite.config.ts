@@ -125,6 +125,7 @@ export default defineConfig({
                 '/statistics',
                 '/documentation',
                 '/ships/lore',
+                '/basics',
             ],
             renderer: new PuppeteerRenderer({
                 renderAfterTime: 3000,
@@ -325,6 +326,13 @@ export default defineConfig({
                             'Explore the lore and backstories of every ship in Starborne Frontiers. Read bios, quotes, and learn the history behind your fleet.',
                         keywords:
                             'ship lore, ship bios, starborne frontiers lore, ship backstories',
+                    },
+                    '/basics': {
+                        title: 'Game Basics',
+                        description:
+                            'A new player guide to Starborne Frontiers: what every stat does, what each ship role is for, how affinities and hacking work, and how row targeting decides who gets hit.',
+                        keywords:
+                            'starborne frontiers, new player guide, beginner guide, ship roles, stats explained, affinities, hacking, security, targeting, rows',
                     },
                 };
 

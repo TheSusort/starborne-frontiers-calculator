@@ -1,0 +1,53 @@
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import StatGuideTable, { STAT_GUIDE, NOT_A_GAME_STAT } from '../StatGuideTable';
+import { STAT_GROUPS } from '../statGuideData';
+import { STATS } from '../../../constants/stats';
+import type { StatName } from '../../../types/stats';
+
+describe('StatGuideTable', () => {
+    it('accounts for every entry in STATS — documented or explicitly excluded', () => {
+        // Tripwire: adding a stat to STATS fails here rather than leaving a blank row on a
+        // page aimed at new players. To leave one out, add it to NOT_A_GAME_STAT with a reason.
+        expect([...Object.keys(STAT_GUIDE), ...NOT_A_GAME_STAT].sort()).toEqual(
+            Object.keys(STATS).sort()
+        );
+    });
+
+    it('has non-empty copy for every documented stat', () => {
+        for (const name of Object.keys(STAT_GUIDE) as StatName[]) {
+            const entry = STAT_GUIDE[name]!;
+            expect(entry.does, `${name}.does`).not.toBe('');
+            expect(entry.wants, `${name}.wants`).not.toBe('');
+        }
+    });
+
+    it('renders a row per documented stat, labelled from STATS', () => {
+        render(<StatGuideTable />);
+        for (const name of Object.keys(STAT_GUIDE) as StatName[]) {
+            expect(screen.getByText(STATS[name].label)).toBeInTheDocument();
+        }
+    });
+
+    it('does not show planner-internal stats to players', () => {
+        // HP Regen is a tool-internal modelling stat, not something a player sees in game.
+        render(<StatGuideTable />);
+        for (const name of NOT_A_GAME_STAT) {
+            expect(screen.queryByText(STATS[name].label)).not.toBeInTheDocument();
+        }
+        expect(NOT_A_GAME_STAT).toContain('hpRegen');
+    });
+
+    it('shows every group panel, and puts at least one stat in each', () => {
+        // The grouping is the section's whole readability claim: three ideas, not one list.
+        // An empty panel means a group heading with nothing under it.
+        render(<StatGuideTable />);
+        for (const group of Object.keys(STAT_GROUPS) as (keyof typeof STAT_GROUPS)[]) {
+            expect(screen.getByText(STAT_GROUPS[group].title)).toBeInTheDocument();
+            const inGroup = (Object.keys(STAT_GUIDE) as StatName[]).filter(
+                (name) => STAT_GUIDE[name]!.group === group
+            );
+            expect(inGroup.length, group).toBeGreaterThan(0);
+        }
+    });
+});
