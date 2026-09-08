@@ -280,6 +280,19 @@ const DocumentationPage: React.FC = () => {
                                 available.
                             </p>
 
+                            <p className="text-theme-text-secondary">
+                                New to Starborne Frontiers itself rather than this planner? Start
+                                with{' '}
+                                <Link
+                                    to="/basics"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    Game Basics
+                                </Link>{' '}
+                                — what the stats do, what the roles are for, and how targeting picks
+                                who gets hit.
+                            </p>
+
                             <div>
                                 <h3 className="text-xl font-semibold mb-2">
                                     Importing Your Game Data
