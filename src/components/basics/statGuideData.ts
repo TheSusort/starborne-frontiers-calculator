@@ -61,12 +61,12 @@ export const STAT_GUIDE: Partial<
     },
     crit: {
         does: 'The chance a hit crits. Worthless on its own — a crit that lands with no crit power behind it is a normal hit.',
-        wants: 'Attackers, and supporters whose repairs can crit.',
+        wants: 'Attackers, and healers whose repairs can crit.',
         group: 'offensive',
     },
     critDamage: {
         does: 'How much extra damage a crit does. Equally worthless on its own — crit power you never trigger is a dead stat.',
-        wants: 'Attackers, and only alongside crit rate. Balance the two rather than stacking one.',
+        wants: 'Attackers, and healers whose repairs can crit. Only alongside crit rate — balance the two rather than stacking one.',
         group: 'offensive',
     },
     speed: {
@@ -76,7 +76,7 @@ export const STAT_GUIDE: Partial<
     },
     hacking: {
         does: "The chance your debuffs land. Every point above the target's security is one percent.",
-        wants: 'Debuffers, and only them. On a ship with no debuffs in its kit it does literally nothing.',
+        wants: 'Debuffers first, but every role has outlier ships whose kit inflicts a debuff and wants hacking to land it. On a ship whose kit inflicts nothing, it does literally nothing.',
         group: 'utility',
     },
     security: {
@@ -86,12 +86,12 @@ export const STAT_GUIDE: Partial<
     },
     healModifier: {
         does: 'Increases the repairs this ship performs.',
-        wants: 'Supporters that actually repair. Nothing else.',
+        wants: 'Supporters that actually repair. A few tanks that heal on hit can build around it too, but that is an outlier strategy, not the norm.',
         group: 'utility',
     },
     shield: {
         does: 'Generates shield each turn as a share of maximum HP. Shield absorbs damage before HP does.',
-        wants: 'Ships built around the Shield set, and anything that needs to soak chip damage.',
+        wants: 'No ship is "built around" the Shield set — gear it for raw survivability, for a ship kit that synergises with shield, or to feed the Arcane Siege implant.',
         group: 'defensive',
     },
     defensePenetration: {
@@ -100,8 +100,8 @@ export const STAT_GUIDE: Partial<
         group: 'offensive',
     },
     shieldPenetration: {
-        does: "Ignores part of a target's shield.",
-        wants: 'Attackers facing shield-heavy teams.',
+        does: "Ignores part of a target's shield. It is not a stat you can gear: it comes only from a ship's own skills.",
+        wants: 'Nothing to gear for. A ship either has it in its kit or it does not.',
         group: 'offensive',
     },
     damageReduction: {

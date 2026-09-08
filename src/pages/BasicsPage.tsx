@@ -81,6 +81,25 @@ const RoleCard: React.FC<{ category: ShipRoleCategory }> = ({ category }) => {
                     {role.statsNote && <Chip>{role.statsNote}</Chip>}
                 </div>
             </div>
+            {role.kitDependent && (
+                <div>
+                    <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
+                        {role.kitDependent.note}
+                    </p>
+                    <div className="space-y-1.5">
+                        {role.kitDependent.options.map((option) => (
+                            <div key={option.label} className="flex flex-wrap items-center gap-1.5">
+                                <span className="text-xs text-theme-text-secondary shrink-0">
+                                    {option.label}:
+                                </span>
+                                {option.stats.map((stat) => (
+                                    <Chip key={stat}>{STATS[stat].label}</Chip>
+                                ))}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
             <div>
                 <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
                     Sets to look for
