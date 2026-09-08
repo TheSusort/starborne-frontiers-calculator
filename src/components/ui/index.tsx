@@ -15,6 +15,8 @@ export * from './Callout';
 export * from './Checkbox';
 export * from './CheckboxGroup';
 export * from './Chip';
+export * from './GroupLabel';
+export * from './IconPlate';
 export * from './FeatureCard';
 export * from './IconBadge';
 export * from './InlineNumberEdit';

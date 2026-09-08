@@ -16,24 +16,13 @@ export const NOT_A_GAME_STAT: StatName[] = ['hpRegen'];
  *  mechanic: it exists so thirteen stats scan as three ideas rather than one list. */
 export type StatGroup = 'offensive' | 'defensive' | 'utility';
 
-/** Panel order and heading, keyed by `StatGroup`. `StatGuideTable` renders the panels in this
- *  object's order and puts each stat in the panel its `group` names. */
+/** Band order, heading and hue, keyed by `StatGroup`. `StatGuideTable` renders the bands in this
+ *  object's order and puts each stat in the band its `group` names. The hue is what lets a reader
+ *  scanning thirteen rows see which of the three ideas they are inside without reading a heading. */
 export const STAT_GROUPS: Record<StatGroup, { title: string; accent: string; text: string }> = {
-    offensive: {
-        title: 'Offensive',
-        accent: 'border-l-red-500',
-        text: 'text-red-400',
-    },
-    defensive: {
-        title: 'Defensive',
-        accent: 'border-l-sky-500',
-        text: 'text-sky-400',
-    },
-    utility: {
-        title: 'Utility',
-        accent: 'border-l-emerald-500',
-        text: 'text-emerald-400',
-    },
+    offensive: { title: 'Offensive', accent: 'border-l-red-500', text: 'text-red-400' },
+    defensive: { title: 'Defensive', accent: 'border-l-sky-500', text: 'text-sky-400' },
+    utility: { title: 'Utility', accent: 'border-l-emerald-500', text: 'text-emerald-400' },
 };
 
 /** Player-facing explanation per stat. `does` is the mechanic; `wants` is who it is worth

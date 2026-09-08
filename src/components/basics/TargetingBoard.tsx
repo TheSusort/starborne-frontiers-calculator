@@ -92,7 +92,10 @@ const Board: React.FC<BoardProps> = ({ idPrefix, mirror, occupied, caster, hits,
                         data-hit={hit ?? 'none'}
                         data-caster={isCaster ? 'true' : 'false'}
                     >
-                        <polygon points={hexPoints(cx, cy, HEX_RADIUS - 2)} className={style} />
+                        <polygon
+                            points={hexPoints(cx, cy, HEX_RADIUS - 2)}
+                            className={`transition-[fill,stroke,stroke-width] duration-200 motion-reduce:transition-none ${style}`}
+                        />
                         <text
                             x={cx}
                             y={cy + 4}
@@ -216,21 +219,33 @@ const TargetingBoard: React.FC = () => {
                     <p className="text-xs uppercase tracking-wide text-theme-text-secondary mb-1.5">
                         Pattern
                     </p>
-                    <div role="radiogroup" aria-label="Pattern" className="flex flex-wrap gap-2">
-                        {DEMO_PATTERNS.map((p, i) => (
-                            <Button
-                                key={p.shape}
-                                role="radio"
-                                aria-checked={i === patternIndex}
-                                size="sm"
-                                variant={i === patternIndex ? 'primary' : 'secondary'}
-                                onClick={() => setPatternIndex(i)}
-                                disabled={ruleId === 'all'}
-                            >
-                                {PATTERN_SHAPES[p.shape].label}
-                            </Button>
-                        ))}
-                    </div>
+                    {/* `all` reaches every living enemy on its own, so there is no anchor to
+                        stamp a footprint around. Say that rather than leaving five buttons
+                        greyed out with no reason given. */}
+                    {ruleId === 'all' ? (
+                        <p className="text-sm text-theme-text-secondary">
+                            All hits every enemy at once — there is no pattern to aim.
+                        </p>
+                    ) : (
+                        <div
+                            role="radiogroup"
+                            aria-label="Pattern"
+                            className="flex flex-wrap gap-2"
+                        >
+                            {DEMO_PATTERNS.map((p, i) => (
+                                <Button
+                                    key={p.shape}
+                                    role="radio"
+                                    aria-checked={i === patternIndex}
+                                    size="sm"
+                                    variant={i === patternIndex ? 'primary' : 'secondary'}
+                                    onClick={() => setPatternIndex(i)}
+                                >
+                                    {PATTERN_SHAPES[p.shape].label}
+                                </Button>
+                            ))}
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -240,7 +255,10 @@ const TargetingBoard: React.FC = () => {
                 {outcomeText}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+            {/* The two fleets face each other, so they sit side by side from `sm` and the enemy
+                board is mirrored. Below `sm` they stack: half of a phone's width puts the T1..B4
+                labels under 6px. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                     <p className="text-xs text-theme-text-secondary mb-1">Your fleet</p>
                     <Board
@@ -252,7 +270,7 @@ const TargetingBoard: React.FC = () => {
                     />
                 </div>
                 <div>
-                    <p className="text-xs text-theme-text-secondary mb-1 text-left lg:text-right">
+                    <p className="text-xs text-theme-text-secondary mb-1 text-left sm:text-right">
                         Enemy fleet
                     </p>
                     <Board
@@ -265,42 +283,37 @@ const TargetingBoard: React.FC = () => {
                 </div>
             </div>
 
-            <div className="border-l-2 border-primary pl-3">
-                <p className="font-semibold text-primary">{rule.label}</p>
+            <div className="border-t border-dark-border pt-3">
+                <p className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                    {rule.label}
+                </p>
                 <p className="text-sm text-theme-text">{rule.description}</p>
             </div>
 
             <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-theme-text-secondary border-t border-dark-border pt-3">
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-[#4ade80]" /> Your attacker
+                    <span className="inline-block w-2 h-2 bg-[#4ade80]" /> Your attacker
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-[#ff3b5c]" /> Main target
-                    (full damage)
+                    <span className="inline-block w-2 h-2 bg-[#ff3b5c]" /> Main target (full damage)
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-[#ff8a9c]" /> Also hit (half
-                    damage)
+                    <span className="inline-block w-2 h-2 bg-[#ff8a9c]" /> Also hit (half damage)
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm border-2 border-dashed border-[#ff3b5c]" />{' '}
+                    <span className="inline-block w-2 h-2 border-2 border-dashed border-[#ff3b5c]" />{' '}
                     In the pattern, no ship there
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-[#cbd5e1]" /> Enemy ship,
-                    untouched
+                    <span className="inline-block w-2 h-2 bg-[#cbd5e1]" /> Enemy ship, untouched
                 </span>
                 <span className="inline-flex items-center gap-1">
-                    <span className="inline-block w-2 h-2 rounded-sm border border-[rgba(148,163,184,0.3)]" />{' '}
+                    <span className="inline-block w-2 h-2 border border-[rgba(148,163,184,0.3)]" />{' '}
                     Empty space
                 </span>
             </div>
 
-            <Callout
-                variant="rule"
-                title="Patterns are clipped at the edge of the board"
-                className="max-w-[68ch]"
-            >
+            <Callout variant="rule" title="Patterns are clipped at the edge of the board">
                 <p>
                     Any cell that falls outside the board is simply not hit. That is why Circle and
                     Cone look identical from T4 — four of Circle&apos;s six surrounding cells fall
