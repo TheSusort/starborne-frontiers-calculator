@@ -7,6 +7,10 @@ import TargetingBoard from '../components/basics/TargetingBoard';
 import AffinityWheel from '../components/basics/AffinityWheel';
 import StatGuideTable from '../components/basics/StatGuideTable';
 import GearBasicsSection from '../components/basics/GearBasicsSection';
+import { ROLE_GUIDE } from '../components/basics/roleGuideData';
+import { SHIP_TYPES } from '../constants/shipTypes';
+import type { ShipRoleCategory } from '../constants/shipTypes';
+import { STATS } from '../constants/stats';
 
 const SECTIONS: { id: string; title: string }[] = [
     { id: 'turn-order', title: 'Speed and turn order' },
@@ -20,32 +24,7 @@ const SECTIONS: { id: string; title: string }[] = [
     { id: 'next-steps', title: 'Where to go next' },
 ];
 
-const ROLE_GUIDE: { role: string; job: string; stats: string; sets: string }[] = [
-    {
-        role: 'Attacker',
-        job: 'Kills things. Everything else on your team exists to let the attacker connect.',
-        stats: 'Attack, Crit Rate, Crit Damage',
-        sets: 'Attack, Critical',
-    },
-    {
-        role: 'Defender',
-        job: 'Survives being shot at, and takes hits meant for someone else.',
-        stats: 'HP, Defense, Security',
-        sets: 'Fortitude, Defense, Protection',
-    },
-    {
-        role: 'Debuffer',
-        job: 'Weakens the enemy — damage over time, stuns, freezes, stat shreds.',
-        stats: 'Hacking, Attack, Speed',
-        sets: 'Hacking, Attack, Speed',
-    },
-    {
-        role: 'Supporter',
-        job: 'Repairs, shields and buffs your side, usually before the damage lands.',
-        stats: 'HP, Speed (Crit Rate if it repairs)',
-        sets: 'Fortitude, Speed, Repair, Boost',
-    },
-];
+const ROLE_CATEGORIES: ShipRoleCategory[] = ['ATTACKER', 'DEFENDER', 'DEBUFFER', 'SUPPORTER'];
 
 const Section: React.FC<{ id: string; title: string; children: React.ReactNode }> = ({
     id,
@@ -138,21 +117,32 @@ const BasicsPage: React.FC = () => {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {ROLE_GUIDE.map((r) => (
-                                        <tr
-                                            key={r.role}
-                                            className="border-b border-dark-border last:border-0 align-top"
-                                        >
-                                            <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
-                                                {r.role}
-                                            </td>
-                                            <td className="py-2 pr-4 text-theme-text">{r.job}</td>
-                                            <td className="py-2 pr-4 text-theme-text">{r.stats}</td>
-                                            <td className="py-2 text-theme-text-secondary">
-                                                {r.sets}
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {ROLE_CATEGORIES.map((cat) => {
+                                        const r = ROLE_GUIDE[cat];
+                                        const statsText =
+                                            r.stats.map((s) => STATS[s].label).join(', ') +
+                                            (r.statsNote ? ` (${r.statsNote})` : '');
+                                        return (
+                                            <tr
+                                                key={cat}
+                                                data-testid={`role-row-${cat}`}
+                                                className="border-b border-dark-border last:border-0 align-top"
+                                            >
+                                                <td className="py-2 pr-4 font-medium text-primary whitespace-nowrap">
+                                                    {SHIP_TYPES[cat].name}
+                                                </td>
+                                                <td className="py-2 pr-4 text-theme-text">
+                                                    {r.job}
+                                                </td>
+                                                <td className="py-2 pr-4 text-theme-text">
+                                                    {statsText}
+                                                </td>
+                                                <td className="py-2 text-theme-text-secondary">
+                                                    {r.sets}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
@@ -161,7 +151,7 @@ const BasicsPage: React.FC = () => {
                             <Link to="/autogear" className="text-primary hover:text-primary-light">
                                 Autogear
                             </Link>{' '}
-                            offers finer presets — Debuffer (Bomber), Supporter (Shield) and so on.
+                            offers finer presets — Debuffer(Bomber), Supporter(Shield) and so on.
                             Those are instructions to the optimiser about what to prioritise, not
                             extra roles in the game.
                         </p>

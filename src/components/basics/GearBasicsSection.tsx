@@ -7,16 +7,16 @@ import type { Stat } from '../../types/stats';
 /** A set with no `minPieces` pays out at 2. */
 const piecesFor = (minPieces: number | undefined): number => minPieces ?? 2;
 
-/** One set's bonus as a short line: its stats, then its special effect if it has one. */
-const setEffect = (
-    stats: Stat[],
-    description: string | Record<string, string> | undefined
-): string => {
+/** One set's bonus as a short line: its stats, then its special effect if it has one.
+ *  `description` is `string | undefined` only — no entry in GEAR_SETS uses the
+ *  `Record<string, string>` shape `GearSetBonus.description` still permits, so the caller
+ *  filters that out before calling (same string-only guard GearPieceDisplay uses on the
+ *  same field) rather than this function pretending to format an object. */
+const setEffect = (stats: Stat[], description: string | undefined): string => {
     const statPart = stats
         .map((s) => `+${s.value}${s.type === 'percentage' ? '%' : ''} ${STATS[s.name].label}`)
         .join(', ');
-    const descPart = typeof description === 'string' ? description : '';
-    return [statPart, descPart].filter(Boolean).join(' — ');
+    return [statPart, description].filter(Boolean).join(' — ');
 };
 
 const GearBasicsSection: React.FC = () => (
@@ -93,7 +93,12 @@ const GearBasicsSection: React.FC = () => (
                                 {piecesFor(set.minPieces)}
                             </td>
                             <td className="py-2 text-theme-text">
-                                {setEffect(set.stats, set.description)}
+                                {setEffect(
+                                    set.stats,
+                                    typeof set.description === 'string'
+                                        ? set.description
+                                        : undefined
+                                )}
                             </td>
                         </tr>
                     ))}

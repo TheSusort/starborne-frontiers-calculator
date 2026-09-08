@@ -2,6 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import BasicsPage from '../BasicsPage';
+import { ROLE_GUIDE } from '../../components/basics/roleGuideData';
+import { STATS } from '../../constants/stats';
+import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
+import { GEAR_SETS } from '../../constants/gearSets';
 
 // Seo renders into document.head via a portal in some setups; stub it so the test asserts
 // page content only.
@@ -62,5 +66,38 @@ describe('BasicsPage', () => {
         // it is about an attacker in one fleet's row hitting a ship in the other's.
         expect(screen.getAllByTestId(/^player-cell-/)).toHaveLength(12);
         expect(screen.getAllByTestId(/^enemy-cell-/)).toHaveLength(12);
+    });
+
+    it('labels every role-table stat from STATS, never a hand-typed name', () => {
+        // Guards against the roles table drifting from StatGuideTable's names (e.g. a
+        // hand-typed "Crit Damage" next to StatGuideTable's "Crit Power" for the same stat).
+        const { container } = renderPage();
+        for (const cat of Object.keys(ROLE_GUIDE) as (keyof typeof ROLE_GUIDE)[]) {
+            const row = container.querySelector(`[data-testid="role-row-${cat}"]`);
+            expect(row, cat).not.toBeNull();
+            for (const stat of ROLE_GUIDE[cat].stats) {
+                expect(row!.textContent, `${cat} / ${stat}`).toContain(STATS[stat].label);
+            }
+        }
+    });
+
+    it('never uses lane/column vocabulary in any locked targeting or gear-set constant', () => {
+        // BasicsPage.test's rendered-text sweep above only sees what's MOUNTED —
+        // TargetingBoard renders one rule/pattern description at a time, so the
+        // never-rendered ones (e.g. back/skip/all) would slip through a render-only check.
+        // This asserts directly over the source-of-truth constants instead.
+        for (const rule of Object.values(TARGETING_RULES)) {
+            expect(rule.description, rule.id).not.toMatch(/\blanes?\b/i);
+            expect(rule.description, rule.id).not.toMatch(/\bcolumns?\b/i);
+        }
+        for (const shape of Object.values(PATTERN_SHAPES)) {
+            expect(shape.label, shape.id).not.toMatch(/\blanes?\b/i);
+            expect(shape.label, shape.id).not.toMatch(/\bcolumns?\b/i);
+        }
+        for (const set of Object.values(GEAR_SETS)) {
+            if (typeof set.description !== 'string') continue;
+            expect(set.description, set.name).not.toMatch(/\blanes?\b/i);
+            expect(set.description, set.name).not.toMatch(/\bcolumns?\b/i);
+        }
     });
 });
