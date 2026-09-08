@@ -255,7 +255,10 @@ const TargetingBoard: React.FC = () => {
                 {outcomeText}
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
+            {/* The two fleets face each other, so they sit side by side from `sm` and the enemy
+                board is mirrored. Below `sm` they stack: half of a phone's width puts the T1..B4
+                labels under 6px. */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
                 <div>
                     <p className="text-xs text-theme-text-secondary mb-1">Your fleet</p>
                     <Board
@@ -267,7 +270,7 @@ const TargetingBoard: React.FC = () => {
                     />
                 </div>
                 <div>
-                    <p className="text-xs text-theme-text-secondary mb-1 text-left lg:text-right">
+                    <p className="text-xs text-theme-text-secondary mb-1 text-left sm:text-right">
                         Enemy fleet
                     </p>
                     <Board
@@ -310,11 +313,7 @@ const TargetingBoard: React.FC = () => {
                 </span>
             </div>
 
-            <Callout
-                variant="rule"
-                title="Patterns are clipped at the edge of the board"
-                className="max-w-[68ch]"
-            >
+            <Callout variant="rule" title="Patterns are clipped at the edge of the board">
                 <p>
                     Any cell that falls outside the board is simply not hit. That is why Circle and
                     Cone look identical from T4 — four of Circle&apos;s six surrounding cells fall

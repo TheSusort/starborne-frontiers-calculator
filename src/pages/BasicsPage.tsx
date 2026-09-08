@@ -39,13 +39,9 @@ const stepNumber = (index: number): string => String(index + 1);
 const Section: React.FC<{
     section: BasicsSection;
     index: number;
-    /** Lets the section run past the 68ch measure. Only the targeting board sets it: the board is
-     *  two 12-cell hex grids side by side and is unreadable squeezed into a prose column. Its own
-     *  prose keeps the measure, so the board is the only thing that is wider. */
-    wide?: boolean;
     children: React.ReactNode;
-}> = ({ section, index, wide = false, children }) => (
-    <section id={section.id} className={`space-y-4 scroll-mt-24 ${wide ? '' : 'max-w-[68ch]'}`}>
+}> = ({ section, index, children }) => (
+    <section id={section.id} className="space-y-4 scroll-mt-24">
         <div className="flex items-center gap-3 border-b border-dark-border pb-3">
             <span
                 aria-hidden="true"
@@ -260,8 +256,61 @@ const BasicsPage: React.FC = () => {
     return (
         <>
             <Seo {...SEO_CONFIG.basics} />
-            <div className="space-y-8">
-                <div className="lg:grid lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-10 lg:items-start">
+            {/* One measure for the page: the rail, the gutter and a 68ch column. Centring the
+                block keeps a wide monitor from leaving the whole page pinned to the left edge. */}
+            <div className="space-y-8 max-w-[calc(14rem+2.5rem+68ch)] mx-auto">
+                {/* This page is the front door for a player who has not opened the planner yet,
+                    so it opens on the hangar rather than on a form — the same photographic ground
+                    the sidebar stands on, with the console panel recessed onto it. Rendered
+                    without PageLayout for the same reason HomePage is. */}
+                <header className="relative border border-dark-border overflow-hidden">
+                    <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-center"
+                    />
+                    <div
+                        aria-hidden="true"
+                        className="absolute inset-0 bg-dark/90 sm:bg-gradient-to-r sm:from-dark sm:via-dark/85 sm:to-dark/40"
+                    />
+                    <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
+                        <div className="max-w-[52ch] space-y-2">
+                            <h1 className="text-2xl font-bold">Game Basics</h1>
+                            <p className="text-sm text-theme-text-secondary">
+                                New to Starborne Frontiers? This is what the game does not tell you:
+                                what every stat is actually for, what each role does, and how the
+                                game decides who gets hit.
+                            </p>
+                        </div>
+
+                        {/* The mobile stand-in for the rail: below lg the sticky column is
+                            hidden, so the plate on the header carries the index instead. */}
+                        <nav
+                            aria-label="On this page"
+                            className="lg:hidden bg-dark/85 border border-dark-border p-4"
+                        >
+                            <GroupLabel className="mb-2 tracking-widest">Contents</GroupLabel>
+                            <ol className="grid gap-x-8 sm:grid-cols-2">
+                                {SECTIONS.map((section, index) => (
+                                    <li key={section.id}>
+                                        <a
+                                            href={`#${section.id}`}
+                                            className="flex items-baseline gap-2 py-2 text-sm text-theme-text"
+                                        >
+                                            <span
+                                                className={`w-3 shrink-0 text-right text-xs tabular-nums ${section.text}`}
+                                            >
+                                                {stepNumber(index)}
+                                            </span>
+                                            <span>{section.title}</span>
+                                        </a>
+                                    </li>
+                                ))}
+                            </ol>
+                        </nav>
+                    </div>
+                </header>
+
+                <div className="lg:grid lg:grid-cols-[14rem_minmax(0,68ch)] lg:gap-10 lg:items-start">
                     {/* Sticky index. Its active entry takes the SECTION's hue, never Signal
                         Orange — that is what stops it reading as the sidebar's active-nav
                         treatment repeated one column away. */}
@@ -299,59 +348,7 @@ const BasicsPage: React.FC = () => {
                         </ol>
                     </nav>
 
-                    <div className="space-y-12 min-w-0">
-                        {/* This page is the front door for a player who has not opened the planner yet,
-                        so it opens on the hangar rather than on a form — the same photographic ground
-                        the sidebar stands on, with the console panel recessed onto it. Rendered
-                        without PageLayout for the same reason HomePage is. */}
-                        <header className="relative max-w-[68ch] border border-dark-border overflow-hidden">
-                            <div
-                                aria-hidden="true"
-                                className="absolute inset-0 bg-[url('/images/Deep_crevasse_01_extended.webp')] bg-cover bg-center"
-                            />
-                            <div
-                                aria-hidden="true"
-                                className="absolute inset-0 bg-dark/90 sm:bg-gradient-to-r sm:from-dark sm:via-dark/85 sm:to-dark/40"
-                            />
-                            <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
-                                <div className="max-w-[52ch] space-y-2">
-                                    <h1 className="text-2xl font-bold">Game Basics</h1>
-                                    <p className="text-sm text-theme-text-secondary">
-                                        New to Starborne Frontiers? This is what the game does not
-                                        tell you: what every stat is actually for, what each role
-                                        does, and how the game decides who gets hit.
-                                    </p>
-                                </div>
-
-                                {/* The mobile stand-in for the rail: below lg the sticky column is
-                                hidden, so the plate on the header carries the index instead. */}
-                                <nav
-                                    aria-label="On this page"
-                                    className="lg:hidden bg-dark/85 border border-dark-border p-4"
-                                >
-                                    <GroupLabel className="mb-2 tracking-widest">
-                                        Contents
-                                    </GroupLabel>
-                                    <ol className="grid gap-x-8 sm:grid-cols-2">
-                                        {SECTIONS.map((section, index) => (
-                                            <li key={section.id}>
-                                                <a
-                                                    href={`#${section.id}`}
-                                                    className="flex items-baseline gap-2 py-2 text-sm text-theme-text"
-                                                >
-                                                    <span
-                                                        className={`w-3 shrink-0 text-right text-xs tabular-nums ${section.text}`}
-                                                    >
-                                                        {stepNumber(index)}
-                                                    </span>
-                                                    <span>{section.title}</span>
-                                                </a>
-                                            </li>
-                                        ))}
-                                    </ol>
-                                </nav>
-                            </div>
-                        </header>
+                    <div className="space-y-12 min-w-0 max-w-[68ch] lg:max-w-none">
                         <Section section={SECTIONS[0]} index={0}>
                             <Callout>
                                 <p>
@@ -457,13 +454,13 @@ const BasicsPage: React.FC = () => {
                             </Callout>
                         </Section>
 
-                        <Section section={SECTIONS[5]} index={5} wide>
-                            <p className="max-w-[68ch]">
+                        <Section section={SECTIONS[5]} index={5}>
+                            <p>
                                 Both fleets sit on a board of three <strong>rows</strong> — top,
                                 middle and bottom — with four <strong>positions</strong> in each,
                                 numbered from the back forward.
                             </p>
-                            <Callout title="Position 4 is the front" className="max-w-[68ch]">
+                            <Callout title="Position 4 is the front">
                                 <p>
                                     A skill does not just pick whoever it likes. Targeting starts in
                                     the <strong>attacking ship&apos;s own row</strong>, steps down a
@@ -472,12 +469,12 @@ const BasicsPage: React.FC = () => {
                                     the row that gets hit.
                                 </p>
                             </Callout>
-                            <p className="max-w-[68ch]">
+                            <p>
                                 Try it — the attacker below sits in the bottom row, and the enemy
                                 has nothing in theirs:
                             </p>
                             <TargetingBoard />
-                            <p className="text-theme-text-secondary max-w-[68ch]">
+                            <p className="text-theme-text-secondary">
                                 When a skill hits more than one ship, the main target takes full
                                 damage and every other ship caught in the pattern takes half, unless
                                 the skill says otherwise.

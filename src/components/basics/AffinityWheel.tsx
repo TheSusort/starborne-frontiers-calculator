@@ -66,7 +66,7 @@ const AffinityWheel: React.FC = () => {
 
     return (
         <div className="card space-y-4">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] items-center">
+            <div className="grid gap-6 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)] items-center">
                 <div>
                     <svg viewBox="0 0 300 280" className="w-full max-w-[20rem] h-auto mx-auto">
                         <defs>
@@ -218,7 +218,7 @@ const AffinityWheel: React.FC = () => {
                 </div>
             </div>
 
-            <Callout variant="mistake" className="max-w-[68ch]">
+            <Callout variant="mistake">
                 <p>
                     That last line is the one that catches people out. Your damage still lands at a
                     disadvantage — 25% smaller, but it lands — and debuffs that roll against hacking
