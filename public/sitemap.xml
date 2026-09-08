@@ -126,4 +126,11 @@
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
+
+  <!-- New Player Guide -->
+  <url>
+    <loc>https://starborneplanner.com/basics</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
 </urlset>

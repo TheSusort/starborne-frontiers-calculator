@@ -104,7 +104,7 @@ export const SEO_CONFIG = {
         keywords: 'starborne, frontiers, squad leaders, faction bonuses, fleet buffs, database',
     },
     basics: {
-        title: 'Game Basics - Starborne Frontiers',
+        title: 'Game Basics',
         description:
             'A new player guide to Starborne Frontiers: what every stat does, what each ship role is for, how affinities and hacking work, and how row targeting decides who gets hit.',
         keywords:
