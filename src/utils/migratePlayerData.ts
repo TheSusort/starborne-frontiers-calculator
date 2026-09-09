@@ -258,6 +258,15 @@ export const syncMigratedDataToSupabase = async (
 
     const BATCH_SIZE = 500;
 
+    // Gear pieces whose stats could not be encoded, so no inventory_items row
+    // exists for them. ship_equipment, ship_implants, loadout_equipment and
+    // team_loadout_equipment all FK to inventory_items(id), so their records
+    // must be filtered against this or the insert violates the constraint and
+    // aborts every step after it. Function-scoped because the inventory step
+    // and those writers are in different blocks.
+    const skippedGearIds = new Set<string>();
+    const gearIdIsUsable = (gearId: string): boolean => !skippedGearIds.has(gearId);
+
     try {
         // First, ensure we have a user record
         const { data: existingUser } = await supabase
@@ -326,39 +335,41 @@ export const syncMigratedDataToSupabase = async (
 
                 if (clearCalibrationError) throw clearCalibrationError;
 
-                for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
-                    const batch = validInventory.slice(i, i + BATCH_SIZE);
-
-                    // Prepare batch of inventory items with stats JSONB
-                    // Note: calibration_ship_id is intentionally omitted to avoid FK
-                    // issues during upsert. It's set separately in Step 2b after ships exist.
-                    // Per item, not per batch: this runs inside the outer try, so
-                    // one unencodable piece would abort the whole migration and
-                    // every step after it.
-                    const inventoryItems = batch.flatMap((item) => {
-                        const stats = tryEncodeGearStats({
-                            mainStat: item.mainStat,
-                            subStats: item.subStats || [],
-                        });
-                        if (!stats) return [];
-                        return [
-                            {
-                                id: item.id,
-                                user_id: userId,
-                                slot: item.slot,
-                                level: item.level,
-                                stars: item.stars,
-                                rarity: item.rarity,
-                                set_bonus: item.setBonus,
-                                stats,
-                            },
-                        ];
+                // Encoded up front, before the batched writes: one unencodable
+                // piece would otherwise abort the whole migration part-way, and
+                // its dependent records need to be filtered out below.
+                // calibration_ship_id is intentionally omitted here to avoid FK
+                // issues during upsert; Step 2b sets it after ships exist.
+                const inventoryRecords = validInventory.flatMap((item) => {
+                    const stats = tryEncodeGearStats({
+                        mainStat: item.mainStat,
+                        subStats: item.subStats || [],
                     });
+                    if (!stats) {
+                        skippedGearIds.add(item.id);
+                        return [];
+                    }
+                    return [
+                        {
+                            id: item.id,
+                            user_id: userId,
+                            slot: item.slot,
+                            level: item.level,
+                            stars: item.stars,
+                            rarity: item.rarity,
+                            set_bonus: item.setBonus,
+                            stats,
+                        },
+                    ];
+                });
+
+                for (let i = 0; i < inventoryRecords.length; i += BATCH_SIZE) {
+                    const batch = inventoryRecords.slice(i, i + BATCH_SIZE);
 
                     // Upsert inventory items
                     const { error: inventoryError } = await supabase
                         .from('inventory_items')
-                        .upsert(inventoryItems, { onConflict: 'id' });
+                        .upsert(batch, { onConflict: 'id' });
 
                     if (inventoryError) throw inventoryError;
                 }
@@ -519,7 +530,7 @@ export const syncMigratedDataToSupabase = async (
                 // Implant records - filter out undefined gear IDs
                 const implantRecords = validShips.flatMap((ship) =>
                     Object.entries(ship.implants || {})
-                        .filter(([, gearId]) => !!gearId)
+                        .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                         .map(([slot, gearId]) => ({
                             ship_id: ship.id,
                             slot,
@@ -553,7 +564,7 @@ export const syncMigratedDataToSupabase = async (
                 // Equipment records - filter out undefined gear IDs
                 const equipmentRecords = validShips.flatMap((ship) =>
                     Object.entries(ship.equipment || {})
-                        .filter(([, gearId]) => !!gearId)
+                        .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                         .map(([slot, gearId]) => ({
                             ship_id: ship.id,
                             slot,
@@ -728,7 +739,7 @@ export const syncMigratedDataToSupabase = async (
                     // Prepare loadout equipment batch
                     const loadoutEquipmentRecords = validLoadouts.flatMap((loadout) =>
                         Object.entries(loadout.equipment || {})
-                            .filter(([, gearId]) => !!gearId)
+                            .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                             .map(([slot, gearId]) => ({
                                 loadout_id: loadout.id,
                                 slot,
@@ -832,7 +843,7 @@ export const syncMigratedDataToSupabase = async (
                             .filter((ship) => !!ship.shipId)
                             .flatMap((ship) =>
                                 Object.entries(ship.equipment || {})
-                                    .filter(([, gearId]) => !!gearId)
+                                    .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                                     .map(([slot, gearId]) => ({
                                         team_loadout_id: teamLoadout.id,
                                         ship_id: ship.shipId,

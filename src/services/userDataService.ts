@@ -255,6 +255,42 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 
     // Step 1: Upsert inventory items (without calibration_ship_id to avoid FK issues)
     const validInventory = inventory.filter((item) => !!item.id);
+
+    // Encoded BEFORE the calibration clear below, which is destructive: a piece
+    // whose stats cannot be encoded should be known while nothing has changed
+    // remotely yet.
+    const inventoryRecords = validInventory.flatMap((item) => {
+        const stats = tryEncodeGearStats({
+            mainStat: item.mainStat,
+            subStats: item.subStats || [],
+        });
+        if (!stats) return [];
+        return [
+            {
+                id: item.id,
+                user_id: userId,
+                slot: item.slot,
+                level: item.level,
+                stars: item.stars,
+                rarity: item.rarity,
+                set_bonus: item.setBonus,
+                stats,
+            },
+        ];
+    });
+
+    // ship_equipment, ship_implants, loadout_equipment and team_loadout_equipment
+    // all FK to inventory_items(id). A piece dropped above has no row, so its
+    // dependent records must be dropped too or their insert violates the
+    // constraint and aborts everything after it. Only the pieces actually
+    // skipped are filtered — an id absent from local inventory entirely may
+    // still exist remotely, and excluding those would break valid references.
+    const keptGearIds = new Set(inventoryRecords.map((record) => record.id));
+    const skippedGearIds = new Set(
+        validInventory.map((item) => item.id).filter((id) => !keptGearIds.has(id))
+    );
+    const gearIdIsUsable = (gearId: string): boolean => !skippedGearIds.has(gearId);
+
     if (validInventory.length > 0) {
         // Clear calibration to avoid FK issues before upserting
         await supabase
@@ -263,34 +299,11 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
             .eq('user_id', userId)
             .not('calibration_ship_id', 'is', null);
 
-        for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
-            const batch = validInventory.slice(i, i + BATCH_SIZE);
-            // Per item, not per batch: calibration_ship_id was cleared above, so
-            // throwing here would lose the calibration AND skip the re-upload
-            // that restores it. One unencodable piece is dropped instead.
-            const inventoryItems = batch.flatMap((item) => {
-                const stats = tryEncodeGearStats({
-                    mainStat: item.mainStat,
-                    subStats: item.subStats || [],
-                });
-                if (!stats) return [];
-                return [
-                    {
-                        id: item.id,
-                        user_id: userId,
-                        slot: item.slot,
-                        level: item.level,
-                        stars: item.stars,
-                        rarity: item.rarity,
-                        set_bonus: item.setBonus,
-                        stats,
-                    },
-                ];
-            });
-
+        for (let i = 0; i < inventoryRecords.length; i += BATCH_SIZE) {
+            const batch = inventoryRecords.slice(i, i + BATCH_SIZE);
             const { error } = await supabase
                 .from('inventory_items')
-                .upsert(inventoryItems, { onConflict: 'id' });
+                .upsert(batch, { onConflict: 'id' });
             if (error) throw error;
         }
     }
@@ -397,7 +410,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 
         const implantRecords = validShips.flatMap((ship) =>
             Object.entries(ship.implants || {})
-                .filter(([, gearId]) => !!gearId)
+                .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                 .map(([slot, gearId]) => ({
                     ship_id: ship.id,
                     slot,
@@ -425,7 +438,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 
         const equipmentRecords = validShips.flatMap((ship) =>
             Object.entries(ship.equipment || {})
-                .filter(([, gearId]) => !!gearId)
+                .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                 .map(([slot, gearId]) => ({
                     ship_id: ship.id,
                     slot,
@@ -528,7 +541,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 
         const loadoutEquipmentRecords = validLoadouts.flatMap((loadout) =>
             Object.entries(loadout.equipment || {})
-                .filter(([, gearId]) => !!gearId)
+                .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                 .map(([slot, gearId]) => ({
                     loadout_id: loadout.id,
                     slot,
@@ -596,7 +609,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                 .filter((ship) => !!ship.shipId)
                 .flatMap((ship) =>
                     Object.entries(ship.equipment || {})
-                        .filter(([, gearId]) => !!gearId)
+                        .filter(([, gearId]) => !!gearId && gearIdIsUsable(gearId))
                         .map(([slot, gearId]) => ({
                             team_loadout_id: teamLoadout.id,
                             ship_id: ship.shipId,
