@@ -57,6 +57,5 @@ export interface AutogearStrategy {
 export enum AutogearAlgorithm {
     TwoPass = 'twoPass',
     SetFirst = 'setFirst',
-    BeamSearch = 'beamSearch',
     Genetic = 'genetic',
 }
