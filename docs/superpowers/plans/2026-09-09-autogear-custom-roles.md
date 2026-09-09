@@ -116,7 +116,9 @@ Add `customFormula?: CustomFormula;` to `SavedAutogearConfig`, below `fleetBuffs
     onSeedFormula: (role: ShipTypeName) => void;
 ```
 
-Add the same five to `AutogearSettingsModal.tsx`'s props and forward them through to `AutogearSettings`, and pass them at the two `AutogearPage.tsx` call sites as `customFormula={undefined}` plus `() => undefined` for each callback — placeholders Task 8 replaces with the real handlers. Import `CustomFormula` and `CustomFormulaRow` as types in all three files.
+Add the same five to `AutogearSettingsModal.tsx`'s props and forward them through to `AutogearSettings`, and pass them at each `AutogearPage.tsx` call site as `customFormula={undefined}` plus `() => undefined` for each callback — placeholders Task 8 replaces with the real handlers.
+
+Import `CustomFormula` and `CustomFormulaRow` as types only in the files that name them — `AutogearSettings.tsx` and `AutogearSettingsModal.tsx`. `AutogearPage.tsx` passes `undefined` and arrow stubs and never names either type, so an import there is unused and fails `npm run lint`.
 
 - [ ] **Step 2: Extract the shared stat maths**
 
@@ -288,10 +290,13 @@ describe('customFormulaScore — importance', () => {
                 { stat: 'crit', kind: 'core', direction: 'max', importance: 1 },
             ],
         };
-        // Trade 25% of attack for a doubled crit. With attack Heavy the trade is bad;
-        // the same trade under equal importance is good.
+        // Trade 25% of attack for a 50% bigger crit. With attack Heavy the trade is bad;
+        // the same trade under equal importance is good. Only the importance differs
+        // between the two halves, which is what this test is about.
+        //   heavy: 1.00^2 × 0.500 = 0.5000  vs  0.75^2 × 0.750 = 0.4219
+        //   equal: 1.00   × 0.500 = 0.5000  vs  0.75   × 0.750 = 0.5625
         const attackHeavy = customFormulaScore(withStats({ attack: 10000, crit: 40 }), heavyAttack);
-        const critHeavy = customFormulaScore(withStats({ attack: 7500, crit: 80 }), heavyAttack);
+        const critHeavy = customFormulaScore(withStats({ attack: 7500, crit: 60 }), heavyAttack);
         expect(attackHeavy).toBeGreaterThan(critHeavy);
 
         const equal: CustomFormula = {
@@ -300,7 +305,7 @@ describe('customFormulaScore — importance', () => {
                 { stat: 'crit', kind: 'core', direction: 'max', importance: 1 },
             ],
         };
-        expect(customFormulaScore(withStats({ attack: 7500, crit: 80 }), equal)).toBeGreaterThan(
+        expect(customFormulaScore(withStats({ attack: 7500, crit: 60 }), equal)).toBeGreaterThan(
             customFormulaScore(withStats({ attack: 10000, crit: 40 }), equal)
         );
     });
@@ -487,7 +492,7 @@ Expected: no errors. `tsc` is the oracle here — the eslint autofixer is not.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/types/autogear.ts src/utils/autogear/customFormula.ts src/utils/autogear/priorityScore.ts src/utils/autogear/__tests__/customFormula.test.ts
+git add src/types/autogear.ts src/utils/autogear/statResolution.ts src/utils/autogear/customFormula.ts src/utils/autogear/priorityScore.ts src/utils/autogear/__tests__/customFormula.test.ts src/components/autogear/AutogearSettings.tsx src/components/autogear/AutogearSettingsModal.tsx src/pages/manager/AutogearPage.tsx
 git commit -m "$(cat <<'MSG'
 feat(autogear): add a custom-role formula and its scoring function
 
