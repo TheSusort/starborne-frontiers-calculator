@@ -13,12 +13,9 @@ vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 // useTutorialTrigger calls useTutorial(), which throws without a TutorialProvider;
 // TestProviders does not supply one.
 vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => undefined }));
-// CommunityRecommendations fetches and ShipSelector opens a modal; neither is under test here.
-vi.mock('../CommunityRecommendations', () => ({ CommunityRecommendations: () => null }));
-vi.mock('../../ship/ShipSelector', () => ({ ShipSelector: () => null }));
 
 describe('RoleSelector default option', () => {
-    it('reports null-shaped emptiness when the Custom option is chosen', async () => {
+    it('reports an empty string when the Custom option is chosen', async () => {
         const onChange = vi.fn();
         render(
             <RoleSelector

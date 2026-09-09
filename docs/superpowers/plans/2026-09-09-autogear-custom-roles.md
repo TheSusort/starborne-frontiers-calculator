@@ -24,7 +24,7 @@
   1. `render` from `src/test-utils/test-utils` (wraps `MemoryRouter` + `NotificationProvider`), not from `@testing-library/react` directly.
   2. `vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }))` — the `ui` barrel transitively imports `'/favicon.ico?url'`, which Vitest cannot resolve. Every component test in this project carries this mock.
   3. `vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => undefined }))` — the component calls `useTutorialTrigger('autogear-settings')`, which calls `useTutorial()`, which **throws** without a `TutorialProvider`. `TestProviders` does not supply one.
-  4. `vi.mock('../CommunityRecommendations', () => ({ CommunityRecommendations: () => null }))` and `vi.mock('../../ship/ShipSelector', () => ({ ShipSelector: () => null }))` — both fetch or open modals and neither is under test.
+  `AutogearSettings` renders **neither** `CommunityRecommendations` nor `ShipSelector` — those live in `AutogearQuickSettings.tsx`. Do not mock them here. A mock that stubs more than it needs to hides real breakage from the later tasks that reuse this test file.
   `src/components/autogear/__tests__/AutogearQuickSettings.test.tsx` is the working reference for this setup; read it before writing the first UI test.
 - Every commit message ends with:
   ```
@@ -1580,8 +1580,6 @@ import { makeSettingsProps } from './autogearSettingsProps';
 
 vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => undefined }));
-vi.mock('../CommunityRecommendations', () => ({ CommunityRecommendations: () => null }));
-vi.mock('../../ship/ShipSelector', () => ({ ShipSelector: () => null }));
 
 describe('AutogearSettings role selection', () => {
     it('hands the page a null, not an empty string', async () => {
@@ -2087,8 +2085,6 @@ import type { CustomFormula } from '../../../types/autogear';
 
 vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => undefined }));
-vi.mock('../CommunityRecommendations', () => ({ CommunityRecommendations: () => null }));
-vi.mock('../../ship/ShipSelector', () => ({ ShipSelector: () => null }));
 
 const renderPanel = (overrides: Parameters<typeof makeSettingsProps>[0] = {}) =>
     render(<AutogearSettings {...makeSettingsProps(overrides)} />);
@@ -2472,10 +2468,13 @@ Run `npm start` (port 3000). Open the Autogear page, pick a ship, set Strategy t
 In `src/constants/changelog.ts`, add to `UNRELEASED_CHANGES` — one entry per user-visible change, 8-12 words each:
 
 ```ts
-    'Autogear: build a custom role from stats, each with a direction.',
+    'Autogear: the Custom strategy now builds a role from stats you choose.',
+    'Autogear: each formula stat can aim high or low, and multiply or add.',
     'Autogear: copy a built-in role into an editable custom formula.',
     'Autogear: stat priorities no longer reorder — position never affected scoring.',
 ```
+
+The first entry carries the `Manual` → `Custom` rename. A player would not notice the rename as a change separate from the mode becoming usable — the old label named something that did nothing — so it does not get an entry of its own.
 
 ```bash
 git add src/components/autogear src/pages/manager/AutogearPage.tsx src/constants/changelog.ts
