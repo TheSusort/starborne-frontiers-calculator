@@ -1507,9 +1507,11 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mt-2">
                                         Minimizing a stat is a preference, not a floor — it makes
                                         low values score better, but the optimizer can still pick a
-                                        high value if it wins elsewhere. Use a Limits tweak instead
-                                        when a stat must never drop below (or rise above) a specific
-                                        number.
+                                        high value if it wins elsewhere. When you need a number
+                                        held, add a Limits tweak with a min or max, and tick its
+                                        Hard Requirement box: a limit on its own only penalizes a
+                                        build that misses it, so the optimizer can still choose to
+                                        miss it.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         A Multiplied stat also has an <strong>Importance</strong> —
@@ -1525,13 +1527,15 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text mt-2">
                                         A Multiplied stat you&apos;re maximizing that your ship
                                         currently has none of scores that term at zero — and one
-                                        zero term zeroes the whole product, so every candidate ties
-                                        at 0 no matter how good its other stats are. Heal modifier
-                                        before gear is the common case. If a stat can legitimately
-                                        be zero, use an Added row for it instead; the formula list
-                                        flags a maximized Multiplied row that is currently zero. A
-                                        minimized row at zero is unaffected — zero is the best that
-                                        row can be.
+                                        zero term zeroes the whole product, however good the rest of
+                                        the build is. Every candidate that cannot supply the stat
+                                        ties at 0, leaving the optimizer nothing to choose between.
+                                        Heal modifier is the common case: no gear slot rolls it, so
+                                        only a set bonus such as Repair or Recovery can lift it off
+                                        zero. If a stat can legitimately be zero, use an Added row
+                                        for it instead; the formula list flags a maximized
+                                        Multiplied row that is currently zero. A minimized row at
+                                        zero is unaffected — zero is the best that row can be.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         While the formula is empty, a <strong>Start from</strong>{' '}
