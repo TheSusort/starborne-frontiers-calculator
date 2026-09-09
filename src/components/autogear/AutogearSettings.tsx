@@ -17,12 +17,16 @@ import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
-import { ShipTypeName } from '../../constants';
+import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { ArenaSeason } from '../../types/arena';
 import { BaseStats } from '../../types/stats';
 import { previewStatBonus } from '../../utils/autogear/scoring';
+import { customFormulaScore, isFormulaEmpty } from '../../utils/autogear/customFormula';
+import { CUSTOM_FORMULA_SEEDS } from '../../utils/autogear/customFormulaSeeds';
+import { CustomFormulaRowView } from './CustomFormulaRow';
+import { CustomFormulaForm } from './CustomFormulaForm';
 import { StatBonusForm } from './StatBonusForm';
 import { StatPriorityRow } from './StatPriorityRow';
 import { SetPriorityRow } from './SetPriorityRow';
@@ -35,7 +39,7 @@ type TweakView =
     | { mode: 'picker' }
     | {
           mode: 'form';
-          type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff';
+          type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'formulaRow';
           editIndex: number | null;
       }
     | {
@@ -302,13 +306,18 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     activeSeason,
     useArenaModifiers,
     onUseArenaModifiersChange,
+    customFormula,
+    onAddFormulaRow,
+    onUpdateFormulaRow,
+    onRemoveFormulaRow,
+    onSeedFormula,
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
 
     const openPicker = () => setTweakView({ mode: 'picker' });
     const openForm = (
-        type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff',
+        type: 'priority' | 'setPriority' | 'statBonus' | 'fleetBuff' | 'formulaRow',
         editIndex: number | null = null
     ) => setTweakView({ mode: 'form', type, editIndex });
     const openImplantForm = (editTarget: ImplantEditTarget = null) =>
@@ -338,10 +347,23 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
         tweakView.mode === 'form' &&
         tweakView.type === 'fleetBuff' &&
         tweakView.editIndex === index;
+    const isEditingFormulaRow = (index: number) =>
+        tweakView.mode === 'form' &&
+        tweakView.type === 'formulaRow' &&
+        tweakView.editIndex === index;
 
     const isSubFlow = tweakView.mode !== 'list';
 
     useTutorialTrigger('autogear-settings');
+
+    const isCustom = !!selectedShip && !selectedShipRole;
+    const formulaRows = customFormula?.rows ?? [];
+    const coreRowCount = formulaRows.filter((r) => r.kind === 'core').length;
+    const bonusRowCount = formulaRows.length - coreRowCount;
+    const currentFormulaScore =
+        isCustom && selectedShipStats && !isFormulaEmpty(customFormula)
+            ? customFormulaScore(selectedShipStats, customFormula)
+            : null;
 
     const advancedEnabledCount =
         (ignoreEquipped ? 1 : 0) +
@@ -374,8 +396,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     </div>
                     {selectedShip && (
                         <Button
-                            aria-label="Reset to role defaults"
-                            title="Reset to role defaults"
+                            aria-label={isCustom ? 'Reset formula' : 'Reset to role defaults'}
+                            title={isCustom ? 'Reset formula' : 'Reset to role defaults'}
                             variant="secondary"
                             onClick={onResetConfig}
                         >
@@ -383,9 +405,24 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         </Button>
                     )}
                 </div>
+                {isCustom && isFormulaEmpty(customFormula) && (
+                    <div className="space-y-2">
+                        <RoleSelector
+                            label="Start from"
+                            value=""
+                            onChange={(role) => role !== '' && onSeedFormula(role)}
+                            noDefaultSelection
+                            defaultOption="Pick a role to copy"
+                        />
+                        <p className="text-xs text-theme-text-secondary">
+                            Copies that role&apos;s scoring into editable stats. Some roles score on
+                            more than stats alone, so their copy is an approximation.
+                        </p>
+                    </div>
+                )}
             </div>
 
-            {selectedShipRole && (
+            {(selectedShipRole || isCustom) && (
                 <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>
                     {tweakView.mode === 'list' && (
                         <div key="list" className="animate-subview-enter space-y-3">
@@ -398,7 +435,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             setPriorities.length +
                                             statBonuses.length +
                                             fleetBuffs.length +
-                                            excludedImplantTypes.length}
+                                            excludedImplantTypes.length +
+                                            formulaRows.length}
                                         )
                                     </span>
                                 </h3>
@@ -416,13 +454,63 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                 setPriorities.length +
                                 statBonuses.length +
                                 fleetBuffs.length +
-                                excludedImplantTypes.length ===
+                                excludedImplantTypes.length +
+                                formulaRows.length ===
                             0 ? (
                                 <p className="text-sm text-theme-text-secondary text-center py-4">
-                                    No tweaks yet. The role&apos;s defaults will be used as-is.
+                                    {isCustom
+                                        ? 'No stats yet. Add a formula stat to start scoring gear for this ship.'
+                                        : "No tweaks yet. The role's defaults will be used as-is."}
                                 </p>
                             ) : (
                                 <div className="space-y-3">
+                                    {isCustom && (
+                                        <div className="space-y-1">
+                                            <div className="flex justify-between items-baseline">
+                                                <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                                    Custom formula
+                                                </h4>
+                                                {currentFormulaScore !== null && (
+                                                    <span className="text-xs text-theme-text-secondary">
+                                                        Equipped build scores{' '}
+                                                        {currentFormulaScore.toFixed(2)} (relative)
+                                                    </span>
+                                                )}
+                                            </div>
+                                            {formulaRows.length === 0 ? (
+                                                <p className="text-sm text-theme-text-secondary py-2">
+                                                    No stats yet. Autogear has nothing to optimise
+                                                    for until you add one.
+                                                </p>
+                                            ) : (
+                                                formulaRows.map((row, index) => (
+                                                    <CustomFormulaRowView
+                                                        key={`formula-${index}`}
+                                                        row={row}
+                                                        isEditing={isEditingFormulaRow(index)}
+                                                        shipStats={selectedShipStats}
+                                                        isLoneCoreRow={
+                                                            coreRowCount === 1 &&
+                                                            bonusRowCount === 0
+                                                        }
+                                                        onEdit={() => openForm('formulaRow', index)}
+                                                        onRemove={() => onRemoveFormulaRow(index)}
+                                                    />
+                                                ))
+                                            )}
+                                            {customFormula?.seededFrom && (
+                                                <p className="text-xs text-theme-text-secondary">
+                                                    Copied from{' '}
+                                                    {SHIP_TYPES[customFormula.seededFrom].name}.{' '}
+                                                    {
+                                                        CUSTOM_FORMULA_SEEDS[
+                                                            customFormula.seededFrom
+                                                        ].fidelity
+                                                    }
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                     {priorities.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
@@ -683,7 +771,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             </>
                                         );
                                     })()}
-                                    {statBonuses.length > 0 && (
+                                    {!isCustom && statBonuses.length > 0 && (
                                         <div className="space-y-1">
                                             <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
                                                 Scales
@@ -705,6 +793,27 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                     onMoveDown={() =>
                                                         onMoveStatBonus(index, index + 1)
                                                     }
+                                                    onRemove={() => onRemoveStatBonus(index)}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                    {isCustom && statBonuses.length > 0 && (
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs uppercase tracking-wide text-amber-400">
+                                                Scale — not used in Custom
+                                            </h4>
+                                            {statBonuses.map((bonus, index) => (
+                                                <StatBonusRow
+                                                    key={`inactive-bonus-${index}`}
+                                                    bonus={bonus}
+                                                    isEditing={false}
+                                                    canMoveUp={false}
+                                                    canMoveDown={false}
+                                                    onUpdate={() => undefined}
+                                                    onEdit={() => undefined}
+                                                    onMoveUp={() => undefined}
+                                                    onMoveDown={() => undefined}
                                                     onRemove={() => onRemoveStatBonus(index)}
                                                 />
                                             ))}
@@ -783,22 +892,38 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         Stealth).
                                     </div>
                                 </button>
-                                <button
-                                    type="button"
-                                    className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
-                                    onClick={() => openForm('statBonus')}
-                                >
-                                    <div className="font-semibold">
-                                        Scale{' '}
-                                        <span className="text-xs text-theme-text-secondary font-normal">
-                                            (advanced)
-                                        </span>
-                                    </div>
-                                    <div className="text-xs text-theme-text-secondary">
-                                        Add a secondary stat to the scoring formula — use when a
-                                        skill scales off a non-standard stat (e.g. Defense at 80%).
-                                    </div>
-                                </button>
+                                {isCustom && (
+                                    <button
+                                        type="button"
+                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                        onClick={() => openForm('formulaRow')}
+                                    >
+                                        <div className="font-semibold">Formula stat</div>
+                                        <div className="text-xs text-theme-text-secondary">
+                                            Add a stat to your custom role&apos;s scoring (e.g.
+                                            Attack, as much as possible).
+                                        </div>
+                                    </button>
+                                )}
+                                {!isCustom && (
+                                    <button
+                                        type="button"
+                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                        onClick={() => openForm('statBonus')}
+                                    >
+                                        <div className="font-semibold">
+                                            Scale{' '}
+                                            <span className="text-xs text-theme-text-secondary font-normal">
+                                                (advanced)
+                                            </span>
+                                        </div>
+                                        <div className="text-xs text-theme-text-secondary">
+                                            Add a secondary stat to the scoring formula — use when a
+                                            skill scales off a non-standard stat (e.g. Defense at
+                                            80%).
+                                        </div>
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
@@ -855,7 +980,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ? 'scale'
                                             : tweakView.type === 'fleetBuff'
                                               ? 'buff'
-                                              : 'implant type'}
+                                              : tweakView.type === 'formulaRow'
+                                                ? 'formula stat'
+                                                : 'implant type'}
                                 </span>
                             </div>
                             {tweakView.type === 'priority' && (
@@ -1029,6 +1156,29 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                     onCancel={backToList}
                                 />
                             )}
+                            {tweakView.type === 'formulaRow' && (
+                                <CustomFormulaForm
+                                    onAdd={(row) => {
+                                        onAddFormulaRow(row);
+                                        backToList();
+                                    }}
+                                    editingValue={
+                                        tweakView.editIndex !== null
+                                            ? formulaRows[tweakView.editIndex]
+                                            : undefined
+                                    }
+                                    onSave={(row) => {
+                                        if (
+                                            tweakView.mode === 'form' &&
+                                            tweakView.editIndex !== null
+                                        ) {
+                                            onUpdateFormulaRow(tweakView.editIndex, row);
+                                            backToList();
+                                        }
+                                    }}
+                                    onCancel={backToList}
+                                />
+                            )}
                         </div>
                     )}
                 </div>
@@ -1162,9 +1312,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                         variant="primary"
                         className="w-full"
                         data-testid="autogear-modal-start"
+                        disabled={isCustom && isFormulaEmpty(customFormula)}
                     >
                         Find Optimal Gear
                     </Button>
+                    {isCustom && isFormulaEmpty(customFormula) && (
+                        <p className="text-xs text-amber-400">
+                            Add at least one stat to your custom formula — without one, every gear
+                            combination scores the same.
+                        </p>
+                    )}
                 </div>
             )}
             {tweakView.mode === 'picker' && (

@@ -1352,6 +1352,15 @@ const DocumentationPage: React.FC = () => {
                                                 </li>
                                             </ul>
                                         </div>
+
+                                        <div className="card">
+                                            <h4 className="font-semibold text-primary">Custom</h4>
+                                            <p className="text-theme-text">
+                                                Skip the built-in roles and build your own scoring
+                                                formula from stats you pick, for ships that
+                                                don&apos;t fit any role above.
+                                            </p>
+                                        </div>
                                     </div>
                                     <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
                                         <h4 className="font-semibold text-blue-200 mb-2">
@@ -1465,14 +1474,43 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Stat bonuses need a <strong>role</strong> selected to have
-                                        any effect — with no role, scoring uses stat priorities only
-                                        and ignores bonuses.
+                                        any effect — with no role (Custom strategy), the Scale
+                                        picker entry is replaced by Formula stat, and any Scale rows
+                                        left over from an earlier role are shown separately, marked
+                                        unused.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Once you pick a stat, the form previews the score it adds to
                                         the selected ship before you save it — the same percentage
                                         can be decisive on one role and negligible on another, since
                                         role base scores differ by orders of magnitude.
+                                    </p>
+                                </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold">Custom Formula</h4>
+                                    <p className="text-theme-text">
+                                        Pick <strong>Custom</strong> as the Strategy to build your
+                                        own scoring formula instead of using a built-in role. Add a{' '}
+                                        <strong>Formula stat</strong> tweak for each stat that
+                                        matters, choosing a direction (as much, or as little, as
+                                        possible) and how it counts: <strong>Multiplied</strong>{' '}
+                                        stats have to be good on their own for the build to score
+                                        well, so balanced builds win; <strong>Added</strong> stats
+                                        top the score up without being able to carry it on their
+                                        own.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        While the formula is empty, a <strong>Start from</strong>{' '}
+                                        picker lets you copy a built-in role&apos;s scoring in as
+                                        editable rows — some roles translate exactly, others are
+                                        noted as approximations. The formula card also shows the
+                                        equipped build&apos;s current score; it is only meaningful
+                                        relative to itself, so use it to confirm a change moved the
+                                        score the way you expected, not as an absolute number.
+                                        Autogear can&apos;t run until the formula has at least one
+                                        stat — an empty formula would score every combination the
+                                        same.
                                     </p>
                                 </div>
 
