@@ -7,7 +7,7 @@ import {
 } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
 import { STAT_NORMALIZERS, STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
-import { SetPriority, StatPriority } from '../../../types/autogear';
+import { CustomFormula, SetPriority, StatPriority } from '../../../types/autogear';
 
 const stats: BaseStats = {
     hp: 50000,
@@ -169,18 +169,146 @@ describe('STAT_NORMALIZERS keys match real stat names', () => {
         expect(strays).toEqual([]);
     });
 
-    it('normalizes a defence priority against defence scale, not raw value', () => {
-        // defence and attack share a 5000 normalizer, so a single-priority score
-        // over the same raw value must match across the two stats.
-        const sameValue: BaseStats = { ...stats, attack: 8000, defence: 8000 };
-        const defScore = calculatePriorityScore(sameValue, [{ stat: 'defence', weight: 1 }]);
-        const atkScore = calculatePriorityScore(sameValue, [{ stat: 'attack', weight: 1 }]);
-        expect(defScore).toBeCloseTo(atkScore, 10);
-        expect(defScore).toBeCloseTo(8000 / 5000, 10);
+    it('normalizes an implant candidate against the stat scale, not its raw value', () => {
+        // STAT_NORMALIZERS survives only for implant pre-filtering. defence and attack
+        // share a 5000 normalizer, so the same raw roll must rank equally on either stat.
+        expect(STAT_NORMALIZERS.defence).toBe(STAT_NORMALIZERS.attack);
+        expect(STAT_NORMALIZERS.crit).toBe(25);
+    });
+});
+
+describe('calculatePriorityScore — custom formula branch', () => {
+    it('scores from the formula when no role is given', () => {
+        const formula: CustomFormula = {
+            rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+        };
+        const score = calculatePriorityScore(
+            stats,
+            [],
+            undefined,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        // attack 10000 against the 10000 normalizer.
+        expect(score).toBeCloseTo(1, 10);
     });
 
-    it('normalizes a crit priority against the crit scale', () => {
-        const critScore = calculatePriorityScore(stats, [{ stat: 'crit', weight: 1 }]);
-        expect(critScore).toBeCloseTo(50 / 25, 10);
+    it('scores 0 with no role and no formula', () => {
+        expect(calculatePriorityScore(stats, [], undefined, {}, [], [], false, 0)).toBe(0);
+    });
+
+    it('ignores the formula when a role is given', () => {
+        const formula: CustomFormula = {
+            rows: [{ stat: 'speed', kind: 'core', direction: 'max' }],
+        };
+        const withFormula = calculatePriorityScore(
+            stats,
+            [],
+            'ATTACKER',
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        const without = calculatePriorityScore(stats, [], 'ATTACKER', {}, [], [], false, 0);
+        expect(withFormula).toBeCloseTo(without, 10);
+    });
+
+    it('applies limit penalties on top of a formula score', () => {
+        const formula: CustomFormula = {
+            rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+        };
+        const unmet: StatPriority[] = [{ stat: 'speed', minLimit: 600, weight: 1 }];
+        const penalised = calculatePriorityScore(
+            stats,
+            unmet,
+            undefined,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        const clean = calculatePriorityScore(
+            stats,
+            [],
+            undefined,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        expect(penalised).toBeLessThan(clean);
+    });
+});
+
+describe('stat-priority order is inert', () => {
+    // The reorder arrows come off StatPriorityRow because of this. Both priorities carry
+    // limits the fixture violates, so a scorer that read order would return different
+    // numbers for the two arrangements.
+    const a: StatPriority = { stat: 'speed', minLimit: 600, weight: 1 };
+    const b: StatPriority = { stat: 'crit', minLimit: 90, weight: 1 };
+
+    it('scores the same for a list and its reverse, in role mode', () => {
+        expect(calculatePriorityScore(stats, [a, b], 'ATTACKER')).toBeCloseTo(
+            calculatePriorityScore(stats, [b, a], 'ATTACKER'),
+            10
+        );
+    });
+
+    it('scores the same for a list and its reverse, in custom mode', () => {
+        const formula: CustomFormula = {
+            rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+        };
+        const forward = calculatePriorityScore(
+            stats,
+            [a, b],
+            undefined,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        const reversed = calculatePriorityScore(
+            stats,
+            [b, a],
+            undefined,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            formula
+        );
+        expect(forward).toBeCloseTo(reversed, 10);
+        // Non-vacuity: the penalty must actually bite, or this passes for the wrong reason.
+        expect(forward).toBeLessThan(
+            calculatePriorityScore(stats, [], undefined, {}, [], [], false, 0, undefined, formula)
+        );
+    });
+
+    it('violates the same amount for a list and its reverse', () => {
+        const hardA: StatPriority = { ...a, hardRequirement: true };
+        const hardB: StatPriority = { ...b, hardRequirement: true };
+        const forward = calculateHardViolation(stats, [hardA, hardB]);
+        expect(forward).toBeCloseTo(calculateHardViolation(stats, [hardB, hardA]), 10);
+        expect(forward).toBeGreaterThan(0);
     });
 });

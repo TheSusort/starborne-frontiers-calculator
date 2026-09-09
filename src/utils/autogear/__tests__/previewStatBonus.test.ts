@@ -79,8 +79,8 @@ describe('previewStatBonus', () => {
     });
 
     // calculatePriorityScore only applies stat bonuses inside the ROLE formulas; with no
-    // role it falls through to calculateDefaultScore, which takes no bonuses at all. So a
-    // bonus is genuinely inert in manual mode and the UI must not imply otherwise.
+    // role it scores from the custom formula, which takes no bonuses at all. So a bonus is
+    // genuinely inert in custom mode and the UI must not imply otherwise.
     it('reports applies=false when no role is selected', () => {
         const preview = previewStatBonus(stats, null, bonus);
         expect(preview.applies).toBe(false);

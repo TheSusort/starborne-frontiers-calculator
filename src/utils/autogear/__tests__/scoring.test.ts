@@ -236,12 +236,16 @@ describe('clearScoreCache', () => {
     const noEngineering = () => undefined;
 
     function score(attack: number): number {
+        // A role, not manual mode: the roleless branch scores from a custom formula, which
+        // is empty here and always 0 — that would make every clearScoreCache assertion below
+        // vacuous. ATTACKER's score is monotonic in attack, which is what these tests need.
         return calculateTotalScore(
             ship,
             equipment,
             priorities,
             () => makeWeapon(attack),
-            noEngineering
+            noEngineering,
+            'ATTACKER'
         );
     }
 

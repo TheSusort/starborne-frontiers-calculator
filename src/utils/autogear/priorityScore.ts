@@ -1,6 +1,6 @@
 import { BaseStats } from '../../types/stats';
-import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import { STAT_NORMALIZERS, ShipTypeName, GEAR_SETS } from '../../constants';
+import { CustomFormula, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import { ShipTypeName, GEAR_SETS } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import {
     calculateEffectiveHP,
@@ -9,6 +9,7 @@ import {
     resolveLimitStatValue,
     MULTIPLIER_NORMALIZERS,
 } from './statResolution';
+import { customFormulaScore } from './customFormula';
 
 export {
     calculateDamageReduction,
@@ -251,36 +252,6 @@ function calculateShieldSupporterScore(
     return (hp + additiveBonus) * (1 + multiplierFactor);
 }
 
-// Cache for pre-calculated order multipliers to avoid repeated Math.pow calls
-const orderMultiplierCache = new Map<number, number[]>();
-
-/**
- * Get pre-calculated order multipliers for a given priorities length.
- * Avoids repeated Math.pow calls in calculateDefaultScore.
- */
-function getOrderMultipliers(length: number): number[] {
-    let multipliers = orderMultiplierCache.get(length);
-    if (!multipliers) {
-        multipliers = Array.from({ length }, (_, index) => Math.pow(2, length - index - 1));
-        orderMultiplierCache.set(length, multipliers);
-    }
-    return multipliers;
-}
-
-// Helper function for default scoring mode
-function calculateDefaultScore(stats: BaseStats, priorities: StatPriority[]): number {
-    let totalScore = 0;
-    const orderMultipliers = getOrderMultipliers(priorities.length);
-    priorities.forEach((priority, index) => {
-        const statValue = resolveLimitStatValue(stats, priority.stat);
-        const normalizer = STAT_NORMALIZERS[priority.stat] || 1;
-        const normalizedValue = statValue / normalizer;
-        const orderMultiplier = orderMultipliers[index];
-        totalScore += normalizedValue * (priority.weight || 1) * orderMultiplier;
-    });
-    return totalScore;
-}
-
 /**
  * Sum of normalized violations for all hard-flagged priorities.
  * Returns 0 when all hard requirements are met (combo is "feasible").
@@ -310,7 +281,8 @@ export function calculatePriorityScore(
     statBonuses?: StatBonus[],
     tryToCompleteSets?: boolean,
     arcaneSiegeMultiplier: number = 0,
-    implantSetCount?: Record<string, number>
+    implantSetCount?: Record<string, number>,
+    customFormula?: CustomFormula
 ): number {
     let penalties = 0;
 
@@ -408,8 +380,7 @@ export function calculatePriorityScore(
                 break;
         }
     } else {
-        // Default scoring logic for manual mode
-        baseScore = calculateDefaultScore(stats, priorities);
+        baseScore = customFormulaScore(stats, customFormula);
     }
 
     // Apply penalties as percentage reduction of base score
@@ -472,8 +443,8 @@ export interface StatBonusPreview {
     /** Role score with `otherBonuses` AND this bonus applied. */
     newScore: number;
     /** False when no role is selected. `calculatePriorityScore` applies stat bonuses only
-     *  inside the role formulas — with no role it uses `calculateDefaultScore`, which takes
-     *  none — so a bonus really does nothing in manual mode. */
+     *  inside the role formulas — with no role it scores from the custom formula, which
+     *  takes none — so a bonus really does nothing in custom mode. */
     applies: boolean;
 }
 
