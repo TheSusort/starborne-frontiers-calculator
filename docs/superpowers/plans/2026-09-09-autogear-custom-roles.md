@@ -37,6 +37,7 @@
 **Created:**
 | File | Responsibility |
 |---|---|
+| `src/utils/autogear/statResolution.ts` | The stat maths `customFormula.ts` and `priorityScore.ts` both need: `calculateDamageReduction`, `calculateEffectiveHP`, `calculateDirectDamage`, `calculateCritMultiplier`, `resolveLimitStatValue`, `MULTIPLIER_NORMALIZERS`. Extracted so neither of those two imports the other. |
 | `src/utils/autogear/customFormula.ts` | `customFormulaScore()` and the term maths. Kept out of `priorityScore.ts` (already ~580 lines) so the formula is one holdable unit. |
 | `src/utils/autogear/customFormulaSeeds.ts` | The role → seed formula table and `seedFormulaFromRole()`. |
 | `src/utils/autogear/__tests__/customFormula.test.ts` | Property probes for the scoring family. |
@@ -56,17 +57,22 @@ The pure maths, with no wiring. Nothing calls it yet, so this task cannot regres
 
 **Files:**
 - Modify: `src/types/autogear.ts`
+- Create: `src/utils/autogear/statResolution.ts`
 - Create: `src/utils/autogear/customFormula.ts`
-- Modify: `src/utils/autogear/priorityScore.ts` (export `MULTIPLIER_NORMALIZERS`)
+- Modify: `src/utils/autogear/priorityScore.ts` (move the shared maths out, re-export it)
+- Modify: `src/components/autogear/AutogearSettings.tsx` (prop declarations only)
+- Modify: `src/components/autogear/AutogearSettingsModal.tsx` (prop declarations only)
 - Test: `src/utils/autogear/__tests__/customFormula.test.ts`
 
 **Interfaces:**
-- Consumes: `resolveLimitStatValue(stats, stat)` and the module-private `MULTIPLIER_NORMALIZERS` from `src/utils/autogear/priorityScore.ts`; `LimitableStat` from `src/types/stats.ts`; `ShipTypeName` from `src/constants/shipTypes.ts`.
+- Consumes: `LimitableStat` from `src/types/stats.ts`; `ShipTypeName` from `src/constants/shipTypes.ts`.
 - Produces:
   - `CustomFormulaRow`, `CustomFormula`, `FormulaRowKind`, `FormulaDirection`, `CoreImportance` in `src/types/autogear.ts`
+  - `src/utils/autogear/statResolution.ts` exporting `calculateDamageReduction`, `calculateEffectiveHP`, `calculateDirectDamage`, `calculateCritMultiplier`, `resolveLimitStatValue`, `MULTIPLIER_NORMALIZERS` — all re-exported from `priorityScore.ts` so no existing importer changes
   - `customFormulaScore(stats: BaseStats, formula: CustomFormula | undefined): number` in `src/utils/autogear/customFormula.ts`
   - `formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number` (exported for tests and the UI's zero-core note)
   - `isFormulaEmpty(formula: CustomFormula | undefined): boolean`
+  - `AutogearSettingsProps` and the modal's forwarded props declare `customFormula`, `onAddFormulaRow`, `onUpdateFormulaRow`, `onRemoveFormulaRow`, `onSeedFormula` — declared here, consumed in Task 8, so Task 6's test-props factory types against the real interface with no cast
 
 - [ ] **Step 1: Add the types**
 
@@ -98,9 +104,49 @@ export interface CustomFormula {
 
 Add `customFormula?: CustomFormula;` to `SavedAutogearConfig`, below `fleetBuffs?`. It must be optional — every persisted config predates it and reads back `undefined`.
 
-- [ ] **Step 2: Export the normalizers**
+- [ ] **Step 1b: Declare the settings props**
 
-In `src/utils/autogear/priorityScore.ts`, change `const MULTIPLIER_NORMALIZERS` (around line 122) to `export const MULTIPLIER_NORMALIZERS`. Leave its doc comment exactly as it is — it already explains that entries sit at each stat's geared value and that the type must stay `Partial<Record<LimitableStat, …>>`.
+`AutogearSettingsProps` in `src/components/autogear/AutogearSettings.tsx` gains five members now, so Task 6's test-props factory types against the real interface. Nothing reads them until Task 8; TypeScript is satisfied because they are declared, and the component simply does not destructure them yet.
+
+```ts
+    customFormula: CustomFormula | undefined;
+    onAddFormulaRow: (row: CustomFormulaRow) => void;
+    onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
+    onRemoveFormulaRow: (index: number) => void;
+    onSeedFormula: (role: ShipTypeName) => void;
+```
+
+Add the same five to `AutogearSettingsModal.tsx`'s props and forward them through to `AutogearSettings`, and pass them at the two `AutogearPage.tsx` call sites as `customFormula={undefined}` plus `() => undefined` for each callback — placeholders Task 8 replaces with the real handlers. Import `CustomFormula` and `CustomFormulaRow` as types in all three files.
+
+- [ ] **Step 2: Extract the shared stat maths**
+
+`customFormula.ts` needs `resolveLimitStatValue` and `MULTIPLIER_NORMALIZERS`, and `priorityScore.ts` needs `customFormulaScore` (Task 2). Importing both ways is a cycle, which `eslint.config.js:94` reports as a warning. Break it by extracting what both need.
+
+Create `src/utils/autogear/statResolution.ts` and **move** these into it from `priorityScore.ts`, carrying each one's existing doc comment across verbatim:
+
+- `calculateDamageReduction`
+- `calculateEffectiveHP`
+- `calculateCritMultiplier`
+- `calculateDirectDamage` (and the `calculateDPS` helper it calls, plus `DEFENSE_PENETRATION_LOOKUP` and `DEFAULT_DEFENSE` — `priorityScore.ts` still needs `calculateDPS`, so export it)
+- `resolveLimitStatValue`
+- `MULTIPLIER_NORMALIZERS` (now exported)
+
+Then in `priorityScore.ts`, import them from `./statResolution` and re-export the public ones so every existing importer is untouched:
+
+```ts
+export {
+    calculateDamageReduction,
+    calculateEffectiveHP,
+    calculateCritMultiplier,
+    calculateDirectDamage,
+    resolveLimitStatValue,
+    MULTIPLIER_NORMALIZERS,
+} from './statResolution';
+```
+
+Run `grep -rn "from '.*priorityScore'" src/ | grep -v __tests__` first and confirm every name those files import is either still defined in `priorityScore.ts` or in that re-export list. `resolveLimitStatValue` in particular is imported from `priorityScore` by `AutogearPage.tsx`, `GeneticStrategy.ts` and `scoring.ts` — the re-export is what keeps those working.
+
+Verify with `npx tsc --noEmit` before writing any new code: a missing re-export shows up here, not in a test.
 
 - [ ] **Step 3: Write the failing tests**
 
@@ -368,7 +414,7 @@ Create `src/utils/autogear/customFormula.ts`:
 ```ts
 import type { BaseStats } from '../../types/stats';
 import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
-import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './priorityScore';
+import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution';
 
 /**
  * One row's contribution, normalized so rows on different stats are comparable.
@@ -409,12 +455,10 @@ export function customFormulaScore(
 
     let product = 1;
     let bonusSum = 0;
-    let hasCore = false;
 
     for (const row of formula!.rows) {
         const term = formulaRowTerm(stats, row);
         if (row.kind === 'core') {
-            hasCore = true;
             const importance = row.importance ?? 1;
             product *= importance === 1 ? term : Math.pow(term, importance);
         } else {
@@ -422,12 +466,11 @@ export function customFormulaScore(
         }
     }
 
-    const bonusFactor = 1 + bonusSum;
-    return hasCore ? product * bonusFactor : bonusFactor;
+    return product * (1 + bonusSum);
 }
 ```
 
-Note the `hasCore` guard: a bonus-only formula must return `1 + Σ`, and `product` is already 1 in that case, so the branch is arithmetically redundant — keep it anyway, because it makes "the empty product is 1" explicit at the one place a reader looks for it.
+`product` starts at 1, so a bonus-only formula returns `1 + Σ` with no special case. The `scores a bonus-only formula off the empty product` test is what holds that — a tripwire rather than a branch asserting it.
 
 - [ ] **Step 6: Run the tests and confirm they pass**
 
@@ -1421,6 +1464,10 @@ import { vi } from 'vitest';
 import { AutogearAlgorithm } from '../../../utils/autogear/AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { BaseStats } from '../../../types/stats';
+import type { ComponentProps } from 'react';
+import type { AutogearSettings } from '../AutogearSettings';
+
+type SettingsProps = ComponentProps<typeof AutogearSettings>;
 
 export const testShip: Ship = {
     id: 'ship-1',
@@ -1456,10 +1503,10 @@ export const testShipStats: BaseStats = { ...testShip.baseStats };
  * Every required member of AutogearSettingsProps, callbacks as spies. Spread overrides
  * on top for the props a given test actually cares about.
  *
- * If AutogearSettings gains a required prop, `tsc --noEmit` fails here rather than in
- * each test — which is the point of routing them all through one factory.
+ * The `SettingsProps` return type is what makes this worth having: if AutogearSettings
+ * gains a required prop, `tsc --noEmit` fails here once rather than in every test.
  */
-export const makeSettingsProps = (overrides: Record<string, unknown> = {}) => ({
+export const makeSettingsProps = (overrides: Partial<SettingsProps> = {}): SettingsProps => ({
     selectedShip: testShip,
     selectedShipStats: testShipStats,
     selectedShipRole: null,
@@ -1513,9 +1560,9 @@ export const makeSettingsProps = (overrides: Record<string, unknown> = {}) => ({
 });
 ```
 
-`customFormula` and the four formula callbacks are in the factory now but only reach `AutogearSettingsProps` in Task 8. Until then TypeScript ignores the extra members because the factory's return type is inferred, not annotated — leave it un-annotated for exactly that reason.
+`customFormula` and the four formula callbacks are already on `AutogearSettingsProps` from Task 1, so the annotated return type checks against the real interface.
 
-Note the factory omits `onMovePriority`: Task 9 deletes that prop. If the implementer is running tasks in order, add `onMovePriority: vi.fn(),` here now and delete it in Task 9.
+The factory as written omits `onMovePriority`, which Task 9 deletes. Task 9 has not run yet, so add `onMovePriority: vi.fn(),` here and delete it in Task 9 — `tsc` will tell you which state you are in.
 
 - [ ] **Step 1c: Write the page-mapping test**
 
@@ -1538,7 +1585,7 @@ describe('AutogearSettings role selection', () => {
         const onRoleSelect = vi.fn();
         renderWithProviders(
             <AutogearSettings
-                {...(makeSettingsProps({ selectedShipRole: 'ATTACKER', onRoleSelect }) as never)}
+                {...makeSettingsProps({ selectedShipRole: 'ATTACKER', onRoleSelect })}
             />
         );
         await userEvent.click(screen.getByText('Attacker'));
@@ -1548,7 +1595,7 @@ describe('AutogearSettings role selection', () => {
 });
 ```
 
-The `as never` cast on the spread is deliberate: the factory is un-annotated so it can carry Task 8's props ahead of time, and the cast keeps `tsc` quiet without weakening the component's own prop types. Remove the cast once Task 8 has added the four formula props to the interface.
+The spread needs no cast: Task 1 declared the formula props, so `makeSettingsProps` returns the component's real prop type.
 
 - [ ] **Step 2: Run and confirm failure**
 
@@ -2038,8 +2085,8 @@ vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => 
 vi.mock('../CommunityRecommendations', () => ({ CommunityRecommendations: () => null }));
 vi.mock('../../ship/ShipSelector', () => ({ ShipSelector: () => null }));
 
-const renderPanel = (overrides: Record<string, unknown> = {}) =>
-    render(<AutogearSettings {...(makeSettingsProps(overrides) as never)} />);
+const renderPanel = (overrides: Parameters<typeof makeSettingsProps>[0] = {}) =>
+    render(<AutogearSettings {...makeSettingsProps(overrides)} />);
 
 const attackFormula: CustomFormula = {
     rows: [{ stat: 'attack', kind: 'core', direction: 'max', importance: 1 }],
@@ -2140,15 +2187,7 @@ Widen the `TweakView` form union to include the new type:
       }
 ```
 
-Add the new props to `AutogearSettingsProps`:
-
-```ts
-    customFormula: CustomFormula | undefined;
-    onAddFormulaRow: (row: CustomFormulaRow) => void;
-    onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
-    onRemoveFormulaRow: (index: number) => void;
-    onSeedFormula: (role: ShipTypeName) => void;
-```
+The five formula props are already declared on `AutogearSettingsProps` from Task 1 — destructure them in the component body now (`customFormula`, `onAddFormulaRow`, `onUpdateFormulaRow`, `onRemoveFormulaRow`, `onSeedFormula`), and replace the placeholder values `AutogearPage.tsx` passes with the real handlers in Step 7.
 
 Derive the mode near the other derived values, above the `return`:
 
@@ -2473,7 +2512,20 @@ MSG
 Append to `src/components/autogear/__tests__/customModePanel.test.tsx`:
 
 ```tsx
+import type { ComponentProps } from 'react';
 import { AutogearConfigList } from '../AutogearConfigList';
+
+type ConfigListProps = ComponentProps<typeof AutogearConfigList>;
+
+// Read AutogearConfigListProps at the top of AutogearConfigList.tsx and fill in every
+// required member here. The annotation makes tsc name anything missing.
+const configListProps = (overrides: Partial<ConfigListProps>): ConfigListProps => ({
+    shipRole: null,
+    statPriorities: [],
+    setPriorities: [],
+    statBonuses: [],
+    ...overrides,
+});
 
 describe('stat priorities carry no reorder control', () => {
     const two = [
@@ -2498,36 +2550,20 @@ describe('stat priorities carry no reorder control', () => {
 
 describe('AutogearConfigList labels a roleless config', () => {
     it('reads Custom rather than rendering nothing', () => {
-        render(
-            <AutogearConfigList
-                {...({
-                    shipRole: null,
-                    statPriorities: [],
-                    setPriorities: [],
-                    statBonuses: [],
-                } as never)}
-            />
-        );
+        render(<AutogearConfigList {...configListProps({ shipRole: null })} />);
         expect(screen.getByText('Custom')).toBeInTheDocument();
     });
 
     it('reads the role name when there is one', () => {
-        render(
-            <AutogearConfigList
-                {...({
-                    shipRole: 'ATTACKER',
-                    statPriorities: [],
-                    setPriorities: [],
-                    statBonuses: [],
-                } as never)}
-            />
-        );
+        // Non-vacuity: proves the row renders a role at all, so the Custom assertion
+        // above is about the null case and not about an element that never appears.
+        render(<AutogearConfigList {...configListProps({ shipRole: 'ATTACKER' })} />);
         expect(screen.getByText('Attacker')).toBeInTheDocument();
     });
 });
 ```
 
-Read `AutogearConfigListProps` at the top of `src/components/autogear/AutogearConfigList.tsx` and supply every required prop in both renders — the four above are a starting point, not the full list.
+`configListProps` is annotated, so `tsc --noEmit` names any required prop the four defaults above are missing. Add what it names — the four are a starting point, not the full list.
 
 - [ ] **Step 2: Run and confirm failure**
 
