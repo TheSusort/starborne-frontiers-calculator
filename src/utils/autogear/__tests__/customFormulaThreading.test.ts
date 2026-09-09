@@ -70,9 +70,8 @@ describe('calculateTotalScore threads the custom formula', () => {
     });
 
     it('gives two different formulas two different scores without an intervening clear', () => {
-        // The memo cache key carries shipRole but not the formula. Today only
-        // clearScoreCache() at the start of every run keeps that from being a live bug;
-        // this test pins the guarantee instead of leaving it to a comment.
+        // The memo cache key includes the formula, so two formulas scored on the
+        // same ship and gear never share a cache entry.
         const a = score(attackFormula);
         const b = score(speedFormula);
         expect(a).not.toBeCloseTo(b, 6);
