@@ -3,7 +3,12 @@ import { join } from 'path';
 import { describe, expect, it } from 'vitest';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import type { Stat } from '../../../types/stats';
-import { decodeGearStats, encodeGearStats } from '../statsCodec';
+import {
+    decodeGearStats,
+    encodeGearStats,
+    tryDecodeGearStats,
+    tryEncodeGearStats,
+} from '../statsCodec';
 
 const flat = (name: string, value: number): Stat => ({ name, value, type: 'flat' }) as Stat;
 const pct = (name: string, value: number): Stat => ({ name, value, type: 'percentage' }) as Stat;
@@ -153,6 +158,55 @@ describe('decodeGearStats', () => {
 
     it('parses a multi-digit value', () => {
         expect(decodeGearStats(['h1234']).mainStat).toEqual(flat('hp', 1234));
+    });
+});
+
+describe('non-finite values', () => {
+    // The module contract is that encode never emits a cell decode would reject.
+    // `${NaN}` would produce "aNaN", which decode throws on, so the value is
+    // refused at the write instead.
+    it.each([[NaN], [Infinity], [-Infinity]])('refuses a value of %s at encode time', (value) => {
+        expect(() => encodeGearStats({ mainStat: flat('attack', value), subStats: [] })).toThrow(
+            /value/i
+        );
+    });
+
+    it('refuses a non-finite substat too', () => {
+        expect(() =>
+            encodeGearStats({ mainStat: flat('attack', 60), subStats: [flat('speed', NaN)] })
+        ).toThrow(/value/i);
+    });
+});
+
+describe('the try* wrappers', () => {
+    // Read and write paths both cross boundaries where one bad row must not
+    // abort the whole operation: a leaderboard covering every user, and a
+    // 48k-row inventory sync that has already cleared calibration.
+    it('tryEncodeGearStats returns the cells on success', () => {
+        expect(tryEncodeGearStats({ mainStat: flat('attack', 60), subStats: [] })).toEqual(['a60']);
+    });
+
+    it('tryEncodeGearStats returns null instead of throwing', () => {
+        expect(tryEncodeGearStats({ mainStat: flat('crit', 5), subStats: [] })).toBeNull();
+        expect(tryEncodeGearStats({ mainStat: flat('attack', NaN), subStats: [] })).toBeNull();
+        expect(tryEncodeGearStats({ mainStat: pct('effectiveHp', 5), subStats: [] })).toBeNull();
+    });
+
+    it('tryDecodeGearStats returns the stats on success', () => {
+        expect(tryDecodeGearStats(['a60', 'C6'])).toEqual({
+            mainStat: flat('attack', 60),
+            subStats: [pct('crit', 6)],
+        });
+    });
+
+    it('tryDecodeGearStats returns null instead of throwing', () => {
+        expect(tryDecodeGearStats(['q60'])).toBeNull();
+        expect(tryDecodeGearStats(['aabc'])).toBeNull();
+    });
+
+    it('tryDecodeGearStats still reads an empty piece rather than failing it', () => {
+        expect(tryDecodeGearStats(null)).toEqual({ mainStat: null, subStats: [] });
+        expect(tryDecodeGearStats([''])).toEqual({ mainStat: null, subStats: [] });
     });
 });
 

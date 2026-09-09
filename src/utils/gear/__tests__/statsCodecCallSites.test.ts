@@ -67,7 +67,7 @@ describe('inventory_items.stats has a single codec', () => {
             // on a bare `.stats`, which also names engineering stats, refit
             // stats and gear-set stats in files that never touch this column.
             const readsColumn = /inventory_items\??\.stats\b/.test(source);
-            const usesCodec = /(encode|decode)GearStats/.test(source);
+            const usesCodec = /(encode|decode)GearStats/i.test(source);
             return readsColumn && !usesCodec;
         });
         expect(unrouted).toEqual([]);
@@ -75,7 +75,7 @@ describe('inventory_items.stats has a single codec', () => {
 
     it('names the files that are routed, so removing one is a visible diff', () => {
         const routed = sourceFiles()
-            .filter((file) => /(encode|decode)GearStats/.test(read(file)))
+            .filter((file) => /(encode|decode)GearStats/i.test(read(file)))
             .sort();
         expect(routed).toEqual([
             'contexts/InventoryProvider.tsx',

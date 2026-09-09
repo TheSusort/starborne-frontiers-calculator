@@ -4,7 +4,7 @@ import type { ShipTypeName } from '../constants/shipTypes';
 import type { AffinityName, Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
-import { decodeGearStats } from '../utils/gear/statsCodec';
+import { tryDecodeGearStats } from '../utils/gear/statsCodec';
 
 export interface UserProfile {
     id: string;
@@ -458,7 +458,11 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         const shipGearMap = new Map<string, InternalGearPiece>();
         data.ship_equipment?.forEach((eq) => {
             if (eq.inventory_items) {
-                const statsData = decodeGearStats(eq.inventory_items.stats);
+                const statsData = tryDecodeGearStats(eq.inventory_items.stats);
+                // Skip the one piece rather than reject the whole ranking: this
+                // spans every user's gear, and the caller clears all rankings on
+                // a throw.
+                if (!statsData) return;
 
                 const gearPiece = {
                     id: eq.inventory_items.id,
@@ -477,7 +481,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         const shipImplantMap = new Map<string, InternalImplantPiece>();
         data.ship_implants?.forEach((implant) => {
             if (implant.inventory_items) {
-                const statsData = decodeGearStats(implant.inventory_items.stats);
+                const statsData = tryDecodeGearStats(implant.inventory_items.stats);
+                if (!statsData) return;
 
                 const implantPiece = {
                     id: implant.inventory_items.id,
@@ -533,8 +538,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             implants:
                 data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
                     if (implant.inventory_items) {
-                        const statsData = decodeGearStats(implant.inventory_items.stats);
-                        if (statsData.mainStat || statsData.subStats.length > 0) {
+                        const statsData = tryDecodeGearStats(implant.inventory_items.stats);
+                        if (statsData && (statsData.mainStat || statsData.subStats.length > 0)) {
                             // Store implant ID as string (matches Ship type)
                             acc[implant.slot] = implant.inventory_items.id;
                         }

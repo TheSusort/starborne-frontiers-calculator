@@ -14,7 +14,7 @@ import { TrophyIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
 import { Select } from '../../components/ui/Select';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { decodeGearStats } from '../../utils/gear/statsCodec';
+import { tryDecodeGearStats } from '../../utils/gear/statsCodec';
 
 interface LeaderboardEntry {
     ship: Ship & { _gearMap?: Map<string, any>; _implantMap?: Map<string, any> };
@@ -94,7 +94,12 @@ export const LeaderboardPage: React.FC = () => {
                     data.ship_equipment.forEach((eq: any) => {
                         if (eq.inventory_items) {
                             // Read from stats JSONB field
-                            const statsData = decodeGearStats(eq.inventory_items.stats);
+                            const statsData = tryDecodeGearStats(eq.inventory_items.stats);
+                            // Skip the one piece rather than the whole page. This
+                            // query is not scoped to one user, and the catch below
+                            // sets `error` for everyone, so one unreadable row
+                            // would hide the leaderboard from every viewer.
+                            if (!statsData) return;
 
                             const gearPiece = {
                                 id: eq.inventory_items.id,
@@ -115,7 +120,8 @@ export const LeaderboardPage: React.FC = () => {
                     data.ship_implants.forEach((implant: any) => {
                         if (implant.inventory_items) {
                             // Read from stats JSONB field
-                            const statsData = decodeGearStats(implant.inventory_items.stats);
+                            const statsData = tryDecodeGearStats(implant.inventory_items.stats);
+                            if (!statsData) return;
 
                             const implantPiece = {
                                 id: implant.inventory_items.id,
@@ -169,10 +175,13 @@ export const LeaderboardPage: React.FC = () => {
                         implants: data.ship_implants.reduce(
                             (acc: Record<string, any>, implant: any) => {
                                 if (implant.inventory_items) {
-                                    const statsData = decodeGearStats(
+                                    const statsData = tryDecodeGearStats(
                                         implant.inventory_items.stats
                                     );
-                                    if (statsData.mainStat || statsData.subStats.length) {
+                                    if (
+                                        statsData &&
+                                        (statsData.mainStat || statsData.subStats.length)
+                                    ) {
                                         acc[implant.slot] = {
                                             id: implant.inventory_items.id,
                                             description: implant.description,

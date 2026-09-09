@@ -84,6 +84,14 @@ const encodeStat = (stat: Stat): string => {
     // defaulted it to flat, so older local data can arrive without one. A
     // flexible stat keeps that default; a percentage-only stat takes the only
     // type it can legally have.
+    // `${NaN}` and `${Infinity}` would write the cells "aNaN" and "aInfinity",
+    // which decode rejects — breaking this module's contract that encode never
+    // emits a cell decode cannot read.
+    if (!Number.isFinite(stat.value)) {
+        throw new Error(
+            `Cannot encode gear stat: "${stat.name}" has a non-finite value ${String(stat.value)}`
+        );
+    }
     const percentage = stat.type === 'percentage' || percentageOnly;
     return `${percentage ? symbol.toUpperCase() : symbol}${stat.value}`;
 };
@@ -147,4 +155,36 @@ export const decodeGearStats = (wire: unknown): GearStats => {
         };
     }
     return { mainStat: null, subStats: [] };
+};
+
+/**
+ * `encodeGearStats`/`decodeGearStats` throw, because a stat they cannot
+ * represent or read is corruption and should be loud. These wrappers are for
+ * the boundaries where ONE bad piece must not take the whole operation down:
+ *
+ * - a leaderboard or public profile spans every user's gear, so one unreadable
+ *   row would otherwise hide the page from everyone
+ * - an inventory sync writes tens of thousands of rows after already clearing
+ *   `calibration_ship_id`, so throwing midway loses the calibration AND skips
+ *   the re-upload
+ *
+ * Single-piece actions (adding or editing one gear piece) should keep using the
+ * throwing pair: there the failure belongs in front of the user who caused it.
+ */
+export const tryEncodeGearStats = (stats: GearStats): string[] | null => {
+    try {
+        return encodeGearStats(stats);
+    } catch (error) {
+        console.error('Skipping gear piece with unencodable stats:', error);
+        return null;
+    }
+};
+
+export const tryDecodeGearStats = (wire: unknown): GearStats | null => {
+    try {
+        return decodeGearStats(wire);
+    } catch (error) {
+        console.error('Skipping gear piece with unreadable stats:', error);
+        return null;
+    }
 };

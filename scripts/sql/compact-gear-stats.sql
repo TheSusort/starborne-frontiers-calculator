@@ -241,6 +241,23 @@ SELECT pg_relation_size('inventory_items') AS bytes_after;
 
 
 -- ============================================================
+-- 5b. Change the column default BEFORE migrating rows
+-- ============================================================
+-- The column defaults to the legacy object:
+--   stats jsonb NOT NULL DEFAULT '{"mainStat": null, "subStats": []}'::jsonb
+-- so any INSERT that omits `stats` writes a legacy row — including after the
+-- step-4 census reaches zero, which would then make the census lie and break
+-- the contract step that drops the legacy decode branch.
+--
+-- '[""]' is what `encodeGearStats({mainStat: null, subStats: []})` produces:
+-- slot 0 present and empty. Kept in step 5b rather than at the end so no row
+-- inserted during the migration lands in the old shape.
+
+ALTER TABLE inventory_items
+  ALTER COLUMN stats SET DEFAULT '[""]'::jsonb;
+
+
+-- ============================================================
 -- 6. Batch migration
 -- ============================================================
 -- Bounded so no single statement holds a long lock on a hot table. Re-run until

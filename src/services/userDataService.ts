@@ -8,7 +8,7 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
 import { AutogearTeam } from '../types/autogearTeam';
-import { encodeGearStats } from '../utils/gear/statsCodec';
+import { tryEncodeGearStats } from '../utils/gear/statsCodec';
 
 const BATCH_SIZE = 500;
 const CHILD_BATCH_SIZE = 50;
@@ -265,19 +265,28 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 
         for (let i = 0; i < validInventory.length; i += BATCH_SIZE) {
             const batch = validInventory.slice(i, i + BATCH_SIZE);
-            const inventoryItems = batch.map((item) => ({
-                id: item.id,
-                user_id: userId,
-                slot: item.slot,
-                level: item.level,
-                stars: item.stars,
-                rarity: item.rarity,
-                set_bonus: item.setBonus,
-                stats: encodeGearStats({
+            // Per item, not per batch: calibration_ship_id was cleared above, so
+            // throwing here would lose the calibration AND skip the re-upload
+            // that restores it. One unencodable piece is dropped instead.
+            const inventoryItems = batch.flatMap((item) => {
+                const stats = tryEncodeGearStats({
                     mainStat: item.mainStat,
                     subStats: item.subStats || [],
-                }),
-            }));
+                });
+                if (!stats) return [];
+                return [
+                    {
+                        id: item.id,
+                        user_id: userId,
+                        slot: item.slot,
+                        level: item.level,
+                        stars: item.stars,
+                        rarity: item.rarity,
+                        set_bonus: item.setBonus,
+                        stats,
+                    },
+                ];
+            });
 
             const { error } = await supabase
                 .from('inventory_items')

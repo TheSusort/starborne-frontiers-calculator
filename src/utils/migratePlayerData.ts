@@ -9,7 +9,7 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { WishlistEntry } from '../types/wishlist';
 import { AutogearTeam } from '../types/autogearTeam';
-import { encodeGearStats } from './gear/statsCodec';
+import { tryEncodeGearStats } from './gear/statsCodec';
 
 interface MigrationResult {
     ships: Ship[];
@@ -332,19 +332,28 @@ export const syncMigratedDataToSupabase = async (
                     // Prepare batch of inventory items with stats JSONB
                     // Note: calibration_ship_id is intentionally omitted to avoid FK
                     // issues during upsert. It's set separately in Step 2b after ships exist.
-                    const inventoryItems = batch.map((item) => ({
-                        id: item.id,
-                        user_id: userId,
-                        slot: item.slot,
-                        level: item.level,
-                        stars: item.stars,
-                        rarity: item.rarity,
-                        set_bonus: item.setBonus,
-                        stats: encodeGearStats({
+                    // Per item, not per batch: this runs inside the outer try, so
+                    // one unencodable piece would abort the whole migration and
+                    // every step after it.
+                    const inventoryItems = batch.flatMap((item) => {
+                        const stats = tryEncodeGearStats({
                             mainStat: item.mainStat,
                             subStats: item.subStats || [],
-                        }),
-                    }));
+                        });
+                        if (!stats) return [];
+                        return [
+                            {
+                                id: item.id,
+                                user_id: userId,
+                                slot: item.slot,
+                                level: item.level,
+                                stars: item.stars,
+                                rarity: item.rarity,
+                                set_bonus: item.setBonus,
+                                stats,
+                            },
+                        ];
+                    });
 
                     // Upsert inventory items
                     const { error: inventoryError } = await supabase
