@@ -3316,11 +3316,15 @@ const DocumentationPage: React.FC = () => {
                                         over the target&apos;s Security, the more reliably its
                                         debuffs stick (and high enough Security can shrug them off
                                         entirely). The exact landing chance is (enemy Hacking −
-                                        target Security), clamped to a 0–100% range. Defaults: a
-                                        freshly added manual enemy starts at 200 Hacking (picking an
-                                        enemy ship fills Hacking from the ship&apos;s stats), and
-                                        the target&apos;s Security defaults to 0 — so debuffs land
-                                        at full chance until you raise the target&apos;s Security.
+                                        target Security), clamped to a 0–100% range. Affinity moves
+                                        the Hacking side of that comparison before it is made: an
+                                        enemy at an affinity advantage over the heal target rolls
+                                        with 25% more Hacking, and one at a disadvantage with 25%
+                                        less. Defaults: a freshly added manual enemy starts at 200
+                                        Hacking (picking an enemy ship fills Hacking from the
+                                        ship&apos;s stats), and the target&apos;s Security defaults
+                                        to 0 — so debuffs land at full chance until you raise the
+                                        target&apos;s Security.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">

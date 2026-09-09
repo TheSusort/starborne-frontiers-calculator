@@ -61,7 +61,8 @@ export interface EnemyAttackerInput {
         hp?: number;
         /** Enemy's own security — resists the HEALER's outbound debuffs. Absent → the pre-SP-3
          *  fixed 100, which is also what the engine's LANDING path would have used on its own:
-         *  `debuffLandingChance` reads `defender.stats.security ?? 100` (effectiveStats.ts:137).
+         *  `liveDebuffLandingChance` (combat/effectiveStats.ts) reads `defender.stats.security ??
+         *  100`.
          *  (`effectiveStatsOf`'s `?? 0` exists but has no landing reader.) So the default is a
          *  belt-and-braces no-op here, kept explicit so the sink's numbers all live in one place —
          *  unlike `hp`/`defence` above, whose engine defaults genuinely ARE 0

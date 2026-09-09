@@ -421,7 +421,9 @@ const BasicsPage: React.FC = () => {
                                 Debuffs are not guaranteed. Whether one lands is decided by the
                                 attacker&apos;s <strong>hacking</strong> against the target&apos;s{' '}
                                 <strong>security</strong>: every point of hacking above the
-                                target&apos;s security is one percent chance to land.
+                                target&apos;s security is one percent chance to land. Affinity
+                                shifts your hacking by 25% either way before the comparison — see
+                                Affinities above.
                             </p>
                             <HackingEquation />
                             <p className="text-sm text-theme-text-secondary">

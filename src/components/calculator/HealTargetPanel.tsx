@@ -124,7 +124,7 @@ export const HealTargetPanel: React.FC<HealTargetPanelProps> = ({
                                 />
                                 <Input
                                     label="Target Security"
-                                    helpLabel="Higher security reduces the chance enemy debuffs land on the heal target. Landing chance = (enemy hacking − security), clamped to 0–100%."
+                                    helpLabel="Higher security reduces the chance enemy debuffs land on the heal target. Landing chance = (enemy hacking − security), clamped to 0–100%. Affinity shifts the hacking side ±25% before the comparison."
                                     type="number"
                                     min="0"
                                     value={target.security}
