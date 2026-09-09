@@ -35,8 +35,8 @@ export const communityBuildSummary = (build: SharedAutogearBuild): string => {
         );
     }
 
-    // Only limit-carrying priorities say anything in one line; an unlimited
-    // priority's strength is its position in the list, which a summary can't show.
+    // Only limit-carrying priorities say anything in one line: a priority with neither
+    // bound names a stat and no target, which a summary has nothing to render.
     const limits = build.statPriorities
         .filter((priority) => priority.minLimit !== undefined || priority.maxLimit !== undefined)
         .map((priority) => {
