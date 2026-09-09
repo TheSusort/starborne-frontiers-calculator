@@ -73,6 +73,16 @@ describe('Custom mode panel', () => {
         });
         expect(screen.getByText(/not used in custom/i)).toBeInTheDocument();
     });
+
+    it('offers only Remove on an inactive Scale row, since editing it has no effect', () => {
+        renderPanel({
+            selectedShipRole: null,
+            customFormula: attackFormula,
+            statBonuses: [{ stat: 'defence', percentage: 80, mode: 'additive' }],
+        });
+        expect(screen.queryByRole('button', { name: 'Edit bonus' })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Remove bonus' })).toBeInTheDocument();
+    });
 });
 
 describe('Custom mode blocks a run it cannot score', () => {

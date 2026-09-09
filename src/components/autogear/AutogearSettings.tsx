@@ -810,6 +810,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                     isEditing={false}
                                                     canMoveUp={false}
                                                     canMoveDown={false}
+                                                    readOnly
                                                     onUpdate={() => undefined}
                                                     onEdit={() => undefined}
                                                     onMoveUp={() => undefined}

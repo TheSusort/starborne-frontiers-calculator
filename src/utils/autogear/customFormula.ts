@@ -1,5 +1,6 @@
 import type { BaseStats } from '../../types/stats';
 import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { ShipTypeName } from '../../constants/shipTypes';
 import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution';
 
 /**
@@ -22,6 +23,36 @@ export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number 
 
 export function isFormulaEmpty(formula: CustomFormula | undefined): boolean {
     return !formula || formula.rows.length === 0;
+}
+
+/** The two config fields that decide whether a ship can be scored at all. */
+export interface ScorabilityConfig {
+    shipRole: ShipTypeName | null;
+    customFormula?: CustomFormula;
+}
+
+/**
+ * Splits ships into those a run can score and those it cannot. A ship is unscoreable
+ * only in Custom mode (`shipRole` null) with an empty formula — every gear combination
+ * would score 0 and tie, so the optimizer would return arbitrary gear (`isFormulaEmpty`).
+ */
+export function partitionScoreableShips<T extends { id: string }>(
+    ships: T[],
+    getConfig: (shipId: string) => ScorabilityConfig
+): { scoreable: T[]; unscoreable: T[] } {
+    const scoreable: T[] = [];
+    const unscoreable: T[] = [];
+
+    for (const ship of ships) {
+        const config = getConfig(ship.id);
+        if (!config.shipRole && isFormulaEmpty(config.customFormula)) {
+            unscoreable.push(ship);
+        } else {
+            scoreable.push(ship);
+        }
+    }
+
+    return { scoreable, unscoreable };
 }
 
 /**

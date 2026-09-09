@@ -13,6 +13,7 @@ import {
 } from '../../types/autogear';
 import type { CustomFormula } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
+import { partitionScoreableShips } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
@@ -490,8 +491,23 @@ export const AutogearPage: React.FC = () => {
 
     const handleAutogear = async () => {
         // Filter out null ships and get valid ships
-        const validShips = selectedShips.filter((ship): ship is Ship => ship !== null);
-        if (validShips.length === 0) return;
+        const presentShips = selectedShips.filter((ship): ship is Ship => ship !== null);
+        if (presentShips.length === 0) return;
+
+        // A Custom-mode ship with no formula rows scores every gear combination 0,
+        // which ties the whole search and would hand back arbitrary gear
+        // (`isFormulaEmpty`). Skip those ships rather than let the batch run over
+        // them, and tell the user which ones were left out.
+        const { scoreable, unscoreable } = partitionScoreableShips(presentShips, getShipConfig);
+        if (unscoreable.length > 0) {
+            addNotification(
+                'warning',
+                `Skipped ${unscoreable.map((ship) => ship.name).join(', ')}: a Custom strategy needs at least one formula stat.`
+            );
+        }
+        if (scoreable.length === 0) return;
+
+        const validShips = scoreable;
 
         // Uncomment the next line to disable performance tracking entirely
         // performanceTracker.disable();
