@@ -32,7 +32,7 @@ const setLabel = (setName: string): string =>
  * build is always described the same way, wherever it is rendered.
  */
 export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: config }) => {
-    const roleInfo = SHIP_TYPES[config.shipRole];
+    const roleInfo = config.shipRole ? SHIP_TYPES[config.shipRole] : undefined;
     const hasImplantSettings = config.optimizeImplants || config.excludedImplantTypes.length > 0;
 
     return (
@@ -40,15 +40,13 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
             <Section title="Role">
                 <span className="inline-flex items-center gap-2">
                     {roleInfo?.iconUrl && <img src={roleInfo.iconUrl} alt="" className="w-4 h-4" />}
-                    {roleInfo?.name ?? config.shipRole}
+                    {roleInfo?.name ?? 'Custom'}
                 </span>
             </Section>
 
-            {/* Rendered as an ordered list: a priority's strength is its position,
-                not a number on the row (StatPriority.weight is always 1). */}
             {config.statPriorities.length > 0 && (
                 <Section title="Stat Priorities">
-                    <ol className="list-decimal list-inside space-y-1">
+                    <ul className="list-disc list-inside space-y-1">
                         {config.statPriorities.map((priority, index) => (
                             <li key={index} data-testid="community-build-priority">
                                 {getLimitStatLabel(priority.stat)}
@@ -59,7 +57,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                                 )}
                             </li>
                         ))}
-                    </ol>
+                    </ul>
                 </Section>
             )}
 

@@ -1393,8 +1393,11 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Your tweaks</strong> on top — stat priorities, set
                                     requirements, or stat bonuses. Click{' '}
                                     <strong>+ Add tweak</strong> to choose a type, then fill in the
-                                    form. Each row has up/down chevrons to reorder it within its
-                                    list — order matters, higher tweaks weigh more in scoring.
+                                    form. Set requirements and stat bonuses each have up/down
+                                    chevrons to reorder them within their list — order matters,
+                                    higher tweaks weigh more in scoring. Stat priorities have no
+                                    reorder control — each one is scored independently of the
+                                    others.
                                 </p>
 
                                 <div className="card">
@@ -1835,7 +1838,8 @@ const DocumentationPage: React.FC = () => {
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
                                         Configure your autogear settings (role, stat priorities,
-                                        gear sets, stat bonuses, fleet buffs, implant settings)
+                                        gear sets, stat bonuses, fleet buffs, implant settings) — a
+                                        Custom build with no role can&apos;t be shared
                                     </li>
                                     <li>
                                         Click &quot;Share your build&quot; to open the share form —

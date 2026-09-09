@@ -50,7 +50,6 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
 export interface SharedAutogearBuild {
     version: 1;
     shipRole: ShipTypeName;
-    /** Order IS the priority — StatPriority.weight is hardcoded to 1 everywhere. */
     statPriorities: StatPriority[];
     setPriorities: SharedSetPriority[];
     statBonuses: StatBonus[];

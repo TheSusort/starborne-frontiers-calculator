@@ -111,6 +111,7 @@ describe('useCommunityRecommendations — stale-ship fetch guard (Finding 1)', (
                 useCommunityRecommendations({
                     selectedShip: props.selectedShip,
                     currentBuild: null,
+                    shipRole: null,
                 }),
             { initialProps: { selectedShip: shipA } }
         );
@@ -154,7 +155,11 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         listForShipMock.mockRejectedValueOnce(new Error('network blip')); // refresh() after share
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: sampleBuild })
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+                shipRole: sampleBuild.shipRole,
+            })
         );
 
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -175,7 +180,11 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         createRecommendationMock.mockResolvedValueOnce(null);
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: sampleBuild })
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+                shipRole: sampleBuild.shipRole,
+            })
         );
 
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -197,7 +206,11 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         createRecommendationMock.mockRejectedValueOnce(new InvalidSharedConfigError());
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: sampleBuild })
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+                shipRole: sampleBuild.shipRole,
+            })
         );
 
         await waitFor(() => expect(result.current.loading).toBe(false));
@@ -230,7 +243,7 @@ describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)',
         });
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: null })
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: null, shipRole: null })
         );
 
         await waitFor(() => expect(result.current.builds).toHaveLength(2));

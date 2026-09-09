@@ -1816,18 +1816,6 @@ export const AutogearPage: React.FC = () => {
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
-                    onMovePriority={(fromIndex, toIndex) => {
-                        if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                statPriorities: arrayMove(
-                                    config.statPriorities,
-                                    fromIndex,
-                                    toIndex
-                                ),
-                            });
-                        }
-                    }}
                     onMoveSetPriority={(fromIndex, toIndex) => {
                         if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);

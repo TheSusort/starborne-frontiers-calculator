@@ -68,7 +68,6 @@ export const makeSettingsProps = (overrides: Partial<SettingsProps> = {}): Setti
     onAddPriority: vi.fn(),
     onUpdatePriority: vi.fn(),
     onRemovePriority: vi.fn(),
-    onMovePriority: vi.fn(),
     onFindOptimalGear: vi.fn(),
     onIgnoreEquippedChange: vi.fn(),
     onIgnoreUnleveledChange: vi.fn(),

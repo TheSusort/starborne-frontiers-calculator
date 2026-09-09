@@ -188,6 +188,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                             <CommunityRecommendations
                                 selectedShip={ship}
                                 currentBuild={configToSharedBuild(getShipConfig(ship.id))}
+                                shipRole={getShipConfig(ship.id).shipRole}
                                 hasExistingConfig={hasExistingBuildConfig(getShipConfig(ship.id))}
                                 onApplyBuild={(build) => onApplyBuild(ship.id, build)}
                             />

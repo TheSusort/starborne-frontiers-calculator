@@ -33,7 +33,6 @@ interface AutogearSettingsModalProps {
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
-    onMovePriority: (fromIndex: number, toIndex: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;

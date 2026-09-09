@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
+import { ShipTypeName } from '../../constants';
 import { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
@@ -16,6 +17,8 @@ import { ShareRecommendationForm } from './ShareRecommendationForm';
 interface CommunityRecommendationsProps {
     selectedShip: Ship | null;
     currentBuild: SharedAutogearBuild | null;
+    /** The ship's selected role, or null in Custom mode. */
+    shipRole: ShipTypeName | null;
     /** Null when the page cannot apply (no ship). */
     onApplyBuild: ((build: SharedAutogearBuild) => void) | null;
     /** Whether the ship already has build config that Apply would overwrite. */
@@ -25,6 +28,7 @@ interface CommunityRecommendationsProps {
 export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> = ({
     selectedShip,
     currentBuild,
+    shipRole,
     onApplyBuild,
     hasExistingConfig,
 }) => {
@@ -53,7 +57,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         ultimateImplantName,
         canShare,
         handleShare,
-    } = useCommunityRecommendations({ selectedShip, currentBuild });
+    } = useCommunityRecommendations({ selectedShip, currentBuild, shipRole });
 
     useTutorialTrigger('autogear-community');
 
@@ -138,6 +142,11 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                                 >
                                     Share your build
                                 </Button>
+                            ) : selectedShip && !shipRole ? (
+                                <p className="text-sm text-theme-text-secondary">
+                                    Custom builds can&apos;t be shared to the community yet — they
+                                    carry a formula the library has no field for.
+                                </p>
                             ) : (
                                 <span className="text-sm text-theme-text-secondary">
                                     Configure autogear settings to share your build

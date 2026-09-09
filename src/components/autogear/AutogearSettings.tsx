@@ -85,7 +85,6 @@ interface AutogearSettingsProps {
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
-    onMovePriority: (fromIndex: number, toIndex: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;
@@ -276,7 +275,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onAddPriority,
     onUpdatePriority,
     onRemovePriority,
-    onMovePriority,
     onIgnoreEquippedChange,
     onIgnoreUnleveledChange,
     onAddSetPriority,
@@ -521,18 +519,10 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                     key={`priority-${index}`}
                                                     priority={priority}
                                                     isEditing={isEditingPriority(index)}
-                                                    canMoveUp={index > 0}
-                                                    canMoveDown={index < priorities.length - 1}
                                                     onUpdate={(updated) =>
                                                         onUpdatePriority(index, updated)
                                                     }
                                                     onEdit={() => openForm('priority', index)}
-                                                    onMoveUp={() =>
-                                                        onMovePriority(index, index - 1)
-                                                    }
-                                                    onMoveDown={() =>
-                                                        onMovePriority(index, index + 1)
-                                                    }
                                                     onRemove={() => onRemovePriority(index)}
                                                 />
                                             ))}

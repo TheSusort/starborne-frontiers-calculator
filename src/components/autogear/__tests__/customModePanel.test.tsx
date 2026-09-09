@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import userEvent from '@testing-library/user-event';
 import { render, screen } from '../../../test-utils/test-utils';
 import type { CustomFormula } from '../../../types/autogear';
 import { AutogearSettings } from '../AutogearSettings';
+import { AutogearConfigList } from '../AutogearConfigList';
 import { makeSettingsProps } from './autogearSettingsProps';
 
 // The `ui` barrel transitively pulls ui/layout/Sidebar, which imports
@@ -108,5 +110,56 @@ describe('Custom mode blocks a run it cannot score', () => {
         expect(() =>
             renderPanel({ selectedShipRole: 'ATTACKER', customFormula: undefined })
         ).not.toThrow();
+    });
+});
+
+type ConfigListProps = ComponentProps<typeof AutogearConfigList>;
+
+const configListProps = (overrides: Partial<ConfigListProps>): ConfigListProps => ({
+    shipRole: null,
+    statPriorities: [],
+    setPriorities: [],
+    statBonuses: [],
+    ignoreEquipped: false,
+    ignoreUnleveled: false,
+    useUpgradedStats: false,
+    tryToCompleteSets: false,
+    optimizeImplants: false,
+    ...overrides,
+});
+
+describe('stat priorities carry no reorder control', () => {
+    const two = [
+        { stat: 'speed' as const, minLimit: 120, weight: 1 },
+        { stat: 'crit' as const, minLimit: 60, weight: 1 },
+    ];
+
+    it('renders neither arrow, in role mode', () => {
+        // calculateDefaultScore was the only code that read priority order; the arrows
+        // reordered a list nothing reads.
+        renderPanel({ selectedShipRole: 'ATTACKER', priorities: two });
+        expect(screen.queryByLabelText(/move priority up/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText(/move priority down/i)).not.toBeInTheDocument();
+    });
+
+    it('still renders the rows themselves', () => {
+        // Non-vacuity: an absent arrow proves nothing if the rows never rendered.
+        // `two` holds both fixture priorities, so both rows' Remove buttons show.
+        renderPanel({ selectedShipRole: 'ATTACKER', priorities: two });
+        expect(screen.getAllByLabelText(/remove priority/i)).toHaveLength(two.length);
+    });
+});
+
+describe('AutogearConfigList labels a roleless config', () => {
+    it('reads Custom rather than rendering nothing', () => {
+        render(<AutogearConfigList {...configListProps({ shipRole: null })} />);
+        expect(screen.getByText('Custom')).toBeInTheDocument();
+    });
+
+    it('reads the role name when there is one', () => {
+        // Non-vacuity: proves the row renders a role at all, so the Custom assertion
+        // above is about the null case and not about an element that never appears.
+        render(<AutogearConfigList {...configListProps({ shipRole: 'ATTACKER' })} />);
+        expect(screen.getByText('Attacker')).toBeInTheDocument();
     });
 });
