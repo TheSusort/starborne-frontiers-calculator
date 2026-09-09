@@ -8,6 +8,7 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
 import { AutogearTeam } from '../types/autogearTeam';
+import { encodeGearStats } from '../utils/gear/statsCodec';
 
 const BATCH_SIZE = 500;
 const CHILD_BATCH_SIZE = 50;
@@ -272,20 +273,10 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                 stars: item.stars,
                 rarity: item.rarity,
                 set_bonus: item.setBonus,
-                stats: {
-                    mainStat: item.mainStat
-                        ? {
-                              name: item.mainStat.name,
-                              value: item.mainStat.value,
-                              type: item.mainStat.type || 'flat',
-                          }
-                        : null,
-                    subStats: (item.subStats || []).map((stat) => ({
-                        name: stat.name,
-                        value: stat.value,
-                        type: stat.type || 'flat',
-                    })),
-                },
+                stats: encodeGearStats({
+                    mainStat: item.mainStat,
+                    subStats: item.subStats || [],
+                }),
             }));
 
             const { error } = await supabase

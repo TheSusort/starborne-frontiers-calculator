@@ -9,6 +9,7 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { WishlistEntry } from '../types/wishlist';
 import { AutogearTeam } from '../types/autogearTeam';
+import { encodeGearStats } from './gear/statsCodec';
 
 interface MigrationResult {
     ships: Ship[];
@@ -339,20 +340,10 @@ export const syncMigratedDataToSupabase = async (
                         stars: item.stars,
                         rarity: item.rarity,
                         set_bonus: item.setBonus,
-                        stats: {
-                            mainStat: item.mainStat
-                                ? {
-                                      name: item.mainStat.name,
-                                      value: item.mainStat.value,
-                                      type: item.mainStat.type || 'flat',
-                                  }
-                                : null,
-                            subStats: (item.subStats || []).map((stat) => ({
-                                name: stat.name,
-                                value: stat.value,
-                                type: stat.type || 'flat',
-                            })),
-                        },
+                        stats: encodeGearStats({
+                            mainStat: item.mainStat,
+                            subStats: item.subStats || [],
+                        }),
                     }));
 
                     // Upsert inventory items

@@ -4,6 +4,7 @@ import type { ShipTypeName } from '../constants/shipTypes';
 import type { AffinityName, Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
+import { decodeGearStats } from '../utils/gear/statsCodec';
 
 export interface UserProfile {
     id: string;
@@ -323,11 +324,6 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         }
     };
 
-    interface RawStatsJsonb {
-        mainStat: RawStat | null;
-        subStats: RawStat[];
-    }
-
     interface RawShipData {
         id: string;
         name: string;
@@ -362,7 +358,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 stars: number;
                 rarity: string;
                 set_bonus: string;
-                stats?: RawStatsJsonb | null;
+                stats?: unknown;
             };
         }>;
         ship_refits?: Array<{
@@ -378,7 +374,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 stars: number;
                 rarity: string;
                 set_bonus: string;
-                stats?: RawStatsJsonb | null;
+                stats?: unknown;
             };
         }>;
     }
@@ -462,10 +458,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         const shipGearMap = new Map<string, InternalGearPiece>();
         data.ship_equipment?.forEach((eq) => {
             if (eq.inventory_items) {
-                const statsData = eq.inventory_items.stats || {
-                    mainStat: null,
-                    subStats: [],
-                };
+                const statsData = decodeGearStats(eq.inventory_items.stats);
 
                 const gearPiece = {
                     id: eq.inventory_items.id,
@@ -474,18 +467,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     stars: eq.inventory_items.stars,
                     rarity: eq.inventory_items.rarity,
                     setBonus: eq.inventory_items.set_bonus,
-                    mainStat: statsData.mainStat
-                        ? {
-                              name: statsData.mainStat.name,
-                              value: statsData.mainStat.value,
-                              type:
-                                  statsData.mainStat.type === 'percentage'
-                                      ? ('percentage' as const)
-                                      : ('flat' as const),
-                              id: statsData.mainStat.id || '',
-                          }
-                        : undefined,
-                    subStats: (statsData.subStats || []).map(createStat),
+                    mainStat: statsData.mainStat ? { ...statsData.mainStat, id: '' } : undefined,
+                    subStats: statsData.subStats,
                 };
                 shipGearMap.set(eq.gear_id, gearPiece);
             }
@@ -494,10 +477,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         const shipImplantMap = new Map<string, InternalImplantPiece>();
         data.ship_implants?.forEach((implant) => {
             if (implant.inventory_items) {
-                const statsData = implant.inventory_items.stats || {
-                    mainStat: null,
-                    subStats: [],
-                };
+                const statsData = decodeGearStats(implant.inventory_items.stats);
 
                 const implantPiece = {
                     id: implant.inventory_items.id,
@@ -507,18 +487,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     stars: implant.inventory_items.stars,
                     rarity: implant.inventory_items.rarity,
                     setBonus: implant.inventory_items.set_bonus,
-                    mainStat: statsData.mainStat
-                        ? {
-                              name: statsData.mainStat.name,
-                              value: statsData.mainStat.value,
-                              type:
-                                  statsData.mainStat.type === 'percentage'
-                                      ? ('percentage' as const)
-                                      : ('flat' as const),
-                              id: statsData.mainStat.id || '',
-                          }
-                        : undefined,
-                    subStats: (statsData.subStats || []).map(createStat),
+                    mainStat: statsData.mainStat ? { ...statsData.mainStat, id: '' } : undefined,
+                    subStats: statsData.subStats,
                 };
                 shipImplantMap.set(implant.slot, implantPiece);
             }
@@ -563,11 +533,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             implants:
                 data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
                     if (implant.inventory_items) {
-                        const statsData = implant.inventory_items.stats;
-                        if (
-                            statsData &&
-                            (statsData.mainStat || (statsData.subStats?.length ?? 0) > 0)
-                        ) {
+                        const statsData = decodeGearStats(implant.inventory_items.stats);
+                        if (statsData.mainStat || statsData.subStats.length > 0) {
                             // Store implant ID as string (matches Ship type)
                             acc[implant.slot] = implant.inventory_items.id;
                         }
