@@ -14,6 +14,7 @@ import { TrophyIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
 import { Select } from '../../components/ui/Select';
 import { GEAR_SETS } from '../../constants/gearSets';
+import { tryDecodeGearStats } from '../../utils/gear/statsCodec';
 
 interface LeaderboardEntry {
     ship: Ship & { _gearMap?: Map<string, any>; _implantMap?: Map<string, any> };
@@ -93,10 +94,12 @@ export const LeaderboardPage: React.FC = () => {
                     data.ship_equipment.forEach((eq: any) => {
                         if (eq.inventory_items) {
                             // Read from stats JSONB field
-                            const statsData = eq.inventory_items.stats || {
-                                mainStat: null,
-                                subStats: [],
-                            };
+                            const statsData = tryDecodeGearStats(eq.inventory_items.stats);
+                            // Skip the one piece rather than the whole page. This
+                            // query is not scoped to one user, and the catch below
+                            // sets `error` for everyone, so one unreadable row
+                            // would hide the leaderboard from every viewer.
+                            if (!statsData) return;
 
                             const gearPiece = {
                                 id: eq.inventory_items.id,
@@ -105,17 +108,8 @@ export const LeaderboardPage: React.FC = () => {
                                 stars: eq.inventory_items.stars,
                                 rarity: eq.inventory_items.rarity,
                                 setBonus: eq.inventory_items.set_bonus,
-                                mainStat: statsData.mainStat
-                                    ? {
-                                          name: statsData.mainStat.name,
-                                          value: statsData.mainStat.value,
-                                          type:
-                                              statsData.mainStat.type === 'percentage'
-                                                  ? 'percentage'
-                                                  : 'flat',
-                                      }
-                                    : undefined,
-                                subStats: (statsData.subStats || []).map(createStat),
+                                mainStat: statsData.mainStat ?? undefined,
+                                subStats: statsData.subStats,
                             };
                             shipGearMap.set(eq.gear_id as string, gearPiece);
                         }
@@ -126,10 +120,8 @@ export const LeaderboardPage: React.FC = () => {
                     data.ship_implants.forEach((implant: any) => {
                         if (implant.inventory_items) {
                             // Read from stats JSONB field
-                            const statsData = implant.inventory_items.stats || {
-                                mainStat: null,
-                                subStats: [],
-                            };
+                            const statsData = tryDecodeGearStats(implant.inventory_items.stats);
+                            if (!statsData) return;
 
                             const implantPiece = {
                                 id: implant.inventory_items.id,
@@ -139,17 +131,8 @@ export const LeaderboardPage: React.FC = () => {
                                 stars: implant.inventory_items.stars,
                                 rarity: implant.inventory_items.rarity,
                                 setBonus: implant.inventory_items.set_bonus,
-                                mainStat: statsData.mainStat
-                                    ? {
-                                          name: statsData.mainStat.name,
-                                          value: statsData.mainStat.value,
-                                          type:
-                                              statsData.mainStat.type === 'percentage'
-                                                  ? 'percentage'
-                                                  : 'flat',
-                                      }
-                                    : undefined,
-                                subStats: (statsData.subStats || []).map(createStat),
+                                mainStat: statsData.mainStat ?? undefined,
+                                subStats: statsData.subStats,
                             };
                             shipImplantMap.set(implant.slot as string, implantPiece);
                         }
@@ -192,15 +175,13 @@ export const LeaderboardPage: React.FC = () => {
                         implants: data.ship_implants.reduce(
                             (acc: Record<string, any>, implant: any) => {
                                 if (implant.inventory_items) {
-                                    const statsData = implant.inventory_items.stats;
+                                    const statsData = tryDecodeGearStats(
+                                        implant.inventory_items.stats
+                                    );
                                     if (
                                         statsData &&
-                                        (statsData.mainStat || statsData.subStats?.length)
+                                        (statsData.mainStat || statsData.subStats.length)
                                     ) {
-                                        const implantStats = [
-                                            ...(statsData.mainStat ? [statsData.mainStat] : []),
-                                            ...(statsData.subStats || []),
-                                        ];
                                         acc[implant.slot] = {
                                             id: implant.inventory_items.id,
                                             description: implant.description,
@@ -208,7 +189,10 @@ export const LeaderboardPage: React.FC = () => {
                                             stars: implant.inventory_items.stars,
                                             rarity: implant.inventory_items.rarity,
                                             setBonus: implant.inventory_items.set_bonus,
-                                            stats: implantStats.map(createStat),
+                                            stats: [
+                                                ...(statsData.mainStat ? [statsData.mainStat] : []),
+                                                ...statsData.subStats,
+                                            ],
                                         };
                                     }
                                 }

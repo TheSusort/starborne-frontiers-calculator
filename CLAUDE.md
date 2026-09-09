@@ -140,7 +140,7 @@ Focus on utility functions (autogear scoring, stat calculations) and data transf
 
 ## Database Migrations
 
-**Location:** `supabase/migrations/` — naming: `YYYYMMDD[sequence]_description.sql`. Apply via Supabase CLI or dashboard.
+**Location:** `supabase/migrations/` — naming: `YYYYMMDD[sequence]_description.sql`. **The user applies them**, via the Supabase dashboard or the CLI; an agent never runs the CLI itself (Security rule 8).
 
 ## Authentication Flow
 
@@ -168,6 +168,7 @@ Access is `users.is_admin = true`. The System Health tab budgets against a 500 M
 5. **New user-facing inputs need validation** — any data crossing a trust boundary (file uploads, URL params, external API responses) must be validated before use. The game data import uses `src/schemas/exportedPlayData.ts` (Zod) as the pattern.
 6. **`users.is_admin` is trigger-protected** — a `BEFORE UPDATE` trigger (`prevent_is_admin_escalation_trigger`) blocks non-admins from self-promoting. Never remove this trigger. Admin promotion is done manually via the Supabase dashboard.
 7. **Public API keys need spending caps** — keys in `VITE_*` vars (Cloudinary, OpenRouter, Google, MIMO, Cubedweb) are visible to all users. Every such key must have a billing cap or rate limit set in its service dashboard.
+8. **Never run the Supabase CLI** — the CLI is linked to the **production** project, so `supabase <anything>` acts on live user data. An agent must not invoke it in any form: not `supabase`, not `npx supabase`, not through a package script, not `--help`, not a read-only subcommand. Write the SQL or the command out and let the user run it themselves. Enforced by a `PreToolUse` hook and `permissions.deny` rules in the user's `~/.claude/settings.json`; the rule stands whether or not that enforcement is present.
 
 ### Patterns to follow
 

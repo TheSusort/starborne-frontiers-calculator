@@ -3,13 +3,13 @@ import { v4 as uuidv4 } from 'uuid';
 import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
+import { decodeGearStats, encodeGearStats } from '../utils/gear/statsCodec';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface InventoryContextType {
@@ -31,17 +31,6 @@ const RETRY_DELAY = 1000; // 1 second
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-interface RawStatData {
-    name: StatName;
-    value: number;
-    type: StatType;
-}
-
-interface RawStatsJsonb {
-    mainStat: RawStatData | null;
-    subStats: RawStatData[];
-}
-
 interface RawGearData {
     id: string;
     slot: GearSlotName;
@@ -50,7 +39,7 @@ interface RawGearData {
     rarity: RarityName;
     set_bonus: GearSetName;
     calibration_ship_id?: string | null;
-    stats: RawStatsJsonb | null;
+    stats: unknown;
 }
 
 // Type guard for valid gear piece
@@ -89,23 +78,7 @@ const isValidGearPiece = (gear: unknown): gear is GearPiece => {
 // Helper function to transform Supabase data into GearPiece format
 const transformGearData = (data: RawGearData): GearPiece | null => {
     try {
-        const statsData = data.stats;
-
-        const createStat = (stat: RawStatData): Stat => {
-            if (stat.type === 'percentage') {
-                return {
-                    name: stat.name,
-                    value: stat.value,
-                    type: 'percentage',
-                };
-            } else {
-                return {
-                    name: stat.name as FlexibleStats,
-                    value: stat.value,
-                    type: 'flat',
-                };
-            }
-        };
+        const { mainStat, subStats } = decodeGearStats(data.stats);
 
         const gear: GearPiece = {
             id: data.id,
@@ -114,14 +87,11 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
             stars: data.stars,
             rarity: data.rarity,
             setBonus: data.set_bonus,
-            mainStat: statsData?.mainStat
-                ? createStat(statsData.mainStat)
-                : {
-                      name: 'hp',
-                      value: 0,
-                      type: 'flat',
-                  },
-            subStats: statsData?.subStats?.length ? statsData.subStats.map(createStat) : [],
+            // A piece with no main stat reads as hp 0 here, unlike the other
+            // decode sites which keep it null. `isValidGearPiece` below rejects
+            // a null mainStat, so the fallback is what keeps such rows loadable.
+            mainStat: mainStat ?? { name: 'hp', value: 0, type: 'flat' },
+            subStats,
             // Include calibration if calibration_ship_id exists
             ...(data.calibration_ship_id && {
                 calibration: {
@@ -460,20 +430,10 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 if (!isSupabaseSyncEnabled()) return optimisticGear;
 
                 // Create gear record with stats JSONB
-                const statsJsonb = {
-                    mainStat: newGear.mainStat
-                        ? {
-                              name: newGear.mainStat.name,
-                              value: newGear.mainStat.value,
-                              type: newGear.mainStat.type,
-                          }
-                        : null,
-                    subStats: (newGear.subStats || []).map((stat) => ({
-                        name: stat.name,
-                        value: stat.value,
-                        type: stat.type,
-                    })),
-                };
+                const statsJsonb = encodeGearStats({
+                    mainStat: newGear.mainStat,
+                    subStats: newGear.subStats || [],
+                });
 
                 const { data: gearData, error: gearError } = await supabase
                     .from('inventory_items')
@@ -550,20 +510,13 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
                 // Update stats JSONB if stats are being updated
                 if (updates.mainStat || updates.subStats) {
-                    updateData.stats = {
-                        mainStat: updatedPiece.mainStat
-                            ? {
-                                  name: updatedPiece.mainStat.name,
-                                  value: updatedPiece.mainStat.value,
-                                  type: updatedPiece.mainStat.type,
-                              }
-                            : null,
-                        subStats: (updatedPiece.subStats || []).map((stat) => ({
-                            name: stat.name,
-                            value: stat.value,
-                            type: stat.type,
-                        })),
-                    };
+                    // Encoded from the merged piece, not from `updates`: the
+                    // compact array carries every stat positionally, so a
+                    // partial write would drop the stats the update left alone.
+                    updateData.stats = encodeGearStats({
+                        mainStat: updatedPiece.mainStat,
+                        subStats: updatedPiece.subStats || [],
+                    });
                 }
 
                 // Update gear record
