@@ -1501,7 +1501,37 @@ const DocumentationPage: React.FC = () => {
                                         stats have to be good on their own for the build to score
                                         well, so balanced builds win; <strong>Added</strong> stats
                                         top the score up without being able to carry it on their
-                                        own.
+                                        own. Two Multiplied stats mean both have to be good — one
+                                        weak stat drags the whole score down.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Minimizing a stat is a preference, not a floor — it makes
+                                        low values score better, but the optimizer can still pick a
+                                        high value if it wins elsewhere. Use a Limits tweak instead
+                                        when a stat must never drop below (or rise above) a specific
+                                        number.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A Multiplied stat also has an <strong>Importance</strong> —
+                                        Slight, Normal, or Heavy — which raises its contribution to
+                                        a power before the core stats are multiplied together. With
+                                        only one Multiplied stat and no Added stats, Importance
+                                        can&apos;t change anything: raising a single term to a power
+                                        is a monotone transform, so every build keeps the same
+                                        ranking regardless of which setting you pick. The formula
+                                        list hides the Importance readout on a lone Multiplied stat
+                                        for that reason.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A Multiplied stat you&apos;re maximizing that your ship
+                                        currently has none of scores that term at zero — and one
+                                        zero term zeroes the whole product, so every candidate ties
+                                        at 0 no matter how good its other stats are. Heal modifier
+                                        before gear is the common case. If a stat can legitimately
+                                        be zero, use an Added row for it instead; the formula list
+                                        flags a maximized Multiplied row that is currently zero. A
+                                        minimized row at zero is unaffected — zero is the best that
+                                        row can be.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         While the formula is empty, a <strong>Start from</strong>{' '}
