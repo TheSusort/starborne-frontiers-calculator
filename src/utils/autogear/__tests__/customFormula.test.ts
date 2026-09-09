@@ -93,12 +93,25 @@ describe('customFormulaScore — the product rewards balance', () => {
         expect(balanced).toBeGreaterThan(lopsided);
     });
 
-    it('is where a weighted sum would rank the lopsided build higher', () => {
-        // The contrast is the point: this is why core rows multiply rather than add (#482).
-        const sum = (s: BaseStats) => s.hacking / 200 + s.hp / 120000;
-        const balancedSum = sum(withStats({ hacking: 200, hp: 50000 }));
-        const lopsidedSum = sum(withStats({ hacking: 400, hp: 12000 }));
-        expect(lopsidedSum).toBeGreaterThan(balancedSum);
+    it('reverses that ranking when the same two stats are bonus rows instead', () => {
+        // Same stats, same builds, only the kind differs — so the flip is caused by core
+        // rows multiplying rather than adding, which is why they do (#482). Both arms run
+        // through the real scorer; a hand-rolled sum here would assert nothing about it.
+        const asSum: CustomFormula = {
+            rows: [
+                { stat: 'hacking', kind: 'bonus', direction: 'max', percentage: 100 },
+                { stat: 'effectiveHp', kind: 'bonus', direction: 'max', percentage: 100 },
+            ],
+        };
+        const balanced = withStats({ hacking: 200, hp: 50000 });
+        const lopsided = withStats({ hacking: 400, hp: 12000 });
+
+        expect(customFormulaScore(balanced, product)).toBeGreaterThan(
+            customFormulaScore(lopsided, product)
+        );
+        expect(customFormulaScore(lopsided, asSum)).toBeGreaterThan(
+            customFormulaScore(balanced, asSum)
+        );
     });
 });
 
