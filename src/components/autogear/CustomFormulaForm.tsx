@@ -9,8 +9,8 @@ import type {
 } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
 
-// Mirrors StatPriorityForm's AVAILABLE_STATS: the stats a player can actually gear for,
-// plus the two derived composites.
+// Mirrors StatPriorityForm's AVAILABLE_STATS: the stats a player can gear for, plus the
+// derived composites.
 const AVAILABLE_STATS: LimitableStat[] = [
     'attack',
     'defence',
