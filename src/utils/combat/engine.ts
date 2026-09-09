@@ -3093,11 +3093,19 @@ export function runCombat(rawInput: CombatEngineInput): {
         const owner = allActorsById.get(ownerId);
         const victim = allActorsById.get(victimId);
         if (!owner || !victim) return undefined;
-        const { damageModifier } = computeAffinityModifiers(
+        // Destructured under the name the LANDING path uses it as: the matchup's one modifier
+        // covers the damage and hacking clauses alike (computeAffinityModifiers' doc).
+        const { damageModifier: affinityModifier } = computeAffinityModifiers(
             owner.affinity ?? 'antimatter',
             victim.affinity ?? 'antimatter'
         );
-        return liveDebuffLandingChance(statusEngine, selfBuffLookup, owner, victim, damageModifier);
+        return liveDebuffLandingChance(
+            statusEngine,
+            selfBuffLookup,
+            owner,
+            victim,
+            affinityModifier
+        );
     };
 
     // THERE IS NO STAND-IN `enemy` ACTOR. Nothing is built for it: it is not a member of

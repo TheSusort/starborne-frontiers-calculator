@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { getAffinityMatchup, computeAffinityModifiers } from '../affinityUtils';
+import {
+    getAffinityMatchup,
+    computeAffinityModifiers,
+    affinityScaledHacking,
+} from '../affinityUtils';
 
 describe('getAffinityMatchup', () => {
     it('thermal has advantage over chemical', () => {
@@ -73,5 +77,32 @@ describe('computeAffinityModifiers', () => {
     it('returns neutral modifiers when attacker is undefined', () => {
         const result = computeAffinityModifiers(undefined, 'thermal');
         expect(result).toEqual({ damageModifier: 0, critCap: 100, critPenalty: 0 });
+    });
+});
+
+describe('affinityScaledHacking', () => {
+    it('raises hacking by the advantage modifier', () => {
+        expect(affinityScaledHacking(200, 25)).toBe(250);
+    });
+
+    it('lowers hacking by the disadvantage modifier', () => {
+        expect(affinityScaledHacking(200, -25)).toBe(150);
+    });
+
+    it('leaves hacking untouched at a neutral matchup', () => {
+        expect(affinityScaledHacking(200, 0)).toBe(200);
+    });
+
+    it('scales the buffed total it is handed, not a base — the caller folds buffs first', () => {
+        expect(affinityScaledHacking(200 + 40, 25)).toBe(300);
+    });
+
+    it("reads computeAffinityModifiers' one modifier for the hacking clause too", () => {
+        // The contract this function exists to make findable: the game applies the SAME +-25% to
+        // the damage clause and the hacking clause, so the hacking side is fed damageModifier.
+        const advantage = computeAffinityModifiers('thermal', 'chemical');
+        const disadvantage = computeAffinityModifiers('thermal', 'electric');
+        expect(affinityScaledHacking(200, advantage.damageModifier)).toBe(250);
+        expect(affinityScaledHacking(200, disadvantage.damageModifier)).toBe(150);
     });
 });
