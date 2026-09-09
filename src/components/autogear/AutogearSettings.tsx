@@ -16,6 +16,7 @@ import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
+import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
@@ -111,6 +112,11 @@ interface AutogearSettingsProps {
     activeSeason?: ArenaSeason | null;
     useArenaModifiers?: boolean;
     onUseArenaModifiersChange?: (value: boolean) => void;
+    customFormula: CustomFormula | undefined;
+    onAddFormulaRow: (row: CustomFormulaRow) => void;
+    onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
+    onRemoveFormulaRow: (index: number) => void;
+    onSeedFormula: (role: ShipTypeName) => void;
 }
 
 const SetPriorityForm: React.FC<{

@@ -35,6 +35,28 @@ export interface FleetBuff {
     percentage: number; // e.g. 30 for +30%
 }
 
+export type FormulaRowKind = 'core' | 'bonus';
+export type FormulaDirection = 'max' | 'min';
+
+/** Exponent applied to a core row's term. Slight / Normal / Heavy. */
+export type CoreImportance = 0.5 | 1 | 2;
+
+export interface CustomFormulaRow {
+    stat: LimitableStat;
+    kind: FormulaRowKind;
+    direction: FormulaDirection;
+    /** Exponent for a core row. Defaults to 1. Unused on a bonus row. */
+    importance?: CoreImportance;
+    /** Coefficient for a bonus row, as a percentage. Defaults to 100. Unused on a core row. */
+    percentage?: number;
+}
+
+export interface CustomFormula {
+    rows: CustomFormulaRow[];
+    /** The role this formula was seeded from. Drives the Reset button and the label. */
+    seededFrom?: ShipTypeName;
+}
+
 export interface SavedAutogearConfig {
     shipId: string;
     shipRole: ShipTypeName | null;
@@ -53,4 +75,5 @@ export interface SavedAutogearConfig {
     useArenaModifiers?: boolean;
     excludedImplantTypes?: string[];
     fleetBuffs?: FleetBuff[];
+    customFormula?: CustomFormula;
 }

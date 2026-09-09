@@ -1846,6 +1846,11 @@ export const AutogearPage: React.FC = () => {
                             });
                         }
                     }}
+                    customFormula={undefined}
+                    onAddFormulaRow={() => undefined}
+                    onUpdateFormulaRow={() => undefined}
+                    onRemoveFormulaRow={() => undefined}
+                    onSeedFormula={() => undefined}
                 />
 
                 <MilestoneModal
