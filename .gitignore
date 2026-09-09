@@ -16,3 +16,11 @@ video/
 # local editor/backup artifacts (never commit)
 .env.bak
 .cursor/
+
+# database dumps — `supabase db dump` writes these to the repo root, and data.sql
+# carries auth.users (every email and password hash) plus the whole inventory.
+# Committed migrations live in supabase/migrations/, which is not matched here.
+/*.sql
+data.sql
+schema.sql
+roles.sql
