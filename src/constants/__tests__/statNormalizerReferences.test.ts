@@ -8,7 +8,7 @@ import { calculateDirectDamage, calculateEffectiveHP } from '../../utils/autogea
 // optimizer's stat-bonus fitness term (calculateMultiplierFactor /
 // applyAdditiveBonuses in priorityScore.ts) — that reads MULTIPLIER_NORMALIZERS instead
 // (see derivedStatBonuses.test.ts). A wrong normalizer here silently mis-ranks
-// manual-priority gear combos and implant candidates against each other. These bounds are
+// implant candidates against each other. These bounds are
 // wide (they are not asserting an exact formula) but they fail if a reference moves by
 // more than ~2x, which is the point at which a chosen normalizer stops meaning what it was
 // chosen to mean.
