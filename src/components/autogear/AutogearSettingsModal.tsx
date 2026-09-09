@@ -28,7 +28,7 @@ interface AutogearSettingsModalProps {
     includeCalibratedGear: boolean;
     assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
-    onRoleSelect: (role: ShipTypeName) => void;
+    onRoleSelect: (role: ShipTypeName | null) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;

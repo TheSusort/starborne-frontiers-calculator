@@ -76,7 +76,7 @@ interface AutogearSettingsProps {
     includeCalibratedGear: boolean;
     assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
-    onRoleSelect: (role: ShipTypeName) => void;
+    onRoleSelect: (role: ShipTypeName | null) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
@@ -367,9 +367,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     <div className="flex-1">
                         <RoleSelector
                             value={selectedShipRole || ''}
-                            onChange={onRoleSelect}
+                            onChange={(role) => onRoleSelect(role === '' ? null : role)}
                             noDefaultSelection
-                            defaultOption="Manual"
+                            defaultOption="Custom"
                         />
                     </div>
                     {selectedShip && (
