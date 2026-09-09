@@ -517,7 +517,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             return { fitness, violation };
         }
 
-        // Slow path (existing code) — unchanged below this line
+        // Slow path: scores through calculateTotalScore, resolving gear by string id
+        // and running the full stats calculator, rather than the fast scoring context.
 
         // Split equipment into gear and implants for proper scoring
         const gearOnly: Partial<Record<GearSlotName, string>> = {};
