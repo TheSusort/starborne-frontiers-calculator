@@ -837,9 +837,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                             ))}
                                         </div>
                                     )}
-                                    <p className="text-xs text-theme-text-secondary italic">
-                                        Order matters — higher tweaks weigh more.
-                                    </p>
                                 </div>
                             )}
                         </div>

@@ -32,7 +32,7 @@ const setLabel = (setName: string): string =>
  * build is always described the same way, wherever it is rendered.
  */
 export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: config }) => {
-    const roleInfo = config.shipRole ? SHIP_TYPES[config.shipRole] : undefined;
+    const roleInfo = SHIP_TYPES[config.shipRole];
     const hasImplantSettings = config.optimizeImplants || config.excludedImplantTypes.length > 0;
 
     return (
@@ -40,7 +40,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
             <Section title="Role">
                 <span className="inline-flex items-center gap-2">
                     {roleInfo?.iconUrl && <img src={roleInfo.iconUrl} alt="" className="w-4 h-4" />}
-                    {roleInfo?.name ?? 'Custom'}
+                    {roleInfo?.name ?? config.shipRole}
                 </span>
             </Section>
 

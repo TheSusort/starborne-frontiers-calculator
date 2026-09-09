@@ -1394,10 +1394,10 @@ const DocumentationPage: React.FC = () => {
                                     requirements, or stat bonuses. Click{' '}
                                     <strong>+ Add tweak</strong> to choose a type, then fill in the
                                     form. Set requirements and stat bonuses each have up/down
-                                    chevrons to reorder them within their list — order matters,
-                                    higher tweaks weigh more in scoring. Stat priorities have no
-                                    reorder control — each one is scored independently of the
-                                    others.
+                                    chevrons to reorder them within their list — that changes how
+                                    the list displays, not how it scores: every tweak is scored
+                                    independently of the others regardless of list position. Stat
+                                    priorities have no reorder control.
                                 </p>
 
                                 <div className="card">
