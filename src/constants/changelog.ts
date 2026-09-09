@@ -6,7 +6,7 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: stat priorities no longer reorder — position never affected scoring.',
+    'Autogear: stat priority rows no longer carry up and down reorder arrows.',
     'Autogear: the Custom strategy now builds a role from stats you choose.',
     'Autogear: each formula stat can aim high or low, and multiply or add.',
     'Autogear: copy a built-in role into an editable custom formula.',
