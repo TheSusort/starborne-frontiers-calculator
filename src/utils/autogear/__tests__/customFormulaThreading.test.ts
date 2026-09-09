@@ -3,6 +3,8 @@ import { calculateTotalScore, clearScoreCache } from '../scoring';
 import type { CustomFormula } from '../../../types/autogear';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
+import { AutogearAlgorithm } from '../AutogearStrategy';
+import { getAutogearStrategy } from '../getStrategy';
 
 const attackFormula: CustomFormula = {
     rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
@@ -76,4 +78,82 @@ describe('calculateTotalScore threads the custom formula', () => {
         const b = score(speedFormula);
         expect(a).not.toBeCloseTo(b, 6);
     });
+});
+
+// A gear piece that is strong in attack and weak in speed, and its mirror. A strategy
+// that forwards the formula picks a different one for each formula; a strategy that drops
+// it scores every candidate 0 and returns whatever its tie-break happens to yield.
+const attackPiece: GearPiece = {
+    id: 'gear-attack',
+    slot: 'weapon',
+    level: 12,
+    stars: 5,
+    rarity: 'legendary',
+    mainStat: { name: 'attack', value: 4000, type: 'flat' },
+    subStats: [],
+    setBonus: 'CRITICAL',
+};
+
+const speedPiece: GearPiece = {
+    id: 'gear-speed',
+    slot: 'weapon',
+    level: 12,
+    stars: 5,
+    rarity: 'legendary',
+    mainStat: { name: 'speed', value: 40, type: 'flat' },
+    subStats: [],
+    setBonus: 'HASTE',
+};
+
+const inventory = [attackPiece, speedPiece];
+const resolve = (id: string) => inventory.find((p) => p.id === id);
+
+describe('every registered strategy forwards the custom formula', () => {
+    // Keyed to the AutogearAlgorithm enum, not to a list of strategy files, so a strategy
+    // added later is covered without anyone remembering to extend this test.
+    for (const algorithm of Object.values(AutogearAlgorithm)) {
+        it(`${algorithm} picks a different piece for an attack formula than a speed formula`, async () => {
+            clearScoreCache();
+            const strategy = getAutogearStrategy(algorithm);
+
+            const forAttack = await Promise.resolve(
+                strategy.findOptimalGear(
+                    ship,
+                    [],
+                    inventory,
+                    resolve,
+                    getEngineeringStats,
+                    undefined,
+                    [],
+                    [],
+                    false,
+                    null,
+                    [],
+                    attackFormula
+                )
+            );
+            clearScoreCache();
+            const forSpeed = await Promise.resolve(
+                strategy.findOptimalGear(
+                    ship,
+                    [],
+                    inventory,
+                    resolve,
+                    getEngineeringStats,
+                    undefined,
+                    [],
+                    [],
+                    false,
+                    null,
+                    [],
+                    speedFormula
+                )
+            );
+
+            const pick = (r: { suggestions: { gearId: string }[] }) =>
+                r.suggestions.find((s) => s.gearId)?.gearId;
+            expect(pick(forAttack)).toBe('gear-attack');
+            expect(pick(forSpeed)).toBe('gear-speed');
+        });
+    }
 });

@@ -6,6 +6,7 @@ import type {
     SetPriority,
     StatBonus,
     FleetBuff,
+    CustomFormula,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat, LimitableStat } from '../../types/stats';
@@ -49,7 +50,8 @@ export interface AutogearStrategy {
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null,
-        fleetBuffs?: FleetBuff[]
+        fleetBuffs?: FleetBuff[],
+        customFormula?: CustomFormula
     ): Promise<AutogearResult> | AutogearResult;
     setProgressCallback(callback: (progress: AutogearProgress) => void): void;
 }
