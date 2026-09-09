@@ -135,8 +135,8 @@ describe('stat priorities carry no reorder control', () => {
     ];
 
     it('renders neither arrow, in role mode', () => {
-        // calculateDefaultScore was the only code that read priority order; the arrows
-        // reordered a list nothing reads.
+        // Nothing scores a stat priority by its list position — `stat-priority order is
+        // inert` in priorityScore.test.ts holds that — so there is no order to control.
         renderPanel({ selectedShipRole: 'ATTACKER', priorities: two });
         expect(screen.queryByLabelText(/move priority up/i)).not.toBeInTheDocument();
         expect(screen.queryByLabelText(/move priority down/i)).not.toBeInTheDocument();
