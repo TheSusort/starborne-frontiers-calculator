@@ -1,5 +1,16 @@
 # Shrinking the `inventory_items` file after the compact-stats migration
 
+> **EXECUTED 2026-09-09 and it worked.** `pg_database_size` 382 → **205 MB**,
+> dashboard ~415 → **~223 MB**, heap 273 → 96 MB, indexes 51 MB. The row
+> fingerprint (`sum(hashtext(i::text))` = 486557030870) matched exactly across
+> the swap and all four FK re-adds succeeded. Gear was absent for **34
+> seconds**, not the 1–3 minutes estimated below.
+>
+> Two things to carry into any repeat, both learned the hard way here:
+> a reload leaves indexes fatter than a rebuild does (they came back at 66 MB
+> and a `REINDEX CONCURRENTLY` recovered 15 MB), and `TRUNCATE` must be in
+> autocommit or the whole exercise is pointless.
+
 The rows are **already compact** — the batched `UPDATE` in
 `compact-gear-stats.sql` ran against production on 2026-09-09 and all 655,402
 rows are in the array form. This runbook is now only about the **file**, which
@@ -171,11 +182,19 @@ disk — diagnose before doing anything else.
            pg_database_size(current_database()) / 1048576                   AS db_mb,
            round(pg_database_size(current_database()) * 1.085 / 1048576)     AS dashboard_est_mb;
 
-Expect heap ~112 MB, idx ~51 MB, total ~160 MB, db ~218 MB, dashboard ~237 MB.
+Measured on the 2026-09-09 run: heap 96 MB, idx 51 MB, total 147 MB, db
+205 MB, dashboard ~223 MB.
 
-A reload fills pages compactly, so no `REINDEX` is needed afterwards — the
-indexes are built as the rows arrive. Check for invalid leftovers anyway if you
-ran one:
+**Reindex after the reload.** The opposite of what an earlier draft of this
+file claimed: index entries are built as the rows arrive rather than
+bulk-sorted, so they pack *less* densely than a rebuild. They came back at
+66 MB against the 51 MB held before the swap, and this recovered the 15 MB in
+about 25 seconds:
+
+    REINDEX INDEX CONCURRENTLY public.idx_inventory_items_user_id_id;
+    REINDEX INDEX CONCURRENTLY public.inventory_items_pkey;
+
+Then check for invalid leftovers:
 
     SELECT indexrelid::regclass FROM pg_index
     WHERE indrelid = 'public.inventory_items'::regclass AND NOT indisvalid;
