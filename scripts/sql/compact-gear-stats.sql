@@ -1,5 +1,15 @@
 -- Re-encode `inventory_items.stats` from the long form to the compact array.
 --
+-- EXECUTED against production 2026-09-09: all 655,402 rows are compact and the
+-- helper functions have been dropped again. Re-running is a no-op — every
+-- statement is gated on `jsonb_typeof(stats) = 'object'`, and no row is an
+-- object any more. Kept for the record and for re-deriving the encoder.
+--
+-- What it measured in the end: the `stats` datum went 247 -> 29.1 B, the whole
+-- row to ~174 B, live bytes 109 MB. The heap FILE stayed at 273 MB — an UPDATE
+-- never shrinks it — so the ~164 MB freed is reusable headroom inside the file,
+-- not a smaller number on the dashboard.
+--
 --   {"mainStat":{"name":"attack","type":"flat","value":60},"subStats":[…]}
 --   ->  ["a60","k6","s3","C6"]
 --
