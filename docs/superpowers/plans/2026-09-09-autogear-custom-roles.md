@@ -1685,7 +1685,7 @@ MSG
 **Interfaces:**
 - Consumes: `CustomFormulaRow` (type) from Task 1, `resolveLimitStatValue` from `priorityScore.ts`, `getLimitStatLabel` from `src/constants/stats.ts`.
 - Produces:
-  - `CustomFormulaRowView` component — props `{ row, index, isEditing, shipStats, isLoneCoreRow, onEdit, onRemove }`
+  - `CustomFormulaRowView` component — props `{ row, isEditing, shipStats, isLoneCoreRow, onEdit, onRemove }`. The row index is not a prop: the caller closes over it for `onEdit` / `onRemove` and passes it as React's `key`.
   - `CustomFormulaForm` component — props `{ onAdd, editingValue?, onSave?, onCancel? }`
 
 The type and the component would otherwise collide on the name `CustomFormulaRow`, hence `CustomFormulaRowView` for the component.
