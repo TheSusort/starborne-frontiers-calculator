@@ -60,20 +60,23 @@ export const CUSTOM_FORMULA_SEEDS: Record<
     },
     DEBUFFER_CORROSION: {
         rows: [core('hacking')],
-        fidelity: 'Approximation. The role also rewards a 3-piece Decimation set.',
+        fidelity:
+            'Approximation. The role also grows with every Decimation piece equipped, which stat rows cannot express.',
     },
     SUPPORTER: {
         rows: [core('hp'), bonus('healModifier'), bonus('crit', 50), bonus('critDamage', 50)],
         fidelity:
-            'Approximation. Heal modifier is a bonus, not a core stat, because it is 0 before gear.',
+            'Approximation. The role folds crit rate and crit power into one multiplier and scales heal modifier the same way, where bonus rows add each on its own. Heal modifier is a bonus row because it is 0 before gear.',
     },
     SUPPORTER_BUFFER: {
         rows: [core('speed'), bonus('effectiveHp', 50)],
-        fidelity: 'Approximation. The role also rewards a 4-piece Boost set.',
+        fidelity:
+            'Approximation. The role adds speed and effective HP together rather than multiplying them, with effective HP on a curve that flattens as it grows, and it rewards a 4-piece Boost set.',
     },
     SUPPORTER_OFFENSIVE: {
         rows: [core('speed'), bonus('attack', 50)],
-        fidelity: 'Approximation. The role also rewards a 4-piece Boost set.',
+        fidelity:
+            'Approximation. The role adds speed and attack together rather than multiplying them, with attack on a curve that flattens as it grows, and it rewards a 4-piece Boost set.',
     },
     SUPPORTER_SHIELD: {
         rows: [core('hp')],
