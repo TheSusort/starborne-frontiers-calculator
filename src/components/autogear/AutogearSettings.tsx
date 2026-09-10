@@ -858,6 +858,30 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                             </div>
                             <h3 className="font-semibold">What do you want to add?</h3>
                             <div className="space-y-2">
+                                {isCustom && (
+                                    <>
+                                        <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary">
+                                            Custom formula
+                                        </h4>
+                                        <button
+                                            type="button"
+                                            className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
+                                            onClick={() => openForm('formulaRow')}
+                                        >
+                                            <div className="font-semibold">Formula stat</div>
+                                            <div className="text-xs text-theme-text-secondary">
+                                                Add a stat to your custom role&apos;s scoring (e.g.
+                                                Attack, as much as possible).
+                                            </div>
+                                        </button>
+                                        <p className="text-xs text-theme-text-secondary pb-1">
+                                            Your formula is what decides a build&apos;s score.
+                                        </p>
+                                        <h4 className="text-xs uppercase tracking-wide text-theme-text-secondary border-t border-dark-border pt-3">
+                                            Other tweaks
+                                        </h4>
+                                    </>
+                                )}
                                 <button
                                     type="button"
                                     className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
@@ -880,19 +904,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                         Stealth).
                                     </div>
                                 </button>
-                                {isCustom && (
-                                    <button
-                                        type="button"
-                                        className="w-full text-left p-3 bg-dark border border-dark-border hover:border-primary hover:bg-dark-lighter rounded transition-colors"
-                                        onClick={() => openForm('formulaRow')}
-                                    >
-                                        <div className="font-semibold">Formula stat</div>
-                                        <div className="text-xs text-theme-text-secondary">
-                                            Add a stat to your custom role&apos;s scoring (e.g.
-                                            Attack, as much as possible).
-                                        </div>
-                                    </button>
-                                )}
                                 {!isCustom && (
                                     <button
                                         type="button"

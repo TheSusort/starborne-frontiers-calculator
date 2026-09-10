@@ -53,6 +53,27 @@ describe('Custom mode panel', () => {
         expect(screen.queryByText(/^Scale$/)).not.toBeInTheDocument();
     });
 
+    it('puts the formula stat above the other tweaks, under its own heading', async () => {
+        // A formula stat decides the score; the rest only constrain it. The picker groups
+        // them so that difference is visible before the choice is made.
+        renderPanel({ selectedShipRole: null });
+        await userEvent.click(screen.getByRole('button', { name: /add tweak/i }));
+
+        expect(screen.getByText(/^Custom formula$/i)).toBeInTheDocument();
+        expect(screen.getByText(/^Other tweaks$/i)).toBeInTheDocument();
+
+        const formulaStat = screen.getByText(/^Formula stat$/i);
+        const limits = screen.getByText(/^Limits$/i);
+        expect(formulaStat.compareDocumentPosition(limits)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+
+    it('groups nothing when a role is selected, because there is no formula', async () => {
+        renderPanel({ selectedShipRole: 'ATTACKER' });
+        await userEvent.click(screen.getByRole('button', { name: /add tweak/i }));
+        expect(screen.queryByText(/^Custom formula$/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/^Other tweaks$/i)).not.toBeInTheDocument();
+    });
+
     it('keeps Scale in the picker when a role is selected', async () => {
         // Non-vacuity for the test above: the entry must exist somewhere, or "hidden in
         // Custom" would pass against a picker that never had a Scale entry at all.
