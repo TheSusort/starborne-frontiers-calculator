@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { customFormulaScore, formulaRowTerm, isFormulaEmpty } from '../customFormula';
-import type { CustomFormula } from '../../../types/autogear';
+import type { CustomFormula, CustomFormulaRow } from '../../../types/autogear';
 import type { BaseStats } from '../../../types/stats';
 
 const base: BaseStats = {
@@ -175,6 +175,46 @@ describe('customFormulaScore — importance', () => {
                 customFormulaScore(one, formula)
             );
         }
+    });
+});
+
+describe('customFormulaScore — a stored importance the type does not allow', () => {
+    // CoreImportance gates authoring, not input. A persisted config is untyped and its
+    // rows reach the scorer without passing through any form, so an exponent outside
+    // {0.5, 1, 2} would silently corrupt the score instead of failing.
+    const withImportance = (importance: number): CustomFormula => ({
+        rows: [
+            { stat: 'attack', kind: 'core', direction: 'max', importance } as CustomFormulaRow,
+            { stat: 'crit', kind: 'core', direction: 'max' },
+        ],
+    });
+    // Attack below its normalizer, so the term is not 1 — an exponent on a term of exactly
+    // 1 provably cannot change anything, which would make the checks below vacuous.
+    const stats = withStats({ attack: 8000 });
+    const normal = customFormulaScore(stats, withImportance(1));
+
+    it('reads 0 as Normal rather than dropping every core row', () => {
+        // Math.pow(term, 0) is 1 for any term, so the core rows would stop counting.
+        expect(customFormulaScore(stats, withImportance(0))).toBeCloseTo(normal, 10);
+    });
+
+    it('reads a negative as Normal rather than inverting the row', () => {
+        // A negative exponent turns a term below 1 into one above it, flipping maximize
+        // into minimize without the row saying so.
+        expect(customFormulaScore(stats, withImportance(-1))).toBeCloseTo(normal, 10);
+    });
+
+    it('reads a non-finite as Normal rather than collapsing or exploding', () => {
+        const score = customFormulaScore(stats, withImportance(Number.POSITIVE_INFINITY));
+        expect(score).toBeCloseTo(normal, 10);
+        expect(Number.isFinite(score)).toBe(true);
+    });
+
+    it('still honours the exponents the picker does offer', () => {
+        // Non-vacuity: if every value read as Normal, the tests above would pass on a
+        // scorer that ignored importance entirely.
+        expect(customFormulaScore(stats, withImportance(2))).not.toBeCloseTo(normal, 6);
+        expect(customFormulaScore(stats, withImportance(0.5))).not.toBeCloseTo(normal, 6);
     });
 });
 

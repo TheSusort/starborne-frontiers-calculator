@@ -1,5 +1,5 @@
 import type { BaseStats } from '../../types/stats';
-import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { CoreImportance, CustomFormula, CustomFormulaRow } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution';
 
@@ -23,6 +23,23 @@ export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number 
 
 export function isFormulaEmpty(formula: CustomFormula | undefined): boolean {
     return !formula || formula.rows.length === 0;
+}
+
+/** The exponents a core row may carry, in the order the picker offers them. */
+export const CORE_IMPORTANCES: readonly CoreImportance[] = [0.5, 1, 2];
+
+/**
+ * A core row's exponent, guaranteed to be one the formula is defined for.
+ *
+ * `CoreImportance` gates authoring, not input: a stored config is untyped, and a row read
+ * back from one reaches the scorer without passing through any form. Left unchecked, the
+ * exponent silently corrupts the score rather than failing — `0` collapses every core term
+ * to 1 so the core rows stop counting, a negative inverts the row's direction, and a
+ * non-finite drives the product to 0 or Infinity. Anything unrecognised reads as Normal.
+ */
+export function coreImportanceOf(row: CustomFormulaRow): CoreImportance {
+    const declared = row.importance;
+    return declared !== undefined && CORE_IMPORTANCES.includes(declared) ? declared : 1;
 }
 
 /** The two config fields that decide whether a ship can be scored at all. */
@@ -73,7 +90,7 @@ export function customFormulaScore(stats: BaseStats, formula: CustomFormula | un
     for (const row of formula!.rows) {
         const term = formulaRowTerm(stats, row);
         if (row.kind === 'core') {
-            const importance = row.importance ?? 1;
+            const importance = coreImportanceOf(row);
             product *= importance === 1 ? term : Math.pow(term, importance);
         } else {
             bonusSum += ((row.percentage ?? 100) / 100) * term;

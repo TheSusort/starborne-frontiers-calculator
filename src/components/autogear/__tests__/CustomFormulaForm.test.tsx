@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CustomFormulaForm } from '../CustomFormulaForm';
+import type { CustomFormulaRow } from '../../../types/autogear';
 
 // The `ui` barrel transitively pulls ui/layout/Sidebar, which imports
 // '/favicon.ico?url' — unresolvable under Vitest. Same workaround as the other
@@ -84,6 +85,33 @@ describe('CustomFormulaForm', () => {
         );
         await userEvent.click(screen.getByRole('button', { name: /save/i }));
         expect(onSave).not.toHaveBeenCalled();
+    });
+
+    it('normalizes a stored core importance the picker never offers', async () => {
+        // Same trust boundary as the weight above: a stored row can carry an exponent
+        // outside the three the picker offers, and saving it back would persist it.
+        const onSave = vi.fn();
+        render(
+            <CustomFormulaForm
+                onAdd={vi.fn()}
+                onSave={onSave}
+                editingValue={
+                    // Parsed rather than written inline, because that is how a stored row
+                    // arrives: JSON with no type to stop it holding an exponent the union
+                    // forbids.
+                    JSON.parse(
+                        '{"stat":"attack","kind":"core","direction":"max","importance":0}'
+                    ) as CustomFormulaRow
+                }
+            />
+        );
+        await userEvent.click(screen.getByRole('button', { name: /save/i }));
+        expect(onSave).toHaveBeenCalledWith({
+            stat: 'attack',
+            kind: 'core',
+            direction: 'max',
+            importance: 1,
+        });
     });
 
     it('prefills from an edited row and saves it back', async () => {

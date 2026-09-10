@@ -8,6 +8,7 @@ import type {
     FormulaRowKind,
 } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
+import { coreImportanceOf } from '../../utils/autogear/customFormula';
 
 // Mirrors StatPriorityForm's AVAILABLE_STATS: the stats a player can gear for, plus the
 // derived composites.
@@ -51,7 +52,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             setStat(editingValue.stat);
             setKind(editingValue.kind);
             setDirection(editingValue.direction);
-            setImportance(editingValue.importance ?? 1);
+            setImportance(coreImportanceOf(editingValue));
             setPercentage(String(editingValue.percentage ?? 100));
         } else {
             setStat(AVAILABLE_STATS[0]);
