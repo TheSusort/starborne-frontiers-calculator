@@ -102,6 +102,10 @@ export interface ScorabilityConfig {
  * Splits ships into those a run can score and those it cannot. A ship is unscoreable
  * only in Custom mode (`shipRole` null) with an empty formula — every gear combination
  * would score 0 and tie, so the optimizer would return arbitrary gear (`isFormulaEmpty`).
+ *
+ * A formula whose every row names a stat the scorer cannot scale ties the search the same
+ * way, at a constant 1 rather than 0, and this gate does not catch it. No formula built
+ * through the picker can be in that state, since `FORMULA_STATS` all carry a normalizer.
  */
 export function partitionScoreableShips<T extends { id: string }>(
     ships: T[],
