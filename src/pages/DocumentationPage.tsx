@@ -1352,7 +1352,9 @@ const DocumentationPage: React.FC = () => {
                                                 </li>
                                             </ul>
                                         </div>
-
+                                    </div>
+                                    <h4 className="text-lg font-semibold">Not a Role</h4>
+                                    <div className="flex flex-wrap gap-4">
                                         <div className="card">
                                             <h4 className="font-semibold text-primary">Custom</h4>
                                             <p className="text-theme-text">

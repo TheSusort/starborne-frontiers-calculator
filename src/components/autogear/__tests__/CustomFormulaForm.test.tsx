@@ -35,6 +35,35 @@ describe('CustomFormulaForm', () => {
         });
     });
 
+    it('submits a bonus row with a 0 weight rather than falling back to 100', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByLabelText(/how it counts/i));
+        await userEvent.click(screen.getByText(/added/i));
+        const weightInput = screen.getByLabelText(/weight %/i);
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '0');
+        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        expect(onAdd).toHaveBeenCalledWith({
+            stat: 'attack',
+            kind: 'bonus',
+            direction: 'max',
+            percentage: 0,
+        });
+    });
+
+    it('rejects a negative bonus weight instead of submitting it', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByLabelText(/how it counts/i));
+        await userEvent.click(screen.getByText(/added/i));
+        const weightInput = screen.getByLabelText(/weight %/i);
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '-5');
+        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+    });
+
     it('prefills from an edited row and saves it back', async () => {
         const onSave = vi.fn();
         render(

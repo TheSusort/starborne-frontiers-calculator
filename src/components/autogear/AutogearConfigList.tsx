@@ -1,5 +1,11 @@
 import React from 'react';
-import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../../types/autogear';
 import { GEAR_SETS, ShipTypeName } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
@@ -17,6 +23,7 @@ interface AutogearConfigListProps {
     tryToCompleteSets: boolean;
     optimizeImplants: boolean;
     excludedImplantTypes?: string[];
+    customFormula?: CustomFormula;
 }
 
 export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
@@ -31,13 +38,16 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
     tryToCompleteSets,
     optimizeImplants,
     excludedImplantTypes = [],
+    customFormula,
 }) => {
+    const formulaRows = customFormula?.rows ?? [];
     const hasConfig =
         statPriorities.length > 0 ||
         setPriorities.length > 0 ||
         statBonuses.length > 0 ||
         fleetBuffs.length > 0 ||
         excludedImplantTypes.length > 0 ||
+        formulaRows.length > 0 ||
         optimizeImplants ||
         ignoreEquipped ||
         ignoreUnleveled ||
@@ -124,6 +134,14 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                     {excludedImplantTypes.map((key) => (
                         <span key={key}>Excl. {IMPLANTS[key]?.name ?? key}</span>
                     ))}
+
+                    {/* Custom Formula */}
+                    {formulaRows.length > 0 && (
+                        <span>
+                            {'Formula: '}
+                            {formulaRows.map((row) => getLimitStatLabel(row.stat)).join(', ')}
+                        </span>
+                    )}
                 </div>
             ) : (
                 <div className="text-theme-text-secondary">No configuration set</div>

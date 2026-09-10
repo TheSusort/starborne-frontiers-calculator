@@ -70,6 +70,9 @@ describe('Custom mode panel', () => {
     it('groups nothing when a role is selected, because there is no formula', async () => {
         renderPanel({ selectedShipRole: 'ATTACKER' });
         await userEvent.click(screen.getByRole('button', { name: /add tweak/i }));
+        // Non-vacuity: proves the picker actually opened, so the two absences below are
+        // about grouping headings and not about a click that silently did nothing.
+        expect(screen.getByText(/^Scale$/)).toBeInTheDocument();
         expect(screen.queryByText(/^Custom formula$/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/^Other tweaks$/i)).not.toBeInTheDocument();
     });
@@ -182,5 +185,22 @@ describe('AutogearConfigList labels a roleless config', () => {
         // above is about the null case and not about an element that never appears.
         render(<AutogearConfigList {...configListProps({ shipRole: 'ATTACKER' })} />);
         expect(screen.getByText('Attacker')).toBeInTheDocument();
+    });
+
+    it('summarises a formula-only config instead of reading No configuration set', () => {
+        render(
+            <AutogearConfigList
+                {...configListProps({ shipRole: null, customFormula: attackFormula })}
+            />
+        );
+        expect(screen.queryByText(/no configuration set/i)).not.toBeInTheDocument();
+        expect(screen.getByText(/formula: attack/i)).toBeInTheDocument();
+    });
+
+    it('reads No configuration set when the config is genuinely empty', () => {
+        // Non-vacuity: proves the empty-state copy still renders at all, so the formula
+        // config above is read against real text and not an element that never appears.
+        render(<AutogearConfigList {...configListProps({ shipRole: null })} />);
+        expect(screen.getByText(/no configuration set/i)).toBeInTheDocument();
     });
 });

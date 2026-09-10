@@ -64,10 +64,17 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const row: CustomFormulaRow =
-            kind === 'core'
-                ? { stat, kind, direction, importance }
-                : { stat, kind, direction, percentage: Number(percentage) || 100 };
+        let row: CustomFormulaRow;
+        if (kind === 'core') {
+            row = { stat, kind, direction, importance };
+        } else {
+            const trimmed = percentage.trim();
+            const parsedPercentage = trimmed === '' ? 100 : Number(trimmed);
+            if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0) {
+                return;
+            }
+            row = { stat, kind, direction, percentage: parsedPercentage };
+        }
         if (editingValue && onSave) {
             onSave(row);
             return;
@@ -129,6 +136,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                         <Input
                             label="Weight %"
                             type="number"
+                            min="0"
                             value={percentage}
                             onChange={(e) => setPercentage(e.target.value)}
                             placeholder="100"
