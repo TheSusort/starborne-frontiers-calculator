@@ -218,6 +218,42 @@ describe('customFormulaScore — a stored importance the type does not allow', (
     });
 });
 
+describe('customFormulaScore — a stored bonus weight the form would refuse', () => {
+    const stats = withStats({ attack: 8000, speed: 130 });
+    const coreOnly: CustomFormula = {
+        rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+    };
+    const withWeight = (percentage: number): CustomFormula => ({
+        rows: [
+            { stat: 'attack', kind: 'core', direction: 'max' },
+            { stat: 'speed', kind: 'bonus', direction: 'max', percentage },
+        ],
+    });
+    const inert = customFormulaScore(stats, coreOnly);
+
+    it('makes a negative weight contribute nothing rather than flipping its sign', () => {
+        expect(customFormulaScore(stats, withWeight(-100))).toBeCloseTo(inert, 10);
+    });
+
+    it('makes a non-finite weight contribute nothing rather than exploding', () => {
+        const score = customFormulaScore(stats, withWeight(Number.POSITIVE_INFINITY));
+        expect(score).toBeCloseTo(inert, 10);
+        expect(Number.isFinite(score)).toBe(true);
+    });
+
+    it('makes NaN contribute nothing rather than poisoning the score', () => {
+        const score = customFormulaScore(stats, withWeight(Number.NaN));
+        expect(score).toBeCloseTo(inert, 10);
+        expect(Number.isNaN(score)).toBe(false);
+    });
+
+    it('still honours a weight the form would accept', () => {
+        // Non-vacuity: if every weight contributed nothing, the checks above would pass on
+        // a scorer that ignored bonus rows altogether.
+        expect(customFormulaScore(stats, withWeight(40))).toBeGreaterThan(inert);
+    });
+});
+
 describe('customFormulaScore — a zero core term zeroes the product', () => {
     it('scores 0 when a maximized core stat is 0, whatever the other rows hold', () => {
         // Deliberate product semantics, and the reason a stat that can be 0 at base

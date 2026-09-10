@@ -116,4 +116,9 @@ export const MULTIPLIER_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     speed: 130,
     effectiveHp: 120000,
     directDamage: 6000,
+    // Both come from set bonuses rather than slot rolls, so their geared value is what the
+    // sets grant: Repair 20% plus Recovery 10% for heal modifier, and 4% per Shield set
+    // activation for shield regen on a build that stacks them.
+    healModifier: 30,
+    shield: 10,
 };

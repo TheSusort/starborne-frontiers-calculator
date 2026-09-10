@@ -8,24 +8,7 @@ import type {
     FormulaRowKind,
 } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
-import { coreImportanceOf } from '../../utils/autogear/customFormula';
-
-// Mirrors StatPriorityForm's AVAILABLE_STATS: the stats a player can gear for, plus the
-// derived composites.
-const AVAILABLE_STATS: LimitableStat[] = [
-    'attack',
-    'defence',
-    'hp',
-    'effectiveHp',
-    'directDamage',
-    'speed',
-    'crit',
-    'critDamage',
-    'hacking',
-    'security',
-    'healModifier',
-    'shield',
-];
+import { FORMULA_STATS, coreImportanceOf } from '../../utils/autogear/customFormula';
 
 const IMPORTANCE_OPTIONS: { value: string; label: string }[] = [
     { value: '0.5', label: 'Slight' },
@@ -41,7 +24,7 @@ interface Props {
 }
 
 export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave, onCancel }) => {
-    const [stat, setStat] = useState<LimitableStat>(AVAILABLE_STATS[0]);
+    const [stat, setStat] = useState<LimitableStat>(FORMULA_STATS[0]);
     const [kind, setKind] = useState<FormulaRowKind>('core');
     const [direction, setDirection] = useState<FormulaDirection>('max');
     const [importance, setImportance] = useState<CoreImportance>(1);
@@ -55,7 +38,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             setImportance(coreImportanceOf(editingValue));
             setPercentage(String(editingValue.percentage ?? 100));
         } else {
-            setStat(AVAILABLE_STATS[0]);
+            setStat(FORMULA_STATS[0]);
             setKind('core');
             setDirection('max');
             setImportance(1);
@@ -81,7 +64,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             return;
         }
         onAdd(row);
-        setStat(AVAILABLE_STATS[0]);
+        setStat(FORMULA_STATS[0]);
         setKind('core');
         setDirection('max');
         setImportance(1);
@@ -96,7 +79,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                     className="flex-1 min-w-[8rem]"
                     value={stat}
                     onChange={(value) => setStat(value as LimitableStat)}
-                    options={AVAILABLE_STATS.map((s) => ({
+                    options={FORMULA_STATS.map((s) => ({
                         value: s,
                         label: getLimitStatLabel(s),
                     }))}

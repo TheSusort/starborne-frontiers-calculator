@@ -1,4 +1,4 @@
-import type { BaseStats } from '../../types/stats';
+import type { BaseStats, LimitableStat } from '../../types/stats';
 import type { CoreImportance, CustomFormula, CustomFormulaRow } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution';
@@ -25,21 +25,71 @@ export function isFormulaEmpty(formula: CustomFormula | undefined): boolean {
     return !formula || formula.rows.length === 0;
 }
 
+/**
+ * The stats a formula row may name, in picker order. Owned here rather than by the form
+ * because the constraint is the scorer's: every entry needs a `MULTIPLIER_NORMALIZERS`
+ * value, or its term reads as the raw stat value and one row decides the ranking.
+ * `customFormulaStats.test.ts` holds that. `hpRegen` is absent deliberately — it is
+ * planner-internal and never shown to players.
+ */
+export const FORMULA_STATS: readonly LimitableStat[] = [
+    'attack',
+    'defence',
+    'hp',
+    'effectiveHp',
+    'directDamage',
+    'speed',
+    'crit',
+    'critDamage',
+    'hacking',
+    'security',
+    'healModifier',
+    'shield',
+];
+
 /** The exponents a core row may carry, in the order the picker offers them. */
 export const CORE_IMPORTANCES: readonly CoreImportance[] = [0.5, 1, 2];
 
+/** The weight a bonus row carries when it does not name one. */
+export const DEFAULT_BONUS_WEIGHT = 100;
+
+/*
+ * A row's own types gate authoring, not input. A stored config is untyped JSON, and a row
+ * read back from one reaches the scorer without passing through any form — so every field
+ * below is normalized here rather than trusted. Each bad value would corrupt the score
+ * silently instead of failing, which is worse than a wrong answer that announces itself.
+ */
+
 /**
- * A core row's exponent, guaranteed to be one the formula is defined for.
- *
- * `CoreImportance` gates authoring, not input: a stored config is untyped, and a row read
- * back from one reaches the scorer without passing through any form. Left unchecked, the
- * exponent silently corrupts the score rather than failing — `0` collapses every core term
- * to 1 so the core rows stop counting, a negative inverts the row's direction, and a
- * non-finite drives the product to 0 or Infinity. Anything unrecognised reads as Normal.
+ * A core row's exponent. `0` would collapse every core term to 1 so the core rows stop
+ * counting, a negative inverts the row's direction, and a non-finite drives the product to
+ * 0 or Infinity. Anything unrecognised reads as Normal.
  */
 export function coreImportanceOf(row: CustomFormulaRow): CoreImportance {
     const declared = row.importance;
     return declared !== undefined && CORE_IMPORTANCES.includes(declared) ? declared : 1;
+}
+
+/**
+ * A bonus row's weight. An absent weight takes the default, because the author never named
+ * one. A present but negative or non-finite weight is corrupt for that row, so the row
+ * contributes nothing — matching the form, which refuses to save such a row at all, and
+ * unlike a default of 100 it cannot turn a stored negative into full positive weight.
+ */
+export function bonusWeightOf(row: CustomFormulaRow): number {
+    const declared = row.percentage;
+    if (declared === undefined) return DEFAULT_BONUS_WEIGHT;
+    return Number.isFinite(declared) && declared >= 0 ? declared : 0;
+}
+
+/**
+ * Whether the scorer can put this row on a comparable scale at all. A stat with no
+ * normalizer would fall back to 1 and read as its raw value, which is orders of magnitude
+ * off every other row — so an unscalable row is skipped rather than allowed to dominate.
+ * `customFormulaStats.test.ts` keeps every stat the picker offers out of this branch.
+ */
+function isScalable(row: CustomFormulaRow): boolean {
+    return MULTIPLIER_NORMALIZERS[row.stat] !== undefined;
 }
 
 /** The two config fields that decide whether a ship can be scored at all. */
@@ -88,12 +138,13 @@ export function customFormulaScore(stats: BaseStats, formula: CustomFormula | un
     let bonusSum = 0;
 
     for (const row of formula!.rows) {
+        if (!isScalable(row)) continue;
         const term = formulaRowTerm(stats, row);
         if (row.kind === 'core') {
             const importance = coreImportanceOf(row);
             product *= importance === 1 ? term : Math.pow(term, importance);
         } else {
-            bonusSum += ((row.percentage ?? 100) / 100) * term;
+            bonusSum += (bonusWeightOf(row) / 100) * term;
         }
     }
 
