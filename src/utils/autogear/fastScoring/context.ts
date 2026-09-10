@@ -1,7 +1,13 @@
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type { EngineeringStat, BaseStats } from '../../../types/stats';
-import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../types/autogear';
+import type {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
 import { FastCache } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
@@ -14,6 +20,7 @@ export interface FastScoringContext {
     readonly priorities: readonly StatPriority[];
     readonly setPriorities: readonly SetPriority[] | undefined;
     readonly statBonuses: readonly StatBonus[] | undefined;
+    readonly customFormula: CustomFormula | undefined;
     readonly shipRole: ShipTypeName | undefined;
     readonly tryToCompleteSets: boolean | undefined;
     readonly arenaModifiers: Record<string, number> | null | undefined;
@@ -49,6 +56,7 @@ export interface BuildContextInput {
     priorities: readonly StatPriority[];
     setPriorities?: readonly SetPriority[];
     statBonuses?: readonly StatBonus[];
+    customFormula?: CustomFormula;
     shipRole?: ShipTypeName;
     tryToCompleteSets?: boolean;
     arenaModifiers?: Record<string, number> | null;
@@ -119,6 +127,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         priorities: input.priorities,
         setPriorities: input.setPriorities,
         statBonuses: input.statBonuses,
+        customFormula: input.customFormula,
         shipRole: input.shipRole,
         tryToCompleteSets: input.tryToCompleteSets,
         arenaModifiers: input.arenaModifiers,

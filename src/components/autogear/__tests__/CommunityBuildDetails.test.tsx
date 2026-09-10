@@ -63,7 +63,7 @@ describe('CommunityBuildDetails', () => {
         expect(screen.getByTestId('community-build-priority').textContent).toContain('Crit Power');
     });
 
-    it('renders stat priorities in payload order, because order is the priority', () => {
+    it('renders stat priorities in the order the payload gives them', () => {
         renderDetails(
             makeBuild({ statPriorities: [{ stat: 'crit' }, { stat: 'speed' }, { stat: 'attack' }] })
         );

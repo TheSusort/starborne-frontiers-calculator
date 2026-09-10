@@ -4,7 +4,13 @@ import { ShipSelector } from '../ship/ShipSelector';
 import { Button } from '../ui';
 import { Ship } from '../../types/ship';
 import { ChevronDownIcon, ChevronUpIcon, CloseIcon, GearIcon, InfoIcon } from '../ui/icons';
-import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { configToSharedBuild, hasExistingBuildConfig } from '../../utils/communityBuild';
@@ -40,6 +46,7 @@ interface AutogearQuickSettingsProps {
         selectedAlgorithm: AutogearAlgorithm;
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
+        customFormula?: CustomFormula;
     };
     children?: React.ReactNode;
 }
@@ -188,6 +195,7 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                             <CommunityRecommendations
                                 selectedShip={ship}
                                 currentBuild={configToSharedBuild(getShipConfig(ship.id))}
+                                shipRole={getShipConfig(ship.id).shipRole}
                                 hasExistingConfig={hasExistingBuildConfig(getShipConfig(ship.id))}
                                 onApplyBuild={(build) => onApplyBuild(ship.id, build)}
                             />

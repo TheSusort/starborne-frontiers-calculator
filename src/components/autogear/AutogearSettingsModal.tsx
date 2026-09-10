@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal } from '../ui/layout/Modal';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
+import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
@@ -27,12 +28,11 @@ interface AutogearSettingsModalProps {
     includeCalibratedGear: boolean;
     assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
-    onRoleSelect: (role: ShipTypeName) => void;
+    onRoleSelect: (role: ShipTypeName | null) => void;
     onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
-    onMovePriority: (fromIndex: number, toIndex: number) => void;
     onFindOptimalGear: () => void;
     onIgnoreEquippedChange: (value: boolean) => void;
     onIgnoreUnleveledChange: (value: boolean) => void;
@@ -63,6 +63,11 @@ interface AutogearSettingsModalProps {
     excludedImplantTypes: string[];
     onSetExcludedImplantTypes: (keys: string[]) => void;
     onRemoveExcludedImplantType: (key: string) => void;
+    customFormula: CustomFormula | undefined;
+    onAddFormulaRow: (row: CustomFormulaRow) => void;
+    onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
+    onRemoveFormulaRow: (index: number) => void;
+    onSeedFormula: (role: ShipTypeName) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({

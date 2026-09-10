@@ -1,6 +1,12 @@
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { EngineeringStat } from '../../types/stats';
 import { AutogearStrategy, AutogearResult, AutogearProgress } from './AutogearStrategy';
@@ -27,7 +33,9 @@ export abstract class BaseStrategy implements AutogearStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null
+        arenaModifiers?: Record<string, number> | null,
+        fleetBuffs?: FleetBuff[],
+        customFormula?: CustomFormula
     ): Promise<AutogearResult> | AutogearResult;
 
     public setProgressCallback(callback: (progress: AutogearProgress) => void) {

@@ -44,11 +44,9 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                 </span>
             </Section>
 
-            {/* Rendered as an ordered list: a priority's strength is its position,
-                not a number on the row (StatPriority.weight is always 1). */}
             {config.statPriorities.length > 0 && (
                 <Section title="Stat Priorities">
-                    <ol className="list-decimal list-inside space-y-1">
+                    <ul className="list-disc list-inside space-y-1">
                         {config.statPriorities.map((priority, index) => (
                             <li key={index} data-testid="community-build-priority">
                                 {getLimitStatLabel(priority.stat)}
@@ -59,7 +57,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                                 )}
                             </li>
                         ))}
-                    </ol>
+                    </ul>
                 </Section>
             )}
 

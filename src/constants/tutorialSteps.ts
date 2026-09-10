@@ -107,7 +107,7 @@ const AUTOGEAR_SETTINGS_TUTORIAL: TutorialGroup = {
             targetId: 'autogear-add-tweak',
             title: 'Your tweaks',
             description:
-                'Add stat priorities, set requirements, or stat bonuses on top of the role defaults. Order matters — higher tweaks weigh more. Use the chevrons to reorder, or click Edit to change a value.',
+                'Add stat priorities, set requirements, or stat bonuses on top of the role defaults. Click Edit on any of them to change a value.',
         },
         {
             targetId: 'autogear-advanced-options',

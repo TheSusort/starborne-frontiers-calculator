@@ -20,6 +20,8 @@ interface StatBonusRowProps {
     onMoveUp: () => void;
     onMoveDown: () => void;
     onRemove: () => void;
+    /** Renders the row with only Remove — no reorder, edit button, or inline number edit. */
+    readOnly?: boolean;
 }
 
 export const StatBonusRow: React.FC<StatBonusRowProps> = ({
@@ -32,6 +34,7 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
     onMoveUp,
     onMoveDown,
     onRemove,
+    readOnly = false,
 }) => {
     return (
         <div className={`flex items-center text-sm gap-2 ${isEditing ? 'opacity-60' : ''}`}>
@@ -63,14 +66,18 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
             </div>
             <span>
                 {getLimitStatLabel(bonus.stat)} ({' '}
-                <InlineNumberEdit
-                    value={bonus.percentage}
-                    onSave={(v) => v !== undefined && onUpdate({ ...bonus, percentage: v })}
-                    min={0}
-                    disabled={isEditing}
-                >
-                    {bonus.percentage}
-                </InlineNumberEdit>
+                {readOnly ? (
+                    bonus.percentage
+                ) : (
+                    <InlineNumberEdit
+                        value={bonus.percentage}
+                        onSave={(v) => v !== undefined && onUpdate({ ...bonus, percentage: v })}
+                        min={0}
+                        disabled={isEditing}
+                    >
+                        {bonus.percentage}
+                    </InlineNumberEdit>
+                )}
                 {'%) — '}
                 <span className="text-xs text-theme-text-secondary">
                     {bonus.mode === 'multiplier' ? 'Multiplier' : 'Additive'}
@@ -79,17 +86,25 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
                     <span className="ml-2 text-xs text-theme-text-secondary">(editing)</span>
                 )}
             </span>
+            {!readOnly && (
+                <Button
+                    aria-label="Edit bonus"
+                    variant="secondary"
+                    size="sm"
+                    onClick={onEdit}
+                    className="ml-auto"
+                    title="Edit bonus"
+                >
+                    <EditIcon />
+                </Button>
+            )}
             <Button
-                aria-label="Edit bonus"
-                variant="secondary"
+                aria-label="Remove bonus"
+                variant="danger"
                 size="sm"
-                onClick={onEdit}
-                className="ml-auto"
-                title="Edit bonus"
+                onClick={onRemove}
+                className={readOnly ? 'ml-auto' : undefined}
             >
-                <EditIcon />
-            </Button>
-            <Button aria-label="Remove bonus" variant="danger" size="sm" onClick={onRemove}>
                 <CloseIcon />
             </Button>
         </div>

@@ -1,6 +1,6 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import type { FleetBuff } from '../../types/autogear';
+import type { FleetBuff, CustomFormula } from '../../types/autogear';
 import { GearSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -157,7 +157,8 @@ export function calculateTotalScore(
     statBonuses?: StatBonus[],
     tryToCompleteSets?: boolean,
     arenaModifiers?: Record<string, number> | null,
-    fleetBuffs?: FleetBuff[]
+    fleetBuffs?: FleetBuff[],
+    customFormula?: CustomFormula
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -210,7 +211,15 @@ export function calculateTotalScore(
     const fleetBuffsKey = fleetBuffs?.length
         ? fleetBuffs.map((b) => `${b.stat}:${b.percentage}`).join(',')
         : '';
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}`;
+    const formulaKey = customFormula?.rows.length
+        ? customFormula.rows
+              .map(
+                  (r) =>
+                      `${r.stat}:${r.kind}:${r.direction}:${r.importance ?? 1}:${r.percentage ?? 100}`
+              )
+              .join(',')
+        : 'none';
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -283,7 +292,8 @@ export function calculateTotalScore(
         statBonuses,
         tryToCompleteSets,
         arcaneSiegeMultiplier,
-        implantSetCount
+        implantSetCount,
+        customFormula
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 

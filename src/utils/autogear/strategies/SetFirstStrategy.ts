@@ -2,7 +2,13 @@
 import { BaseStrategy } from '../BaseStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../../../types/autogear';
 import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { calculateTotalStats } from '../../ship/statsCalculator';
@@ -39,14 +45,19 @@ export class SetFirstStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        _tryToCompleteSets?: boolean,
+        _arenaModifiers?: Record<string, number> | null,
+        _fleetBuffs?: FleetBuff[],
+        customFormula?: CustomFormula
     ): Promise<AutogearResult> {
         const setGroups = this.groupInventoryBySets(
             availableInventory,
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            customFormula
         );
 
         // Sort set groups by priority
@@ -80,7 +91,8 @@ export class SetFirstStrategy extends BaseStrategy {
                 getEngineeringStatsForShipType,
                 shipRole,
                 setPriorities,
-                statBonuses
+                statBonuses,
+                customFormula
             );
 
             setPieces.forEach((piece) => {
@@ -101,7 +113,8 @@ export class SetFirstStrategy extends BaseStrategy {
             getEngineeringStatsForShipType,
             shipRole,
             setPriorities,
-            statBonuses
+            statBonuses,
+            customFormula
         );
 
         // Ensure progress is complete
@@ -127,7 +140,8 @@ export class SetFirstStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        customFormula?: CustomFormula
     ): SetGroup[] {
         const setGroups: Record<string, GearPiece[]> = {};
 
@@ -148,7 +162,8 @@ export class SetFirstStrategy extends BaseStrategy {
                     ship,
                     priorities,
                     getGearPiece,
-                    getEngineeringStatsForShipType
+                    getEngineeringStatsForShipType,
+                    customFormula
                 );
                 return { setName, pieces, score };
             })
@@ -161,7 +176,8 @@ export class SetFirstStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
+        customFormula?: CustomFormula
     ): number {
         // Find best possible combination of pieces from this set
         const slots = new Set(pieces.map((p) => p.slot));
@@ -183,7 +199,12 @@ export class SetFirstStrategy extends BaseStrategy {
                         );
                         const currentScore = this.calculateStatScore(
                             currentStats.final,
-                            priorities
+                            priorities,
+                            undefined,
+                            undefined,
+                            undefined,
+                            undefined,
+                            customFormula
                         );
 
                         if (!best || currentScore > best.score) {
@@ -204,7 +225,14 @@ export class SetFirstStrategy extends BaseStrategy {
             testEquipment,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType
+            getEngineeringStatsForShipType,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            customFormula
         );
     }
 
@@ -218,7 +246,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        customFormula?: CustomFormula
     ): Promise<GearPiece[]> {
         const availableSlots = pieces.map((p) => p.slot).filter((slot) => !usedSlots.has(slot));
 
@@ -263,7 +292,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         shipRole,
                         undefined,
                         setPriorities,
-                        statBonuses
+                        statBonuses,
+                        customFormula
                     ) * priorityMultiplier;
 
                 if (score > bestScore) {
@@ -287,7 +317,8 @@ export class SetFirstStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        customFormula?: CustomFormula
     ): Promise<void> {
         for (const slotKey of Object.keys(GEAR_SLOTS)) {
             const slot = slotKey;
@@ -319,7 +350,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         shipRole,
                         undefined,
                         setPriorities,
-                        statBonuses
+                        statBonuses,
+                        customFormula
                     );
                     if (score > bestScore) {
                         bestScore = score;
@@ -341,7 +373,8 @@ export class SetFirstStrategy extends BaseStrategy {
         shipRole?: ShipTypeName,
         setCount?: Record<string, number>,
         setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[]
+        statBonuses?: StatBonus[],
+        customFormula?: CustomFormula
     ): number {
         return calculatePriorityScore(
             stats,
@@ -349,7 +382,11 @@ export class SetFirstStrategy extends BaseStrategy {
             shipRole,
             setCount,
             setPriorities,
-            statBonuses
+            statBonuses,
+            undefined,
+            undefined,
+            undefined,
+            customFormula
         );
     }
 }

@@ -4,7 +4,7 @@ import { Select } from './Select';
 
 interface RoleSelectorProps {
     value: ShipTypeName | '';
-    onChange: (role: ShipTypeName) => void;
+    onChange: (role: ShipTypeName | '') => void;
     label?: string;
     className?: string;
     disabled?: boolean;

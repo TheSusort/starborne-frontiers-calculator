@@ -6,6 +6,11 @@ export const CURRENT_VERSION = '1.66.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Autogear: stat priority rows no longer carry up and down reorder arrows.',
+    'Autogear: heal modifier and shield scale bonuses no longer swamp the score.',
+    'Autogear: the Custom strategy now builds a role from stats you choose.',
+    'Autogear: each formula stat can aim high or low, and multiply or add.',
+    'Autogear: copy a built-in role into an editable custom formula.',
     'Healing calculator: hacking help text now says affinity shifts debuff landing by 25%.',
     'Documentation: the debuff landing formula now names the affinity hacking swing.',
     'Game Basics: the debuff landing section now points at the affinity hacking swing.',

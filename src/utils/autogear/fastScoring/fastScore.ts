@@ -126,7 +126,8 @@ export function fastScore(
         context.statBonuses as StatBonus[],
         context.tryToCompleteSets,
         arcaneSiegeMultiplier,
-        implantSetCount
+        implantSetCount,
+        context.customFormula
     );
 
     if (!hasHardRequirements) {

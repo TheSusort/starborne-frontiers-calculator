@@ -11,6 +11,9 @@ import {
     StatBonus,
     FleetBuff,
 } from '../../types/autogear';
+import type { CustomFormula } from '../../types/autogear';
+import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
+import { partitionScoreableShips } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
@@ -167,6 +170,7 @@ export const AutogearPage: React.FC = () => {
                 useArenaModifiers: boolean;
                 excludedImplantTypes: string[];
                 fleetBuffs: FleetBuff[];
+                customFormula: CustomFormula | undefined;
             }
         >
     >({});
@@ -331,6 +335,7 @@ export const AutogearPage: React.FC = () => {
                 useArenaModifiers: false,
                 excludedImplantTypes: [],
                 fleetBuffs: [],
+                customFormula: undefined,
             }
         );
     };
@@ -486,8 +491,23 @@ export const AutogearPage: React.FC = () => {
 
     const handleAutogear = async () => {
         // Filter out null ships and get valid ships
-        const validShips = selectedShips.filter((ship): ship is Ship => ship !== null);
-        if (validShips.length === 0) return;
+        const presentShips = selectedShips.filter((ship): ship is Ship => ship !== null);
+        if (presentShips.length === 0) return;
+
+        // A Custom-mode ship with no formula rows scores every gear combination 0,
+        // which ties the whole search and would hand back arbitrary gear
+        // (`isFormulaEmpty`). Skip those ships rather than let the batch run over
+        // them, and tell the user which ones were left out.
+        const { scoreable, unscoreable } = partitionScoreableShips(presentShips, getShipConfig);
+        if (unscoreable.length > 0) {
+            addNotification(
+                'warning',
+                `Skipped ${unscoreable.map((ship) => ship.name).join(', ')}: a Custom strategy needs at least one formula stat.`
+            );
+        }
+        if (scoreable.length === 0) return;
+
+        const validShips = scoreable;
 
         // Uncomment the next line to disable performance tracking entirely
         // performanceTracker.disable();
@@ -542,10 +562,10 @@ export const AutogearPage: React.FC = () => {
         // describes equipment IDS, not the gear's stats, so a run whose gear
         // stats differ from the last one ("Use upgraded stats", "Assume all
         // gear is calibrated", or a gear piece edited since) would otherwise
-        // read stale scores. Only GeneticStrategy clears it itself; TwoPass,
-        // SetFirst and BeamSearch do not. Clearing once per team run (not per
-        // ship) keeps all within-run caching intact — the key already includes
-        // ship.id, so cross-ship reuse was negligible.
+        // read stale scores. Only GeneticStrategy clears it itself; the others
+        // do not. Clearing once per team run (not per ship) keeps all
+        // within-run caching intact — the key already includes ship.id, so
+        // cross-ship reuse was negligible.
         clearScoreCache();
 
         const startTime = performance.now();
@@ -626,6 +646,7 @@ export const AutogearPage: React.FC = () => {
                 useArenaModifiers: shipConfig.useArenaModifiers,
                 fleetBuffs: shipConfig.fleetBuffs,
                 excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
+                customFormula: shipConfig.customFormula,
             };
             void saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
@@ -768,7 +789,8 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.statBonuses,
                     shipConfig.tryToCompleteSets,
                     arenaModifiers,
-                    shipConfig.fleetBuffs
+                    shipConfig.fleetBuffs,
+                    shipConfig.customFormula
                 )
             );
             const newSuggestions = strategyResult.suggestions;
@@ -1762,37 +1784,36 @@ export const AutogearPage: React.FC = () => {
                     onResetConfig={() => {
                         if (shipSettings) {
                             void resetConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                shipRole: 'ATTACKER',
-                                statPriorities: [],
-                                setPriorities: [],
-                                statBonuses: [],
-                                ignoreEquipped: false,
-                                ignoreUnleveled: true,
-                                useUpgradedStats: false,
-                                tryToCompleteSets: false,
-                                selectedAlgorithm: AutogearAlgorithm.Genetic,
-                                showSecondaryRequirements: false,
-                                optimizeImplants: false,
-                                includeCalibratedGear: false,
-                                assumeCalibrated: false,
-                                useArenaModifiers: false,
-                                excludedImplantTypes: [],
-                                fleetBuffs: [],
-                            });
-                            addNotification('success', 'Reset configuration to defaults');
-                        }
-                    }}
-                    onMovePriority={(fromIndex, toIndex) => {
-                        if (shipSettings) {
                             const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                statPriorities: arrayMove(
-                                    config.statPriorities,
-                                    fromIndex,
-                                    toIndex
-                                ),
-                            });
+                            if (config.shipRole === null) {
+                                // Custom mode: the role stays unset; only the formula resets,
+                                // re-seeding from its origin role when it has one.
+                                updateShipConfig(shipSettings.id, {
+                                    customFormula: config.customFormula?.seededFrom
+                                        ? seedFormulaFromRole(config.customFormula.seededFrom)
+                                        : undefined,
+                                });
+                            } else {
+                                updateShipConfig(shipSettings.id, {
+                                    shipRole: 'ATTACKER',
+                                    statPriorities: [],
+                                    setPriorities: [],
+                                    statBonuses: [],
+                                    ignoreEquipped: false,
+                                    ignoreUnleveled: true,
+                                    useUpgradedStats: false,
+                                    tryToCompleteSets: false,
+                                    selectedAlgorithm: AutogearAlgorithm.Genetic,
+                                    showSecondaryRequirements: false,
+                                    optimizeImplants: false,
+                                    includeCalibratedGear: false,
+                                    assumeCalibrated: false,
+                                    useArenaModifiers: false,
+                                    excludedImplantTypes: [],
+                                    fleetBuffs: [],
+                                });
+                            }
+                            addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
                     onMoveSetPriority={(fromIndex, toIndex) => {
@@ -1845,6 +1866,52 @@ export const AutogearPage: React.FC = () => {
                                 fleetBuffs: arrayMove(config.fleetBuffs, fromIndex, toIndex),
                             });
                         }
+                    }}
+                    customFormula={
+                        shipSettings ? getShipConfig(shipSettings.id).customFormula : undefined
+                    }
+                    onAddFormulaRow={(row) => {
+                        if (!shipSettings) return;
+                        const config = getShipConfig(shipSettings.id);
+                        const rows = config.customFormula?.rows ?? [];
+                        const existing = rows.findIndex(
+                            (r) => r.stat === row.stat && r.kind === row.kind
+                        );
+                        const next =
+                            existing >= 0
+                                ? rows.map((r, i) => (i === existing ? row : r))
+                                : [...rows, row];
+                        updateShipConfig(shipSettings.id, {
+                            customFormula: { ...config.customFormula, rows: next },
+                        });
+                    }}
+                    onUpdateFormulaRow={(index, row) => {
+                        if (!shipSettings) return;
+                        const config = getShipConfig(shipSettings.id);
+                        const rows = config.customFormula?.rows ?? [];
+                        updateShipConfig(shipSettings.id, {
+                            customFormula: {
+                                ...config.customFormula,
+                                rows: rows.map((r, i) => (i === index ? row : r)),
+                            },
+                        });
+                    }}
+                    onRemoveFormulaRow={(index) => {
+                        if (!shipSettings) return;
+                        const config = getShipConfig(shipSettings.id);
+                        const rows = config.customFormula?.rows ?? [];
+                        updateShipConfig(shipSettings.id, {
+                            customFormula: {
+                                ...config.customFormula,
+                                rows: rows.filter((_, i) => i !== index),
+                            },
+                        });
+                    }}
+                    onSeedFormula={(role) => {
+                        if (!shipSettings) return;
+                        updateShipConfig(shipSettings.id, {
+                            customFormula: seedFormulaFromRole(role),
+                        });
                     }}
                 />
 

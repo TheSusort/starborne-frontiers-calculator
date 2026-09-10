@@ -1353,6 +1353,17 @@ const DocumentationPage: React.FC = () => {
                                             </ul>
                                         </div>
                                     </div>
+                                    <h4 className="text-lg font-semibold">Not a Role</h4>
+                                    <div className="flex flex-wrap gap-4">
+                                        <div className="card">
+                                            <h4 className="font-semibold text-primary">Custom</h4>
+                                            <p className="text-theme-text">
+                                                Skip the built-in roles and build your own scoring
+                                                formula from stats you pick, for ships that
+                                                don&apos;t fit any role above.
+                                            </p>
+                                        </div>
+                                    </div>
                                     <div className="mt-4 p-4 bg-blue-900/50 border border-blue-700">
                                         <h4 className="font-semibold text-blue-200 mb-2">
                                             Scoring System Notes
@@ -1384,8 +1395,11 @@ const DocumentationPage: React.FC = () => {
                                     <strong>Your tweaks</strong> on top — stat priorities, set
                                     requirements, or stat bonuses. Click{' '}
                                     <strong>+ Add tweak</strong> to choose a type, then fill in the
-                                    form. Each row has up/down chevrons to reorder it within its
-                                    list — order matters, higher tweaks weigh more in scoring.
+                                    form. Set requirements and stat bonuses each have up/down
+                                    chevrons to reorder them within their list — that changes how
+                                    the list displays, not how it scores: every tweak is scored
+                                    independently of the others regardless of list position. Stat
+                                    priorities have no reorder control.
                                 </p>
 
                                 <div className="card">
@@ -1465,14 +1479,77 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Stat bonuses need a <strong>role</strong> selected to have
-                                        any effect — with no role, scoring uses stat priorities only
-                                        and ignores bonuses.
+                                        any effect — with no role (Custom strategy), the Scale
+                                        picker entry is replaced by Formula stat, and any Scale rows
+                                        left over from an earlier role are shown separately, marked
+                                        unused.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Once you pick a stat, the form previews the score it adds to
                                         the selected ship before you save it — the same percentage
                                         can be decisive on one role and negligible on another, since
                                         role base scores differ by orders of magnitude.
+                                    </p>
+                                </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold">Custom Formula</h4>
+                                    <p className="text-theme-text">
+                                        Pick <strong>Custom</strong> as the Strategy to build your
+                                        own scoring formula instead of using a built-in role. Add a{' '}
+                                        <strong>Formula stat</strong> tweak for each stat that
+                                        matters, choosing a direction (as much, or as little, as
+                                        possible) and how it counts: <strong>Multiplied</strong>{' '}
+                                        stats have to be good on their own for the build to score
+                                        well, so balanced builds win; <strong>Added</strong> stats
+                                        top the score up without being able to carry it on their
+                                        own. Two Multiplied stats mean both have to be good — one
+                                        weak stat drags the whole score down.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Minimizing a stat is a preference, not a floor — it makes
+                                        low values score better, but the optimizer can still pick a
+                                        high value if it wins elsewhere. When you need a number
+                                        held, add a Limits tweak with a min or max, and tick its
+                                        Hard Requirement box: a limit on its own only penalizes a
+                                        build that misses it, so the optimizer can still choose to
+                                        miss it.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A Multiplied stat also has an <strong>Importance</strong> —
+                                        Slight, Normal, or Heavy — which raises its contribution to
+                                        a power before the core stats are multiplied together. With
+                                        only one Multiplied stat and no Added stats, Importance
+                                        can&apos;t change anything: raising a single term to a power
+                                        is a monotone transform, so every build keeps the same
+                                        ranking regardless of which setting you pick. The formula
+                                        list hides the Importance readout on a lone Multiplied stat
+                                        for that reason.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A Multiplied stat you&apos;re maximizing that your ship
+                                        currently has none of scores that term at zero — and one
+                                        zero term zeroes the whole product, however good the rest of
+                                        the build is. Every candidate that cannot supply the stat
+                                        ties at 0, leaving the optimizer nothing to choose between.
+                                        Heal modifier is the common case: no gear slot rolls it, so
+                                        only a set bonus such as Repair or Recovery can lift it off
+                                        zero. If a stat can legitimately be zero, use an Added row
+                                        for it instead; the formula list flags a maximized
+                                        Multiplied row that is currently zero. A minimized row at
+                                        zero is unaffected — zero is the best that row can be.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        While the formula is empty, a <strong>Start from</strong>{' '}
+                                        picker lets you copy a built-in role&apos;s scoring in as
+                                        editable rows — some roles translate exactly, others are
+                                        noted as approximations. The formula card also shows the
+                                        equipped build&apos;s current score; it is only meaningful
+                                        relative to itself, so use it to confirm a change moved the
+                                        score the way you expected, not as an absolute number.
+                                        Autogear can&apos;t run until the formula has at least one
+                                        stat — an empty formula would score every combination the
+                                        same.
                                     </p>
                                 </div>
 
@@ -1797,7 +1874,8 @@ const DocumentationPage: React.FC = () => {
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
                                         Configure your autogear settings (role, stat priorities,
-                                        gear sets, stat bonuses, fleet buffs, implant settings)
+                                        gear sets, stat bonuses, fleet buffs, implant settings) — a
+                                        Custom build with no role can&apos;t be shared
                                     </li>
                                     <li>
                                         Click &quot;Share your build&quot; to open the share form —

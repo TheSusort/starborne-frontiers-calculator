@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
+import { ShipTypeName } from '../constants';
 import { SharedAutogearBuild } from '../types/communityRecommendation';
 import {
     CommunityRecommendationService,
@@ -18,6 +19,8 @@ interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
     /** The user's current build for this ship, or null when no role is set. */
     currentBuild: SharedAutogearBuild | null;
+    /** The ship's selected role, or null in Custom mode — a roleless build cannot be shared. */
+    shipRole: ShipTypeName | null;
 }
 
 interface UseCommunityRecommendationsReturn {
@@ -44,11 +47,12 @@ interface UseCommunityRecommendationsReturn {
 export const useCommunityRecommendations = ({
     selectedShip,
     currentBuild,
+    shipRole,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
     const { activeProfileId } = useActiveProfile();
 
-    const canShare = !!selectedShip && !!currentBuild;
+    const canShare = !!selectedShip && !!currentBuild && !!shipRole;
 
     const [builds, setBuilds] = useState<CommunityBuild[]>([]);
     const [loading, setLoading] = useState(false);
