@@ -64,6 +64,28 @@ describe('CustomFormulaForm', () => {
         expect(onAdd).not.toHaveBeenCalled();
     });
 
+    it('rejects a non-finite weight arriving from a stored row', async () => {
+        // A number input sanitizes a non-finite entry to empty, so typing cannot produce
+        // this. A persisted config can: it is untyped storage, and the edit path seeds the
+        // field from whatever it holds. This is the case the submit handler's finite check
+        // exists for — `min="0"` cannot see it, since Infinity is above zero.
+        const onSave = vi.fn();
+        render(
+            <CustomFormulaForm
+                onAdd={vi.fn()}
+                onSave={onSave}
+                editingValue={{
+                    stat: 'speed',
+                    kind: 'bonus',
+                    direction: 'max',
+                    percentage: Number.POSITIVE_INFINITY,
+                }}
+            />
+        );
+        await userEvent.click(screen.getByRole('button', { name: /save/i }));
+        expect(onSave).not.toHaveBeenCalled();
+    });
+
     it('prefills from an edited row and saves it back', async () => {
         const onSave = vi.fn();
         render(
