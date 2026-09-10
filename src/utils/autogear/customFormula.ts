@@ -83,13 +83,25 @@ export function bonusWeightOf(row: CustomFormulaRow): number {
 }
 
 /**
- * Whether the scorer can put this row on a comparable scale at all. A stat with no
- * normalizer would fall back to 1 and read as its raw value, which is orders of magnitude
- * off every other row — so an unscalable row is skipped rather than allowed to dominate.
- * `customFormulaStats.test.ts` keeps every stat the picker offers out of this branch.
+ * Whether the scorer can honour this row as written. Every field is checked, because a
+ * stored row that fails one of them would otherwise be scored under a meaning its author
+ * never expressed: an unrecognised `kind` reads as a bonus row and an unrecognised
+ * `direction` as maximize, both by falling through their comparisons, and a stat with no
+ * normalizer falls back to 1 so its term reads as the raw value — orders of magnitude off
+ * every other row. An unusable row is skipped instead.
+ *
+ * `customFormulaStats.test.ts` keeps every stat the picker offers out of this branch, so
+ * no formula built through the UI has a row that fails here.
  */
-function isScalable(row: CustomFormulaRow): boolean {
-    return MULTIPLIER_NORMALIZERS[row.stat] !== undefined;
+function isUsableRow(row: CustomFormulaRow): boolean {
+    if (MULTIPLIER_NORMALIZERS[row.stat] === undefined) return false;
+    if (row.kind !== 'core' && row.kind !== 'bonus') return false;
+    return row.direction === 'max' || row.direction === 'min';
+}
+
+/** Whether any row of this formula is one the scorer can honour. */
+export function formulaHasUsableRow(formula: CustomFormula | undefined): boolean {
+    return !!formula && formula.rows.some(isUsableRow);
 }
 
 /** The two config fields that decide whether a ship can be scored at all. */
@@ -99,13 +111,11 @@ export interface ScorabilityConfig {
 }
 
 /**
- * Splits ships into those a run can score and those it cannot. A ship is unscoreable
- * only in Custom mode (`shipRole` null) with an empty formula — every gear combination
- * would score 0 and tie, so the optimizer would return arbitrary gear (`isFormulaEmpty`).
- *
- * A formula whose every row names a stat the scorer cannot scale ties the search the same
- * way, at a constant 1 rather than 0, and this gate does not catch it. No formula built
- * through the picker can be in that state, since `FORMULA_STATS` all carry a normalizer.
+ * Splits ships into those a run can score and those it cannot. A ship is unscoreable in
+ * Custom mode (`shipRole` null) when no row of its formula is one the scorer can honour —
+ * whether the formula is empty or every row fails `isUsableRow`. Either way each gear
+ * combination scores the same constant and they all tie, so the optimizer would hand back
+ * arbitrary gear as a result.
  */
 export function partitionScoreableShips<T extends { id: string }>(
     ships: T[],
@@ -116,7 +126,7 @@ export function partitionScoreableShips<T extends { id: string }>(
 
     for (const ship of ships) {
         const config = getConfig(ship.id);
-        if (!config.shipRole && isFormulaEmpty(config.customFormula)) {
+        if (!config.shipRole && !formulaHasUsableRow(config.customFormula)) {
             unscoreable.push(ship);
         } else {
             scoreable.push(ship);
@@ -142,7 +152,7 @@ export function customFormulaScore(stats: BaseStats, formula: CustomFormula | un
     let bonusSum = 0;
 
     for (const row of formula!.rows) {
-        if (!isScalable(row)) continue;
+        if (!isUsableRow(row)) continue;
         const term = formulaRowTerm(stats, row);
         if (row.kind === 'core') {
             const importance = coreImportanceOf(row);
