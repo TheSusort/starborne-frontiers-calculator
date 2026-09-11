@@ -44,7 +44,7 @@ interface PlacementBoardProps {
     /** Label for the copy button, e.g. "Copy to enemy" / "Copy to your team". Required alongside
      *  `onCopyToOtherSide` — every caller supplies one when it supplies the other. */
     copyLabel: string;
-    /** Renders an Edit control on each occupied cell and makes Shift+Click open the stat
+    /** Renders a cog control on each occupied cell and makes Shift+Click open the stat
      *  editor. */
     onEditStats?: (position: Position) => void;
     /** Marks a cell whose placement carries a stat override. */

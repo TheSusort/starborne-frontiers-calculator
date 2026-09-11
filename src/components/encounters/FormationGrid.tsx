@@ -6,7 +6,7 @@ import { Button } from '../ui/Button';
 import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons';
+import { ChevronLeftIcon, ChevronRightIcon, GearIcon } from '../ui/icons';
 
 interface FormationGridProps {
     formation: ShipPosition[] | SharedShipPosition[];
@@ -26,7 +26,7 @@ interface FormationGridProps {
      * placement boards opt in.
      */
     showFacingCue?: boolean;
-    /** Opt-in: renders an Edit control on each occupied cell and makes Shift+Click open the
+    /** Opt-in: renders a cog control on each occupied cell and makes Shift+Click open the
      *  stat editor. Simulator only. */
     onEditStats?: (position: Position) => void;
     /** Opt-in: marks a cell whose placement carries a stat override. Simulator only. */
@@ -241,19 +241,21 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     // <button> nested inside another <button> has undefined accessibility
                                     // semantics (ambiguous focus/activation and screen-reader announcement).
                                     // The wrapper div is unaffected by HexButton's hex clip-path/rotation, so
-                                    // this stays unclipped and upright while still reading as "on the cell".
+                                    // this stays upright. The percentage inset keeps the whole control inside
+                                    // the hex's outer border: the mask is a flat-top polygon in a frame rotated
+                                    // 30deg, so the cell's own corners fall outside the painted shape.
                                     <Button
                                         type="button"
                                         variant="secondary"
                                         size="xs"
-                                        className="!absolute top-0 right-0 z-20 !h-6 !min-w-[24px] !px-1.5 !py-0 text-[9px] leading-none"
+                                        className="!absolute top-[18%] right-[16%] z-20 !h-6 !w-6 !min-w-[24px] !p-0 flex items-center justify-center"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onEditStats(pos);
                                         }}
                                         aria-label={`Edit ${ship.name}'s stats`}
                                     >
-                                        Edit
+                                        <GearIcon className="w-3.5 h-3.5" />
                                     </Button>
                                 )}
                             </div>
@@ -285,7 +287,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
-                    {onEditStats && ", Shift+Click or a ship's Edit button to edit stats"}
+                    {onEditStats && ", Shift+Click or a ship's cog icon to edit stats"}
                 </div>
             )}
         </div>
