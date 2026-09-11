@@ -8,10 +8,10 @@
  * crit). Rates are clamped to [0, 1]; rate >= 1 always fires (rng() is [0,1)), rate <= 0
  * never fires.
  *
- * `rng` defaults to `Math.random` (production is truly random, no seed). Tests override
- * it via `setRateGateRng` — `src/setupTests.ts` installs a seeded mulberry32 per test so
- * the suite (including golden snapshots) stays deterministic. Production never calls the
- * setters.
+ * `rng` defaults to `Math.random`, so an ordinary fight is a real random sample. Callers that
+ * need a reproducible fight install a seeded stream for the duration of one run via
+ * `setupKeyedTestRng` and restore the default afterwards — `src/setupTests.ts` does this per
+ * test, and `src/utils/simulator/seededRuns.ts` does it per seeded run in the app.
  */
 
 /** The active RNG. Production leaves this as Math.random; tests override it. */
@@ -23,10 +23,10 @@ export function setRateGateRng(fn: () => number): void {
 }
 
 /**
- * Test-only: restore the default Math.random RNG.
+ * Restore the default `Math.random` RNG, clearing both the shared and the keyed stream.
  *
  * ⚠️ ORDER MATTERS. This clears BOTH streams — `rng` and `keyedProvider` — so calling it *after*
- * `setupKeyedTestRng` un-seeds the test and hands it true randomness, silently. It belongs in an
+ * `setupKeyedTestRng` un-seeds the caller and hands it true randomness, silently. It belongs in an
  * `afterEach` or a `finally`, never on the line after a seed. In a test file it is usually
  * redundant anyway: `src/setupTests.ts` already resets after every test.
  * Enforced by `rateGateSeedingOrder.test.ts`.

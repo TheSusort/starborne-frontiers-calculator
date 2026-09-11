@@ -3,7 +3,7 @@ import { checkInvariants } from '../audit/invariants';
 import { checkReproducibility } from '../audit/reproducibility';
 import { composeBattle, type TaggedShip } from '../audit/compose';
 import { tagShip } from '../audit/classes';
-import { runSeededBattle } from '../audit/seededBattle';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { loadShipSkillRecords, csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';

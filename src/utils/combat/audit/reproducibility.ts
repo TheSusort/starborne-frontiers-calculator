@@ -1,6 +1,6 @@
 import type { BattleSimulationInput } from '../../calculators/battleSimulator';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import type { InvariantViolation } from './types';
-import { runSeededBattle } from './seededBattle';
 
 /** Two runs of the same (input, seed) must be byte-identical. This guards
  *  nondeterminism OTHER than the (now-pinned) RNG — Map-iteration order, leaked

@@ -15,7 +15,7 @@ import {
     FILLER_NAMES,
     SEED,
 } from '../../audit/kitFingerprintScenarios';
-import { runSeededBattle } from '../../audit/seededBattle';
+import { runSeededBattle } from '../../../simulator/seededRuns';
 import type { CombatLogEntry } from '../types';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../../scripts/lib/shipSkillCsv';

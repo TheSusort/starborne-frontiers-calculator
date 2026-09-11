@@ -3,9 +3,9 @@ import type { Position } from '../../../types/encounters';
 import type { BattleResult, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { CombatLogEntryKind } from '../log/types';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import type { AblationResult } from './types';
 import { canonicalPlacement } from './fixtures';
-import { runSeededBattle } from './seededBattle';
 import { fingerprintActor } from './fingerprint';
 
 const ROUNDS = 20;

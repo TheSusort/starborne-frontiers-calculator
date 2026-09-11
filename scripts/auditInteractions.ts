@@ -7,7 +7,7 @@ import { buildInertAllyBaseline } from './lib/traceScenario';
 import { writeLedger } from './lib/interactionLedger';
 import { tagShip } from '../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../src/utils/combat/audit/compose';
-import { runSeededBattle } from '../src/utils/combat/audit/seededBattle';
+import { runSeededBattle } from '../src/utils/simulator/seededRuns';
 import { checkInvariants } from '../src/utils/combat/audit/invariants';
 import { checkReproducibility } from '../src/utils/combat/audit/reproducibility';
 import { runDifferential } from '../src/utils/combat/audit/fingerprint';

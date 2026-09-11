@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { simulateBattle, type BattlePlacement, type BattleResult } from '../battleSimulator';
-import { runSeededBattle } from '../../combat/audit/seededBattle';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../../combat/state';

@@ -16,8 +16,8 @@ import {
     ALLY_FILLER_NAMES,
 } from '../kitFingerprintScenarios';
 import { PLACEMENTS, PLACEMENT_PAIRS } from '../types';
-import { runSeededBattle } from '../seededBattle';
-import * as seededBattleModule from '../seededBattle';
+import { runSeededBattle } from '../../../simulator/seededRuns';
+import * as seededBattleModule from '../../../simulator/seededRuns';
 import {
     diffAllPlacements,
     diffPlacements,

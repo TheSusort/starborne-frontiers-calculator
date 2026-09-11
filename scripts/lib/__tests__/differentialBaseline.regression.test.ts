@@ -5,7 +5,7 @@ import { loadShipSkillRecords, csvAvailable } from '../shipSkillCsv';
 import { loadShipDataByName, shipDataAvailable } from '../shipDataSnapshot';
 import { tagShip } from '../../../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../../../src/utils/combat/audit/compose';
-import { runSeededBattle } from '../../../src/utils/combat/audit/seededBattle';
+import { runSeededBattle } from '../../../src/utils/simulator/seededRuns';
 import { runDifferential } from '../../../src/utils/combat/audit/fingerprint';
 import type {
     BattleResult,
