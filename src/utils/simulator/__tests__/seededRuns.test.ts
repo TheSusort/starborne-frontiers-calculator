@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import { runSeededBattle, runSeedSet, summarizeRun } from '../seededRuns';
+import * as rateAccumulator from '../../calculators/rateAccumulator';
 
 const placement = (
     id: string,
@@ -78,6 +79,22 @@ describe('runSeededBattle', () => {
         const a = runSeededBattle(input(), 777);
         const b = runSeededBattle(input(), 777);
         expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    });
+
+    it('resets the RNG (via finally) even when the battle throws', () => {
+        // Spies directly on resetRateGateRng so the assertion observes the finally firing,
+        // rather than inferring it from a later call's behaviour: setupKeyedTestRng
+        // unconditionally overwrites the module RNG on every call, so a later runSeededBattle
+        // would look fine even if this finally never ran.
+        const resetSpy = vi.spyOn(rateAccumulator, 'resetRateGateRng');
+        const callsBefore = resetSpy.mock.calls.length;
+
+        const throwingBattle: BattleSimulationInput = { ...input(), playerTeam: [] };
+        expect(() => runSeededBattle(throwingBattle, 1)).toThrow();
+
+        expect(resetSpy.mock.calls.length - callsBefore).toBe(1);
+
+        resetSpy.mockRestore();
     });
 });
 
