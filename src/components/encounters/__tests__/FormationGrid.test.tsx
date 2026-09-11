@@ -102,4 +102,15 @@ describe('FormationGrid on-cell edit control', () => {
 
         expect(onEditStats).toHaveBeenCalledWith('T1');
     });
+
+    // Nested interactive elements (a <button> inside another <button>) have undefined
+    // accessibility semantics — undefined focus order and ambiguous screen-reader
+    // announcement. The Edit control must render outside the cell's own button.
+    it('is not nested inside another button', () => {
+        render(<FormationGrid formation={occupiedFormation} onEditStats={() => {}} />);
+
+        const editButton = screen.getByRole('button', { name: /edit nova's stats/i });
+
+        expect(editButton.closest('button')).toBe(editButton);
+    });
 });
