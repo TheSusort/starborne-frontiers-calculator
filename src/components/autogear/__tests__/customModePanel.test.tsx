@@ -177,6 +177,43 @@ describe('stat priorities carry no reorder control', () => {
     });
 });
 
+describe('set, bonus and buff rows carry no reorder control', () => {
+    // Nothing reads the order of these three lists: the set-penalty loop in
+    // calculatePriorityScore accumulates, applyAdditiveBonuses and calculateMultiplierFactor
+    // both reduce to a sum, and applyFleetBuffs adds or multiplies — all commutative. See #497.
+    const rows = {
+        selectedShipRole: 'ATTACKER' as const,
+        setPriorities: [
+            { setName: 'DECIMATION' as const, count: 4 },
+            { setName: 'FORTITUDE' as const, count: 2 },
+        ],
+        statBonuses: [
+            { stat: 'attack' as const, percentage: 20, mode: 'additive' as const },
+            { stat: 'defence' as const, percentage: 10, mode: 'additive' as const },
+        ],
+        fleetBuffs: [
+            { stat: 'attack' as const, percentage: 15 },
+            { stat: 'hp' as const, percentage: 5 },
+        ],
+    };
+
+    it('renders no arrow on any of the three lists', () => {
+        renderPanel(rows);
+        expect(screen.queryAllByLabelText(/move set priority (up|down)/i)).toHaveLength(0);
+        expect(screen.queryAllByLabelText(/move bonus (up|down)/i)).toHaveLength(0);
+        expect(screen.queryAllByLabelText(/move buff (up|down)/i)).toHaveLength(0);
+    });
+
+    it('still renders all three lists of rows', () => {
+        // Non-vacuity: an absent arrow proves nothing if the rows never rendered. Each
+        // fixture holds two entries, so each Remove label must appear twice.
+        renderPanel(rows);
+        expect(screen.getAllByLabelText(/remove set priority/i)).toHaveLength(2);
+        expect(screen.getAllByLabelText(/remove bonus/i)).toHaveLength(2);
+        expect(screen.getAllByLabelText(/remove buff/i)).toHaveLength(2);
+    });
+});
+
 describe('AutogearConfigList labels a roleless config', () => {
     it('reads Custom rather than rendering nothing', () => {
         render(<AutogearConfigList {...configListProps({ shipRole: null })} />);

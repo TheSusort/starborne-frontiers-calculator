@@ -1816,22 +1816,6 @@ export const AutogearPage: React.FC = () => {
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
-                    onMoveSetPriority={(fromIndex, toIndex) => {
-                        if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                setPriorities: arrayMove(config.setPriorities, fromIndex, toIndex),
-                            });
-                        }
-                    }}
-                    onMoveStatBonus={(fromIndex, toIndex) => {
-                        if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                statBonuses: arrayMove(config.statBonuses, fromIndex, toIndex),
-                            });
-                        }
-                    }}
                     fleetBuffs={shipSettings ? getShipConfig(shipSettings.id).fleetBuffs : []}
                     onAddFleetBuff={(buff) => {
                         if (shipSettings) {
@@ -1856,14 +1840,6 @@ export const AutogearPage: React.FC = () => {
                             const config = getShipConfig(shipSettings.id);
                             updateShipConfig(shipSettings.id, {
                                 fleetBuffs: config.fleetBuffs.filter((_, i) => i !== index),
-                            });
-                        }
-                    }}
-                    onMoveFleetBuff={(fromIndex, toIndex) => {
-                        if (shipSettings) {
-                            const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, {
-                                fleetBuffs: arrayMove(config.fleetBuffs, fromIndex, toIndex),
                             });
                         }
                     }}
