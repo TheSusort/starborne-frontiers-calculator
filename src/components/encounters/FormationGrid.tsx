@@ -246,7 +246,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                         type="button"
                                         variant="secondary"
                                         size="xs"
-                                        className="!absolute bottom-1 left-1/2 -translate-x-1/2 z-20 !h-6 !min-w-[24px] !px-1.5 !py-0 text-[9px] leading-none"
+                                        className="!absolute top-0 right-0 z-20 !h-6 !min-w-[24px] !px-1.5 !py-0 text-[9px] leading-none"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onEditStats(pos);
