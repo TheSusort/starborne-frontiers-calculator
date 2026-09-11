@@ -170,6 +170,20 @@ describe('InlineNumberEdit', () => {
             expect(screen.getByRole('button', { name: 'Edit limit' })).toHaveFocus();
         });
 
+        it('names the editor from label', () => {
+            renderWith({ label: 'Edit limit' });
+            fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }));
+            expect(screen.getByRole('spinbutton', { name: 'Edit limit' })).toBeInTheDocument();
+        });
+
+        it('gives the editor a generic name when label is omitted', () => {
+            // The trigger can fall back to its children for a name; the input has no text
+            // content, so without a fallback it would be an unnamed spinbutton.
+            renderWith();
+            fireEvent.click(screen.getByRole('button', { name: '100' }));
+            expect(screen.getByRole('spinbutton', { name: 'Edit value' })).toBeInTheDocument();
+        });
+
         it('does not steal focus back when the editor is left by blur', () => {
             renderWith({ label: 'Edit limit' });
             fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }));

@@ -9,8 +9,10 @@ interface InlineNumberEditProps {
     disabled?: boolean;
     className?: string;
     /**
-     * Accessible name for the display trigger. Without it the name falls back to the rendered
-     * children, which is the bare number and says nothing about what it belongs to.
+     * Accessible name for both the display trigger and the editor. Without it the trigger falls
+     * back to the rendered children, which is the bare number and says nothing about what it
+     * belongs to; the editor has no text content to fall back on at all, so it takes a generic
+     * name instead of none.
      */
     label?: string;
     children: React.ReactNode;
@@ -109,7 +111,7 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
         <input
             ref={inputRef}
             type="number"
-            aria-label={label}
+            aria-label={label ?? 'Edit value'}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
