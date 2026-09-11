@@ -1,6 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import RunComparison from '../RunComparison';
 import type { SeedSetAggregate } from '../../../utils/simulator/seededRuns';
 
@@ -11,10 +10,12 @@ const roster = [
 const aggregate = (
     wins: SeedSetAggregate['wins'],
     meanRounds: number,
-    dealt: number
+    dealt: number,
+    baseSeed = 500,
+    count = 20
 ): SeedSetAggregate => ({
-    baseSeed: 500,
-    count: 20,
+    baseSeed,
+    count,
     roster,
     runs: [],
     wins,
@@ -38,7 +39,6 @@ describe('RunComparison', () => {
                 current={current}
                 currentOverrides={currentOverrides}
                 roster={roster}
-                onUnpin={() => {}}
             />
         );
         expect(screen.getByText('8')).toBeInTheDocument();
@@ -53,7 +53,6 @@ describe('RunComparison', () => {
                 current={current}
                 currentOverrides={currentOverrides}
                 roster={roster}
-                onUnpin={() => {}}
             />
         );
         expect(screen.getByText('-1.0')).toBeInTheDocument();
@@ -66,7 +65,6 @@ describe('RunComparison', () => {
                 current={current}
                 currentOverrides={currentOverrides}
                 roster={roster}
-                onUnpin={() => {}}
             />
         );
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
@@ -82,7 +80,6 @@ describe('RunComparison', () => {
                 current={current}
                 currentOverrides={currentOverrides}
                 roster={roster}
-                onUnpin={() => {}}
             />
         );
         const row = screen.getByText(/player:T1/).closest('tr') ?? screen.getByText(/player:T1/);
@@ -90,18 +87,20 @@ describe('RunComparison', () => {
         expect(row).toHaveTextContent('12650');
     });
 
-    it('unpins on request', async () => {
-        const onUnpin = vi.fn();
+    it("shows the baseline's own seed and run count, not the current aggregate's", () => {
+        const divergentBaseline = {
+            aggregate: aggregate({ player: 8, enemy: 12, draw: 0 }, 6, 1000, 777, 30),
+            overrides: {},
+        };
         render(
             <RunComparison
-                baseline={baseline}
+                baseline={divergentBaseline}
                 current={current}
                 currentOverrides={currentOverrides}
                 roster={roster}
-                onUnpin={onUnpin}
             />
         );
-        await userEvent.click(screen.getByRole('button', { name: /unpin/i }));
-        expect(onUnpin).toHaveBeenCalled();
+        expect(screen.getByText(/Base seed 777/)).toBeInTheDocument();
+        expect(screen.getByText(/over 30 runs/)).toBeInTheDocument();
     });
 });

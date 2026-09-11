@@ -1,5 +1,4 @@
 import React from 'react';
-import { Button } from '../ui/Button';
 import { DataTable, type Column } from '../ui/tables/DataTable';
 import {
     diffOverrides,
@@ -14,7 +13,6 @@ interface Props {
     current: SeedSetAggregate;
     currentOverrides: OverrideSnapshot;
     roster: BattleResult['roster'];
-    onUnpin: () => void;
 }
 
 /** A signed delta's colour: green when it favours the player side, red when it costs the player
@@ -86,18 +84,10 @@ const DeltaCell: React.FC<{
 
 /**
  * Compares a pinned baseline seed-set aggregate against the current one: win split, mean/median
- * rounds, per-actor mean totals, and the override changes that produced the variant. While a
- * baseline is pinned the two aggregates share the same seed set (enforced by `SimulatorPage`
- * locking the seed/count controls), so every delta here is paired rather than a comparison of two
- * independently-sampled runs.
+ * rounds, per-actor mean totals, and the override changes that produced the variant. The seed and
+ * run count shown come from `baseline.aggregate`, the actual seed set both configurations share.
  */
-const RunComparison: React.FC<Props> = ({
-    baseline,
-    current,
-    currentOverrides,
-    roster,
-    onUnpin,
-}) => {
+const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides, roster }) => {
     const nameFor = (actorId: string) => roster.find((r) => r.actorId === actorId)?.name ?? actorId;
     const sideFor = (actorId: string) =>
         roster.find((r) => r.actorId === actorId)?.side ?? 'player';
@@ -212,15 +202,10 @@ const RunComparison: React.FC<Props> = ({
 
     return (
         <div className="card space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-semibold">Baseline Comparison</h2>
-                <Button variant="secondary" onClick={onUnpin}>
-                    Unpin baseline
-                </Button>
-            </div>
+            <h2 className="text-lg font-semibold">Baseline Comparison</h2>
             <p className="text-sm text-theme-text-secondary">
-                Base seed {current.baseSeed} over {current.count} runs — the same seed set on both
-                sides.
+                Base seed {baseline.aggregate.baseSeed} over {baseline.aggregate.count} runs — the
+                same seed set on both sides.
             </p>
 
             <DataTable data={scalarRows} columns={scalarColumns} getRowKey={(row) => row.metric} />

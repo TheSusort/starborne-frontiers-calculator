@@ -7,9 +7,8 @@ import type { SeedSetAggregate } from './seededRuns';
 export type OverrideSnapshot = Record<string, StatOverrides>;
 
 /** A seed-set aggregate frozen as the comparison point, alongside the override snapshot that
- *  produced it. The seed and run count live inside `aggregate` — while a baseline is pinned,
- *  `SimulatorPage` reads them from here rather than from editable state, so the variant run it is
- *  compared against is forced onto the same seed set. */
+ *  produced it. The seed and run count live inside `aggregate` — see `effectiveRunParams`' doc
+ *  for how a pinned baseline forces a variant run onto this same seed set. */
 export interface PinnedBaseline {
     aggregate: SeedSetAggregate;
     overrides: OverrideSnapshot;

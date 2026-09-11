@@ -12,6 +12,7 @@ import { buildTeam } from '../utils/simulator/buildTeam';
 import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
 import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
 import { snapshotOverrides, PinnedBaseline } from '../utils/simulator/compareRuns';
+import { effectiveRunParams } from '../utils/simulator/effectiveRunParams';
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
 import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
@@ -187,11 +188,12 @@ const SimulatorPage: React.FC = () => {
         enemySquadLeader,
     });
 
-    // While a baseline is pinned, the seed and run count are the baseline's own — never the raw
-    // `seed`/`runCount` state, which keeps whatever the user last typed before pinning. A variant
-    // run must reuse the baseline's exact seed set or the comparison is unpaired.
-    const effectiveSeed = baseline ? baseline.aggregate.baseSeed : seed;
-    const effectiveRunCount = baseline ? baseline.aggregate.count : runCount;
+    // See effectiveRunParams' doc for why a pinned baseline overrides the page's own seed/runCount.
+    const { seed: effectiveSeed, runCount: effectiveRunCount } = effectiveRunParams(
+        baseline,
+        seed,
+        runCount
+    );
 
     const handleRun = () => {
         // Guard: simulateBattle throws on an empty side.
@@ -298,6 +300,7 @@ const SimulatorPage: React.FC = () => {
                             canRun={canRun}
                             locked={baseline !== null}
                             lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
+                            onUnpin={handleUnpinBaseline}
                         />
                         {!canRun && (
                             <span className="text-sm text-theme-text-secondary">
@@ -354,7 +357,6 @@ const SimulatorPage: React.FC = () => {
                             current={aggregate}
                             currentOverrides={snapshotOverrides(playerBoard, enemyBoard)}
                             roster={aggregate.roster}
-                            onUnpin={handleUnpinBaseline}
                         />
                     )}
 

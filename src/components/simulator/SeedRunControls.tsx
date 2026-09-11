@@ -13,6 +13,10 @@ interface Props {
      *  affecting whether a run can currently be started. */
     locked?: boolean;
     lockedReason?: string;
+    /** Unpins the baseline. Rendered next to the locked-reason text only while `locked` is
+     *  true and this is supplied, so the component stays usable (e.g. in tests) without an
+     *  unpin affordance. */
+    onUnpin?: () => void;
 }
 
 // SimulatorPage's initial seed state needs this generator; it is not itself a component so
@@ -31,6 +35,7 @@ const SeedRunControls: React.FC<Props> = ({
     canRun,
     locked = false,
     lockedReason,
+    onUnpin,
 }) => {
     return (
         <div className="flex flex-wrap items-end gap-4">
@@ -62,6 +67,11 @@ const SeedRunControls: React.FC<Props> = ({
             </Button>
             {locked && lockedReason && (
                 <span className="text-sm text-theme-text-secondary">{lockedReason}</span>
+            )}
+            {locked && onUnpin && (
+                <Button variant="secondary" size="sm" onClick={onUnpin}>
+                    Unpin baseline
+                </Button>
             )}
             <Button variant="primary" onClick={onRun} disabled={!canRun}>
                 Run Simulation
