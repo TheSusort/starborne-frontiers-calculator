@@ -3897,6 +3897,29 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Seeded Runs</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Every run is seeded and reproducible — running the same seed
+                                        against the same teams always plays out identically; press
+                                        &quot;New seed&quot; to get a fresh one
+                                    </li>
+                                    <li>
+                                        Raise the run count to repeat the fight over that many
+                                        consecutive seeds and see an aggregate — win split and
+                                        average rounds and per-actor damage/healing — instead of a
+                                        single playback
+                                    </li>
+                                    <li>
+                                        A single seeded run reproduces one fight; the aggregate over
+                                        a seed set is what you use to compare two configurations.
+                                        Click any seed in the aggregate to open that one
+                                        fight&apos;s round-by-round playback
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Squad Leaders</h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>

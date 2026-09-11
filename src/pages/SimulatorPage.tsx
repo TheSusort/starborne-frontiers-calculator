@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import { PageLayout } from '../components/ui';
-import { Button } from '../components/ui/Button';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { Ship } from '../types/ship';
@@ -8,13 +7,12 @@ import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { shipFinalStats, combatStatsFromShip } from '../utils/ship/combatStats';
-import {
-    simulateBattle,
-    BattleResult,
-    BattlePlacement,
-} from '../utils/calculators/battleSimulator';
+import { BattleResult, BattlePlacement } from '../utils/calculators/battleSimulator';
+import { runSeededBattle, runSeedSet, SeedSetAggregate } from '../utils/simulator/seededRuns';
 import PlacementBoard, { BoardState } from '../components/simulator/PlacementBoard';
 import BattlePlayback from '../components/simulator/BattlePlayback';
+import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
+import SeedSetResults from '../components/simulator/SeedSetResults';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import { SquadLeaderSelection } from '../utils/combat/preFight';
 import {
@@ -38,7 +36,10 @@ const SimulatorPage: React.FC = () => {
     const [playerSelected, setPlayerSelected] = useState<Position | undefined>(undefined);
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
     const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
+    const [aggregate, setAggregate] = useState<SeedSetAggregate | null>(null);
     const [runError, setRunError] = useState<string | null>(null);
+    const [seed, setSeed] = useState<number>(() => randomSeed());
+    const [runCount, setRunCount] = useState(1);
     // Per-side squad-leader selections (pre-fight faction auras), persisted to
     // localStorage (validated on read — stale/hand-edited values fall back to none).
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
@@ -141,21 +142,43 @@ const SimulatorPage: React.FC = () => {
         // Guard: simulateBattle throws on an empty side.
         if (!canRun) return;
         setRunError(null);
+        const input = {
+            playerTeam: buildTeam(playerBoard),
+            enemyTeam: buildTeam(enemyBoard),
+            playerSquadLeader,
+            enemySquadLeader,
+        };
         try {
-            const result = simulateBattle(
+            if (runCount === 1) {
+                setAggregate(null);
+                setBattleResult(runSeededBattle(input, seed, getGearPiece));
+            } else {
+                setBattleResult(null);
+                setAggregate(runSeedSet(input, seed, runCount, getGearPiece));
+            }
+        } catch (err) {
+            setBattleResult(null);
+            setAggregate(null);
+            setRunError(err instanceof Error ? err.message : 'Simulation failed');
+        }
+    };
+
+    // Re-runs a single seed from the aggregate. Determinism guarantees the playback matches the
+    // row it was opened from, so the fight does not need to be retained alongside the summary.
+    const handleOpenSeed = (openSeed: number) => {
+        if (!canRun) return;
+        setBattleResult(
+            runSeededBattle(
                 {
                     playerTeam: buildTeam(playerBoard),
                     enemyTeam: buildTeam(enemyBoard),
                     playerSquadLeader,
                     enemySquadLeader,
                 },
+                openSeed,
                 getGearPiece
-            );
-            setBattleResult(result);
-        } catch (err) {
-            setBattleResult(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
-        }
+            )
+        );
     };
 
     return (
@@ -212,9 +235,14 @@ const SimulatorPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <Button variant="primary" onClick={handleRun} disabled={!canRun}>
-                            Run Simulation
-                        </Button>
+                        <SeedRunControls
+                            seed={seed}
+                            runCount={runCount}
+                            onSeedChange={setSeed}
+                            onRunCountChange={setRunCount}
+                            onRun={handleRun}
+                            canRun={canRun}
+                        />
                         {!canRun && (
                             <span className="text-sm text-theme-text-secondary">
                                 Place at least one ship on each team to run.
@@ -247,6 +275,14 @@ const SimulatorPage: React.FC = () => {
                                 ))}
                             </ul>
                         </div>
+                    )}
+
+                    {aggregate && (
+                        <SeedSetResults
+                            aggregate={aggregate}
+                            roster={aggregate.roster}
+                            onOpenSeed={handleOpenSeed}
+                        />
                     )}
 
                     {battleResult && <BattlePlayback result={battleResult} />}

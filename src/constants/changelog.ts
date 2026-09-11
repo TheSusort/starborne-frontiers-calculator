@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.67.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: tweak values can now be reached and edited with the keyboard.',
     'Autogear: set, bonus and buff rows no longer carry reorder arrows.',
+    'Combat simulator: runs are now seeded and can be repeated over many seeds.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
