@@ -78,6 +78,7 @@ export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
                         {label} ({' '}
                         <InlineNumberEdit
                             value={priority.count}
+                            label={`Edit required pieces for ${label}`}
                             onSave={(v) => v !== undefined && onUpdate({ ...priority, count: v })}
                             min={0}
                             max={6}

@@ -5,7 +5,9 @@ export const CURRENT_VERSION = '1.67.0';
 // RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Autogear: tweak values can now be reached and edited with the keyboard.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

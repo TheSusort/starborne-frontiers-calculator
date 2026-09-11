@@ -116,4 +116,79 @@ describe('InlineNumberEdit', () => {
         expect(onSave).toHaveBeenCalledTimes(1);
         expect(onSave).toHaveBeenCalledWith(250);
     });
+    describe('keyboard reachability', () => {
+        it('exposes the display trigger as a button named by label', () => {
+            renderWith({ label: 'Edit minimum Attack' });
+            expect(screen.getByRole('button', { name: 'Edit minimum Attack' })).toBeInTheDocument();
+        });
+
+        it('falls back to the rendered children for its accessible name', () => {
+            renderWith();
+            expect(screen.getByRole('button', { name: '100' })).toBeInTheDocument();
+        });
+
+        it('is in the tab order and opens on Enter', () => {
+            renderWith({ label: 'Edit limit' });
+            const trigger = screen.getByRole('button', { name: 'Edit limit' });
+            expect(trigger).toHaveAttribute('tabindex', '0');
+            trigger.focus();
+            fireEvent.keyDown(trigger, { key: 'Enter' });
+            expect(screen.getByRole('spinbutton')).toBeInTheDocument();
+        });
+
+        it('opens on Space', () => {
+            renderWith({ label: 'Edit limit' });
+            fireEvent.keyDown(screen.getByRole('button', { name: 'Edit limit' }), { key: ' ' });
+            expect(screen.getByRole('spinbutton')).toBeInTheDocument();
+        });
+
+        it('is out of the tab order and inert when disabled', () => {
+            renderWith({ label: 'Edit limit', disabled: true });
+            const trigger = screen.getByRole('button', { name: 'Edit limit' });
+            expect(trigger).toHaveAttribute('tabindex', '-1');
+            expect(trigger).toHaveAttribute('aria-disabled', 'true');
+            fireEvent.keyDown(trigger, { key: 'Enter' });
+            expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
+        });
+
+        it('returns focus to the trigger after Escape', () => {
+            renderWith({ label: 'Edit limit' });
+            const trigger = screen.getByRole('button', { name: 'Edit limit' });
+            fireEvent.keyDown(trigger, { key: 'Enter' });
+            fireEvent.keyDown(screen.getByRole('spinbutton'), { key: 'Escape' });
+            expect(screen.getByRole('button', { name: 'Edit limit' })).toHaveFocus();
+        });
+
+        it('returns focus to the trigger after committing with Enter', () => {
+            const { onSave } = renderWith({ label: 'Edit limit' });
+            const trigger = screen.getByRole('button', { name: 'Edit limit' });
+            fireEvent.keyDown(trigger, { key: 'Enter' });
+            const input = screen.getByRole('spinbutton');
+            fireEvent.change(input, { target: { value: '250' } });
+            fireEvent.keyDown(input, { key: 'Enter' });
+            expect(onSave).toHaveBeenCalledWith(250);
+            expect(screen.getByRole('button', { name: 'Edit limit' })).toHaveFocus();
+        });
+
+        it('names the editor from label', () => {
+            renderWith({ label: 'Edit limit' });
+            fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }));
+            expect(screen.getByRole('spinbutton', { name: 'Edit limit' })).toBeInTheDocument();
+        });
+
+        it('gives the editor a generic name when label is omitted', () => {
+            // The trigger can fall back to its children for a name; the input has no text
+            // content, so without a fallback it would be an unnamed spinbutton.
+            renderWith();
+            fireEvent.click(screen.getByRole('button', { name: '100' }));
+            expect(screen.getByRole('spinbutton', { name: 'Edit value' })).toBeInTheDocument();
+        });
+
+        it('does not steal focus back when the editor is left by blur', () => {
+            renderWith({ label: 'Edit limit' });
+            fireEvent.click(screen.getByRole('button', { name: 'Edit limit' }));
+            fireEvent.blur(screen.getByRole('spinbutton'));
+            expect(screen.getByRole('button', { name: 'Edit limit' })).not.toHaveFocus();
+        });
+    });
 });
