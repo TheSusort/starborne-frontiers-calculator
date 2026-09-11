@@ -11,11 +11,14 @@ import { runSeededBattle, runSeedSet, SeedSetAggregate } from '../utils/simulato
 import { buildTeam } from '../utils/simulator/buildTeam';
 import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
 import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
+import { snapshotOverrides, PinnedBaseline } from '../utils/simulator/compareRuns';
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
 import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
+import RunComparison from '../components/simulator/RunComparison';
+import { Button } from '../components/ui/Button';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import { SquadLeaderSelection } from '../utils/combat/preFight';
 import {
@@ -43,6 +46,11 @@ const SimulatorPage: React.FC = () => {
     const [runError, setRunError] = useState<string | null>(null);
     const [seed, setSeed] = useState<number>(() => randomSeed());
     const [runCount, setRunCount] = useState(1);
+    // The comparison point for the current session. While set, the seed and run count are
+    // read-only and forced onto the baseline's values (see the locked SeedRunControls below) —
+    // otherwise a "variant" run could sample a different seed set and the comparison would be
+    // unpaired while looking paired.
+    const [baseline, setBaseline] = useState<PinnedBaseline | null>(null);
     // Per-side squad-leader selections (pre-fight faction auras), persisted to
     // localStorage (validated on read — stale/hand-edited values fall back to none).
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
@@ -179,18 +187,24 @@ const SimulatorPage: React.FC = () => {
         enemySquadLeader,
     });
 
+    // While a baseline is pinned, the seed and run count are the baseline's own — never the raw
+    // `seed`/`runCount` state, which keeps whatever the user last typed before pinning. A variant
+    // run must reuse the baseline's exact seed set or the comparison is unpaired.
+    const effectiveSeed = baseline ? baseline.aggregate.baseSeed : seed;
+    const effectiveRunCount = baseline ? baseline.aggregate.count : runCount;
+
     const handleRun = () => {
         // Guard: simulateBattle throws on an empty side.
         if (!canRun) return;
         setRunError(null);
         const input = buildInput();
         try {
-            if (runCount === 1) {
+            if (effectiveRunCount === 1) {
                 setAggregate(null);
-                setBattleResult(runSeededBattle(input, seed, getGearPiece));
+                setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
             } else {
                 setBattleResult(null);
-                setAggregate(runSeedSet(input, seed, runCount, getGearPiece));
+                setAggregate(runSeedSet(input, effectiveSeed, effectiveRunCount, getGearPiece));
             }
         } catch (err) {
             setBattleResult(null);
@@ -205,6 +219,13 @@ const SimulatorPage: React.FC = () => {
         if (!canRun) return;
         setBattleResult(runSeededBattle(buildInput(), openSeed, getGearPiece));
     };
+
+    const handlePinBaseline = () => {
+        if (!aggregate) return;
+        setBaseline({ aggregate, overrides: snapshotOverrides(playerBoard, enemyBoard) });
+    };
+
+    const handleUnpinBaseline = () => setBaseline(null);
 
     return (
         <>
@@ -269,12 +290,14 @@ const SimulatorPage: React.FC = () => {
 
                     <div className="flex items-center gap-4">
                         <SeedRunControls
-                            seed={seed}
-                            runCount={runCount}
+                            seed={effectiveSeed}
+                            runCount={effectiveRunCount}
                             onSeedChange={setSeed}
                             onRunCountChange={setRunCount}
                             onRun={handleRun}
                             canRun={canRun}
+                            locked={baseline !== null}
+                            lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
                         />
                         {!canRun && (
                             <span className="text-sm text-theme-text-secondary">
@@ -311,10 +334,27 @@ const SimulatorPage: React.FC = () => {
                     )}
 
                     {aggregate && (
-                        <SeedSetResults
-                            aggregate={aggregate}
+                        <div className="space-y-2">
+                            <SeedSetResults
+                                aggregate={aggregate}
+                                roster={aggregate.roster}
+                                onOpenSeed={handleOpenSeed}
+                            />
+                            {!baseline && (
+                                <Button variant="secondary" onClick={handlePinBaseline}>
+                                    Pin as baseline
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {baseline && aggregate && (
+                        <RunComparison
+                            baseline={baseline}
+                            current={aggregate}
+                            currentOverrides={snapshotOverrides(playerBoard, enemyBoard)}
                             roster={aggregate.roster}
-                            onOpenSeed={handleOpenSeed}
+                            onUnpin={handleUnpinBaseline}
                         />
                     )}
 

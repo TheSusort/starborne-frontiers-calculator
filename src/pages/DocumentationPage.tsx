@@ -3949,6 +3949,26 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Comparing Against a Baseline
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        After a multi-seed run, pin it as a baseline; then change
+                                        stats and run again to compare
+                                    </li>
+                                    <li>
+                                        While a baseline is pinned, the seed and run count are fixed
+                                        so both configurations face the same seed set
+                                    </li>
+                                    <li>
+                                        The aggregate is the comparison and a single seed is a
+                                        reproduction
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Squad Leaders</h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>

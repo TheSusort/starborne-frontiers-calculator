@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: runs are now seeded and can be repeated over many seeds.',
     'Combat simulator: a board can be copied to the opposing side in one click.',
     "Combat simulator: any placed ship's stats can now be tweaked for one simulation.",
+    'Combat simulator: pin a run as a baseline and compare a tweaked run against it.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
