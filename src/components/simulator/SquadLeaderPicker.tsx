@@ -46,7 +46,10 @@ interface Props {
  */
 const SquadLeaderPicker: React.FC<Props> = ({ side, selection, onChange, board }) => {
     const ships = useMemo(
-        () => Object.values(board).filter((ship): ship is Ship => ship !== undefined),
+        () =>
+            Object.values(board)
+                .map((p) => p?.ship)
+                .filter((s): s is Ship => s !== undefined),
         [board]
     );
 

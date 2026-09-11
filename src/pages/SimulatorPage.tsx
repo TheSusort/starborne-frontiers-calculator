@@ -6,10 +6,10 @@ import { Ship } from '../types/ship';
 import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { shipFinalStats, combatStatsFromShip } from '../utils/ship/combatStats';
-import { BattleResult, BattlePlacement } from '../utils/calculators/battleSimulator';
+import { BattleResult } from '../utils/calculators/battleSimulator';
 import { runSeededBattle, runSeedSet, SeedSetAggregate } from '../utils/simulator/seededRuns';
-import PlacementBoard, { BoardState } from '../components/simulator/PlacementBoard';
+import { buildTeam } from '../utils/simulator/buildTeam';
+import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
 import BattlePlayback from '../components/simulator/BattlePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
@@ -57,18 +57,22 @@ const SimulatorPage: React.FC = () => {
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
         () =>
-            (Object.entries(playerBoard) as [Position, Ship][]).map(([position, ship]) => ({
-                shipId: ship.id,
-                position,
-            })),
+            (Object.entries(playerBoard) as [Position, Placement][]).map(
+                ([position, placement]) => ({
+                    shipId: placement.ship.id,
+                    position,
+                })
+            ),
         [playerBoard]
     );
     const enemyFormation = useMemo<ShipPosition[]>(
         () =>
-            (Object.entries(enemyBoard) as [Position, Ship][]).map(([position, ship]) => ({
-                shipId: ship.id,
-                position,
-            })),
+            (Object.entries(enemyBoard) as [Position, Placement][]).map(
+                ([position, placement]) => ({
+                    shipId: placement.ship.id,
+                    position,
+                })
+            ),
         [enemyBoard]
     );
 
@@ -112,7 +116,7 @@ const SimulatorPage: React.FC = () => {
     const handlePickShip = (side: Side, ship: Ship) => {
         const { selected, setBoard, setSelected } = boardSetters[side];
         if (!selected) return;
-        setBoard((prev) => ({ ...prev, [selected]: ship }));
+        setBoard((prev) => ({ ...prev, [selected]: { ship } }));
         setSelected(undefined);
     };
 
@@ -124,30 +128,35 @@ const SimulatorPage: React.FC = () => {
         setSelected(undefined);
     };
 
-    // Build the engine input for one side: each placed ship → BattlePlacement with
-    // fully gear/refit/engineering-resolved stats as statOverrides (else combat floors to
-    // un-geared base stats — see the WARNING in battleSimulator.ts).
-    const buildTeam = (board: BoardState): BattlePlacement[] =>
-        (Object.entries(board) as [Position, Ship][]).map(([position, ship]) => ({
-            ship,
-            position,
-            statOverrides: combatStatsFromShip(shipFinalStats(ship, statsDeps)),
-        }));
+    // Copies ships AND their overrides — a near-mirror board is the common setup and rebuilding it
+    // by hand is the friction this removes.
+    const handleCopyBoard = (from: Side) => {
+        const source = from === 'player' ? playerBoard : enemyBoard;
+        const copy: BoardState = {};
+        for (const [position, placement] of Object.entries(source) as [Position, Placement][]) {
+            copy[position] = { ship: placement.ship, overrides: { ...placement.overrides } };
+        }
+        (from === 'player' ? setEnemyBoard : setPlayerBoard)(copy);
+    };
 
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
     const canRun = playerCount > 0 && enemyCount > 0;
 
+    // Shared engine input for both a fresh run and a seed re-open — both call sites need the
+    // same fully-resolved teams and squad-leader selections.
+    const buildInput = () => ({
+        playerTeam: buildTeam(playerBoard, statsDeps),
+        enemyTeam: buildTeam(enemyBoard, statsDeps),
+        playerSquadLeader,
+        enemySquadLeader,
+    });
+
     const handleRun = () => {
         // Guard: simulateBattle throws on an empty side.
         if (!canRun) return;
         setRunError(null);
-        const input = {
-            playerTeam: buildTeam(playerBoard),
-            enemyTeam: buildTeam(enemyBoard),
-            playerSquadLeader,
-            enemySquadLeader,
-        };
+        const input = buildInput();
         try {
             if (runCount === 1) {
                 setAggregate(null);
@@ -167,18 +176,7 @@ const SimulatorPage: React.FC = () => {
     // row it was opened from, so the fight does not need to be retained alongside the summary.
     const handleOpenSeed = (openSeed: number) => {
         if (!canRun) return;
-        setBattleResult(
-            runSeededBattle(
-                {
-                    playerTeam: buildTeam(playerBoard),
-                    enemyTeam: buildTeam(enemyBoard),
-                    playerSquadLeader,
-                    enemySquadLeader,
-                },
-                openSeed,
-                getGearPiece
-            )
-        );
+        setBattleResult(runSeededBattle(buildInput(), openSeed, getGearPiece));
     };
 
     return (
@@ -205,6 +203,8 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('player', ship)}
                                 onCloseSelector={() => setPlayerSelected(undefined)}
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
+                                onCopyToOtherSide={() => handleCopyBoard('player')}
+                                copyLabel="Copy to enemy"
                             />
                             <SquadLeaderPicker
                                 side="player"
@@ -223,6 +223,8 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('enemy', ship)}
                                 onCloseSelector={() => setEnemySelected(undefined)}
                                 onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                onCopyToOtherSide={() => handleCopyBoard('enemy')}
+                                copyLabel="Copy to your team"
                                 mirrored
                             />
                             <SquadLeaderPicker

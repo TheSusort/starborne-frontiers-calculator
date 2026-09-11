@@ -68,7 +68,7 @@ describe('PlacementBoard load-from-encounter', () => {
         expect(onLoadEncounter).toHaveBeenCalledTimes(1);
         const board = onLoadEncounter.mock.calls[0][0];
         // Owned ship placed at its position; unowned ship's cell skipped entirely.
-        expect(board).toEqual({ T1: ownedShip });
+        expect(board).toEqual({ T1: { ship: ownedShip } });
         expect(board.M2).toBeUndefined();
     });
 });
