@@ -10,6 +10,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: set, bonus and buff rows no longer carry reorder arrows.',
     'Combat simulator: runs are now seeded and can be repeated over many seeds.',
     'Combat simulator: a board can be copied to the opposing side in one click.',
+    "Combat simulator: any placed ship's stats can now be tweaked for one simulation.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

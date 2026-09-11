@@ -25,6 +25,10 @@ interface FormationGridProps {
      * placement boards opt in.
      */
     showFacingCue?: boolean;
+    /** Opt-in: Shift+Click a cell to edit that placement's stats. Simulator only. */
+    onEditStats?: (position: Position) => void;
+    /** Opt-in: marks a cell whose placement carries a stat override. Simulator only. */
+    hasOverrides?: (position: Position) => boolean;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -35,6 +39,8 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onSetSortOrder,
     mirrored = false,
     showFacingCue = false,
+    onEditStats,
+    hasOverrides,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -147,6 +153,8 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     onClick={(e) => {
                                         if (e.ctrlKey || e.metaKey) {
                                             onRemoveShip?.(pos);
+                                        } else if (e.shiftKey && onEditStats) {
+                                            onEditStats(pos);
                                         } else {
                                             onPositionSelect?.(pos);
                                         }
@@ -164,6 +172,11 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                             className="flex flex-col items-center justify-end w-full h-full
                     scale-[0.9151]"
                                         >
+                                            {hasOverrides?.(pos) && (
+                                                <span className="absolute top-0 right-0 px-1 text-[10px] font-bold text-amber-400 bg-black/70">
+                                                    MOD
+                                                </span>
+                                            )}
                                             {imageKey ? (
                                                 <div
                                                     className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-6 px-1 ${affinity ? 'pb-6' : 'pb-1 mb-1'}`}
@@ -245,6 +258,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
+                    {onEditStats && ', Shift+Click to edit stats'}
                 </div>
             )}
         </div>

@@ -43,6 +43,10 @@ interface PlacementBoardProps {
     onCopyToOtherSide?: () => void;
     /** Label for the copy button, e.g. "Copy to enemy" / "Copy to your team". */
     copyLabel?: string;
+    /** Shift+Click a cell to edit that placement's stats. */
+    onEditStats?: (position: Position) => void;
+    /** Marks a cell whose placement carries a stat override. */
+    hasOverrides?: (position: Position) => boolean;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -59,6 +63,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     mirrored = false,
     onCopyToOtherSide,
     copyLabel,
+    onEditStats,
+    hasOverrides,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
@@ -141,6 +147,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 onRemoveShip={onRemoveShip}
                 mirrored={mirrored}
                 showFacingCue
+                onEditStats={onEditStats}
+                hasOverrides={hasOverrides}
             />
             {/* ShipSelector contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — autoOpen fires the picker open on mount; onClose clears the selection, which

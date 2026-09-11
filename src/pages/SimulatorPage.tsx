@@ -9,7 +9,10 @@ import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { BattleResult } from '../utils/calculators/battleSimulator';
 import { runSeededBattle, runSeedSet, SeedSetAggregate } from '../utils/simulator/seededRuns';
 import { buildTeam } from '../utils/simulator/buildTeam';
+import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
+import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
+import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
@@ -54,6 +57,10 @@ const SimulatorPage: React.FC = () => {
         writeStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS[side], selection);
     };
 
+    // The cell whose stat editor is open, or null when none is. One modal for the whole
+    // page, not one per cell — a placement's own overrides are looked up by side + position.
+    const [editing, setEditing] = useState<{ side: Side; position: Position } | null>(null);
+
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
         () =>
@@ -97,6 +104,26 @@ const SimulatorPage: React.FC = () => {
             selected: enemySelected,
             setSelected: setEnemySelected,
         },
+    };
+
+    const editingPlacement = editing
+        ? boardSetters[editing.side].board[editing.position]
+        : undefined;
+
+    const handleOverridesChange = (next: StatOverrides) => {
+        if (!editing) return;
+        const { setBoard } = boardSetters[editing.side];
+        setBoard((prev) => {
+            const placement = prev[editing.position];
+            if (!placement) return prev;
+            return {
+                ...prev,
+                [editing.position]: {
+                    ship: placement.ship,
+                    overrides: hasAnyOverride(next) ? next : undefined,
+                },
+            };
+        });
     };
 
     const handleSelectPosition = (side: Side, position: Position) => {
@@ -205,6 +232,8 @@ const SimulatorPage: React.FC = () => {
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('player')}
                                 copyLabel="Copy to enemy"
+                                onEditStats={(pos) => setEditing({ side: 'player', position: pos })}
+                                hasOverrides={(pos) => hasAnyOverride(playerBoard[pos]?.overrides)}
                             />
                             <SquadLeaderPicker
                                 side="player"
@@ -226,6 +255,8 @@ const SimulatorPage: React.FC = () => {
                                 onCopyToOtherSide={() => handleCopyBoard('enemy')}
                                 copyLabel="Copy to your team"
                                 mirrored
+                                onEditStats={(pos) => setEditing({ side: 'enemy', position: pos })}
+                                hasOverrides={(pos) => hasAnyOverride(enemyBoard[pos]?.overrides)}
                             />
                             <SquadLeaderPicker
                                 side="enemy"
@@ -289,6 +320,18 @@ const SimulatorPage: React.FC = () => {
 
                     {battleResult && <BattlePlayback result={battleResult} />}
                 </div>
+
+                {editing && editingPlacement && (
+                    <StatOverrideModal
+                        isOpen
+                        onClose={() => setEditing(null)}
+                        shipName={editingPlacement.ship.name}
+                        position={editing.position}
+                        base={combatStatsFromShip(shipFinalStats(editingPlacement.ship, statsDeps))}
+                        overrides={editingPlacement.overrides}
+                        onChange={handleOverridesChange}
+                    />
+                )}
             </PageLayout>
         </>
     );
