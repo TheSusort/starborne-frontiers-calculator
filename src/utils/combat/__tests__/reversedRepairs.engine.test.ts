@@ -42,7 +42,7 @@
  *
  * NO RNG SEEDING. Every gate in this file is pinned by rate rather than by seed: `makeRateGate`
  * documents that `rate >= 1` always fires and `rate <= 0` never does, so `crit: 100` crits every
- * time and `crit: 0` never does. That is strictly stronger than `setupKeyedTestRng` — it removes
+ * time and `crit: 0` never does. That is strictly stronger than `setupKeyedRng` — it removes
  * the stream entirely instead of fixing it — and it sidesteps the keyed-RNG-per-ownerId hazard that
  * makes cross-side amount comparisons unsafe.
  */

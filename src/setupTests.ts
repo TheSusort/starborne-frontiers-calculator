@@ -6,7 +6,7 @@ import '@testing-library/jest-dom';
 import { expect, afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import * as matchers from '@testing-library/jest-dom/matchers';
-import { setupKeyedTestRng, resetRateGateRng } from './utils/calculators/rateAccumulator';
+import { setupKeyedRng, resetRateGateRng } from './utils/calculators/rateAccumulator';
 
 // Extend Vitest's expect method with testing-library methods
 expect.extend(matchers);
@@ -22,7 +22,7 @@ afterEach(() => {
 // the golden snapshots that depend on them — are reproducible regardless of test order.
 const RATE_GATE_TEST_SEED = 0x5eed1234;
 beforeEach(() => {
-    setupKeyedTestRng(RATE_GATE_TEST_SEED);
+    setupKeyedRng(RATE_GATE_TEST_SEED);
 });
 afterEach(() => {
     resetRateGateRng();

@@ -48,14 +48,14 @@
  * ⚠️ No shipped kit builds the victimless DoT/debuff shape — all 40 corpus shapes resolve a target
  * (spec §10.1) — so those four cases are synthetic BY NECESSITY. The purge pair is the shipped one.
  *
- * ⚠️ SEEDING: `setupKeyedTestRng` only, never followed by `resetRateGateRng()` — that pair un-seeds
+ * ⚠️ SEEDING: `setupKeyedRng` only, never followed by `resetRateGateRng()` — that pair un-seeds
  * both streams and is flagged by `rateGateSeedingOrder.test.ts`. `src/setupTests.ts` already resets
  * after every test.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 import {
@@ -185,7 +185,7 @@ const observe = (over: Partial<CombatEngineInput> = {}): Observed => {
 describe('SP-4c-2d: a victimless reactive infliction is a no-op — the `dot` branch', () => {
     beforeEach(() => {
         idc = 0;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('a start-of-round DoT with target:enemy applies NOTHING and emits no dot-applied', () => {
@@ -218,7 +218,7 @@ describe('SP-4c-2d: a victimless reactive infliction is a no-op — the `dot` br
 describe('SP-4c-2d: a victimless reactive infliction is a no-op — the `debuff` branch', () => {
     beforeEach(() => {
         idc = 0;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('a start-of-round debuff with target:enemy applies NOTHING and emits no debuff-applied', () => {
@@ -249,7 +249,7 @@ describe('SP-4c-2d: a victimless reactive infliction is a no-op — the `debuff`
 describe('SP-4c-2d: a victimless reactive infliction is a no-op — the `purge` branch', () => {
     beforeEach(() => {
         idc = 0;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     /** An enemy that self-buffs on its turn, so `mostBuffsAmong` has something to resolve. */

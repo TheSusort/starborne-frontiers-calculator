@@ -21,7 +21,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import {
     bareInput,
     bareAlly,
@@ -35,7 +35,7 @@ const PER_CAST = 10_000;
 const ENEMY_MAX_HP = 1_000_000;
 
 const run = (over: Partial<CombatEngineInput> = {}) => {
-    setupKeyedTestRng(12345);
+    setupKeyedRng(12345);
     return runCombat({
         ...bareInput(),
         numRounds: 4,

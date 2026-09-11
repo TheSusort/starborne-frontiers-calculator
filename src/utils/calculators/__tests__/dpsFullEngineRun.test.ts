@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { baseInput, damageKit } from '../__testutils__/dpsRealEnemyFixture';
 import type { ShipSkills } from '../../../types/abilities';
 import { runCombat } from '../../combat/engine';
@@ -32,7 +32,7 @@ const selfShieldKit = (): ShipSkills => ({
 });
 
 describe('#415 the DPS calculator runs the full engine', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('grants and reports a shield', () => {
         const { rounds } = simulateDPS(
@@ -56,7 +56,7 @@ describe('#415 the DPS calculator runs the full engine', () => {
 });
 
 describe('#415 the healing report stays out of a DPS result', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('omits the healing block in dps mode', () => {
         const result = runCombat({ ...bareInput(), mode: 'dps' });

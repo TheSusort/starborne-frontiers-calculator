@@ -6,12 +6,12 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { baseInput, bombKit, dotKit, realEnemyInput } from '../__testutils__/dpsRealEnemyFixture';
 
 describe('re-derived round totals keep the integer contract', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('writes integer totalRoundDamage / cumulativeDamage on a real-enemy run', () => {
@@ -34,7 +34,7 @@ describe('re-derived round totals keep the integer contract', () => {
 
 describe('the Direct damage row on a positional run', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('reports the focus firing damage, not 0', () => {

@@ -40,7 +40,7 @@
  *
  * NO RNG SEEDING, exactly as Task 5: every gate is pinned by RATE (`makeRateGate` fires whenever
  * `rate >= 1` and never when `rate <= 0`), so `crit: 0` removes the stream instead of fixing it.
- * `setupKeyedTestRng` is keyed per-`ownerId` and would hand the two side arms different draws,
+ * `setupKeyedRng` is keyed per-`ownerId` and would hand the two side arms different draws,
  * which is exactly what the cross-arm equality assertions cannot tolerate.
  */
 import { describe, it, expect } from 'vitest';

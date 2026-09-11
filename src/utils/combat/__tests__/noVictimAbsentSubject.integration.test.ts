@@ -24,7 +24,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareAlly, bareEnemy, BARE_ALLY_ID } from '../__testutils__/bareRosterFixture';
 import type { Condition, ShipSkills } from '../../../types/abilities';
 
@@ -87,9 +87,9 @@ const supportRun = (gate: Condition) => {
     return { shieldsOnFocus, allyRepairs };
 };
 
-// Do NOT call resetRateGateRng() after setupKeyedTestRng() — reset un-seeds the test.
+// Do NOT call resetRateGateRng() after setupKeyedRng() — reset un-seeds the test.
 describe('SP-4d: a no-victim turn resolves no enemy-derived gate', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it("Cobalt's HP-vs-target clause does not grant the shield against nobody", () => {
         const { shieldsOnFocus, allyRepairs } = supportRun({

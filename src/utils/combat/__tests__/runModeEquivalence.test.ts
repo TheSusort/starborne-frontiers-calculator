@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
 import { Ability, ShipSkills } from '../../../types/abilities';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 
-// NOTE: do NOT call resetRateGateRng() after setupKeyedTestRng() — reset nulls the keyed
+// NOTE: do NOT call resetRateGateRng() after setupKeyedRng() — reset nulls the keyed
 // provider and restores Math.random, un-seeding the test (rateAccumulator.ts).
 
 const FOCUS_ID = 'attacker';
@@ -79,13 +79,13 @@ const BATTLE_BASE = (): CombatEngineInput => ({ ...base() });
 
 describe('mode is the sole run-kind signal', () => {
     beforeEach(() => {
-        setupKeyedTestRng(9001);
+        setupKeyedRng(9001);
     });
 
     it("omitting mode on a plain DPS input is identical to mode 'dps'", () => {
-        setupKeyedTestRng(9001);
+        setupKeyedRng(9001);
         const implicit = runCombat({ ...DPS_BASE() });
-        setupKeyedTestRng(9001);
+        setupKeyedRng(9001);
         const explicit = runCombat({ ...DPS_BASE(), mode: 'dps' });
 
         expect(explicit).toEqual(implicit);

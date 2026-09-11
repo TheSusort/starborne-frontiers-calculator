@@ -3,7 +3,7 @@ import {
     type BattleResult,
     type BattleSimulationInput,
 } from '../calculators/battleSimulator';
-import { resetRateGateRng, setupKeyedTestRng } from '../calculators/rateAccumulator';
+import { resetRateGateRng, setupKeyedRng } from '../calculators/rateAccumulator';
 import type { GearPiece } from '../../types/gear';
 
 /**
@@ -23,7 +23,7 @@ export function runSeededBattle(
     seed: number,
     getGearPiece?: (id: string) => GearPiece | undefined
 ): BattleResult {
-    setupKeyedTestRng(seed);
+    setupKeyedRng(seed);
     try {
         return simulateBattle(input, getGearPiece);
     } finally {

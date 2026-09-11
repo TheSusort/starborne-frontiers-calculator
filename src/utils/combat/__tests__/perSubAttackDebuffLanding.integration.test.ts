@@ -67,7 +67,7 @@
  * `hits x 10_000`, so no mid-cast death confounds a count.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { resetRateGateRng, setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { resetRateGateRng, setupKeyedRng } from '../../calculators/rateAccumulator';
 import { runPlayerTurn } from '../playerTurn';
 import { runCombat, CombatEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
@@ -692,7 +692,7 @@ describe('PR8 — independent landing rolls', () => {
         // the cast-time draw survives, so the distinct set has ONE member and no count exceeds 1)
         // and by no-oping `onSubAttackEnd`.
         const gated = (seed: number): number => {
-            setupKeyedTestRng(seed);
+            setupKeyedRng(seed);
             return debuffApplications(
                 focusCast([activeWithDebuffClause(3)], [enemyAt('victim', 'M4')], [], 150),
                 'Corrode',

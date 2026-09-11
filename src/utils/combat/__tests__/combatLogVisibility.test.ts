@@ -22,7 +22,7 @@ import {
     type BattleSimulationInput,
     type BattlePlacement,
 } from '../../calculators/battleSimulator';
-import { setupKeyedTestRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type { Position } from '../../../types/encounters';
@@ -121,7 +121,7 @@ function run(
     input: BattleSimulationInput,
     getGearPiece?: (id: string) => GearPiece | undefined
 ): ReturnType<typeof simulateBattle> {
-    setupKeyedTestRng(SEED);
+    setupKeyedRng(SEED);
     try {
         return simulateBattle(input, getGearPiece);
     } finally {

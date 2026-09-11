@@ -3,7 +3,7 @@ import { simulateDPS } from '../dpsSimulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
 import { Ability, ShipSkills } from '../../../types/abilities';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 
 // Same test-only seed `src/setupTests.ts` installs per-test (SP-0's keyed provider). Re-applied
 // between the two `simulateDPS` calls below so both draw from an identical per-key stream state
@@ -86,7 +86,7 @@ describe('PR10: buff-steal is DPS-inert (no target buffs to steal in single-ship
             const withSteal = simulateDPS({ ...BASE_STATS, shipSkills: skills });
             // Reseed so `withoutSteal` draws from the SAME per-key stream position `withSteal`
             // started from, instead of continuing on from wherever the first call left off.
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const withoutSteal = simulateDPS({
                 ...BASE_STATS,
                 shipSkills: withoutBuffSteal(skills),

@@ -32,7 +32,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
-import { setRateGateRng, setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setRateGateRng, setupKeyedRng } from '../../calculators/rateAccumulator';
 import { Ship, AffinityName } from '../../../types/ship';
 import { Ability } from '../../../types/abilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
@@ -234,7 +234,7 @@ function runAoE(anchorAffinity: AffinityName = 'electric'): {
 
 describe('Sentinel on-ally-crit — attack-scoped repair, crit-victim-scoped damage', () => {
     // src/setupTests.ts installs the seeded RNG per test; restore it after the scripted override.
-    afterEach(() => setupKeyedTestRng(12345));
+    afterEach(() => setupKeyedRng(12345));
 
     it('repairs the critting ally ONCE for the whole attack, not once per critting hit', () => {
         const { reactiveHeals } = runAoE();

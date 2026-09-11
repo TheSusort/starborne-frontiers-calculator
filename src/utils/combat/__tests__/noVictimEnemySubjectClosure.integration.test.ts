@@ -24,7 +24,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareAlly, bareEnemy, BARE_ALLY_ID } from '../__testutils__/bareRosterFixture';
 import type { Ability, Condition, ShipSkills } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
@@ -277,9 +277,9 @@ function buffGrantedFor(gate: Condition, shieldPool: number): boolean {
     return granted;
 }
 
-// Do NOT call resetRateGateRng() after setupKeyedTestRng() — reset un-seeds the test.
+// Do NOT call resetRateGateRng() after setupKeyedRng() — reset un-seeds the test.
 describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-victim turn', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     describe('enemy-debuff', () => {
         const gate = (): Condition => ({
@@ -290,7 +290,7 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
         });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const { shieldsOnFocus, allyRepairs } = noVictimRun(gate());
             expect(shieldsOnFocus).toEqual([]);
             expect(allyRepairs.length).toBeGreaterThan(0);
@@ -339,7 +339,7 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
         });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const { shieldsOnFocus, allyRepairs } = noVictimRun(gate());
             expect(shieldsOnFocus).toEqual([]);
             expect(allyRepairs.length).toBeGreaterThan(0);
@@ -385,7 +385,7 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
         });
 
         it('NEGATIVE: does not grant the shield on a no-victim turn (the repair still lands)', () => {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const { shieldsOnFocus, allyRepairs } = noVictimRun(gate());
             expect(shieldsOnFocus).toEqual([]);
             expect(allyRepairs.length).toBeGreaterThan(0);
@@ -399,7 +399,7 @@ describe('SP-4d Task 9: enemy-debuff/enemy-dot-count/enemy-shield close on a no-
 
     describe('side-wide non-regression (constraint 4): enemy-buff keeps answering with no victim', () => {
         it("a no-victim turn's self-shield still gates correctly on the enemy roster's self-buff", () => {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             // The enemy attacker gets a PASSIVE self-buff, seeded at combat start by
             // seedPassiveTimedStatuses — live from round 1 regardless of whether any cast this
             // round resolves a victim. `enemy-buff` reads the UNION of enemy self-buffs

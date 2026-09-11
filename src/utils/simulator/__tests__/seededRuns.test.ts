@@ -83,7 +83,7 @@ describe('runSeededBattle', () => {
 
     it('resets the RNG (via finally) even when the battle throws', () => {
         // Spies directly on resetRateGateRng so the assertion observes the finally firing,
-        // rather than inferring it from a later call's behaviour: setupKeyedTestRng
+        // rather than inferring it from a later call's behaviour: setupKeyedRng
         // unconditionally overwrites the module RNG on every call, so a later runSeededBattle
         // would look fine even if this finally never ran.
         const resetSpy = vi.spyOn(rateAccumulator, 'resetRateGateRng');
@@ -179,5 +179,19 @@ describe('runSeedSet', () => {
                 expect(rosterIds.has(actorId)).toBe(true);
             }
         }
+    });
+
+    it('runs[N] equals summarizeRun(runSeededBattle(input, baseSeed + N)) for a non-first N', () => {
+        // The "click a seed row to play it back" feature rests on this equality. Running the same
+        // set twice (the reproducibility test above) would still pass if a per-seed input mutation
+        // desynced the set from a standalone replay of one of its seeds — this checks the seed set
+        // against an independently-run single battle instead of against itself.
+        const agg = runSeedSet(input(), 500, 5);
+
+        const replayed2 = summarizeRun(runSeededBattle(input(), 502), 502);
+        expect(agg.runs[2]).toEqual(replayed2);
+
+        const replayedLast = summarizeRun(runSeededBattle(input(), 504), 504);
+        expect(agg.runs[4]).toEqual(replayedLast);
     });
 });

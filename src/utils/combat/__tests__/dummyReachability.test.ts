@@ -110,7 +110,7 @@ import {
     __resetResolvedVictimTurnCounts,
     SENTINEL_ENEMY_ACTOR_ID,
 } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { normalizeCombatRoster, MIN_TARGETABLE_MAX_HP } from '../normalizeRoster';
 // Fixtures live in __testutils__, NOT in the other test file. Importing from a `.test.ts`
 // module executes its `describe` blocks as an import side effect — the suites would run twice,
@@ -143,7 +143,7 @@ const noVictimTurns = (): number => __getNoVictimTurnCount();
 
 describe('no-victim turns after normalization', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetNoVictimTurnCount();
     });
 
@@ -280,7 +280,7 @@ describe('no-victim turns after normalization', () => {
 
 describe('the shapes that used to reach the dummy sink', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetNoVictimTurnCount();
     });
 
@@ -433,7 +433,7 @@ describe('the shapes that used to reach the dummy sink', () => {
  */
 describe('A DEAD RESOLVED VICTIM IS UNCONSTRUCTIBLE', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetResolvedVictimTurnCounts();
     });
 

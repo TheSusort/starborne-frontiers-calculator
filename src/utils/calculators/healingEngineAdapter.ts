@@ -428,7 +428,7 @@ const practiceTarget = (): EnemyAttackerInput => ({
  *
  * The claim is exact equality, not merely "same stat basis": swapping a 0-attack default card for
  * the practice target changes only the incoming damage (0 either way here), never the healer's own
- * output — verified under a seeded RNG (`setupKeyedTestRng`) at healer crit 0, 50 and 100, all three
+ * output — verified under a seeded RNG (`setupKeyedRng`) at healer crit 0, 50 and 100, all three
  * giving byte-identical `totalDirectHeal` AND per-round series between the two runs (see
  * `healingPracticeTarget.test.ts`'s `it.each([0, 50, 100])` stat-basis case, which asserts both).
  * Measured there at `critDamage: 100` — 6,248 / [2083, 2083, 2083] at crit 0, 16,662 /
@@ -436,10 +436,10 @@ const practiceTarget = (): EnemyAttackerInput => ({
  * no-crit, a MIXED and an always-crit profile. A live `critDamage` is load-bearing to that: with
  * `critDamage: 0` a crit multiplies by 1 and all three crit settings collapse onto the same 6,248,
  * which would make the sweep three copies of one case rather than three profiles. Reproducing that equality
- * at all requires a seeded harness: production draws are unseeded `Math.random`
- * (`rateAccumulator.ts:11-14`), so two live page runs are never expected to match — the equality is
- * a property of the simulation given the same random stream, not a promise about two independent
- * clicks.
+ * at all requires a seeded harness: this calculator's own production path never installs a seeded
+ * stream, so its draws are `rateAccumulator`'s default `rng` (`Math.random`), and two live page runs
+ * are never expected to match — the equality is a property of the simulation given the same random
+ * stream, not a promise about two independent clicks.
  *
  * The ally-side substitution below is the other half of the same claim: a support healer's ACTIVE
  * target is ally-side, which resolves to no opposing victim at all.

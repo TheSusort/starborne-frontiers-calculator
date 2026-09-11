@@ -22,7 +22,7 @@
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { Ability } from '../../../types/abilities';
 import type { ParsedTarget, ParsedPattern } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -314,7 +314,7 @@ describe('SP-4b-2 D2 — enemy-side mirror: an ENEMY on-crit debuff lands on the
  *     cast that crit only some of the enemies it hit.
  *
  * SEEDING. Both cases need a genuinely mixed draw, so all four pin the SAME
- * `setupKeyedTestRng(MIXED_DRAW_SEED)` (never followed by `resetRateGateRng` — the global
+ * `setupKeyedRng(MIXED_DRAW_SEED)` (never followed by `resetRateGateRng` — the global
  * bootstrap's `afterEach` owns cleanup). The seed chooses WHICH victims land/crit; it does not
  * choose the invariants — the set-equality and the one-decision-per-victim count hold for every
  * seed, and the "genuinely partial / genuinely mixed" guards are the only assertions the seed
@@ -339,7 +339,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
     ];
 
     it('an `inflict` on-crit debuff draws landing PER crit victim — some land, some resist', () => {
-        setupKeyedTestRng(MIXED_DRAW_SEED);
+        setupKeyedRng(MIXED_DRAW_SEED);
         const { landed, resisted, critVictimIds } = landingOutcomes(
             focus({
                 hacking: 250,
@@ -368,7 +368,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
     });
 
     it('an enemy `inflict` on-crit debuff draws landing per PLAYER victim (mirror)', () => {
-        setupKeyedTestRng(MIXED_DRAW_SEED);
+        setupKeyedRng(MIXED_DRAW_SEED);
         const enemy = critingEnemy('foe-crit', 'M4', allPattern());
         const { landed, resisted, critVictimIds } = landingOutcomes(
             focus({
@@ -402,7 +402,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
     // The other axis: `apply` (no landing draw at all) so the ONLY thing that can vary is which
     // victims the cast crit. crit 50 → per-victim crit draws → a partial crit.
     it('a PARTIAL crit debuffs exactly the victims it crit, and no others', () => {
-        setupKeyedTestRng(MIXED_DRAW_SEED);
+        setupKeyedRng(MIXED_DRAW_SEED);
         const { landed, resisted, critVictimIds } = landingOutcomes(
             focus({
                 crit: 50,
@@ -430,7 +430,7 @@ describe('SP-4b-2 D2 — the crit route fans the landing gate out per victim', (
     });
 
     it('an enemy PARTIAL crit debuffs exactly the player actors it crit (mirror)', () => {
-        setupKeyedTestRng(MIXED_DRAW_SEED);
+        setupKeyedRng(MIXED_DRAW_SEED);
         const enemy = critingEnemy('foe-crit', 'M4', allPattern());
         const { landed, resisted, critVictimIds } = landingOutcomes(
             focus({

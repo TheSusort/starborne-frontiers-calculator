@@ -17,7 +17,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { baseInput, damageKit } from '../__testutils__/dpsRealEnemyFixture';
 import type { ShipSkills } from '../../../types/abilities';
 
@@ -45,7 +45,7 @@ const startOfTurnShieldKit = (): ShipSkills => ({
 });
 
 describe('#415 the battle arm’s shield grant now lands in DPS mode too', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('grants 20% of max HP per round and compounds the pool', () => {
         const { rounds } = simulateDPS(

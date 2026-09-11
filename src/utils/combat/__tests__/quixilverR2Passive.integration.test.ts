@@ -45,7 +45,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
-import { setupKeyedTestRng, resetRateGateRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng, resetRateGateRng } from '../../calculators/rateAccumulator';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { BARRIER_RECHARGING } from '../barrierRecharging';
 import type { Ship } from '../../../types/ship';
@@ -55,7 +55,7 @@ import type { Position } from '../../../types/encounters';
 import type { CombatActor } from '../state';
 
 const RNG_SEED = 0x5eed1234;
-beforeEach(() => setupKeyedTestRng(RNG_SEED));
+beforeEach(() => setupKeyedRng(RNG_SEED));
 afterEach(() => resetRateGateRng());
 
 /** docs/ship-skills.csv, Quixilver, `second_passive_skill_text` — copied verbatim, tags and all.

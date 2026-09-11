@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
 import type { ShipSkills } from '../../../types/abilities';
 
@@ -126,7 +126,7 @@ const baseInput = (): DPSSimulationInput => ({
 
 describe('SP-2 status timeline collection', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('attaches one focus stats snapshot per focus turn when the flag is set', () => {
@@ -180,9 +180,9 @@ describe('SP-2 status timeline collection', () => {
     });
 
     it('does not change any damage number when collecting', () => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const off = simulateDPS(baseInput());
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const on = simulateDPS({ ...baseInput(), collectStatusTimeline: true });
 
         expect(on.summary).toEqual(off.summary);

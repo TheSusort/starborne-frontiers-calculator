@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import type { ShipSkills } from '../../../types/abilities';
 import { bareInput } from '../__testutils__/bareRosterFixture';
 
@@ -47,7 +47,7 @@ const input = (): CombatEngineInput => ({ ...bareInput(), shipSkills: secondaryK
 
 describe('display sub-buckets on a positional run', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('reports the secondary component the cast actually dealt', () => {

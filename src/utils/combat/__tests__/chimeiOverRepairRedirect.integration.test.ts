@@ -539,7 +539,7 @@ describe('#435 acceptance — the redirect fires off Chimei’s start-of-round p
 /**
  * R2 / R-A / R-B — the same passive repair, with Chimei wearing both on-repair implants.
  *
- * RNG. The suite bootstrap (`src/setupTests.ts`) already installs `setupKeyedTestRng(seed)` before
+ * RNG. The suite bootstrap (`src/setupTests.ts`) already installs `setupKeyedRng(seed)` before
  * every test, which is the seeding the fixtures above run under. Font of Power is a 16% proc, so
  * these cases additionally FORCE both streams to 0 — an always-fire override, not an un-seeding
  * (the forbidden call is `resetRateGateRng()`, which restores `Math.random`). This mirrors the

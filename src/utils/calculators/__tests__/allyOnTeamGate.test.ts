@@ -12,7 +12,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { Ability, Condition, ShipSkills } from '../../../types/abilities';
 
 let idCounter = 0;
@@ -83,7 +83,7 @@ const ALLY_GATE: Condition[] = [{ subject: 'ally-on-team', derivable: false, buf
 
 const total = (conditions: Condition[], extra: Partial<DPSSimulationInput> = {}) => {
     idCounter = 0;
-    setupKeyedTestRng(4242);
+    setupKeyedRng(4242);
     return simulateDPS({ ...BASE, shipSkills: skills(conditions), ...extra }).summary.totalDamage;
 };
 
