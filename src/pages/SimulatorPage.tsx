@@ -6,13 +6,9 @@ import { Ship } from '../types/ship';
 import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { BattleResult } from '../utils/calculators/battleSimulator';
-import { runSeededBattle, runSeedSet, SeedSetAggregate } from '../utils/simulator/seededRuns';
-import { buildTeam } from '../utils/simulator/buildTeam';
+import { useSimulatorRuns } from '../hooks/useSimulatorRuns';
 import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
 import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
-import { snapshotOverrides, PinnedBaseline } from '../utils/simulator/compareRuns';
-import { effectiveRunParams } from '../utils/simulator/effectiveRunParams';
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
 import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
@@ -42,16 +38,8 @@ const SimulatorPage: React.FC = () => {
     // Selected cell per board (the cell a picked ship fills). Independent per side.
     const [playerSelected, setPlayerSelected] = useState<Position | undefined>(undefined);
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
-    const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
-    const [aggregate, setAggregate] = useState<SeedSetAggregate | null>(null);
-    const [runError, setRunError] = useState<string | null>(null);
     const [seed, setSeed] = useState<number>(() => randomSeed());
     const [runCount, setRunCount] = useState(1);
-    // The comparison point for the current session. While set, the seed and run count are
-    // read-only and forced onto the baseline's values (see the locked SeedRunControls below) —
-    // otherwise a "variant" run could sample a different seed set and the comparison would be
-    // unpaired while looking paired.
-    const [baseline, setBaseline] = useState<PinnedBaseline | null>(null);
     // Per-side squad-leader selections (pre-fight faction auras), persisted to
     // localStorage (validated on read — stale/hand-edited values fall back to none).
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
@@ -165,69 +153,49 @@ const SimulatorPage: React.FC = () => {
     };
 
     // Copies ships AND their overrides — a near-mirror board is the common setup and rebuilding it
-    // by hand is the friction this removes.
+    // by hand is the friction this removes. An un-overridden placement copies to `undefined`, the
+    // same "no overrides" representation the override-change handler below writes, so a board
+    // never carries the alternate `{}` spelling of the same state.
     const handleCopyBoard = (from: Side) => {
         const source = from === 'player' ? playerBoard : enemyBoard;
         const copy: BoardState = {};
         for (const [position, placement] of Object.entries(source) as [Position, Placement][]) {
-            copy[position] = { ship: placement.ship, overrides: { ...placement.overrides } };
+            copy[position] = {
+                ship: placement.ship,
+                overrides: hasAnyOverride(placement.overrides)
+                    ? { ...placement.overrides }
+                    : undefined,
+            };
         }
         (from === 'player' ? setEnemyBoard : setPlayerBoard)(copy);
     };
 
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
-    const canRun = playerCount > 0 && enemyCount > 0;
 
-    // Shared engine input for both a fresh run and a seed re-open — both call sites need the
-    // same fully-resolved teams and squad-leader selections.
-    const buildInput = () => ({
-        playerTeam: buildTeam(playerBoard, statsDeps),
-        enemyTeam: buildTeam(enemyBoard, statsDeps),
+    const {
+        battleResult,
+        aggregate,
+        baseline,
+        runError,
+        effectiveSeed,
+        effectiveRunCount,
+        currentOverrides,
+        canRun,
+        handleRun,
+        handleOpenSeed,
+        handlePinBaseline,
+        handleUnpinBaseline,
+    } = useSimulatorRuns({
+        playerBoard,
+        enemyBoard,
+        statsDeps,
         playerSquadLeader,
         enemySquadLeader,
-    });
-
-    // See effectiveRunParams' doc for why a pinned baseline overrides the page's own seed/runCount.
-    const { seed: effectiveSeed, runCount: effectiveRunCount } = effectiveRunParams(
-        baseline,
+        getGearPiece,
         seed,
-        runCount
-    );
-
-    const handleRun = () => {
-        // Guard: simulateBattle throws on an empty side.
-        if (!canRun) return;
-        setRunError(null);
-        const input = buildInput();
-        try {
-            if (effectiveRunCount === 1) {
-                setAggregate(null);
-                setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
-            } else {
-                setBattleResult(null);
-                setAggregate(runSeedSet(input, effectiveSeed, effectiveRunCount, getGearPiece));
-            }
-        } catch (err) {
-            setBattleResult(null);
-            setAggregate(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
-        }
-    };
-
-    // Re-runs a single seed from the aggregate. Determinism guarantees the playback matches the
-    // row it was opened from, so the fight does not need to be retained alongside the summary.
-    const handleOpenSeed = (openSeed: number) => {
-        if (!canRun) return;
-        setBattleResult(runSeededBattle(buildInput(), openSeed, getGearPiece));
-    };
-
-    const handlePinBaseline = () => {
-        if (!aggregate) return;
-        setBaseline({ aggregate, overrides: snapshotOverrides(playerBoard, enemyBoard) });
-    };
-
-    const handleUnpinBaseline = () => setBaseline(null);
+        runCount,
+    });
 
     return (
         <>
@@ -338,11 +306,7 @@ const SimulatorPage: React.FC = () => {
 
                     {aggregate && (
                         <div className="space-y-2">
-                            <SeedSetResults
-                                aggregate={aggregate}
-                                roster={aggregate.roster}
-                                onOpenSeed={handleOpenSeed}
-                            />
+                            <SeedSetResults aggregate={aggregate} onOpenSeed={handleOpenSeed} />
                             {!baseline && (
                                 <Button variant="secondary" onClick={handlePinBaseline}>
                                     Pin as baseline
@@ -351,12 +315,11 @@ const SimulatorPage: React.FC = () => {
                         </div>
                     )}
 
-                    {baseline && aggregate && (
+                    {baseline && aggregate && currentOverrides && (
                         <RunComparison
                             baseline={baseline}
                             current={aggregate}
-                            currentOverrides={snapshotOverrides(playerBoard, enemyBoard)}
-                            roster={aggregate.roster}
+                            currentOverrides={currentOverrides}
                         />
                     )}
 

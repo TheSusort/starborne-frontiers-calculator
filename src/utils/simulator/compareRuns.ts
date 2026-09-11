@@ -1,3 +1,4 @@
+import type { BattleResult } from '../calculators/battleSimulator';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { StatOverrides } from './statOverrides';
 import type { SeedSetAggregate } from './seededRuns';
@@ -28,7 +29,9 @@ export function snapshotOverrides(
     for (const [side, board] of boards) {
         for (const [position, placement] of Object.entries(board)) {
             if (placement?.overrides && Object.keys(placement.overrides).length > 0) {
-                snapshot[`${side}:${position}`] = placement.overrides;
+                // Copy, not alias: a pinned baseline must survive later edits to the live
+                // placement's overrides object.
+                snapshot[`${side}:${position}`] = { ...placement.overrides };
             }
         }
     }
@@ -63,4 +66,18 @@ export function diffOverrides(from: OverrideSnapshot, to: OverrideSnapshot): Ove
         a.key === b.key ? a.stat.localeCompare(b.stat) : a.key.localeCompare(b.key)
     );
     return rows;
+}
+
+/** True when two rosters name different actors — a different count, or the same actorId now
+ *  resolving to a different ship (side/name/position). Board edits made after a baseline was
+ *  pinned renumber and reassign the engine's actorIds (see `battleSimulator`'s `p:<shipId>:<i>`
+ *  scheme), which can make an unrelated ship's current figures line up against the baseline's
+ *  row for that id — this is the check that catches it. */
+export function rostersDiffer(a: BattleResult['roster'], b: BattleResult['roster']): boolean {
+    if (a.length !== b.length) return true;
+    const key = (r: BattleResult['roster'][number]) =>
+        `${r.actorId}|${r.side}|${r.name}|${r.position}`;
+    const sortedA = a.map(key).sort();
+    const sortedB = b.map(key).sort();
+    return sortedA.some((k, i) => k !== sortedB[i]);
 }

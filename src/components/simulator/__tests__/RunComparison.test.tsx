@@ -38,7 +38,6 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
-                roster={roster}
             />
         );
         expect(screen.getByText('8')).toBeInTheDocument();
@@ -52,7 +51,6 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
-                roster={roster}
             />
         );
         expect(screen.getByText('-1.0')).toBeInTheDocument();
@@ -64,7 +62,6 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
-                roster={roster}
             />
         );
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
@@ -73,17 +70,17 @@ describe('RunComparison', () => {
         expect(screen.getByText('+400')).toBeInTheDocument();
     });
 
-    it('lists one override-diff row per changed stat, naming side, position and stat', () => {
+    it('lists one override-diff row per changed stat, with side and position as separate columns and the stat label (not the raw key)', () => {
         render(
             <RunComparison
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
-                roster={roster}
             />
         );
-        const row = screen.getByText(/player:T1/).closest('tr') ?? screen.getByText(/player:T1/);
-        expect(row).toHaveTextContent(/attack/i);
+        const row = screen.getByText('player').closest('tr')!;
+        expect(row).toHaveTextContent('T1');
+        expect(row).toHaveTextContent('Attack');
         expect(row).toHaveTextContent('12650');
     });
 
@@ -97,10 +94,37 @@ describe('RunComparison', () => {
                 baseline={divergentBaseline}
                 current={current}
                 currentOverrides={currentOverrides}
-                roster={roster}
             />
         );
         expect(screen.getByText(/Base seed 777/)).toBeInTheDocument();
         expect(screen.getByText(/over 30 runs/)).toBeInTheDocument();
+    });
+
+    it('shows no roster-mismatch warning when the baseline and current rosters match', () => {
+        render(
+            <RunComparison
+                baseline={baseline}
+                current={current}
+                currentOverrides={currentOverrides}
+            />
+        );
+        expect(screen.queryByText(/roster changed/i)).not.toBeInTheDocument();
+    });
+
+    it('warns when the current roster differs from the baseline (a board edit renumbered actors)', () => {
+        const reshuffledCurrent: SeedSetAggregate = {
+            ...current,
+            roster: [
+                { actorId: 'focus', side: 'player', name: 'A Different Ship', position: 'T2' },
+            ],
+        };
+        render(
+            <RunComparison
+                baseline={baseline}
+                current={reshuffledCurrent}
+                currentOverrides={currentOverrides}
+            />
+        );
+        expect(screen.getByText(/roster changed/i)).toBeInTheDocument();
     });
 });

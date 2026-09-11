@@ -1,6 +1,12 @@
 import React from 'react';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
+import {
+    clampRunCount,
+    clampSeed,
+    MAX_RUN_COUNT,
+    MIN_RUN_COUNT,
+} from '../../utils/simulator/seedRunInputs';
 
 interface Props {
     seed: number;
@@ -43,17 +49,17 @@ const SeedRunControls: React.FC<Props> = ({
                 label="Seed"
                 type="number"
                 value={seed}
-                onChange={(e) => onSeedChange(Number(e.target.value))}
+                onChange={(e) => onSeedChange(clampSeed(Number(e.target.value)))}
                 disabled={locked}
                 className="max-w-[10rem]"
             />
             <Input
                 label="Runs"
                 type="number"
-                min={1}
-                max={200}
+                min={MIN_RUN_COUNT}
+                max={MAX_RUN_COUNT}
                 value={runCount}
-                onChange={(e) => onRunCountChange(Number(e.target.value))}
+                onChange={(e) => onRunCountChange(clampRunCount(Number(e.target.value)))}
                 disabled={locked}
                 className="max-w-[6rem]"
             />

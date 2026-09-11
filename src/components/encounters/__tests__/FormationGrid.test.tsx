@@ -56,3 +56,50 @@ describe('FormationGrid mirrored', () => {
         expect(onEditStats).not.toHaveBeenCalled();
     });
 });
+
+describe('FormationGrid on-cell edit control', () => {
+    // A SharedShipPosition entry resolves to a ship via its own shipName, independent of the
+    // useShips mock (which returns no ships) — the simplest way to occupy a cell here.
+    const occupiedFormation = [{ shipId: 's1', shipName: 'Nova', position: 'T1' as const }];
+
+    it('renders an Edit button on an occupied cell when onEditStats is supplied', () => {
+        render(<FormationGrid formation={occupiedFormation} onEditStats={() => {}} />);
+        expect(screen.getByRole('button', { name: /edit nova's stats/i })).toBeInTheDocument();
+    });
+
+    it('renders no Edit button when onEditStats is not supplied (Encounters usage)', () => {
+        render(<FormationGrid formation={occupiedFormation} />);
+        expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+    });
+
+    it('renders no Edit button on an empty cell even when onEditStats is supplied', () => {
+        render(<FormationGrid formation={[]} onEditStats={() => {}} />);
+        expect(screen.queryByRole('button', { name: /edit/i })).not.toBeInTheDocument();
+    });
+
+    it('clicking the Edit button opens the stat editor and does not select/replace the ship', () => {
+        const onEditStats = vi.fn();
+        const onPositionSelect = vi.fn();
+        render(
+            <FormationGrid
+                formation={occupiedFormation}
+                onEditStats={onEditStats}
+                onPositionSelect={onPositionSelect}
+            />
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: /edit nova's stats/i }));
+
+        expect(onEditStats).toHaveBeenCalledWith('T1');
+        expect(onPositionSelect).not.toHaveBeenCalled();
+    });
+
+    it('works on the mirrored enemy board too', () => {
+        const onEditStats = vi.fn();
+        render(<FormationGrid formation={occupiedFormation} onEditStats={onEditStats} mirrored />);
+
+        fireEvent.click(screen.getByRole('button', { name: /edit nova's stats/i }));
+
+        expect(onEditStats).toHaveBeenCalledWith('T1');
+    });
+});

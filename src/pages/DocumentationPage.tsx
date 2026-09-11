@@ -3907,8 +3907,9 @@ const DocumentationPage: React.FC = () => {
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
-                                        Shift+Click a placed ship to open its stat editor and change
-                                        any of its combat stats for this simulation only
+                                        Shift+Click a placed ship, or use its Edit button on the
+                                        cell, to open its stat editor and change any of its combat
+                                        stats for this simulation only
                                     </li>
                                     <li>
                                         Values are absolute and prefilled from the ship&apos;s

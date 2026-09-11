@@ -41,8 +41,9 @@ interface PlacementBoardProps {
     mirrored?: boolean;
     /** Copy this board (ships and overrides) onto the other side. Omitted → no copy button. */
     onCopyToOtherSide?: () => void;
-    /** Label for the copy button, e.g. "Copy to enemy" / "Copy to your team". */
-    copyLabel?: string;
+    /** Label for the copy button, e.g. "Copy to enemy" / "Copy to your team". Required alongside
+     *  `onCopyToOtherSide` — every caller supplies one when it supplies the other. */
+    copyLabel: string;
     /** Shift+Click a cell to edit that placement's stats. */
     onEditStats?: (position: Position) => void;
     /** Marks a cell whose placement carries a stat override. */
@@ -136,7 +137,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                         disabled={formation.length === 0}
                         onClick={onCopyToOtherSide}
                     >
-                        {copyLabel ?? 'Copy to other side'}
+                        {copyLabel}
                     </Button>
                 )}
             </div>

@@ -2,6 +2,7 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Position, ShipPosition, SharedShipPosition } from '../../types/encounters';
 import { useShips } from '../../contexts/ShipsContext';
 import { HexButton } from '../ui/HexButton';
+import { Button } from '../ui/Button';
 import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
@@ -148,6 +149,37 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                 MOD
                             </span>
                         ) : null;
+                        // Touch/keyboard path to the stat editor, alongside the Shift+Click power path.
+                        // Only rendered when the caller supplies onEditStats, so a caller that omits
+                        // it is unaffected in both layout and behaviour. stopPropagation keeps this
+                        // click from also firing the cell's onClick (which opens the replace picker) —
+                        // the button sits inside the HexButton's own <button>.
+                        const editButton =
+                            onEditStats && ship ? (
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="xs"
+                                    className="!h-3.5 !px-1 !py-0 text-[8px] leading-none"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onEditStats(pos);
+                                    }}
+                                    aria-label={`Edit ${ship.name}'s stats`}
+                                >
+                                    Edit
+                                </Button>
+                            ) : null;
+                        // Shares the MOD marker's row rather than adding one: the bottom stack sits
+                        // against the hex's narrow bottom edge (clip-hex tapers to 25%-75% width
+                        // there), so each extra row of height risks the clip-path cutting content.
+                        const cellControls =
+                            overrideMarker || editButton ? (
+                                <span className="flex items-center gap-1">
+                                    {editButton}
+                                    {overrideMarker}
+                                </span>
+                            ) : null;
                         return (
                             <div
                                 key={pos}
@@ -184,7 +216,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                     className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-6 px-1 ${affinity ? 'pb-6' : 'pb-1 mb-1'}`}
                                                 >
                                                     <div className="flex flex-col items-center">
-                                                        {overrideMarker}
+                                                        {cellControls}
                                                         <span className="text-white text-xs font-bold leading-tight text-center max-w-full px-1">
                                                             {ship.name}
                                                         </span>
@@ -207,7 +239,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-center">
-                                                    {overrideMarker}
+                                                    {cellControls}
                                                     <span className="text-white text-xs mt-1 px-1 text-center max-w-full">
                                                         {ship.name}
                                                     </span>
@@ -262,7 +294,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
-                    {onEditStats && ', Shift+Click to edit stats'}
+                    {onEditStats && ", Shift+Click or a ship's Edit button to edit stats"}
                 </div>
             )}
         </div>

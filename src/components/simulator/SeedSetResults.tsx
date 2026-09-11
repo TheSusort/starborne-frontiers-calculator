@@ -2,11 +2,9 @@ import React from 'react';
 import { Button } from '../ui/Button';
 import { DataTable, type Column } from '../ui/tables/DataTable';
 import type { SeedSetAggregate, ActorTotals } from '../../utils/simulator/seededRuns';
-import type { BattleResult } from '../../utils/calculators/battleSimulator';
 
 interface Props {
     aggregate: SeedSetAggregate;
-    roster: BattleResult['roster'];
     onOpenSeed: (seed: number) => void;
 }
 
@@ -17,8 +15,9 @@ interface ActorMeanRow {
 
 /** Aggregate view for a multi-seed run. One seeded run reproduces a fight; this aggregate is what
  *  compares two configurations. Clicking a seed re-runs that single fight for playback. */
-const SeedSetResults: React.FC<Props> = ({ aggregate, roster, onOpenSeed }) => {
-    const nameFor = (actorId: string) => roster.find((r) => r.actorId === actorId)?.name ?? actorId;
+const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
+    const nameFor = (actorId: string) =>
+        aggregate.roster.find((r) => r.actorId === actorId)?.name ?? actorId;
 
     const actorRows: ActorMeanRow[] = Object.entries(aggregate.perActorMean).map(
         ([actorId, totals]) => ({ actorId, totals })

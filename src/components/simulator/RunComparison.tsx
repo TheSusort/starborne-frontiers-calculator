@@ -2,18 +2,23 @@ import React from 'react';
 import { DataTable, type Column } from '../ui/tables/DataTable';
 import {
     diffOverrides,
+    rostersDiffer,
     type OverrideSnapshot,
     type PinnedBaseline,
 } from '../../utils/simulator/compareRuns';
 import type { SeedSetAggregate } from '../../utils/simulator/seededRuns';
-import type { BattleResult } from '../../utils/calculators/battleSimulator';
+import { STATS } from '../../constants/stats';
+import type { StatName } from '../../types/stats';
 
 interface Props {
     baseline: PinnedBaseline;
     current: SeedSetAggregate;
     currentOverrides: OverrideSnapshot;
-    roster: BattleResult['roster'];
 }
+
+/** Human label for an override-diff row's stat key, falling back to the raw key for anything
+ *  outside `STATS` (there shouldn't be any — overrides are only ever written for `STATS` keys). */
+const statLabel = (stat: string): string => STATS[stat as StatName]?.label ?? stat;
 
 /** A signed delta's colour: green when it favours the player side, red when it costs the player
  *  side, and neutral when the metric carries no inherent direction (e.g. round count). */
@@ -87,10 +92,11 @@ const DeltaCell: React.FC<{
  * rounds, per-actor mean totals, and the override changes that produced the variant. The seed and
  * run count shown come from `baseline.aggregate`, the actual seed set both configurations share.
  */
-const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides, roster }) => {
-    const nameFor = (actorId: string) => roster.find((r) => r.actorId === actorId)?.name ?? actorId;
+const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides }) => {
+    const nameFor = (actorId: string) =>
+        current.roster.find((r) => r.actorId === actorId)?.name ?? actorId;
     const sideFor = (actorId: string) =>
-        roster.find((r) => r.actorId === actorId)?.side ?? 'player';
+        current.roster.find((r) => r.actorId === actorId)?.side ?? 'player';
 
     const scalarRows: ScalarRow[] = [
         {
@@ -194,11 +200,16 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides, r
 
     const diffRows = diffOverrides(baseline.overrides, currentOverrides);
     const diffColumns: Column<(typeof diffRows)[number]>[] = [
-        { key: 'key', label: 'Placement', render: (row) => row.key },
-        { key: 'stat', label: 'Stat', render: (row) => row.stat },
+        // `key` is "<side>:<position>" (see snapshotOverrides) — split so the table reads as
+        // two plain columns instead of the internal composite key.
+        { key: 'side', label: 'Side', render: (row) => row.key.split(':')[0] },
+        { key: 'position', label: 'Position', render: (row) => row.key.split(':')[1] },
+        { key: 'stat', label: 'Stat', render: (row) => statLabel(row.stat) },
         { key: 'from', label: 'From', align: 'right', render: (row) => row.from ?? '—' },
         { key: 'to', label: 'To', align: 'right', render: (row) => row.to ?? '—' },
     ];
+
+    const rosterChanged = rostersDiffer(baseline.aggregate.roster, current.roster);
 
     return (
         <div className="card space-y-4">
@@ -207,6 +218,15 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides, r
                 Base seed {baseline.aggregate.baseSeed} over {baseline.aggregate.count} runs — the
                 same seed set on both sides.
             </p>
+
+            {rosterChanged && (
+                <div className="card border-amber-500/40 text-sm text-amber-400">
+                    The roster changed since the baseline was pinned (a ship was added, removed, or
+                    moved to a different position). Per-actor figures below may compare different
+                    ships rather than the same ship before and after — pin a new baseline before
+                    trusting this comparison.
+                </div>
+            )}
 
             <DataTable data={scalarRows} columns={scalarColumns} getRowKey={(row) => row.metric} />
 

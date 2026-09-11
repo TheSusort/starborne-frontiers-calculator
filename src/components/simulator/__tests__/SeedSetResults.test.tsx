@@ -34,20 +34,20 @@ const aggregate: SeedSetAggregate = {
 
 describe('SeedSetResults', () => {
     it('shows the win split and the round averages', () => {
-        render(<SeedSetResults aggregate={aggregate} roster={roster} onOpenSeed={() => {}} />);
+        render(<SeedSetResults aggregate={aggregate} onOpenSeed={() => {}} />);
         expect(screen.getByText(/1 \/ 2/)).toBeInTheDocument();
         expect(screen.getByText('5.0')).toBeInTheDocument();
     });
 
     it('names each actor from the roster rather than showing a raw actorId', () => {
-        render(<SeedSetResults aggregate={aggregate} roster={roster} onOpenSeed={() => {}} />);
+        render(<SeedSetResults aggregate={aggregate} onOpenSeed={() => {}} />);
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
         expect(screen.queryByText('focus')).not.toBeInTheDocument();
     });
 
     it('asks to open a single seed when its row is clicked', async () => {
         const onOpenSeed = vi.fn();
-        render(<SeedSetResults aggregate={aggregate} roster={roster} onOpenSeed={onOpenSeed} />);
+        render(<SeedSetResults aggregate={aggregate} onOpenSeed={onOpenSeed} />);
         await userEvent.click(screen.getByRole('button', { name: /seed 501/i }));
         expect(onOpenSeed).toHaveBeenCalledWith(501);
     });
