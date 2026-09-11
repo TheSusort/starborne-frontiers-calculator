@@ -141,6 +141,13 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         const rarity = fullShip?.rarity || template?.rarity?.toLowerCase();
                         const shipType = fullShip?.type || template?.type;
                         const roleIconUrl = shipType && SHIP_TYPES[shipType]?.iconUrl;
+                        // The cell's hex clip-path removes the corners, so the override marker rides in the
+                        // bottom stack with the ship name rather than floating in a corner.
+                        const overrideMarker = hasOverrides?.(pos) ? (
+                            <span className="text-[9px] font-bold text-amber-400 leading-tight">
+                                MOD
+                            </span>
+                        ) : null;
                         return (
                             <div
                                 key={pos}
@@ -172,20 +179,12 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                             className="flex flex-col items-center justify-end w-full h-full
                     scale-[0.9151]"
                                         >
-                                            {hasOverrides?.(pos) && (
-                                                // The cell's hex clip-path removes the corners, so a badge flush
-                                                // against top-0/right-0 sits in the clipped-away region; inset it
-                                                // enough to clear the mask boundary on both the normal and
-                                                // mirrored (enemy) board.
-                                                <span className="absolute top-[18%] right-[6%] px-1 text-[10px] font-bold text-amber-400 bg-black/70">
-                                                    MOD
-                                                </span>
-                                            )}
                                             {imageKey ? (
                                                 <div
                                                     className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-6 px-1 ${affinity ? 'pb-6' : 'pb-1 mb-1'}`}
                                                 >
                                                     <div className="flex flex-col items-center">
+                                                        {overrideMarker}
                                                         <span className="text-white text-xs font-bold leading-tight text-center max-w-full px-1">
                                                             {ship.name}
                                                         </span>
@@ -208,6 +207,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-center">
+                                                    {overrideMarker}
                                                     <span className="text-white text-xs mt-1 px-1 text-center max-w-full">
                                                         {ship.name}
                                                     </span>

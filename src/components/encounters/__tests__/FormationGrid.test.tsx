@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import FormationGrid from '../FormationGrid';
 
 // FormationGrid resolves ships via these contexts; an empty fleet keeps every cell empty so
@@ -37,5 +37,22 @@ describe('FormationGrid mirrored', () => {
 
         rerender(<FormationGrid formation={[]} showFacingCue />);
         expect(screen.getByText('front')).toBeInTheDocument();
+    });
+
+    it('Shift+Clicking an empty cell selects the position instead of editing stats', () => {
+        const onPositionSelect = vi.fn();
+        const onEditStats = vi.fn();
+        render(
+            <FormationGrid
+                formation={[]}
+                onPositionSelect={onPositionSelect}
+                onEditStats={onEditStats}
+            />
+        );
+
+        fireEvent.click(screen.getByText('T1').closest('button')!, { shiftKey: true });
+
+        expect(onPositionSelect).toHaveBeenCalledWith('T1');
+        expect(onEditStats).not.toHaveBeenCalled();
     });
 });
