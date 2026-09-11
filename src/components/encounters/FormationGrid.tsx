@@ -153,7 +153,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     onClick={(e) => {
                                         if (e.ctrlKey || e.metaKey) {
                                             onRemoveShip?.(pos);
-                                        } else if (e.shiftKey && onEditStats) {
+                                        } else if (e.shiftKey && onEditStats && ship) {
                                             onEditStats(pos);
                                         } else {
                                             onPositionSelect?.(pos);
@@ -173,7 +173,11 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                     scale-[0.9151]"
                                         >
                                             {hasOverrides?.(pos) && (
-                                                <span className="absolute top-0 right-0 px-1 text-[10px] font-bold text-amber-400 bg-black/70">
+                                                // The cell's hex clip-path removes the corners, so a badge flush
+                                                // against top-0/right-0 sits in the clipped-away region; inset it
+                                                // enough to clear the mask boundary on both the normal and
+                                                // mirrored (enemy) board.
+                                                <span className="absolute top-[18%] right-[6%] px-1 text-[10px] font-bold text-amber-400 bg-black/70">
                                                     MOD
                                                 </span>
                                             )}
