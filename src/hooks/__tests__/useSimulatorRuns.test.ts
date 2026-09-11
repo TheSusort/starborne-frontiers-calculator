@@ -106,6 +106,28 @@ describe('useSimulatorRuns', () => {
         expect(replayedInput).toBe(runInput);
     });
 
+    it('running again after a board edit refreshes the recorded provenance to the edited snapshot', () => {
+        const initialPlayerBoard = board('T1', 'nova', { attack: 100 });
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ playerBoard: initialPlayerBoard, runCount: 3 }) }
+        );
+
+        act(() => result.current.handleRun());
+        const firstRunOverrides = result.current.currentOverrides;
+
+        // Edit the board, then run again (as opposed to the frozen-provenance test above, which
+        // never re-runs after the edit).
+        const editedPlayerBoard = board('T1', 'nova', { attack: 400 });
+        rerender(baseArgs({ playerBoard: editedPlayerBoard, runCount: 3 }));
+        act(() => result.current.handleRun());
+
+        expect(result.current.currentOverrides).toEqual(
+            snapshotOverrides(editedPlayerBoard, baseArgs().enemyBoard)
+        );
+        expect(result.current.currentOverrides).not.toEqual(firstRunOverrides);
+    });
+
     it('a run while a baseline is pinned uses the baseline seed and count, ignoring the caller-supplied seed/runCount', () => {
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),

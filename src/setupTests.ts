@@ -16,9 +16,9 @@ afterEach(() => {
     cleanup();
 });
 
-// Make the combat RNG deterministic per test. Production uses real Math.random;
-// tests install both a fixed-seed mulberry32 (unkeyed gates) and a keyed provider
-// seeded from the same base seed (keyed gates), so crit/proc/landing outcomes — and
+// Make the combat RNG deterministic per test. Outside a seeded run the default stream is
+// real Math.random; tests install both a fixed-seed mulberry32 (unkeyed gates) and a keyed
+// provider seeded from the same base seed (keyed gates), so crit/proc/landing outcomes — and
 // the golden snapshots that depend on them — are reproducible regardless of test order.
 const RATE_GATE_TEST_SEED = 0x5eed1234;
 beforeEach(() => {

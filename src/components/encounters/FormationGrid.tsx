@@ -26,7 +26,8 @@ interface FormationGridProps {
      * placement boards opt in.
      */
     showFacingCue?: boolean;
-    /** Opt-in: Shift+Click a cell to edit that placement's stats. Simulator only. */
+    /** Opt-in: renders an Edit control on each occupied cell and makes Shift+Click open the
+     *  stat editor. Simulator only. */
     onEditStats?: (position: Position) => void;
     /** Opt-in: marks a cell whose placement carries a stat override. Simulator only. */
     hasOverrides?: (position: Position) => boolean;
@@ -245,7 +246,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                         type="button"
                                         variant="secondary"
                                         size="xs"
-                                        className="!absolute bottom-1 left-1/2 -translate-x-1/2 z-20 !h-3.5 !px-1 !py-0 text-[8px] leading-none"
+                                        className="!absolute bottom-1 left-1/2 -translate-x-1/2 z-20 !h-6 !min-w-[24px] !px-1.5 !py-0 text-[9px] leading-none"
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             onEditStats(pos);
