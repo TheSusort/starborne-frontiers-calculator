@@ -35,6 +35,7 @@ export const StatPriorityRow: React.FC<StatPriorityRowProps> = ({
                         min:{' '}
                         <InlineNumberEdit
                             value={priority.minLimit}
+                            label={`Edit minimum ${getLimitStatLabel(priority.stat)}`}
                             onSave={(v) => update({ minLimit: v })}
                             allowEmpty
                             disabled={isEditing}
@@ -50,6 +51,7 @@ export const StatPriorityRow: React.FC<StatPriorityRowProps> = ({
                         max:{' '}
                         <InlineNumberEdit
                             value={priority.maxLimit}
+                            label={`Edit maximum ${getLimitStatLabel(priority.stat)}`}
                             onSave={(v) => update({ maxLimit: v })}
                             allowEmpty
                             disabled={isEditing}

@@ -71,6 +71,7 @@ export const StatBonusRow: React.FC<StatBonusRowProps> = ({
                 ) : (
                     <InlineNumberEdit
                         value={bonus.percentage}
+                        label={`Edit ${getLimitStatLabel(bonus.stat)} scale percentage`}
                         onSave={(v) => v !== undefined && onUpdate({ ...bonus, percentage: v })}
                         min={0}
                         disabled={isEditing}

@@ -8,6 +8,11 @@ interface InlineNumberEditProps {
     max?: number;
     disabled?: boolean;
     className?: string;
+    /**
+     * Accessible name for the display trigger. Without it the name falls back to the rendered
+     * children, which is the bare number and says nothing about what it belongs to.
+     */
+    label?: string;
     children: React.ReactNode;
 }
 
@@ -19,17 +24,27 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
     max,
     disabled = false,
     className = '',
+    label,
     children,
 }) => {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState<string>('');
     const inputRef = useRef<HTMLInputElement>(null);
+    const triggerRef = useRef<HTMLSpanElement>(null);
     const committedRef = useRef(false);
+    // Set only when the editor is left by a key, so focus returns to the trigger for a keyboard
+    // user. A blur-driven exit must NOT refocus: that would pull focus back out of whatever the
+    // user tabbed to.
+    const refocusTriggerRef = useRef(false);
 
     useEffect(() => {
         if (editing && inputRef.current) {
             inputRef.current.focus();
             inputRef.current.select();
+        }
+        if (!editing && refocusTriggerRef.current) {
+            refocusTriggerRef.current = false;
+            triggerRef.current?.focus();
         }
     }, [editing]);
 
@@ -71,8 +86,19 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
     if (!editing) {
         return (
             <span
-                className={`cursor-pointer border-b border-dotted border-theme-text-secondary hover:text-theme-text ${disabled ? 'pointer-events-none opacity-60' : ''} ${className}`}
+                ref={triggerRef}
+                role="button"
+                tabIndex={disabled ? -1 : 0}
+                aria-label={label}
+                aria-disabled={disabled || undefined}
+                className={`cursor-pointer border-b border-dotted border-theme-text-secondary hover:text-theme-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${disabled ? 'pointer-events-none opacity-60' : ''} ${className}`}
                 onClick={startEdit}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        startEdit();
+                    }
+                }}
             >
                 {children}
             </span>
@@ -83,15 +109,18 @@ export const InlineNumberEdit: React.FC<InlineNumberEditProps> = ({
         <input
             ref={inputRef}
             type="number"
+            aria-label={label}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commit}
             onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    refocusTriggerRef.current = true;
                     commit();
                 } else if (e.key === 'Escape') {
                     e.preventDefault();
+                    refocusTriggerRef.current = true;
                     cancel();
                 }
             }}

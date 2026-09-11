@@ -107,6 +107,9 @@ describe('Custom mode panel', () => {
             statBonuses: [{ stat: 'defence', percentage: 80, mode: 'additive' }],
         });
         expect(screen.queryByRole('button', { name: 'Edit bonus' })).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole('button', { name: /edit .* scale percentage/i })
+        ).not.toBeInTheDocument();
         expect(screen.getByRole('button', { name: 'Remove bonus' })).toBeInTheDocument();
     });
 });
