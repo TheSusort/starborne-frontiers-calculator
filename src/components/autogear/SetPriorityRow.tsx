@@ -1,24 +1,13 @@
 import React from 'react';
-import {
-    Button,
-    ChevronUpIcon,
-    ChevronDownIcon,
-    CloseIcon,
-    EditIcon,
-    InlineNumberEdit,
-} from '../ui';
+import { Button, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
 import { SetPriority } from '../../types/autogear';
 import { GEAR_SETS } from '../../constants/gearSets';
 
 interface SetPriorityRowProps {
     priority: SetPriority;
     isEditing: boolean;
-    canMoveUp: boolean;
-    canMoveDown: boolean;
     onUpdate: (priority: SetPriority) => void;
     onEdit: () => void;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
     onRemove: () => void;
     availableImplantTypes?: { key: string; name: string; label: string }[];
     modeLabel?: string;
@@ -27,12 +16,8 @@ interface SetPriorityRowProps {
 export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
     priority,
     isEditing,
-    canMoveUp,
-    canMoveDown,
     onUpdate,
     onEdit,
-    onMoveUp,
-    onMoveDown,
     onRemove,
     availableImplantTypes,
     modeLabel,
@@ -44,32 +29,6 @@ export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
 
     return (
         <div className={`flex items-center text-sm gap-2 ${isEditing ? 'opacity-60' : ''}`}>
-            <div className="flex flex-col">
-                {canMoveUp && (
-                    <Button
-                        aria-label="Move set priority up"
-                        variant="secondary"
-                        size="xs"
-                        onClick={onMoveUp}
-                        disabled={isEditing}
-                        className="!p-0.5"
-                    >
-                        <ChevronUpIcon className="w-3 h-3" />
-                    </Button>
-                )}
-                {canMoveDown && (
-                    <Button
-                        aria-label="Move set priority down"
-                        variant="secondary"
-                        size="xs"
-                        onClick={onMoveDown}
-                        disabled={isEditing}
-                        className="!p-0.5"
-                    >
-                        <ChevronDownIcon className="w-3 h-3" />
-                    </Button>
-                )}
-            </div>
             <span>
                 {priority.kind === 'implant' ? (
                     label

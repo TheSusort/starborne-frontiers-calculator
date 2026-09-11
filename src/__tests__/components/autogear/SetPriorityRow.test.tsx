@@ -1,3 +1,4 @@
+import type { ComponentProps } from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { SetPriorityRow } from '../../../components/autogear/SetPriorityRow';
@@ -6,14 +7,12 @@ import { SetPriorityRow } from '../../../components/autogear/SetPriorityRow';
 vi.mock('../../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 
 const noop = vi.fn();
-const baseProps = {
+// Typed, so `tsc --noEmit` fails here when SetPriorityRow's props change. An untyped
+// object literal spread gets no excess-property check and silently keeps dead props.
+const baseProps: Omit<ComponentProps<typeof SetPriorityRow>, 'priority'> = {
     isEditing: false,
-    canMoveUp: false,
-    canMoveDown: false,
     onUpdate: noop,
     onEdit: noop,
-    onMoveUp: noop,
-    onMoveDown: noop,
     onRemove: noop,
 };
 

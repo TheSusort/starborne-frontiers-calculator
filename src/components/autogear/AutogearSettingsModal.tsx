@@ -40,16 +40,13 @@ interface AutogearSettingsModalProps {
     onAddSetPriority: (priority: SetPriority) => void;
     onUpdateSetPriority: (index: number, priority: SetPriority) => void;
     onRemoveSetPriority: (index: number) => void;
-    onMoveSetPriority: (fromIndex: number, toIndex: number) => void;
     onAddStatBonus: (bonus: StatBonus) => void;
     onUpdateStatBonus: (index: number, bonus: StatBonus) => void;
     onRemoveStatBonus: (index: number) => void;
-    onMoveStatBonus: (fromIndex: number, toIndex: number) => void;
     fleetBuffs: FleetBuff[];
     onAddFleetBuff: (buff: FleetBuff) => void;
     onUpdateFleetBuff: (index: number, buff: FleetBuff) => void;
     onRemoveFleetBuff: (index: number) => void;
-    onMoveFleetBuff: (fromIndex: number, toIndex: number) => void;
     onUseUpgradedStatsChange: (value: boolean) => void;
     onTryToCompleteSetsChange: (value: boolean) => void;
     onOptimizeImplantsChange: (value: boolean) => void;

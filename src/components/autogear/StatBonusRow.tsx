@@ -1,24 +1,13 @@
 import React from 'react';
-import {
-    Button,
-    ChevronUpIcon,
-    ChevronDownIcon,
-    CloseIcon,
-    EditIcon,
-    InlineNumberEdit,
-} from '../ui';
+import { Button, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
 import { StatBonus } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
 
 interface StatBonusRowProps {
     bonus: StatBonus;
     isEditing: boolean;
-    canMoveUp: boolean;
-    canMoveDown: boolean;
     onUpdate: (bonus: StatBonus) => void;
     onEdit: () => void;
-    onMoveUp: () => void;
-    onMoveDown: () => void;
     onRemove: () => void;
     /** Renders the row with only Remove — no reorder, edit button, or inline number edit. */
     readOnly?: boolean;
@@ -27,43 +16,13 @@ interface StatBonusRowProps {
 export const StatBonusRow: React.FC<StatBonusRowProps> = ({
     bonus,
     isEditing,
-    canMoveUp,
-    canMoveDown,
     onUpdate,
     onEdit,
-    onMoveUp,
-    onMoveDown,
     onRemove,
     readOnly = false,
 }) => {
     return (
         <div className={`flex items-center text-sm gap-2 ${isEditing ? 'opacity-60' : ''}`}>
-            <div className="flex flex-col">
-                {canMoveUp && (
-                    <Button
-                        aria-label="Move bonus up"
-                        variant="secondary"
-                        size="xs"
-                        onClick={onMoveUp}
-                        disabled={isEditing}
-                        className="!p-0.5"
-                    >
-                        <ChevronUpIcon className="w-3 h-3" />
-                    </Button>
-                )}
-                {canMoveDown && (
-                    <Button
-                        aria-label="Move bonus down"
-                        variant="secondary"
-                        size="xs"
-                        onClick={onMoveDown}
-                        disabled={isEditing}
-                        className="!p-0.5"
-                    >
-                        <ChevronDownIcon className="w-3 h-3" />
-                    </Button>
-                )}
-            </div>
             <span>
                 {getLimitStatLabel(bonus.stat)} ({' '}
                 {readOnly ? (
