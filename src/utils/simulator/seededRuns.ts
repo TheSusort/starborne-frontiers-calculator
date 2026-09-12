@@ -83,6 +83,14 @@ export function summarizeRun(result: BattleResult, seed: number): SeedRunSummary
     };
 }
 
+/** Median of an ascending-sorted, non-empty series. An even-sized series averages the two middle
+ *  values, so a 20-seed set reports the midpoint between its 10th and 11th shortest fights rather
+ *  than the longer of the pair. */
+export function median(sorted: number[]): number {
+    const mid = sorted.length / 2;
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[Math.floor(mid)];
+}
+
 /**
  * Run the same input over seeds `baseSeed .. baseSeed + count - 1` and aggregate.
  *
@@ -145,7 +153,7 @@ export function runSeedSet(
         runs,
         wins,
         meanRounds: rounds.reduce((a, b) => a + b, 0) / rounds.length,
-        medianRounds: sorted[Math.floor(sorted.length / 2)],
+        medianRounds: median(sorted),
         perActorMean,
     };
 }

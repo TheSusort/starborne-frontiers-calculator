@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
-import { runSeededBattle, runSeedSet, summarizeRun } from '../seededRuns';
+import { median, runSeededBattle, runSeedSet, summarizeRun } from '../seededRuns';
 import * as rateAccumulator from '../../calculators/rateAccumulator';
 
 const placement = (
@@ -139,12 +139,24 @@ describe('runSeedSet', () => {
         expect(agg.wins.player + agg.wins.enemy + agg.wins.draw).toBe(6);
     });
 
-    it('meanRounds and medianRounds match its own runs', () => {
+    it('meanRounds is the mean of its own runs', () => {
         const agg = runSeedSet(input(), 500, 5);
         const rounds = agg.runs.map((r) => r.lastRound);
         expect(agg.meanRounds).toBeCloseTo(rounds.reduce((a, b) => a + b, 0) / rounds.length, 10);
-        const sorted = [...rounds].sort((a, b) => a - b);
-        expect(agg.medianRounds).toBe(sorted[Math.floor(sorted.length / 2)]);
+    });
+
+    // These assert the DEFINITION of a median against hand-computed values rather than re-deriving
+    // it from the implementation's own expression, which would pass whatever that expression did.
+    it('medianRounds is the middle value for an odd-sized seed set', () => {
+        const agg = runSeedSet(input(), 500, 5);
+        const sorted = agg.runs.map((r) => r.lastRound).sort((a, b) => a - b);
+        expect(agg.medianRounds).toBe(sorted[2]);
+    });
+
+    it('medianRounds averages the two middle values for an even-sized seed set', () => {
+        const agg = runSeedSet(input(), 500, 4);
+        const sorted = agg.runs.map((r) => r.lastRound).sort((a, b) => a - b);
+        expect(agg.medianRounds).toBeCloseTo((sorted[1] + sorted[2]) / 2, 10);
     });
 
     it('perActorMean equals the mean of its own per-run totals', () => {
@@ -193,5 +205,24 @@ describe('runSeedSet', () => {
 
         const replayedLast = summarizeRun(runSeededBattle(input(), 504), 504);
         expect(agg.runs[4]).toEqual(replayedLast);
+    });
+});
+
+describe('median', () => {
+    // Hand-computed series, so these pin the definition rather than whatever the implementation
+    // currently computes. A fixture where every fight runs the same number of rounds would let an
+    // upper-median implementation pass by coincidence; these series have differing middle pairs.
+    it('returns the middle value for an odd-sized series', () => {
+        expect(median([4, 5, 9])).toBe(5);
+        expect(median([1, 2, 3, 4, 100])).toBe(3);
+    });
+
+    it('averages the two middle values for an even-sized series', () => {
+        expect(median([4, 4, 5, 6, 6, 9])).toBe(5.5);
+        expect(median([4, 6])).toBe(5);
+    });
+
+    it('is unaffected by outliers at either end', () => {
+        expect(median([0, 5, 6, 1000])).toBe(5.5);
     });
 });
