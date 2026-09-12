@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { StorageKey } from '../constants/storage';
+import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { getFromIndexedDB } from '../hooks/useStorage';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
@@ -709,5 +709,113 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         // collision with an existing remote team must not abort steps 1-7,
         // which already succeeded.
         console.error('Error re-uploading autogear teams:', error);
+    }
+}
+
+/** Cloud ids for a user-owned table that are absent from the local snapshot. */
+async function staleIds(table: string, userId: string, localIds: Set<string>): Promise<string[]> {
+    const { data, error } = await supabase.from(table).select('id').eq('user_id', userId);
+    if (error) throw error;
+    return (data ?? []).map((row) => row.id as string).filter((id) => !localIds.has(id));
+}
+
+/** Deletes rows from `table` where `column` matches one of `ids`, in batches. */
+async function deleteWhereIn(table: string, column: string, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .in(column, ids.slice(i, i + BATCH_SIZE));
+        if (error) throw error;
+    }
+}
+
+/** Ids of rows in a child table whose parent is being removed. */
+async function childIds(
+    table: string,
+    parentColumn: string,
+    parentIds: string[]
+): Promise<string[]> {
+    const found: string[] = [];
+    for (let i = 0; i < parentIds.length; i += BATCH_SIZE) {
+        const { data, error } = await supabase
+            .from(table)
+            .select('id')
+            .in(parentColumn, parentIds.slice(i, i + BATCH_SIZE));
+        if (error) throw error;
+        found.push(...(data ?? []).map((row) => row.id as string));
+    }
+    return found;
+}
+
+/**
+ * Removes the ships, gear and encounter notes a user has in Supabase but not in
+ * their current local snapshot, so a restore lands the backup as a snapshot
+ * rather than merging it into whatever was already in the cloud.
+ *
+ * Runs only AFTER `reuploadLocalDataToSupabase` has resolved: every row the
+ * local snapshot describes already exists remotely by then, so a failure here
+ * leaves extra rows behind and never missing ones. Nothing here may be
+ * reordered ahead of that call.
+ *
+ * Deletes are child-before-parent; the schema has no CASCADE constraints.
+ */
+export async function pruneSupabaseDataNotInLocal(userId: string): Promise<void> {
+    const localShips = loadLocalData<Ship[]>(StorageKey.SHIPS);
+    const localEncounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
+    const localInventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(userId))) ?? [];
+
+    const staleShipIds = await staleIds('ships', userId, new Set(localShips.map((s) => s.id)));
+    const staleGearIds = await staleIds(
+        'inventory_items',
+        userId,
+        new Set(localInventory.map((item) => item.id))
+    );
+    const staleNoteIds = await staleIds(
+        'encounter_notes',
+        userId,
+        new Set(localEncounters.map((note) => note.id))
+    );
+
+    // Encounter notes: votes and formations both FK to the note.
+    if (staleNoteIds.length > 0) {
+        await deleteWhereIn('encounter_votes', 'encounter_id', staleNoteIds);
+        await deleteWhereIn('encounter_formations', 'note_id', staleNoteIds);
+        await deleteWhereIn('encounter_notes', 'id', staleNoteIds);
+    }
+
+    // Ships: a formation row and an inventory item's calibration both point at a
+    // ship and are not scoped by ship_id alone, so clear those first.
+    if (staleShipIds.length > 0) {
+        await deleteWhereIn('encounter_formations', 'ship_id', staleShipIds);
+        for (let i = 0; i < staleShipIds.length; i += BATCH_SIZE) {
+            const { error } = await supabase
+                .from('inventory_items')
+                .update({ calibration_ship_id: null })
+                .in('calibration_ship_id', staleShipIds.slice(i, i + BATCH_SIZE));
+            if (error) throw error;
+        }
+
+        await deleteWhereIn('ship_equipment', 'ship_id', staleShipIds);
+
+        const implantIds = await childIds('ship_implants', 'ship_id', staleShipIds);
+        await deleteWhereIn('ship_implant_stats', 'implant_id', implantIds);
+        await deleteWhereIn('ship_implants', 'ship_id', staleShipIds);
+
+        const refitIds = await childIds('ship_refits', 'ship_id', staleShipIds);
+        await deleteWhereIn('ship_refit_stats', 'refit_id', refitIds);
+        await deleteWhereIn('ship_refits', 'ship_id', staleShipIds);
+
+        await deleteWhereIn('ship_base_stats', 'ship_id', staleShipIds);
+        await deleteWhereIn('ships', 'id', staleShipIds);
+    }
+
+    // Gear: four tables reference an inventory item by id.
+    if (staleGearIds.length > 0) {
+        await deleteWhereIn('ship_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('ship_implants', 'id', staleGearIds);
+        await deleteWhereIn('loadout_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('team_loadout_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('inventory_items', 'id', staleGearIds);
     }
 }

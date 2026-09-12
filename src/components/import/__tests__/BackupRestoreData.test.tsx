@@ -3,7 +3,10 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { BackupRestoreData } from '../BackupRestoreData';
 import { StorageKey, inventoryCacheKey } from '../../../constants/storage';
 import { getFromIndexedDB, setInIndexedDB } from '../../../hooks/useStorage';
-import { reuploadLocalDataToSupabase } from '../../../services/userDataService';
+import {
+    reuploadLocalDataToSupabase,
+    pruneSupabaseDataNotInLocal,
+} from '../../../services/userDataService';
 import { supabase } from '../../../config/supabase';
 
 // ui/index → Sidebar → /favicon.ico?url which Vitest cannot resolve
@@ -22,7 +25,7 @@ vi.mock('../../../hooks/useStorage', () => ({
 
 vi.mock('../../../services/userDataService', () => ({
     reuploadLocalDataToSupabase: vi.fn().mockResolvedValue(undefined),
-    pruneSupabaseDataNotIn: vi.fn().mockResolvedValue(undefined),
+    pruneSupabaseDataNotInLocal: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../../config/supabase', () => ({
@@ -80,6 +83,7 @@ describe('BackupRestoreData', () => {
         (setInIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
         (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
         (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+        (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     });
 
     afterEach(() => {
@@ -133,6 +137,36 @@ describe('BackupRestoreData', () => {
                 expect(reuploadLocalDataToSupabase).toHaveBeenCalledWith(PROFILE_ID)
             );
             expect(supabase.from).not.toHaveBeenCalled();
+        });
+
+        it('prunes cloud rows the backup does not have, but only once every upload landed', async () => {
+            const order: string[] = [];
+            (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockImplementation(() => {
+                order.push('upload');
+                return Promise.resolve();
+            });
+            (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockImplementation(() => {
+                order.push('prune');
+                return Promise.resolve();
+            });
+
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(order).toEqual(['upload', 'prune']));
+            expect(pruneSupabaseDataNotInLocal).toHaveBeenCalledWith(PROFILE_ID);
+        });
+
+        it('never prunes when the upload failed — a rejected upload must delete nothing', async () => {
+            (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('PostgREST rejected the insert')
+            );
+
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(reuploadLocalDataToSupabase).toHaveBeenCalled());
+            expect(pruneSupabaseDataNotInLocal).not.toHaveBeenCalled();
         });
 
         it('leaves the cloud untouched when signed out', async () => {

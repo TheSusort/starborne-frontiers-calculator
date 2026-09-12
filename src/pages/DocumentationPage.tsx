@@ -4399,11 +4399,18 @@ const DocumentationPage: React.FC = () => {
                                 <h4 className="font-semibold text-primary mb-2">
                                     Backup &amp; Restore
                                 </h4>
-                                <p className="text-theme-text">
+                                <p className="text-theme-text mb-2">
                                     Backup and restore controls are located on the Profile page,
                                     available to all users including anonymous users. Use backup to
                                     export a local copy of your data and restore to reload it on
-                                    this or another device.
+                                    this or another device. The file covers your ships, gear
+                                    inventory, loadouts, teams, encounters and engineering stats.
+                                </p>
+                                <p className="text-theme-text">
+                                    Restoring while signed in replaces your cloud data with the
+                                    contents of the file: everything in the backup is uploaded
+                                    first, and only then is anything the backup does not contain
+                                    removed. If the upload fails, nothing is deleted.
                                 </p>
                             </div>
 

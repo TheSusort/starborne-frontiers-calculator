@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Backup: downloaded backups now contain your gear inventory.',
     'Restore: restoring a backup while signed in no longer deletes your cloud gear and ships.',
     'Restore: restored gear now shows up in your inventory.',
+    'Restore: your cloud data now matches the backup file exactly.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

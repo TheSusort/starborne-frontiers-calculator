@@ -8,7 +8,10 @@ import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { StorageKey, StorageKeyType, inventoryCacheKey } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
 import { clearIndexedDBStorage, getFromIndexedDB, setInIndexedDB } from '../../hooks/useStorage';
-import { reuploadLocalDataToSupabase } from '../../services/userDataService';
+import {
+    reuploadLocalDataToSupabase,
+    pruneSupabaseDataNotInLocal,
+} from '../../services/userDataService';
 
 const BACKUP_KEYS = Object.values(StorageKey);
 
@@ -212,6 +215,11 @@ export const BackupRestoreData: React.FC = () => {
                         // rejected insert after an already-committed delete, which
                         // emptied cloud gear and ships outright (#504).
                         await reuploadLocalDataToSupabase(activeProfileId);
+
+                        // Only now that every row in the backup exists remotely is
+                        // it safe to remove what the backup does not have. The old
+                        // order — delete, then upload — is what lost the data.
+                        await pruneSupabaseDataNotInLocal(activeProfileId);
 
                         addNotification('success', 'Data restored and synced to cloud storage');
                     } catch (error) {
