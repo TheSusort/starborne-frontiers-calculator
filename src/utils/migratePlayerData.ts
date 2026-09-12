@@ -1,7 +1,7 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import { v4 as uuidv4 } from 'uuid';
 import { supabase as defaultSupabase } from '../config/supabase';
-import { StorageKey } from '../constants/storage';
+import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { LocalEncounterNote } from '../types/encounters';
@@ -9,6 +9,7 @@ import { Loadout, TeamLoadout } from '../types/loadout';
 import { EngineeringStats } from '../types/stats';
 import { WishlistEntry } from '../types/wishlist';
 import { AutogearTeam } from '../types/autogearTeam';
+import { getFromIndexedDB, setInIndexedDB } from '../hooks/useStorage';
 import { tryEncodeGearStats } from './gear/statsCodec';
 
 interface MigrationResult {
@@ -42,10 +43,33 @@ const ensureValidUuid = (id: string | undefined): string => {
 };
 
 /**
+ * Rewrites every gear id in a slot -> gear id record through the migration map.
+ * Ship equipment, ship implants and both kinds of loadout all hold gear ids in
+ * this shape, and every one of them is a foreign key to `inventory_items(id)`
+ * once the data reaches Supabase.
+ */
+const remapGearIds = <T extends Partial<Record<string, string>>>(
+    equipment: T | undefined,
+    gearIdMap: Map<string, string>
+): T => {
+    const remapped: Partial<Record<string, string>> = { ...equipment };
+    for (const [slot, gearId] of Object.entries(remapped)) {
+        if (gearId && gearIdMap.has(gearId)) {
+            remapped[slot] = gearIdMap.get(gearId);
+        }
+    }
+    return remapped as T;
+};
+
+/**
  * Migrates all local data from string IDs to UUIDs while preserving relationships
  * This function is called when a user signs up for the first time
+ *
+ * @param activeProfileId - The profile the migrated inventory cache belongs to
  */
-export const migratePlayerData = (): MigrationResult => {
+export const migratePlayerData = async (
+    activeProfileId: string | null
+): Promise<MigrationResult> => {
     // ID mapping from old ID to new UUID
     const shipIdMap = new Map<string, string>();
     const gearIdMap = new Map<string, string>();
@@ -67,7 +91,9 @@ export const migratePlayerData = (): MigrationResult => {
 
     // Load all relevant data
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS);
-    const inventory = loadLocalData<GearPiece[]>(StorageKey.INVENTORY);
+    // Gear is cached in IndexedDB, not localStorage; a player who has never
+    // signed in holds it under the unscoped key.
+    const inventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(null))) ?? [];
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
@@ -87,28 +113,32 @@ export const migratePlayerData = (): MigrationResult => {
         return ship;
     });
 
-    // Migrate inventory IDs and build mapping
+    // Migrate inventory IDs and build mapping. `calibration.shipId` is a ship
+    // reference living inside a gear piece, so it follows the ship mapping built
+    // above or the calibration is dropped for want of a matching ships row.
     const migratedInventory = inventory.map((item) => {
+        const calibratedShipId = item.calibration?.shipId;
+        const migrated =
+            calibratedShipId && shipIdMap.has(calibratedShipId)
+                ? {
+                      ...item,
+                      calibration: { shipId: shipIdMap.get(calibratedShipId) as string },
+                  }
+                : item;
+
         // Only migrate non-UUID IDs
-        if (!isUuid(item.id)) {
+        if (!isUuid(migrated.id)) {
             const newId = uuidv4();
-            gearIdMap.set(item.id, newId);
-            return { ...item, id: newId };
+            gearIdMap.set(migrated.id, newId);
+            return { ...migrated, id: newId };
         }
-        return item;
+        return migrated;
     });
 
     // Step 2: Update equipment references in ships
     const updatedShips = migratedShips.map((ship) => {
-        const updatedEquipment = { ...ship.equipment };
-
-        // Replace gear IDs in equipment
-        for (const slot of Object.keys(updatedEquipment)) {
-            const gearId = updatedEquipment[slot];
-            if (gearId && gearIdMap.has(gearId)) {
-                updatedEquipment[slot] = gearIdMap.get(gearId);
-            }
-        }
+        const updatedEquipment = remapGearIds(ship.equipment, gearIdMap);
+        const updatedImplants = remapGearIds(ship.implants, gearIdMap);
 
         const updatedRefits =
             ship.refits?.map((refit) => {
@@ -125,6 +155,7 @@ export const migratePlayerData = (): MigrationResult => {
         return {
             ...ship,
             equipment: updatedEquipment,
+            implants: updatedImplants,
             refits: updatedRefits,
         };
     });
@@ -160,14 +191,7 @@ export const migratePlayerData = (): MigrationResult => {
             updatedShipId = shipIdMap.get(loadout.shipId) as string;
         }
 
-        // Update equipment references
-        const updatedEquipment = { ...loadout.equipment };
-        for (const slot of Object.keys(updatedEquipment)) {
-            const gearId = updatedEquipment[slot];
-            if (gearId && gearIdMap.has(gearId)) {
-                updatedEquipment[slot] = gearIdMap.get(gearId) as string;
-            }
-        }
+        const updatedEquipment = remapGearIds(loadout.equipment, gearIdMap);
 
         return {
             ...loadout,
@@ -186,14 +210,7 @@ export const migratePlayerData = (): MigrationResult => {
                 updatedShipId = shipIdMap.get(shipLoadout.shipId) as string;
             }
 
-            // Update equipment references
-            const updatedEquipment = { ...shipLoadout.equipment };
-            for (const slot of Object.keys(updatedEquipment)) {
-                const gearId = updatedEquipment[slot];
-                if (gearId && gearIdMap.has(gearId)) {
-                    updatedEquipment[slot] = gearIdMap.get(gearId) as string;
-                }
-            }
+            const updatedEquipment = remapGearIds(shipLoadout.equipment, gearIdMap);
 
             return {
                 ...shipLoadout,
@@ -209,14 +226,15 @@ export const migratePlayerData = (): MigrationResult => {
         };
     });
 
-    // Step 6: Save all updated data back to localStorage
+    // Step 6: Save all updated data back — the inventory to its IndexedDB
+    // cache, everything else to localStorage
     localStorage.setItem(StorageKey.SHIPS, JSON.stringify(updatedShips));
-    localStorage.setItem(StorageKey.INVENTORY, JSON.stringify(migratedInventory));
     localStorage.setItem(StorageKey.ENCOUNTERS, JSON.stringify(updatedEncounters));
     localStorage.setItem(StorageKey.LOADOUTS, JSON.stringify(updatedLoadouts));
     localStorage.setItem(StorageKey.TEAM_LOADOUTS, JSON.stringify(updatedTeamLoadouts));
     localStorage.setItem(StorageKey.ENGINEERING_STATS, JSON.stringify(engineeringStats));
     localStorage.setItem(StorageKey.AUTOGEAR_TEAMS, JSON.stringify(updatedAutogearTeams));
+    await setInIndexedDB(inventoryCacheKey(activeProfileId), migratedInventory);
 
     // Return the migrated data for further processing
     return {

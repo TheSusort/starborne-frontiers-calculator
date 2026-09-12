@@ -33,7 +33,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Dispatch migration start event
                 window.dispatchEvent(new Event('app:migration:start'));
 
-                const migrationResult = migratePlayerData();
+                const migrationResult = await migratePlayerData(user?.id ?? null);
                 if (user?.id) {
                     await syncMigratedDataToSupabase(user.id, migrationResult);
                 }
