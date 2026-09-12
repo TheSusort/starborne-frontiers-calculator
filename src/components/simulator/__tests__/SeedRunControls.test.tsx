@@ -66,3 +66,40 @@ describe('SeedRunControls', () => {
         expect(onSeedChange).toHaveBeenCalledWith(0);
     });
 });
+
+describe('SeedRunControls while a run is in flight', () => {
+    it('replaces Run Simulation with Cancel and fires the cancel callback', async () => {
+        const onCancel = vi.fn();
+        render(<SeedRunControls {...baseProps} isRunning onCancel={onCancel} />);
+        expect(screen.queryByRole('button', { name: /run simulation/i })).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: /cancel/i }));
+        expect(onCancel).toHaveBeenCalled();
+    });
+
+    it('shows completed and total seeds as progress', () => {
+        render(<SeedRunControls {...baseProps} isRunning progress={{ completed: 7, total: 50 }} />);
+        expect(screen.getByText(/7\s*\/\s*50/)).toBeInTheDocument();
+    });
+
+    it('disables the seed and run-count inputs while running, without a pinned baseline', () => {
+        render(<SeedRunControls {...baseProps} isRunning />);
+        expect(screen.getByLabelText(/seed/i)).toBeDisabled();
+        expect(screen.getByLabelText(/runs/i)).toBeDisabled();
+        expect(screen.getByRole('button', { name: /new seed/i })).toBeDisabled();
+    });
+
+    it('shows Run Simulation and no progress when idle', () => {
+        render(<SeedRunControls {...baseProps} />);
+        expect(screen.getByRole('button', { name: /run simulation/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('run-count ceiling', () => {
+    it('accepts a run count far above the old two-hundred ceiling', () => {
+        const onRunCountChange = vi.fn();
+        render(<SeedRunControls {...baseProps} onRunCountChange={onRunCountChange} />);
+        fireEvent.change(screen.getByLabelText(/runs/i), { target: { value: '750' } });
+        expect(onRunCountChange).toHaveBeenCalledWith(750);
+    });
+});

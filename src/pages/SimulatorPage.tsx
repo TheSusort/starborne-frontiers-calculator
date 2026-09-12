@@ -186,6 +186,9 @@ const SimulatorPage: React.FC = () => {
         handleOpenSeed,
         handlePinBaseline,
         handleUnpinBaseline,
+        isRunning,
+        progress,
+        handleCancel,
     } = useSimulatorRuns({
         playerBoard,
         enemyBoard,
@@ -269,6 +272,9 @@ const SimulatorPage: React.FC = () => {
                             locked={baseline !== null}
                             lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
                             onUnpin={handleUnpinBaseline}
+                            isRunning={isRunning}
+                            progress={progress}
+                            onCancel={handleCancel}
                         />
                         {!canRun && (
                             <span className="text-sm text-theme-text-secondary">
@@ -308,7 +314,11 @@ const SimulatorPage: React.FC = () => {
                         <div className="space-y-2">
                             <SeedSetResults aggregate={aggregate} onOpenSeed={handleOpenSeed} />
                             {!baseline && (
-                                <Button variant="secondary" onClick={handlePinBaseline}>
+                                <Button
+                                    variant="secondary"
+                                    onClick={handlePinBaseline}
+                                    disabled={isRunning}
+                                >
                                     Pin as baseline
                                 </Button>
                             )}
