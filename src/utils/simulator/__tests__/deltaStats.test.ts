@@ -28,14 +28,20 @@ const aggregateWithRuns = (runs: SeedRunSummary[]): SeedSetAggregate => ({
 
 describe('pairedDelta', () => {
     it('calls a two-win difference over twenty seeds indistinguishable', () => {
-        // The issue's own noise example: 10/20 against 12/20.
+        // #508's own noise example: 10/20 against 12/20.
         const result = pairedDelta(winSeries(10, 20), winSeries(12, 20));
         expect(result.n).toBe(20);
+        // Pinned against an independently computed value, not the implementation's own formula:
+        // this is the one assertion in the file that separates the sample standard deviation
+        // (Bessel-corrected, /(n - 1)) from the population one (/n) — the two denominators land
+        // on the same side of the distinguishability threshold for every other case here, so this
+        // is what stops the denominator from drifting silently.
+        expect(result.se).toBeCloseTo(0.0688247, 6);
         expect(result.distinguishable).toBe(false);
     });
 
     it('calls a fifteen-win difference over twenty seeds a result', () => {
-        // The issue's own signal example: 4/20 against 19/20. Paired against the noise case
+        // #508's own signal example: 4/20 against 19/20. Paired against the noise case
         // above, this is what makes the instrument non-vacuous: it can report both verdicts.
         const result = pairedDelta(winSeries(4, 20), winSeries(19, 20));
         expect(result.distinguishable).toBe(true);
