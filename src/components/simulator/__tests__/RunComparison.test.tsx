@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import RunComparison from '../RunComparison';
 import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
 
@@ -180,7 +180,7 @@ describe('RunComparison', () => {
 });
 
 describe('RunComparison noise verdict', () => {
-    it('renders a decisive win change as a signed delta with its spread', () => {
+    it('renders a decisive win change as a signed delta with its spread, coloured for direction', () => {
         render(
             <RunComparison
                 baseline={baseline}
@@ -188,10 +188,12 @@ describe('RunComparison noise verdict', () => {
                 currentOverrides={currentOverrides}
             />
         );
-        expect(screen.getByText(/\+15\.0\s*±/)).toBeInTheDocument();
+        const deltaText = screen.getByText(/\+15\.0\s*±/);
+        expect(deltaText).toBeInTheDocument();
+        expect(deltaText).toHaveClass('text-green-400');
     });
 
-    it('refuses to sign a win change that is indistinguishable from noise', () => {
+    it('refuses to sign a win change that is indistinguishable from noise, with no direction colour', () => {
         render(
             <RunComparison
                 baseline={noiseBaseline}
@@ -199,10 +201,34 @@ describe('RunComparison noise verdict', () => {
                 currentOverrides={currentOverrides}
             />
         );
-        // Non-vacuity: the decisive fixture above renders a signed number for this same row,
-        // so this assertion is about the data, not about the row always reading this way.
-        expect(screen.getAllByText(/not distinguishable at 20 runs/i).length).toBeGreaterThan(0);
+        // Scoped to the Player wins row specifically: a page-wide search for the noise wording
+        // would also be satisfied by rows this fixture never touches (draws, mean rounds,
+        // per-actor damage), so a partial revert of only this row would still pass.
+        const row = screen.getByText('Player wins').closest('tr')!;
+        expect(row).toHaveTextContent(/not distinguishable/);
+        const refusal = within(row).getByText(/not distinguishable/i);
+        expect(refusal).toHaveClass('text-theme-text-secondary');
+        expect(refusal).not.toHaveClass('text-green-400');
+        expect(refusal).not.toHaveClass('text-red-400');
         expect(screen.queryByText(/\+2\.0\s*±/)).not.toBeInTheDocument();
+    });
+
+    it('renders an unchanged row as a plain signed zero, not noise wording', () => {
+        // Draws is 0 in both configurations for every fixture in this file (winner is always
+        // 'player' or 'enemy'): baseline and current agree on every paired seed, so this is the
+        // "nothing moved" case, not a difference too small to trust.
+        render(
+            <RunComparison
+                baseline={baseline}
+                current={current}
+                currentOverrides={currentOverrides}
+            />
+        );
+        const row = screen.getByText('Draws').closest('tr')!;
+        expect(row).toHaveTextContent('0.0');
+        expect(row).not.toHaveTextContent(/not distinguishable/);
+        const zero = within(row).getByText('0.0');
+        expect(zero).toHaveClass('text-theme-text-secondary');
     });
 
     it('notes a likely outlier when the mean and median round deltas disagree in sign', () => {

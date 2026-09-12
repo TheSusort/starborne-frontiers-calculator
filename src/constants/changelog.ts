@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: multi-seed runs show live progress and can be cancelled.',
     'Combat simulator: a multi-seed run can now cover up to 1,000 seeds.',
     'Combat simulator: baseline comparisons now flag deltas too small to trust.',
+    'Combat simulator: a comparison now warns when one fight skews the mean.',
     'Backup: downloaded backups now contain your gear inventory.',
     'Restore: restoring a backup while signed in no longer deletes your cloud gear and ships.',
     'Restore: restored gear now shows up in your inventory.',
