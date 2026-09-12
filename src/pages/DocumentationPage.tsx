@@ -3977,8 +3977,10 @@ const DocumentationPage: React.FC = () => {
                                         a signed number
                                     </li>
                                     <li>
-                                        If mean and median rounds moved in opposite directions, a
-                                        note flags that one fight in the seed set is an outlier
+                                        If mean and median rounds moved in opposite directions and
+                                        the mean move is itself distinguishable, a note flags the
+                                        round-count distribution as skewed and points you to the
+                                        median
                                     </li>
                                 </ul>
                             </div>

@@ -86,6 +86,40 @@ describe('pairedDelta', () => {
     it('throws when the two series have different lengths', () => {
         expect(() => pairedDelta([1, 2], [1, 2, 3])).toThrow(/length/i);
     });
+
+    describe('the exact sign test on indicator (win/draw) series', () => {
+        it('calls five same-direction discordant pairs out of twenty a coin flip, not a result', () => {
+            // Five 0->1 flips, the rest unchanged: the exact two-sided sign test on 5 non-zero,
+            // all-same-direction differences is p = 2 * 0.5^5 = 0.0625, above the 0.05 cutoff —
+            // the boundary the t rule gets wrong (it would call this distinguishable at t=2.52).
+            const result = pairedDelta(winSeries(10, 20), winSeries(15, 20));
+            expect(result.distinguishable).toBe(false);
+        });
+
+        it('calls six same-direction discordant pairs out of twenty a result', () => {
+            // One more flip than above: p = 2 * 0.5^6 = 0.03125, at or under the cutoff.
+            const result = pairedDelta(winSeries(10, 20), winSeries(16, 20));
+            expect(result.distinguishable).toBe(true);
+        });
+
+        it('keeps a continuous series on the t rule even where a same-direction majority count would call it differently', () => {
+            // 15 of 20 differences are +1 and 5 are -3: the -3 puts this series outside the
+            // {-1, 0, 1} indicator range, so it takes the t rule, not the sign test. The mean
+            // cancels to exactly zero (15*1 - 5*3 = 0), so the t rule correctly reports no
+            // distinguishable difference. Naively counting only each difference's sign would see
+            // a 15-vs-5 non-zero split, which the sign test would call distinguishable
+            // (p = 2 * P(X >= 15 | Binomial(20, 0.5)) ≈ 0.041) — the two rules disagree here,
+            // which is exactly why the series shape must gate which one runs.
+            const baselineValues = new Array<number>(20).fill(0);
+            const currentValues = [
+                ...new Array<number>(15).fill(1),
+                ...new Array<number>(5).fill(-3),
+            ];
+            const result = pairedDelta(baselineValues, currentValues);
+            expect(result.mean).toBe(0);
+            expect(result.distinguishable).toBe(false);
+        });
+    });
 });
 
 describe('scalePairedDelta', () => {

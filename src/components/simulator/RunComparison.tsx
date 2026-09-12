@@ -54,9 +54,6 @@ const PairedDeltaText: React.FC<{ delta: PairedDelta; direction: Direction }> = 
     delta,
     direction,
 }) => {
-    // A delta with no spread and no mean difference is not a call `pairedDelta` refused to make —
-    // the two configurations produced the identical figure on every paired seed. That is a plain
-    // zero, not noise, so it gets the neutral colour and no "not distinguishable" wording.
     if (delta.se === 0 && delta.mean === 0) {
         return (
             <span className="text-theme-text-secondary">
@@ -159,8 +156,8 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             const delta = pairedDelta(series.baseline, series.current);
             // The per-seed value is a 0/1 indicator, so its mean is a win RATE. Scale to the
             // wins-out-of-N the rest of the row is written in, using the paired series' own
-            // length so the scale factor always matches the figure the delta came from; t is
-            // scale-invariant, so the verdict is unaffected.
+            // length so the scale factor always matches the figure the delta came from — see
+            // `scalePairedDelta` for why the verdict survives the rescale.
             return scalePairedDelta(delta, delta.n);
         };
 
@@ -316,14 +313,15 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
 
     const rosterChanged = rostersDiffer(baseline.aggregate.roster, current.roster);
 
-    const meanRoundsDelta = current.meanRounds - baseline.aggregate.meanRounds;
+    // The median is the robust one. When it moves opposite the (paired, distinguishable) mean,
+    // the round-count distribution is skewed and the mean is the figure to distrust. Reads the
+    // same `deltas.rounds` the Mean rounds row renders, rather than recomputing an unpaired
+    // aggregate difference, so the banner and that row can never disagree about the same figure.
     const medianRoundsDelta = current.medianRounds - baseline.aggregate.medianRounds;
-    // The median is the robust one. When the two point opposite ways, a single long or short
-    // fight is moving the mean and the mean is the figure to distrust.
     const roundsDisagree =
-        meanRoundsDelta !== 0 &&
+        deltas.rounds.distinguishable &&
         medianRoundsDelta !== 0 &&
-        Math.sign(meanRoundsDelta) !== Math.sign(medianRoundsDelta);
+        Math.sign(deltas.rounds.mean) !== Math.sign(medianRoundsDelta);
 
     return (
         <div className="card space-y-4">
@@ -344,8 +342,8 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
 
             {roundsDisagree && (
                 <div className="card border-amber-500/40 text-sm text-amber-400">
-                    Mean and median rounds moved in opposite directions, so one fight in the seed
-                    set is an outlier. Trust the median.
+                    Mean and median rounds moved in opposite directions: the round-count
+                    distribution is skewed, so the median is the more reliable figure.
                 </div>
             )}
 

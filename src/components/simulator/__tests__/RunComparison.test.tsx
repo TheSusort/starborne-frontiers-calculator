@@ -231,17 +231,68 @@ describe('RunComparison noise verdict', () => {
         expect(zero).toHaveClass('text-theme-text-secondary');
     });
 
-    it('notes a likely outlier when the mean and median round deltas disagree in sign', () => {
-        // Mean rounds up, median rounds down: one fight dragged the mean the other way.
-        const outlierBaseline = { aggregate: aggregate(10, 6, 1000, 0), overrides: {} };
-        const outlierCurrent = { ...aggregate(10, 5, 1000, 0), meanRounds: 7, medianRounds: 5 };
+    /** Builds a same-roster aggregate from explicit per-seed `lastRound` values, with `meanRounds`
+     *  and `medianRounds` derived from those runs the way real aggregation does (never hand-set),
+     *  so the fixture cannot land in a state the app itself could not produce. */
+    const roundsAggregate = (lastRounds: number[]): SeedSetAggregate => {
+        const runs: SeedRunSummary[] = lastRounds.map((lastRound, i) => ({
+            seed: BASE_SEED + i,
+            winner: 'draw',
+            lastRound,
+            perActor: { focus: { damageDealt: 0, damageTaken: 0, healingDone: 0 } },
+        }));
+        const sorted = [...lastRounds].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        const median = sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+        return {
+            baseSeed: BASE_SEED,
+            count: lastRounds.length,
+            roster,
+            runs,
+            wins: { player: 0, enemy: 0, draw: lastRounds.length },
+            meanRounds: lastRounds.reduce((a, b) => a + b, 0) / lastRounds.length,
+            medianRounds: median,
+            perActorMean: { focus: { damageDealt: 0, damageTaken: 0, healingDone: 0 } },
+        };
+    };
+
+    it('notes a skewed round-count distribution when the mean and median disagree and the mean move is distinguishable', () => {
+        // Baseline: 20 seeds all at 6 rounds. Current: 15 seeds drop to 5, 5 seeds run long at
+        // 31 — current mean 11.5 (delta +5.5, t ≈ 2.13, distinguishable) against current median 5
+        // (delta -1). Mean and median disagree in sign, and the mean move is real, not noise.
+        const skewedBaseline = {
+            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
+            overrides: {},
+        };
+        const skewedCurrent = roundsAggregate([
+            ...new Array<number>(15).fill(5),
+            ...new Array<number>(5).fill(31),
+        ]);
         render(
             <RunComparison
-                baseline={outlierBaseline}
-                current={outlierCurrent}
+                baseline={skewedBaseline}
+                current={skewedCurrent}
                 currentOverrides={{}}
             />
         );
-        expect(screen.getByText(/outlier/i)).toBeInTheDocument();
+        expect(screen.getByText(/skewed/i)).toBeInTheDocument();
+    });
+
+    it('says nothing about skew when the mean/median disagreement is not distinguishable from noise', () => {
+        // Reachable case: 19 seeds each shorten by one round (6 -> 5, which drags the median down
+        // to 5) and one seed runs long at 46 (which pulls the mean up to 7.05) — but a single
+        // outlier among 19 concordant seeds can never clear the t threshold (t ≈ 0.51 here), so
+        // the Mean rounds row itself reads "not distinguishable" and the banner must agree.
+        const noisyBaseline = {
+            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
+            overrides: {},
+        };
+        const noisyCurrent = roundsAggregate([...new Array<number>(19).fill(5), 46]);
+        render(
+            <RunComparison baseline={noisyBaseline} current={noisyCurrent} currentOverrides={{}} />
+        );
+        expect(screen.queryByText(/skewed/i)).not.toBeInTheDocument();
+        const row = screen.getByText('Mean rounds').closest('tr')!;
+        expect(row).toHaveTextContent(/not distinguishable/i);
     });
 });

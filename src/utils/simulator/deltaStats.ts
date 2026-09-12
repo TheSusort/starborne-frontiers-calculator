@@ -8,6 +8,20 @@ import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
  * exact seed set, so seed *i* of one aggregate and seed *i* of the other are the same fight under
  * two configurations. Pairing removes the variance the two share — that fight's own luck — which
  * is what makes a difference of a couple of wins at N=20 readable as noise rather than a result.
+ *
+ * Two different tests decide `distinguishable`, chosen by what shape the per-seed differences
+ * take:
+ *
+ * - A **continuous** series (rounds, damage, healing — anything whose differences are not all in
+ *   `{-1, 0, 1}`) takes the paired t rule: `|mean / se| >= T_THRESHOLD`.
+ * - An **indicator** series (every difference in `{-1, 0, 1}`, the shape a win/draw row feeds in)
+ *   takes the exact two-sided sign test on the non-zero differences instead. A win/draw indicator
+ *   puts most of its mass at zero, which the normal approximation behind the t rule badly
+ *   misfits: an all-same-direction flip on as few as 4 of 20 seeds clears the t threshold despite
+ *   an exact binomial test rating it a coin flip, and raising the seed count does not fix this —
+ *   the t-statistic for a fixed flip count is nearly seed-count invariant. `mean` and `se` are
+ *   still the ordinary paired mean/standard-error of the differences either way; only the verdict
+ *   changes.
  */
 export interface PairedDelta {
     /** Mean of the per-seed differences `current - baseline`. */
@@ -18,10 +32,48 @@ export interface PairedDelta {
     distinguishable: boolean;
 }
 
-/** |mean / se| at or above this counts as distinguishable — roughly a 95% two-sided call. Fixed,
- *  not a user setting: a threshold a reader can lower until they like the answer is not a
- *  safeguard. */
+/** |mean / se| at or above this counts as distinguishable on the continuous (t-rule) path —
+ *  roughly a 95% two-sided call. Fixed, not a user setting: a threshold a reader can lower until
+ *  they like the answer is not a safeguard. */
 export const T_THRESHOLD = 2;
+
+/** The indicator (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the
+ *  same role `T_THRESHOLD` plays on the continuous path. Fixed for the same reason. */
+export const SIGN_TEST_ALPHA = 0.05;
+
+/** True when every per-seed difference is a win/draw indicator swing (`-1`, `0` or `1`) rather
+ *  than a continuous quantity — the shape that must take the sign test, not the t rule, below. */
+function isIndicatorSeries(differences: number[]): boolean {
+    return differences.every((d) => d === -1 || d === 0 || d === 1);
+}
+
+/** `P(X >= k)` for `X ~ Binomial(m, 0.5)`, via the running ratio between adjacent binomial
+ *  probabilities rather than raw coefficients — `m` can run into the hundreds (the simulator's
+ *  seed ceiling), where a coefficient itself would be astronomically large before the halving. */
+function binomialTailProbability(m: number, k: number): number {
+    let term = 0.5 ** m; // P(X = 0)
+    let tail = 0;
+    for (let i = 0; i <= m; i++) {
+        if (i >= k) tail += term;
+        term = (term * (m - i)) / (i + 1);
+    }
+    return tail;
+}
+
+/** Exact two-sided sign test (McNemar's test for paired binary outcomes) on a series of
+ *  `{-1, 0, 1}` differences: ties (zeros) are discarded, then the non-zero split is asked how
+ *  surprising it is under a fair coin. Two-sided p is `2 * P(X >= k)` for `X ~ Binomial(m, 0.5)`,
+ *  `m` the non-zero count and `k` the majority-direction count, clamped at 1 (the two tails can
+ *  overlap when the split is near even). */
+function signTestDistinguishable(differences: number[]): boolean {
+    const nonZero = differences.filter((d) => d !== 0);
+    const m = nonZero.length;
+    if (m === 0) return false;
+    const positive = nonZero.filter((d) => d > 0).length;
+    const majority = Math.max(positive, m - positive);
+    const p = Math.min(1, 2 * binomialTailProbability(m, majority));
+    return p <= SIGN_TEST_ALPHA;
+}
 
 export function pairedDelta(baselineValues: number[], currentValues: number[]): PairedDelta {
     if (baselineValues.length !== currentValues.length) {
@@ -41,15 +93,21 @@ export function pairedDelta(baselineValues: number[], currentValues: number[]): 
     const variance = differences.reduce((acc, d) => acc + (d - mean) ** 2, 0) / (n - 1);
     const se = Math.sqrt(variance) / Math.sqrt(n);
 
-    // Zero spread means every seed moved by the identical amount: the strongest signal there is
-    // when that amount is non-zero, and no change at all when it is zero.
-    const distinguishable = se === 0 ? mean !== 0 : Math.abs(mean / se) >= T_THRESHOLD;
+    let distinguishable: boolean;
+    if (isIndicatorSeries(differences)) {
+        distinguishable = signTestDistinguishable(differences);
+    } else {
+        // Zero spread means every seed moved by the identical amount: the strongest signal there
+        // is when that amount is non-zero, and no change at all when it is zero.
+        distinguishable = se === 0 ? mean !== 0 : Math.abs(mean / se) >= T_THRESHOLD;
+    }
 
     return { mean, se, n, distinguishable };
 }
 
-/** Re-express a delta in different units — a win *rate* as a win *count*, say. `t` is
- *  scale-invariant, so the verdict is carried through unchanged rather than recomputed. */
+/** Re-express a delta in different units — a win *rate* as a win *count*, say. Both the t rule and
+ *  the sign test read only the sign/ratio of the differences, never their absolute scale, so
+ *  either verdict is carried through unchanged rather than recomputed. */
 export function scalePairedDelta(delta: PairedDelta, factor: number): PairedDelta {
     return { ...delta, mean: delta.mean * factor, se: delta.se * factor };
 }
