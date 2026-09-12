@@ -4410,7 +4410,10 @@ const DocumentationPage: React.FC = () => {
                                     Restoring while signed in replaces your cloud data with the
                                     contents of the file: everything in the backup is uploaded
                                     first, and only then is anything the backup does not contain
-                                    removed. If the upload fails, nothing is deleted.
+                                    removed. If the upload fails, nothing is deleted. A section the
+                                    file does not mention at all is left alone rather than emptied,
+                                    so an older backup taken before gear was included will not clear
+                                    your inventory.
                                 </p>
                             </div>
 

@@ -113,6 +113,25 @@ describe('BackupRestoreData', () => {
             const parsed = JSON.parse(await readBlob(blobs[0])) as Record<string, string>;
             expect(JSON.parse(parsed[StorageKey.INVENTORY])).toEqual(GEAR);
         });
+
+        it('leaves out the upgrade cache, which is derived from the inventory', async () => {
+            (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+            const blobs: Blob[] = [];
+            URL.createObjectURL = vi.fn((blob: Blob | MediaSource) => {
+                blobs.push(blob as Blob);
+                return 'blob:stub';
+            });
+            URL.revokeObjectURL = vi.fn();
+
+            render(<BackupRestoreData />);
+            fireEvent.click(screen.getByRole('button', { name: /backup data/i }));
+
+            await waitFor(() => expect(blobs).toHaveLength(1));
+
+            const parsed = JSON.parse(await readBlob(blobs[0])) as Record<string, string>;
+            expect(parsed[StorageKey.GEAR_UPGRADES]).toBeUndefined();
+            expect(getFromIndexedDB).not.toHaveBeenCalledWith(StorageKey.GEAR_UPGRADES);
+        });
     });
 
     describe('restore', () => {
@@ -154,7 +173,24 @@ describe('BackupRestoreData', () => {
             await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
 
             await waitFor(() => expect(order).toEqual(['upload', 'prune']));
-            expect(pruneSupabaseDataNotInLocal).toHaveBeenCalledWith(PROFILE_ID);
+            expect(pruneSupabaseDataNotInLocal).toHaveBeenCalledWith(PROFILE_ID, [
+                StorageKey.SHIPS,
+            ]);
+        });
+
+        it('tells the prune only the sections the file carried, so the rest is left alone', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({
+                [StorageKey.SHIPS]: JSON.stringify(SHIPS),
+                [StorageKey.LOADOUTS]: JSON.stringify([]),
+            });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).toContain(StorageKey.SHIPS);
+            expect(sections).toContain(StorageKey.LOADOUTS);
+            expect(sections).not.toContain(StorageKey.INVENTORY);
         });
 
         it('never prunes when the upload failed — a rejected upload must delete nothing', async () => {

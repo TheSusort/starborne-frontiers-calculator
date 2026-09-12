@@ -16,18 +16,19 @@ import {
 const BACKUP_KEYS = Object.values(StorageKey);
 
 /**
- * Inventory and gear upgrades are cached in IndexedDB; every other backup key is
- * a localStorage entry. Returns the IndexedDB cache key for a backup key, or
- * null when the key belongs to localStorage.
+ * Inventory is cached in IndexedDB; every other backup key is a localStorage
+ * entry. Returns the IndexedDB cache key for a backup key, or null when the key
+ * belongs to localStorage.
  *
  * The backup file always names the UNSCOPED key, so a file taken on one profile
  * restores onto another; only the cache key it lands in is profile-scoped.
+ *
+ * `gear_upgrades` is the other IndexedDB entry and is deliberately NOT here:
+ * `useGearUpgrades` derives it from the inventory by simulation, so backing it
+ * up would roughly double the file for something that regenerates itself.
  */
-const indexedDbCacheKey = (key: string, activeProfileId: string | null): string | null => {
-    if (key === StorageKey.INVENTORY) return inventoryCacheKey(activeProfileId);
-    if (key === StorageKey.GEAR_UPGRADES) return StorageKey.GEAR_UPGRADES;
-    return null;
-};
+const indexedDbCacheKey = (key: string, activeProfileId: string | null): string | null =>
+    key === StorageKey.INVENTORY ? inventoryCacheKey(activeProfileId) : null;
 
 // Legacy key mappings for backward compatibility
 const LEGACY_KEY_MAP: Record<string, StorageKeyType> = {
@@ -219,7 +220,12 @@ export const BackupRestoreData: React.FC = () => {
                         // Only now that every row in the backup exists remotely is
                         // it safe to remove what the backup does not have. The old
                         // order — delete, then upload — is what lost the data.
-                        await pruneSupabaseDataNotInLocal(activeProfileId);
+                        // Scoped to the keys this file actually carried: a section
+                        // the file omits is left alone, never emptied.
+                        await pruneSupabaseDataNotInLocal(
+                            activeProfileId,
+                            Object.keys(normalizedBackup)
+                        );
 
                         addNotification('success', 'Data restored and synced to cloud storage');
                     } catch (error) {
