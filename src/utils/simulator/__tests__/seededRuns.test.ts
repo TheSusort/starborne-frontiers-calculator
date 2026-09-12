@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
-import { median, runSeededBattle, runSeedSet, summarizeRun } from '../seededRuns';
+import { median, runSeededBattle, runSeedSet, runSeedSetAsync, summarizeRun } from '../seededRuns';
 import * as rateAccumulator from '../../calculators/rateAccumulator';
 
 const placement = (
@@ -205,6 +205,61 @@ describe('runSeedSet', () => {
 
         const replayedLast = summarizeRun(runSeededBattle(input(), 504), 504);
         expect(agg.runs[4]).toEqual(replayedLast);
+    });
+});
+
+describe('runSeedSetAsync', () => {
+    it('produces an aggregate identical to the synchronous runSeedSet for the same seed set', async () => {
+        // The whole point of the async path is that yielding to the event loop between seeds
+        // changes nothing. `input()` is non-degenerate (someone dies, and a different seed
+        // produces a different fight), so a between-seed RNG leak would show up here.
+        const sync = runSeedSet(input(), 500, 6);
+        const async = await runSeedSetAsync(input(), 500, 6);
+        expect(async).toEqual(sync);
+    });
+
+    it('reports progress once per completed seed, in order', async () => {
+        const seen: Array<[number, number]> = [];
+        await runSeedSetAsync(input(), 500, 4, {
+            onProgress: (completed, total) => seen.push([completed, total]),
+        });
+        expect(seen).toEqual([
+            [1, 4],
+            [2, 4],
+            [3, 4],
+            [4, 4],
+        ]);
+    });
+
+    it('resolves null when aborted mid-run, never a partial aggregate', async () => {
+        const controller = new AbortController();
+        const seen: number[] = [];
+        const result = await runSeedSetAsync(input(), 500, 20, {
+            signal: controller.signal,
+            onProgress: (completed) => {
+                seen.push(completed);
+                if (completed === 3) controller.abort();
+            },
+        });
+        expect(result).toBeNull();
+        // Non-vacuity: it really did stop early rather than finishing and discarding.
+        expect(seen.length).toBeLessThan(20);
+    });
+
+    it('resolves null immediately when the signal is already aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const onProgress = vi.fn();
+        const result = await runSeedSetAsync(input(), 500, 5, {
+            signal: controller.signal,
+            onProgress,
+        });
+        expect(result).toBeNull();
+        expect(onProgress).not.toHaveBeenCalled();
+    });
+
+    it('rejects on an invalid count, matching the synchronous validation', async () => {
+        await expect(runSeedSetAsync(input(), 500, 0)).rejects.toThrow(/count/i);
     });
 });
 
