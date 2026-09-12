@@ -1,5 +1,5 @@
 import { supabase } from '../config/supabase';
-import { StorageKey } from '../constants/storage';
+import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { getFromIndexedDB } from '../hooks/useStorage';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
@@ -250,8 +250,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
     const autogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
 
     // Inventory is profile-scoped in IndexedDB
-    const inventory: GearPiece[] =
-        (await getFromIndexedDB(`${StorageKey.INVENTORY}:${userId}`)) ?? [];
+    const inventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(userId))) ?? [];
 
     // Step 1: Upsert inventory items (without calibration_ship_id to avoid FK issues)
     const validInventory = inventory.filter((item) => !!item.id);
@@ -709,5 +708,188 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         // collision with an existing remote team must not abort steps 1-7,
         // which already succeeded.
         console.error('Error re-uploading autogear teams:', error);
+    }
+}
+
+/**
+ * PostgREST caps one response at the project's `db-max-rows`, so a plain
+ * `select('id')` silently returns a PREFIX for any table a real account fills —
+ * an inventory runs to tens of thousands of rows. A truncated read makes the
+ * prune act on a partial picture: stale parents survive, and a truncated CHILD
+ * read deletes some of a parent's children and then fails the parent delete on
+ * the FK. Every id read here pages, ordered by id so pages cannot overlap or
+ * skip.
+ */
+const ID_PAGE_SIZE = 1000;
+
+async function readAllIds(
+    table: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filter: (query: any) => any
+): Promise<string[]> {
+    const ids: string[] = [];
+    for (let from = 0; ; from += ID_PAGE_SIZE) {
+        const { data, error } = await filter(supabase.from(table).select('id'))
+            .order('id')
+            .range(from, from + ID_PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as Array<{ id: string }>;
+        ids.push(...page.map((row) => row.id));
+        if (page.length < ID_PAGE_SIZE) return ids;
+    }
+}
+
+/** Cloud ids for a user-owned table that are absent from the local snapshot. */
+async function staleIds(table: string, userId: string, localIds: Set<string>): Promise<string[]> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ids = await readAllIds(table, (query: any) => query.eq('user_id', userId));
+    return ids.filter((id) => !localIds.has(id));
+}
+
+/** Deletes rows from `table` where `column` matches one of `ids`, in batches. */
+async function deleteWhereIn(table: string, column: string, ids: string[]): Promise<void> {
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .in(column, ids.slice(i, i + BATCH_SIZE));
+        if (error) throw error;
+    }
+}
+
+/** Ids of rows in a child table whose parent is being removed. */
+async function childIds(
+    table: string,
+    parentColumn: string,
+    parentIds: string[]
+): Promise<string[]> {
+    const found: string[] = [];
+    for (let i = 0; i < parentIds.length; i += BATCH_SIZE) {
+        const batch = parentIds.slice(i, i + BATCH_SIZE);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        found.push(...(await readAllIds(table, (query: any) => query.in(parentColumn, batch))));
+    }
+    return found;
+}
+
+/**
+ * Removes the ships, gear and encounter notes a user has in Supabase but not in
+ * their current local snapshot, so a restore lands the backup as a snapshot
+ * rather than merging it into whatever was already in the cloud.
+ *
+ * Runs only AFTER `reuploadLocalDataToSupabase` has resolved: every row the
+ * local snapshot describes already exists remotely by then, so a failure here
+ * leaves extra rows behind and never missing ones. Nothing here may be
+ * reordered ahead of that call.
+ *
+ * Deletes are child-before-parent; the schema has no CASCADE constraints.
+ */
+export async function pruneSupabaseDataNotInLocal(
+    userId: string,
+    restoredSections: readonly string[]
+): Promise<void> {
+    // A section the backup file never carried was not rewritten locally, so the
+    // local state it would be compared against is whatever happened to be
+    // cached — for gear on a fresh device, plausibly nothing. Pruning that would
+    // delete cloud rows the user never asked to drop, which is the failure this
+    // whole path exists to prevent. Absent means "leave alone", not "empty".
+    const restored = new Set(restoredSections);
+
+    const localShips = loadLocalData<Ship[]>(StorageKey.SHIPS);
+    const localEncounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
+    const localLoadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
+    const localTeamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
+    const localAutogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
+    const localInventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(userId))) ?? [];
+
+    const idSet = <T extends { id: string }>(rows: T[]) => new Set(rows.map((row) => row.id));
+
+    const staleShipIds = restored.has(StorageKey.SHIPS)
+        ? await staleIds('ships', userId, idSet(localShips))
+        : [];
+    const staleGearIds = restored.has(StorageKey.INVENTORY)
+        ? await staleIds('inventory_items', userId, idSet(localInventory))
+        : [];
+    const staleNoteIds = restored.has(StorageKey.ENCOUNTERS)
+        ? await staleIds('encounter_notes', userId, idSet(localEncounters))
+        : [];
+    const staleLoadoutIds = restored.has(StorageKey.LOADOUTS)
+        ? await staleIds('loadouts', userId, idSet(localLoadouts))
+        : [];
+    const staleTeamIds = restored.has(StorageKey.TEAM_LOADOUTS)
+        ? await staleIds('team_loadouts', userId, idSet(localTeamLoadouts))
+        : [];
+    const staleAutogearTeamIds = restored.has(StorageKey.AUTOGEAR_TEAMS)
+        ? await staleIds('autogear_teams', userId, idSet(localAutogearTeams))
+        : [];
+
+    // Encounter notes: votes and formations both FK to the note.
+    if (staleNoteIds.length > 0) {
+        await deleteWhereIn('encounter_votes', 'encounter_id', staleNoteIds);
+        await deleteWhereIn('encounter_formations', 'note_id', staleNoteIds);
+        await deleteWhereIn('encounter_notes', 'id', staleNoteIds);
+    }
+
+    if (staleLoadoutIds.length > 0) {
+        await deleteWhereIn('loadout_equipment', 'loadout_id', staleLoadoutIds);
+        await deleteWhereIn('loadouts', 'id', staleLoadoutIds);
+    }
+
+    if (staleTeamIds.length > 0) {
+        await deleteWhereIn('team_loadout_equipment', 'team_loadout_id', staleTeamIds);
+        await deleteWhereIn('team_loadout_ships', 'team_loadout_id', staleTeamIds);
+        await deleteWhereIn('team_loadouts', 'id', staleTeamIds);
+    }
+
+    // autogear_teams holds ship ids in a plain array column, not an FK.
+    if (staleAutogearTeamIds.length > 0) {
+        await deleteWhereIn('autogear_teams', 'id', staleAutogearTeamIds);
+    }
+
+    // Ships are deleted last of the parents: five tables reference a ship, and
+    // three of them (loadouts, team_loadout_ships, team_loadout_equipment) can
+    // be rows the local snapshot KEEPS while pointing at a ship it drops, so
+    // they are cleared by ship_id here rather than by their own stale set.
+    if (staleShipIds.length > 0) {
+        await deleteWhereIn('encounter_formations', 'ship_id', staleShipIds);
+        await deleteWhereIn('team_loadout_equipment', 'ship_id', staleShipIds);
+        await deleteWhereIn('team_loadout_ships', 'ship_id', staleShipIds);
+
+        const orphanedLoadoutIds = await childIds('loadouts', 'ship_id', staleShipIds);
+        await deleteWhereIn('loadout_equipment', 'loadout_id', orphanedLoadoutIds);
+        await deleteWhereIn('loadouts', 'ship_id', staleShipIds);
+
+        // calibration_ship_id is nullable and the piece itself survives.
+        for (let i = 0; i < staleShipIds.length; i += BATCH_SIZE) {
+            const { error } = await supabase
+                .from('inventory_items')
+                .update({ calibration_ship_id: null })
+                .in('calibration_ship_id', staleShipIds.slice(i, i + BATCH_SIZE));
+            if (error) throw error;
+        }
+
+        await deleteWhereIn('ship_equipment', 'ship_id', staleShipIds);
+
+        const implantIds = await childIds('ship_implants', 'ship_id', staleShipIds);
+        await deleteWhereIn('ship_implant_stats', 'implant_id', implantIds);
+        await deleteWhereIn('ship_implants', 'ship_id', staleShipIds);
+
+        const refitIds = await childIds('ship_refits', 'ship_id', staleShipIds);
+        await deleteWhereIn('ship_refit_stats', 'refit_id', refitIds);
+        await deleteWhereIn('ship_refits', 'ship_id', staleShipIds);
+
+        await deleteWhereIn('ship_base_stats', 'ship_id', staleShipIds);
+        await deleteWhereIn('ships', 'id', staleShipIds);
+    }
+
+    // Gear. `ship_implants.id` IS the inventory item's id, so a stale piece that
+    // is an equipped implant also drags ship_implant_stats with it.
+    if (staleGearIds.length > 0) {
+        await deleteWhereIn('ship_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('loadout_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('team_loadout_equipment', 'gear_id', staleGearIds);
+        await deleteWhereIn('ship_implant_stats', 'implant_id', staleGearIds);
+        await deleteWhereIn('ship_implants', 'id', staleGearIds);
+        await deleteWhereIn('inventory_items', 'id', staleGearIds);
     }
 }

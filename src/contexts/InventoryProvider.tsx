@@ -7,7 +7,7 @@ import { GearSlotName } from '../constants/gearTypes';
 import { RarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
-import { StorageKey } from '../constants/storage';
+import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
 import { decodeGearStats, encodeGearStats } from '../utils/gear/statsCodec';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
@@ -136,16 +136,11 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         }
     }, []);
 
-    // Build the profile-scoped IndexedDB cache key.
-    // When activeProfileId is null (unauthenticated / demo), fall back to the legacy
-    // base key so offline/demo users still get a persistent cache.
-    const inventoryCacheKey = activeProfileId
-        ? `${StorageKey.INVENTORY}:${activeProfileId}`
-        : StorageKey.INVENTORY;
+    const cacheKey = inventoryCacheKey(activeProfileId);
 
     // Use useStorage for inventory
     const { data: storageInventory, setData: setStorageInventory } = useStorage<GearPiece[]>({
-        key: inventoryCacheKey,
+        key: cacheKey,
         defaultValue: [],
         useIndexedDB: true,
     });
@@ -355,7 +350,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 activeProfileIdRef.current = null;
                 // Wipe the entire IndexedDB store so all profile-keyed inventory
                 // entries are gone regardless of which key is active at sign-out time.
-                // removeFromIndexedDB(inventoryCacheKey) could miss entries if the
+                // removeFromIndexedDB(cacheKey) could miss entries if the
                 // active profile changes before the event fires.
                 void clearIndexedDBStorage();
                 setLocalInventory([]);

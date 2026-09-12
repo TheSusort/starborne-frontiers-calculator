@@ -7,7 +7,7 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { StorageKey } from '../constants/storage';
+import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { useNotification } from '../hooks/useNotification';
 import { removeFromIndexedDB } from '../hooks/useStorage';
 import {
@@ -208,7 +208,7 @@ export const ActiveProfileProvider: React.FC<{ children: React.ReactNode }> = ({
             }
             await deleteAltApi(id, user.id);
             try {
-                await removeFromIndexedDB(`${StorageKey.INVENTORY}:${id}`);
+                await removeFromIndexedDB(inventoryCacheKey(id));
             } catch {
                 // Ignore — cache may not exist for this profile if no inventory was loaded.
             }

@@ -17,3 +17,14 @@ export const StorageKey = {
 } as const;
 
 export type StorageKeyType = (typeof StorageKey)[keyof typeof StorageKey];
+
+/**
+ * Inventory is cached in IndexedDB, not localStorage, under a profile-scoped
+ * key so two profiles on one browser do not serve each other's gear. Signed-out
+ * and demo users have no profile and fall back to the unscoped key.
+ *
+ * Every site that reads or writes the inventory cache resolves the key here;
+ * `reuploadLocalDataToSupabase` reads the same key for the signed-in profile.
+ */
+export const inventoryCacheKey = (activeProfileId: string | null): string =>
+    activeProfileId ? `${StorageKey.INVENTORY}:${activeProfileId}` : StorageKey.INVENTORY;

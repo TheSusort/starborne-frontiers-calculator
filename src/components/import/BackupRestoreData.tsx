@@ -5,11 +5,31 @@ import { Button, ConfirmModal } from '../ui';
 import { useNotification } from '../../hooks/useNotification';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
-import { StorageKey, StorageKeyType } from '../../constants/storage';
+import { StorageKey, StorageKeyType, inventoryCacheKey } from '../../constants/storage';
 import { supabase } from '../../config/supabase';
-import { clearIndexedDBStorage } from '../../hooks/useStorage';
+import { clearIndexedDBStorage, getFromIndexedDB, setInIndexedDB } from '../../hooks/useStorage';
+import {
+    reuploadLocalDataToSupabase,
+    pruneSupabaseDataNotInLocal,
+} from '../../services/userDataService';
+import { parseBackupInventory } from '../../schemas/backupData';
 
 const BACKUP_KEYS = Object.values(StorageKey);
+
+/**
+ * Inventory is cached in IndexedDB; every other backup key is a localStorage
+ * entry. Returns the IndexedDB cache key for a backup key, or null when the key
+ * belongs to localStorage.
+ *
+ * The backup file always names the UNSCOPED key, so a file taken on one profile
+ * restores onto another; only the cache key it lands in is profile-scoped.
+ *
+ * `gear_upgrades` is the other IndexedDB entry and is deliberately NOT here:
+ * `useGearUpgrades` derives it from the inventory by simulation, so backing it
+ * up would roughly double the file for something that regenerates itself.
+ */
+const indexedDbCacheKey = (key: string, activeProfileId: string | null): string | null =>
+    key === StorageKey.INVENTORY ? inventoryCacheKey(activeProfileId) : null;
 
 // Legacy key mappings for backward compatibility
 const LEGACY_KEY_MAP: Record<string, StorageKeyType> = {
@@ -92,32 +112,6 @@ const migrateDataFormat = (key: string, data: any): any => {
     }
 };
 
-// Create types for the data structures
-interface LoadoutEquipment {
-    [key: string]: string;
-}
-
-interface LoadoutData {
-    id: string;
-    name: string;
-    shipId: string;
-    equipment: LoadoutEquipment;
-    createdAt: number;
-}
-
-interface ShipLoadout {
-    position: number;
-    shipId: string;
-    equipment: LoadoutEquipment;
-}
-
-interface TeamLoadoutData {
-    id: string;
-    name: string;
-    shipLoadouts: ShipLoadout[];
-    createdAt: number;
-}
-
 export const BackupRestoreData: React.FC = () => {
     const { addNotification } = useNotification();
     const { user, signOut } = useAuth();
@@ -126,15 +120,23 @@ export const BackupRestoreData: React.FC = () => {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [showDeleteLocalStorageConfirm, setShowDeleteLocalStorageConfirm] = useState(false);
 
-    const handleBackup = () => {
+    const handleBackup = async () => {
         try {
             const backup: StorageData = {};
-            BACKUP_KEYS.forEach((key) => {
+            for (const key of BACKUP_KEYS) {
+                const cacheKey = indexedDbCacheKey(key, activeProfileId);
+                if (cacheKey) {
+                    const cached: unknown = await getFromIndexedDB(cacheKey);
+                    if (cached !== undefined && cached !== null) {
+                        backup[key] = JSON.stringify(cached);
+                    }
+                    continue;
+                }
                 const data = localStorage.getItem(key);
                 if (data) {
                     backup[key] = data;
                 }
-            });
+            }
 
             const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -187,197 +189,63 @@ export const BackupRestoreData: React.FC = () => {
                     }
                 });
 
-                // Update localStorage with normalized data
-                Object.entries(normalizedBackup).forEach(([key, value]) => {
-                    if (value) {
+                // Write each key back to the store the app actually reads it from.
+                // Gear restored into localStorage is invisible to InventoryProvider,
+                // which reads the IndexedDB cache.
+                //
+                // Only the keys that actually landed are collected: the cloud prune
+                // below compares the cloud against LOCAL state, so naming a section
+                // that failed to write would delete the very rows the backup carried.
+                const restoredSections: string[] = [];
+
+                for (const [key, value] of Object.entries(normalizedBackup)) {
+                    if (!value) continue;
+
+                    const cacheKey = indexedDbCacheKey(key, activeProfileId);
+                    if (!cacheKey) {
                         localStorage.setItem(key, value);
+                        restoredSections.push(key);
+                        continue;
                     }
-                });
+
+                    const gear = parseBackupInventory(JSON.parse(value));
+                    if (!gear) {
+                        console.error(`Backup section ${key} is not a valid gear inventory`);
+                        addNotification(
+                            'error',
+                            'The backup file’s gear inventory is unreadable and was skipped'
+                        );
+                        continue;
+                    }
+
+                    try {
+                        await setInIndexedDB(cacheKey, gear);
+                        restoredSections.push(key);
+                    } catch (cacheError) {
+                        console.error(`Error restoring ${key} to IndexedDB:`, cacheError);
+                        addNotification(
+                            'error',
+                            'Your gear inventory could not be saved and was skipped'
+                        );
+                    }
+                }
 
                 // If user is logged in, sync to Supabase
                 if (activeProfileId) {
                     try {
-                        const tableNameMap: Record<string, string> = {
-                            [StorageKey.SHIPS]: 'ships',
-                            [StorageKey.INVENTORY]: 'inventory_items',
-                            [StorageKey.ENCOUNTERS]: 'encounter_notes',
-                            [StorageKey.ENGINEERING_STATS]: 'engineering_stats',
-                            [StorageKey.LOADOUTS]: 'loadouts',
-                            [StorageKey.TEAM_LOADOUTS]: 'team_loadouts',
-                            [StorageKey.AUTOGEAR_TEAMS]: 'autogear_teams',
-                        };
+                        // The restore writes local state, then hands the whole
+                        // upload to the one routine that knows the column shape of
+                        // every table. Building the payload here instead meant a
+                        // rejected insert after an already-committed delete, which
+                        // emptied cloud gear and ships outright (#504).
+                        await reuploadLocalDataToSupabase(activeProfileId);
 
-                        // Process each data type for Supabase
-                        for (const [key, value] of Object.entries(normalizedBackup)) {
-                            if (!value || !tableNameMap[key]) continue;
-
-                            const tableName = tableNameMap[key];
-                            const parsedData = JSON.parse(value);
-
-                            // Handle different data types
-                            if (key === StorageKey.LOADOUTS) {
-                                // Handle loadouts specially
-                                await supabase
-                                    .from('loadouts')
-                                    .delete()
-                                    .eq('user_id', activeProfileId);
-
-                                if (Array.isArray(parsedData) && parsedData.length > 0) {
-                                    // Insert loadout records
-                                    const loadoutRecords = parsedData.map(
-                                        (loadout: LoadoutData) => ({
-                                            id: loadout.id,
-                                            user_id: activeProfileId,
-                                            name: loadout.name,
-                                            ship_id: loadout.shipId,
-                                            created_at: new Date(loadout.createdAt).toISOString(),
-                                        })
-                                    );
-
-                                    await supabase.from('loadouts').insert(loadoutRecords);
-
-                                    // Insert equipment records
-                                    const equipmentRecords = parsedData.flatMap(
-                                        (loadout: LoadoutData) =>
-                                            Object.entries(loadout.equipment).map(
-                                                ([slot, gearId]) => ({
-                                                    loadout_id: loadout.id,
-                                                    slot: slot,
-                                                    gear_id: gearId,
-                                                })
-                                            )
-                                    );
-
-                                    if (equipmentRecords.length > 0) {
-                                        await supabase
-                                            .from('loadout_equipment')
-                                            .insert(equipmentRecords);
-                                    }
-                                }
-                            } else if (key === StorageKey.TEAM_LOADOUTS) {
-                                // Handle team loadouts specially
-                                await supabase
-                                    .from('team_loadouts')
-                                    .delete()
-                                    .eq('user_id', activeProfileId);
-
-                                if (Array.isArray(parsedData) && parsedData.length > 0) {
-                                    // Insert team loadout records
-                                    const teamLoadoutRecords = parsedData.map((teamLoadout) => ({
-                                        id: teamLoadout.id,
-                                        user_id: activeProfileId,
-                                        name: teamLoadout.name,
-                                        created_at: new Date(
-                                            teamLoadout.createdAt as string | number | Date
-                                        ).toISOString(),
-                                    }));
-
-                                    await supabase.from('team_loadouts').insert(teamLoadoutRecords);
-
-                                    // Insert ship records
-                                    const shipRecords = parsedData.flatMap(
-                                        (teamLoadout: TeamLoadoutData) =>
-                                            teamLoadout.shipLoadouts.map(
-                                                (shipLoadout: ShipLoadout, index: number) => ({
-                                                    team_loadout_id: teamLoadout.id,
-                                                    position: index,
-                                                    ship_id: shipLoadout.shipId,
-                                                })
-                                            )
-                                    );
-
-                                    if (shipRecords.length > 0) {
-                                        await supabase
-                                            .from('team_loadout_ships')
-                                            .insert(shipRecords);
-                                    }
-
-                                    // Insert equipment records
-                                    const equipmentRecords = parsedData.flatMap(
-                                        (teamLoadout: TeamLoadoutData) =>
-                                            teamLoadout.shipLoadouts.flatMap(
-                                                (shipLoadout: ShipLoadout, position: number) =>
-                                                    Object.entries(shipLoadout.equipment).map(
-                                                        ([slot, gearId]) => ({
-                                                            team_loadout_id: teamLoadout.id,
-                                                            position,
-                                                            slot: slot,
-                                                            gear_id: gearId,
-                                                        })
-                                                    )
-                                            )
-                                    );
-
-                                    if (equipmentRecords.length > 0) {
-                                        await supabase
-                                            .from('team_loadout_equipment')
-                                            .insert(equipmentRecords);
-                                    }
-                                }
-                            } else if (key === StorageKey.AUTOGEAR_TEAMS) {
-                                await supabase
-                                    .from('autogear_teams')
-                                    .delete()
-                                    .eq('user_id', activeProfileId);
-
-                                if (Array.isArray(parsedData) && parsedData.length > 0) {
-                                    const teamRecords = parsedData.map((team) => {
-                                        const createdAt = new Date(
-                                            team.createdAt as string | number | Date
-                                        );
-                                        return {
-                                            id: team.id,
-                                            user_id: activeProfileId,
-                                            name: team.name,
-                                            ship_ids: team.shipIds ?? [],
-                                            created_at: (Number.isNaN(createdAt.getTime())
-                                                ? new Date()
-                                                : createdAt
-                                            ).toISOString(),
-                                        };
-                                    });
-
-                                    await supabase.from('autogear_teams').insert(teamRecords);
-                                }
-                            } else if (key === StorageKey.ENGINEERING_STATS) {
-                                // Handle engineering stats specially
-                                await supabase
-                                    .from(tableName)
-                                    .delete()
-                                    .eq('user_id', activeProfileId);
-
-                                if (parsedData.stats && parsedData.stats.length > 0) {
-                                    const records = parsedData.stats.flatMap((stat: any) =>
-                                        stat.stats.map((s: any) => ({
-                                            user_id: activeProfileId,
-                                            ship_type: stat.shipType,
-                                            stat_name: s.name,
-                                            value: s.value,
-                                            type: s.type,
-                                        }))
-                                    );
-
-                                    if (records.length > 0) {
-                                        await supabase.from(tableName).insert(records);
-                                    }
-                                }
-                            } else if (Array.isArray(parsedData)) {
-                                // Handle other array data
-                                await supabase
-                                    .from(tableName)
-                                    .delete()
-                                    .eq('user_id', activeProfileId);
-
-                                if (parsedData.length > 0) {
-                                    await supabase.from(tableName).insert(
-                                        parsedData.map((item: any) => ({
-                                            ...item,
-                                            user_id: activeProfileId,
-                                        }))
-                                    );
-                                }
-                            }
-                        }
+                        // Only now that every row in the backup exists remotely is
+                        // it safe to remove what the backup does not have. The old
+                        // order — delete, then upload — is what lost the data.
+                        // Scoped to the keys this file actually carried: a section
+                        // the file omits is left alone, never emptied.
+                        await pruneSupabaseDataNotInLocal(activeProfileId, restoredSections);
 
                         addNotification('success', 'Data restored and synced to cloud storage');
                     } catch (error) {
@@ -454,7 +322,7 @@ export const BackupRestoreData: React.FC = () => {
                 <Button
                     variant="secondary"
                     size="sm"
-                    onClick={handleBackup}
+                    onClick={() => void handleBackup()}
                     aria-label="Backup data"
                 >
                     Backup
