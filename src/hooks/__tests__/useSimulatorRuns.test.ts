@@ -101,8 +101,9 @@ const baseArgs = (overrides: Partial<Parameters<typeof useSimulatorRuns>[0]> = {
     ...overrides,
 });
 
-// Shared by every describe block below: each starts with a clean call history and no held gate,
-// so a test in one block can never observe a mock call recorded by another.
+// Shared by every describe block below: each starts with an empty call history and no held
+// gate. mockClear() does not drop a queued mockRejectedValueOnce/mockImplementationOnce — the
+// one test below that queues one consumes it before any other test can observe it.
 beforeEach(() => {
     mockRunSeededBattle.mockClear();
     mockRunSeedSet.mockClear();
@@ -275,6 +276,38 @@ describe('useSimulatorRuns progress and cancellation', () => {
         expect(result.current.battleResult).not.toBeNull();
     });
 
+    it('a synchronous single-seed run supersedes an in-flight multi-seed run', async () => {
+        const release = holdNextRun();
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ runCount: 5 }) }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.isRunning).toBe(true);
+
+        // The user drops Runs to 1 while the multi-seed run above is still parked, then
+        // presses Run again — the sync branch must win regardless of what the parked run
+        // does when it eventually lands.
+        rerender(baseArgs({ runCount: 1 }));
+        act(() => {
+            result.current.handleRun();
+        });
+        const singleRunResult = result.current.battleResult;
+        expect(singleRunResult).not.toBeNull();
+
+        await act(async () => {
+            release();
+        });
+
+        expect(result.current.battleResult).toBe(singleRunResult);
+        expect(result.current.aggregate).toBeNull();
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.progress).toBeNull();
+    });
+
     it('leaves the previous aggregate and its provenance untouched when a run is cancelled', async () => {
         const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
 
@@ -351,11 +384,20 @@ describe('useSimulatorRuns progress and cancellation', () => {
     });
 
     it('surfaces an async run failure as a run error and clears the displayed result', async () => {
-        mockRunSeedSetAsync.mockRejectedValueOnce(new Error('engine exploded'));
         const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+
+        // Land a successful run first, so there is a non-null aggregate for the failing run
+        // to clear — otherwise the null-aggregate assertion below would pass trivially.
         await act(async () => {
             result.current.handleRun();
         });
+        expect(result.current.aggregate).not.toBeNull();
+
+        mockRunSeedSetAsync.mockRejectedValueOnce(new Error('engine exploded'));
+        await act(async () => {
+            result.current.handleRun();
+        });
+
         expect(result.current.runError).toBe('engine exploded');
         expect(result.current.aggregate).toBeNull();
         expect(result.current.isRunning).toBe(false);

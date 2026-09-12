@@ -55,7 +55,7 @@ export interface UseSimulatorRunsResult {
     handleOpenSeed: (seed: number) => void;
     handlePinBaseline: () => void;
     handleUnpinBaseline: () => void;
-    /** True while a multi-seed run is in flight. A single run is synchronous and never sets it. */
+    /** True while a multi-seed run is in flight. A single run is synchronous and clears it. */
     isRunning: boolean;
     /** Completed/total seeds of the run in flight, or `null` when none is. */
     progress: { completed: number; total: number } | null;
@@ -86,8 +86,10 @@ export function useSimulatorRuns({
     const [isRunning, setIsRunning] = useState(false);
     const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
     const abortRef = useRef<AbortController | null>(null);
-    // Bumped per started run and on unmount. A run only writes state while its generation is
-    // still current, so a superseded run (Run pressed twice) or an unmounted component cannot.
+    // Bumped at the start of every handleRun call — sync or async — and on unmount. An async
+    // run only writes state while its generation is still current, so starting ANY new run
+    // (including the synchronous single-run branch, which writes immediately and never needs
+    // to check isCurrent itself) or unmounting supersedes whichever async run is in flight.
     const generationRef = useRef(0);
 
     useEffect(
@@ -125,7 +127,18 @@ export function useSimulatorRuns({
         const input = buildInput();
         const overrides = snapshotOverrides(playerBoard, enemyBoard);
 
+        // Every run supersedes whatever is in flight, sync or async: abort the previous
+        // controller and bump the generation so a still-running async run's `.then`/`.catch`
+        // finds `isCurrent()` false and writes nothing.
+        abortRef.current?.abort();
+        const generation = ++generationRef.current;
+        const isCurrent = () => generation === generationRef.current;
+
         if (effectiveRunCount === 1) {
+            // A single run is synchronous, so it leaves no running state behind for a later
+            // async `.then`/`.catch` to clear — clear it here instead.
+            setIsRunning(false);
+            setProgress(null);
             try {
                 setAggregate(null);
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
@@ -139,11 +152,8 @@ export function useSimulatorRuns({
             return;
         }
 
-        abortRef.current?.abort();
         const controller = new AbortController();
         abortRef.current = controller;
-        const generation = ++generationRef.current;
-        const isCurrent = () => generation === generationRef.current;
 
         setIsRunning(true);
         setProgress({ completed: 0, total: effectiveRunCount });
