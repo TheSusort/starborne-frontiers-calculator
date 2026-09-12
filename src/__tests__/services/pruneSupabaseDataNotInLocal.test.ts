@@ -1,13 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { pruneSupabaseDataNotInLocal } from '../../services/userDataService';
 import { StorageKey, inventoryCacheKey } from '../../constants/storage';
-import { supabase } from '../../config/supabase';
 import { getFromIndexedDB } from '../../hooks/useStorage';
+import { deletesOn, fakeSupabase, indexOfDelete, PAGE_SIZE } from './fakeSupabase';
 
 const USER = '22222222-2222-4222-8222-222222222222';
-
-/** Must match ID_PAGE_SIZE in userDataService.ts. */
-const PAGE_SIZE = 1000;
 
 /** Every prunable section, as a restore of a complete backup file would pass. */
 const ALL_SECTIONS = [
@@ -21,94 +18,6 @@ const ALL_SECTIONS = [
 
 vi.mock('../../config/supabase', () => ({ supabase: { from: vi.fn() } }));
 vi.mock('../../hooks/useStorage', () => ({ getFromIndexedDB: vi.fn() }));
-
-/** One recorded statement, in the order it was actually awaited. */
-interface Op {
-    table: string;
-    kind: 'select' | 'delete' | 'update';
-    column?: string;
-    values?: unknown[];
-    payload?: unknown;
-    ordered?: boolean;
-    range?: [number, number];
-}
-
-/**
- * Records every statement in execution order against a fixed set of cloud rows.
- * Ordering is the property under test: a parent deleted before its children
- * violates an FK, and the prune must never be the thing that loses data.
- */
-const fakeSupabase = (cloud: Record<string, Array<Record<string, unknown>>>) => {
-    const ops: Op[] = [];
-
-    const chainFor = (table: string) => {
-        const state: Op = { table, kind: 'select' };
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chain: any = {
-            select: () => {
-                state.kind = 'select';
-                return chain;
-            },
-            delete: () => {
-                state.kind = 'delete';
-                return chain;
-            },
-            update: (payload: unknown) => {
-                state.kind = 'update';
-                state.payload = payload;
-                return chain;
-            },
-            eq: (column: string, value: unknown) => {
-                state.column = column;
-                state.values = [value];
-                return chain;
-            },
-            in: (column: string, values: unknown[]) => {
-                state.column = column;
-                state.values = values;
-                return chain;
-            },
-            not: () => chain,
-            is: () => chain,
-            order: () => {
-                state.ordered = true;
-                return chain;
-            },
-            // Serves the slice the caller asked for, so a helper that reads only
-            // the first page genuinely sees a truncated list.
-            range: (from: number, to: number) => {
-                state.range = [from, to];
-                return chain;
-            },
-            then: (
-                resolve: (r: { data: Array<Record<string, unknown>> | null; error: null }) => void
-            ) => {
-                ops.push({ ...state });
-                if (state.kind !== 'select') {
-                    resolve({ data: null, error: null });
-                    return;
-                }
-                const rows = cloud[table] ?? [];
-                const page = state.range
-                    ? rows.slice(state.range[0], state.range[1] + 1)
-                    : rows.slice(0, PAGE_SIZE);
-                resolve({ data: page, error: null });
-            },
-        };
-        return chain;
-    };
-
-    (supabase.from as ReturnType<typeof vi.fn>).mockImplementation((table: string) =>
-        chainFor(table)
-    );
-    return ops;
-};
-
-const deletesOn = (ops: Op[], table: string) =>
-    ops.filter((op) => op.table === table && op.kind === 'delete');
-
-const indexOfDelete = (ops: Op[], table: string) =>
-    ops.findIndex((op) => op.table === table && op.kind === 'delete');
 
 describe('pruneSupabaseDataNotInLocal', () => {
     beforeEach(() => {

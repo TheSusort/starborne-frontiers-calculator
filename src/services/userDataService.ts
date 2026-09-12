@@ -23,23 +23,10 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
     const steps: Array<() => Promise<void>> = [
         // team_loadout_equipment / team_loadout_ships → team_loadouts → user_id
         async () => {
-            const { data: tl, error: selError } = await supabase
-                .from('team_loadouts')
-                .select('id')
-                .eq('user_id', userId);
-            if (selError) throw selError;
-            if (!tl?.length) return;
-            const ids = tl.map((r) => r.id);
-            const { error: eqError } = await supabase
-                .from('team_loadout_equipment')
-                .delete()
-                .in('team_loadout_id', ids);
-            if (eqError) throw eqError;
-            const { error: shError } = await supabase
-                .from('team_loadout_ships')
-                .delete()
-                .in('team_loadout_id', ids);
-            if (shError) throw shError;
+            const ids = await readAllIds('team_loadouts', (query) => query.eq('user_id', userId));
+            if (!ids.length) return;
+            await deleteWhereIn('team_loadout_equipment', 'team_loadout_id', ids);
+            await deleteWhereIn('team_loadout_ships', 'team_loadout_id', ids);
         },
         async () => {
             const { error } = await supabase.from('team_loadouts').delete().eq('user_id', userId);
@@ -47,20 +34,9 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
         },
         // loadout_equipment → loadouts → user_id
         async () => {
-            const { data: lo, error: selError } = await supabase
-                .from('loadouts')
-                .select('id')
-                .eq('user_id', userId);
-            if (selError) throw selError;
-            if (!lo?.length) return;
-            const { error } = await supabase
-                .from('loadout_equipment')
-                .delete()
-                .in(
-                    'loadout_id',
-                    lo.map((r) => r.id)
-                );
-            if (error) throw error;
+            const ids = await readAllIds('loadouts', (query) => query.eq('user_id', userId));
+            if (!ids.length) return;
+            await deleteWhereIn('loadout_equipment', 'loadout_id', ids);
         },
         async () => {
             const { error } = await supabase.from('loadouts').delete().eq('user_id', userId);
@@ -68,119 +44,40 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
         },
         // encounter_votes (FK child of encounter_notes) → encounter_formations → encounter_notes
         async () => {
-            const { data: en, error: selError } = await supabase
-                .from('encounter_notes')
-                .select('id')
-                .eq('user_id', userId);
-            if (selError) throw selError;
-            if (!en?.length) return;
-            const { error } = await supabase
-                .from('encounter_votes')
-                .delete()
-                .in(
-                    'encounter_id',
-                    en.map((r) => r.id)
-                );
-            if (error) throw error;
+            const ids = await readAllIds('encounter_notes', (query) => query.eq('user_id', userId));
+            if (!ids.length) return;
+            await deleteWhereIn('encounter_votes', 'encounter_id', ids);
         },
         // encounter_formations → encounter_notes → user_id
         async () => {
-            const { data: en, error: selError } = await supabase
-                .from('encounter_notes')
-                .select('id')
-                .eq('user_id', userId);
-            if (selError) throw selError;
-            if (!en?.length) return;
-            const { error } = await supabase
-                .from('encounter_formations')
-                .delete()
-                .in(
-                    'note_id',
-                    en.map((r) => r.id)
-                );
-            if (error) throw error;
+            const ids = await readAllIds('encounter_notes', (query) => query.eq('user_id', userId));
+            if (!ids.length) return;
+            await deleteWhereIn('encounter_formations', 'note_id', ids);
         },
         // ship child tables — scope via ships → user_id
         async () => {
-            const { data: sh, error: selShError } = await supabase
-                .from('ships')
-                .select('id')
-                .eq('user_id', userId);
-            if (selShError) throw selShError;
-            if (!sh?.length) return;
-            const shipIds = sh.map((r) => r.id);
-            const { error: seqError } = await supabase
-                .from('ship_equipment')
-                .delete()
-                .in('ship_id', shipIds);
-            if (seqError) throw seqError;
-            const { data: imp, error: selImpError } = await supabase
-                .from('ship_implants')
-                .select('id')
-                .in('ship_id', shipIds);
-            if (selImpError) throw selImpError;
-            if (imp?.length) {
-                const { error: impStatsError } = await supabase
-                    .from('ship_implant_stats')
-                    .delete()
-                    .in(
-                        'implant_id',
-                        imp.map((r) => r.id)
-                    );
-                if (impStatsError) throw impStatsError;
-            }
-            const { error: impError } = await supabase
-                .from('ship_implants')
-                .delete()
-                .in('ship_id', shipIds);
-            if (impError) throw impError;
-            const { data: ref, error: selRefError } = await supabase
-                .from('ship_refits')
-                .select('id')
-                .in('ship_id', shipIds);
-            if (selRefError) throw selRefError;
-            if (ref?.length) {
-                const { error: refStatsError } = await supabase
-                    .from('ship_refit_stats')
-                    .delete()
-                    .in(
-                        'refit_id',
-                        ref.map((r) => r.id)
-                    );
-                if (refStatsError) throw refStatsError;
-            }
-            const { error: refError } = await supabase
-                .from('ship_refits')
-                .delete()
-                .in('ship_id', shipIds);
-            if (refError) throw refError;
-            const { error: bsError } = await supabase
-                .from('ship_base_stats')
-                .delete()
-                .in('ship_id', shipIds);
-            if (bsError) throw bsError;
+            const shipIds = await readAllIds('ships', (query) => query.eq('user_id', userId));
+            if (!shipIds.length) return;
+            await deleteWhereIn('ship_equipment', 'ship_id', shipIds);
+
+            const implantIds = await childIds('ship_implants', 'ship_id', shipIds);
+            await deleteWhereIn('ship_implant_stats', 'implant_id', implantIds);
+            await deleteWhereIn('ship_implants', 'ship_id', shipIds);
+
+            const refitIds = await childIds('ship_refits', 'ship_id', shipIds);
+            await deleteWhereIn('ship_refit_stats', 'refit_id', refitIds);
+            await deleteWhereIn('ship_refits', 'ship_id', shipIds);
+
+            await deleteWhereIn('ship_base_stats', 'ship_id', shipIds);
         },
         async () => {
             const { error } = await supabase.from('encounter_notes').delete().eq('user_id', userId);
             if (error) throw error;
         },
         // inventory_items must go before ships (calibration_ship_id FK)
-        // Batched: single-statement delete on large tables can time out
         async () => {
-            const { data: items, error: selError } = await supabase
-                .from('inventory_items')
-                .select('id')
-                .eq('user_id', userId);
-            if (selError) throw selError;
-            if (!items?.length) return;
-            const ids = items.map((r) => r.id as string);
-            for (let i = 0; i < ids.length; i += BATCH_SIZE) {
-                const { error } = await supabase
-                    .from('inventory_items')
-                    .delete()
-                    .in('id', ids.slice(i, i + BATCH_SIZE));
-                if (error) throw error;
-            }
+            const ids = await readAllIds('inventory_items', (query) => query.eq('user_id', userId));
+            await deleteWhereIn('inventory_items', 'id', ids);
         },
         async () => {
             const { error } = await supabase.from('ships').delete().eq('user_id', userId);
@@ -492,11 +389,9 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         if (notesError) throw notesError;
 
         // Verify which ship IDs exist in the database to avoid FK violations
-        const { data: existingShips } = await supabase
-            .from('ships')
-            .select('id')
-            .eq('user_id', userId);
-        const validShipIds = new Set(existingShips?.map((ship) => ship.id) || []);
+        const validShipIds = new Set(
+            await readAllIds('ships', (query) => query.eq('user_id', userId))
+        );
 
         const formationRecords = validEncounters.flatMap((note) =>
             (note.formation || [])
@@ -714,11 +609,12 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
 /**
  * PostgREST caps one response at the project's `db-max-rows`, so a plain
  * `select('id')` silently returns a PREFIX for any table a real account fills —
- * an inventory runs to tens of thousands of rows. A truncated read makes the
- * prune act on a partial picture: stale parents survive, and a truncated CHILD
- * read deletes some of a parent's children and then fails the parent delete on
- * the FK. Every id read here pages, ordered by id so pages cannot overlap or
- * skip.
+ * an inventory runs to tens of thousands of rows. A truncated read makes every
+ * caller act on a partial picture: rows meant to go survive, and a truncated
+ * CHILD read deletes some of a parent's children and then fails the parent
+ * delete on the FK, aborting the sequence partway. Every id read in this file
+ * goes through here, ordered by id so pages cannot overlap or skip;
+ * `idReadsArePaged.test.ts` fails if one is added that does not.
  */
 const ID_PAGE_SIZE = 1000;
 
@@ -746,7 +642,10 @@ async function staleIds(table: string, userId: string, localIds: Set<string>): P
     return ids.filter((id) => !localIds.has(id));
 }
 
-/** Deletes rows from `table` where `column` matches one of `ids`, in batches. */
+/**
+ * Deletes rows from `table` where `column` matches one of `ids`, in batches: a
+ * single statement carrying every id of a real account's inventory times out.
+ */
 async function deleteWhereIn(table: string, column: string, ids: string[]): Promise<void> {
     for (let i = 0; i < ids.length; i += BATCH_SIZE) {
         const { error } = await supabase
