@@ -29,14 +29,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         const migrateDataForNewUser = async () => {
+            // This closes over the `user` STATE, not the auth callback's
+            // parameter, so it runs once with a stale null before the state
+            // catches up. That pass can never sync, and its remap assigns gear
+            // ids that the pass which does sync will not reproduce, so leaving
+            // it to run strands the signed-out inventory cache against ships
+            // that reference the other pass's ids.
+            if (!user?.id) return;
+
             try {
                 // Dispatch migration start event
                 window.dispatchEvent(new Event('app:migration:start'));
 
-                const migrationResult = migratePlayerData();
-                if (user?.id) {
-                    await syncMigratedDataToSupabase(user.id, migrationResult);
-                }
+                const migrationResult = await migratePlayerData(user.id);
+                await syncMigratedDataToSupabase(user.id, migrationResult);
 
                 // Dispatch migration end event
                 window.dispatchEvent(new Event('app:migration:end'));
