@@ -3946,6 +3946,11 @@ const DocumentationPage: React.FC = () => {
                                         Click any seed in the aggregate to open that one
                                         fight&apos;s round-by-round playback
                                     </li>
+                                    <li>
+                                        Multi-seed runs show their progress as they go and can be
+                                        cancelled at any point; cancelling leaves the previously
+                                        displayed results untouched
+                                    </li>
                                 </ul>
                             </div>
 
