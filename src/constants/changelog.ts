@@ -12,6 +12,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: a board can be copied to the opposing side in one click.',
     "Combat simulator: any placed ship's stats can now be tweaked for one simulation.",
     'Combat simulator: pin a run as a baseline and compare a tweaked run against it.',
+    'Backup: downloaded backups now contain your gear inventory.',
+    'Restore: restoring a backup while signed in no longer deletes your cloud gear and ships.',
+    'Restore: restored gear now shows up in your inventory.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
