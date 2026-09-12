@@ -711,11 +711,39 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
     }
 }
 
+/**
+ * PostgREST caps one response at the project's `db-max-rows`, so a plain
+ * `select('id')` silently returns a PREFIX for any table a real account fills —
+ * an inventory runs to tens of thousands of rows. A truncated read makes the
+ * prune act on a partial picture: stale parents survive, and a truncated CHILD
+ * read deletes some of a parent's children and then fails the parent delete on
+ * the FK. Every id read here pages, ordered by id so pages cannot overlap or
+ * skip.
+ */
+const ID_PAGE_SIZE = 1000;
+
+async function readAllIds(
+    table: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filter: (query: any) => any
+): Promise<string[]> {
+    const ids: string[] = [];
+    for (let from = 0; ; from += ID_PAGE_SIZE) {
+        const { data, error } = await filter(supabase.from(table).select('id'))
+            .order('id')
+            .range(from, from + ID_PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as Array<{ id: string }>;
+        ids.push(...page.map((row) => row.id));
+        if (page.length < ID_PAGE_SIZE) return ids;
+    }
+}
+
 /** Cloud ids for a user-owned table that are absent from the local snapshot. */
 async function staleIds(table: string, userId: string, localIds: Set<string>): Promise<string[]> {
-    const { data, error } = await supabase.from(table).select('id').eq('user_id', userId);
-    if (error) throw error;
-    return (data ?? []).map((row) => row.id as string).filter((id) => !localIds.has(id));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ids = await readAllIds(table, (query: any) => query.eq('user_id', userId));
+    return ids.filter((id) => !localIds.has(id));
 }
 
 /** Deletes rows from `table` where `column` matches one of `ids`, in batches. */
@@ -737,12 +765,9 @@ async function childIds(
 ): Promise<string[]> {
     const found: string[] = [];
     for (let i = 0; i < parentIds.length; i += BATCH_SIZE) {
-        const { data, error } = await supabase
-            .from(table)
-            .select('id')
-            .in(parentColumn, parentIds.slice(i, i + BATCH_SIZE));
-        if (error) throw error;
-        found.push(...(data ?? []).map((row) => row.id as string));
+        const batch = parentIds.slice(i, i + BATCH_SIZE);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        found.push(...(await readAllIds(table, (query: any) => query.in(parentColumn, batch))));
     }
     return found;
 }

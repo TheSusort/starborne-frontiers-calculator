@@ -205,6 +205,54 @@ describe('BackupRestoreData', () => {
             expect(pruneSupabaseDataNotInLocal).not.toHaveBeenCalled();
         });
 
+        // A section that failed to land locally must not reach the prune: the
+        // prune compares the cloud against local state, so naming a section it
+        // could not write would delete the very rows the backup carried.
+        it('does not prune a section whose local write failed', async () => {
+            (setInIndexedDB as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('QuotaExceededError')
+            );
+
+            render(<BackupRestoreData />);
+            await restoreFile({
+                [StorageKey.SHIPS]: JSON.stringify(SHIPS),
+                [StorageKey.INVENTORY]: JSON.stringify(GEAR),
+            });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).not.toContain(StorageKey.INVENTORY);
+            expect(sections).toContain(StorageKey.SHIPS);
+        });
+
+        it('rejects a malformed inventory section instead of caching it', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({
+                [StorageKey.SHIPS]: JSON.stringify(SHIPS),
+                [StorageKey.INVENTORY]: JSON.stringify({ notAnArray: true }),
+            });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            expect(setInIndexedDB).not.toHaveBeenCalled();
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).not.toContain(StorageKey.INVENTORY);
+        });
+
+        // Over-strict validation is its own data-loss path: a real backup whose
+        // gear predates a field must still restore.
+        it('accepts gear carrying unknown extra fields', async () => {
+            const oddGear = [{ ...GEAR[0], somethingNewTheGameAdded: 42 }];
+
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.INVENTORY]: JSON.stringify(oddGear) });
+
+            await waitFor(() =>
+                expect(setInIndexedDB).toHaveBeenCalledWith(inventoryCacheKey(PROFILE_ID), oddGear)
+            );
+        });
+
         it('leaves the cloud untouched when signed out', async () => {
             activeProfileId = null;
             render(<BackupRestoreData />);

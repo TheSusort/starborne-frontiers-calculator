@@ -12,6 +12,7 @@ import {
     reuploadLocalDataToSupabase,
     pruneSupabaseDataNotInLocal,
 } from '../../services/userDataService';
+import { parseBackupInventory } from '../../schemas/backupData';
 
 const BACKUP_KEYS = Object.values(StorageKey);
 
@@ -191,19 +192,41 @@ export const BackupRestoreData: React.FC = () => {
                 // Write each key back to the store the app actually reads it from.
                 // Gear restored into localStorage is invisible to InventoryProvider,
                 // which reads the IndexedDB cache.
+                //
+                // Only the keys that actually landed are collected: the cloud prune
+                // below compares the cloud against LOCAL state, so naming a section
+                // that failed to write would delete the very rows the backup carried.
+                const restoredSections: string[] = [];
+
                 for (const [key, value] of Object.entries(normalizedBackup)) {
                     if (!value) continue;
 
                     const cacheKey = indexedDbCacheKey(key, activeProfileId);
                     if (!cacheKey) {
                         localStorage.setItem(key, value);
+                        restoredSections.push(key);
+                        continue;
+                    }
+
+                    const gear = parseBackupInventory(JSON.parse(value));
+                    if (!gear) {
+                        console.error(`Backup section ${key} is not a valid gear inventory`);
+                        addNotification(
+                            'error',
+                            'The backup file’s gear inventory is unreadable and was skipped'
+                        );
                         continue;
                     }
 
                     try {
-                        await setInIndexedDB(cacheKey, JSON.parse(value));
+                        await setInIndexedDB(cacheKey, gear);
+                        restoredSections.push(key);
                     } catch (cacheError) {
                         console.error(`Error restoring ${key} to IndexedDB:`, cacheError);
+                        addNotification(
+                            'error',
+                            'Your gear inventory could not be saved and was skipped'
+                        );
                     }
                 }
 
@@ -222,10 +245,7 @@ export const BackupRestoreData: React.FC = () => {
                         // order — delete, then upload — is what lost the data.
                         // Scoped to the keys this file actually carried: a section
                         // the file omits is left alone, never emptied.
-                        await pruneSupabaseDataNotInLocal(
-                            activeProfileId,
-                            Object.keys(normalizedBackup)
-                        );
+                        await pruneSupabaseDataNotInLocal(activeProfileId, restoredSections);
 
                         addNotification('success', 'Data restored and synced to cloud storage');
                     } catch (error) {

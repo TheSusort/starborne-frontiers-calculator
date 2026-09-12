@@ -6,6 +6,9 @@ import { getFromIndexedDB } from '../../hooks/useStorage';
 
 const USER = '22222222-2222-4222-8222-222222222222';
 
+/** Must match ID_PAGE_SIZE in userDataService.ts. */
+const PAGE_SIZE = 1000;
+
 /** Every prunable section, as a restore of a complete backup file would pass. */
 const ALL_SECTIONS = [
     StorageKey.SHIPS,
@@ -26,6 +29,8 @@ interface Op {
     column?: string;
     values?: unknown[];
     payload?: unknown;
+    ordered?: boolean;
+    range?: [number, number];
 }
 
 /**
@@ -65,14 +70,29 @@ const fakeSupabase = (cloud: Record<string, Array<Record<string, unknown>>>) => 
             },
             not: () => chain,
             is: () => chain,
+            order: () => {
+                state.ordered = true;
+                return chain;
+            },
+            // Serves the slice the caller asked for, so a helper that reads only
+            // the first page genuinely sees a truncated list.
+            range: (from: number, to: number) => {
+                state.range = [from, to];
+                return chain;
+            },
             then: (
                 resolve: (r: { data: Array<Record<string, unknown>> | null; error: null }) => void
             ) => {
                 ops.push({ ...state });
-                resolve({
-                    data: state.kind === 'select' ? (cloud[table] ?? []) : null,
-                    error: null,
-                });
+                if (state.kind !== 'select') {
+                    resolve({ data: null, error: null });
+                    return;
+                }
+                const rows = cloud[table] ?? [];
+                const page = state.range
+                    ? rows.slice(state.range[0], state.range[1] + 1)
+                    : rows.slice(0, PAGE_SIZE);
+                resolve({ data: page, error: null });
             },
         };
         return chain;
@@ -302,6 +322,36 @@ describe('pruneSupabaseDataNotInLocal', () => {
         await pruneSupabaseDataNotInLocal(USER, [StorageKey.CHANGELOG_STATE]);
 
         expect(ops.filter((op) => op.kind === 'delete')).toEqual([]);
+    });
+
+    // PostgREST caps a single select at the project's `db-max-rows`. A truncated
+    // id read makes the prune act on a partial picture: stale rows survive, and
+    // a truncated CHILD read deletes only some of a parent's children and then
+    // fails the parent delete on the FK. A real account holds tens of thousands
+    // of gear rows, so this is the normal case, not an edge case.
+    it('reads every page of ids rather than the first response', async () => {
+        localStorage.setItem(StorageKey.SHIPS, JSON.stringify([]));
+        const firstPage = Array.from({ length: PAGE_SIZE }, (_, i) => ({ id: `ship-${i}` }));
+        const ops = fakeSupabase({ ships: [...firstPage, { id: 'ship-on-page-two' }] });
+
+        await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+        const deleted = deletesOn(ops, 'ships').flatMap((op) => op.values ?? []);
+        expect(deleted).toContain('ship-on-page-two');
+        expect(deleted).toHaveLength(PAGE_SIZE + 1);
+    });
+
+    it('orders paged id reads, so the pages cannot overlap or skip', async () => {
+        localStorage.setItem(StorageKey.SHIPS, JSON.stringify([]));
+        const ops = fakeSupabase({ ships: [{ id: 'a' }] });
+
+        await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+        const selects = ops.filter((op) => op.table === 'ships' && op.kind === 'select');
+        expect(selects.length).toBeGreaterThan(0);
+        for (const select of selects) {
+            expect(select.ordered, 'every paged id read must be ordered').toBe(true);
+        }
     });
 
     it('deletes encounter children before the note row', async () => {
