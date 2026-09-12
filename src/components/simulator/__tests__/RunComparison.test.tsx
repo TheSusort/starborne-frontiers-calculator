@@ -1,34 +1,59 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import RunComparison from '../RunComparison';
-import type { SeedSetAggregate } from '../../../utils/simulator/seededRuns';
+import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
 
 const roster = [
     { actorId: 'focus', side: 'player' as const, name: 'Xcellence', position: 'T1' as const },
 ];
 
-const aggregate = (
-    wins: SeedSetAggregate['wins'],
-    meanRounds: number,
-    dealt: number,
-    baseSeed = 500,
-    count = 20
-): SeedSetAggregate => ({
-    baseSeed,
-    count,
-    roster,
-    runs: [],
-    wins,
-    meanRounds,
-    medianRounds: Math.round(meanRounds),
-    perActorMean: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
-});
+const BASE_SEED = 500;
+const COUNT = 20;
 
-const baseline = {
-    aggregate: aggregate({ player: 8, enemy: 12, draw: 0 }, 6, 1000),
-    overrides: {},
+/** Per-seed runs whose winners, rounds and damage produce a given aggregate. `wins` player-wins
+ *  come first; `rounds` and `dealt` are constant per seed unless `spread` is given, which
+ *  alternates them by ±spread so a row has real variance to measure. */
+const runsFor = (wins: number, rounds: number, dealt: number, spread = 0): SeedRunSummary[] =>
+    Array.from({ length: COUNT }, (_, i) => {
+        const swing = i % 2 === 0 ? spread : -spread;
+        return {
+            seed: BASE_SEED + i,
+            winner: i < wins ? ('player' as const) : ('enemy' as const),
+            lastRound: rounds + swing,
+            perActor: {
+                focus: { damageDealt: dealt + swing * 10, damageTaken: 0, healingDone: 0 },
+            },
+        };
+    });
+
+const aggregate = (wins: number, rounds: number, dealt: number, spread = 0): SeedSetAggregate => {
+    const runs = runsFor(wins, rounds, dealt, spread);
+    return {
+        baseSeed: BASE_SEED,
+        count: COUNT,
+        roster,
+        runs,
+        wins: { player: wins, enemy: COUNT - wins, draw: 0 },
+        meanRounds: runs.reduce((a, r) => a + r.lastRound, 0) / COUNT,
+        medianRounds: rounds,
+        perActorMean: {
+            focus: {
+                damageDealt: runs.reduce((a, r) => a + r.perActor.focus.damageDealt, 0) / COUNT,
+                damageTaken: 0,
+                healingDone: 0,
+            },
+        },
+    };
 };
-const current = aggregate({ player: 13, enemy: 7, draw: 0 }, 5, 1400);
+
+/** A decisive change: 4/20 becomes 19/20. */
+const baseline = { aggregate: aggregate(4, 6, 1000, 1), overrides: {} };
+const current = aggregate(19, 5, 1400, 1);
+
+/** A change that is not: 10/20 becomes 12/20 with everything else barely moving. */
+const noiseBaseline = { aggregate: aggregate(10, 6, 1000, 2), overrides: {} };
+const noiseCurrent = aggregate(12, 6, 1020, 2);
+
 const currentOverrides = { 'player:T1': { attack: 12650 } };
 
 describe('RunComparison', () => {
@@ -40,9 +65,9 @@ describe('RunComparison', () => {
                 currentOverrides={currentOverrides}
             />
         );
-        expect(screen.getByText('8')).toBeInTheDocument();
-        expect(screen.getByText('13')).toBeInTheDocument();
-        expect(screen.getByText('+5')).toBeInTheDocument();
+        expect(screen.getByText('4')).toBeInTheDocument();
+        expect(screen.getByText('19')).toBeInTheDocument();
+        expect(screen.getByText(/\+15\.0\s*±/)).toBeInTheDocument();
     });
 
     it('shows the mean-rounds delta signed', () => {
@@ -53,7 +78,7 @@ describe('RunComparison', () => {
                 currentOverrides={currentOverrides}
             />
         );
-        expect(screen.getByText('-1.0')).toBeInTheDocument();
+        expect(screen.getByText(/-1\.0\s*±/)).toBeInTheDocument();
     });
 
     it('shows per-actor mean damage for both configurations with a delta', () => {
@@ -67,7 +92,7 @@ describe('RunComparison', () => {
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
         expect(screen.getByText('1000')).toBeInTheDocument();
         expect(screen.getByText('1400')).toBeInTheDocument();
-        expect(screen.getByText('+400')).toBeInTheDocument();
+        expect(screen.getByText(/\+400\.0\s*±/)).toBeInTheDocument();
     });
 
     it('lists one override-diff row per changed stat, with side and position as separate columns and the stat label (not the raw key)', () => {
@@ -85,14 +110,39 @@ describe('RunComparison', () => {
     });
 
     it("shows the baseline's own seed and run count, not the current aggregate's", () => {
-        const divergentBaseline = {
-            aggregate: aggregate({ player: 8, enemy: 12, draw: 0 }, 6, 1000, 777, 30),
-            overrides: {},
+        // pairedSeries pairs by `runs`, not by baseSeed/count, so the current aggregate below
+        // carries the baseline's 30-seed run set but its own (different) baseSeed/count — the
+        // fixture that actually discriminates "reads baseline.aggregate" from "reads current".
+        const divergentSeedSet = (
+            wins: number,
+            rounds: number,
+            dealt: number
+        ): SeedSetAggregate => {
+            const seedCount = 30;
+            const seedBase = 777;
+            const runs: SeedRunSummary[] = Array.from({ length: seedCount }, (_, i) => ({
+                seed: seedBase + i,
+                winner: i < wins ? 'player' : 'enemy',
+                lastRound: rounds,
+                perActor: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
+            }));
+            return {
+                baseSeed: seedBase,
+                count: seedCount,
+                roster,
+                runs,
+                wins: { player: wins, enemy: seedCount - wins, draw: 0 },
+                meanRounds: rounds,
+                medianRounds: rounds,
+                perActorMean: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
+            };
         };
+        const divergentBaseline = { aggregate: divergentSeedSet(8, 6, 1000), overrides: {} };
+        const divergentCurrent = { ...divergentSeedSet(13, 5, 1400), baseSeed: 500, count: 20 };
         render(
             <RunComparison
                 baseline={divergentBaseline}
-                current={current}
+                current={divergentCurrent}
                 currentOverrides={currentOverrides}
             />
         );
@@ -126,5 +176,46 @@ describe('RunComparison', () => {
             />
         );
         expect(screen.getByText(/roster changed/i)).toBeInTheDocument();
+    });
+});
+
+describe('RunComparison noise verdict', () => {
+    it('renders a decisive win change as a signed delta with its spread', () => {
+        render(
+            <RunComparison
+                baseline={baseline}
+                current={current}
+                currentOverrides={currentOverrides}
+            />
+        );
+        expect(screen.getByText(/\+15\.0\s*±/)).toBeInTheDocument();
+    });
+
+    it('refuses to sign a win change that is indistinguishable from noise', () => {
+        render(
+            <RunComparison
+                baseline={noiseBaseline}
+                current={noiseCurrent}
+                currentOverrides={currentOverrides}
+            />
+        );
+        // Non-vacuity: the decisive fixture above renders a signed number for this same row,
+        // so this assertion is about the data, not about the row always reading this way.
+        expect(screen.getAllByText(/not distinguishable at 20 runs/i).length).toBeGreaterThan(0);
+        expect(screen.queryByText(/\+2\.0\s*±/)).not.toBeInTheDocument();
+    });
+
+    it('notes a likely outlier when the mean and median round deltas disagree in sign', () => {
+        // Mean rounds up, median rounds down: one fight dragged the mean the other way.
+        const outlierBaseline = { aggregate: aggregate(10, 6, 1000, 0), overrides: {} };
+        const outlierCurrent = { ...aggregate(10, 5, 1000, 0), meanRounds: 7, medianRounds: 5 };
+        render(
+            <RunComparison
+                baseline={outlierBaseline}
+                current={outlierCurrent}
+                currentOverrides={{}}
+            />
+        );
+        expect(screen.getByText(/outlier/i)).toBeInTheDocument();
     });
 });

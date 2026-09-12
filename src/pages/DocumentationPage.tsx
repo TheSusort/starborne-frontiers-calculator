@@ -3966,6 +3966,15 @@ const DocumentationPage: React.FC = () => {
                                         The aggregate is the comparison and a single seed is a
                                         reproduction
                                     </li>
+                                    <li>
+                                        A delta that is too small to tell apart from seed-to-seed
+                                        luck is labelled &quot;not distinguishable&quot; instead of
+                                        a signed number
+                                    </li>
+                                    <li>
+                                        If mean and median rounds moved in opposite directions, a
+                                        note flags that one fight in the seed set is an outlier
+                                    </li>
                                 </ul>
                             </div>
 
