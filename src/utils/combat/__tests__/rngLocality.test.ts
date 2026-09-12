@@ -4,7 +4,7 @@
 // damageDealt is identical with/without E1's extra draw.
 //
 // The two `simulateBattle` calls are re-seeded to the SAME starting keyed-stream state
-// (`setupKeyedTestRng(SEED)` before each) rather than left to run back-to-back off one
+// (`setupKeyedRng(SEED)` before each) rather than left to run back-to-back off one
 // continuing provider. Per-key streams are lazily created and never reset between two calls
 // sharing one provider instance, so without re-seeding, E2's second-call draws would be items
 // 4-6 of its stream instead of a fresh 1-3 — any match would be coincidental (a fluke of where
@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { simulateBattle } from '../../calculators/battleSimulator';
 import {
-    setupKeyedTestRng,
+    setupKeyedRng,
     setRateGateRng,
     setKeyedRng,
     mulberry32,
@@ -44,10 +44,10 @@ describe('RNG stream locality', () => {
     // (a fluke of where the crit threshold happens to fall), not proof of anything.
 
     it("keyed streams: perturbing E1's draw count leaves E2's per-round damage unchanged", () => {
-        setupKeyedTestRng(LOCALITY_TEST_SEED);
+        setupKeyedRng(LOCALITY_TEST_SEED);
         const a = simulateBattle(baseLocalityInput());
 
-        setupKeyedTestRng(LOCALITY_TEST_SEED);
+        setupKeyedRng(LOCALITY_TEST_SEED);
         const b = simulateBattle(withExtraE1Draw());
 
         expect(e2Damage(b)).toEqual(e2Damage(a));

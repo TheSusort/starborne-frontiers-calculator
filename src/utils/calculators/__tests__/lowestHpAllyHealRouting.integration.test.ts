@@ -51,7 +51,7 @@ import {
 } from '../healingEngineAdapter';
 import { simulateBattle, type BattlePlacement } from '../battleSimulator';
 import { createEventBus } from '../../combat/events';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { parsePattern, parseTarget } from '../../targetingParser';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { TeamActorInput } from '../../../types/calculator';
@@ -158,7 +158,7 @@ function runHealing(
     arm: 'legacy' | 'selector',
     team: TeamActorInput[]
 ): Observed {
-    setupKeyedTestRng(4242);
+    setupKeyedRng(4242);
     const skills = kitFor(shipName, arm);
     const recipients: string[] = [];
     const bus = createEventBus();
@@ -338,7 +338,7 @@ const punchingBag = (speed: number): BattlePlacement => ({
 /** Every `heal` log target in the whole battle, walking `reactions` too (a reactive repair hangs
  *  off the entry that triggered it, not off the turn's top-level list). */
 function battleHealTargets(arm: 'legacy' | 'selector'): { targetId: string; amount: number }[] {
-    setupKeyedTestRng(4242);
+    setupKeyedRng(4242);
     const stats = { hp: 200_000, attack: 20_000, hacking: 2_000 };
     const result = simulateBattle({
         playerTeam: [

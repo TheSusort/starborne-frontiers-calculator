@@ -9,13 +9,13 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, SYNTHESIZED_DPS_ENEMY_ID } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../../combat/engine';
 import { baseInput } from '../__testutils__/dpsRealEnemyFixture';
 
 describe('the DPS calculator never runs without an enemy', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetNoVictimTurnCount();
     });
 
@@ -41,7 +41,7 @@ describe('the DPS calculator never runs without an enemy', () => {
         // Defence is the observable: doubling it must reduce the damage. If the synthesized enemy
         // ignored `enemyDefense`, both runs would be identical.
         const soft = simulateDPS(baseInput({ enemyDefense: 0 })).summary.totalDamage;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const armoured = simulateDPS(baseInput({ enemyDefense: 20_000 })).summary.totalDamage;
         expect(armoured).toBeLessThan(soft);
     });

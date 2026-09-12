@@ -28,7 +28,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, SENTINEL_ENEMY_ACTOR_ID, CombatEngineInput } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import {
     bareInput,
     bareEnemy,
@@ -116,7 +116,7 @@ const SENTINEL_CLAIMS: {
 
 describe('SP-4c-2d: the sentinel id is reserved in both directions', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it.each(SHAPES)('no ACTOR carries the sentinel id — $name', ({ input, expected }) => {

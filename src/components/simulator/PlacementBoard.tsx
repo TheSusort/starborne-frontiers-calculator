@@ -9,9 +9,16 @@ import { Modal } from '../ui/layout/Modal';
 import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useShips } from '../../contexts/ShipsContext';
+import type { StatOverrides } from '../../utils/simulator/statOverrides';
 
-/** One placement board's state: a Position → Ship map (shared shape with SimulatorPage). */
-export type BoardState = Partial<Record<Position, Ship>>;
+/** One occupied board cell. Overrides live ON the placement, not in a position-keyed side map,
+ *  so replacing the ship in a cell can never leave the previous ship's overrides behind. */
+export interface Placement {
+    ship: Ship;
+    overrides?: StatOverrides;
+}
+
+export type BoardState = Partial<Record<Position, Placement>>;
 
 interface PlacementBoardProps {
     /** Heading for this side (e.g. "Your Team", "Enemy Team"); count suffix is included by the caller. */
@@ -32,6 +39,16 @@ interface PlacementBoardProps {
     onLoadEncounter: (board: BoardState) => void;
     /** Mirror the column order (enemy board): col 4 = front renders leftmost, facing the player. */
     mirrored?: boolean;
+    /** Copy this board (ships and overrides) onto the other side. Omitted → no copy button. */
+    onCopyToOtherSide?: () => void;
+    /** Label for the copy button, e.g. "Copy to enemy" / "Copy to your team". Required alongside
+     *  `onCopyToOtherSide` — every caller supplies one when it supplies the other. */
+    copyLabel: string;
+    /** Renders a cog control on each occupied cell and makes Shift+Click open the stat
+     *  editor. */
+    onEditStats?: (position: Position) => void;
+    /** Marks a cell whose placement carries a stat override. */
+    hasOverrides?: (position: Position) => boolean;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -46,6 +63,10 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     onCloseSelector,
     onLoadEncounter,
     mirrored = false,
+    onCopyToOtherSide,
+    copyLabel,
+    onEditStats,
+    hasOverrides,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
@@ -79,7 +100,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
             // malformed entry rather than trusting its shape.
             if (!item?.shipId || !item?.position) continue;
             const ship = getShipById(item.shipId);
-            if (ship) board[item.position] = ship;
+            if (ship) board[item.position] = { ship };
         }
         onLoadEncounter(board);
     };
@@ -101,7 +122,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                     />
                 </div>
             )}
-            <div className="mb-3">
+            <div className="mb-3 flex gap-2">
                 <Button
                     variant="secondary"
                     size="sm"
@@ -110,6 +131,16 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 >
                     Save as encounter
                 </Button>
+                {onCopyToOtherSide && (
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        disabled={formation.length === 0}
+                        onClick={onCopyToOtherSide}
+                    >
+                        {copyLabel}
+                    </Button>
+                )}
             </div>
             <FormationGrid
                 formation={formation}
@@ -118,6 +149,8 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 onRemoveShip={onRemoveShip}
                 mirrored={mirrored}
                 showFacingCue
+                onEditStats={onEditStats}
+                hasOverrides={hasOverrides}
             />
             {/* ShipSelector contract: mounted ONLY while a cell is selected. Mount/unmount drives the
                 modal — autoOpen fires the picker open on mount; onClose clears the selection, which

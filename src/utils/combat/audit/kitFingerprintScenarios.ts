@@ -8,8 +8,8 @@ import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
 import { parseShipTargeting, type ParsedPattern } from '../../targetingParser';
 import { resolveCells } from '../../targeting/resolvePattern';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import { canonicalPlacement } from './fixtures';
-import { runSeededBattle } from './seededBattle';
 import { fingerprintActorTokens } from './fingerprint';
 import type { Placement } from './types';
 

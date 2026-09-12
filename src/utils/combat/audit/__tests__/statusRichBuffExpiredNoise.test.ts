@@ -3,7 +3,7 @@ import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import { buildScenarioBattle, SEED } from '../kitFingerprintScenarios';
-import { runSeededBattle } from '../seededBattle';
+import { runSeededBattle } from '../../../simulator/seededRuns';
 import { resolveSubjectActorId } from '../placementSymmetry';
 import { fingerprintActor } from '../fingerprint';
 import type { Placement } from '../types';

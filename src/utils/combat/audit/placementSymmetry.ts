@@ -2,8 +2,8 @@ import type { Ship } from '../../../types/ship';
 import type { BattleResult } from '../../calculators/battleSimulator';
 import type { CombatLogEntryKind } from '../log/types';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import { fingerprintActor } from './fingerprint';
-import { runSeededBattle } from './seededBattle';
 import {
     boardFor,
     buildScenarioBattle,

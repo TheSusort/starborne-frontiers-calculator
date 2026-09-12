@@ -10,9 +10,9 @@ const atlasShip = (id: string): Ship => ({ id, name: id, faction: 'ATLAS_SYNDICA
 
 // 2 Marauders + 1 off-faction ship.
 const marauderBoard: BoardState = {
-    T1: marauderShip('m1'),
-    T2: marauderShip('m2'),
-    M1: atlasShip('a1'),
+    T1: { ship: marauderShip('m1') },
+    T2: { ship: marauderShip('m2') },
+    M1: { ship: atlasShip('a1') },
 };
 
 const renderPicker = (props: Partial<React.ComponentProps<typeof SquadLeaderPicker>> = {}) =>
@@ -130,7 +130,7 @@ describe('SquadLeaderPicker applied-effects preview', () => {
     });
 
     it('warns when no leader-faction ship is placed (faction gate unmet)', () => {
-        renderPicker({ selection: brandisherStage3, board: { M1: atlasShip('a1') } });
+        renderPicker({ selection: brandisherStage3, board: { M1: { ship: atlasShip('a1') } } });
         expect(
             screen.getByText(
                 /No Marauders ship on this team — leader effects inactive \(enemy-targeting effects included\)\./

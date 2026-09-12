@@ -33,4 +33,15 @@ describe('SimulatorPage', () => {
         expect(screen.getAllByRole('grid')).toHaveLength(2);
         expect(screen.getByRole('button', { name: /Run/i })).toBeInTheDocument();
     });
+
+    it('renders the seed and run-count controls', () => {
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+        expect(screen.getByLabelText(/seed/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/runs/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /new seed/i })).toBeInTheDocument();
+    });
 });

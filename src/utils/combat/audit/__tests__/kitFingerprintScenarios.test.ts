@@ -28,7 +28,7 @@ import {
 import { fingerprintActorTokens } from '../fingerprint';
 import { PLACEMENTS } from '../types';
 import { resolveSubjectActorId } from '../placementSymmetry';
-import { runSeededBattle } from '../seededBattle';
+import { runSeededBattle } from '../../../simulator/seededRuns';
 import { positionTurnRank } from '../../state';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';

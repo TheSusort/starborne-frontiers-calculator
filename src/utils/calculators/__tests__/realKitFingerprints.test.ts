@@ -32,7 +32,7 @@ import {
     type ScenarioName,
     type FingerprintScenario,
 } from '../../combat/audit/kitFingerprintScenarios';
-import { runSeededBattle } from '../../combat/audit/seededBattle';
+import { runSeededBattle } from '../../simulator/seededRuns';
 import { fingerprintActorTokens } from '../../combat/audit/fingerprint';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';

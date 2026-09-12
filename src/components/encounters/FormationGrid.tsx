@@ -2,10 +2,11 @@ import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { Position, ShipPosition, SharedShipPosition } from '../../types/encounters';
 import { useShips } from '../../contexts/ShipsContext';
 import { HexButton } from '../ui/HexButton';
+import { Button } from '../ui/Button';
 import { Ship } from '../../types/ship';
 import { useShipsData } from '../../hooks/useShipsData';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { ChevronLeftIcon, ChevronRightIcon } from '../ui/icons';
+import { ChevronLeftIcon, ChevronRightIcon, GearIcon } from '../ui/icons';
 
 interface FormationGridProps {
     formation: ShipPosition[] | SharedShipPosition[];
@@ -25,6 +26,11 @@ interface FormationGridProps {
      * placement boards opt in.
      */
     showFacingCue?: boolean;
+    /** Opt-in: renders a cog control on each occupied cell and makes Shift+Click open the
+     *  stat editor. Simulator only. */
+    onEditStats?: (position: Position) => void;
+    /** Opt-in: marks a cell whose placement carries a stat override. Simulator only. */
+    hasOverrides?: (position: Position) => boolean;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -35,6 +41,8 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     onSetSortOrder,
     mirrored = false,
     showFacingCue = false,
+    onEditStats,
+    hasOverrides,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -135,9 +143,17 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                         const rarity = fullShip?.rarity || template?.rarity?.toLowerCase();
                         const shipType = fullShip?.type || template?.type;
                         const roleIconUrl = shipType && SHIP_TYPES[shipType]?.iconUrl;
+                        // The cell's hex clip-path removes the corners, so the override marker rides in the
+                        // bottom stack with the ship name rather than floating in a corner.
+                        const overrideMarker = hasOverrides?.(pos) ? (
+                            <span className="text-[9px] font-bold text-amber-400 leading-tight">
+                                MOD
+                            </span>
+                        ) : null;
                         return (
                             <div
                                 key={pos}
+                                className="relative"
                                 onMouseEnter={() => setHoveredPosition(pos)}
                                 onMouseLeave={() =>
                                     setHoveredPosition((prev) => (prev === pos ? null : prev))
@@ -147,6 +163,8 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                     onClick={(e) => {
                                         if (e.ctrlKey || e.metaKey) {
                                             onRemoveShip?.(pos);
+                                        } else if (e.shiftKey && onEditStats && ship) {
+                                            onEditStats(pos);
                                         } else {
                                             onPositionSelect?.(pos);
                                         }
@@ -169,6 +187,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                     className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent pt-6 px-1 ${affinity ? 'pb-6' : 'pb-1 mb-1'}`}
                                                 >
                                                     <div className="flex flex-col items-center">
+                                                        {overrideMarker}
                                                         <span className="text-white text-xs font-bold leading-tight text-center max-w-full px-1">
                                                             {ship.name}
                                                         </span>
@@ -191,6 +210,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                                 </div>
                                             ) : (
                                                 <div className="flex flex-col items-center">
+                                                    {overrideMarker}
                                                     <span className="text-white text-xs mt-1 px-1 text-center max-w-full">
                                                         {ship.name}
                                                     </span>
@@ -216,6 +236,28 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                                         <span className="text-xs">{pos}</span>
                                     )}
                                 </HexButton>
+                                {onEditStats && ship && (
+                                    // Renders as a sibling of HexButton's <button>, not a child of it: a
+                                    // <button> nested inside another <button> has undefined accessibility
+                                    // semantics (ambiguous focus/activation and screen-reader announcement).
+                                    // The wrapper div is unaffected by HexButton's hex clip-path/rotation, so
+                                    // this stays upright. The percentage inset keeps the whole control inside
+                                    // the hex's outer border: the mask is a flat-top polygon in a frame rotated
+                                    // 30deg, so the cell's own corners fall outside the painted shape.
+                                    <Button
+                                        type="button"
+                                        variant="secondary"
+                                        size="xs"
+                                        className="!absolute top-[18%] right-[16%] z-20 !h-6 !w-6 !min-w-[24px] !p-0 flex items-center justify-center"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onEditStats(pos);
+                                        }}
+                                        aria-label={`Edit ${ship.name}'s stats`}
+                                    >
+                                        <GearIcon className="w-3.5 h-3.5" />
+                                    </Button>
+                                )}
                             </div>
                         );
                     })}
@@ -245,6 +287,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
                 <div className="text-xs text-theme-text-secondary mt-10">
                     Click to select a ship, Ctrl+Click to remove a ship, Hover + 1-5 to set attack
                     order
+                    {onEditStats && ", Shift+Click or a ship's cog icon to edit stats"}
                 </div>
             )}
         </div>

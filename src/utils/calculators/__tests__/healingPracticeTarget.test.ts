@@ -19,7 +19,7 @@ import {
     HealerStats,
     EnemyAttackerInput,
 } from '../healingEngineAdapter';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import {
     DEFAULT_ENEMY_DEFENCE,
     DEFAULT_ENEMY_HP,
@@ -95,7 +95,7 @@ const BASE = (
 describe('healing with no enemies — the practice target', () => {
     it('runs, and the opponent is the practice target rather than the dummy', () => {
         idc = 0;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const result = simulateHealing(BASE([]));
         // PRESENCE, not value: a `> 0`-guarded display regression shows up as a vanished row,
         // never as a wrong number.
@@ -114,7 +114,7 @@ describe('healing with no enemies — the practice target', () => {
 
     it('the practice target never attacks, so every heal is overheal on a full-HP target', () => {
         idc = 0;
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const result = simulateHealing(BASE([]));
         expect(result.summary.totalEffectiveHealing).toBe(0);
         expect(result.summary.totalOverheal).toBeGreaterThan(0);
@@ -161,10 +161,10 @@ describe('healing with no enemies — the practice target', () => {
             };
 
             idc = 0;
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const zero = simulateHealing(BASE([], crit, CRIT_DAMAGE));
             idc = 0;
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const one = simulateHealing(BASE([inertDefaultCard], crit, CRIT_DAMAGE));
 
             // A 0-attack default card and the practice target differ only by id, so the healer's own
@@ -181,7 +181,7 @@ describe('healing with no enemies — the practice target', () => {
             // pass with the practice target at defence 0, which is precisely the silent
             // damage-maximising drift the shared stat block exists to prevent.
             idc = 0;
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             const softer = simulateHealing(
                 BASE(
                     [{ ...inertDefaultCard, stats: { ...inertDefaultCard.stats, defence: 0 } }],

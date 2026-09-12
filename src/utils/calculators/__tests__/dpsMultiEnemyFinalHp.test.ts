@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Position } from '../../../types/encounters';
@@ -77,7 +77,7 @@ const run = (enemies: ReturnType<typeof enemy>[], rounds = 2): DPSSimulationInpu
 
 describe('finalHpPct across a multi-enemy DPS roster', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('reports the HP-weighted remainder, not just the first enemy', () => {

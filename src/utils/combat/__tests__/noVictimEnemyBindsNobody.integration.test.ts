@@ -33,7 +33,7 @@ import {
     __resetResolvedVictimTurnCounts,
 } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareEnemy, BARE_ENEMY_ID } from '../__testutils__/bareRosterFixture';
 import type { ShipSkills } from '../../../types/abilities';
 import { parsePattern, parseTarget } from '../../targetingParser';
@@ -71,7 +71,7 @@ const supportPlusDotKit = (): ShipSkills => ({
 });
 
 const run = () => {
-    setupKeyedTestRng(12345);
+    setupKeyedRng(12345);
     __resetNoVictimTurnCount();
     __resetResolvedVictimTurnCounts();
     const events: CombatEvent[] = [];
@@ -101,7 +101,7 @@ const run = () => {
 };
 
 describe('#346: an ally-targeted enemy cast binds no victim, so its enemy-facing half lands nowhere', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('the repair lands on the enemy side — the turn RAN, it was not skipped', () => {
         const heals = run().filter((e) => e.type === 'heal-performed');

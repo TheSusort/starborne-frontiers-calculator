@@ -7,18 +7,18 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { realEnemyInput } from '../__testutils__/dpsRealEnemyFixture';
 
 describe('affinity on a positional DPS run', () => {
     beforeEach(() => {
-        setupKeyedTestRng(999);
+        setupKeyedRng(999);
     });
 
     it('applies the advantage when raw affinities are threaded', () => {
         const neutral = simulateDPS(realEnemyInput()).summary.totalDamage;
 
-        setupKeyedTestRng(999);
+        setupKeyedRng(999);
         const advantaged = simulateDPS(
             realEnemyInput({
                 affinity: 'chemical',
@@ -38,7 +38,7 @@ describe('affinity on a positional DPS run', () => {
     });
 
     it('does not double-apply when the pre-resolved modifier is ALSO supplied', () => {
-        setupKeyedTestRng(999);
+        setupKeyedRng(999);
         const both = simulateDPS(
             realEnemyInput({
                 affinity: 'chemical',
@@ -47,7 +47,7 @@ describe('affinity on a positional DPS run', () => {
             })
         ).summary.totalDamage;
 
-        setupKeyedTestRng(999);
+        setupKeyedRng(999);
         const rawOnly = simulateDPS(
             realEnemyInput({ affinity: 'chemical', enemyAffinity: 'electric' })
         ).summary.totalDamage;

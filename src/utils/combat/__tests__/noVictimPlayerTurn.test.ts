@@ -19,7 +19,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../engine';
 import { createEventBus, CombatEvent } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareAlly, bareEnemy, BARE_ALLY_ID } from '../__testutils__/bareRosterFixture';
 import type { ShipSkills } from '../../../types/abilities';
 
@@ -120,12 +120,12 @@ const supportRun = (skills: ShipSkills = repairKit()) => {
     return { focusTurns, allyRepairs, controlsApplied };
 };
 
-// NOTE: do NOT call resetRateGateRng() after setupKeyedTestRng() — reset nulls the keyed
+// NOTE: do NOT call resetRateGateRng() after setupKeyedRng() — reset nulls the keyed
 // provider and restores Math.random, un-seeding the test (rateAccumulator.ts,
-// rateGateSeedingOrder.test.ts). setupKeyedTestRng alone seeds both streams.
+// rateGateSeedingOrder.test.ts). setupKeyedRng alone seeds both streams.
 describe('SP-4c-2b: an ally-targeted player cast still acts', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         // Module-level, so it needs a per-case reset (same contract as the sibling counters in
         // `dummyReachability.test.ts`).
         __resetNoVictimTurnCount();

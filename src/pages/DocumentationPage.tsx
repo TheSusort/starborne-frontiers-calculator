@@ -3893,6 +3893,79 @@ const DocumentationPage: React.FC = () => {
                                         Run the simulation once you have at least one ship on each
                                         team
                                     </li>
+                                    <li>
+                                        &quot;Copy to enemy&quot; / &quot;Copy to your team&quot;
+                                        duplicates a whole board — ships and any stat overrides —
+                                        onto the other side
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Editing a Ship&apos;s Stats
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Shift+Click a placed ship, or use the cog icon on its cell,
+                                        to open its stat editor and change any of its combat stats
+                                        for this simulation only
+                                    </li>
+                                    <li>
+                                        Values are absolute and prefilled from the ship&apos;s
+                                        geared stats; overrides are not saved and never touch the
+                                        ship&apos;s real gear
+                                    </li>
+                                    <li>
+                                        Overrides sit after gear, refits and engineering, so they
+                                        cannot represent a set bonus
+                                    </li>
+                                    <li>
+                                        A cell with an active override shows a &quot;MOD&quot; badge
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Seeded Runs</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Every run is seeded and reproducible — running the same seed
+                                        against the same teams always plays out identically; press
+                                        &quot;New seed&quot; to get a fresh one
+                                    </li>
+                                    <li>
+                                        Raise the run count to repeat the fight over that many
+                                        consecutive seeds and see an aggregate — win split and
+                                        average rounds and per-actor damage/healing — instead of a
+                                        single playback
+                                    </li>
+                                    <li>
+                                        A single seeded run reproduces one fight; the aggregate over
+                                        a seed set is what you use to compare two configurations.
+                                        Click any seed in the aggregate to open that one
+                                        fight&apos;s round-by-round playback
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    Comparing Against a Baseline
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        After a multi-seed run, pin it as a baseline; then change
+                                        stats and run again to compare
+                                    </li>
+                                    <li>
+                                        While a baseline is pinned, the seed and run count are fixed
+                                        so both configurations face the same seed set
+                                    </li>
+                                    <li>
+                                        The aggregate is the comparison and a single seed is a
+                                        reproduction
+                                    </li>
                                 </ul>
                             </div>
 

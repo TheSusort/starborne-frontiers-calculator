@@ -54,13 +54,13 @@ import { runPlayerTurn, type PlayerActorRuntime, type PlayerTurnArgs } from '../
 import { createActor } from '../state';
 import { createStatusEngine } from '../statusEngine';
 import { createEventBus, type CombatEvent } from '../events';
-import { setupKeyedTestRng, makeRateGate } from '../../calculators/rateAccumulator';
+import { setupKeyedRng, makeRateGate } from '../../calculators/rateAccumulator';
 import { bareEnemy, bareInput, BARE_ALLY_ID } from '../__testutils__/bareRosterFixture';
 import type { Ability, Condition, ShipSkills } from '../../../types/abilities';
 
-// Do NOT call resetRateGateRng() after setupKeyedTestRng() — reset un-seeds the test (see
+// Do NOT call resetRateGateRng() after setupKeyedRng() — reset un-seeds the test (see
 // noVictimAbsentSubject.integration.test.ts's identical note).
-beforeEach(() => setupKeyedTestRng(20260820));
+beforeEach(() => setupKeyedRng(20260820));
 
 const ALLY_TARGET = { raw: 'ally-team', side: 'ally' as const, selection: 'team' as const };
 const BASE_PATTERN = { raw: 'base', shape: 'base' as const, range: 0, modifiers: {} };

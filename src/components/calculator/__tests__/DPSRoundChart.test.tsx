@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import React from 'react';
 import { DPSRoundChart } from '../DPSRoundChart';
 import { simulateDPS, DPSSimulationInput } from '../../../utils/calculators/dpsSimulator';
-import { setupKeyedTestRng } from '../../../utils/calculators/rateAccumulator';
+import { setupKeyedRng } from '../../../utils/calculators/rateAccumulator';
 import {
     DEFAULT_ATTACKER_SLOT,
     DEFAULT_ENEMY_SLOT,
@@ -164,7 +164,7 @@ describe('DPSRoundChart surfaces walked-team damage from a real page-shaped run'
         // No `resetRateGateRng()` here: it clears BOTH streams, so calling it after the seed
         // un-seeds the test (see `rateGateSeedingOrder.test.ts`). `src/setupTests.ts` already
         // resets after every test.
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('draws the dashed "with team" overlay, which exists only when teamDamage is non-zero', () => {
@@ -253,7 +253,7 @@ describe('DPSRoundChart surfaces walked-team damage from a real page-shaped run'
     });
 
     it('shows every damage-type row from a real simulated run', () => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const result = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
 
         render(

@@ -11,7 +11,7 @@
  * it a witness rather than turn-order filler.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { collectTurns } from '../__testutils__/turnOrderTap';
 import {
     bareInput,
@@ -25,7 +25,7 @@ import {
 
 describe('roster-wipe termination', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('PLAYER WIPES ENEMY: the run ends on the killing turn, before the slower ally acts', () => {

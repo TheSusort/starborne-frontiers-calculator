@@ -1,20 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { PageLayout } from '../components/ui';
-import { Button } from '../components/ui/Button';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
 import { Ship } from '../types/ship';
 import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
-import { shipFinalStats, combatStatsFromShip } from '../utils/ship/combatStats';
-import {
-    simulateBattle,
-    BattleResult,
-    BattlePlacement,
-} from '../utils/calculators/battleSimulator';
-import PlacementBoard, { BoardState } from '../components/simulator/PlacementBoard';
+import { useSimulatorRuns } from '../hooks/useSimulatorRuns';
+import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
+import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
+import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
+import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
+import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
+import SeedSetResults from '../components/simulator/SeedSetResults';
+import RunComparison from '../components/simulator/RunComparison';
+import { Button } from '../components/ui/Button';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import { SquadLeaderSelection } from '../utils/combat/preFight';
 import {
@@ -37,8 +38,8 @@ const SimulatorPage: React.FC = () => {
     // Selected cell per board (the cell a picked ship fills). Independent per side.
     const [playerSelected, setPlayerSelected] = useState<Position | undefined>(undefined);
     const [enemySelected, setEnemySelected] = useState<Position | undefined>(undefined);
-    const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
-    const [runError, setRunError] = useState<string | null>(null);
+    const [seed, setSeed] = useState<number>(() => randomSeed());
+    const [runCount, setRunCount] = useState(1);
     // Per-side squad-leader selections (pre-fight faction auras), persisted to
     // localStorage (validated on read — stale/hand-edited values fall back to none).
     const [playerSquadLeader, setPlayerSquadLeader] = useState<SquadLeaderSelection | undefined>(
@@ -53,21 +54,29 @@ const SimulatorPage: React.FC = () => {
         writeStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS[side], selection);
     };
 
+    // The cell whose stat editor is open, or null when none is. One modal for the whole
+    // page, not one per cell — a placement's own overrides are looked up by side + position.
+    const [editing, setEditing] = useState<{ side: Side; position: Position } | null>(null);
+
     // FormationGrid consumes ShipPosition[] (it resolves the full ship by id via useShips).
     const playerFormation = useMemo<ShipPosition[]>(
         () =>
-            (Object.entries(playerBoard) as [Position, Ship][]).map(([position, ship]) => ({
-                shipId: ship.id,
-                position,
-            })),
+            (Object.entries(playerBoard) as [Position, Placement][]).map(
+                ([position, placement]) => ({
+                    shipId: placement.ship.id,
+                    position,
+                })
+            ),
         [playerBoard]
     );
     const enemyFormation = useMemo<ShipPosition[]>(
         () =>
-            (Object.entries(enemyBoard) as [Position, Ship][]).map(([position, ship]) => ({
-                shipId: ship.id,
-                position,
-            })),
+            (Object.entries(enemyBoard) as [Position, Placement][]).map(
+                ([position, placement]) => ({
+                    shipId: placement.ship.id,
+                    position,
+                })
+            ),
         [enemyBoard]
     );
 
@@ -94,6 +103,26 @@ const SimulatorPage: React.FC = () => {
         },
     };
 
+    const editingPlacement = editing
+        ? boardSetters[editing.side].board[editing.position]
+        : undefined;
+
+    const handleOverridesChange = (next: StatOverrides) => {
+        if (!editing) return;
+        const { setBoard } = boardSetters[editing.side];
+        setBoard((prev) => {
+            const placement = prev[editing.position];
+            if (!placement) return prev;
+            return {
+                ...prev,
+                [editing.position]: {
+                    ship: placement.ship,
+                    overrides: hasAnyOverride(next) ? next : undefined,
+                },
+            };
+        });
+    };
+
     const handleSelectPosition = (side: Side, position: Position) => {
         boardSetters[side].setSelected(position);
     };
@@ -111,7 +140,7 @@ const SimulatorPage: React.FC = () => {
     const handlePickShip = (side: Side, ship: Ship) => {
         const { selected, setBoard, setSelected } = boardSetters[side];
         if (!selected) return;
-        setBoard((prev) => ({ ...prev, [selected]: ship }));
+        setBoard((prev) => ({ ...prev, [selected]: { ship } }));
         setSelected(undefined);
     };
 
@@ -123,40 +152,50 @@ const SimulatorPage: React.FC = () => {
         setSelected(undefined);
     };
 
-    // Build the engine input for one side: each placed ship → BattlePlacement with
-    // fully gear/refit/engineering-resolved stats as statOverrides (else combat floors to
-    // un-geared base stats — see the WARNING in battleSimulator.ts).
-    const buildTeam = (board: BoardState): BattlePlacement[] =>
-        (Object.entries(board) as [Position, Ship][]).map(([position, ship]) => ({
-            ship,
-            position,
-            statOverrides: combatStatsFromShip(shipFinalStats(ship, statsDeps)),
-        }));
+    // Copies ships AND their overrides — a near-mirror board is the common setup and rebuilding it
+    // by hand is the friction this removes. An un-overridden placement copies to `undefined`, the
+    // same "no overrides" representation the override-change handler below writes, so a board
+    // never carries the alternate `{}` spelling of the same state.
+    const handleCopyBoard = (from: Side) => {
+        const source = from === 'player' ? playerBoard : enemyBoard;
+        const copy: BoardState = {};
+        for (const [position, placement] of Object.entries(source) as [Position, Placement][]) {
+            copy[position] = {
+                ship: placement.ship,
+                overrides: hasAnyOverride(placement.overrides)
+                    ? { ...placement.overrides }
+                    : undefined,
+            };
+        }
+        (from === 'player' ? setEnemyBoard : setPlayerBoard)(copy);
+    };
 
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
-    const canRun = playerCount > 0 && enemyCount > 0;
 
-    const handleRun = () => {
-        // Guard: simulateBattle throws on an empty side.
-        if (!canRun) return;
-        setRunError(null);
-        try {
-            const result = simulateBattle(
-                {
-                    playerTeam: buildTeam(playerBoard),
-                    enemyTeam: buildTeam(enemyBoard),
-                    playerSquadLeader,
-                    enemySquadLeader,
-                },
-                getGearPiece
-            );
-            setBattleResult(result);
-        } catch (err) {
-            setBattleResult(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
-        }
-    };
+    const {
+        battleResult,
+        aggregate,
+        baseline,
+        runError,
+        effectiveSeed,
+        effectiveRunCount,
+        currentOverrides,
+        canRun,
+        handleRun,
+        handleOpenSeed,
+        handlePinBaseline,
+        handleUnpinBaseline,
+    } = useSimulatorRuns({
+        playerBoard,
+        enemyBoard,
+        statsDeps,
+        playerSquadLeader,
+        enemySquadLeader,
+        getGearPiece,
+        seed,
+        runCount,
+    });
 
     return (
         <>
@@ -182,6 +221,10 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('player', ship)}
                                 onCloseSelector={() => setPlayerSelected(undefined)}
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
+                                onCopyToOtherSide={() => handleCopyBoard('player')}
+                                copyLabel="Copy to enemy"
+                                onEditStats={(pos) => setEditing({ side: 'player', position: pos })}
+                                hasOverrides={(pos) => hasAnyOverride(playerBoard[pos]?.overrides)}
                             />
                             <SquadLeaderPicker
                                 side="player"
@@ -200,7 +243,11 @@ const SimulatorPage: React.FC = () => {
                                 onPickShip={(ship) => handlePickShip('enemy', ship)}
                                 onCloseSelector={() => setEnemySelected(undefined)}
                                 onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
+                                onCopyToOtherSide={() => handleCopyBoard('enemy')}
+                                copyLabel="Copy to your team"
                                 mirrored
+                                onEditStats={(pos) => setEditing({ side: 'enemy', position: pos })}
+                                hasOverrides={(pos) => hasAnyOverride(enemyBoard[pos]?.overrides)}
                             />
                             <SquadLeaderPicker
                                 side="enemy"
@@ -212,9 +259,17 @@ const SimulatorPage: React.FC = () => {
                     </div>
 
                     <div className="flex items-center gap-4">
-                        <Button variant="primary" onClick={handleRun} disabled={!canRun}>
-                            Run Simulation
-                        </Button>
+                        <SeedRunControls
+                            seed={effectiveSeed}
+                            runCount={effectiveRunCount}
+                            onSeedChange={setSeed}
+                            onRunCountChange={setRunCount}
+                            onRun={handleRun}
+                            canRun={canRun}
+                            locked={baseline !== null}
+                            lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
+                            onUnpin={handleUnpinBaseline}
+                        />
                         {!canRun && (
                             <span className="text-sm text-theme-text-secondary">
                                 Place at least one ship on each team to run.
@@ -249,8 +304,39 @@ const SimulatorPage: React.FC = () => {
                         </div>
                     )}
 
+                    {aggregate && (
+                        <div className="space-y-2">
+                            <SeedSetResults aggregate={aggregate} onOpenSeed={handleOpenSeed} />
+                            {!baseline && (
+                                <Button variant="secondary" onClick={handlePinBaseline}>
+                                    Pin as baseline
+                                </Button>
+                            )}
+                        </div>
+                    )}
+
+                    {baseline && aggregate && currentOverrides && (
+                        <RunComparison
+                            baseline={baseline}
+                            current={aggregate}
+                            currentOverrides={currentOverrides}
+                        />
+                    )}
+
                     {battleResult && <BattlePlayback result={battleResult} />}
                 </div>
+
+                {editing && editingPlacement && (
+                    <StatOverrideModal
+                        isOpen
+                        onClose={() => setEditing(null)}
+                        shipName={editingPlacement.ship.name}
+                        position={editing.position}
+                        base={combatStatsFromShip(shipFinalStats(editingPlacement.ship, statsDeps))}
+                        overrides={editingPlacement.overrides}
+                        onChange={handleOverridesChange}
+                    />
+                )}
             </PageLayout>
         </>
     );

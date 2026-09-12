@@ -43,7 +43,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { damageKit } from '../__testutils__/bareRosterFixture';
 import type { ShipSkills } from '../../../types/abilities';
 
@@ -259,7 +259,7 @@ describe('SP-4c-2b: a reactive infliction rolls against ITS OWN victim', () => {
         // Seeded so the file is deterministic end to end. The assertions below do NOT depend on the
         // seed — both arms are at a saturated chance (1 and 0) precisely so that a future reseed
         // cannot flip them. Seeding only pins the two enemies' damage/crit streams.
-        setupKeyedTestRng(4242);
+        setupKeyedRng(4242);
     });
 
     it('lands every time on the ZERO-security attacker and never on the high-security one', () => {

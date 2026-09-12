@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { checkInvariants } from '../invariants';
-import { runSeededBattle } from '../seededBattle';
+import { runSeededBattle } from '../../../simulator/seededRuns';
 import { canonicalPlacement } from '../fixtures';
 import { buildTraceShip } from '../../../../../scripts/lib/traceShipFactory';
 import type { BattleSimulationInput } from '../../../calculators/battleSimulator';

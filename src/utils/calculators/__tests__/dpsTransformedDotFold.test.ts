@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { realEnemyInput, REAL_ENEMY_ID } from '../__testutils__/dpsRealEnemyFixture';
 import type { Ability } from '../../../types/abilities';
 
@@ -45,7 +45,7 @@ const transformingEnemy = () => [
 
 describe('a transforming enemy does not swallow the focus’s Direct row', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('reports the transformed ticks as Direct damage', () => {

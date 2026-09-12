@@ -25,12 +25,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, SENTINEL_ENEMY_ACTOR_ID } from '../engine';
 import type { SelectedGameBuff } from '../../../types/calculator';
 import { createEventBus } from '../events';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareAlly, bareInput } from '../__testutils__/bareRosterFixture';
 
 describe('the side-wide scheduled-debuff decrement, after the dummy turn was retired', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('MOVES the side-wide scheduled enemy-debuff decrement to the round tail, still exactly once per round', () => {

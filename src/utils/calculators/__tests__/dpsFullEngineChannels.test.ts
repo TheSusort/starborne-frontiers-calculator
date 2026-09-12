@@ -23,7 +23,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { baseInput, damageKit } from '../__testutils__/dpsRealEnemyFixture';
 import { createEventBus } from '../../combat/events';
 import type { Ability, ShipSkills } from '../../../types/abilities';
@@ -78,7 +78,7 @@ const standingLeechKit = (): ShipSkills => ({
 });
 
 describe('#415 standing leech', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('shields the focus for a share of the damage it deals', () => {
         const { rounds } = simulateDPS(
@@ -115,7 +115,7 @@ const takenLeechKit = (): ShipSkills => ({
 });
 
 describe('#415 damage-taken leech', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('shields the focus for a share of the damage it takes', () => {
         const { rounds } = simulateDPS(
@@ -190,7 +190,7 @@ const lowHpReactiveKit = (): ShipSkills => ({
 });
 
 describe('#415 drain-time self-HP gates read real HP', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     /** Every `buff-applied` for the gated buff, off the write-only bus tap. */
     const runAndCollectGrants = (focusHp: number, enemyAttack: number): string[] => {
@@ -256,7 +256,7 @@ const hotKit = (): ShipSkills => ({
 });
 
 describe('#415 repair-over-time ticks in DPS mode', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('restores HP to a focus that has been hurt', () => {
         const ticks: { holderId: string; amount: number }[] = [];
@@ -343,7 +343,7 @@ const lowestHpAllyHealKit = (): ShipSkills => ({
 });
 
 describe('#415 lowest-hp-ally resolves to a real recipient in DPS mode', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('routes the repair to the ally, not to nobody', () => {
         const heals: { casterId: string; targets: string[] }[] = [];
@@ -410,7 +410,7 @@ const enemyBombKit = (): ShipSkills => ({
 });
 
 describe('#415 a focus killed by its own turn-start burst does not act', () => {
-    beforeEach(() => setupKeyedTestRng(12345));
+    beforeEach(() => setupKeyedRng(12345));
 
     it('books no direct damage in the round it dies', () => {
         const { rounds } = simulateDPS(

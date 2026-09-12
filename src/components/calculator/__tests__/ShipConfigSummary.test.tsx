@@ -15,7 +15,7 @@ import {
     type DPSSimulationResult,
     type RoundStatsSnapshot,
 } from '../../../utils/calculators/dpsSimulator';
-import { setupKeyedTestRng } from '../../../utils/calculators/rateAccumulator';
+import { setupKeyedRng } from '../../../utils/calculators/rateAccumulator';
 import { buildDefaultShipSkills } from '../../../utils/abilities/configToSimInputs';
 import {
     dotKit,
@@ -178,7 +178,7 @@ describe('ShipConfigSummary buffed stats', () => {
         // #324 introduced (a `> 0`-guarded row silently zeroed on the positional path), so this
         // one assertion drives a REAL run through the same real-enemy fixture the calculator and
         // chart suites use.
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         const result = simulateDPS(realEnemyInput({ shipSkills: dotKit() }));
         expect(result.summary.totalDirectDamage).toBeGreaterThan(0);
 

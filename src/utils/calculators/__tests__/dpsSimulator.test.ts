@@ -1,11 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { simulateDPS } from '../dpsSimulator';
-import {
-    setRateGateRng,
-    setKeyedRng,
-    resetRateGateRng,
-    setupKeyedTestRng,
-} from '../rateAccumulator';
+import { setRateGateRng, setKeyedRng, resetRateGateRng, setupKeyedRng } from '../rateAccumulator';
 import { flatInputToAbilities } from '../../abilities/flatInputToAbilities';
 import {
     SelectedGameBuff,
@@ -1269,7 +1264,7 @@ describe('simulateDPS', () => {
             // position `disadvantage` started from, instead of continuing on from wherever the
             // first call left off (same live-map gotcha SP-0 Task 3 hit and fixed in
             // `rngLocality.test.ts`).
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const disadvantage = simulateDPS({
                 ...baseWithDebuff,
                 enemyDebuffs: [applyDebuff],
@@ -1281,7 +1276,7 @@ describe('simulateDPS', () => {
                 affinity: 'chemical',
                 enemyAffinity: 'thermal',
             });
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const noDebuffs = simulateDPS({
                 ...baseInput,
                 enemyDefense: 10000,
@@ -1878,11 +1873,11 @@ describe('simulateDPS', () => {
             // NOTE: `setRateGateRng(mulberry32(seed))` alone is dead for keyed gates under
             // SP-0 (crit=60 draws from a `${actorId}:active-crit` stream key, and the keyed
             // test provider — installed globally in setupTests.ts — takes precedence over a
-            // bare `rng` override whenever a key is supplied). Use `setupKeyedTestRng` so both
+            // bare `rng` override whenever a key is supplied). Use `setupKeyedRng` so both
             // runs reseed the keyed per-key streams too, not just the unkeyed fallback.
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const fromFlat = simulateDPS(flat);
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const fromSkills = simulateDPS({ ...flat, shipSkills: flatInputToAbilities(flat) });
 
             expect(fromSkills.rounds).toEqual(fromFlat.rounds);
@@ -2676,11 +2671,11 @@ describe('simulateDPS', () => {
             // NOTE: `setRateGateRng(mulberry32(seed))` alone is dead for keyed gates under
             // SP-0 (crit + landing both draw from `${actorId}:${purpose}` stream keys, and the
             // keyed test provider — installed globally in setupTests.ts — takes precedence over
-            // a bare `rng` override whenever a key is supplied). Use `setupKeyedTestRng` so both
+            // a bare `rng` override whenever a key is supplied). Use `setupKeyedRng` so both
             // runs reseed the keyed per-key streams too, not just the unkeyed fallback.
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const a = simulateDPS(input).summary;
-            setupKeyedTestRng(RATE_GATE_TEST_SEED);
+            setupKeyedRng(RATE_GATE_TEST_SEED);
             const b = simulateDPS(input).summary;
             expect(a).toEqual(b);
         });

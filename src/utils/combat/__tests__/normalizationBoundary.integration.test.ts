@@ -5,12 +5,12 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput } from '../__testutils__/bareRosterFixture';
 
 describe('the normalization boundary is live in runCombat', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('routes a position-less, targeting-less roster per-victim instead of into the sink', () => {

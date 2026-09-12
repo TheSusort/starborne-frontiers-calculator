@@ -32,7 +32,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { runCombat, __getNoVictimTurnCount, __resetNoVictimTurnCount } from '../engine';
 import type { CombatEngineInput, TeamActorEngineInput } from '../engine';
-import { setupKeyedTestRng } from '../../calculators/rateAccumulator';
+import { setupKeyedRng } from '../../calculators/rateAccumulator';
 import { bareInput, bareEnemy, damageKit } from '../__testutils__/bareRosterFixture';
 import type { RoundData } from '../../calculators/dpsSimulator';
 
@@ -77,7 +77,7 @@ const legacyIn = (round: RoundData): number => round.directDamage;
 
 describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetNoVictimTurnCount();
     });
 
@@ -175,7 +175,7 @@ describe('SP-4b-1 §4B — damage is never credited to neither channel', () => {
         ];
 
         for (const shape of shapes) {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             __resetNoVictimTurnCount();
             const result = runCombat(shape.input());
 
@@ -347,7 +347,7 @@ const enemyLegacyIn = (round: RoundData, incomingDamage: number): number =>
 
 describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting invariant', () => {
     beforeEach(() => {
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
         __resetNoVictimTurnCount();
     });
 
@@ -433,7 +433,7 @@ describe('SP-4b-1 §4B — the MIRROR: enemy→player obeys the same accounting 
         ];
 
         for (const shape of shapes) {
-            setupKeyedTestRng(12345);
+            setupKeyedRng(12345);
             __resetNoVictimTurnCount();
             const result = runCombat(playerSideWithMaxHp(shape.maxHp));
 

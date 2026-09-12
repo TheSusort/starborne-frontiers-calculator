@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { simulateDPS, DPSSimulationInput } from '../dpsSimulator';
-import { setupKeyedTestRng } from '../rateAccumulator';
+import { setupKeyedRng } from '../rateAccumulator';
 import { DEFAULT_ATTACKER_SLOT, DEFAULT_ENEMY_SLOT } from '../dpsEnemyPlacement';
 import type { ShipSkills } from '../../../types/abilities';
 
@@ -64,7 +64,7 @@ describe('DPS calculator with a real positioned enemy', () => {
     beforeEach(() => {
         // `src/setupTests.ts` already seeds globally; re-seed explicitly so this file is
         // deterministic in isolation too. The rate gate keys on ownerId.
-        setupKeyedTestRng(12345);
+        setupKeyedRng(12345);
     });
 
     it('routes the focus attacker damage to the REAL enemy, not the dummy', () => {
