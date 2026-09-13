@@ -61,6 +61,15 @@ export interface UseSimulatorRunsResult {
     progress: { completed: number; total: number } | null;
     /** Aborts the run in flight. A cancelled run writes no result — see `handleRun`. */
     handleCancel: () => void;
+    /** The two fights behind one diverging seed: the pinned baseline's and the current run's,
+     *  replayed under the same seed. Mutually exclusive with `battleResult` — the page shows a
+     *  pair or a single fight, never both. */
+    divergence: { seed: number; baseline: BattleResult; current: BattleResult } | null;
+    /** Replays both configurations at `seed` and opens them as a pair. */
+    handleOpenDivergence: (seed: number) => void;
+    /** Closes an open pair. Distinct from unpinning — the baseline stays pinned, so the next
+     *  diverging seed opens without re-running anything. */
+    handleCloseDivergence: () => void;
 }
 
 /**
@@ -85,6 +94,11 @@ export function useSimulatorRuns({
     const [provenance, setProvenance] = useState<RunProvenance | null>(null);
     const [isRunning, setIsRunning] = useState(false);
     const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
+    const [divergence, setDivergence] = useState<{
+        seed: number;
+        baseline: BattleResult;
+        current: BattleResult;
+    } | null>(null);
     const abortRef = useRef<AbortController | null>(null);
     // Bumped at the start of every handleRun call — sync or async — and on unmount. An async
     // run only writes state while its generation is still current, so starting ANY new run
@@ -141,11 +155,13 @@ export function useSimulatorRuns({
             setProgress(null);
             try {
                 setAggregate(null);
+                setDivergence(null);
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
                 setProvenance({ input, overrides });
             } catch (err) {
                 setBattleResult(null);
                 setAggregate(null);
+                setDivergence(null);
                 setProvenance(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
@@ -170,10 +186,10 @@ export function useSimulatorRuns({
                 if (!isCurrent()) return;
                 setIsRunning(false);
                 setProgress(null);
-                // A cancelled run resolves null and produced no result. Leave `aggregate`,
-                // `battleResult` and `provenance` exactly as they were: whatever is displayed
-                // has to stay the recorded run that produced it.
+                // A cancelled run resolves null and writes nothing: whatever is displayed has to
+                // stay the recorded run that produced it.
                 if (result === null) return;
+                setDivergence(null);
                 setBattleResult(null);
                 setAggregate(result);
                 setProvenance({ input, overrides });
@@ -184,6 +200,7 @@ export function useSimulatorRuns({
                 setProgress(null);
                 setBattleResult(null);
                 setAggregate(null);
+                setDivergence(null);
                 setProvenance(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             });
@@ -205,8 +222,10 @@ export function useSimulatorRuns({
             }
             setRunError(null);
             try {
+                setDivergence(null);
                 setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
             } catch (err) {
+                setDivergence(null);
                 setBattleResult(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
@@ -224,7 +243,43 @@ export function useSimulatorRuns({
         setBaseline({ aggregate, overrides: provenance.overrides, input: provenance.input });
     };
 
-    const handleUnpinBaseline = () => setBaseline(null);
+    const handleUnpinBaseline = () => {
+        setBaseline(null);
+        // Without a baseline there is no baseline side to show, so an open pair would be half a
+        // comparison.
+        setDivergence(null);
+    };
+
+    // Replays one seed under BOTH configurations: the pinned baseline's frozen input and the
+    // input that produced the current aggregate. `getGearPiece` is threaded into both, because
+    // `simulateBattle` resolves gear-derived abilities during the fight rather than reading them
+    // off the input — so dropping it on one side would resolve the two fights under different
+    // rules.
+    const handleOpenDivergence = useCallback(
+        (seed: number) => {
+            if (!baseline) {
+                setRunError('Pin a baseline before opening a diverging seed.');
+                return;
+            }
+            if (!provenance) {
+                setRunError('No run to replay yet.');
+                return;
+            }
+            setRunError(null);
+            try {
+                const baselineResult = runSeededBattle(baseline.input, seed, getGearPiece);
+                const currentResult = runSeededBattle(provenance.input, seed, getGearPiece);
+                setBattleResult(null);
+                setDivergence({ seed, baseline: baselineResult, current: currentResult });
+            } catch (err) {
+                setDivergence(null);
+                setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            }
+        },
+        [baseline, provenance, getGearPiece]
+    );
+
+    const handleCloseDivergence = () => setDivergence(null);
 
     return {
         battleResult,
@@ -242,5 +297,8 @@ export function useSimulatorRuns({
         isRunning,
         progress,
         handleCancel,
+        divergence,
+        handleOpenDivergence,
+        handleCloseDivergence,
     };
 }
