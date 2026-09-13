@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { DataTable, type Column } from '../ui/tables/DataTable';
 import {
     diffOverrides,
@@ -7,6 +7,12 @@ import {
     type PinnedBaseline,
 } from '../../utils/simulator/compareRuns';
 import type { SeedSetAggregate } from '../../utils/simulator/seededRuns';
+import {
+    pairedDelta,
+    pairedSeries,
+    scalePairedDelta,
+    type PairedDelta,
+} from '../../utils/simulator/deltaStats';
 import { STATS } from '../../constants/stats';
 import type { StatName } from '../../types/stats';
 
@@ -35,12 +41,45 @@ function formatSigned(delta: number, decimals: number): string {
     return delta > 0 ? `+${rounded}` : rounded;
 }
 
+/** Every paired delta renders to one decimal place, spread included. A win count is a whole
+ *  number but its uncertainty is not, and "+5 ±0" would be a lie about a spread of 0.4. */
+const DELTA_DECIMALS = 1;
+
+/** Renders a paired delta, or refuses to. A delta the seed set cannot separate from noise gets
+ *  no sign and no colour — colour is a claim about direction, and an indistinguishable delta has
+ *  not earned one. A delta with no spread and no mean difference is a third case, not a variant of
+ *  the first: the two configurations produced an identical figure, so it renders as a plain
+ *  neutral zero rather than the noise wording. */
+const PairedDeltaText: React.FC<{ delta: PairedDelta; direction: Direction }> = ({
+    delta,
+    direction,
+}) => {
+    if (delta.se === 0 && delta.mean === 0) {
+        return (
+            <span className="text-theme-text-secondary">
+                {formatSigned(delta.mean, DELTA_DECIMALS)}
+            </span>
+        );
+    }
+    if (!delta.distinguishable) {
+        return (
+            <span className="text-theme-text-secondary">not distinguishable at {delta.n} runs</span>
+        );
+    }
+    return (
+        <span className={deltaColorClass(delta.mean, direction)}>
+            {formatSigned(delta.mean, DELTA_DECIMALS)} ±{delta.se.toFixed(DELTA_DECIMALS)}
+        </span>
+    );
+};
+
 interface ScalarRow {
     metric: string;
     baselineValue: number;
     currentValue: number;
     decimals: number;
     direction: Direction;
+    delta: PairedDelta | null;
 }
 
 /** One actor's baseline vs. current mean total for one metric, plus whether a higher value
@@ -49,6 +88,7 @@ interface ActorMetricCell {
     baselineValue: number;
     currentValue: number;
     direction: Direction;
+    delta: PairedDelta;
 }
 
 /** One row per actor: its name plus a cell per tracked metric, each holding both
@@ -72,18 +112,17 @@ const ACTOR_METRICS: Array<{
     { key: 'healingDone', label: 'Healing Done', higherGoodForOwnSide: true },
 ];
 
-/** Stacked baseline / current / delta cell used by both the actor and scalar tables. */
-const DeltaCell: React.FC<{
-    baselineValue: number;
-    currentValue: number;
-    direction: Direction;
-}> = ({ baselineValue, currentValue, direction }) => (
+/** Stacked baseline / current / delta cell used by the actor table. */
+const DeltaCell: React.FC<ActorMetricCell> = ({
+    baselineValue,
+    currentValue,
+    direction,
+    delta,
+}) => (
     <div className="flex flex-col items-end gap-0.5">
         <span className="text-xs text-theme-text-secondary">{baselineValue.toFixed(0)}</span>
         <span>{currentValue.toFixed(0)}</span>
-        <span className={deltaColorClass(currentValue - baselineValue, direction)}>
-            {formatSigned(currentValue - baselineValue, 0)}
-        </span>
+        <PairedDeltaText delta={delta} direction={direction} />
     </div>
 );
 
@@ -98,6 +137,65 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
     const sideFor = (actorId: string) =>
         current.roster.find((r) => r.actorId === actorId)?.side ?? 'player';
 
+    // Both aggregates ran the same seed set (effectiveRunParams guarantees it while a baseline
+    // is pinned), so every figure below is a PAIRED difference: seed i against seed i. This walks
+    // both `runs` arrays once per metric, so it is memoized against the two aggregates rather than
+    // recomputed on every render — this component re-renders on every progress tick of a run in
+    // flight.
+    const deltas = useMemo(() => {
+        const actorIds = Array.from(
+            new Set([
+                ...Object.keys(baseline.aggregate.perActorMean),
+                ...Object.keys(current.perActorMean),
+            ])
+        );
+
+        const winDelta = (side: 'player' | 'enemy' | 'draw'): PairedDelta => {
+            const series = pairedSeries(baseline.aggregate, current, (run) =>
+                run.winner === side ? 1 : 0
+            );
+            const delta = pairedDelta(series.baseline, series.current, 'binary');
+            // The per-seed value is a 0/1 indicator, so its mean is a win RATE. Scale to the
+            // wins-out-of-N the rest of the row is written in, using the paired series' own
+            // length so the scale factor always matches the figure the delta came from — see
+            // `scalePairedDelta` for why the verdict survives the rescale.
+            return scalePairedDelta(delta, delta.n);
+        };
+
+        const roundsDelta = (() => {
+            const series = pairedSeries(baseline.aggregate, current, (run) => run.lastRound);
+            return pairedDelta(series.baseline, series.current);
+        })();
+
+        const actorDelta = (
+            actorId: string,
+            key: 'damageDealt' | 'damageTaken' | 'healingDone'
+        ): PairedDelta => {
+            const series = pairedSeries(
+                baseline.aggregate,
+                current,
+                (run) => run.perActor[actorId]?.[key] ?? 0
+            );
+            return pairedDelta(series.baseline, series.current);
+        };
+
+        return {
+            actorIds,
+            playerWins: winDelta('player'),
+            enemyWins: winDelta('enemy'),
+            drawWins: winDelta('draw'),
+            rounds: roundsDelta,
+            actors: Object.fromEntries(
+                actorIds.map((actorId) => [
+                    actorId,
+                    Object.fromEntries(
+                        ACTOR_METRICS.map(({ key }) => [key, actorDelta(actorId, key)])
+                    ),
+                ])
+            ) as Record<string, Record<'damageDealt' | 'damageTaken' | 'healingDone', PairedDelta>>,
+        };
+    }, [baseline.aggregate, current]);
+
     const scalarRows: ScalarRow[] = [
         {
             metric: 'Player wins',
@@ -105,6 +203,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             currentValue: current.wins.player,
             decimals: 0,
             direction: 'higherGood',
+            delta: deltas.playerWins,
         },
         {
             metric: 'Enemy wins',
@@ -112,6 +211,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             currentValue: current.wins.enemy,
             decimals: 0,
             direction: 'lowerGood',
+            delta: deltas.enemyWins,
         },
         {
             metric: 'Draws',
@@ -119,6 +219,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             currentValue: current.wins.draw,
             decimals: 0,
             direction: 'neutral',
+            delta: deltas.drawWins,
         },
         {
             metric: 'Mean rounds',
@@ -126,6 +227,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             currentValue: current.meanRounds,
             decimals: 1,
             direction: 'neutral',
+            delta: deltas.rounds,
         },
         {
             metric: 'Median rounds',
@@ -133,6 +235,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             currentValue: current.medianRounds,
             decimals: 0,
             direction: 'neutral',
+            delta: null,
         },
     ];
 
@@ -154,24 +257,23 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             key: 'delta',
             label: 'Delta',
             align: 'right',
-            render: (row) => (
-                <span
-                    className={deltaColorClass(row.currentValue - row.baselineValue, row.direction)}
-                >
-                    {formatSigned(row.currentValue - row.baselineValue, row.decimals)}
-                </span>
-            ),
+            render: (row) =>
+                row.delta ? (
+                    <PairedDeltaText delta={row.delta} direction={row.direction} />
+                ) : (
+                    <span
+                        className={deltaColorClass(
+                            row.currentValue - row.baselineValue,
+                            row.direction
+                        )}
+                    >
+                        {formatSigned(row.currentValue - row.baselineValue, row.decimals)}
+                    </span>
+                ),
         },
     ];
 
-    const actorIds = Array.from(
-        new Set([
-            ...Object.keys(baseline.aggregate.perActorMean),
-            ...Object.keys(current.perActorMean),
-        ])
-    );
-
-    const actorRows: ActorRow[] = actorIds.map((actorId) => {
+    const actorRows: ActorRow[] = deltas.actorIds.map((actorId) => {
         const isPlayerActor = sideFor(actorId) === 'player';
         const baselineTotals = baseline.aggregate.perActorMean[actorId];
         const currentTotals = current.perActorMean[actorId];
@@ -182,6 +284,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
                     baselineValue: baselineTotals?.[key] ?? 0,
                     currentValue: currentTotals?.[key] ?? 0,
                     direction: isPlayerActor === higherGoodForOwnSide ? 'higherGood' : 'lowerGood',
+                    delta: deltas.actors[actorId][key],
                 },
             ])
         ) as Record<'damageDealt' | 'damageTaken' | 'healingDone', ActorMetricCell>;
@@ -211,6 +314,16 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
 
     const rosterChanged = rostersDiffer(baseline.aggregate.roster, current.roster);
 
+    // The median is the robust one. When it moves opposite the (paired, distinguishable) mean,
+    // the round-count distribution is skewed and the mean is the figure to distrust. Reads the
+    // same `deltas.rounds` the Mean rounds row renders, so the banner and that row can never
+    // disagree about the same figure.
+    const medianRoundsDelta = current.medianRounds - baseline.aggregate.medianRounds;
+    const roundsDisagree =
+        deltas.rounds.distinguishable &&
+        medianRoundsDelta !== 0 &&
+        Math.sign(deltas.rounds.mean) !== Math.sign(medianRoundsDelta);
+
     return (
         <div className="card space-y-4">
             <h2 className="text-lg font-semibold">Baseline Comparison</h2>
@@ -225,6 +338,13 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
                     moved to a different position). Per-actor figures below may compare different
                     ships rather than the same ship before and after — pin a new baseline before
                     trusting this comparison.
+                </div>
+            )}
+
+            {roundsDisagree && (
+                <div className="card border-amber-500/40 text-sm text-amber-400">
+                    Mean and median rounds moved in opposite directions: the round-count
+                    distribution is skewed, so the median is the more reliable figure.
                 </div>
             )}
 

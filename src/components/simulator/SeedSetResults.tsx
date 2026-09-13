@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../ui/Button';
+import { Pagination } from '../ui/Pagination';
 import { DataTable, type Column } from '../ui/tables/DataTable';
 import type { SeedSetAggregate, ActorTotals } from '../../utils/simulator/seededRuns';
 
@@ -13,9 +14,37 @@ interface ActorMeanRow {
     totals: ActorTotals;
 }
 
+/** Seed buttons per page. Caps how many `Button`s a single pass mounts, no matter how large the
+ *  aggregate. */
+const SEEDS_PER_PAGE = 50;
+
 /** Aggregate view for a multi-seed run. One seeded run reproduces a fight; this aggregate is what
- *  compares two configurations. Clicking a seed re-runs that single fight for playback. */
+ *  compares two configurations. Clicking a seed re-runs that single fight for playback.
+ *
+ *  Memoized: a run in flight ticks `onProgress` up to ~100 times (see `runSeedSetAsync`'s doc),
+ *  and this component owns the one unbounded list in the results tree, so it is the render this
+ *  memo exists to skip. It only pays off if `onOpenSeed` is referentially stable across those
+ *  ticks — `useSimulatorRuns` wraps it in `useCallback` for exactly that reason. */
 const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
+    const [currentPage, setCurrentPage] = useState(1);
+
+    // A new aggregate always opens on page 1, even when the previous page number is still in
+    // range for it (e.g. an 8th page that both a 600-seed and a 500-seed run can show) — a fresh
+    // run's results start from the top, not wherever the last run's view happened to be.
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [aggregate]);
+
+    const totalPages = Math.ceil(aggregate.runs.length / SEEDS_PER_PAGE);
+    // Clamped at render time, not just by the effect above: the effect's reset only takes
+    // effect on the render after this one, so an unclamped `currentPage` here would slice an
+    // empty window for that one frame whenever a shorter aggregate replaces a longer one.
+    const renderedPage = Math.min(currentPage, Math.max(1, totalPages));
+    const visibleRuns = aggregate.runs.slice(
+        (renderedPage - 1) * SEEDS_PER_PAGE,
+        renderedPage * SEEDS_PER_PAGE
+    );
+
     const nameFor = (actorId: string) =>
         aggregate.roster.find((r) => r.actorId === actorId)?.name ?? actorId;
 
@@ -76,7 +105,7 @@ const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
 
             {/* per-seed rows, each a Button labelled "Seed <n> — <winner> in <rounds> rounds" */}
             <div className="flex flex-wrap gap-2">
-                {aggregate.runs.map((run) => (
+                {visibleRuns.map((run) => (
                     <Button
                         key={run.seed}
                         variant="secondary"
@@ -87,8 +116,17 @@ const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
                     </Button>
                 ))}
             </div>
+
+            {/* The seed grid sits mid-card, not at the top of the page — scrolling to top on
+                every page change would yank the viewport away from what the click was about. */}
+            <Pagination
+                currentPage={renderedPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                scrollToTop={false}
+            />
         </div>
     );
 };
 
-export default SeedSetResults;
+export default React.memo(SeedSetResults);

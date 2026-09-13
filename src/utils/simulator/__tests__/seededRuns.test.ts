@@ -2,8 +2,9 @@ import { describe, it, expect, vi } from 'vitest';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
-import { median, runSeededBattle, runSeedSet, summarizeRun } from '../seededRuns';
+import { median, runSeededBattle, runSeedSet, runSeedSetAsync, summarizeRun } from '../seededRuns';
 import * as rateAccumulator from '../../calculators/rateAccumulator';
+import * as battleSimulator from '../../calculators/battleSimulator';
 
 const placement = (
     id: string,
@@ -205,6 +206,114 @@ describe('runSeedSet', () => {
 
         const replayedLast = summarizeRun(runSeededBattle(input(), 504), 504);
         expect(agg.runs[4]).toEqual(replayedLast);
+    });
+});
+
+describe('runSeedSetAsync', () => {
+    it('produces an aggregate identical to the synchronous runSeedSet for the same seed set', async () => {
+        // The whole point of the async path is that yielding to the event loop between seeds
+        // changes nothing. `input()` is non-degenerate (someone dies, and a different seed
+        // produces a different fight), so a between-seed RNG leak would show up here.
+        const sync = runSeedSet(input(), 500, 6);
+        const async = await runSeedSetAsync(input(), 500, 6);
+        expect(async).toEqual(sync);
+    });
+
+    it('reports progress once per completed seed, in order, when the run is small enough that the throttle never engages (count <= 100)', async () => {
+        const seen: Array<[number, number]> = [];
+        await runSeedSetAsync(input(), 500, 4, {
+            onProgress: (completed, total) => seen.push([completed, total]),
+        });
+        expect(seen).toEqual([
+            [1, 4],
+            [2, 4],
+            [3, 4],
+            [4, 4],
+        ]);
+    });
+
+    it('throttles progress to about 100 calls on a large run, always reporting the final seed', async () => {
+        // 250 is the largest count that keeps this fast with real battles. reportEvery is
+        // ceil(250 / 100) = 3, and 250 is NOT a multiple of 3 (the last multiple is 249) — so
+        // this exercises both the modulo cadence AND the "always report the final seed" rule as
+        // two separate calls, rather than one call the modulo would have produced anyway.
+        const seen: Array<[number, number]> = [];
+        await runSeedSetAsync(input(), 500, 250, {
+            onProgress: (completed, total) => seen.push([completed, total]),
+        });
+        expect(seen.length).toBe(84);
+        expect(seen.at(-1)).toEqual([250, 250]);
+    });
+
+    it('suppresses the final onProgress call when cancel lands during the last seed, so a discarded run never reports 100%', async () => {
+        // The ordinary cancel-on-the-last-seed race: the top-of-loop abort check passes for
+        // i = count - 1, the loop yields, the user cancels during that yield, the final battle
+        // still runs, and the post-loop abort check discards the result. FIFO timer ordering
+        // puts this abort inside the final seed's own yield.
+        const controller = new AbortController();
+        const seen: Array<[number, number]> = [];
+        const count = 5;
+        const result = await runSeedSetAsync(input(), 500, count, {
+            signal: controller.signal,
+            onProgress: (completed, total) => {
+                seen.push([completed, total]);
+                if (completed === count - 1) {
+                    setTimeout(() => controller.abort());
+                }
+            },
+        });
+        expect(result).toBeNull();
+        expect(seen.at(-1)).toEqual([count - 1, count]);
+    });
+
+    it('resolves null when aborted mid-run, never a partial aggregate', async () => {
+        const controller = new AbortController();
+        const seen: number[] = [];
+        const result = await runSeedSetAsync(input(), 500, 20, {
+            signal: controller.signal,
+            onProgress: (completed) => {
+                seen.push(completed);
+                if (completed === 3) controller.abort();
+            },
+        });
+        expect(result).toBeNull();
+        // Non-vacuity: it really did stop early rather than finishing and discarding.
+        expect(seen.length).toBeLessThan(20);
+    });
+
+    it('checks the signal again immediately after the yield, so a cancel arriving during the yield stops before one more battle runs', async () => {
+        // FIFO timer ordering: scheduling the abort from inside onProgress(1, ...) queues it
+        // BEFORE the loop's own next-seed yield timer, so the abort timer fires first and lands
+        // the cancel mid-yield rather than between seeds. Without the post-yield check this
+        // still passes the top-of-loop check, runs seed 501's battle anyway, and only stops on
+        // the iteration after — one battle later than Cancel should allow.
+        const controller = new AbortController();
+        const simulateSpy = vi.spyOn(battleSimulator, 'simulateBattle');
+        const result = await runSeedSetAsync(input(), 500, 5, {
+            signal: controller.signal,
+            onProgress: (completed) => {
+                if (completed === 1) setTimeout(() => controller.abort());
+            },
+        });
+        expect(result).toBeNull();
+        expect(simulateSpy.mock.calls.length).toBe(1);
+        simulateSpy.mockRestore();
+    });
+
+    it('resolves null immediately when the signal is already aborted', async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const onProgress = vi.fn();
+        const result = await runSeedSetAsync(input(), 500, 5, {
+            signal: controller.signal,
+            onProgress,
+        });
+        expect(result).toBeNull();
+        expect(onProgress).not.toHaveBeenCalled();
+    });
+
+    it('rejects on an invalid count, matching the synchronous validation', async () => {
+        await expect(runSeedSetAsync(input(), 500, 0)).rejects.toThrow(/count/i);
     });
 });
 

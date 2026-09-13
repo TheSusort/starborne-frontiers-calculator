@@ -36,13 +36,44 @@ const fakeAggregate = (baseSeed = 0, count = 0): SeedSetAggregate => ({
 });
 
 const mockRunSeededBattle = vi.fn((..._args: unknown[]) => fakeBattleResult);
-const mockRunSeedSet = vi.fn((...args: unknown[]) =>
-    fakeAggregate(args[1] as number, args[2] as number)
-);
 
+/** Parks the next async run until the returned `release` is called, so a test can observe the
+ *  in-flight state. Without it a run resolves on the next microtask and `isRunning` is never
+ *  observably true — a progress assertion made after the run lands passes even if the hook
+ *  never sets progress at all. */
+let pendingGate: Promise<void> | null = null;
+function holdNextRun(): () => void {
+    let release!: () => void;
+    pendingGate = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    return release;
+}
+
+const mockRunSeedSetAsync = vi.fn(async (...args: unknown[]) => {
+    const baseSeed = args[1] as number;
+    const count = args[2] as number;
+    const options = args[3] as {
+        signal?: AbortSignal;
+        onProgress?: (completed: number, total: number) => void;
+    };
+    options.onProgress?.(1, count);
+    if (pendingGate) {
+        const gate = pendingGate;
+        pendingGate = null;
+        await gate;
+    }
+    // Honours the signal the way the real function does — a cancelled run resolves null, never
+    // a partial aggregate — and otherwise echoes the seed/count exactly as `mockRunSeedSet`
+    // does, which the file's existing pin-then-inspect assertions depend on.
+    return options.signal?.aborted ? null : fakeAggregate(baseSeed, count);
+});
+
+// The hook only calls runSeededBattle and runSeedSetAsync — runSeedSet has no runtime consumer
+// in this module graph (compareRuns/deltaStats import only its types), so it is not stubbed here.
 vi.mock('../../utils/simulator/seededRuns', () => ({
     runSeededBattle: (...args: unknown[]) => mockRunSeededBattle(...args),
-    runSeedSet: (...args: unknown[]) => mockRunSeedSet(...args),
+    runSeedSetAsync: (...args: unknown[]) => mockRunSeedSetAsync(...args),
 }));
 
 const ship = (id: string): Ship => ({ id, name: id }) as unknown as Ship;
@@ -68,22 +99,28 @@ const baseArgs = (overrides: Partial<Parameters<typeof useSimulatorRuns>[0]> = {
     ...overrides,
 });
 
-describe('useSimulatorRuns', () => {
-    beforeEach(() => {
-        mockRunSeededBattle.mockClear();
-        mockRunSeedSet.mockClear();
-    });
+// Shared by every describe block below: each starts with an empty call history and no held
+// gate. mockClear() does not drop a queued mockRejectedValueOnce/mockImplementationOnce, so any
+// test that queues a one-shot mock value must consume it within that same test.
+beforeEach(() => {
+    mockRunSeededBattle.mockClear();
+    mockRunSeedSetAsync.mockClear();
+    pendingGate = null;
+});
 
-    it('editing a board after a run does not change the recorded provenance, and a reopened seed replays the frozen input', () => {
+describe('useSimulatorRuns', () => {
+    it('editing a board after a run does not change the recorded provenance, and a reopened seed replays the frozen input', async () => {
         const initialPlayerBoard = board('T1', 'nova', { attack: 100 });
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
             { initialProps: baseArgs({ playerBoard: initialPlayerBoard, runCount: 3 }) }
         );
 
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
 
-        const runInput = mockRunSeedSet.mock.calls[0][0];
+        const runInput = mockRunSeedSetAsync.mock.calls[0][0];
         const recordedOverrides = result.current.currentOverrides;
         expect(recordedOverrides).toEqual(
             snapshotOverrides(initialPlayerBoard, baseArgs().enemyBoard)
@@ -106,21 +143,25 @@ describe('useSimulatorRuns', () => {
         expect(replayedInput).toBe(runInput);
     });
 
-    it('running again after a board edit refreshes the recorded provenance to the edited snapshot', () => {
+    it('running again after a board edit refreshes the recorded provenance to the edited snapshot', async () => {
         const initialPlayerBoard = board('T1', 'nova', { attack: 100 });
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
             { initialProps: baseArgs({ playerBoard: initialPlayerBoard, runCount: 3 }) }
         );
 
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
         const firstRunOverrides = result.current.currentOverrides;
 
         // Edit the board, then run again (as opposed to the frozen-provenance test above, which
         // never re-runs after the edit).
         const editedPlayerBoard = board('T1', 'nova', { attack: 400 });
         rerender(baseArgs({ playerBoard: editedPlayerBoard, runCount: 3 }));
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
 
         expect(result.current.currentOverrides).toEqual(
             snapshotOverrides(editedPlayerBoard, baseArgs().enemyBoard)
@@ -128,13 +169,15 @@ describe('useSimulatorRuns', () => {
         expect(result.current.currentOverrides).not.toEqual(firstRunOverrides);
     });
 
-    it('a run while a baseline is pinned uses the baseline seed and count, ignoring the caller-supplied seed/runCount', () => {
+    it('a run while a baseline is pinned uses the baseline seed and count, ignoring the caller-supplied seed/runCount', async () => {
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
             { initialProps: baseArgs({ seed: 42, runCount: 5 }) }
         );
 
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
         act(() => result.current.handlePinBaseline());
         expect(result.current.baseline).not.toBeNull();
 
@@ -144,24 +187,30 @@ describe('useSimulatorRuns', () => {
         expect(result.current.effectiveSeed).toBe(42);
         expect(result.current.effectiveRunCount).toBe(5);
 
-        act(() => result.current.handleRun());
-        const lastCall = mockRunSeedSet.mock.calls[mockRunSeedSet.mock.calls.length - 1];
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const lastCall = mockRunSeedSetAsync.mock.calls[mockRunSeedSetAsync.mock.calls.length - 1];
         expect(lastCall[1]).toBe(42);
         expect(lastCall[2]).toBe(5);
     });
 
-    it('pinning then re-running preserves the baseline (a new aggregate does not replace it)', () => {
+    it('pinning then re-running preserves the baseline (a new aggregate does not replace it)', async () => {
         const { result } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
             { initialProps: baseArgs() }
         );
 
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
         act(() => result.current.handlePinBaseline());
         const pinnedBaseline = result.current.baseline;
         expect(pinnedBaseline).not.toBeNull();
 
-        act(() => result.current.handleRun());
+        await act(async () => {
+            result.current.handleRun();
+        });
         expect(result.current.baseline).toBe(pinnedBaseline);
         // The new run produced its own aggregate object, distinct from the pinned one.
         expect(result.current.aggregate).not.toBe(pinnedBaseline?.aggregate);
@@ -188,5 +237,185 @@ describe('useSimulatorRuns', () => {
         act(() => result.current.handlePinBaseline());
 
         expect(result.current.baseline).toBeNull();
+    });
+
+    it('keeps the same handleOpenSeed reference across a re-render that leaves provenance unchanged', async () => {
+        // Pins referential stability across a re-render, not just across identical args.
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs() }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const firstHandleOpenSeed = result.current.handleOpenSeed;
+
+        // New board object references, same underlying boards/getGearPiece/provenance.
+        rerender(baseArgs());
+
+        expect(result.current.handleOpenSeed).toBe(firstHandleOpenSeed);
+    });
+});
+
+describe('useSimulatorRuns progress and cancellation', () => {
+    it('exposes progress and a running flag while a multi-seed run is in flight', async () => {
+        const release = holdNextRun();
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+
+        // Parked inside runSeedSetAsync, after its first onProgress call. Asserting here rather
+        // than after the run lands is the whole point: a progress value only checked at the end
+        // is always null and proves nothing.
+        expect(result.current.isRunning).toBe(true);
+        expect(result.current.progress).toEqual({ completed: 1, total: 5 });
+
+        await act(async () => {
+            release();
+        });
+
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.progress).toBeNull();
+        expect(result.current.aggregate).not.toBeNull();
+    });
+
+    it('keeps a single run on the synchronous path', () => {
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 1 })));
+        act(() => {
+            result.current.handleRun();
+        });
+        expect(mockRunSeedSetAsync).not.toHaveBeenCalled();
+        expect(result.current.battleResult).not.toBeNull();
+    });
+
+    it('a synchronous single-seed run supersedes an in-flight multi-seed run', async () => {
+        const release = holdNextRun();
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ runCount: 5 }) }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.isRunning).toBe(true);
+
+        // Contract: a synchronous run must supersede an in-flight async one regardless of what
+        // the parked run does when it eventually lands, even though no user-reachable path
+        // triggers this today — inputsDisabled locks Runs and swaps Run for Cancel for the whole
+        // time a multi-seed run is in flight.
+        rerender(baseArgs({ runCount: 1 }));
+        act(() => {
+            result.current.handleRun();
+        });
+        const singleRunResult = result.current.battleResult;
+        expect(singleRunResult).not.toBeNull();
+
+        await act(async () => {
+            release();
+        });
+
+        expect(result.current.battleResult).toBe(singleRunResult);
+        expect(result.current.aggregate).toBeNull();
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.progress).toBeNull();
+    });
+
+    it('leaves the previous aggregate and its provenance untouched when a run is cancelled', async () => {
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const firstAggregate = result.current.aggregate;
+        const firstOverrides = result.current.currentOverrides;
+        expect(firstAggregate).not.toBeNull();
+
+        const release = holdNextRun();
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.isRunning).toBe(true);
+
+        await act(async () => {
+            result.current.handleCancel();
+            release();
+        });
+
+        expect(result.current.aggregate).toBe(firstAggregate);
+        expect(result.current.currentOverrides).toBe(firstOverrides);
+        expect(result.current.runError).toBeNull();
+        expect(result.current.progress).toBeNull();
+        expect(result.current.isRunning).toBe(false);
+    });
+
+    it('passes an abort signal that handleCancel aborts', async () => {
+        const release = holdNextRun();
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+        await act(async () => {
+            result.current.handleRun();
+        });
+        await act(async () => {
+            result.current.handleCancel();
+            release();
+        });
+        const options = mockRunSeedSetAsync.mock.calls[0][3] as { signal: AbortSignal };
+        expect(options.signal.aborted).toBe(true);
+    });
+
+    it('refuses to pin a baseline while a run is in flight', async () => {
+        // A run in flight replaces the displayed aggregate when it lands. Pinning the old one
+        // now would leave the baseline and the current run on DIFFERENT seed sets, which
+        // RunComparison's paired statistics reject outright.
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+        await act(async () => {
+            result.current.handleRun();
+        });
+
+        // Control: pinning between runs works, so the assertion below is about the in-flight
+        // state and not about pinning being broken generally.
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+        expect(result.current.baseline).not.toBeNull();
+        act(() => {
+            result.current.handleUnpinBaseline();
+        });
+
+        const release = holdNextRun();
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+        expect(result.current.baseline).toBeNull();
+
+        await act(async () => {
+            release();
+        });
+    });
+
+    it('surfaces an async run failure as a run error and clears the displayed result', async () => {
+        const { result } = renderHook(() => useSimulatorRuns(baseArgs({ runCount: 5 })));
+
+        // Land a successful run first, so there is a non-null aggregate for the failing run
+        // to clear — otherwise the null-aggregate assertion below would pass trivially.
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.aggregate).not.toBeNull();
+
+        mockRunSeedSetAsync.mockRejectedValueOnce(new Error('engine exploded'));
+        await act(async () => {
+            result.current.handleRun();
+        });
+
+        expect(result.current.runError).toBe('engine exploded');
+        expect(result.current.aggregate).toBeNull();
+        expect(result.current.isRunning).toBe(false);
     });
 });

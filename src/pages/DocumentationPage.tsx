@@ -3946,6 +3946,11 @@ const DocumentationPage: React.FC = () => {
                                         Click any seed in the aggregate to open that one
                                         fight&apos;s round-by-round playback
                                     </li>
+                                    <li>
+                                        Multi-seed runs show their progress as they go and can be
+                                        cancelled at any point; cancelling leaves the previously
+                                        displayed results untouched
+                                    </li>
                                 </ul>
                             </div>
 
@@ -3965,6 +3970,17 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         The aggregate is the comparison and a single seed is a
                                         reproduction
+                                    </li>
+                                    <li>
+                                        A delta that is too small to tell apart from seed-to-seed
+                                        luck is labelled &quot;not distinguishable&quot; instead of
+                                        a signed number
+                                    </li>
+                                    <li>
+                                        If mean and median rounds moved in opposite directions and
+                                        the mean move is itself distinguishable, a note flags the
+                                        round-count distribution as skewed and points you to the
+                                        median
                                     </li>
                                 </ul>
                             </div>

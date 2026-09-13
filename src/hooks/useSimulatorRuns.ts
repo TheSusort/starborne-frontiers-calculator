@@ -1,7 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GearPiece } from '../types/gear';
 import type { BattleResult, BattleSimulationInput } from '../utils/calculators/battleSimulator';
-import { runSeededBattle, runSeedSet, type SeedSetAggregate } from '../utils/simulator/seededRuns';
+import {
+    runSeededBattle,
+    runSeedSetAsync,
+    type SeedSetAggregate,
+} from '../utils/simulator/seededRuns';
 import { buildTeam } from '../utils/simulator/buildTeam';
 import type { CombatStatsDeps } from '../utils/ship/combatStats';
 import {
@@ -51,6 +55,12 @@ export interface UseSimulatorRunsResult {
     handleOpenSeed: (seed: number) => void;
     handlePinBaseline: () => void;
     handleUnpinBaseline: () => void;
+    /** True while a multi-seed run is in flight. A single run is synchronous and clears it. */
+    isRunning: boolean;
+    /** Completed/total seeds of the run in flight, or `null` when none is. */
+    progress: { completed: number; total: number } | null;
+    /** Aborts the run in flight. A cancelled run writes no result — see `handleRun`. */
+    handleCancel: () => void;
 }
 
 /**
@@ -73,6 +83,22 @@ export function useSimulatorRuns({
     const [runError, setRunError] = useState<string | null>(null);
     const [baseline, setBaseline] = useState<PinnedBaseline | null>(null);
     const [provenance, setProvenance] = useState<RunProvenance | null>(null);
+    const [isRunning, setIsRunning] = useState(false);
+    const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
+    const abortRef = useRef<AbortController | null>(null);
+    // Bumped at the start of every handleRun call — sync or async — and on unmount. An async
+    // run only writes state while its generation is still current, so starting ANY new run
+    // (including the synchronous single-run branch, which writes immediately and never needs
+    // to check isCurrent itself) or unmounting supersedes whichever async run is in flight.
+    const generationRef = useRef(0);
+
+    useEffect(
+        () => () => {
+            generationRef.current++;
+            abortRef.current?.abort();
+        },
+        []
+    );
 
     const playerCount = Object.keys(playerBoard).length;
     const enemyCount = Object.keys(enemyBoard).length;
@@ -100,41 +126,100 @@ export function useSimulatorRuns({
         // snapshot (or vice versa) from two separate reads of live state.
         const input = buildInput();
         const overrides = snapshotOverrides(playerBoard, enemyBoard);
-        try {
-            if (effectiveRunCount === 1) {
+
+        // Every run supersedes whatever is in flight, sync or async: abort the previous
+        // controller and bump the generation so a still-running async run's `.then`/`.catch`
+        // finds `isCurrent()` false and writes nothing.
+        abortRef.current?.abort();
+        const generation = ++generationRef.current;
+        const isCurrent = () => generation === generationRef.current;
+
+        if (effectiveRunCount === 1) {
+            // A single run is synchronous, so it leaves no running state behind for a later
+            // async `.then`/`.catch` to clear — clear it here instead.
+            setIsRunning(false);
+            setProgress(null);
+            try {
                 setAggregate(null);
                 setBattleResult(runSeededBattle(input, effectiveSeed, getGearPiece));
-            } else {
+                setProvenance({ input, overrides });
+            } catch (err) {
                 setBattleResult(null);
-                setAggregate(runSeedSet(input, effectiveSeed, effectiveRunCount, getGearPiece));
+                setAggregate(null);
+                setProvenance(null);
+                setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
-            setProvenance({ input, overrides });
-        } catch (err) {
-            setBattleResult(null);
-            setAggregate(null);
-            setProvenance(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            return;
         }
+
+        const controller = new AbortController();
+        abortRef.current = controller;
+
+        setIsRunning(true);
+        setProgress({ completed: 0, total: effectiveRunCount });
+
+        void runSeedSetAsync(input, effectiveSeed, effectiveRunCount, {
+            getGearPiece,
+            signal: controller.signal,
+            onProgress: (completed, total) => {
+                if (!isCurrent()) return;
+                setProgress({ completed, total });
+            },
+        })
+            .then((result) => {
+                if (!isCurrent()) return;
+                setIsRunning(false);
+                setProgress(null);
+                // A cancelled run resolves null and produced no result. Leave `aggregate`,
+                // `battleResult` and `provenance` exactly as they were: whatever is displayed
+                // has to stay the recorded run that produced it.
+                if (result === null) return;
+                setBattleResult(null);
+                setAggregate(result);
+                setProvenance({ input, overrides });
+            })
+            .catch((err) => {
+                if (!isCurrent()) return;
+                setIsRunning(false);
+                setProgress(null);
+                setBattleResult(null);
+                setAggregate(null);
+                setProvenance(null);
+                setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            });
     };
+
+    const handleCancel = () => abortRef.current?.abort();
 
     // Replays one seed from the input that produced the CURRENT aggregate, so the playback
     // always matches the row it was opened from regardless of any board edit made since that
     // run. Never rebuild from the live boards here.
-    const handleOpenSeed = (openSeed: number) => {
-        if (!provenance) {
-            setRunError('No run to replay yet.');
-            return;
-        }
-        setRunError(null);
-        try {
-            setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
-        } catch (err) {
-            setBattleResult(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
-        }
-    };
+    //
+    // Wrapped in useCallback so this stays referentially stable for `SeedSetResults`' memo —
+    // see that component's doc for why.
+    const handleOpenSeed = useCallback(
+        (openSeed: number) => {
+            if (!provenance) {
+                setRunError('No run to replay yet.');
+                return;
+            }
+            setRunError(null);
+            try {
+                setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
+            } catch (err) {
+                setBattleResult(null);
+                setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            }
+        },
+        [provenance, getGearPiece]
+    );
 
     const handlePinBaseline = () => {
+        // A run in flight replaces `aggregate` and `provenance` when it lands, so pinning the
+        // currently displayed aggregate would leave the baseline and the current run on
+        // different seed sets — and a paired comparison over two different seed sets is not a
+        // comparison. `RunComparison` throws rather than render one.
+        if (isRunning) return;
         if (!aggregate || !provenance) return;
         setBaseline({ aggregate, overrides: provenance.overrides });
     };
@@ -154,5 +239,8 @@ export function useSimulatorRuns({
         handleOpenSeed,
         handlePinBaseline,
         handleUnpinBaseline,
+        isRunning,
+        progress,
+        handleCancel,
     };
 }

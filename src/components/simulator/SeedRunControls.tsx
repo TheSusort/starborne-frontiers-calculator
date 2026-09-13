@@ -23,6 +23,11 @@ interface Props {
      *  true and this is supplied, so the component stays usable (e.g. in tests) without an
      *  unpin affordance. */
     onUnpin?: () => void;
+    /** True while a multi-seed run is in flight: the inputs lock and Run becomes Cancel. */
+    isRunning?: boolean;
+    /** Completed/total seeds of the run in flight. */
+    progress?: { completed: number; total: number } | null;
+    onCancel?: () => void;
 }
 
 // SimulatorPage's initial seed state needs this generator; it is not itself a component so
@@ -42,7 +47,11 @@ const SeedRunControls: React.FC<Props> = ({
     locked = false,
     lockedReason,
     onUnpin,
+    isRunning = false,
+    progress = null,
+    onCancel,
 }) => {
+    const inputsDisabled = locked || isRunning;
     return (
         <div className="flex flex-wrap items-end gap-4">
             <Input
@@ -50,7 +59,7 @@ const SeedRunControls: React.FC<Props> = ({
                 type="number"
                 value={seed}
                 onChange={(e) => onSeedChange(clampSeed(Number(e.target.value)))}
-                disabled={locked}
+                disabled={inputsDisabled}
                 className="max-w-[10rem]"
             />
             <Input
@@ -60,14 +69,14 @@ const SeedRunControls: React.FC<Props> = ({
                 max={MAX_RUN_COUNT}
                 value={runCount}
                 onChange={(e) => onRunCountChange(clampRunCount(Number(e.target.value)))}
-                disabled={locked}
+                disabled={inputsDisabled}
                 className="max-w-[6rem]"
             />
             <Button
                 variant="secondary"
                 size="sm"
                 onClick={() => onSeedChange(randomSeed())}
-                disabled={locked}
+                disabled={inputsDisabled}
             >
                 New seed
             </Button>
@@ -79,9 +88,21 @@ const SeedRunControls: React.FC<Props> = ({
                     Unpin baseline
                 </Button>
             )}
-            <Button variant="primary" onClick={onRun} disabled={!canRun}>
-                Run Simulation
-            </Button>
+            {/* Mounted unconditionally, empty until there is progress: a screen reader
+                inconsistently announces a live region and its first text when both land in the
+                same mutation. */}
+            <span aria-live="polite" className="text-sm text-theme-text-secondary">
+                {progress && `Run ${progress.completed} / ${progress.total}`}
+            </span>
+            {isRunning ? (
+                <Button variant="secondary" onClick={onCancel}>
+                    Cancel
+                </Button>
+            ) : (
+                <Button variant="primary" onClick={onRun} disabled={!canRun}>
+                    Run Simulation
+                </Button>
+            )}
         </div>
     );
 };
