@@ -88,11 +88,12 @@ const SeedRunControls: React.FC<Props> = ({
                     Unpin baseline
                 </Button>
             )}
-            {progress && (
-                <span aria-live="polite" className="text-sm text-theme-text-secondary">
-                    Run {progress.completed} / {progress.total}
-                </span>
-            )}
+            {/* Mounted unconditionally, empty until there is progress: a screen reader
+                inconsistently announces a live region and its first text when both land in the
+                same mutation. */}
+            <span aria-live="polite" className="text-sm text-theme-text-secondary">
+                {progress && `Run ${progress.completed} / ${progress.total}`}
+            </span>
             {isRunning ? (
                 <Button variant="secondary" onClick={onCancel}>
                     Cancel

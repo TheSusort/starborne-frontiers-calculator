@@ -14,8 +14,8 @@ interface ActorMeanRow {
     totals: ActorTotals;
 }
 
-/** Seed buttons per page. A 1,000-seed aggregate would otherwise mount one unvirtualized
- *  `Button` per seed in a single pass. */
+/** Seed buttons per page. Caps how many `Button`s a single pass mounts, no matter how large the
+ *  aggregate. */
 const SEEDS_PER_PAGE = 50;
 
 /** Aggregate view for a multi-seed run. One seeded run reproduces a fight; this aggregate is what
@@ -35,9 +35,13 @@ const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
     }, [aggregate]);
 
     const totalPages = Math.ceil(aggregate.runs.length / SEEDS_PER_PAGE);
+    // Clamped at render time, not just by the effect above: the effect's reset only takes
+    // effect on the render after this one, so an unclamped `currentPage` here would slice an
+    // empty window for that one frame whenever a shorter aggregate replaces a longer one.
+    const renderedPage = Math.min(currentPage, Math.max(1, totalPages));
     const visibleRuns = aggregate.runs.slice(
-        (currentPage - 1) * SEEDS_PER_PAGE,
-        currentPage * SEEDS_PER_PAGE
+        (renderedPage - 1) * SEEDS_PER_PAGE,
+        renderedPage * SEEDS_PER_PAGE
     );
 
     const nameFor = (actorId: string) =>
@@ -115,7 +119,7 @@ const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
             {/* The seed grid sits mid-card, not at the top of the page — scrolling to top on
                 every page change would yank the viewport away from what the click was about. */}
             <Pagination
-                currentPage={currentPage}
+                currentPage={renderedPage}
                 totalPages={totalPages}
                 onPageChange={setCurrentPage}
                 scrollToTop={false}

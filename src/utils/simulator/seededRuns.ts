@@ -181,8 +181,9 @@ export interface SeedSetRunOptions {
     /** Aborting stops the loop between seeds and resolves `null`. */
     signal?: AbortSignal;
     /** Called at most ~100 times over the whole run, always including the final seed, with
-     *  `(completed, total)`. Below 100 seeds it fires once per completed seed; a run cancelled
-     *  before its last seed lands never receives the final call — see `runSeedSetAsync`'s doc. */
+     *  `(completed, total)`. At or below 100 seeds it fires once per completed seed; a run
+     *  cancelled before its last seed lands never receives the final call — see
+     *  `runSeedSetAsync`'s doc. */
     onProgress?: (completed: number, total: number) => void;
 }
 

@@ -213,6 +213,25 @@ describe('RunComparison noise verdict', () => {
         expect(screen.queryByText(/\+2\.0\s*±/)).not.toBeInTheDocument();
     });
 
+    it('calls a five-of-twenty same-direction win-count flip not distinguishable, the case the t rule alone gets wrong', () => {
+        // Same shape as the low-level sign-test fixture (deltaStats.test.ts): 5 flips out of 20,
+        // all one direction. The t rule alone reads t ≈ 2.52 (over the threshold, a false
+        // result); the exact sign test the win rows actually run reads p = 2 * 0.5^5 = 0.0625
+        // (under the cutoff) — not distinguishable. Pins that win rows take the sign test rather
+        // than the t rule.
+        const flipBaseline = { aggregate: aggregate(10, 6, 1000, 0), overrides: {} };
+        const flipCurrent = aggregate(15, 6, 1000, 0);
+        render(
+            <RunComparison
+                baseline={flipBaseline}
+                current={flipCurrent}
+                currentOverrides={currentOverrides}
+            />
+        );
+        const row = screen.getByText('Player wins').closest('tr')!;
+        expect(row).toHaveTextContent(/not distinguishable/i);
+    });
+
     it('renders an unchanged row as a plain signed zero, not noise wording', () => {
         // Draws is 0 in both configurations for every fixture in this file (winner is always
         // 'player' or 'enemy'): baseline and current agree on every paired seed, so this is the

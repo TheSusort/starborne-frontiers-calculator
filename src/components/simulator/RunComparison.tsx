@@ -140,7 +140,8 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
     // Both aggregates ran the same seed set (effectiveRunParams guarantees it while a baseline
     // is pinned), so every figure below is a PAIRED difference: seed i against seed i. This walks
     // both `runs` arrays once per metric, so it is memoized against the two aggregates rather than
-    // recomputed on every render — a multi-seed run re-renders this component once per seed.
+    // recomputed on every render — this component re-renders on every progress tick of a run in
+    // flight.
     const deltas = useMemo(() => {
         const actorIds = Array.from(
             new Set([
@@ -153,7 +154,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
             const series = pairedSeries(baseline.aggregate, current, (run) =>
                 run.winner === side ? 1 : 0
             );
-            const delta = pairedDelta(series.baseline, series.current);
+            const delta = pairedDelta(series.baseline, series.current, 'binary');
             // The per-seed value is a 0/1 indicator, so its mean is a win RATE. Scale to the
             // wins-out-of-N the rest of the row is written in, using the paired series' own
             // length so the scale factor always matches the figure the delta came from — see
@@ -315,8 +316,8 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
 
     // The median is the robust one. When it moves opposite the (paired, distinguishable) mean,
     // the round-count distribution is skewed and the mean is the figure to distrust. Reads the
-    // same `deltas.rounds` the Mean rounds row renders, rather than recomputing an unpaired
-    // aggregate difference, so the banner and that row can never disagree about the same figure.
+    // same `deltas.rounds` the Mean rounds row renders, so the banner and that row can never
+    // disagree about the same figure.
     const medianRoundsDelta = current.medianRounds - baseline.aggregate.medianRounds;
     const roundsDisagree =
         deltas.rounds.distinguishable &&

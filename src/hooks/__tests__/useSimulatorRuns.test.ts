@@ -240,8 +240,7 @@ describe('useSimulatorRuns', () => {
     });
 
     it('keeps the same handleOpenSeed reference across a re-render that leaves provenance unchanged', async () => {
-        // SeedSetResults is memoized against `onOpenSeed`, so a fresh closure on every render
-        // (e.g. from a progress tick re-rendering the page) would defeat that memo entirely.
+        // Pins referential stability across a re-render, not just across identical args.
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
             { initialProps: baseArgs() }

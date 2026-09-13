@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { pairedDelta, pairedSeries, scalePairedDelta } from '../deltaStats';
+import {
+    pairedDelta,
+    pairedSeries,
+    scalePairedDelta,
+    binomialTailProbability,
+} from '../deltaStats';
+import { MAX_RUN_COUNT } from '../seedRunInputs';
 import type { SeedRunSummary, SeedSetAggregate } from '../seededRuns';
 
 /** A per-seed win indicator series with `wins` ones followed by zeros — the shape the win-count
@@ -87,29 +93,29 @@ describe('pairedDelta', () => {
         expect(() => pairedDelta([1, 2], [1, 2, 3])).toThrow(/length/i);
     });
 
-    describe('the exact sign test on indicator (win/draw) series', () => {
+    describe('the exact sign test on a binary (win/draw) series', () => {
         it('calls five same-direction discordant pairs out of twenty a coin flip, not a result', () => {
             // Five 0->1 flips, the rest unchanged: the exact two-sided sign test on 5 non-zero,
             // all-same-direction differences is p = 2 * 0.5^5 = 0.0625, above the 0.05 cutoff —
             // the boundary the t rule gets wrong (it would call this distinguishable at t=2.52).
-            const result = pairedDelta(winSeries(10, 20), winSeries(15, 20));
+            const result = pairedDelta(winSeries(10, 20), winSeries(15, 20), 'binary');
             expect(result.distinguishable).toBe(false);
         });
 
         it('calls six same-direction discordant pairs out of twenty a result', () => {
             // One more flip than above: p = 2 * 0.5^6 = 0.03125, at or under the cutoff.
-            const result = pairedDelta(winSeries(10, 20), winSeries(16, 20));
+            const result = pairedDelta(winSeries(10, 20), winSeries(16, 20), 'binary');
             expect(result.distinguishable).toBe(true);
         });
 
-        it('keeps a continuous series on the t rule even where a same-direction majority count would call it differently', () => {
-            // 15 of 20 differences are +1 and 5 are -3: the -3 puts this series outside the
-            // {-1, 0, 1} indicator range, so it takes the t rule, not the sign test. The mean
-            // cancels to exactly zero (15*1 - 5*3 = 0), so the t rule correctly reports no
-            // distinguishable difference. Naively counting only each difference's sign would see
-            // a 15-vs-5 non-zero split, which the sign test would call distinguishable
+        it('reads a continuous series on the t rule even where a same-direction majority count would call it differently', () => {
+            // 15 of 20 differences are +1 and 5 are -3: not called with the binary option, so
+            // this stays on the t rule regardless of shape. The mean cancels to exactly zero
+            // (15*1 - 5*3 = 0), so the t rule correctly reports no distinguishable difference.
+            // Naively counting only each difference's sign would see a 15-vs-5 non-zero split,
+            // which the sign test would call distinguishable
             // (p = 2 * P(X >= 15 | Binomial(20, 0.5)) ≈ 0.041) — the two rules disagree here,
-            // which is exactly why the series shape must gate which one runs.
+            // which is exactly why the caller, not the values, must choose which one runs.
             const baselineValues = new Array<number>(20).fill(0);
             const currentValues = [
                 ...new Array<number>(15).fill(1),
@@ -119,6 +125,41 @@ describe('pairedDelta', () => {
             expect(result.mean).toBe(0);
             expect(result.distinguishable).toBe(false);
         });
+    });
+
+    describe('routing is chosen by the caller, not sniffed from the values', () => {
+        it('gives the continuous verdict for a same-direction {-1,0,1}-shaped series when no metric kind is passed', () => {
+            // Every seed moves by exactly one: the shape a win/draw row also produces, but this
+            // is called the way a rounds delta is (no third argument), so it stays on the t rule.
+            // Zero spread means the `se === 0` shortcut fires: distinguishable whenever mean !== 0.
+            const result = pairedDelta([0, 0, 0, 0], [1, 1, 1, 1]);
+            expect(result.distinguishable).toBe(true);
+        });
+
+        it('gives the sign-test verdict for the identical series when called with the binary option, and finds it not distinguishable at n=4', () => {
+            // Same series as above, now told it is a binary metric: an exact sign test on 4
+            // non-zero, all-same-direction differences is p = 2 * 0.5^4 = 0.125, above the 0.05
+            // cutoff — the sign test cannot reach p <= 0.05 below 6 non-zero differences.
+            const result = pairedDelta([0, 0, 0, 0], [1, 1, 1, 1], 'binary');
+            expect(result.distinguishable).toBe(false);
+        });
+    });
+});
+
+describe('binomialTailProbability', () => {
+    it('stays finite, non-zero and correctly ordered at the simulator run-count ceiling', () => {
+        // Binds the running-ratio recurrence to MAX_RUN_COUNT (`seedRunInputs.ts`): raising the
+        // ceiling past what this arithmetic supports (it underflows to exactly 0 past m=1074)
+        // should trip this test rather than silently making every large comparison
+        // "distinguishable".
+        const centre = binomialTailProbability(MAX_RUN_COUNT, Math.floor(MAX_RUN_COUNT / 2));
+        const extreme = binomialTailProbability(MAX_RUN_COUNT, MAX_RUN_COUNT);
+        expect(Number.isFinite(centre)).toBe(true);
+        expect(centre).toBeGreaterThan(0);
+        expect(Number.isFinite(extreme)).toBe(true);
+        expect(extreme).toBeGreaterThan(0);
+        // A more extreme split is less probable than a near-even one.
+        expect(extreme).toBeLessThan(centre);
     });
 });
 

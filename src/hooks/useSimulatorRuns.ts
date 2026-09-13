@@ -195,10 +195,8 @@ export function useSimulatorRuns({
     // always matches the row it was opened from regardless of any board edit made since that
     // run. Never rebuild from the live boards here.
     //
-    // Wrapped in useCallback so `SeedSetResults` — memoized because its seed-button list is
-    // otherwise the single most expensive thing this hook re-renders — sees a stable
-    // `onOpenSeed` across the progress-driven re-renders of a run in flight; a fresh closure
-    // every render would defeat that memo.
+    // Wrapped in useCallback so this stays referentially stable for `SeedSetResults`' memo —
+    // see that component's doc for why.
     const handleOpenSeed = useCallback(
         (openSeed: number) => {
             if (!provenance) {

@@ -9,19 +9,20 @@ import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
  * two configurations. Pairing removes the variance the two share — that fight's own luck — which
  * is what makes a difference of a couple of wins at N=20 readable as noise rather than a result.
  *
- * Two different tests decide `distinguishable`, chosen by what shape the per-seed differences
- * take:
+ * Two tests decide `distinguishable`, chosen by the caller's `metricKind` — by what the metric
+ * IS, never inferred from how a particular pair of runs happened to land. A *rounds* delta where
+ * every seed moves by at most one round still takes the continuous rule: it is a continuous
+ * metric that drew a narrow sample, not a win/draw indicator.
  *
- * - A **continuous** series (rounds, damage, healing — anything whose differences are not all in
- *   `{-1, 0, 1}`) takes the paired t rule: `|mean / se| >= T_THRESHOLD`.
- * - An **indicator** series (every difference in `{-1, 0, 1}`, the shape a win/draw row feeds in)
- *   takes the exact two-sided sign test on the non-zero differences instead. A win/draw indicator
- *   puts most of its mass at zero, which the normal approximation behind the t rule badly
- *   misfits: an all-same-direction flip on as few as 4 of 20 seeds clears the t threshold despite
- *   an exact binomial test rating it a coin flip, and raising the seed count does not fix this —
- *   the t-statistic for a fixed flip count is nearly seed-count invariant. `mean` and `se` are
- *   still the ordinary paired mean/standard-error of the differences either way; only the verdict
- *   changes.
+ * - `'continuous'` (the default — rounds, damage, healing, and every other non-binary metric)
+ *   takes the paired t rule: `|mean / se| >= T_THRESHOLD`.
+ * - `'binary'` (a win/draw row: the per-seed value is a 0/1 indicator) takes the exact two-sided
+ *   sign test on the non-zero differences instead. A win/draw indicator puts most of its mass at
+ *   zero, which the normal approximation behind the t rule badly misfits: an all-same-direction
+ *   flip on as few as 4 of 20 seeds clears the t threshold despite an exact binomial test rating
+ *   it a coin flip, and raising the seed count does not fix this — the t-statistic for a fixed
+ *   flip count is nearly seed-count invariant. `mean` and `se` are still the ordinary paired
+ *   mean/standard-error of the differences either way; only the verdict changes.
  */
 export interface PairedDelta {
     /** Mean of the per-seed differences `current - baseline`. */
@@ -37,20 +38,19 @@ export interface PairedDelta {
  *  they like the answer is not a safeguard. */
 export const T_THRESHOLD = 2;
 
-/** The indicator (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the
+/** The binary (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the
  *  same role `T_THRESHOLD` plays on the continuous path. Fixed for the same reason. */
 export const SIGN_TEST_ALPHA = 0.05;
 
-/** True when every per-seed difference is a win/draw indicator swing (`-1`, `0` or `1`) rather
- *  than a continuous quantity — the shape that must take the sign test, not the t rule, below. */
-function isIndicatorSeries(differences: number[]): boolean {
-    return differences.every((d) => d === -1 || d === 0 || d === 1);
-}
+/** Which statistical test `pairedDelta` runs, chosen by what the metric IS: `'binary'` for a
+ *  win/draw indicator row, `'continuous'` for everything else (rounds, damage, healing, ...). */
+export type PairedMetricKind = 'binary' | 'continuous';
 
 /** `P(X >= k)` for `X ~ Binomial(m, 0.5)`, via the running ratio between adjacent binomial
- *  probabilities rather than raw coefficients — `m` can run into the hundreds (the simulator's
- *  seed ceiling), where a coefficient itself would be astronomically large before the halving. */
-function binomialTailProbability(m: number, k: number): number {
+ *  probabilities rather than raw coefficients — `m` can run up to `MAX_RUN_COUNT`
+ *  (`src/utils/simulator/seedRunInputs.ts`), where a coefficient itself would be astronomically
+ *  large before the halving. The test below binds this arithmetic to that ceiling directly. */
+export function binomialTailProbability(m: number, k: number): number {
     let term = 0.5 ** m; // P(X = 0)
     let tail = 0;
     for (let i = 0; i <= m; i++) {
@@ -75,7 +75,11 @@ function signTestDistinguishable(differences: number[]): boolean {
     return p <= SIGN_TEST_ALPHA;
 }
 
-export function pairedDelta(baselineValues: number[], currentValues: number[]): PairedDelta {
+export function pairedDelta(
+    baselineValues: number[],
+    currentValues: number[],
+    metricKind: PairedMetricKind = 'continuous'
+): PairedDelta {
     if (baselineValues.length !== currentValues.length) {
         throw new Error(
             `pairedDelta: series length mismatch (${baselineValues.length} vs ${currentValues.length})`
@@ -94,7 +98,7 @@ export function pairedDelta(baselineValues: number[], currentValues: number[]): 
     const se = Math.sqrt(variance) / Math.sqrt(n);
 
     let distinguishable: boolean;
-    if (isIndicatorSeries(differences)) {
+    if (metricKind === 'binary') {
         distinguishable = signTestDistinguishable(differences);
     } else {
         // Zero spread means every seed moved by the identical amount: the strongest signal there

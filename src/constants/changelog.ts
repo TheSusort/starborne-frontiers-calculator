@@ -14,7 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: pin a run as a baseline and compare a tweaked run against it.',
     'Combat simulator: multi-seed runs show live progress and can be cancelled.',
     'Combat simulator: a multi-seed run can now cover up to 1,000 seeds.',
-    'Combat simulator: large seed results now page through instead of listing all at once.',
+    'Combat simulator: multi-seed results now show seeds a page at a time.',
     'Combat simulator: baseline comparisons now flag deltas too small to trust.',
     'Combat simulator: a comparison now warns when skewed round counts make the mean unreliable.',
     'Backup: downloaded backups now contain your gear inventory.',
