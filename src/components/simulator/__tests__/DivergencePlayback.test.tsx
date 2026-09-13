@@ -76,6 +76,35 @@ describe('DivergencePlayback', () => {
         expect(screen.getByLabelText(/Nova at T1, 50% HP/)).toBeInTheDocument();
     });
 
+    // The other fixtures all make `current` the longer fight, so "the longer fight" and
+    // "current's own length" read the same in their assertions. This one flips it: baseline is
+    // longer, current is shorter, pinning that the stepper spans the longer fight whichever side
+    // it's on.
+    const mirroredProps = {
+        seed: 507,
+        baseline: battle(7, 'enemy'),
+        current: battle(4, 'player'),
+        onClose: vi.fn(),
+    };
+
+    it('spans the longer fight even when that fight is the baseline', () => {
+        render(<DivergencePlayback {...mirroredProps} />);
+        expect(screen.getByText('Round 1 / 7')).toBeInTheDocument();
+    });
+
+    it('holds the shorter fight at its last round when current is the shorter one', () => {
+        render(<DivergencePlayback {...mirroredProps} />);
+        // Step to round 6: past the 4-round current run, inside the 7-round baseline.
+        for (let i = 0; i < 5; i++) {
+            fireEvent.click(screen.getByLabelText('Next round'));
+        }
+        expect(screen.getByText('Round 6 / 7')).toBeInTheDocument();
+        // Current holds at its own last round, 4 (index 3, 70%); baseline shows its round 6
+        // (index 5, 50%).
+        expect(screen.getByLabelText(/Nova at T1, 70% HP/)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Nova at T1, 50% HP/)).toBeInTheDocument();
+    });
+
     it('closes', () => {
         const onClose = vi.fn();
         render(<DivergencePlayback {...props} onClose={onClose} />);
