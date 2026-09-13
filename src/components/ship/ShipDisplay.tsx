@@ -46,6 +46,10 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
                   role: 'button',
                   tabIndex: 0,
                   onKeyDown: (event: React.KeyboardEvent) => {
+                      // The card carries its own controls (star, lock, actions menu), and a
+                      // key press on one of those bubbles here. Acting on it would make one
+                      // Enter do two things.
+                      if (event.target !== event.currentTarget) return;
                       if (event.key !== 'Enter' && event.key !== ' ') return;
                       // Space scrolls the page by default; a card acting as a button must not.
                       event.preventDefault();
