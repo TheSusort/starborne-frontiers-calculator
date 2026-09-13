@@ -366,6 +366,24 @@ describe('diverging seeds', () => {
         expect(screen.getAllByRole('button', { name: /open/i })).toHaveLength(1);
     });
 
+    it('names which side won under each configuration', () => {
+        const { base, variant } = flipOneSeed();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        // Asserted per cell, not per row: the seed lost under the baseline and won under the
+        // variant, so a row merely CONTAINING both labels would read the same with the two
+        // columns — or the two labels — swapped.
+        const cells = screen.getByText('502').closest('tr')!.querySelectorAll('td');
+        expect(cells[1]).toHaveTextContent('Enemy');
+        expect(cells[2]).toHaveTextContent('You');
+    });
+
     it('hands the seed back when a row is opened', () => {
         const { base, variant } = flipOneSeed();
         const onOpenDivergence = vi.fn();
