@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Let a player click a seed where a pinned baseline and the current run disagree on the winner, and see both fights replayed side by side in round lockstep.
+**Goal:** Let a player click a seed where a pinned baseline and the current run disagree on the winner, and see both fights replayed stacked, in one column, stepped together in round lockstep.
 
 **Architecture:** `PinnedBaseline` starts retaining the `BattleSimulationInput` that produced it, which makes the baseline replayable at any seed. A pure `divergingSeeds` walks the two aggregates' already-recorded per-seed summaries and returns the winner mismatches. `useSimulatorRuns` gains one `divergence` slot holding both replayed `BattleResult`s. `BattlePlayback` becomes optionally round-controlled so a new `DivergencePlayback` can drive two of them from one `RoundStepper`.
 
@@ -332,7 +332,8 @@ In `src/utils/simulator/compareRuns.ts`, extend the interface and its doc:
  *  fully-resolved engine input that produced it. The seed and run count live inside `aggregate` —
  *  see `effectiveRunParams`' doc for how a pinned baseline forces a variant run onto this same
  *  seed set. `input` is what makes the baseline replayable at a seed after the boards have moved
- *  on; it is captured at pin time and never re-derived from live state. */
+ *  on; it is the object the run itself recorded, carried over unchanged when the baseline is
+ *  pinned and never rebuilt from live board state. */
 export interface PinnedBaseline {
     aggregate: SeedSetAggregate;
     overrides: OverrideSnapshot;

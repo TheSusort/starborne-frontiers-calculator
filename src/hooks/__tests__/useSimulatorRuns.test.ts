@@ -611,6 +611,25 @@ describe('divergence playback', () => {
         expect(result.current.runError).toBe('replay exploded');
     });
 
+    it('a failed open clears the single fight that was on screen', async () => {
+        const { result } = await runPinAndOpen(507);
+        // Back to a single playback first: a pair and a single fight are mutually exclusive, so
+        // this is the only state in which a failing open has a stale battleResult to leave behind.
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.battleResult).not.toBeNull();
+
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        act(() => {
+            result.current.handleOpenDivergence(511);
+        });
+        expect(result.current.battleResult).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
     it('a failed single-seed replay leaves no pair', async () => {
         const { result } = await runPinAndOpen();
         mockRunSeededBattle.mockImplementationOnce(() => {

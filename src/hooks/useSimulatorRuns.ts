@@ -270,6 +270,9 @@ export function useSimulatorRuns({
                 setBattleResult(null);
                 setDivergence({ seed: openSeed, baseline: baselineResult, current: currentResult });
             } catch (err) {
+                // A failed open leaves nothing displayed: the pair never formed, and the single
+                // fight that was on screen is not what the error is about.
+                setBattleResult(null);
                 setDivergence(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
