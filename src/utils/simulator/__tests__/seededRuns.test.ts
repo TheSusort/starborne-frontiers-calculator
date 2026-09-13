@@ -4,6 +4,7 @@ import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
 import { median, runSeededBattle, runSeedSet, runSeedSetAsync, summarizeRun } from '../seededRuns';
 import * as rateAccumulator from '../../calculators/rateAccumulator';
+import * as battleSimulator from '../../calculators/battleSimulator';
 
 const placement = (
     id: string,
@@ -278,6 +279,25 @@ describe('runSeedSetAsync', () => {
         expect(result).toBeNull();
         // Non-vacuity: it really did stop early rather than finishing and discarding.
         expect(seen.length).toBeLessThan(20);
+    });
+
+    it('checks the signal again immediately after the yield, so a cancel arriving during the yield stops before one more battle runs', async () => {
+        // FIFO timer ordering: scheduling the abort from inside onProgress(1, ...) queues it
+        // BEFORE the loop's own next-seed yield timer, so the abort timer fires first and lands
+        // the cancel mid-yield rather than between seeds. Without the post-yield check this
+        // still passes the top-of-loop check, runs seed 501's battle anyway, and only stops on
+        // the iteration after — one battle later than Cancel should allow.
+        const controller = new AbortController();
+        const simulateSpy = vi.spyOn(battleSimulator, 'simulateBattle');
+        const result = await runSeedSetAsync(input(), 500, 5, {
+            signal: controller.signal,
+            onProgress: (completed) => {
+                if (completed === 1) setTimeout(() => controller.abort());
+            },
+        });
+        expect(result).toBeNull();
+        expect(simulateSpy.mock.calls.length).toBe(1);
+        simulateSpy.mockRestore();
     });
 
     it('resolves null immediately when the signal is already aborted', async () => {

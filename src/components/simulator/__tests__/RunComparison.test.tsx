@@ -276,16 +276,17 @@ describe('RunComparison noise verdict', () => {
     };
 
     it('notes a skewed round-count distribution when the mean and median disagree and the mean move is distinguishable', () => {
-        // Baseline: 20 seeds all at 6 rounds. Current: 15 seeds drop to 5, 5 seeds run long at
-        // 31 — current mean 11.5 (delta +5.5, t ≈ 2.13, distinguishable) against current median 5
-        // (delta -1). Mean and median disagree in sign, and the mean move is real, not noise.
+        // Baseline: 20 seeds all at 6 rounds. Current: 13 seeds drop to 5, 7 seeds run long at
+        // 101 — current mean 38.6 (delta +32.6, t ≈ 3.10 against df=19's 2.093 critical value,
+        // comfortably distinguishable) against current median 5 (delta -1). Mean and median
+        // disagree in sign, and the mean move is real, not noise.
         const skewedBaseline = {
             aggregate: roundsAggregate(new Array<number>(20).fill(6)),
             overrides: {},
         };
         const skewedCurrent = roundsAggregate([
-            ...new Array<number>(15).fill(5),
-            ...new Array<number>(5).fill(31),
+            ...new Array<number>(13).fill(5),
+            ...new Array<number>(7).fill(101),
         ]);
         render(
             <RunComparison

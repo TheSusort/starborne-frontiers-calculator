@@ -220,6 +220,10 @@ export async function runSeedSetAsync(
     for (let i = 0; i < count; i++) {
         if (signal?.aborted) return null;
         await new Promise((resolve) => setTimeout(resolve));
+        // A cancellation arriving during the yield above is only visible here, immediately after
+        // it: without this second check the loop would still run one more full battle before
+        // noticing, which on a heavy board is exactly the delay Cancel exists to remove.
+        if (signal?.aborted) return null;
         const seed = baseSeed + i;
         const result = runSeededBattle(input, seed, getGearPiece);
         if (i === 0) roster = result.roster;

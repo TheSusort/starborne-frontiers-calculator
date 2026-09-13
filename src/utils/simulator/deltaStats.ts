@@ -15,7 +15,11 @@ import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
  * metric that drew a narrow sample, not a win/draw indicator.
  *
  * - `'continuous'` (the default — rounds, damage, healing, and every other non-binary metric)
- *   takes the paired t rule: `|mean / se| >= T_THRESHOLD`.
+ *   takes the paired t rule: `|mean / se| >= studentTCritical95(n - 1)`. The critical value is
+ *   read off the two-sided 95% t table for the sample's own degrees of freedom, not a fixed
+ *   constant — at small `n` the normal approximation (`1.960`) understates it enormously (12.706
+ *   at `n = 2`), which would report a difference as distinguishable when the sample is far too
+ *   small to support that call.
  * - `'binary'` (a win/draw row: the per-seed value is a 0/1 indicator) takes the exact two-sided
  *   sign test on the non-zero differences instead. A win/draw indicator puts most of its mass at
  *   zero, which the normal approximation behind the t rule badly misfits: an all-same-direction
@@ -33,14 +37,71 @@ export interface PairedDelta {
     distinguishable: boolean;
 }
 
-/** |mean / se| at or above this counts as distinguishable on the continuous (t-rule) path —
- *  roughly a 95% two-sided call. Fixed, not a user setting: a threshold a reader can lower until
- *  they like the answer is not a safeguard. */
-export const T_THRESHOLD = 2;
+/** The two-sided 95% t critical value as degrees of freedom go to infinity — the normal
+ *  approximation. NOT the threshold the continuous path compares against: at finite `n` that is
+ *  `studentTCritical95(n - 1)`, which is always at least this large. Exported only because it is
+ *  the asymptote `studentTCritical95` converges to past `df = 100`. */
+export const T_THRESHOLD = 1.96;
 
-/** The binary (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the
- *  same role `T_THRESHOLD` plays on the continuous path. Fixed for the same reason. */
+/** The binary (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the same
+ *  role `studentTCritical95(df)` plays on the continuous path. Fixed, not a user setting: a
+ *  threshold a reader can lower until they like the answer is not a safeguard. */
 export const SIGN_TEST_ALPHA = 0.05;
+
+/** Two-sided 95% t critical values by degrees of freedom, `df` ascending. Hand-transcribed from a
+ *  standard t table rather than computed, because inverting the t distribution numerically is
+ *  much harder to audit than reading a table. */
+const T_CRITICAL_95_TABLE: ReadonlyArray<readonly [df: number, critical: number]> = [
+    [1, 12.706],
+    [2, 4.303],
+    [3, 3.182],
+    [4, 2.776],
+    [5, 2.571],
+    [6, 2.447],
+    [7, 2.365],
+    [8, 2.306],
+    [9, 2.262],
+    [10, 2.228],
+    [11, 2.201],
+    [12, 2.179],
+    [13, 2.16],
+    [14, 2.145],
+    [15, 2.131],
+    [16, 2.12],
+    [17, 2.11],
+    [18, 2.101],
+    [19, 2.093],
+    [20, 2.086],
+    [21, 2.08],
+    [22, 2.074],
+    [23, 2.069],
+    [24, 2.064],
+    [25, 2.06],
+    [26, 2.056],
+    [27, 2.052],
+    [28, 2.048],
+    [29, 2.045],
+    [30, 2.042],
+    [40, 2.021],
+    [60, 2.0],
+    [80, 1.99],
+    [100, 1.984],
+];
+
+/** The two-sided 95% critical value for `df` degrees of freedom, read off `T_CRITICAL_95_TABLE`.
+ *  A `df` that falls between two table entries takes the next LOWER entry's value — the larger,
+ *  more conservative critical value — rather than interpolating: `df = 35` reads the `df = 30`
+ *  row's `2.042`. Above `df = 100` this returns `T_THRESHOLD`, the table's own asymptote.
+ *  Undefined for `df < 1`; `pairedDelta` never calls this below `n = 2` (`df = 1`). */
+export function studentTCritical95(df: number): number {
+    if (df > 100) return T_THRESHOLD;
+    let critical = T_CRITICAL_95_TABLE[0][1];
+    for (const [tableDf, tableCritical] of T_CRITICAL_95_TABLE) {
+        if (tableDf > df) break;
+        critical = tableCritical;
+    }
+    return critical;
+}
 
 /** Which statistical test `pairedDelta` runs, chosen by what the metric IS: `'binary'` for a
  *  win/draw indicator row, `'continuous'` for everything else (rounds, damage, healing, ...). */
@@ -103,7 +164,7 @@ export function pairedDelta(
     } else {
         // Zero spread means every seed moved by the identical amount: the strongest signal there
         // is when that amount is non-zero, and no change at all when it is zero.
-        distinguishable = se === 0 ? mean !== 0 : Math.abs(mean / se) >= T_THRESHOLD;
+        distinguishable = se === 0 ? mean !== 0 : Math.abs(mean / se) >= studentTCritical95(n - 1);
     }
 
     return { mean, se, n, distinguishable };

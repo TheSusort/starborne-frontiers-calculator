@@ -4,6 +4,7 @@ import {
     pairedSeries,
     scalePairedDelta,
     binomialTailProbability,
+    studentTCritical95,
 } from '../deltaStats';
 import { MAX_RUN_COUNT } from '../seedRunInputs';
 import type { SeedRunSummary, SeedSetAggregate } from '../seededRuns';
@@ -143,6 +144,49 @@ describe('pairedDelta', () => {
             const result = pairedDelta([0, 0, 0, 0], [1, 1, 1, 1], 'binary');
             expect(result.distinguishable).toBe(false);
         });
+    });
+});
+
+describe('the continuous path scales its threshold to the sample size', () => {
+    it('calls differences of [1, 2] at n=2 not distinguishable, where the fixed-threshold-of-2 rule got it wrong', () => {
+        // t = |mean| / se = 3.0 here — over the old fixed threshold of 2, but the true two-sided
+        // 95% critical value at df=1 (n=2) is 12.706: a sample this small cannot support a call
+        // this confident, however large the difference looks.
+        const result = pairedDelta([0, 0], [1, 2]);
+        expect(result.n).toBe(2);
+        expect(Math.abs(result.mean / result.se)).toBeCloseTo(3, 6);
+        expect(result.distinguishable).toBe(false);
+    });
+
+    it('can still call a difference distinguishable at n=2, so the small-n path is not just a permanent refusal', () => {
+        // Same n as the case above, same paired-difference shape (two nearby positive numbers),
+        // but close enough together that t clears even df=1's 12.706 critical value.
+        const result = pairedDelta([0, 0], [10, 11]);
+        expect(result.n).toBe(2);
+        expect(Math.abs(result.mean / result.se)).toBeGreaterThan(12.706);
+        expect(result.distinguishable).toBe(true);
+    });
+});
+
+describe('studentTCritical95', () => {
+    it('reads an exact table entry', () => {
+        expect(studentTCritical95(19)).toBe(2.093);
+    });
+
+    it('reads the next LOWER df entry when df falls between table points, not an interpolation', () => {
+        // df=35 sits between the df=30 (2.042) and df=40 (2.021) rows; the rule takes the
+        // more conservative (larger) of the two, which is the lower df's value.
+        expect(studentTCritical95(35)).toBe(2.042);
+    });
+
+    it('reads the exact df=100 row, then falls back to the asymptotic value past it', () => {
+        expect(studentTCritical95(100)).toBe(1.984);
+        expect(studentTCritical95(101)).toBe(1.96);
+        expect(studentTCritical95(10000)).toBe(1.96);
+    });
+
+    it('reads the most extreme table entry, df=1', () => {
+        expect(studentTCritical95(1)).toBe(12.706);
     });
 });
 
