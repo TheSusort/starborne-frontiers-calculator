@@ -27,6 +27,21 @@ import {
 
 type Side = 'player' | 'enemy';
 
+type UnsimulatedEntry = { actorId: string; name: string; texts: string[] };
+
+/** One side's list of squad-leader effects the sim could not model this run (conditional /
+ *  per-round / modifier-channel effects). */
+const UnsimulatedEffectsList: React.FC<{ entries: UnsimulatedEntry[] }> = ({ entries }) => (
+    <ul className="text-sm space-y-1">
+        {entries.map((entry) => (
+            <li key={entry.actorId}>
+                <span className="text-theme-text-secondary">{entry.name}: </span>
+                <span className="text-amber-400">{entry.texts.join('; ')}</span>
+            </li>
+        ))}
+    </ul>
+);
+
 const SimulatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
@@ -291,27 +306,46 @@ const SimulatorPage: React.FC = () => {
                         <div className="card text-red-400">Simulation error: {runError}</div>
                     )}
 
-                    {/* Squad-leader effects the sim could not model this run (conditional /
-                        per-round / modifier-channel effects) — surfaced so the outcome is
-                        never mistaken for a full simulation of the selected leaders. */}
-                    {battleResult?.preFight && battleResult.preFight.unsimulated.length > 0 && (
-                        <div className="card border-amber-500/40 space-y-1">
-                            <p className="text-sm font-semibold text-amber-400">
-                                Squad leader effects not simulated this run
-                            </p>
-                            <ul className="text-sm space-y-1">
-                                {battleResult.preFight.unsimulated.map((entry) => (
-                                    <li key={entry.actorId}>
-                                        <span className="text-theme-text-secondary">
-                                            {entry.name}:{' '}
-                                        </span>
-                                        <span className="text-amber-400">
-                                            {entry.texts.join('; ')}
-                                        </span>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
+                    {/* Squad-leader effects the sim could not model, surfaced so the outcome is
+                        never mistaken for a full simulation of the selected leaders. A divergence
+                        pair can carry a DIFFERENT selection per side (the baseline may have been
+                        pinned under a different squad leader than the current run), so each side
+                        gets its own labelled list rather than one merged list. */}
+                    {divergence ? (
+                        <>
+                            {(divergence.baseline.preFight?.unsimulated.length ?? 0) > 0 && (
+                                <div className="card border-amber-500/40 space-y-1">
+                                    <p className="text-sm font-semibold text-amber-400">
+                                        Baseline: squad leader effects not simulated this run
+                                    </p>
+                                    <UnsimulatedEffectsList
+                                        entries={divergence.baseline.preFight!.unsimulated}
+                                    />
+                                </div>
+                            )}
+                            {(divergence.current.preFight?.unsimulated.length ?? 0) > 0 && (
+                                <div className="card border-amber-500/40 space-y-1">
+                                    <p className="text-sm font-semibold text-amber-400">
+                                        Current: squad leader effects not simulated this run
+                                    </p>
+                                    <UnsimulatedEffectsList
+                                        entries={divergence.current.preFight!.unsimulated}
+                                    />
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        battleResult?.preFight &&
+                        battleResult.preFight.unsimulated.length > 0 && (
+                            <div className="card border-amber-500/40 space-y-1">
+                                <p className="text-sm font-semibold text-amber-400">
+                                    Squad leader effects not simulated this run
+                                </p>
+                                <UnsimulatedEffectsList
+                                    entries={battleResult.preFight.unsimulated}
+                                />
+                            </div>
+                        )
                     )}
 
                     {aggregate && (

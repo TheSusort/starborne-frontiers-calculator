@@ -4,11 +4,12 @@ import { MemoryRouter } from 'react-router-dom';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
 import SimulatorPage from '../SimulatorPage';
 
-// Exercises the page-level wiring added in Task 7: `onOpenDivergence` reaching the hook's
+// Pins the page's wiring of the hook's divergence state: `onOpenDivergence` reaching
 // `handleOpenDivergence`, `onClose` reaching `handleCloseDivergence` (not `handleUnpinBaseline`),
-// and the divergence pair replacing the single playback rather than joining it. The hook itself
-// (state transitions) is covered by useSimulatorRuns.test.ts; this file only pins the page's use
-// of what the hook returns.
+// the divergence pair replacing the single playback rather than joining it, and the
+// squad-leader-unsimulated caveat surfacing per side while a pair is open. The hook's own state
+// transitions are covered by useSimulatorRuns.test.ts; this file only pins the page's use of
+// what the hook returns.
 
 const handleOpenDivergence = vi.fn();
 const handleCloseDivergence = vi.fn();
@@ -147,5 +148,76 @@ describe('SimulatorPage divergence wiring', () => {
         fireEvent.click(screen.getByText('close divergence'));
         expect(handleCloseDivergence).toHaveBeenCalledTimes(1);
         expect(handleUnpinBaseline).not.toHaveBeenCalled();
+    });
+
+    it("surfaces only the baseline side's unsimulated squad-leader effects, labelled, when only it carries them", () => {
+        const baselineWithCaveat = {
+            outcome: { winner: 'player', lastRound: 1 },
+            preFight: { unsimulated: [{ actorId: 'a1', name: 'Nova', texts: ['stacking buff'] }] },
+        } as unknown as BattleResult;
+        hookReturn = {
+            ...baseHookReturn,
+            divergence: { seed: 507, baseline: baselineWithCaveat, current: currentResult },
+        };
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+
+        expect(
+            screen.getByText('Baseline: squad leader effects not simulated this run')
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText('Current: squad leader effects not simulated this run')
+        ).not.toBeInTheDocument();
+        expect(screen.getByText(/stacking buff/)).toBeInTheDocument();
+    });
+
+    it("labels each side's unsimulated effects separately when both carry them, never merged", () => {
+        const baselineWithCaveat = {
+            outcome: { winner: 'player', lastRound: 1 },
+            preFight: {
+                unsimulated: [{ actorId: 'a1', name: 'Nova', texts: ['baseline-only effect'] }],
+            },
+        } as unknown as BattleResult;
+        const currentWithCaveat = {
+            outcome: { winner: 'enemy', lastRound: 1 },
+            preFight: {
+                unsimulated: [{ actorId: 'a2', name: 'Vanguard', texts: ['current-only effect'] }],
+            },
+        } as unknown as BattleResult;
+        hookReturn = {
+            ...baseHookReturn,
+            divergence: { seed: 507, baseline: baselineWithCaveat, current: currentWithCaveat },
+        };
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+
+        expect(
+            screen.getByText('Baseline: squad leader effects not simulated this run')
+        ).toBeInTheDocument();
+        expect(
+            screen.getByText('Current: squad leader effects not simulated this run')
+        ).toBeInTheDocument();
+        expect(screen.getByText(/baseline-only effect/)).toBeInTheDocument();
+        expect(screen.getByText(/current-only effect/)).toBeInTheDocument();
+    });
+
+    it('shows no unsimulated-effects caveat while a pair is open and neither side carries one', () => {
+        hookReturn = {
+            ...baseHookReturn,
+            divergence: { seed: 507, baseline: baselineResult, current: currentResult },
+        };
+        render(
+            <MemoryRouter>
+                <SimulatorPage />
+            </MemoryRouter>
+        );
+
+        expect(screen.queryByText(/squad leader effects not simulated/)).not.toBeInTheDocument();
     });
 });
