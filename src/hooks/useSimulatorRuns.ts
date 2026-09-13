@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { GearPiece } from '../types/gear';
 import type { BattleResult, BattleSimulationInput } from '../utils/calculators/battleSimulator';
 import {
@@ -194,19 +194,27 @@ export function useSimulatorRuns({
     // Replays one seed from the input that produced the CURRENT aggregate, so the playback
     // always matches the row it was opened from regardless of any board edit made since that
     // run. Never rebuild from the live boards here.
-    const handleOpenSeed = (openSeed: number) => {
-        if (!provenance) {
-            setRunError('No run to replay yet.');
-            return;
-        }
-        setRunError(null);
-        try {
-            setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
-        } catch (err) {
-            setBattleResult(null);
-            setRunError(err instanceof Error ? err.message : 'Simulation failed');
-        }
-    };
+    //
+    // Wrapped in useCallback so `SeedSetResults` — memoized because its seed-button list is
+    // otherwise the single most expensive thing this hook re-renders — sees a stable
+    // `onOpenSeed` across the progress-driven re-renders of a run in flight; a fresh closure
+    // every render would defeat that memo.
+    const handleOpenSeed = useCallback(
+        (openSeed: number) => {
+            if (!provenance) {
+                setRunError('No run to replay yet.');
+                return;
+            }
+            setRunError(null);
+            try {
+                setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
+            } catch (err) {
+                setBattleResult(null);
+                setRunError(err instanceof Error ? err.message : 'Simulation failed');
+            }
+        },
+        [provenance, getGearPiece]
+    );
 
     const handlePinBaseline = () => {
         // A run in flight replaces `aggregate` and `provenance` when it lands, so pinning the

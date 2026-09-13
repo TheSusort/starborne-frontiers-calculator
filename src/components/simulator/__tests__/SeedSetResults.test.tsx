@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SeedSetResults from '../SeedSetResults';
-import type { SeedSetAggregate } from '../../../utils/simulator/seededRuns';
+import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
 
 const roster = [
     { actorId: 'focus', side: 'player' as const, name: 'Xcellence', position: 'T1' as const },
@@ -50,5 +50,48 @@ describe('SeedSetResults', () => {
         render(<SeedSetResults aggregate={aggregate} onOpenSeed={onOpenSeed} />);
         await userEvent.click(screen.getByRole('button', { name: /seed 501/i }));
         expect(onOpenSeed).toHaveBeenCalledWith(501);
+    });
+
+    it('renders no pagination controls for a run at or under the page size', () => {
+        render(<SeedSetResults aggregate={aggregate} onOpenSeed={() => {}} />);
+        expect(screen.queryByLabelText(/next page/i)).not.toBeInTheDocument();
+    });
+});
+
+describe('SeedSetResults pagination', () => {
+    const manyRunsAggregate = (count: number, baseSeed = 1000): SeedSetAggregate => {
+        const runs: SeedRunSummary[] = Array.from({ length: count }, (_, i) => ({
+            seed: baseSeed + i,
+            winner: 'player',
+            lastRound: 1,
+            perActor: {},
+        }));
+        return { ...aggregate, baseSeed, count, runs };
+    };
+
+    it('shows only the first page of seed buttons for a run above the page size', () => {
+        render(<SeedSetResults aggregate={manyRunsAggregate(60)} onOpenSeed={() => {}} />);
+        expect(screen.getByRole('button', { name: /seed 1000 —/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /seed 1055 —/i })).not.toBeInTheDocument();
+    });
+
+    it('reveals the next page of seeds when the pagination control advances', async () => {
+        render(<SeedSetResults aggregate={manyRunsAggregate(60)} onOpenSeed={() => {}} />);
+        await userEvent.click(screen.getByRole('button', { name: '2' }));
+        expect(screen.getByRole('button', { name: /seed 1055 —/i })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /seed 1000 —/i })).not.toBeInTheDocument();
+    });
+
+    it('resets to page 1 when a shorter run replaces a longer one, rather than stranding the view', async () => {
+        const { rerender } = render(
+            <SeedSetResults aggregate={manyRunsAggregate(60)} onOpenSeed={() => {}} />
+        );
+        await userEvent.click(screen.getByRole('button', { name: '2' }));
+        expect(screen.getByRole('button', { name: /seed 1055 —/i })).toBeInTheDocument();
+
+        rerender(<SeedSetResults aggregate={aggregate} onOpenSeed={() => {}} />);
+
+        expect(screen.getByRole('button', { name: /seed 500 —/i })).toBeInTheDocument();
+        expect(screen.queryByLabelText(/next page/i)).not.toBeInTheDocument();
     });
 });

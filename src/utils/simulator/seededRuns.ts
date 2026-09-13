@@ -180,20 +180,24 @@ export interface SeedSetRunOptions {
     getGearPiece?: (id: string) => GearPiece | undefined;
     /** Aborting stops the loop between seeds and resolves `null`. */
     signal?: AbortSignal;
-    /** Called after each completed seed with `(completed, total)`. */
+    /** Called at most ~100 times over the whole run, always including the final seed, with
+     *  `(completed, total)`. Below 100 seeds it fires once per completed seed; a run cancelled
+     *  before its last seed lands never receives the final call — see `runSeedSetAsync`'s doc. */
     onProgress?: (completed: number, total: number) => void;
 }
 
 /**
- * `runSeedSet`, yielding to the event loop between seeds so a long run neither freezes the page
- * nor has to finish.
+ * `runSeedSet`, yielding to the event loop between every seed (including the first) so a long
+ * run neither freezes the page nor has to finish before the UI can paint.
  *
  * Yielding is safe because each seed's RNG setup and teardown are contained inside
  * `runSeededBattle`: there is no cross-seed state for another task to corrupt, and nothing else
  * on the page can observe a half-seeded RNG.
  *
  * Resolves `null` when the signal aborts — **never a partial aggregate**. A cancelled run
- * produced no result, and a caller must not be able to display one.
+ * produced no result, and a caller must not be able to display one. Because a `onProgress` call
+ * for the final seed sits behind an abort check, a run cancelled during its last yield reports no
+ * further progress rather than painting 100% just before the result is discarded.
  */
 export async function runSeedSetAsync(
     input: BattleSimulationInput,
@@ -204,16 +208,26 @@ export async function runSeedSetAsync(
     assertRunCount(count);
     const { getGearPiece, signal, onProgress } = options;
 
+    // Each `onProgress` call re-renders every consumer of the result it reports (see
+    // `SeedSetResults`), so a 1,000-seed run cannot fire one per seed without flooding the
+    // results tree. Reporting at most ~100 times keeps that cost constant regardless of `count`,
+    // while a count at or below 100 keeps reporting every seed unchanged.
+    const reportEvery = Math.max(1, Math.ceil(count / 100));
+
     const runs: SeedRunSummary[] = [];
     let roster: BattleResult['roster'] = [];
     for (let i = 0; i < count; i++) {
         if (signal?.aborted) return null;
-        if (i > 0) await new Promise((resolve) => setTimeout(resolve));
+        await new Promise((resolve) => setTimeout(resolve));
         const seed = baseSeed + i;
         const result = runSeededBattle(input, seed, getGearPiece);
         if (i === 0) roster = result.roster;
         runs.push(summarizeRun(result, seed));
-        onProgress?.(i + 1, count);
+
+        const completed = i + 1;
+        if (!signal?.aborted && (completed % reportEvery === 0 || completed === count)) {
+            onProgress?.(completed, count);
+        }
     }
     if (signal?.aborted) return null;
 

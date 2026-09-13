@@ -36,9 +36,6 @@ const fakeAggregate = (baseSeed = 0, count = 0): SeedSetAggregate => ({
 });
 
 const mockRunSeededBattle = vi.fn((..._args: unknown[]) => fakeBattleResult);
-const mockRunSeedSet = vi.fn((...args: unknown[]) =>
-    fakeAggregate(args[1] as number, args[2] as number)
-);
 
 /** Parks the next async run until the returned `release` is called, so a test can observe the
  *  in-flight state. Without it a run resolves on the next microtask and `isRunning` is never
@@ -72,9 +69,10 @@ const mockRunSeedSetAsync = vi.fn(async (...args: unknown[]) => {
     return options.signal?.aborted ? null : fakeAggregate(baseSeed, count);
 });
 
+// The hook only calls runSeededBattle and runSeedSetAsync — runSeedSet has no runtime consumer
+// in this module graph (compareRuns/deltaStats import only its types), so it is not stubbed here.
 vi.mock('../../utils/simulator/seededRuns', () => ({
     runSeededBattle: (...args: unknown[]) => mockRunSeededBattle(...args),
-    runSeedSet: (...args: unknown[]) => mockRunSeedSet(...args),
     runSeedSetAsync: (...args: unknown[]) => mockRunSeedSetAsync(...args),
 }));
 
@@ -102,11 +100,10 @@ const baseArgs = (overrides: Partial<Parameters<typeof useSimulatorRuns>[0]> = {
 });
 
 // Shared by every describe block below: each starts with an empty call history and no held
-// gate. mockClear() does not drop a queued mockRejectedValueOnce/mockImplementationOnce — the
-// one test below that queues one consumes it before any other test can observe it.
+// gate. mockClear() does not drop a queued mockRejectedValueOnce/mockImplementationOnce, so any
+// test that queues a one-shot mock value must consume it within that same test.
 beforeEach(() => {
     mockRunSeededBattle.mockClear();
-    mockRunSeedSet.mockClear();
     mockRunSeedSetAsync.mockClear();
     pendingGate = null;
 });
@@ -241,6 +238,25 @@ describe('useSimulatorRuns', () => {
 
         expect(result.current.baseline).toBeNull();
     });
+
+    it('keeps the same handleOpenSeed reference across a re-render that leaves provenance unchanged', async () => {
+        // SeedSetResults is memoized against `onOpenSeed`, so a fresh closure on every render
+        // (e.g. from a progress tick re-rendering the page) would defeat that memo entirely.
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs() }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const firstHandleOpenSeed = result.current.handleOpenSeed;
+
+        // New board object references, same underlying boards/getGearPiece/provenance.
+        rerender(baseArgs());
+
+        expect(result.current.handleOpenSeed).toBe(firstHandleOpenSeed);
+    });
 });
 
 describe('useSimulatorRuns progress and cancellation', () => {
@@ -288,9 +304,10 @@ describe('useSimulatorRuns progress and cancellation', () => {
         });
         expect(result.current.isRunning).toBe(true);
 
-        // The user drops Runs to 1 while the multi-seed run above is still parked, then
-        // presses Run again — the sync branch must win regardless of what the parked run
-        // does when it eventually lands.
+        // Contract: a synchronous run must supersede an in-flight async one regardless of what
+        // the parked run does when it eventually lands, even though no user-reachable path
+        // triggers this today — inputsDisabled locks Runs and swaps Run for Cancel for the whole
+        // time a multi-seed run is in flight.
         rerender(baseArgs({ runCount: 1 }));
         act(() => {
             result.current.handleRun();

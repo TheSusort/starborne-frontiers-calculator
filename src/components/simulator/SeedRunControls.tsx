@@ -89,7 +89,7 @@ const SeedRunControls: React.FC<Props> = ({
                 </Button>
             )}
             {progress && (
-                <span className="text-sm text-theme-text-secondary">
+                <span aria-live="polite" className="text-sm text-theme-text-secondary">
                     Run {progress.completed} / {progress.total}
                 </span>
             )}

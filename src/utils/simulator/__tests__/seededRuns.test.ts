@@ -218,7 +218,7 @@ describe('runSeedSetAsync', () => {
         expect(async).toEqual(sync);
     });
 
-    it('reports progress once per completed seed, in order', async () => {
+    it('reports progress once per completed seed, in order, when the run is small enough that the throttle never engages (count <= 100)', async () => {
         const seen: Array<[number, number]> = [];
         await runSeedSetAsync(input(), 500, 4, {
             onProgress: (completed, total) => seen.push([completed, total]),
@@ -229,6 +229,40 @@ describe('runSeedSetAsync', () => {
             [3, 4],
             [4, 4],
         ]);
+    });
+
+    it('throttles progress to about 100 calls on a large run, always reporting the final seed', async () => {
+        // 250 is the largest count that keeps this fast with real battles. reportEvery is
+        // ceil(250 / 100) = 3, and 250 is NOT a multiple of 3 (the last multiple is 249) — so
+        // this exercises both the modulo cadence AND the "always report the final seed" rule as
+        // two separate calls, rather than one call the modulo would have produced anyway.
+        const seen: Array<[number, number]> = [];
+        await runSeedSetAsync(input(), 500, 250, {
+            onProgress: (completed, total) => seen.push([completed, total]),
+        });
+        expect(seen.length).toBe(84);
+        expect(seen.at(-1)).toEqual([250, 250]);
+    });
+
+    it('suppresses the final onProgress call when cancel lands during the last seed, so a discarded run never reports 100%', async () => {
+        // The ordinary cancel-on-the-last-seed race: the top-of-loop abort check passes for
+        // i = count - 1, the loop yields, the user cancels during that yield, the final battle
+        // still runs, and the post-loop abort check discards the result. FIFO timer ordering
+        // puts this abort inside the final seed's own yield.
+        const controller = new AbortController();
+        const seen: Array<[number, number]> = [];
+        const count = 5;
+        const result = await runSeedSetAsync(input(), 500, count, {
+            signal: controller.signal,
+            onProgress: (completed, total) => {
+                seen.push([completed, total]);
+                if (completed === count - 1) {
+                    setTimeout(() => controller.abort());
+                }
+            },
+        });
+        expect(result).toBeNull();
+        expect(seen.at(-1)).toEqual([count - 1, count]);
     });
 
     it('resolves null when aborted mid-run, never a partial aggregate', async () => {
