@@ -28,8 +28,9 @@ const SEEDS_PER_PAGE = 50;
 const SeedSetResults: React.FC<Props> = ({ aggregate, onOpenSeed }) => {
     const [currentPage, setCurrentPage] = useState(1);
 
-    // A shorter run landing after a longer one would otherwise strand the view on a page past
-    // the new run's last one.
+    // A new aggregate always opens on page 1, even when the previous page number is still in
+    // range for it (e.g. an 8th page that both a 600-seed and a 500-seed run can show) — a fresh
+    // run's results start from the top, not wherever the last run's view happened to be.
     useEffect(() => {
         setCurrentPage(1);
     }, [aggregate]);

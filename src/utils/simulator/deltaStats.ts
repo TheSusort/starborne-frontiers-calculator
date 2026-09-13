@@ -49,7 +49,7 @@ export type PairedMetricKind = 'binary' | 'continuous';
 /** `P(X >= k)` for `X ~ Binomial(m, 0.5)`, via the running ratio between adjacent binomial
  *  probabilities rather than raw coefficients — `m` can run up to `MAX_RUN_COUNT`
  *  (`src/utils/simulator/seedRunInputs.ts`), where a coefficient itself would be astronomically
- *  large before the halving. The test below binds this arithmetic to that ceiling directly. */
+ *  large before the halving. `deltaStats.test.ts` binds this arithmetic to that ceiling. */
 export function binomialTailProbability(m: number, k: number): number {
     let term = 0.5 ** m; // P(X = 0)
     let tail = 0;
