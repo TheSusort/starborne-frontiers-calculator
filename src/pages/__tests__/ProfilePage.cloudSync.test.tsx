@@ -14,9 +14,9 @@ const USER_ID = '11111111-1111-4111-8111-111111111111';
 
 vi.mock('../../services/userDataService', () => ({
     deleteUserSupabaseData: vi.fn().mockResolvedValue(undefined),
-    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue(undefined),
+    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue([]),
     pruneSupabaseDataNotInLocal: vi.fn().mockResolvedValue(undefined),
-    PRUNABLE_SECTIONS: ['ships', 'inventory_items'],
+    PRUNABLE_SECTIONS: ['ships', 'inventory_items', 'autogear_teams'],
 }));
 
 vi.mock('../../utils/syncUtils', () => ({
@@ -91,6 +91,7 @@ const recordCallOrder = () => {
     });
     (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockImplementation(async () => {
         order.push('upload');
+        return [];
     });
     (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockImplementation(async () => {
         order.push('prune');
@@ -190,6 +191,50 @@ describe('ProfilePage cloud sync', () => {
 
             await waitFor(() => expect(deleteUserSupabaseData).toHaveBeenCalledWith(USER_ID));
             expect(reuploadLocalDataToSupabase).not.toHaveBeenCalled();
+        });
+    });
+
+    // The autogear-team step swallows a per-team error by design, so a caller can otherwise
+    // prune that section against a local picture the upload never finished writing.
+    describe('when a section does not fully upload', () => {
+        beforeEach(() => {
+            (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue([
+                'autogear_teams',
+            ]);
+        });
+
+        it('leaves that section out of the prune', async () => {
+            await renderDataTab();
+
+            fireEvent.click(screen.getByRole('switch'));
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).not.toContain('autogear_teams');
+        });
+
+        it('still prunes every section that did land', async () => {
+            await renderDataTab();
+
+            fireEvent.click(screen.getByRole('switch'));
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).toContain('ships');
+        });
+
+        it('does not report a clean success', async () => {
+            await renderDataTab();
+
+            fireEvent.click(screen.getByRole('switch'));
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            expect(notification.addNotification).toHaveBeenCalledWith(
+                'warning',
+                expect.stringContaining('could not be uploaded')
+            );
         });
     });
 });

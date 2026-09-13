@@ -22,7 +22,7 @@ export const BATCH_SIZE = 500;
 /** One recorded statement, in the order it was actually awaited. */
 export interface Op {
     table: string;
-    kind: 'select' | 'delete' | 'update';
+    kind: 'select' | 'delete' | 'update' | 'insert' | 'upsert';
     column?: string;
     values?: unknown[];
     payload?: unknown;
@@ -91,6 +91,16 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
             },
             update: (payload: unknown) => {
                 state.kind = 'update';
+                state.payload = payload;
+                return chain;
+            },
+            insert: (payload: unknown) => {
+                state.kind = 'insert';
+                state.payload = payload;
+                return chain;
+            },
+            upsert: (payload: unknown) => {
+                state.kind = 'upsert';
                 state.payload = payload;
                 return chain;
             },

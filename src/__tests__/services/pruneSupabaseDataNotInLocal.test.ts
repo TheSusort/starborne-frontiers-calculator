@@ -331,6 +331,40 @@ describe('pruneSupabaseDataNotInLocal', () => {
             expect(deletedValues(ops, 'inventory_items')).toEqual(['cloud-gear']);
         });
 
+        // The shape check has to reach the ROWS, not just the container. A section of
+        // id-less objects reads as present, contributes `undefined` to the id set, and then
+        // every cloud row counts as stale — the whole cloud copy deleted from a local value
+        // that describes nothing.
+        it('leaves the cloud alone when the rows carry no usable id', async () => {
+            localStorage.setItem(StorageKey.SHIPS, JSON.stringify([{}, {}]));
+            const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+        });
+
+        it('leaves the cloud alone when only one row is missing its id', async () => {
+            localStorage.setItem(
+                StorageKey.SHIPS,
+                JSON.stringify([{ id: 'keep-ship' }, { name: 'no id here' }])
+            );
+            const ops = fakeSupabase({ ships: [{ id: 'keep-ship' }, { id: 'other' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+        });
+
+        it('leaves cloud gear alone when the cached rows carry no usable id', async () => {
+            (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue([{ slot: 'weapon' }]);
+            const ops = fakeSupabase({ inventory_items: [{ id: 'cloud-gear' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'inventory_items')).toEqual([]);
+        });
+
         it('still prunes when the local key is there and holds an empty list', async () => {
             localStorage.setItem(StorageKey.SHIPS, JSON.stringify([]));
             const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });

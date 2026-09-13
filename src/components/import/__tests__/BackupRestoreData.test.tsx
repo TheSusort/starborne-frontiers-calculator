@@ -24,7 +24,7 @@ vi.mock('../../../hooks/useStorage', () => ({
 }));
 
 vi.mock('../../../services/userDataService', () => ({
-    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue(undefined),
+    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue([]),
     pruneSupabaseDataNotInLocal: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -82,7 +82,8 @@ describe('BackupRestoreData', () => {
         localStorage.clear();
         (setInIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
         (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-        (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+        // Resolves to the sections that did NOT fully upload; [] is the all-clear.
+        (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue([]);
         (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     });
 
@@ -162,7 +163,7 @@ describe('BackupRestoreData', () => {
             const order: string[] = [];
             (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockImplementation(() => {
                 order.push('upload');
-                return Promise.resolve();
+                return Promise.resolve([]);
             });
             (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockImplementation(() => {
                 order.push('prune');
@@ -263,6 +264,23 @@ describe('BackupRestoreData', () => {
             );
             expect(reuploadLocalDataToSupabase).not.toHaveBeenCalled();
             expect(supabase.from).not.toHaveBeenCalled();
+        });
+    });
+
+    // The restore names the sections its file carried; a section whose upload did not finish
+    // must drop out of that list, or the prune reconciles the cloud to a local picture the
+    // upload never wrote.
+    describe('when a section does not fully upload', () => {
+        it('leaves that section out of the prune', async () => {
+            (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue([
+                StorageKey.SHIPS,
+            ]);
+
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            expect(pruneSupabaseDataNotInLocal).toHaveBeenCalledWith(PROFILE_ID, []);
         });
     });
 });

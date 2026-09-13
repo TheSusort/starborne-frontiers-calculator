@@ -4413,8 +4413,11 @@ const DocumentationPage: React.FC = () => {
                                         from your current local data, then removes anything the
                                         cloud still holds that your local data does not. Useful if
                                         your cloud data has become out of sync with your local data.
-                                        Your local copy is never at risk, and sync remains enabled
-                                        after the operation.
+                                        Anything this browser cannot read — a section that is
+                                        missing or unreadable locally — is left untouched rather
+                                        than deleted, and the same goes for anything that failed to
+                                        upload. Your local copy is never at risk, and sync remains
+                                        enabled after the operation.
                                     </li>
                                 </ul>
                             </div>

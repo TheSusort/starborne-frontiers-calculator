@@ -149,18 +149,58 @@ const loadLocalData = <T>(key: string, isArray: boolean = true): T =>
     readLocalSection<T>(key, isArray).value;
 
 /**
+ * A prunable section is compared ROW BY ROW against the cloud, so the shape check has to
+ * reach the rows: a list of objects with no `id` reads as a perfectly good empty id set, and
+ * every cloud row then counts as stale. One unusable row makes the whole section unreadable
+ * — a partial id set is a wrong answer, not a smaller one.
+ *
+ * The bar is deliberately the minimum consumers need, a non-empty string `id`: an
+ * over-strict check here is itself a way to lose data, since an unreadable section is never
+ * pruned but is also never reconciled.
+ */
+const hasUsableId = (row: unknown): row is { id: string } =>
+    typeof row === 'object' &&
+    row !== null &&
+    typeof (row as { id?: unknown }).id === 'string' &&
+    (row as { id: string }).id.length > 0;
+
+const asPrunableSection = <T extends { id: string }>(
+    label: string,
+    section: LocalSection<T[]>
+): LocalSection<T[]> => {
+    if (!section.present) return section;
+    if (!section.value.every(hasUsableId)) {
+        console.error(`Local section ${label} holds rows with no usable id`);
+        return { value: [], present: false };
+    }
+    return section;
+};
+
+const readPrunableSection = <T extends { id: string }>(key: string): LocalSection<T[]> =>
+    asPrunableSection(key, readLocalSection<T[]>(key));
+
+/**
  * Reads current local state (localStorage + IndexedDB) and upserts everything
  * to Supabase for the given user. This is idempotent — safe to call multiple times.
  *
  * Unlike syncMigratedDataToSupabase, this function does NOT remap UUIDs. It
  * assumes IDs are already valid UUIDs (as they are for existing authenticated users).
+ *
+ * Returns the sections that did NOT fully land. Every step but the last throws on failure;
+ * the autogear-team step swallows a per-team error by design (see its catch), so it reports
+ * the section here instead. A caller about to prune must exclude what it is told, or it
+ * removes cloud rows against a local picture the upload never finished writing.
  */
-export async function reuploadLocalDataToSupabase(userId: string): Promise<void> {
+export async function reuploadLocalDataToSupabase(userId: string): Promise<string[]> {
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS);
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
-    const engineeringStats = loadLocalData<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
+    const engineeringSection = readLocalSection<EngineeringStats>(
+        StorageKey.ENGINEERING_STATS,
+        false
+    );
+    const engineeringStats = engineeringSection.value;
     const autogearConfigs = loadLocalData<Record<string, SavedAutogearConfig>>(
         StorageKey.AUTOGEAR_CONFIGS,
         false
@@ -541,9 +581,14 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         }
     }
 
-    // Step 6: Upsert engineering stats
-    if (engineeringStats?.stats && engineeringStats.stats.length > 0) {
-        const statsRecords = engineeringStats.stats
+    // Step 6: Replace engineering stats.
+    //
+    // Gated on the local section being READABLE, not on it being non-empty. A user who
+    // cleared their engineering stats locally has a present, empty section, and skipping the
+    // delete for it would leave the cloud holding stats they removed. An unreadable section
+    // is left alone, the same rule `pruneSupabaseDataNotInLocal` follows.
+    if (engineeringSection.present) {
+        const statsRecords = (engineeringStats?.stats ?? [])
             .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
             .flatMap((stat) =>
                 (stat.stats || [])
@@ -592,6 +637,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
     }
 
     // Step 8: Upsert saved autogear teams
+    const incomplete: string[] = [];
     try {
         if (autogearTeams.length > 0) {
             const teamRecords = autogearTeams.map((team) => ({
@@ -615,6 +661,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
                         error,
                         team.id
                     );
+                    incomplete.push(StorageKey.AUTOGEAR_TEAMS);
                 }
             }
         }
@@ -624,7 +671,10 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<void>
         // collision with an existing remote team must not abort steps 1-7,
         // which already succeeded.
         console.error('Error re-uploading autogear teams:', error);
+        incomplete.push(StorageKey.AUTOGEAR_TEAMS);
     }
+
+    return [...new Set(incomplete)];
 }
 
 /**
@@ -730,11 +780,11 @@ export async function pruneSupabaseDataNotInLocal(
     // path exists to prevent. Absent means "leave alone", not "empty".
     const restored = new Set(restoredSections);
 
-    const localShips = readLocalSection<Ship[]>(StorageKey.SHIPS);
-    const localEncounters = readLocalSection<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
-    const localLoadouts = readLocalSection<Loadout[]>(StorageKey.LOADOUTS);
-    const localTeamLoadouts = readLocalSection<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
-    const localAutogearTeams = readLocalSection<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
+    const localShips = readPrunableSection<Ship>(StorageKey.SHIPS);
+    const localEncounters = readPrunableSection<LocalEncounterNote>(StorageKey.ENCOUNTERS);
+    const localLoadouts = readPrunableSection<Loadout>(StorageKey.LOADOUTS);
+    const localTeamLoadouts = readPrunableSection<TeamLoadout>(StorageKey.TEAM_LOADOUTS);
+    const localAutogearTeams = readPrunableSection<AutogearTeam>(StorageKey.AUTOGEAR_TEAMS);
 
     // IndexedDB resolves `undefined` for a key it has no record for, which is a
     // different fact from a record holding an empty array: the first is a
@@ -742,9 +792,14 @@ export async function pruneSupabaseDataNotInLocal(
     // A read that fails outright rejects, and aborts the prune rather than
     // reaching here with an empty list.
     const inventoryRecord = await getFromIndexedDB(inventoryCacheKey(userId));
-    const localInventory: LocalSection<GearPiece[]> = Array.isArray(inventoryRecord)
-        ? { value: inventoryRecord, present: true }
-        : { value: [], present: false };
+    // Labelled, not keyed: `StorageKey.INVENTORY` names an IndexedDB entry and may only be
+    // handed to the key resolver or an IndexedDB helper (see inventoryStorageKey.test.ts).
+    const localInventory = asPrunableSection<GearPiece>(
+        'the gear cache',
+        Array.isArray(inventoryRecord)
+            ? { value: inventoryRecord, present: true }
+            : { value: [], present: false }
+    );
 
     const idSet = <T extends { id: string }>(rows: T[]) => new Set(rows.map((row) => row.id));
 

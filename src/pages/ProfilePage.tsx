@@ -256,6 +256,13 @@ export const ProfilePage: React.FC = () => {
         }
     };
 
+    /**
+     * A section whose upload did not finish must not be pruned against: the cloud would be
+     * reconciled to a local picture that was never fully written.
+     */
+    const prunableAfter = (incomplete: string[]): string[] =>
+        PRUNABLE_SECTIONS.filter((section) => !incomplete.includes(section));
+
     const handleSyncToggleOff = async () => {
         setSyncOperation('toggle');
         try {
@@ -281,12 +288,17 @@ export const ProfilePage: React.FC = () => {
             // `pruneSupabaseDataNotInLocal`'s doc for why this order is the
             // whole point: a failure here leaves extra cloud rows, never
             // missing ones.
-            await reuploadLocalDataToSupabase(user!.id);
-            await pruneSupabaseDataNotInLocal(user!.id, PRUNABLE_SECTIONS);
+            const incomplete = await reuploadLocalDataToSupabase(user!.id);
+            await pruneSupabaseDataNotInLocal(user!.id, prunableAfter(incomplete));
             // Only update state after all operations succeed so the UI stays consistent.
             setSupabaseSyncEnabled(true);
             setSyncEnabled(true);
-            addNotification('success', 'Cloud sync enabled.');
+            addNotification(
+                incomplete.length > 0 ? 'warning' : 'success',
+                incomplete.length > 0
+                    ? 'Cloud sync enabled, but some data could not be uploaded. Try a clear & re-sync.'
+                    : 'Cloud sync enabled.'
+            );
         } catch (error) {
             console.error('Error enabling cloud sync:', error);
             addNotification('error', 'Failed to enable cloud sync. Please try again.');
@@ -298,9 +310,14 @@ export const ProfilePage: React.FC = () => {
     const handleClearAndReSync = async () => {
         setSyncOperation('clearResync');
         try {
-            await reuploadLocalDataToSupabase(user!.id);
-            await pruneSupabaseDataNotInLocal(user!.id, PRUNABLE_SECTIONS);
-            addNotification('success', 'Cloud data cleared and re-synced from local.');
+            const incomplete = await reuploadLocalDataToSupabase(user!.id);
+            await pruneSupabaseDataNotInLocal(user!.id, prunableAfter(incomplete));
+            addNotification(
+                incomplete.length > 0 ? 'warning' : 'success',
+                incomplete.length > 0
+                    ? 'Cloud data re-synced, but some of it could not be uploaded.'
+                    : 'Cloud data cleared and re-synced from local.'
+            );
         } catch (error) {
             console.error('Error during clear & re-sync:', error);
             addNotification('error', 'Failed to clear and re-sync cloud data. Please try again.');
@@ -689,7 +706,7 @@ export const ProfilePage: React.FC = () => {
                 onClose={() => setShowClearReSyncConfirm(false)}
                 onConfirm={() => void handleClearAndReSync()}
                 title="Clear & Re-sync"
-                message="This uploads your local data to the cloud, then removes anything the cloud has that your local data does not. Sync remains enabled."
+                message="This uploads your local data to the cloud, then removes anything the cloud has that your local data does not. Data this browser cannot read is left untouched rather than deleted. Sync remains enabled."
                 confirmLabel="Clear & Re-sync"
                 cancelLabel="Cancel"
             />
