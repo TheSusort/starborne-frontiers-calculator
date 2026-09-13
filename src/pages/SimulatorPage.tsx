@@ -12,6 +12,7 @@ import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides'
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
 import StatOverrideModal from '../components/simulator/StatOverrideModal';
 import BattlePlayback from '../components/simulator/BattlePlayback';
+import DivergencePlayback from '../components/simulator/DivergencePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
 import RunComparison from '../components/simulator/RunComparison';
@@ -177,6 +178,9 @@ const SimulatorPage: React.FC = () => {
         battleResult,
         aggregate,
         baseline,
+        divergence,
+        handleOpenDivergence,
+        handleCloseDivergence,
         runError,
         effectiveSeed,
         effectiveRunCount,
@@ -330,11 +334,20 @@ const SimulatorPage: React.FC = () => {
                             baseline={baseline}
                             current={aggregate}
                             currentOverrides={currentOverrides}
-                            onOpenDivergence={() => {}}
+                            onOpenDivergence={handleOpenDivergence}
                         />
                     )}
 
-                    {battleResult && <BattlePlayback result={battleResult} />}
+                    {divergence ? (
+                        <DivergencePlayback
+                            seed={divergence.seed}
+                            baseline={divergence.baseline}
+                            current={divergence.current}
+                            onClose={handleCloseDivergence}
+                        />
+                    ) : (
+                        battleResult && <BattlePlayback result={battleResult} />
+                    )}
                 </div>
 
                 {editing && editingPlacement && (

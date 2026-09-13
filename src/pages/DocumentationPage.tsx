@@ -3982,6 +3982,12 @@ const DocumentationPage: React.FC = () => {
                                         round-count distribution as skewed and points you to the
                                         median
                                     </li>
+                                    <li>
+                                        With a baseline pinned, the comparison also lists every seed
+                                        where the two configurations picked a different winner;
+                                        opening one replays both fights stacked and stepped
+                                        together, so the same round of each sits one above the other
+                                    </li>
                                 </ul>
                             </div>
 
