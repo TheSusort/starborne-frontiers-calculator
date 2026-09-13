@@ -196,6 +196,32 @@ describe('BackupRestoreData', () => {
             expect(sections).not.toContain(StorageKey.INVENTORY);
         });
 
+        // A backup file carries every StorageKey the user had, autogear configs
+        // included, so a restore names that section and the cloud is reconciled
+        // against the file. A config created after the backup was taken is gone
+        // — snapshot semantics, the same rule ships follow.
+        it('names the autogear config section when the file carries it', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({
+                [StorageKey.AUTOGEAR_CONFIGS]: JSON.stringify({ 'ship-1': {} }),
+            });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).toContain(StorageKey.AUTOGEAR_CONFIGS);
+        });
+
+        it('leaves cloud autogear configs alone when the file does not carry them', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            const sections = (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mock
+                .calls[0][1] as string[];
+            expect(sections).not.toContain(StorageKey.AUTOGEAR_CONFIGS);
+        });
+
         it('never prunes when the upload failed — a rejected upload must delete nothing', async () => {
             (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockRejectedValue(
                 new Error('PostgREST rejected the insert')

@@ -688,31 +688,45 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
 
 /**
  * PostgREST caps one response at the project's `db-max-rows`, so a plain
- * `select('id')` silently returns a PREFIX for any table a real account fills —
+ * `select(...)` silently returns a PREFIX for any table a real account fills —
  * an inventory runs to tens of thousands of rows. A truncated read makes every
  * caller act on a partial picture: rows meant to go survive, and a truncated
  * CHILD read deletes some of a parent's children and then fails the parent
- * delete on the FK, aborting the sequence partway. Every id read in this file
- * goes through here, ordered by id so pages cannot overlap or skip;
- * `idReadsArePaged.test.ts` fails if one is added that does not.
+ * delete on the FK, aborting the sequence partway. Every row enumeration in
+ * this file goes through `readAllRows`, ordered by `id` so pages cannot overlap
+ * or skip; `idReadsArePaged.test.ts` fails if a select is added that does not.
+ *
+ * Ordering is by `id` for every table, not by the columns being read: `id` is
+ * the primary key everywhere here, so it is the one column guaranteed unique
+ * and therefore the one that makes the page boundaries total.
  */
 const ID_PAGE_SIZE = 1000;
+
+async function readAllRows<T>(
+    table: string,
+    columns: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    filter: (query: any) => any
+): Promise<T[]> {
+    const rows: T[] = [];
+    for (let from = 0; ; from += ID_PAGE_SIZE) {
+        const { data, error } = await filter(supabase.from(table).select(columns))
+            .order('id')
+            .range(from, from + ID_PAGE_SIZE - 1);
+        if (error) throw error;
+        const page = (data ?? []) as T[];
+        rows.push(...page);
+        if (page.length < ID_PAGE_SIZE) return rows;
+    }
+}
 
 async function readAllIds(
     table: string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     filter: (query: any) => any
 ): Promise<string[]> {
-    const ids: string[] = [];
-    for (let from = 0; ; from += ID_PAGE_SIZE) {
-        const { data, error } = await filter(supabase.from(table).select('id'))
-            .order('id')
-            .range(from, from + ID_PAGE_SIZE - 1);
-        if (error) throw error;
-        const page = (data ?? []) as Array<{ id: string }>;
-        ids.push(...page.map((row) => row.id));
-        if (page.length < ID_PAGE_SIZE) return ids;
-    }
+    const rows = await readAllRows<{ id: string }>(table, 'id', filter);
+    return rows.map((row) => row.id);
 }
 
 /** Cloud ids for a user-owned table that are absent from the local snapshot. */
@@ -720,6 +734,61 @@ async function staleIds(table: string, userId: string, localIds: Set<string>): P
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ids = await readAllIds(table, (query: any) => query.eq('user_id', userId));
     return ids.filter((id) => !localIds.has(id));
+}
+
+/**
+ * Row ids of the user's autogear configs whose ship the local section does not
+ * name. The only prune that matches on a column other than `id`, because the
+ * local section is keyed by ship id and carries no row id at all.
+ *
+ * A row missing any of the three columns makes the WHOLE prune return nothing,
+ * the cloud-side mirror of `asPrunableSection`'s rule: a row with no `ship_id`
+ * is in no local key set, so it and every row read beside it count as stale and
+ * the user's entire config table goes. A partial answer here is a wrong answer,
+ * not a smaller one. The bar is a non-empty string, not a uuid: an over-strict
+ * check leaves stale rows behind forever, which is the safe failure but still
+ * one.
+ *
+ * `watermark` is the newest `updated_at` the read itself saw, and the caller
+ * bounds its delete by it so that a config written between the read and the
+ * delete survives. Max-of-read rather than a clock reading: there is no server
+ * `now()` to select without an RPC, and the browser's clock skews against
+ * Postgres in both directions. Any write whose transaction starts after this
+ * read completes carries a later `updated_at` than every row the read returned.
+ *
+ * It does NOT close the window between the LOCAL read and this cloud read; no
+ * section's prune does.
+ */
+interface StaleConfigs {
+    ids: string[];
+    watermark: string | null;
+}
+
+async function staleConfigRows(userId: string, localShipIds: Set<string>): Promise<StaleConfigs> {
+    const rows = await readAllRows<Record<string, unknown>>(
+        'autogear_configs',
+        'id, ship_id, updated_at',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (query: any) => query.eq('user_id', userId)
+    );
+    const usable = (value: unknown): value is string =>
+        typeof value === 'string' && value.length > 0;
+    if (!rows.every((row) => ['id', 'ship_id', 'updated_at'].every((key) => usable(row[key])))) {
+        console.error('A cloud autogear config is missing a column; leaving the section alone');
+        return { ids: [], watermark: null };
+    }
+    const typed = rows as unknown as Array<{ id: string; ship_id: string; updated_at: string }>;
+    // Compared as raw strings, never through `Date`: PostgREST returns
+    // microsecond precision and `Date.parse` truncates to milliseconds, which
+    // would pick an arbitrary row among any that share a millisecond.
+    const watermark = typed.reduce<string | null>(
+        (newest, row) => (newest === null || row.updated_at > newest ? row.updated_at : newest),
+        null
+    );
+    return {
+        ids: typed.filter((row) => !localShipIds.has(row.ship_id)).map((row) => row.id),
+        watermark,
+    };
 }
 
 /**
@@ -732,6 +801,27 @@ async function deleteWhereIn(table: string, column: string, ids: string[]): Prom
             .from(table)
             .delete()
             .in(column, ids.slice(i, i + BATCH_SIZE));
+        if (error) throw error;
+    }
+}
+
+/**
+ * `deleteWhereIn`, with an upper bound on a second column: a row whose
+ * `boundColumn` moved past `bound` since the ids were read is left alone.
+ */
+async function deleteWhereInBounded(
+    table: string,
+    column: string,
+    ids: string[],
+    boundColumn: string,
+    bound: string
+): Promise<void> {
+    for (let i = 0; i < ids.length; i += BATCH_SIZE) {
+        const { error } = await supabase
+            .from(table)
+            .delete()
+            .in(column, ids.slice(i, i + BATCH_SIZE))
+            .lte(boundColumn, bound);
         if (error) throw error;
     }
 }
@@ -764,6 +854,7 @@ export const PRUNABLE_SECTIONS: readonly string[] = [
     StorageKey.LOADOUTS,
     StorageKey.TEAM_LOADOUTS,
     StorageKey.AUTOGEAR_TEAMS,
+    StorageKey.AUTOGEAR_CONFIGS,
 ];
 
 /**
@@ -794,6 +885,13 @@ export async function pruneSupabaseDataNotInLocal(
     const localLoadouts = readPrunableSection<Loadout>(StorageKey.LOADOUTS);
     const localTeamLoadouts = readPrunableSection<TeamLoadout>(StorageKey.TEAM_LOADOUTS);
     const localAutogearTeams = readPrunableSection<AutogearTeam>(StorageKey.AUTOGEAR_TEAMS);
+    // An OBJECT section keyed by ship id, not a list of rows carrying their own
+    // `id`, so `asPrunableSection`'s row check has no analogue: `Object.keys`
+    // cannot yield a non-string, which is the hazard that check exists for.
+    const localAutogearConfigs = readLocalSection<Record<string, unknown>>(
+        StorageKey.AUTOGEAR_CONFIGS,
+        false
+    );
 
     // IndexedDB resolves `undefined` for a key it has no record for, which is a
     // different fact from a record holding an empty array: the first is a
@@ -840,6 +938,17 @@ export async function pruneSupabaseDataNotInLocal(
         restored.has(StorageKey.AUTOGEAR_TEAMS) && localAutogearTeams.present
             ? await staleIds('autogear_teams', userId, idSet(localAutogearTeams.value))
             : [];
+    // autogear_configs is the one table whose local key is not the row's `id`:
+    // the local section is keyed by ship id, so the comparison is ship id
+    // against ship id while the delete still goes by `id`. Comparing instead
+    // against the ships being pruned would miss a config removed for a ship the
+    // snapshot KEEPS (#521). The `(user_id, ship_id)` conflict target the
+    // upsert above uses is a PRODUCTION constraint that
+    // `supabase/current-schema.sql` does not carry; do not read it here.
+    const staleConfigs =
+        restored.has(StorageKey.AUTOGEAR_CONFIGS) && localAutogearConfigs.present
+            ? await staleConfigRows(userId, new Set(Object.keys(localAutogearConfigs.value)))
+            : { ids: [], watermark: null };
 
     // Encounter notes: votes and formations both FK to the note.
     if (staleNoteIds.length > 0) {
@@ -862,6 +971,23 @@ export async function pruneSupabaseDataNotInLocal(
     // autogear_teams holds ship ids in a plain array column, not an FK.
     if (staleAutogearTeamIds.length > 0) {
         await deleteWhereIn('autogear_teams', 'id', staleAutogearTeamIds);
+    }
+
+    // autogear_configs.ship_id is a plain text column, not an FK, and no table
+    // references a config, so this is independent of the ship prune below.
+    //
+    // Bounded by the read's watermark so a config saved between the read and
+    // this delete is not removed; read `staleConfigRows`' doc for why that bound
+    // is the newest row read rather than a clock. `saveConfig` is fired without
+    // being awaited, so the window is reachable from ordinary use.
+    if (staleConfigs.ids.length > 0 && staleConfigs.watermark !== null) {
+        await deleteWhereInBounded(
+            'autogear_configs',
+            'id',
+            staleConfigs.ids,
+            'updated_at',
+            staleConfigs.watermark
+        );
     }
 
     // Ships are deleted last of the parents: five tables reference a ship, and

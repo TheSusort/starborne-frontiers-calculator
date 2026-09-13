@@ -6,6 +6,9 @@ import { deletedValues, deletesOn, fakeSupabase, indexOfDelete, PAGE_SIZE } from
 
 const USER = '22222222-2222-4222-8222-222222222222';
 
+/** A cloud `updated_at`, in the shape PostgREST returns. */
+const STAMP = '2026-09-13T10:00:00+00:00';
+
 /** Every prunable section, as a restore of a complete backup file would pass. */
 const ALL_SECTIONS = [
     StorageKey.SHIPS,
@@ -14,6 +17,7 @@ const ALL_SECTIONS = [
     StorageKey.LOADOUTS,
     StorageKey.TEAM_LOADOUTS,
     StorageKey.AUTOGEAR_TEAMS,
+    StorageKey.AUTOGEAR_CONFIGS,
 ];
 
 vi.mock('../../config/supabase', () => ({ supabase: { from: vi.fn() } }));
@@ -372,6 +376,235 @@ describe('pruneSupabaseDataNotInLocal', () => {
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
 
             expect(deletedValues(ops, 'ships')).toEqual(['cloud-ship']);
+        });
+    });
+    // autogear_configs is keyed `(user_id, ship_id)` and the local section is an
+    // OBJECT keyed by ship id, not a list of rows carrying their own `id`. The
+    // comparison is therefore ship id against ship id, while the delete still
+    // goes by the row's `id` primary key.
+    describe('autogear configs', () => {
+        it('deletes only the cloud configs whose ship the local section does not name', async () => {
+            localStorage.setItem(
+                StorageKey.AUTOGEAR_CONFIGS,
+                JSON.stringify({ 'keep-ship': { name: 'kept' } })
+            );
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-keep', ship_id: 'keep-ship', updated_at: STAMP },
+                    { id: 'cfg-stale', ship_id: 'gone-ship', updated_at: STAMP },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const deletes = deletesOn(ops, 'autogear_configs');
+            expect(deletes).toHaveLength(1);
+            expect(deletes[0].column).toBe('id');
+            expect(deletes[0].values).toEqual(['cfg-stale']);
+        });
+
+        // The shape the partial fix in #521 would have missed: the ship is still
+        // owned locally, only its config was removed. Pruning configs off the
+        // ships' stale set alone reports success and deletes nothing.
+        it('deletes a config whose ship the local snapshot still keeps', async () => {
+            localStorage.setItem(
+                StorageKey.SHIPS,
+                JSON.stringify([{ id: 'kept-ship', updated_at: STAMP }])
+            );
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                ships: [{ id: 'kept-ship', updated_at: STAMP }],
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'kept-ship', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+            expect(deletedValues(ops, 'autogear_configs')).toEqual(['cfg-1']);
+        });
+
+        it('leaves cloud configs alone when the local key is absent entirely', async () => {
+            const ops = fakeSupabase({
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'a', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        it('leaves cloud configs alone when the local key holds unparseable JSON', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, '{not json');
+            const ops = fakeSupabase({
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'a', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        // `null` and every scalar parse cleanly and are not the object this section
+        // is; a section read as present is one the cloud copy is replaced from.
+        it('leaves cloud configs alone when the local key parses to null', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, 'null');
+            const ops = fakeSupabase({
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'a', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        it('leaves cloud configs alone when the caller did not name the section', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'a', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, [StorageKey.SHIPS]);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        it('prunes every config when the local key is there and holds no entries', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-1', ship_id: 'a', updated_at: STAMP },
+                    { id: 'cfg-2', ship_id: 'b', updated_at: STAMP },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletedValues(ops, 'autogear_configs')).toEqual(['cfg-1', 'cfg-2']);
+        });
+
+        // The read is of `(id, ship_id)`, not of `id`, so it does not ride on the
+        // path the other sections' paging is proven over.
+        it('reads every page of configs rather than the first response', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const firstPage = Array.from({ length: PAGE_SIZE }, (_, i) => ({
+                id: `cfg-${i}`,
+                ship_id: `ship-${i}`,
+                updated_at: STAMP,
+            }));
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    ...firstPage,
+                    { id: 'cfg-on-page-two', ship_id: 'late-ship', updated_at: STAMP },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const deleted = deletedValues(ops, 'autogear_configs');
+            expect(deleted).toContain('cfg-on-page-two');
+            expect(deleted).toHaveLength(PAGE_SIZE + 1);
+        });
+
+        // The mirror of `hasUsableId` on the CLOUD side. A row with no `ship_id`
+        // is not in any local key set, so it and every row beside it read as
+        // stale and the whole table goes. A partial answer is a wrong answer.
+        it('leaves every config alone when a cloud row carries no ship id', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({ 'keep-ship': {} }));
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-keep', ship_id: 'keep-ship', updated_at: STAMP },
+                    { id: 'cfg-broken', updated_at: STAMP },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        // A config saved between the stale read and the delete must survive it.
+        // There is no server `now()` to read without an RPC and a client clock
+        // skews, so the watermark is the newest `updated_at` the read itself saw:
+        // any write whose transaction starts after that read carries a later one.
+        // Inert without the `update_autogear_configs_updated_at` trigger, which
+        // is what makes an upsert's UPDATE branch move the column at all.
+        it('bounds the delete by the newest updated_at the read saw', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-1', ship_id: 'a', updated_at: '2026-09-13T10:00:00+00:00' },
+                    { id: 'cfg-2', ship_id: 'b', updated_at: '2026-09-13T12:00:00+00:00' },
+                    { id: 'cfg-3', ship_id: 'c', updated_at: '2026-09-13T11:00:00+00:00' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const deletes = deletesOn(ops, 'autogear_configs');
+            expect(deletes.length).toBeGreaterThan(0);
+            for (const op of deletes) {
+                expect(op.upperBounds?.updated_at).toBe('2026-09-13T12:00:00+00:00');
+            }
+        });
+
+        it('compares watermarks as raw strings, not through Date', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            // Same millisecond, different microseconds: `Date.parse` truncates
+            // both to the same value and would pick whichever came first.
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-1', ship_id: 'a', updated_at: '2026-09-13T12:00:00.123999+00:00' },
+                    { id: 'cfg-2', ship_id: 'b', updated_at: '2026-09-13T12:00:00.123001+00:00' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')[0].upperBounds?.updated_at).toBe(
+                '2026-09-13T12:00:00.123999+00:00'
+            );
+        });
+
+        it('leaves every config alone when a cloud row carries no updated_at', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [
+                    { id: 'cfg-1', ship_id: 'a', updated_at: STAMP },
+                    { id: 'cfg-2', ship_id: 'b' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        it('leaves every config alone when a cloud row carries no id', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [{ ship_id: 'a', updated_at: '2026-09-13T10:00:00+00:00' }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'autogear_configs')).toEqual([]);
+        });
+
+        it('orders the paged config read, so the pages cannot overlap or skip', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, JSON.stringify({}));
+            const ops = fakeSupabase({
+                autogear_configs: [{ id: 'cfg-1', ship_id: 'a', updated_at: STAMP }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const selects = ops.filter(
+                (op) => op.table === 'autogear_configs' && op.kind === 'select'
+            );
+            expect(selects.length).toBeGreaterThan(0);
+            for (const select of selects) {
+                expect(select.ordered, 'every paged read must be ordered').toBe(true);
+            }
         });
     });
 });
