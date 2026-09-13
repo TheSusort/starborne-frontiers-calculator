@@ -225,7 +225,6 @@ export function useSimulatorRuns({
                 setDivergence(null);
                 setBattleResult(runSeededBattle(provenance.input, openSeed, getGearPiece));
             } catch (err) {
-                setDivergence(null);
                 setBattleResult(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
