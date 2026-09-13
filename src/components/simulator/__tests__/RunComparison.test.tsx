@@ -7,8 +7,8 @@ import type { PinnedBaseline } from '../../../utils/simulator/compareRuns';
 
 const emptyInput: BattleSimulationInput = { playerTeam: [], enemyTeam: [] };
 
-/** Wraps an aggregate as a pinned baseline. The input is inert here — `RunComparison` only reads
- *  `baseline.aggregate`, never `baseline.input`. */
+/** Wraps an aggregate as a pinned baseline. The input is inert here — `RunComparison` never reads
+ *  `baseline.input`. */
 const pinned = (aggregate: SeedSetAggregate): PinnedBaseline => ({
     aggregate,
     overrides: {},
