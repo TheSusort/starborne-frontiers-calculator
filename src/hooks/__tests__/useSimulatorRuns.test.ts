@@ -492,9 +492,12 @@ describe('divergence playback', () => {
         // A divergence pair and a single playback are alternatives, never both on the page.
         expect(result.current.battleResult).toBeNull();
 
-        // Both replays go through the pinned/recorded inputs at the SAME seed.
+        // Both replays go through the pinned/recorded inputs at the SAME seed. The full call
+        // list (not just its tail) is asserted so this discriminates "exactly two replays ran"
+        // from "three or more, the last two of which happened to match" — the earlier 509 call
+        // is the `handleOpenSeed` replay made above to seed a non-null `battleResult`.
         const seeds = mockRunSeededBattle.mock.calls.map((call) => call[1]);
-        expect(seeds.slice(-2)).toEqual([507, 507]);
+        expect(seeds).toEqual([509, 507, 507]);
     });
 
     it('does nothing without a pinned baseline', async () => {
@@ -563,23 +566,40 @@ describe('divergence playback', () => {
     });
 
     it('reports a replay failure and shows no pair', async () => {
-        const rendered = renderHook(
-            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
-            { initialProps: baseArgs() }
-        );
-        await act(async () => {
-            rendered.result.current.handleRun();
-        });
-        act(() => {
-            rendered.result.current.handlePinBaseline();
-        });
+        // Start from a pair genuinely open at 507, so the null-divergence assertion below
+        // discriminates "the failed replay cleared it" from "it was never opened."
+        const { result } = await runPinAndOpen(507);
+        expect(result.current.divergence?.seed).toBe(507);
+
         mockRunSeededBattle.mockImplementationOnce(() => {
             throw new Error('replay exploded');
         });
         act(() => {
-            rendered.result.current.handleOpenDivergence(507);
+            result.current.handleOpenDivergence(511);
         });
-        expect(rendered.result.current.divergence).toBeNull();
-        expect(rendered.result.current.runError).toBe('replay exploded');
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
+    it('a failed single-seed replay leaves no pair', async () => {
+        const { result } = await runPinAndOpen();
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
+    it('clears the pair when a multi-seed run rejects', async () => {
+        const { result } = await runPinAndOpen();
+        mockRunSeedSetAsync.mockRejectedValueOnce(new Error('engine exploded'));
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('engine exploded');
     });
 });
