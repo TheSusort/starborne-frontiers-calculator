@@ -31,6 +31,13 @@ interface FormationGridProps {
     onEditStats?: (position: Position) => void;
     /** Opt-in: marks a cell whose placement carries a stat override. Simulator only. */
     hasOverrides?: (position: Position) => boolean;
+    /**
+     * Opt-in: hands back the ship already held for a cell, instead of this grid re-deriving it
+     * from `shipId` against the ships the player OWNS. A caller whose board can hold a unit
+     * nobody owns — the simulator's reference ships — must supply this, or those cells resolve
+     * to nothing and render empty.
+     */
+    resolveShip?: (position: Position) => Ship | null;
 }
 
 const FormationGrid: React.FC<FormationGridProps> = ({
@@ -43,6 +50,7 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     showFacingCue = false,
     onEditStats,
     hasOverrides,
+    resolveShip,
 }) => {
     const { ships } = useShips();
     const { ships: templateShips } = useShipsData();
@@ -96,6 +104,10 @@ const FormationGrid: React.FC<FormationGridProps> = ({
     const getShipForPosition = (pos: Position): Ship | { name: string } | null => {
         const shipPosition = formation.find((ship) => ship.position === pos);
         if (!shipPosition) return null;
+
+        // A caller that already holds the ship wins: its board may carry units nobody owns.
+        const provided = resolveShip?.(pos);
+        if (provided) return provided;
 
         // Try to find the full ship in the user's local inventory
         const fullShip = ships.find((ship) => ship.id === shipPosition.shipId);

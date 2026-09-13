@@ -42,6 +42,7 @@ const renderBoard = (props: Partial<React.ComponentProps<typeof PlacementBoard>>
             onRemoveShip={vi.fn()}
             onPickShip={vi.fn()}
             onCloseSelector={vi.fn()}
+            resolveShip={() => null}
             onLoadEncounter={vi.fn()}
             copyLabel="Copy to other side"
             {...props}

@@ -6,6 +6,9 @@ export const CURRENT_VERSION = '1.67.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: place any unit in the game, not just ones you own.',
+    'Combat simulator: fight a unit at R0 level 60 or fully refitted.',
+    'Import: shield penetration from refits is no longer dropped.',
     'Combat simulator: baseline comparisons now list every seed where the winner disagrees.',
     'Combat simulator: a diverging seed now opens both fights stacked and stepped together.',
     'Autogear: tweak values can now be reached and edited with the keyboard.',

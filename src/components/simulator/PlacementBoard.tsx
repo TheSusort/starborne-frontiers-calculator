@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Position, ShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import FormationGrid from '../encounters/FormationGrid';
-import { ShipSelector } from '../ship/ShipSelector';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/layout/Modal';
@@ -10,6 +9,7 @@ import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useShips } from '../../contexts/ShipsContext';
 import type { StatOverrides } from '../../utils/simulator/statOverrides';
+import { UnitVersionSelector } from './UnitVersionSelector';
 
 /** One occupied board cell. Overrides live ON the placement, not in a position-keyed side map,
  *  so replacing the ship in a cell can never leave the previous ship's overrides behind. */
@@ -49,6 +49,9 @@ interface PlacementBoardProps {
     onEditStats?: (position: Position) => void;
     /** Marks a cell whose placement carries a stat override. */
     hasOverrides?: (position: Position) => boolean;
+    /** Hands FormationGrid the ship this board already holds for a cell — required here, since
+     *  a simulator board can carry a reference unit the player does not own. */
+    resolveShip: (position: Position) => Ship | null;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -67,6 +70,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     copyLabel,
     onEditStats,
     hasOverrides,
+    resolveShip,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
@@ -151,18 +155,13 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 showFacingCue
                 onEditStats={onEditStats}
                 hasOverrides={hasOverrides}
+                resolveShip={resolveShip}
             />
-            {/* ShipSelector contract: mounted ONLY while a cell is selected. Mount/unmount drives the
-                modal — autoOpen fires the picker open on mount; onClose clears the selection, which
-                unmounts this and closes the modal. Do not render it unconditionally. */}
+            {/* Picker contract: mounted ONLY while a cell is selected. Mount/unmount drives the
+                modal — it opens on mount; onClose clears the selection, which unmounts this and
+                closes the modal. Do not render it unconditionally. */}
             {selectedPosition && (
-                <ShipSelector
-                    selected={null}
-                    onSelect={onPickShip}
-                    autoOpen
-                    onClose={onCloseSelector}
-                    hidden
-                />
+                <UnitVersionSelector onSelect={onPickShip} onClose={onCloseSelector} />
             )}
             <Modal
                 isOpen={isSaveModalOpen}

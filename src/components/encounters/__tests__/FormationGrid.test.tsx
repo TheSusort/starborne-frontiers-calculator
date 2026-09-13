@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within, fireEvent } from '@testing-library/react';
 import FormationGrid from '../FormationGrid';
+import type { Ship } from '../../../types/ship';
 
 // FormationGrid resolves ships via these contexts; an empty fleet keeps every cell empty so
 // each renders its position label (e.g. "T1"), which we use to assert column render order.
@@ -112,5 +113,36 @@ describe('FormationGrid on-cell edit control', () => {
         const editButton = screen.getByRole('button', { name: /edit nova's stats/i });
 
         expect(editButton.closest('button')).toBe(editButton);
+    });
+});
+
+// A simulator board can hold a reference unit — a ship with an id no owned row has. This grid
+// resolves cells against the ships a player OWNS, so without `resolveShip` such a cell resolves
+// to nothing and renders as empty: the board silently loses the ship that was just placed.
+describe('FormationGrid resolveShip', () => {
+    const REFERENCE = {
+        id: 'template:T_AEGIS:r0',
+        name: 'Aegis',
+        rarity: 'legendary',
+        faction: 'ATLAS',
+        type: 'ATTACKER',
+        affinity: 'thermal',
+        baseStats: {},
+        equipment: {},
+        implants: {},
+        refits: [],
+    } as unknown as Ship;
+
+    const formation = [{ shipId: REFERENCE.id, position: 'T1' as const }];
+
+    it('renders a ship the player does not own when the caller supplies it', () => {
+        render(<FormationGrid formation={formation} resolveShip={() => REFERENCE} />);
+        expect(screen.getByText('Aegis')).toBeInTheDocument();
+    });
+
+    it('leaves the cell empty without it, which is the break this prop exists to close', () => {
+        render(<FormationGrid formation={formation} />);
+        expect(screen.queryByText('Aegis')).not.toBeInTheDocument();
+        expect(screen.getByText('T1')).toBeInTheDocument();
     });
 });
