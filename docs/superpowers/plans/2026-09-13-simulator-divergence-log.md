@@ -293,7 +293,7 @@ A required field, so `tsc --noEmit` enumerates every construction site for you. 
 Add to the main `describe('useSimulatorRuns')` block in `src/hooks/__tests__/useSimulatorRuns.test.ts`:
 
 ```ts
-it('pins the input that produced the baseline, and a later board edit does not change it', async () => {
+it('pins the input that RAN, not a fresh read of the boards at pin time', async () => {
     const { result, rerender } = renderHook(
         (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
         { initialProps: baseArgs({ playerBoard: board('T1', 'nova', { attack: 100 }) }) }
@@ -302,18 +302,19 @@ it('pins the input that produced the baseline, and a later board edit does not c
     await act(async () => {
         result.current.handleRun();
     });
+    // The exact object the run consumed. `handleRun` passes one `input` const to both
+    // `runSeedSetAsync` and `setProvenance`, so identity against it is the check.
+    const ranInput = mockRunSeedSetAsync.mock.calls[0][0];
+
+    // The boards move on BEFORE the pin. A baseline is a snapshot of the run it names, so
+    // pinning must reach for the recorded input rather than rebuilding from live state —
+    // otherwise replaying the baseline later reproduces a fight that never happened.
+    rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }) }));
     act(() => {
         result.current.handlePinBaseline();
     });
 
-    const pinnedInput = result.current.baseline?.input;
-    expect(pinnedInput).toBeDefined();
-
-    // The boards move on. A pinned baseline is a snapshot of the run that produced it, so its
-    // input must not follow them — replaying it later has to reproduce the pinned fight.
-    rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }) }));
-
-    expect(result.current.baseline?.input).toBe(pinnedInput);
+    expect(result.current.baseline?.input).toBe(ranInput);
 });
 ```
 
@@ -406,7 +407,9 @@ Expected: PASS, all three files.
 
 - [ ] **Step 6: Mutation probe the snapshot**
 
-Temporarily change `handlePinBaseline` to build a fresh input instead of reading the recorded one: `setBaseline({ aggregate, overrides: provenance.overrides, input: buildInput() })`. Run `npx vitest run src/hooks/__tests__/useSimulatorRuns.test.ts -t 'pins the input'`. Expected: FAIL — a fresh `buildInput()` is a different object, so the identity assertion breaks. Restore.
+Temporarily change `handlePinBaseline` to build a fresh input instead of reading the recorded one: `setBaseline({ aggregate, overrides: provenance.overrides, input: buildInput() })`. Run `npx vitest run src/hooks/__tests__/useSimulatorRuns.test.ts -t 'pins the input'`. Expected: FAIL — `buildInput()` at pin time reads the *vanguard* board, so it is neither the object the run consumed nor built from the same board. Restore.
+
+The board edit must sit between the run and the pin for this probe to discriminate. A version that pins first and edits afterwards passes under the mutation too, because nothing re-reads the state slot after the edit — it would assert only that React state does not spontaneously change.
 
 - [ ] **Step 7: Commit**
 
@@ -733,19 +736,20 @@ describe('BattlePlayback', () => {
         // The parent owns the position, so a second stepper here would be a second source of
         // truth for it.
         expect(screen.queryByLabelText('Next round')).not.toBeInTheDocument();
-        expect(screen.getByText('70%')).toBeInTheDocument();
+        // Round 3 is index 2, so hpPct is 100 - 2 * 10.
+        expect(screen.getByLabelText(/Nova at T1, 80% HP/)).toBeInTheDocument();
     });
 
     it('clamps a controlled round past the end to this fight’s last round', () => {
         // The two sides of a divergence can end on different rounds; the shorter fight holds at
         // its own last round rather than blanking out.
-        render(<BattlePlayback result={battle(3)} round={9} />);
-        expect(screen.getByText('80%')).toBeInTheDocument();
+        render(<BattlePlayback result={battle(2)} round={9} />);
+        expect(screen.getByLabelText(/Nova at T1, 90% HP/)).toBeInTheDocument();
     });
 });
 ```
 
-If `70%` / `80%` do not appear, open `src/utils/simulator/boardOverlays.ts` and `BattleBoard.tsx` to see how `hpPct` is rendered, and assert on that exact text instead. The assertion must read a **per-round** value, not the outcome card — an assertion that passes on any round pins nothing.
+`hpPct` is not rendered as text — `BattleBoard` paints it as a bar width and exposes it in the cell's `aria-label`, formatted `"<name> at <position>, <n>% HP"`. Hence `getByLabelText`. The assertion deliberately reads a **per-round** value: an assertion against the outcome card would pass on every round and pin nothing.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -897,9 +901,10 @@ describe('DivergencePlayback', () => {
             fireEvent.click(screen.getByLabelText('Next round'));
         }
         expect(screen.getByText('Round 6 / 7')).toBeInTheDocument();
-        // Baseline holds at its round 4 (70%), current shows its round 6 (50%).
-        expect(screen.getByText('70%')).toBeInTheDocument();
-        expect(screen.getByText('50%')).toBeInTheDocument();
+        // Baseline holds at its own last round, 4 (index 3, 70%); the current run shows its
+        // round 6 (index 5, 50%).
+        expect(screen.getByLabelText(/Nova at T1, 70% HP/)).toBeInTheDocument();
+        expect(screen.getByLabelText(/Nova at T1, 50% HP/)).toBeInTheDocument();
     });
 
     it('closes', () => {
@@ -1189,6 +1194,10 @@ Run: `npx tsc --noEmit` and add `onOpenDivergence={() => {}}` to every `RunCompa
 Run: `npx vitest run src/components/simulator/__tests__/RunComparison.test.tsx`
 Expected: PASS, whole file.
 
+Expect the pre-existing fixtures to start rendering divergence rows: the decisive 4-wins-to-19-wins
+pair flips fifteen seeds. If that collides with an existing query, narrow that query to the table it
+means (`within(...)`) — do not weaken it to a regex that would also match a divergence row.
+
 - [ ] **Step 6: Mutation probe the filter**
 
 Temporarily change `divergingSeeds`' early return from `if (baselineRun.winner === currentRun.winner) return;` to `if (false) return;`. Run the RunComparison file. Expected: "lists only the seeds whose winner changed" FAILS on the button count, and "says the two configurations agreed" FAILS. Restore.
@@ -1269,7 +1278,7 @@ Expected: PASS.
 In `src/constants/changelog.ts`, add to the top of `UNRELEASED_CHANGES`:
 
 ```ts
-    'Combat simulator: open both fights for a seed where a baseline and your run disagree.',
+    'Combat simulator: open both fights for a seed where baseline and current disagree.',
 ```
 
 - [ ] **Step 4: Update the in-app documentation**
