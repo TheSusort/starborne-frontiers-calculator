@@ -4409,10 +4409,12 @@ const DocumentationPage: React.FC = () => {
                                         one device does not affect other devices.
                                     </li>
                                     <li>
-                                        <strong>Clear &amp; re-sync:</strong> Wipes your cloud data
-                                        and re-uploads everything from your current localStorage.
-                                        Useful if your cloud data has become out of sync with your
-                                        local data. Sync remains enabled after the operation.
+                                        <strong>Clear &amp; re-sync:</strong> Uploads everything
+                                        from your current local data, then removes anything the
+                                        cloud still holds that your local data does not. Useful if
+                                        your cloud data has become out of sync with your local data.
+                                        Your local copy is never at risk, and sync remains enabled
+                                        after the operation.
                                     </li>
                                 </ul>
                             </div>

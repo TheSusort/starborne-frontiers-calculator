@@ -137,7 +137,7 @@ describe('ProfilePage cloud sync', () => {
         // A prune that throws must not leave the toggle claiming sync is on: the
         // cloud copy is then a partial replacement nobody has reconciled.
         it('leaves sync off when the prune fails', async () => {
-            (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockRejectedValue(
+            (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
                 new Error('prune failed')
             );
             await renderDataTab();
