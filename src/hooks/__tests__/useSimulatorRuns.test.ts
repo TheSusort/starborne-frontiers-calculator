@@ -464,9 +464,15 @@ describe('divergence playback', () => {
     };
 
     it('replays both sides at the seed and hides the single-fight playback', async () => {
-        const { result } = renderHook(
+        const getGearPiece = () => undefined;
+        const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
-            { initialProps: baseArgs() }
+            {
+                initialProps: baseArgs({
+                    playerBoard: board('T1', 'nova', { attack: 100 }),
+                    getGearPiece,
+                }),
+            }
         );
         await act(async () => {
             result.current.handleRun();
@@ -474,6 +480,21 @@ describe('divergence playback', () => {
         act(() => {
             result.current.handlePinBaseline();
         });
+        // The input the pin recorded. Captured now, before the board changes below, so it stays
+        // a snapshot of the run that got pinned.
+        const baselineInput = mockRunSeedSetAsync.mock.calls[0][0];
+
+        // Re-run under a changed board so the CURRENT run's recorded input is a different object
+        // from the pinned baseline's. Without this, `baseline.input` and `provenance.input` are
+        // the same object (one run, then pinned) and no assertion on a replay call's input can
+        // tell which one it actually used — asserting the wrong one would pass just as well.
+        rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }), getGearPiece }));
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const currentInput = mockRunSeedSetAsync.mock.calls[1][0];
+        expect(currentInput).not.toBe(baselineInput);
+
         // Open a single playback first so `battleResult` starts non-null — otherwise the
         // "hides the single-fight playback" assertion below would pass even if
         // handleOpenDivergence never cleared it.
@@ -492,12 +513,21 @@ describe('divergence playback', () => {
         // A divergence pair and a single playback are alternatives, never both on the page.
         expect(result.current.battleResult).toBeNull();
 
-        // Both replays go through the pinned/recorded inputs at the SAME seed. The full call
-        // list (not just its tail) is asserted so this discriminates "exactly two replays ran"
-        // from "three or more, the last two of which happened to match" — the earlier 509 call
-        // is the `handleOpenSeed` replay made above to seed a non-null `battleResult`.
-        const seeds = mockRunSeededBattle.mock.calls.map((call) => call[1]);
-        expect(seeds).toEqual([509, 507, 507]);
+        // The full call list (not just its tail) is asserted so this discriminates "exactly two
+        // replays ran at 507" from "three or more, the last two of which happened to match" —
+        // the earlier 509 call is the `handleOpenSeed` replay made above. Each replay's input
+        // (call[0]) and getGearPiece (call[2]) are asserted, not just its seed (call[1]): the
+        // first replay must use the pinned BASELINE's input, the second the CURRENT run's own
+        // recorded input, and both must carry the same getGearPiece.
+        const replayCalls = mockRunSeededBattle.mock.calls;
+        expect(replayCalls).toHaveLength(3);
+        expect(replayCalls[0][1]).toBe(509);
+        expect(replayCalls[1][0]).toBe(baselineInput);
+        expect(replayCalls[1][1]).toBe(507);
+        expect(replayCalls[1][2]).toBe(getGearPiece);
+        expect(replayCalls[2][0]).toBe(currentInput);
+        expect(replayCalls[2][1]).toBe(507);
+        expect(replayCalls[2][2]).toBe(getGearPiece);
     });
 
     it('does nothing without a pinned baseline', async () => {
@@ -561,7 +591,7 @@ describe('divergence playback', () => {
             result.current.handleCloseDivergence();
         });
         expect(result.current.divergence).toBeNull();
-        // Close is not unpin: the next diverging seed must open without re-running anything.
+        // See handleCloseDivergence's doc: close is not unpin.
         expect(result.current.baseline).not.toBeNull();
     });
 

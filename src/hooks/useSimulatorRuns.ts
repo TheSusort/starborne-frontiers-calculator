@@ -65,10 +65,10 @@ export interface UseSimulatorRunsResult {
      *  replayed under the same seed. Mutually exclusive with `battleResult` — the page shows a
      *  pair or a single fight, never both. */
     divergence: { seed: number; baseline: BattleResult; current: BattleResult } | null;
-    /** Replays both configurations at `seed` and opens them as a pair. */
-    handleOpenDivergence: (seed: number) => void;
+    /** Replays both configurations at `openSeed` and opens them as a pair. */
+    handleOpenDivergence: (openSeed: number) => void;
     /** Closes an open pair. Distinct from unpinning — the baseline stays pinned, so the next
-     *  diverging seed opens without re-running anything. */
+     *  diverging seed opens without re-running the seed set (it still replays the two fights). */
     handleCloseDivergence: () => void;
 }
 
@@ -161,7 +161,6 @@ export function useSimulatorRuns({
             } catch (err) {
                 setBattleResult(null);
                 setAggregate(null);
-                setDivergence(null);
                 setProvenance(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
             }
@@ -255,7 +254,7 @@ export function useSimulatorRuns({
     // off the input — so dropping it on one side would resolve the two fights under different
     // rules.
     const handleOpenDivergence = useCallback(
-        (seed: number) => {
+        (openSeed: number) => {
             if (!baseline) {
                 setRunError('Pin a baseline before opening a diverging seed.');
                 return;
@@ -266,10 +265,10 @@ export function useSimulatorRuns({
             }
             setRunError(null);
             try {
-                const baselineResult = runSeededBattle(baseline.input, seed, getGearPiece);
-                const currentResult = runSeededBattle(provenance.input, seed, getGearPiece);
+                const baselineResult = runSeededBattle(baseline.input, openSeed, getGearPiece);
+                const currentResult = runSeededBattle(provenance.input, openSeed, getGearPiece);
                 setBattleResult(null);
-                setDivergence({ seed, baseline: baselineResult, current: currentResult });
+                setDivergence({ seed: openSeed, baseline: baselineResult, current: currentResult });
             } catch (err) {
                 setDivergence(null);
                 setRunError(err instanceof Error ? err.message : 'Simulation failed');
