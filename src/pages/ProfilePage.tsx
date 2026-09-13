@@ -32,7 +32,12 @@ import { TrophyIcon } from '../components/ui/icons';
 import { AuthModal } from '../components/auth/AuthModal';
 import { BackupRestoreData } from '../components/import/BackupRestoreData';
 import { isSupabaseSyncEnabled, setSupabaseSyncEnabled } from '../utils/syncUtils';
-import { deleteUserSupabaseData, reuploadLocalDataToSupabase } from '../services/userDataService';
+import {
+    deleteUserSupabaseData,
+    reuploadLocalDataToSupabase,
+    pruneSupabaseDataNotInLocal,
+    PRUNABLE_SECTIONS,
+} from '../services/userDataService';
 
 function StatusBadge({ status }: { status: IntegrationStatus }) {
     const labels: Record<IntegrationStatus, string> = {
@@ -272,8 +277,12 @@ export const ProfilePage: React.FC = () => {
     const handleSyncToggleOn = async () => {
         setSyncOperation('toggle');
         try {
-            await deleteUserSupabaseData(user!.id);
+            // Upload, then remove what local does not have. Read
+            // `pruneSupabaseDataNotInLocal`'s doc for why this order is the
+            // whole point: a failure here leaves extra cloud rows, never
+            // missing ones.
             await reuploadLocalDataToSupabase(user!.id);
+            await pruneSupabaseDataNotInLocal(user!.id, PRUNABLE_SECTIONS);
             // Only update state after all operations succeed so the UI stays consistent.
             setSupabaseSyncEnabled(true);
             setSyncEnabled(true);
@@ -289,8 +298,8 @@ export const ProfilePage: React.FC = () => {
     const handleClearAndReSync = async () => {
         setSyncOperation('clearResync');
         try {
-            await deleteUserSupabaseData(user!.id);
             await reuploadLocalDataToSupabase(user!.id);
+            await pruneSupabaseDataNotInLocal(user!.id, PRUNABLE_SECTIONS);
             addNotification('success', 'Cloud data cleared and re-synced from local.');
         } catch (error) {
             console.error('Error during clear & re-sync:', error);
@@ -591,8 +600,8 @@ export const ProfilePage: React.FC = () => {
                                                     Clear &amp; re-sync
                                                 </p>
                                                 <p className="text-xs text-theme-text-secondary mt-0.5">
-                                                    Wipes cloud data and re-uploads from local. Sync
-                                                    stays enabled.
+                                                    Replaces your cloud data with your local data.
+                                                    Sync stays enabled.
                                                 </p>
                                             </div>
                                             <Button
@@ -680,7 +689,7 @@ export const ProfilePage: React.FC = () => {
                 onClose={() => setShowClearReSyncConfirm(false)}
                 onConfirm={() => void handleClearAndReSync()}
                 title="Clear & Re-sync"
-                message="This will delete all your cloud data and immediately re-upload from your local data. Sync remains enabled."
+                message="This uploads your local data to the cloud, then removes anything the cloud has that your local data does not. Sync remains enabled."
                 confirmLabel="Clear & Re-sync"
                 cancelLabel="Cancel"
             />

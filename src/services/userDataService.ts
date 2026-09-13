@@ -114,18 +114,39 @@ export async function deleteUserSupabaseData(userId: string): Promise<void> {
     }
 }
 
-const loadLocalData = <T>(key: string, isArray: boolean = true): T => {
+/**
+ * A local read carries two facts, and the prune needs both: the value, and
+ * whether the section is actually THERE. A missing key and an unreadable one
+ * both yield the same empty default, which reads identically to "the user owns
+ * none of these" — and pruning on that deletes the cloud copy. `present` is
+ * false unless the key exists, parses, and has the shape its consumers walk.
+ *
+ * Read `pruneSupabaseDataNotInLocal`'s doc for why absent means leave alone.
+ */
+interface LocalSection<T> {
+    value: T;
+    present: boolean;
+}
+
+const readLocalSection = <T>(key: string, isArray: boolean = true): LocalSection<T> => {
+    const empty = { value: (isArray ? [] : {}) as unknown as T, present: false };
     try {
         const data = localStorage.getItem(key);
-        if (data) {
-            return JSON.parse(data) as T;
+        if (!data) return empty;
+        const parsed = JSON.parse(data) as T;
+        if (isArray !== Array.isArray(parsed)) {
+            console.error(`Local section ${key} has the wrong shape for its consumers`);
+            return empty;
         }
-        return (isArray ? [] : {}) as unknown as T;
+        return { value: parsed, present: true };
     } catch (error) {
         console.error(`Error loading data from localStorage for ${key}:`, error);
-        return (isArray ? [] : {}) as unknown as T;
+        return empty;
     }
 };
+
+const loadLocalData = <T>(key: string, isArray: boolean = true): T =>
+    readLocalSection<T>(key, isArray).value;
 
 /**
  * Reads current local state (localStorage + IndexedDB) and upserts everything
@@ -672,6 +693,21 @@ async function childIds(
 }
 
 /**
+ * Every section `pruneSupabaseDataNotInLocal` knows how to compare. A caller
+ * replacing the whole cloud copy with local state — the sync toggle and
+ * clear-and-resync — passes all of them; a restore passes only the sections
+ * its backup file carried.
+ */
+export const PRUNABLE_SECTIONS: readonly string[] = [
+    StorageKey.SHIPS,
+    StorageKey.INVENTORY,
+    StorageKey.ENCOUNTERS,
+    StorageKey.LOADOUTS,
+    StorageKey.TEAM_LOADOUTS,
+    StorageKey.AUTOGEAR_TEAMS,
+];
+
+/**
  * Removes the ships, gear and encounter notes a user has in Supabase but not in
  * their current local snapshot, so a restore lands the backup as a snapshot
  * rather than merging it into whatever was already in the cloud.
@@ -687,40 +723,59 @@ export async function pruneSupabaseDataNotInLocal(
     userId: string,
     restoredSections: readonly string[]
 ): Promise<void> {
-    // A section the backup file never carried was not rewritten locally, so the
-    // local state it would be compared against is whatever happened to be
-    // cached — for gear on a fresh device, plausibly nothing. Pruning that would
-    // delete cloud rows the user never asked to drop, which is the failure this
-    // whole path exists to prevent. Absent means "leave alone", not "empty".
+    // A section the caller did not name was not rewritten locally, so the local
+    // state it would be compared against is whatever happened to be cached —
+    // for gear on a fresh device, plausibly nothing. Pruning that would delete
+    // cloud rows the user never asked to drop, which is the failure this whole
+    // path exists to prevent. Absent means "leave alone", not "empty".
     const restored = new Set(restoredSections);
 
-    const localShips = loadLocalData<Ship[]>(StorageKey.SHIPS);
-    const localEncounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
-    const localLoadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
-    const localTeamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
-    const localAutogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
-    const localInventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(userId))) ?? [];
+    const localShips = readLocalSection<Ship[]>(StorageKey.SHIPS);
+    const localEncounters = readLocalSection<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
+    const localLoadouts = readLocalSection<Loadout[]>(StorageKey.LOADOUTS);
+    const localTeamLoadouts = readLocalSection<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
+    const localAutogearTeams = readLocalSection<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
+
+    // IndexedDB resolves `undefined` for a key it has no record for, which is a
+    // different fact from a record holding an empty array: the first is a
+    // cache that was never populated, the second is a user who owns no gear.
+    // A read that fails outright rejects, and aborts the prune rather than
+    // reaching here with an empty list.
+    const inventoryRecord = await getFromIndexedDB(inventoryCacheKey(userId));
+    const localInventory: LocalSection<GearPiece[]> = Array.isArray(inventoryRecord)
+        ? { value: inventoryRecord, present: true }
+        : { value: [], present: false };
 
     const idSet = <T extends { id: string }>(rows: T[]) => new Set(rows.map((row) => row.id));
 
-    const staleShipIds = restored.has(StorageKey.SHIPS)
-        ? await staleIds('ships', userId, idSet(localShips))
-        : [];
-    const staleGearIds = restored.has(StorageKey.INVENTORY)
-        ? await staleIds('inventory_items', userId, idSet(localInventory))
-        : [];
-    const staleNoteIds = restored.has(StorageKey.ENCOUNTERS)
-        ? await staleIds('encounter_notes', userId, idSet(localEncounters))
-        : [];
-    const staleLoadoutIds = restored.has(StorageKey.LOADOUTS)
-        ? await staleIds('loadouts', userId, idSet(localLoadouts))
-        : [];
-    const staleTeamIds = restored.has(StorageKey.TEAM_LOADOUTS)
-        ? await staleIds('team_loadouts', userId, idSet(localTeamLoadouts))
-        : [];
-    const staleAutogearTeamIds = restored.has(StorageKey.AUTOGEAR_TEAMS)
-        ? await staleIds('autogear_teams', userId, idSet(localAutogearTeams))
-        : [];
+    // Both halves of each gate are load-bearing. The caller names the sections
+    // it wrote; `present` says the section is locally READABLE, without which
+    // the comparison runs against an empty default that means nothing. Either
+    // one missing leaves that section's cloud rows alone.
+    const staleShipIds =
+        restored.has(StorageKey.SHIPS) && localShips.present
+            ? await staleIds('ships', userId, idSet(localShips.value))
+            : [];
+    const staleGearIds =
+        restored.has(StorageKey.INVENTORY) && localInventory.present
+            ? await staleIds('inventory_items', userId, idSet(localInventory.value))
+            : [];
+    const staleNoteIds =
+        restored.has(StorageKey.ENCOUNTERS) && localEncounters.present
+            ? await staleIds('encounter_notes', userId, idSet(localEncounters.value))
+            : [];
+    const staleLoadoutIds =
+        restored.has(StorageKey.LOADOUTS) && localLoadouts.present
+            ? await staleIds('loadouts', userId, idSet(localLoadouts.value))
+            : [];
+    const staleTeamIds =
+        restored.has(StorageKey.TEAM_LOADOUTS) && localTeamLoadouts.present
+            ? await staleIds('team_loadouts', userId, idSet(localTeamLoadouts.value))
+            : [];
+    const staleAutogearTeamIds =
+        restored.has(StorageKey.AUTOGEAR_TEAMS) && localAutogearTeams.present
+            ? await staleIds('autogear_teams', userId, idSet(localAutogearTeams.value))
+            : [];
 
     // Encounter notes: votes and formations both FK to the note.
     if (staleNoteIds.length > 0) {

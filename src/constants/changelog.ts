@@ -25,6 +25,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Restore: cloud data now matches every section your backup file contains.',
     'Sign-in: your gear and implants now carry over to the cloud.',
     'Cloud sync: disabling or re-syncing no longer leaves stale cloud data behind.',
+    'Cloud sync: enabling sync or re-syncing now uploads before clearing the cloud.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

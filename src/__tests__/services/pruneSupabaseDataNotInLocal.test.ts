@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { pruneSupabaseDataNotInLocal } from '../../services/userDataService';
 import { StorageKey, inventoryCacheKey } from '../../constants/storage';
 import { getFromIndexedDB } from '../../hooks/useStorage';
-import { deletesOn, fakeSupabase, indexOfDelete, PAGE_SIZE } from './fakeSupabase';
+import { deletedValues, deletesOn, fakeSupabase, indexOfDelete, PAGE_SIZE } from './fakeSupabase';
 
 const USER = '22222222-2222-4222-8222-222222222222';
 
@@ -275,5 +275,69 @@ describe('pruneSupabaseDataNotInLocal', () => {
             expect(at, `${child} must be deleted before encounter_notes`).toBeGreaterThanOrEqual(0);
             expect(at, `${child} must be deleted before encounter_notes`).toBeLessThan(noteDelete);
         }
+    });
+    // Naming a section is only half the permission: the local state it will be
+    // compared against has to be readable. A key that is missing or unparseable
+    // yields the same empty default as a user who owns nothing, and acting on
+    // that deletes the cloud copy — the exact loss this function exists to stop.
+    describe('a section whose local read did not land', () => {
+        it('leaves the cloud alone when the local key holds unparseable JSON', async () => {
+            localStorage.setItem(StorageKey.SHIPS, '{ not json');
+            const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+        });
+
+        it('leaves the cloud alone when the local key holds the wrong shape', async () => {
+            localStorage.setItem(StorageKey.SHIPS, JSON.stringify({ ships: [] }));
+            const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+        });
+
+        it('leaves the cloud alone when the local key is absent entirely', async () => {
+            const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'ships')).toEqual([]);
+        });
+
+        // The gear cache is IndexedDB, where "no record for this key" resolves
+        // undefined. On a device that has never loaded the inventory that is
+        // the normal state, and it is not the same fact as a record holding [].
+        it('leaves cloud gear alone when the gear cache has no record', async () => {
+            (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+            const ops = fakeSupabase({ inventory_items: [{ id: 'cloud-gear' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'inventory_items')).toEqual([]);
+        });
+
+        // The contrast that keeps the test above from passing for the wrong
+        // reason: a record that IS there and empty still prunes, which is how
+        // clear-and-resync empties a cloud the user has emptied locally.
+        it('still prunes when the gear cache holds an empty record', async () => {
+            (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+            const ops = fakeSupabase({ inventory_items: [{ id: 'cloud-gear' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletedValues(ops, 'inventory_items')).toEqual(['cloud-gear']);
+        });
+
+        it('still prunes when the local key is there and holds an empty list', async () => {
+            localStorage.setItem(StorageKey.SHIPS, JSON.stringify([]));
+            const ops = fakeSupabase({ ships: [{ id: 'cloud-ship' }] });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletedValues(ops, 'ships')).toEqual(['cloud-ship']);
+        });
     });
 });
