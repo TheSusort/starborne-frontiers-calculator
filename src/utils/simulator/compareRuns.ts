@@ -1,4 +1,4 @@
-import type { BattleResult } from '../calculators/battleSimulator';
+import type { BattleResult, BattleSimulationInput } from '../calculators/battleSimulator';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { StatOverrides } from './statOverrides';
 import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
@@ -8,12 +8,16 @@ import { assertPairedSeedSets } from './deltaStats';
  *  into one object and a pinned baseline can be diffed against a later snapshot. */
 export type OverrideSnapshot = Record<string, StatOverrides>;
 
-/** A seed-set aggregate frozen as the comparison point, alongside the override snapshot that
- *  produced it. The seed and run count live inside `aggregate` — see `effectiveRunParams`' doc
- *  for how a pinned baseline forces a variant run onto this same seed set. */
+/** A seed-set aggregate frozen as the comparison point, alongside the override snapshot and the
+ *  fully-resolved engine input that produced it. The seed and run count live inside `aggregate` —
+ *  see `effectiveRunParams`' doc for how a pinned baseline forces a variant run onto this same
+ *  seed set. `input` is what makes the baseline replayable at a seed after the boards have moved
+ *  on; it is the same object the run recorded in its provenance, carried over unchanged when the
+ *  baseline is pinned, and never rebuilt from live board state. */
 export interface PinnedBaseline {
     aggregate: SeedSetAggregate;
     overrides: OverrideSnapshot;
+    input: BattleSimulationInput;
 }
 
 /** Take a snapshot of both boards' overrides. Placements with no override are omitted — a

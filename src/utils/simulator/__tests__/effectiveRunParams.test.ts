@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { effectiveRunParams } from '../effectiveRunParams';
 import type { PinnedBaseline } from '../compareRuns';
 import type { SeedSetAggregate } from '../seededRuns';
+import type { BattleSimulationInput } from '../../calculators/battleSimulator';
 
 const aggregate = (baseSeed: number, count: number): SeedSetAggregate => ({
     baseSeed,
@@ -14,9 +15,12 @@ const aggregate = (baseSeed: number, count: number): SeedSetAggregate => ({
     perActorMean: {},
 });
 
+const input: BattleSimulationInput = { playerTeam: [], enemyTeam: [] };
+
 const baseline = (baseSeed: number, count: number): PinnedBaseline => ({
     aggregate: aggregate(baseSeed, count),
     overrides: {},
+    input,
 });
 
 describe('effectiveRunParams', () => {

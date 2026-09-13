@@ -2,6 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import RunComparison from '../RunComparison';
 import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
+import type { BattleSimulationInput } from '../../../utils/calculators/battleSimulator';
+import type { PinnedBaseline } from '../../../utils/simulator/compareRuns';
+
+const emptyInput: BattleSimulationInput = { playerTeam: [], enemyTeam: [] };
+
+/** Wraps an aggregate as a pinned baseline. The input is inert here — `RunComparison` only reads
+ *  `baseline.aggregate`, never `baseline.input`. */
+const pinned = (aggregate: SeedSetAggregate): PinnedBaseline => ({
+    aggregate,
+    overrides: {},
+    input: emptyInput,
+});
 
 const roster = [
     { actorId: 'focus', side: 'player' as const, name: 'Xcellence', position: 'T1' as const },
@@ -47,11 +59,11 @@ const aggregate = (wins: number, rounds: number, dealt: number, spread = 0): See
 };
 
 /** A decisive change: 4/20 becomes 19/20. */
-const baseline = { aggregate: aggregate(4, 6, 1000, 1), overrides: {} };
+const baseline = pinned(aggregate(4, 6, 1000, 1));
 const current = aggregate(19, 5, 1400, 1);
 
 /** A change that is not: 10/20 becomes 12/20 with everything else barely moving. */
-const noiseBaseline = { aggregate: aggregate(10, 6, 1000, 2), overrides: {} };
+const noiseBaseline = pinned(aggregate(10, 6, 1000, 2));
 const noiseCurrent = aggregate(12, 6, 1020, 2);
 
 const currentOverrides = { 'player:T1': { attack: 12650 } };
@@ -137,7 +149,7 @@ describe('RunComparison', () => {
                 perActorMean: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
             };
         };
-        const divergentBaseline = { aggregate: divergentSeedSet(8, 6, 1000), overrides: {} };
+        const divergentBaseline = pinned(divergentSeedSet(8, 6, 1000));
         const divergentCurrent = { ...divergentSeedSet(13, 5, 1400), baseSeed: 500, count: 20 };
         render(
             <RunComparison
@@ -219,7 +231,7 @@ describe('RunComparison noise verdict', () => {
         // result); the exact sign test the win rows actually run reads p = 2 * 0.5^5 = 0.0625
         // (under the cutoff) — not distinguishable. Pins that win rows take the sign test rather
         // than the t rule.
-        const flipBaseline = { aggregate: aggregate(10, 6, 1000, 0), overrides: {} };
+        const flipBaseline = pinned(aggregate(10, 6, 1000, 0));
         const flipCurrent = aggregate(15, 6, 1000, 0);
         render(
             <RunComparison
@@ -280,10 +292,7 @@ describe('RunComparison noise verdict', () => {
         // 101 — current mean 38.6 (delta +32.6, t ≈ 3.10 against df=19's 2.093 critical value,
         // comfortably distinguishable) against current median 5 (delta -1). Mean and median
         // disagree in sign, and the mean move is real, not noise.
-        const skewedBaseline = {
-            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
-            overrides: {},
-        };
+        const skewedBaseline = pinned(roundsAggregate(new Array<number>(20).fill(6)));
         const skewedCurrent = roundsAggregate([
             ...new Array<number>(13).fill(5),
             ...new Array<number>(7).fill(101),
@@ -303,10 +312,7 @@ describe('RunComparison noise verdict', () => {
         // to 5) and one seed runs long at 46 (which pulls the mean up to 7.05) — but a single
         // outlier among 19 concordant seeds can never clear the t threshold (t ≈ 0.51 here), so
         // the Mean rounds row itself reads "not distinguishable" and the banner must agree.
-        const noisyBaseline = {
-            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
-            overrides: {},
-        };
+        const noisyBaseline = pinned(roundsAggregate(new Array<number>(20).fill(6)));
         const noisyCurrent = roundsAggregate([...new Array<number>(19).fill(5), 46]);
         render(
             <RunComparison baseline={noisyBaseline} current={noisyCurrent} currentOverrides={{}} />

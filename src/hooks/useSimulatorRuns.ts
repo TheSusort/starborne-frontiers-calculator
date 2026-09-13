@@ -221,7 +221,7 @@ export function useSimulatorRuns({
         // comparison. `RunComparison` throws rather than render one.
         if (isRunning) return;
         if (!aggregate || !provenance) return;
-        setBaseline({ aggregate, overrides: provenance.overrides });
+        setBaseline({ aggregate, overrides: provenance.overrides, input: provenance.input });
     };
 
     const handleUnpinBaseline = () => setBaseline(null);

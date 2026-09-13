@@ -216,6 +216,30 @@ describe('useSimulatorRuns', () => {
         expect(result.current.aggregate).not.toBe(pinnedBaseline?.aggregate);
     });
 
+    it('pins the input that RAN, not a fresh read of the boards at pin time', async () => {
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ playerBoard: board('T1', 'nova', { attack: 100 }) }) }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        // The exact object the run consumed. `handleRun` passes one `input` const to both
+        // `runSeedSetAsync` and `setProvenance`, so identity against it is the check.
+        const ranInput = mockRunSeedSetAsync.mock.calls[0][0];
+
+        // The boards move on BEFORE the pin. A baseline is a snapshot of the run it names, so
+        // pinning must reach for the recorded input rather than rebuilding from live state —
+        // otherwise replaying the baseline later reproduces a fight that never happened.
+        rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }) }));
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+
+        expect(result.current.baseline?.input).toBe(ranInput);
+    });
+
     it('handleOpenSeed reports an error instead of throwing when there is no run to replay', () => {
         const { result } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
