@@ -30,7 +30,7 @@ interface UnitVersionSelectorProps {
  */
 export const UnitVersionSelector: React.FC<UnitVersionSelectorProps> = ({ onSelect, onClose }) => {
     const { ships: ownedShips } = useShips();
-    const { ships: units, loading, getAscensionStats } = useShipsData();
+    const { ships: units, loading, error, getAscensionStats } = useShipsData();
     const [search, setSearch] = useState('');
     const [unit, setUnit] = useState<Ship | null>(null);
 
@@ -135,7 +135,17 @@ export const UnitVersionSelector: React.FC<UnitVersionSelectorProps> = ({ onSele
                         autoFocus
                     />
                     {loading && <Loader />}
-                    {!loading && matches.length === 0 && <p>No units match that search</p>}
+                    {/* An empty list after a failed fetch is not an empty SEARCH — saying "no
+                        matches" there sends the player looking for a typo that is not theirs. */}
+                    {!loading && error && units.length === 0 && (
+                        <p className="text-red-400">
+                            The unit list could not be loaded. Check your connection and reopen this
+                            picker.
+                        </p>
+                    )}
+                    {!loading && !error && matches.length === 0 && (
+                        <p>No units match that search</p>
+                    )}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                         {matches.map((candidate) => (
                             <ShipDisplay

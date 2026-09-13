@@ -29,14 +29,21 @@ interface AscensionStatRow {
     value: number;
 }
 
+/** Mirrors `isAscensionStat` in src/utils/ship/referenceShip.ts, which the app validates with. */
+const MAX_REFIT_LEVEL = 6;
+
 const isAscensionStatRow = (value: unknown): value is AscensionStatRow => {
     if (typeof value !== 'object' || value === null) return false;
     const row = value as Record<string, unknown>;
     return (
         typeof row.level === 'number' &&
+        Number.isInteger(row.level) &&
+        row.level >= 0 &&
+        row.level <= MAX_REFIT_LEVEL &&
         typeof row.attribute === 'string' &&
         typeof row.type === 'string' &&
-        typeof row.value === 'number'
+        typeof row.value === 'number' &&
+        Number.isFinite(row.value)
     );
 };
 
@@ -91,13 +98,17 @@ const main = async () => {
             id: string;
             ascensionStats?: unknown;
         };
-        const stats = Array.isArray(unit.ascensionStats)
-            ? unit.ascensionStats.filter(isAscensionStatRow)
-            : [];
-        if (stats.length === 0) {
+        // All or nothing, matching the app's own parse: a partial list would still satisfy
+        // `canBeFullyRefitted`, so the picker would offer a refitted version missing grants.
+        const rows = Array.isArray(unit.ascensionStats) ? unit.ascensionStats : [];
+        if (rows.length === 0 || !rows.every(isAscensionStatRow)) {
+            if (rows.length > 0) {
+                console.error(`${slug}: ascension payload has unusable rows, skipping the unit`);
+            }
             emptyUnits.push(slug);
             continue;
         }
+        const stats = rows as AscensionStatRow[];
         const template = templateByDefinitionId.get(unit.id);
         if (!template) {
             unmatchedUnits.push(`${slug} (${unit.id})`);
@@ -129,6 +140,7 @@ const main = async () => {
         return;
     }
 
+    const failures: string[] = [];
     for (const update of updates) {
         const { error: updateError } = await supabase
             .from('ship_templates')
@@ -136,9 +148,16 @@ const main = async () => {
             .eq('id', update.id);
         if (updateError) {
             console.error(`failed to update ${update.name}:`, updateError.message);
+            failures.push(update.name);
         }
     }
-    console.log(`wrote ascension_stats for ${updates.length} templates`);
+
+    console.log(`wrote ascension_stats for ${updates.length - failures.length} templates`);
+    // A partial write that exits 0 tells automation the data landed. Fail loudly instead.
+    if (failures.length > 0) {
+        console.error(`${failures.length} failed: ${failures.join(', ')}`);
+        process.exit(1);
+    }
 };
 
 main().catch((error) => {

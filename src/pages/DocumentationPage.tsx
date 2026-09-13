@@ -3887,9 +3887,10 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         Versions are your own copies of that unit, an R0 level 60
-                                        reference, or a fully refitted one. A reference version
-                                        carries no gear, so the fight shows what the unit itself
-                                        does — your engineering bonuses still apply
+                                        reference, and — for units whose refit data has been loaded
+                                        — a fully refitted one. A reference version carries no gear,
+                                        so the fight shows what the unit itself does — your
+                                        engineering bonuses still apply
                                     </li>
                                     <li>
                                         Each of your own ships fights with its real geared, refit,

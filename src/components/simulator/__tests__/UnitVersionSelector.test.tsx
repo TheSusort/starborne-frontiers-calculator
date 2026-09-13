@@ -44,6 +44,8 @@ const UNITS = [ship('T_AEGIS', 'Aegis'), ship('T_JUDGE', 'Judge')];
 
 let ownedShips: Ship[] = [];
 let ascensionByTemplate: Record<string, AscensionStat[]> = {};
+let unitsError: string | null = null;
+let availableUnits: Ship[] = [];
 
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({ ships: ownedShips, getShipById: vi.fn() }),
@@ -51,9 +53,9 @@ vi.mock('../../../contexts/ShipsContext', () => ({
 
 vi.mock('../../../hooks/useShipsData', () => ({
     useShipsData: () => ({
-        ships: UNITS,
+        ships: availableUnits,
         loading: false,
-        error: null,
+        error: unitsError,
         fetchSingleShip: vi.fn(),
         getAscensionStats: (id: string) => ascensionByTemplate[id] ?? null,
     }),
@@ -83,6 +85,8 @@ describe('UnitVersionSelector', () => {
         vi.clearAllMocks();
         ownedShips = [];
         ascensionByTemplate = {};
+        unitsError = null;
+        availableUnits = UNITS;
     });
 
     const renderSelector = (onSelect = vi.fn(), onClose = vi.fn()) => {
@@ -198,5 +202,79 @@ describe('UnitVersionSelector', () => {
 
         expect(screen.getByPlaceholderText('Search units')).toBeInTheDocument();
         expect(screen.getAllByText('Judge').length).toBeGreaterThan(0);
+    });
+
+    // An empty list after a failed fetch is not an empty search: telling the player "no
+    // matches" sends them hunting a typo that is not theirs.
+    describe('when the unit list fails to load', () => {
+        beforeEach(() => {
+            unitsError = 'network down';
+            availableUnits = [];
+        });
+
+        it('says the list could not be loaded, not that nothing matched', () => {
+            renderSelector();
+
+            expect(screen.getByText(/could not be loaded/i)).toBeInTheDocument();
+            expect(screen.queryByText('No units match that search')).toBeNull();
+        });
+
+        it('still says nothing matched when the list loaded and the search is too narrow', () => {
+            unitsError = null;
+            availableUnits = UNITS;
+            renderSelector();
+
+            fireEvent.change(screen.getByPlaceholderText('Search units'), {
+                target: { value: 'zzzz' },
+            });
+
+            expect(screen.getByText('No units match that search')).toBeInTheDocument();
+        });
+    });
+
+    // Every step of this picker is a grid of cards, so a mouse-only card makes the whole
+    // flow unreachable from the keyboard.
+    describe('keyboard', () => {
+        it('advances from a unit card on Enter', () => {
+            renderSelector();
+
+            fireEvent.keyDown(screen.getAllByRole('button', { name: /Aegis/ })[0], {
+                key: 'Enter',
+            });
+
+            expect(screen.getByText('Reference')).toBeInTheDocument();
+        });
+
+        it('picks a reference version on Space', () => {
+            const { onSelect } = renderSelector();
+            openUnit('Aegis');
+
+            const card = screen.getByText('R0 level 60').closest('[role="button"]') as HTMLElement;
+            fireEvent.keyDown(card, { key: ' ' });
+
+            expect((onSelect.mock.calls[0][0] as Ship).id).toBe('template:T_AEGIS:r0');
+        });
+
+        it('picks an owned copy on Enter', () => {
+            ownedShips = [ship('owned-1', 'Aegis')];
+            const { onSelect } = renderSelector();
+            openUnit('Aegis');
+
+            const ownedSection = screen.getByText('Your ships').parentElement as HTMLElement;
+            const card = within(ownedSection).getByText('Aegis').closest('[role="button"]');
+            fireEvent.keyDown(card as HTMLElement, { key: 'Enter' });
+
+            expect((onSelect.mock.calls[0][0] as Ship).id).toBe('owned-1');
+        });
+
+        it('ignores a key that is not Enter or Space', () => {
+            const { onSelect } = renderSelector();
+            openUnit('Aegis');
+
+            const card = screen.getByText('R0 level 60').closest('[role="button"]') as HTMLElement;
+            fireEvent.keyDown(card, { key: 'a' });
+
+            expect(onSelect).not.toHaveBeenCalled();
+        });
     });
 });

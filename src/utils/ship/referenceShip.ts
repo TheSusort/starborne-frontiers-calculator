@@ -26,22 +26,32 @@ export const MAX_REFITS = 6;
 
 export type ReferenceVariant = 'r0' | 'refitted';
 
-/** Rejects anything that is not a usable ascension row, so a malformed column cannot half-apply. */
+/** Rejects anything that is not a usable ascension row. */
 export const isAscensionStat = (value: unknown): value is AscensionStat => {
     if (typeof value !== 'object' || value === null) return false;
     const row = value as Record<string, unknown>;
     return (
         typeof row.level === 'number' &&
+        Number.isInteger(row.level) &&
+        row.level >= 0 &&
+        row.level <= MAX_REFITS &&
         typeof row.attribute === 'string' &&
         typeof row.type === 'string' &&
-        typeof row.value === 'number'
+        typeof row.value === 'number' &&
+        Number.isFinite(row.value)
     );
 };
 
+/**
+ * All or nothing: one unusable row rejects the whole column.
+ *
+ * Keeping the readable rows would leave a unit whose grants are silently incomplete while
+ * `canBeFullyRefitted` still says yes, so the picker would offer a "fully refitted" version
+ * that is missing refits. No data is a visible absence; partial data is a wrong number.
+ */
 export const parseAscensionStats = (value: unknown): AscensionStat[] | null => {
-    if (!Array.isArray(value)) return null;
-    const rows = value.filter(isAscensionStat);
-    return rows.length > 0 ? rows : null;
+    if (!Array.isArray(value) || value.length === 0) return null;
+    return value.every(isAscensionStat) ? value : null;
 };
 
 const statsForLevel = (rows: AscensionStat[], level: number): Stat[] =>
@@ -126,7 +136,29 @@ export const referenceShip = (
 export const referenceShipId = (template: Ship, variant: ReferenceVariant): string =>
     `template:${template.id}:${variant}`;
 
-export const isReferenceShipId = (id: string): boolean => id.startsWith('template:');
+const REFERENCE_ID_PREFIX = 'template:';
+
+export const isReferenceShipId = (id: string): boolean => id.startsWith(REFERENCE_ID_PREFIX);
+
+/**
+ * Reads a reference ship id back into the template and variant that built it, so a stored
+ * board (a saved encounter, a shared setup) can rebuild the ship rather than looking it up
+ * among the ships the viewer owns — where it will never be.
+ *
+ * `null` for an owned ship's id, and for a reference id whose variant this app no longer has.
+ */
+export const parseReferenceShipId = (
+    id: string
+): { templateId: string; variant: ReferenceVariant } | null => {
+    if (!isReferenceShipId(id)) return null;
+    const rest = id.slice(REFERENCE_ID_PREFIX.length);
+    // Split at the LAST separator: a template id may contain one, a variant never does.
+    const separator = rest.lastIndexOf(':');
+    if (separator <= 0) return null;
+    const variant = rest.slice(separator + 1);
+    if (variant !== 'r0' && variant !== 'refitted') return null;
+    return { templateId: rest.slice(0, separator), variant };
+};
 
 export const canBeFullyRefitted = (ascensionStats: AscensionStat[] | null): boolean =>
     (ascensionStats?.length ?? 0) > 0;

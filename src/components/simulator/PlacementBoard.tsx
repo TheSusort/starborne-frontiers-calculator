@@ -8,6 +8,8 @@ import { Modal } from '../ui/layout/Modal';
 import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useShips } from '../../contexts/ShipsContext';
+import { useShipsData } from '../../hooks/useShipsData';
+import { parseReferenceShipId, referenceShip } from '../../utils/ship/referenceShip';
 import type { StatOverrides } from '../../utils/simulator/statOverrides';
 import { UnitVersionSelector } from './UnitVersionSelector';
 
@@ -74,6 +76,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
+    const { ships: units, getAscensionStats } = useShipsData();
 
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [encounterName, setEncounterName] = useState('');
@@ -92,18 +95,32 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
         }
     };
 
+    /**
+     * A saved formation stores ids only, and a reference unit's id belongs to no owned row —
+     * looking it up among the player's ships silently drops the cell. Rebuild it from the
+     * template instead.
+     */
+    const resolveSavedShip = (shipId: string): Ship | null => {
+        const reference = parseReferenceShipId(shipId);
+        if (!reference) return getShipById(shipId) ?? null;
+        const template = units.find((unit) => unit.id === reference.templateId);
+        if (!template) return null;
+        return referenceShip(template, reference.variant, getAscensionStats(template.id));
+    };
+
     const handleLoadEncounter = (encounterId: string) => {
         if (!encounterId) return;
         const encounter = encounters.find((e) => e.id === encounterId);
         if (!encounter) return;
-        // Build the board from the encounter's formation. Skip cells whose ship the user no
-        // longer owns (getShipById undefined) so we never place a missing ship.
+        // Build the board from the encounter's formation. Skip cells whose ship cannot be
+        // resolved — an owned ship the user has since deleted, or a unit no longer in the
+        // catalogue — so we never place a missing ship.
         const board: BoardState = {};
         for (const item of encounter.formation ?? []) {
             // Formation comes from the encounter store (DB trust boundary); skip any
             // malformed entry rather than trusting its shape.
             if (!item?.shipId || !item?.position) continue;
-            const ship = getShipById(item.shipId);
+            const ship = resolveSavedShip(item.shipId);
             if (ship) board[item.position] = { ship };
         }
         onLoadEncounter(board);

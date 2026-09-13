@@ -169,8 +169,25 @@ describe('parseAscensionStats', () => {
         }
     );
 
-    it('keeps only the usable rows when a column is partly malformed', () => {
-        expect(parseAscensionStats([ascension[0], { level: 2 }])).toEqual([ascension[0]]);
+    // One bad row rejects the whole column: a partial list still satisfies
+    // `canBeFullyRefitted`, so the picker would offer a refitted version missing grants.
+    it('rejects the whole column when one row is malformed', () => {
+        expect(parseAscensionStats([ascension[0], { level: 2 }])).toBeNull();
+    });
+
+    it.each([
+        ['a level past the last refit', { ...ascension[0], level: 7 }],
+        ['a fractional level', { ...ascension[0], level: 1.5 }],
+        ['a negative level', { ...ascension[0], level: -1 }],
+        ['a non-finite value', { ...ascension[0], value: Number.POSITIVE_INFINITY }],
+        ['a NaN value', { ...ascension[0], value: Number.NaN }],
+    ])('rejects a column carrying %s', (_label, row) => {
+        expect(parseAscensionStats([row])).toBeNull();
+    });
+
+    it('accepts level 0, which is an innate grant rather than a refit', () => {
+        const innate = { level: 0, attribute: 'CritChance', type: 'Flat', value: 0.2 };
+        expect(parseAscensionStats([innate])).toEqual([innate]);
     });
 });
 

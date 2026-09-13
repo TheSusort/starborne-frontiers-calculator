@@ -37,6 +37,22 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         onSaveAsLoadout,
     }) => {
         const { getGearPiece } = useInventory();
+
+        // A card that responds to a click has to answer the keyboard too, or the whole ship
+        // picker is mouse-only. Applied where the click handler is, so the two cannot drift.
+        const interactiveProps = onClick
+            ? {
+                  onClick,
+                  role: 'button',
+                  tabIndex: 0,
+                  onKeyDown: (event: React.KeyboardEvent) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return;
+                      // Space scrolls the page by default; a card acting as a button must not.
+                      event.preventDefault();
+                      onClick();
+                  },
+              }
+            : {};
         const { getEngineeringStatsForShipType } = useEngineeringStats();
         const { addNotification } = useNotification();
 
@@ -99,6 +115,7 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         if (variant === 'compact') {
             return (
                 <div
+                    {...interactiveProps}
                     className={`card-hover flex justify-between flex-grow p-3 bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                         selected ? 'border-2' : ''
                     } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName}`}
@@ -120,10 +137,10 @@ export const ShipDisplay: React.FC<ShipDisplayProps> = memo(
         return (
             <div
                 id={`ship-card-${ship.id}`}
+                {...interactiveProps}
                 className={`card-hover flex flex-col w-full flex-grow bg-dark border ${RARITIES[ship.rarity || 'common'].borderColor} ${
                     selected ? 'border-2' : ''
                 } ${onClick ? 'cursor-pointer hover:bg-dark-lighter' : ''} ${contentClassName || ''}`}
-                onClick={onClick}
             >
                 <div
                     className={`px-4 py-2 border-b ${RARITIES[ship.rarity || 'common'].borderColor} flex justify-between items-center`}
