@@ -38,10 +38,10 @@ export interface PairedDelta {
 }
 
 /** The two-sided 95% t critical value as degrees of freedom go to infinity — the normal
- *  approximation. NOT the threshold the continuous path compares against: at finite `n` that is
- *  `studentTCritical95(n - 1)`, which is always at least this large. Exported only because it is
- *  the asymptote `studentTCritical95` converges to past `df = 100`. */
-export const T_THRESHOLD = 1.96;
+ *  approximation `studentTCritical95` falls back to past `df = 100`. NOT the threshold the
+ *  continuous path compares against: at finite `n` that is `studentTCritical95(n - 1)`, which is
+ *  always at least this large. */
+export const T_CRITICAL_95_ASYMPTOTE = 1.96;
 
 /** The binary (sign-test) path's significance level — its `p <= SIGN_TEST_ALPHA` plays the same
  *  role `studentTCritical95(df)` plays on the continuous path. Fixed, not a user setting: a
@@ -91,10 +91,10 @@ const T_CRITICAL_95_TABLE: ReadonlyArray<readonly [df: number, critical: number]
 /** The two-sided 95% critical value for `df` degrees of freedom, read off `T_CRITICAL_95_TABLE`.
  *  A `df` that falls between two table entries takes the next LOWER entry's value — the larger,
  *  more conservative critical value — rather than interpolating: `df = 35` reads the `df = 30`
- *  row's `2.042`. Above `df = 100` this returns `T_THRESHOLD`, the table's own asymptote.
+ *  row's `2.042`. Above `df = 100` this returns `T_CRITICAL_95_ASYMPTOTE`.
  *  Undefined for `df < 1`; `pairedDelta` never calls this below `n = 2` (`df = 1`). */
 export function studentTCritical95(df: number): number {
-    if (df > 100) return T_THRESHOLD;
+    if (df > 100) return T_CRITICAL_95_ASYMPTOTE;
     let critical = T_CRITICAL_95_TABLE[0][1];
     for (const [tableDf, tableCritical] of T_CRITICAL_95_TABLE) {
         if (tableDf > df) break;

@@ -196,9 +196,11 @@ export interface SeedSetRunOptions {
  * on the page can observe a half-seeded RNG.
  *
  * Resolves `null` when the signal aborts — **never a partial aggregate**. A cancelled run
- * produced no result, and a caller must not be able to display one. Because a `onProgress` call
- * for the final seed sits behind an abort check, a run cancelled during its last yield reports no
- * further progress rather than painting 100% just before the result is discarded.
+ * produced no result, and a caller must not be able to display one. A cancellation seen at the
+ * post-yield check below stops that seed's battle from running at all; one arriving after a
+ * battle already finished still skips that seed's `onProgress` call (the `!signal?.aborted` guard
+ * further down), so a run cancelled during its last seed never reports 100% just before the
+ * result is discarded.
  */
 export async function runSeedSetAsync(
     input: BattleSimulationInput,
@@ -221,8 +223,8 @@ export async function runSeedSetAsync(
         if (signal?.aborted) return null;
         await new Promise((resolve) => setTimeout(resolve));
         // A cancellation arriving during the yield above is only visible here, immediately after
-        // it: without this second check the loop would still run one more full battle before
-        // noticing, which on a heavy board is exactly the delay Cancel exists to remove.
+        // it: without checking again here, the loop runs the seed's battle before noticing,
+        // which on a heavy board is exactly the delay Cancel exists to remove.
         if (signal?.aborted) return null;
         const seed = baseSeed + i;
         const result = runSeededBattle(input, seed, getGearPiece);
