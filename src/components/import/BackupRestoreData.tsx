@@ -238,16 +238,26 @@ export const BackupRestoreData: React.FC = () => {
                         // every table. Building the payload here instead meant a
                         // rejected insert after an already-committed delete, which
                         // emptied cloud gear and ships outright (#504).
-                        await reuploadLocalDataToSupabase(activeProfileId);
+                        const incomplete = await reuploadLocalDataToSupabase(activeProfileId);
 
                         // Only now that every row in the backup exists remotely is
                         // it safe to remove what the backup does not have. The old
                         // order — delete, then upload — is what lost the data.
                         // Scoped to the keys this file actually carried: a section
                         // the file omits is left alone, never emptied.
-                        await pruneSupabaseDataNotInLocal(activeProfileId, restoredSections);
+                        await pruneSupabaseDataNotInLocal(
+                            activeProfileId,
+                            restoredSections.filter((section) => !incomplete.includes(section))
+                        );
 
-                        addNotification('success', 'Data restored and synced to cloud storage');
+                        if (incomplete.length > 0) {
+                            addNotification(
+                                'warning',
+                                'Data restored, but some of it could not be uploaded to the cloud. Your local copy is intact — try a clear & re-sync from your profile.'
+                            );
+                        } else {
+                            addNotification('success', 'Data restored and synced to cloud storage');
+                        }
                     } catch (error) {
                         console.error('Failed to sync with Supabase:', error);
                         addNotification(

@@ -24,7 +24,7 @@ vi.mock('../../../hooks/useStorage', () => ({
 }));
 
 vi.mock('../../../services/userDataService', () => ({
-    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue(undefined),
+    reuploadLocalDataToSupabase: vi.fn().mockResolvedValue([]),
     pruneSupabaseDataNotInLocal: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -32,8 +32,10 @@ vi.mock('../../../config/supabase', () => ({
     supabase: { from: vi.fn(), rpc: vi.fn() },
 }));
 
+// One stable spy, so a test can assert on what the restore actually told the user.
+const addNotification = vi.fn();
 vi.mock('../../../hooks/useNotification', () => ({
-    useNotification: () => ({ addNotification: vi.fn() }),
+    useNotification: () => ({ addNotification }),
 }));
 
 vi.mock('../../../contexts/AuthProvider', () => ({
@@ -82,7 +84,8 @@ describe('BackupRestoreData', () => {
         localStorage.clear();
         (setInIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
         (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
-        (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+        // Resolves to the sections that did NOT fully upload; [] is the all-clear.
+        (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue([]);
         (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     });
 
@@ -162,7 +165,7 @@ describe('BackupRestoreData', () => {
             const order: string[] = [];
             (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockImplementation(() => {
                 order.push('upload');
-                return Promise.resolve();
+                return Promise.resolve([]);
             });
             (pruneSupabaseDataNotInLocal as ReturnType<typeof vi.fn>).mockImplementation(() => {
                 order.push('prune');
@@ -263,6 +266,42 @@ describe('BackupRestoreData', () => {
             );
             expect(reuploadLocalDataToSupabase).not.toHaveBeenCalled();
             expect(supabase.from).not.toHaveBeenCalled();
+        });
+    });
+
+    // The restore names the sections its file carried; a section whose upload did not finish
+    // must drop out of that list, or the prune reconciles the cloud to a local picture the
+    // upload never wrote.
+    describe('when a section does not fully upload', () => {
+        beforeEach(() => {
+            (reuploadLocalDataToSupabase as ReturnType<typeof vi.fn>).mockResolvedValue([
+                StorageKey.SHIPS,
+            ]);
+        });
+
+        it('leaves that section out of the prune', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            expect(pruneSupabaseDataNotInLocal).toHaveBeenCalledWith(PROFILE_ID, []);
+        });
+
+        // Those sections are local-only afterwards, so a clean success sends the user away
+        // believing the cloud has a copy it does not have.
+        it('does not report a clean success', async () => {
+            render(<BackupRestoreData />);
+            await restoreFile({ [StorageKey.SHIPS]: JSON.stringify(SHIPS) });
+
+            await waitFor(() => expect(pruneSupabaseDataNotInLocal).toHaveBeenCalled());
+            expect(addNotification).toHaveBeenCalledWith(
+                'warning',
+                expect.stringContaining('could not be uploaded')
+            );
+            expect(addNotification).not.toHaveBeenCalledWith(
+                'success',
+                'Data restored and synced to cloud storage'
+            );
         });
     });
 });
