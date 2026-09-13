@@ -134,7 +134,13 @@ const readLocalSection = <T>(key: string, isArray: boolean = true): LocalSection
         const data = localStorage.getItem(key);
         if (!data) return empty;
         const parsed = JSON.parse(data) as T;
-        if (isArray !== Array.isArray(parsed)) {
+        // `null` and every scalar parse cleanly and are neither. Checking only
+        // `Array.isArray` lets them through as a present object section, and a present
+        // section is one this app then REPLACES the cloud copy from.
+        const shapeMatches = isArray
+            ? Array.isArray(parsed)
+            : typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed);
+        if (!shapeMatches) {
             console.error(`Local section ${key} has the wrong shape for its consumers`);
             return empty;
         }
@@ -196,10 +202,13 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
-    const engineeringSection = readLocalSection<EngineeringStats>(
-        StorageKey.ENGINEERING_STATS,
-        false
-    );
+    // engineering_stats is REPLACED wholesale from this value, so the read has to reach the
+    // field that replacement walks: an object without a `stats` array yields no records, and
+    // replacing from it would delete every remote row and insert nothing.
+    const engineeringRead = readLocalSection<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
+    const engineeringSection = Array.isArray(engineeringRead.value?.stats)
+        ? engineeringRead
+        : { value: engineeringRead.value, present: false };
     const engineeringStats = engineeringSection.value;
     const autogearConfigs = loadLocalData<Record<string, SavedAutogearConfig>>(
         StorageKey.AUTOGEAR_CONFIGS,

@@ -52,6 +52,22 @@ describe('reuploadLocalDataToSupabase', () => {
             expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
         });
 
+        // `readLocalSection`'s non-array branch accepted ANY parsed JSON, so a key holding
+        // `null` or a scalar read as present and the replacement then deleted every remote
+        // row and inserted nothing.
+        it.each([
+            ['null', 'null'],
+            ['a scalar', '5'],
+            ['an object with no stats', '{}'],
+        ])('leaves them alone when the local section is %s', async (_label, raw) => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, raw);
+            const ops = fakeSupabase({});
+
+            await reuploadLocalDataToSupabase(USER);
+
+            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
+        });
+
         it('still replaces them when the local section has stats', async () => {
             localStorage.setItem(
                 StorageKey.ENGINEERING_STATS,
@@ -63,6 +79,20 @@ describe('reuploadLocalDataToSupabase', () => {
 
             await reuploadLocalDataToSupabase(USER);
 
+            expect(deletesOn(ops, 'engineering_stats')).toHaveLength(1);
+        });
+    });
+
+    // The object sections are read with the same helper. `Object.entries(null)` throws, so a
+    // key holding `null` took down the whole upload — every section after it included.
+    describe('a malformed object section', () => {
+        it('does not abort the upload when the autogear configs are null', async () => {
+            localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, 'null');
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            const ops = fakeSupabase({});
+
+            await expect(reuploadLocalDataToSupabase(USER)).resolves.toEqual([]);
+            // The section AFTER it still ran, which is what aborting would have skipped.
             expect(deletesOn(ops, 'engineering_stats')).toHaveLength(1);
         });
     });

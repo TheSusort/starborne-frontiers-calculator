@@ -250,7 +250,14 @@ export const BackupRestoreData: React.FC = () => {
                             restoredSections.filter((section) => !incomplete.includes(section))
                         );
 
-                        addNotification('success', 'Data restored and synced to cloud storage');
+                        if (incomplete.length > 0) {
+                            addNotification(
+                                'warning',
+                                'Data restored, but some of it could not be uploaded to the cloud. Your local copy is intact — try a clear & re-sync from your profile.'
+                            );
+                        } else {
+                            addNotification('success', 'Data restored and synced to cloud storage');
+                        }
                     } catch (error) {
                         console.error('Failed to sync with Supabase:', error);
                         addNotification(
