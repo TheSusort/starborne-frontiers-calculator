@@ -23,9 +23,8 @@ ALTER TABLE public.ship_templates
 -- so it measures two different things on write and on validate. See
 -- 20260901000001_bound_community_recommendation_payload_size.sql for the
 -- measurements behind that rule.
+-- Plain, not NOT VALID: the column is new, so every existing row holds NULL and
+-- there is nothing for a second validating pass to scan.
 ALTER TABLE public.ship_templates
   ADD CONSTRAINT ship_templates_ascension_stats_size
-  CHECK (ascension_stats IS NULL OR octet_length(ascension_stats::text) <= 16384) NOT VALID;
-
-ALTER TABLE public.ship_templates
-  VALIDATE CONSTRAINT ship_templates_ascension_stats_size;
+  CHECK (ascension_stats IS NULL OR octet_length(ascension_stats::text) <= 16384);
