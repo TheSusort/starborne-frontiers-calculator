@@ -3869,9 +3869,9 @@ const DocumentationPage: React.FC = () => {
                             <h3 className="text-xl font-semibold mb-2">Round-by-Round Battles</h3>
                             <p className="text-theme-text mb-4">
                                 The Combat Simulator pits two squads against each other on the hex
-                                board and plays out the whole fight, round by round. Both sides are
-                                ships from your own fleet, simulated with their fully geared stats —
-                                so you can stage matchups and watch exactly how they unfold.
+                                board and plays out the whole fight, round by round. Either side can
+                                hold any unit in the game, so you can stage matchups against ships
+                                you do not own and watch exactly how they unfold.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
@@ -3882,12 +3882,19 @@ const DocumentationPage: React.FC = () => {
                                         an enemy team on the other
                                     </li>
                                     <li>
-                                        Click a cell to select it, then pick a ship from your fleet
-                                        to fill it; click a placed ship to remove it
+                                        Click a cell to select it, then pick any unit in the game
+                                        and choose a version of it; click a placed ship to remove it
                                     </li>
                                     <li>
-                                        Each placed ship fights with its real geared, refit, and
-                                        engineering-resolved stats
+                                        Versions are your own copies of that unit, an R0 level 60
+                                        reference, and — for units whose refit data has been loaded
+                                        — a fully refitted one. A reference version carries no gear,
+                                        so the fight shows what the unit itself does — your
+                                        engineering bonuses still apply
+                                    </li>
+                                    <li>
+                                        Each of your own ships fights with its real geared, refit,
+                                        and engineering-resolved stats
                                     </li>
                                     <li>
                                         Run the simulation once you have at least one ship on each

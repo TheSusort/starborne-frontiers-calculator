@@ -1,14 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ExportedPlayData } from '../types/exportedPlayData';
-import {
-    EngineeringStats,
-    StatType,
-    StatName,
-    Stat,
-    PERCENTAGE_ONLY_STATS,
-    FlexibleStats,
-    PercentageOnlyStats,
-} from '../types/stats';
+import { EngineeringStats, StatName, Stat } from '../types/stats';
 import { Ship, Refit, AffinityName } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
@@ -16,6 +8,18 @@ import { GearSetName } from '../constants/gearSets';
 import { ShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
+import {
+    createStat,
+    getPercentageStatValue,
+    getStatName,
+    getStatType,
+} from './ship/gameStatVocabulary';
+import {
+    applyGuaranteedCrit,
+    getDamageReduction,
+    getHpRegen,
+    padEmptyRefits,
+} from './ship/perShipRules';
 
 interface ImportResult {
     success: boolean;
@@ -141,17 +145,8 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             }
         });
 
-        // Add crit to Asphodel or Tormenter if they have more than 2 refits
-        if ((unit.Name === 'Asphodel' || unit.Name === 'Tormenter') && unit.Refit >= 2) {
-            refits[0].stats.push(createStat('crit', 100 - baseStats.crit, 'percentage'));
-        }
-
-        // Check if refits have stats, if not, add an empty attack stat to each empty refit
-        refits.forEach((refit) => {
-            if (refit.stats.length === 0) {
-                refit.stats.push(createStat('attack', 0, 'flat'));
-            }
-        });
+        applyGuaranteedCrit(unit.Name, unit.Refit, refits, baseStats.crit);
+        padEmptyRefits(refits);
 
         return {
             id: unit.Id,
@@ -347,28 +342,6 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
 };
 
 /** HELPER FUNCTIONS */
-
-const getPercentageStatValue = (value: number, modifierType: string, attribute: string): number => {
-    if (PERCENTAGE_ONLY_STATS.includes(getStatName(attribute) as PercentageOnlyStats)) {
-        return Math.round(value * 100);
-    }
-
-    if (modifierType === 'Percentage') {
-        return Math.round(value * 100);
-    }
-    return value;
-};
-
-const getStatType = (modifierType: string, attribute: string): StatType => {
-    if (PERCENTAGE_ONLY_STATS.includes(getStatName(attribute) as PercentageOnlyStats)) {
-        return 'percentage';
-    }
-
-    if (modifierType === 'Percentage') {
-        return 'percentage';
-    }
-    return 'flat';
-};
 
 const getSetBonus = (set: GearSetName): GearSetName | null => {
     switch (set) {
@@ -604,62 +577,3 @@ const getSlotName = (slot: string): GearSlotName => {
     if (slot === 'sensors') return 'sensor';
     return slot;
 };
-
-function getStatName(exportStatName: string): StatName | null {
-    switch (exportStatName) {
-        case 'HullPoints':
-            return 'hp';
-        case 'Power':
-            return 'attack';
-        case 'Defense':
-            return 'defence';
-        case 'Manipulation':
-            return 'hacking';
-        case 'Security':
-            return 'security';
-        case 'CritChance':
-            return 'crit';
-        case 'CritBoost':
-            return 'critDamage';
-        case 'Initiative':
-            return 'speed';
-        case 'ShieldPoints':
-            return 'shield';
-        case 'DefensePenetration':
-            return 'defensePenetration';
-        default:
-            return null;
-    }
-}
-
-const getHpRegen = (name: string): number => {
-    if (name === 'Isha') {
-        return 5;
-    } else if (name === 'Heliodor') {
-        return 8;
-    }
-    return 0;
-};
-
-const getDamageReduction = (name: string, refitCount: number): number => {
-    // Iridium's 35% damage reduction passive requires refit 2 or higher
-    if (name === 'Iridium' && refitCount >= 2) {
-        return 35;
-    }
-    return 0;
-};
-
-function createStat(name: StatName, value: number, type: StatType): Stat {
-    if (PERCENTAGE_ONLY_STATS.includes(name as PercentageOnlyStats) || type === 'percentage') {
-        return {
-            name: name,
-            value,
-            type: 'percentage',
-        };
-    }
-    return {
-        name: name as FlexibleStats,
-        value,
-        type: 'flat',
-    };
-}

@@ -242,6 +242,7 @@ const SimulatorPage: React.FC = () => {
                                 onRemoveShip={(pos) => handleRemoveShip('player', pos)}
                                 onPickShip={(ship) => handlePickShip('player', ship)}
                                 onCloseSelector={() => setPlayerSelected(undefined)}
+                                resolveShip={(pos) => playerBoard[pos]?.ship ?? null}
                                 onLoadEncounter={(board) => handleLoadEncounter('player', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('player')}
                                 copyLabel="Copy to enemy"
@@ -264,6 +265,7 @@ const SimulatorPage: React.FC = () => {
                                 onRemoveShip={(pos) => handleRemoveShip('enemy', pos)}
                                 onPickShip={(ship) => handlePickShip('enemy', ship)}
                                 onCloseSelector={() => setEnemySelected(undefined)}
+                                resolveShip={(pos) => enemyBoard[pos]?.ship ?? null}
                                 onLoadEncounter={(board) => handleLoadEncounter('enemy', board)}
                                 onCopyToOtherSide={() => handleCopyBoard('enemy')}
                                 copyLabel="Copy to your team"

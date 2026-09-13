@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import PlacementBoard from '../PlacementBoard';
 import type { Ship } from '../../../types/ship';
@@ -19,12 +19,35 @@ const encounters: LocalEncounterNote[] = [
 
 const ownedShip = { id: 'ship-owned', name: 'Nova' } as Ship;
 
+const TEMPLATE = {
+    id: 'T_AEGIS',
+    name: 'Aegis',
+    rarity: 'legendary',
+    faction: 'ATLAS',
+    type: 'ATTACKER',
+    baseStats: { hp: 1000, attack: 100, crit: 10 },
+    equipment: {},
+    implants: {},
+    refits: [],
+} as unknown as Ship;
+
 const getShipById = vi.fn((id: string) => (id === 'ship-owned' ? ownedShip : undefined));
 
 const addEncounter = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../../../hooks/useEncounterNotes', () => ({
     useEncounterNotes: () => ({ encounters, loading: false, addEncounter }),
+}));
+vi.mock('../../../hooks/useShipsData', () => ({
+    useShipsData: () => ({
+        ships: [TEMPLATE],
+        loading: false,
+        error: null,
+        fetchSingleShip: vi.fn(),
+        getAscensionStats: () => [
+            { level: 1, attribute: 'HullPoints', type: 'Percentage', value: 0.15 },
+        ],
+    }),
 }));
 vi.mock('../../../contexts/ShipsContext', () => ({
     useShips: () => ({ ships: [ownedShip], getShipById }),
@@ -42,6 +65,7 @@ const renderBoard = (props: Partial<React.ComponentProps<typeof PlacementBoard>>
             onRemoveShip={vi.fn()}
             onPickShip={vi.fn()}
             onCloseSelector={vi.fn()}
+            resolveShip={() => null}
             onLoadEncounter={vi.fn()}
             copyLabel="Copy to other side"
             {...props}
@@ -104,5 +128,48 @@ describe('PlacementBoard save-as-encounter', () => {
 
         await waitFor(() => expect(addEncounter).toHaveBeenCalledTimes(1));
         expect(addEncounter).toHaveBeenCalledWith({ name: 'My Team', formation });
+    });
+});
+
+// A saved formation stores ids only. A reference unit's id belongs to no owned row, so the
+// owned-ship lookup drops the cell and the board silently loses the ship on load.
+describe('PlacementBoard load-from-encounter with a reference ship', () => {
+    // The fixture is module-level and shared, so put it back rather than leaving the
+    // describes above dependent on running first.
+    const originalFormation = encounters[0].formation;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        encounters[0].formation = [
+            { shipId: 'template:T_AEGIS:refitted', position: 'T1' },
+            { shipId: 'ship-owned', position: 'M2' },
+        ];
+    });
+
+    afterEach(() => {
+        encounters[0].formation = originalFormation;
+    });
+
+    const loadEncounter = () => {
+        const onLoadEncounter = vi.fn();
+        renderBoard({ onLoadEncounter });
+        fireEvent.click(screen.getByRole('button', { name: /Load encounter/i }));
+        fireEvent.click(screen.getByText('Defense Wall'));
+        return onLoadEncounter.mock.calls[0][0];
+    };
+
+    it('rebuilds the reference ship from its template rather than dropping the cell', () => {
+        const board = loadEncounter();
+        expect(board.T1?.ship.id).toBe('template:T_AEGIS:refitted');
+        expect(board.T1?.ship.refits).toHaveLength(6);
+    });
+
+    it('still resolves owned ships alongside it', () => {
+        expect(loadEncounter().M2?.ship).toBe(ownedShip);
+    });
+
+    it('skips a reference id whose unit is no longer in the catalogue', () => {
+        encounters[0].formation = [{ shipId: 'template:T_GONE:r0', position: 'T1' }];
+        expect(loadEncounter().T1).toBeUndefined();
     });
 });

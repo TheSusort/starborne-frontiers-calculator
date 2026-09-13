@@ -2,14 +2,16 @@ import React, { useState } from 'react';
 import { Position, ShipPosition } from '../../types/encounters';
 import { Ship } from '../../types/ship';
 import FormationGrid from '../encounters/FormationGrid';
-import { ShipSelector } from '../ship/ShipSelector';
 import { Select } from '../ui/Select';
 import { Button } from '../ui/Button';
 import { Modal } from '../ui/layout/Modal';
 import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { useShips } from '../../contexts/ShipsContext';
+import { useShipsData } from '../../hooks/useShipsData';
+import { parseReferenceShipId, referenceShip } from '../../utils/ship/referenceShip';
 import type { StatOverrides } from '../../utils/simulator/statOverrides';
+import { UnitVersionSelector } from './UnitVersionSelector';
 
 /** One occupied board cell. Overrides live ON the placement, not in a position-keyed side map,
  *  so replacing the ship in a cell can never leave the previous ship's overrides behind. */
@@ -49,6 +51,9 @@ interface PlacementBoardProps {
     onEditStats?: (position: Position) => void;
     /** Marks a cell whose placement carries a stat override. */
     hasOverrides?: (position: Position) => boolean;
+    /** Hands FormationGrid the ship this board already holds for a cell — required here, since
+     *  a simulator board can carry a reference unit the player does not own. */
+    resolveShip: (position: Position) => Ship | null;
 }
 
 /** One placement board: a side heading, an optional "load encounter" dropdown, a FormationGrid,
@@ -67,9 +72,11 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     copyLabel,
     onEditStats,
     hasOverrides,
+    resolveShip,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
     const { getShipById } = useShips();
+    const { ships: units, getAscensionStats } = useShipsData();
 
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [encounterName, setEncounterName] = useState('');
@@ -88,18 +95,32 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
         }
     };
 
+    /**
+     * A saved formation stores ids only, and a reference unit's id belongs to no owned row —
+     * looking it up among the player's ships silently drops the cell. Rebuild it from the
+     * template instead.
+     */
+    const resolveSavedShip = (shipId: string): Ship | null => {
+        const reference = parseReferenceShipId(shipId);
+        if (!reference) return getShipById(shipId) ?? null;
+        const template = units.find((unit) => unit.id === reference.templateId);
+        if (!template) return null;
+        return referenceShip(template, reference.variant, getAscensionStats(template.id));
+    };
+
     const handleLoadEncounter = (encounterId: string) => {
         if (!encounterId) return;
         const encounter = encounters.find((e) => e.id === encounterId);
         if (!encounter) return;
-        // Build the board from the encounter's formation. Skip cells whose ship the user no
-        // longer owns (getShipById undefined) so we never place a missing ship.
+        // Build the board from the encounter's formation. Skip cells whose ship cannot be
+        // resolved — an owned ship the user has since deleted, or a unit no longer in the
+        // catalogue — so we never place a missing ship.
         const board: BoardState = {};
         for (const item of encounter.formation ?? []) {
             // Formation comes from the encounter store (DB trust boundary); skip any
             // malformed entry rather than trusting its shape.
             if (!item?.shipId || !item?.position) continue;
-            const ship = getShipById(item.shipId);
+            const ship = resolveSavedShip(item.shipId);
             if (ship) board[item.position] = { ship };
         }
         onLoadEncounter(board);
@@ -151,18 +172,13 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
                 showFacingCue
                 onEditStats={onEditStats}
                 hasOverrides={hasOverrides}
+                resolveShip={resolveShip}
             />
-            {/* ShipSelector contract: mounted ONLY while a cell is selected. Mount/unmount drives the
-                modal — autoOpen fires the picker open on mount; onClose clears the selection, which
-                unmounts this and closes the modal. Do not render it unconditionally. */}
+            {/* Picker contract: mounted ONLY while a cell is selected. Mount/unmount drives the
+                modal — it opens on mount; onClose clears the selection, which unmounts this and
+                closes the modal. Do not render it unconditionally. */}
             {selectedPosition && (
-                <ShipSelector
-                    selected={null}
-                    onSelect={onPickShip}
-                    autoOpen
-                    onClose={onCloseSelector}
-                    hidden
-                />
+                <UnitVersionSelector onSelect={onPickShip} onClose={onCloseSelector} />
             )}
             <Modal
                 isOpen={isSaveModalOpen}

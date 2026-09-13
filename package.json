@@ -51,6 +51,7 @@
         "audit:gated-buffs": "tsx scripts/auditGatedBuffs.ts",
         "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts",
         "fetch:ship-data": "tsx scripts/fetch-ship-data.ts",
+        "fetch:ascension-stats": "tsx scripts/fetch-ascension-stats.ts",
         "audit": "node scripts/audit.mjs"
     },
     "browserslist": {

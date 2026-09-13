@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { Ship, AffinityName } from '../types/ship';
+import { AscensionStat, parseAscensionStats } from '../utils/ship/referenceShip';
 
 interface ShipTemplate {
     id: string;
@@ -23,6 +24,7 @@ interface ShipTemplate {
     bio?: string;
     quote?: string;
     quote_author?: string;
+    ascension_stats?: unknown;
     base_stats: {
         hp: number;
         attack: number;
@@ -82,6 +84,9 @@ const transformShipTemplate = (template: ShipTemplate): Ship => ({
 // Module-level cache so every consumer of this hook shares a single
 // ship_templates fetch per session. Templates rarely change mid-session.
 let cachedShips: Ship[] | null = null;
+// Keyed by template id. Ascension stats are per-unit reference data, not part of
+// any one player's Ship, so they ride alongside rather than on the Ship itself.
+let cachedAscensionStats: Map<string, AscensionStat[]> = new Map();
 let inflightFetch: Promise<Ship[]> | null = null;
 
 const fetchShipTemplates = async (): Promise<Ship[]> => {
@@ -97,7 +102,14 @@ const fetchShipTemplates = async (): Promise<Ship[]> => {
                 throw fetchError;
             }
 
-            cachedShips = (data as ShipTemplate[]).map(transformShipTemplate);
+            const rows = data as ShipTemplate[];
+            const ascension = new Map<string, AscensionStat[]>();
+            for (const row of rows) {
+                const stats = parseAscensionStats(row.ascension_stats);
+                if (stats) ascension.set(row.id, stats);
+            }
+            cachedAscensionStats = ascension;
+            cachedShips = rows.map(transformShipTemplate);
             return cachedShips;
         })();
     }
@@ -161,5 +173,9 @@ export const useShipsData = () => {
         }
     };
 
-    return { ships, loading, error, fetchSingleShip };
+    /** The unit's per-refit stat grants, or null when the catalogue has none for it. */
+    const getAscensionStats = (templateId: string): AscensionStat[] | null =>
+        cachedAscensionStats.get(templateId) ?? null;
+
+    return { ships, loading, error, fetchSingleShip, getAscensionStats };
 };
