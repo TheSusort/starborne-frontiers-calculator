@@ -6,7 +6,8 @@ export const CURRENT_VERSION = '1.67.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: open both fights for a seed where baseline and current disagree.',
+    'Combat simulator: baseline comparisons now list every seed where the winner disagrees.',
+    'Combat simulator: a diverging seed now opens both fights stacked and stepped together.',
     'Autogear: tweak values can now be reached and edited with the keyboard.',
     'Autogear: set, bonus and buff rows no longer carry reorder arrows.',
     'Combat simulator: runs are now seeded and can be repeated over many seeds.',
