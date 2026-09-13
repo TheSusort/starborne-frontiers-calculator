@@ -93,7 +93,7 @@ describe('diffOverrides', () => {
 describe('divergingSeeds', () => {
     const BASE_SEED = 500;
 
-    /** A three-seed aggregate whose per-seed winners and round counts are given directly. */
+    /** Builds an aggregate from the per-seed winners and round counts supplied. */
     const aggregate = (
         entries: Array<[winner: SeedRunSummary['winner'], lastRound: number]>
     ): SeedSetAggregate => {

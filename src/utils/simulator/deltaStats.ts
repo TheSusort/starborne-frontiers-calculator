@@ -195,9 +195,7 @@ export function assertPairedSeedSets(baseline: SeedSetAggregate, current: SeedSe
 /**
  * Line two aggregates up seed by seed and pull one value out of each run.
  *
- * Throws when the aggregates did not run the same seed set. There is deliberately no unpaired
- * fallback: an unpaired series would still render a confident-looking spread while silently
- * measuring something else.
+ * Throws when the aggregates did not run the same seed set; see `assertPairedSeedSets`.
  */
 export function pairedSeries(
     baseline: SeedSetAggregate,
