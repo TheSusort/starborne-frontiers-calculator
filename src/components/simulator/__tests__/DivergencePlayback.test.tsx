@@ -49,11 +49,29 @@ describe('DivergencePlayback', () => {
         onClose: vi.fn(),
     };
 
-    it('names the seed and both outcomes', () => {
+    it('names the seed and reads correctly for every outcome, including a draw', () => {
         render(<DivergencePlayback {...props} />);
         expect(screen.getByText(/Seed 507/)).toBeInTheDocument();
-        expect(screen.getByText('Baseline')).toBeInTheDocument();
-        expect(screen.getByText('Current')).toBeInTheDocument();
+        // props: baseline is a 4-round enemy win, current a 7-round player win.
+        expect(
+            screen.getByText(
+                'Baseline: Enemy wins in 4 rounds. Current: Your team wins in 7 rounds.'
+            )
+        ).toBeInTheDocument();
+    });
+
+    it('reads correctly when one side is a draw', () => {
+        render(
+            <DivergencePlayback
+                seed={507}
+                baseline={battle(4, 'draw')}
+                current={battle(7, 'player')}
+                onClose={vi.fn()}
+            />
+        );
+        expect(
+            screen.getByText('Baseline: Draw in 4 rounds. Current: Your team wins in 7 rounds.')
+        ).toBeInTheDocument();
     });
 
     it('drives both fights from one stepper, over the longer fight’s round count', () => {

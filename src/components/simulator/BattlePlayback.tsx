@@ -18,7 +18,7 @@ interface BattlePlaybackProps {
     round?: number;
 }
 
-const outcomeLabel = (result: BattleResult): string => {
+export const outcomeLabel = (result: BattleResult): string => {
     const { winner } = result.outcome;
     return winner === 'player' ? 'Your team wins' : winner === 'enemy' ? 'Enemy wins' : 'Draw';
 };

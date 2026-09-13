@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
 import { Button } from '../ui/Button';
 import RoundStepper from './RoundStepper';
-import BattlePlayback from './BattlePlayback';
+import BattlePlayback, { outcomeLabel } from './BattlePlayback';
 
 interface DivergencePlaybackProps {
     seed: number;
@@ -12,11 +12,6 @@ interface DivergencePlaybackProps {
     current: BattleResult;
     onClose: () => void;
 }
-
-const winnerLabel = (result: BattleResult): string => {
-    const { winner } = result.outcome;
-    return winner === 'player' ? 'your team' : winner === 'enemy' ? 'the enemy' : 'a draw';
-};
 
 /**
  * One seed's two fights, stacked and stepped together. A single `RoundStepper` drives both
@@ -47,9 +42,8 @@ const DivergencePlayback: React.FC<DivergencePlaybackProps> = ({
                 <div>
                     <h2 className="text-lg font-semibold">Seed {seed}</h2>
                     <p className="text-sm text-theme-text-secondary">
-                        Baseline won by {winnerLabel(baseline)} in {baseline.outcome.lastRound}{' '}
-                        rounds; the current run, {winnerLabel(current)} in{' '}
-                        {current.outcome.lastRound}.
+                        Baseline: {outcomeLabel(baseline)} in {baseline.outcome.lastRound} rounds.
+                        Current: {outcomeLabel(current)} in {current.outcome.lastRound} rounds.
                     </p>
                 </div>
                 <Button variant="secondary" size="sm" onClick={onClose}>
