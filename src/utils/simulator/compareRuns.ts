@@ -1,18 +1,23 @@
-import type { BattleResult } from '../calculators/battleSimulator';
+import type { BattleResult, BattleSimulationInput } from '../calculators/battleSimulator';
 import type { BoardState } from '../../components/simulator/PlacementBoard';
 import type { StatOverrides } from './statOverrides';
-import type { SeedSetAggregate } from './seededRuns';
+import type { SeedRunSummary, SeedSetAggregate } from './seededRuns';
+import { assertPairedSeedSets } from './deltaStats';
 
 /** A board's overrides at one point in time, keyed `"<side>:<position>"` so both boards flatten
  *  into one object and a pinned baseline can be diffed against a later snapshot. */
 export type OverrideSnapshot = Record<string, StatOverrides>;
 
-/** A seed-set aggregate frozen as the comparison point, alongside the override snapshot that
- *  produced it. The seed and run count live inside `aggregate` — see `effectiveRunParams`' doc
- *  for how a pinned baseline forces a variant run onto this same seed set. */
+/** A seed-set aggregate frozen as the comparison point, alongside the override snapshot and the
+ *  fully-resolved engine input that produced it. The seed and run count live inside `aggregate` —
+ *  see `effectiveRunParams`' doc for how a pinned baseline forces a variant run onto this same
+ *  seed set. `input` is what makes the baseline replayable at a seed after the boards have moved
+ *  on; it is the same object the run recorded in its provenance, carried over unchanged when the
+ *  baseline is pinned, and never rebuilt from live board state. */
 export interface PinnedBaseline {
     aggregate: SeedSetAggregate;
     overrides: OverrideSnapshot;
+    input: BattleSimulationInput;
 }
 
 /** Take a snapshot of both boards' overrides. Placements with no override are omitted — a
@@ -80,4 +85,38 @@ export function rostersDiffer(a: BattleResult['roster'], b: BattleResult['roster
     const sortedA = a.map(key).sort();
     const sortedB = b.map(key).sort();
     return sortedA.some((k, i) => k !== sortedB[i]);
+}
+
+/** One seed where two configurations disagreed about who won. Round counts ride along so a
+ *  fight that also took much longer is visible without a round-count threshold deciding which
+ *  rows exist. */
+export interface DivergingSeed {
+    seed: number;
+    baselineWinner: SeedRunSummary['winner'];
+    currentWinner: SeedRunSummary['winner'];
+    baselineRounds: number;
+    currentRounds: number;
+}
+
+/** The seeds where a pinned baseline and the current run produced different winners, in seed-set
+ *  order. Reads the recorded per-seed summaries both aggregates already carry — nothing is
+ *  re-simulated here. */
+export function divergingSeeds(
+    baseline: SeedSetAggregate,
+    current: SeedSetAggregate
+): DivergingSeed[] {
+    assertPairedSeedSets(baseline, current);
+    const rows: DivergingSeed[] = [];
+    baseline.runs.forEach((baselineRun, i) => {
+        const currentRun = current.runs[i];
+        if (baselineRun.winner === currentRun.winner) return;
+        rows.push({
+            seed: baselineRun.seed,
+            baselineWinner: baselineRun.winner,
+            currentWinner: currentRun.winner,
+            baselineRounds: baselineRun.lastRound,
+            currentRounds: currentRun.lastRound,
+        });
+    });
+    return rows;
 }

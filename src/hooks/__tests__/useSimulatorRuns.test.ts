@@ -216,6 +216,30 @@ describe('useSimulatorRuns', () => {
         expect(result.current.aggregate).not.toBe(pinnedBaseline?.aggregate);
     });
 
+    it('pins the input that RAN, not a fresh read of the boards at pin time', async () => {
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs({ playerBoard: board('T1', 'nova', { attack: 100 }) }) }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        // The exact object the run consumed. `handleRun` passes one `input` const to both
+        // `runSeedSetAsync` and `setProvenance`, so identity against it is the check.
+        const ranInput = mockRunSeedSetAsync.mock.calls[0][0];
+
+        // The boards move on BEFORE the pin. A baseline is a snapshot of the run it names, so
+        // pinning must reach for the recorded input rather than rebuilding from live state —
+        // otherwise replaying the baseline later reproduces a fight that never happened.
+        rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }) }));
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+
+        expect(result.current.baseline?.input).toBe(ranInput);
+    });
+
     it('handleOpenSeed reports an error instead of throwing when there is no run to replay', () => {
         const { result } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
@@ -417,5 +441,214 @@ describe('useSimulatorRuns progress and cancellation', () => {
         expect(result.current.runError).toBe('engine exploded');
         expect(result.current.aggregate).toBeNull();
         expect(result.current.isRunning).toBe(false);
+    });
+});
+
+describe('divergence playback', () => {
+    /** Runs, pins, then opens a divergence — the state every test in this block starts from. */
+    const runPinAndOpen = async (seed = 507) => {
+        const rendered = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs() }
+        );
+        await act(async () => {
+            rendered.result.current.handleRun();
+        });
+        act(() => {
+            rendered.result.current.handlePinBaseline();
+        });
+        act(() => {
+            rendered.result.current.handleOpenDivergence(seed);
+        });
+        return rendered;
+    };
+
+    it('replays both sides at the seed and hides the single-fight playback', async () => {
+        const getGearPiece = () => undefined;
+        const { result, rerender } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            {
+                initialProps: baseArgs({
+                    playerBoard: board('T1', 'nova', { attack: 100 }),
+                    getGearPiece,
+                }),
+            }
+        );
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => {
+            result.current.handlePinBaseline();
+        });
+        // The input the pin recorded. Captured now, before the board changes below, so it stays
+        // a snapshot of the run that got pinned.
+        const baselineInput = mockRunSeedSetAsync.mock.calls[0][0];
+
+        // Re-run under a changed board so the CURRENT run's recorded input is a different object
+        // from the pinned baseline's. Without this, `baseline.input` and `provenance.input` are
+        // the same object (one run, then pinned) and no assertion on a replay call's input can
+        // tell which one it actually used — asserting the wrong one would pass just as well.
+        rerender(baseArgs({ playerBoard: board('T1', 'vanguard', { attack: 999 }), getGearPiece }));
+        await act(async () => {
+            result.current.handleRun();
+        });
+        const currentInput = mockRunSeedSetAsync.mock.calls[1][0];
+        expect(currentInput).not.toBe(baselineInput);
+
+        // Open a single playback first so `battleResult` starts non-null — otherwise the
+        // "hides the single-fight playback" assertion below would pass even if
+        // handleOpenDivergence never cleared it.
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.battleResult).toBe(fakeBattleResult);
+
+        act(() => {
+            result.current.handleOpenDivergence(507);
+        });
+
+        expect(result.current.divergence?.seed).toBe(507);
+        expect(result.current.divergence?.baseline).toBe(fakeBattleResult);
+        expect(result.current.divergence?.current).toBe(fakeBattleResult);
+        // A divergence pair and a single playback are alternatives, never both on the page.
+        expect(result.current.battleResult).toBeNull();
+
+        // The full call list (not just its tail) is asserted so this discriminates "exactly two
+        // replays ran at 507" from "three or more, the last two of which happened to match" —
+        // the earlier 509 call is the `handleOpenSeed` replay made above. Each replay's input
+        // (call[0]) and getGearPiece (call[2]) are asserted, not just its seed (call[1]): the
+        // first replay must use the pinned BASELINE's input, the second the CURRENT run's own
+        // recorded input, and both must carry the same getGearPiece.
+        const replayCalls = mockRunSeededBattle.mock.calls;
+        expect(replayCalls).toHaveLength(3);
+        expect(replayCalls[0][1]).toBe(509);
+        expect(replayCalls[1][0]).toBe(baselineInput);
+        expect(replayCalls[1][1]).toBe(507);
+        expect(replayCalls[1][2]).toBe(getGearPiece);
+        expect(replayCalls[2][0]).toBe(currentInput);
+        expect(replayCalls[2][1]).toBe(507);
+        expect(replayCalls[2][2]).toBe(getGearPiece);
+    });
+
+    it('does nothing without a pinned baseline', async () => {
+        const { result } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs() }
+        );
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => {
+            result.current.handleOpenDivergence(507);
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toMatch(/baseline/i);
+    });
+
+    it('clears the pair when a new run lands', async () => {
+        const { result } = await runPinAndOpen();
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.divergence).toBeNull();
+    });
+
+    it('keeps the pair when a run is cancelled, because a cancelled run writes nothing', async () => {
+        const { result } = await runPinAndOpen();
+        const release = holdNextRun();
+        act(() => {
+            result.current.handleRun();
+        });
+        act(() => {
+            result.current.handleCancel();
+        });
+        await act(async () => {
+            release();
+        });
+        expect(result.current.divergence?.seed).toBe(507);
+    });
+
+    it('clears the pair when the baseline is unpinned', async () => {
+        const { result } = await runPinAndOpen();
+        act(() => {
+            result.current.handleUnpinBaseline();
+        });
+        expect(result.current.divergence).toBeNull();
+    });
+
+    it('clears the pair when a single seed is opened from the results list', async () => {
+        const { result } = await runPinAndOpen();
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.battleResult).toBe(fakeBattleResult);
+    });
+
+    it('closes the pair without dropping the pinned baseline', async () => {
+        const { result } = await runPinAndOpen();
+        act(() => {
+            result.current.handleCloseDivergence();
+        });
+        expect(result.current.divergence).toBeNull();
+        // See handleCloseDivergence's doc: close is not unpin.
+        expect(result.current.baseline).not.toBeNull();
+    });
+
+    it('reports a replay failure and shows no pair', async () => {
+        // Start from a pair genuinely open at 507, so the null-divergence assertion below
+        // discriminates "the failed replay cleared it" from "it was never opened."
+        const { result } = await runPinAndOpen(507);
+        expect(result.current.divergence?.seed).toBe(507);
+
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        act(() => {
+            result.current.handleOpenDivergence(511);
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
+    it('a failed open clears the single fight that was on screen', async () => {
+        const { result } = await runPinAndOpen(507);
+        // Back to a single playback first: a pair and a single fight are mutually exclusive, so
+        // this is the only state in which a failing open has a stale battleResult to leave behind.
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.battleResult).not.toBeNull();
+
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        act(() => {
+            result.current.handleOpenDivergence(511);
+        });
+        expect(result.current.battleResult).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
+    it('a failed single-seed replay leaves no pair', async () => {
+        const { result } = await runPinAndOpen();
+        mockRunSeededBattle.mockImplementationOnce(() => {
+            throw new Error('replay exploded');
+        });
+        act(() => {
+            result.current.handleOpenSeed(509);
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('replay exploded');
+    });
+
+    it('clears the pair when a multi-seed run rejects', async () => {
+        const { result } = await runPinAndOpen();
+        mockRunSeedSetAsync.mockRejectedValueOnce(new Error('engine exploded'));
+        await act(async () => {
+            result.current.handleRun();
+        });
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.runError).toBe('engine exploded');
     });
 });

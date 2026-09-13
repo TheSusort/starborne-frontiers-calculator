@@ -177,30 +177,34 @@ export function scalePairedDelta(delta: PairedDelta, factor: number): PairedDelt
     return { ...delta, mean: delta.mean * factor, se: delta.se * factor };
 }
 
+/** Throw unless the two aggregates ran the identical seed set in the identical order. Anything
+ *  that walks both `runs` arrays by index is only valid under that condition, and there is
+ *  deliberately no unpaired fallback: a fallback would still present its output as a comparison
+ *  of these two configurations while measuring something else. */
+export function assertPairedSeedSets(baseline: SeedSetAggregate, current: SeedSetAggregate): void {
+    if (
+        baseline.runs.length !== current.runs.length ||
+        baseline.runs.some((run, i) => run.seed !== current.runs[i].seed)
+    ) {
+        throw new Error(
+            'assertPairedSeedSets: the two aggregates do not share a seed set, so a paired comparison is not valid'
+        );
+    }
+}
+
 /**
  * Line two aggregates up seed by seed and pull one value out of each run.
  *
- * Throws when the aggregates did not run the same seed set. There is deliberately no unpaired
- * fallback: an unpaired series would still render a confident-looking spread while silently
- * measuring something else.
+ * Throws when the aggregates did not run the same seed set; see `assertPairedSeedSets`.
  */
 export function pairedSeries(
     baseline: SeedSetAggregate,
     current: SeedSetAggregate,
     pick: (run: SeedRunSummary) => number
 ): { baseline: number[]; current: number[] } {
-    const baselineRuns = baseline.runs;
-    const currentRuns = current.runs;
-    if (
-        baselineRuns.length !== currentRuns.length ||
-        baselineRuns.some((run, i) => run.seed !== currentRuns[i].seed)
-    ) {
-        throw new Error(
-            'pairedSeries: the two aggregates do not share a seed set, so a paired comparison is not valid'
-        );
-    }
+    assertPairedSeedSets(baseline, current);
     return {
-        baseline: baselineRuns.map(pick),
-        current: currentRuns.map(pick),
+        baseline: baseline.runs.map(pick),
+        current: current.runs.map(pick),
     };
 }

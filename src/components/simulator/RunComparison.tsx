@@ -1,8 +1,11 @@
 import React, { useMemo } from 'react';
 import { DataTable, type Column } from '../ui/tables/DataTable';
+import { Button } from '../ui/Button';
 import {
     diffOverrides,
+    divergingSeeds,
     rostersDiffer,
+    type DivergingSeed,
     type OverrideSnapshot,
     type PinnedBaseline,
 } from '../../utils/simulator/compareRuns';
@@ -20,11 +23,20 @@ interface Props {
     baseline: PinnedBaseline;
     current: SeedSetAggregate;
     currentOverrides: OverrideSnapshot;
+    /** Opens both configurations' fights at one seed. */
+    onOpenDivergence: (seed: number) => void;
 }
 
 /** Human label for an override-diff row's stat key, falling back to the raw key for anything
  *  outside `STATS` (there shouldn't be any — overrides are only ever written for `STATS` keys). */
 const statLabel = (stat: string): string => STATS[stat as StatName]?.label ?? stat;
+
+/** Winner as a player reads it, rather than the engine's side token. */
+const WINNER_LABEL: Record<DivergingSeed['baselineWinner'], string> = {
+    player: 'You',
+    enemy: 'Enemy',
+    draw: 'Draw',
+};
 
 /** A signed delta's colour: green when it favours the player side, red when it costs the player
  *  side, and neutral when the metric carries no inherent direction (e.g. round count). */
@@ -131,7 +143,12 @@ const DeltaCell: React.FC<ActorMetricCell> = ({
  * rounds, per-actor mean totals, and the override changes that produced the variant. The seed and
  * run count shown come from `baseline.aggregate`, the actual seed set both configurations share.
  */
-const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides }) => {
+const RunComparison: React.FC<Props> = ({
+    baseline,
+    current,
+    currentOverrides,
+    onOpenDivergence,
+}) => {
     const nameFor = (actorId: string) =>
         current.roster.find((r) => r.actorId === actorId)?.name ?? actorId;
     const sideFor = (actorId: string) =>
@@ -193,6 +210,7 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
                     ),
                 ])
             ) as Record<string, Record<'damageDealt' | 'damageTaken' | 'healingDone', PairedDelta>>,
+            diverging: divergingSeeds(baseline.aggregate, current),
         };
     }, [baseline.aggregate, current]);
 
@@ -312,6 +330,36 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
         { key: 'to', label: 'To', align: 'right', render: (row) => row.to ?? '—' },
     ];
 
+    const divergenceColumns: Column<DivergingSeed>[] = [
+        { key: 'seed', label: 'Seed', render: (row) => row.seed },
+        {
+            key: 'baselineWinner',
+            label: 'Baseline',
+            render: (row) => WINNER_LABEL[row.baselineWinner],
+        },
+        {
+            key: 'currentWinner',
+            label: 'Current',
+            render: (row) => WINNER_LABEL[row.currentWinner],
+        },
+        {
+            key: 'rounds',
+            label: 'Rounds',
+            align: 'right',
+            render: (row) => `${row.baselineRounds} → ${row.currentRounds}`,
+        },
+        {
+            key: 'open',
+            label: '',
+            align: 'right',
+            render: (row) => (
+                <Button variant="secondary" size="sm" onClick={() => onOpenDivergence(row.seed)}>
+                    Open
+                </Button>
+            ),
+        },
+    ];
+
     const rosterChanged = rostersDiffer(baseline.aggregate.roster, current.roster);
 
     // The median is the robust one. When it moves opposite the (paired, distinguishable) mean,
@@ -363,6 +411,16 @@ const RunComparison: React.FC<Props> = ({ baseline, current, currentOverrides })
                 getRowKey={(row) => `${row.key}:${row.stat}`}
                 emptyMessage="No stat differences between the baseline and current overrides"
             />
+
+            <div className="space-y-2">
+                <h3 className="text-base font-semibold">Diverging seeds</h3>
+                <DataTable
+                    data={deltas.diverging}
+                    columns={divergenceColumns}
+                    getRowKey={(row) => String(row.seed)}
+                    emptyMessage="Both configurations produced the same winner on every seed."
+                />
+            </div>
         </div>
     );
 };

@@ -11,9 +11,14 @@ import TurnOrderStrip from './TurnOrderStrip';
 interface BattlePlaybackProps {
     /** A completed simulation. Owns the round-stepper position and pinned-ship detail card. */
     result: BattleResult;
+    /** Controlled round (1-based). When given, the parent owns the playback position and this
+     *  component renders no stepper — two playbacks driven by one stepper is the point. A value
+     *  past this fight's last round clamps to it, so a shorter fight beside a longer one holds
+     *  on its final round. */
+    round?: number;
 }
 
-const outcomeLabel = (result: BattleResult): string => {
+export const outcomeLabel = (result: BattleResult): string => {
     const { winner } = result.outcome;
     return winner === 'player' ? 'Your team wins' : winner === 'enemy' ? 'Enemy wins' : 'Draw';
 };
@@ -21,10 +26,10 @@ const outcomeLabel = (result: BattleResult): string => {
 /**
  * The playback half of the Combat Simulator: outcome summary, round stepper, the two mirrored
  * BattleBoards, the optional per-ship detail card, and the round event log. Owns the playback
- * position (`currentRound`) and pinned-ship state, resetting both whenever a fresh `result`
- * arrives (the parent page no longer tracks these).
+ * position (`currentRound`) when uncontrolled and always owns pinned-ship state, resetting both
+ * whenever a fresh `result` arrives.
  */
-const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result }) => {
+const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result, round }) => {
     // Round-stepper playback position (1-based).
     const [currentRound, setCurrentRound] = useState(1);
     // Pinned ship (synthetic roster actorId) for the per-ship detail card; null = none.
@@ -36,9 +41,11 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result }) => {
         setPinned(null);
     }, [result]);
 
-    // The round currently shown by the stepper (1-based, clamped to the trimmed rounds).
+    // The round shown: the controlled prop when given, else the stepper's own state; clamped to
+    // this fight's last round either way.
     const total = result.rounds.length;
-    const curRound = total > 0 ? result.rounds[Math.min(currentRound, total) - 1] : undefined;
+    const effectiveRound = round ?? currentRound;
+    const curRound = total > 0 ? result.rounds[Math.min(effectiveRound, total) - 1] : undefined;
 
     return (
         <>
@@ -55,7 +62,7 @@ const BattlePlayback: React.FC<BattlePlaybackProps> = ({ result }) => {
                 }
             />
 
-            {curRound && (
+            {curRound && round === undefined && (
                 <RoundStepper
                     round={Math.min(currentRound, total)}
                     total={total}

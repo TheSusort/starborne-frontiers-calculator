@@ -1,7 +1,19 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import RunComparison from '../RunComparison';
 import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
+import type { BattleSimulationInput } from '../../../utils/calculators/battleSimulator';
+import type { PinnedBaseline } from '../../../utils/simulator/compareRuns';
+
+const emptyInput: BattleSimulationInput = { playerTeam: [], enemyTeam: [] };
+
+/** Wraps an aggregate as a pinned baseline. The input is inert here — `RunComparison` never reads
+ *  `baseline.input`. */
+const pinned = (aggregate: SeedSetAggregate): PinnedBaseline => ({
+    aggregate,
+    overrides: {},
+    input: emptyInput,
+});
 
 const roster = [
     { actorId: 'focus', side: 'player' as const, name: 'Xcellence', position: 'T1' as const },
@@ -47,11 +59,11 @@ const aggregate = (wins: number, rounds: number, dealt: number, spread = 0): See
 };
 
 /** A decisive change: 4/20 becomes 19/20. */
-const baseline = { aggregate: aggregate(4, 6, 1000, 1), overrides: {} };
+const baseline = pinned(aggregate(4, 6, 1000, 1));
 const current = aggregate(19, 5, 1400, 1);
 
 /** A change that is not: 10/20 becomes 12/20 with everything else barely moving. */
-const noiseBaseline = { aggregate: aggregate(10, 6, 1000, 2), overrides: {} };
+const noiseBaseline = pinned(aggregate(10, 6, 1000, 2));
 const noiseCurrent = aggregate(12, 6, 1020, 2);
 
 const currentOverrides = { 'player:T1': { attack: 12650 } };
@@ -63,6 +75,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText('4')).toBeInTheDocument();
@@ -76,6 +89,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/-1\.0\s*±/)).toBeInTheDocument();
@@ -87,6 +101,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
@@ -101,6 +116,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('player').closest('tr')!;
@@ -137,13 +153,14 @@ describe('RunComparison', () => {
                 perActorMean: { focus: { damageDealt: dealt, damageTaken: 0, healingDone: 0 } },
             };
         };
-        const divergentBaseline = { aggregate: divergentSeedSet(8, 6, 1000), overrides: {} };
+        const divergentBaseline = pinned(divergentSeedSet(8, 6, 1000));
         const divergentCurrent = { ...divergentSeedSet(13, 5, 1400), baseSeed: 500, count: 20 };
         render(
             <RunComparison
                 baseline={divergentBaseline}
                 current={divergentCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/Base seed 777/)).toBeInTheDocument();
@@ -156,6 +173,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.queryByText(/roster changed/i)).not.toBeInTheDocument();
@@ -173,6 +191,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={reshuffledCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/roster changed/i)).toBeInTheDocument();
@@ -186,6 +205,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const deltaText = screen.getByText(/\+15\.0\s*±/);
@@ -199,6 +219,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={noiseBaseline}
                 current={noiseCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         // Scoped to the Player wins row specifically: a page-wide search for the noise wording
@@ -219,13 +240,14 @@ describe('RunComparison noise verdict', () => {
         // result); the exact sign test the win rows actually run reads p = 2 * 0.5^5 = 0.0625
         // (under the cutoff) — not distinguishable. Pins that win rows take the sign test rather
         // than the t rule.
-        const flipBaseline = { aggregate: aggregate(10, 6, 1000, 0), overrides: {} };
+        const flipBaseline = pinned(aggregate(10, 6, 1000, 0));
         const flipCurrent = aggregate(15, 6, 1000, 0);
         render(
             <RunComparison
                 baseline={flipBaseline}
                 current={flipCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('Player wins').closest('tr')!;
@@ -241,6 +263,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('Draws').closest('tr')!;
@@ -280,10 +303,7 @@ describe('RunComparison noise verdict', () => {
         // 101 — current mean 38.6 (delta +32.6, t ≈ 3.10 against df=19's 2.093 critical value,
         // comfortably distinguishable) against current median 5 (delta -1). Mean and median
         // disagree in sign, and the mean move is real, not noise.
-        const skewedBaseline = {
-            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
-            overrides: {},
-        };
+        const skewedBaseline = pinned(roundsAggregate(new Array<number>(20).fill(6)));
         const skewedCurrent = roundsAggregate([
             ...new Array<number>(13).fill(5),
             ...new Array<number>(7).fill(101),
@@ -293,6 +313,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={skewedBaseline}
                 current={skewedCurrent}
                 currentOverrides={{}}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/skewed/i)).toBeInTheDocument();
@@ -303,16 +324,91 @@ describe('RunComparison noise verdict', () => {
         // to 5) and one seed runs long at 46 (which pulls the mean up to 7.05) — but a single
         // outlier among 19 concordant seeds can never clear the t threshold (t ≈ 0.51 here), so
         // the Mean rounds row itself reads "not distinguishable" and the banner must agree.
-        const noisyBaseline = {
-            aggregate: roundsAggregate(new Array<number>(20).fill(6)),
-            overrides: {},
-        };
+        const noisyBaseline = pinned(roundsAggregate(new Array<number>(20).fill(6)));
         const noisyCurrent = roundsAggregate([...new Array<number>(19).fill(5), 46]);
         render(
-            <RunComparison baseline={noisyBaseline} current={noisyCurrent} currentOverrides={{}} />
+            <RunComparison
+                baseline={noisyBaseline}
+                current={noisyCurrent}
+                currentOverrides={{}}
+                onOpenDivergence={() => {}}
+            />
         );
         expect(screen.queryByText(/skewed/i)).not.toBeInTheDocument();
         const row = screen.getByText('Mean rounds').closest('tr')!;
         expect(row).toHaveTextContent(/not distinguishable/i);
+    });
+});
+
+describe('diverging seeds', () => {
+    /** Same seed set, same everything, except that seed 502 flips from an enemy win to a player
+     *  win and takes three rounds longer. */
+    const flipOneSeed = () => {
+        const base = aggregate(10, 6, 1000, 0);
+        const variant = aggregate(10, 6, 1000, 0);
+        variant.runs[2] = { ...variant.runs[2], winner: 'player', lastRound: 9 };
+        base.runs[2] = { ...base.runs[2], winner: 'enemy', lastRound: 6 };
+        return { base, variant };
+    };
+
+    it('lists only the seeds whose winner changed', () => {
+        const { base, variant } = flipOneSeed();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        expect(screen.getByText('502')).toBeInTheDocument();
+        expect(screen.getByText('6 → 9')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /open/i })).toHaveLength(1);
+    });
+
+    it('names which side won under each configuration', () => {
+        const { base, variant } = flipOneSeed();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        // Asserted per cell, not per row: the seed lost under the baseline and won under the
+        // variant, so a row merely CONTAINING both labels would read the same with the two
+        // columns — or the two labels — swapped.
+        const cells = screen.getByText('502').closest('tr')!.querySelectorAll('td');
+        expect(cells[1]).toHaveTextContent('Enemy');
+        expect(cells[2]).toHaveTextContent('You');
+    });
+
+    it('hands the seed back when a row is opened', () => {
+        const { base, variant } = flipOneSeed();
+        const onOpenDivergence = vi.fn();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={onOpenDivergence}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /open/i }));
+        expect(onOpenDivergence).toHaveBeenCalledWith(502);
+    });
+
+    it('says the two configurations agreed rather than showing an empty table', () => {
+        const same = aggregate(10, 6, 1000, 0);
+        render(
+            <RunComparison
+                baseline={pinned(same)}
+                current={aggregate(10, 6, 1400, 0)}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        expect(screen.getByText(/same winner on every seed/i)).toBeInTheDocument();
     });
 });
