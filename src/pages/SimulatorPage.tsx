@@ -330,6 +330,7 @@ const SimulatorPage: React.FC = () => {
                             baseline={baseline}
                             current={aggregate}
                             currentOverrides={currentOverrides}
+                            onOpenDivergence={() => {}}
                         />
                     )}
 

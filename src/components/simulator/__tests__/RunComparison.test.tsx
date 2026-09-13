@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import RunComparison from '../RunComparison';
 import type { SeedRunSummary, SeedSetAggregate } from '../../../utils/simulator/seededRuns';
 import type { BattleSimulationInput } from '../../../utils/calculators/battleSimulator';
@@ -75,6 +75,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText('4')).toBeInTheDocument();
@@ -88,6 +89,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/-1\.0\s*±/)).toBeInTheDocument();
@@ -99,6 +101,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText('Xcellence')).toBeInTheDocument();
@@ -113,6 +116,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('player').closest('tr')!;
@@ -156,6 +160,7 @@ describe('RunComparison', () => {
                 baseline={divergentBaseline}
                 current={divergentCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/Base seed 777/)).toBeInTheDocument();
@@ -168,6 +173,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.queryByText(/roster changed/i)).not.toBeInTheDocument();
@@ -185,6 +191,7 @@ describe('RunComparison', () => {
                 baseline={baseline}
                 current={reshuffledCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/roster changed/i)).toBeInTheDocument();
@@ -198,6 +205,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const deltaText = screen.getByText(/\+15\.0\s*±/);
@@ -211,6 +219,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={noiseBaseline}
                 current={noiseCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         // Scoped to the Player wins row specifically: a page-wide search for the noise wording
@@ -238,6 +247,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={flipBaseline}
                 current={flipCurrent}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('Player wins').closest('tr')!;
@@ -253,6 +263,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={baseline}
                 current={current}
                 currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
             />
         );
         const row = screen.getByText('Draws').closest('tr')!;
@@ -302,6 +313,7 @@ describe('RunComparison noise verdict', () => {
                 baseline={skewedBaseline}
                 current={skewedCurrent}
                 currentOverrides={{}}
+                onOpenDivergence={() => {}}
             />
         );
         expect(screen.getByText(/skewed/i)).toBeInTheDocument();
@@ -315,10 +327,70 @@ describe('RunComparison noise verdict', () => {
         const noisyBaseline = pinned(roundsAggregate(new Array<number>(20).fill(6)));
         const noisyCurrent = roundsAggregate([...new Array<number>(19).fill(5), 46]);
         render(
-            <RunComparison baseline={noisyBaseline} current={noisyCurrent} currentOverrides={{}} />
+            <RunComparison
+                baseline={noisyBaseline}
+                current={noisyCurrent}
+                currentOverrides={{}}
+                onOpenDivergence={() => {}}
+            />
         );
         expect(screen.queryByText(/skewed/i)).not.toBeInTheDocument();
         const row = screen.getByText('Mean rounds').closest('tr')!;
         expect(row).toHaveTextContent(/not distinguishable/i);
+    });
+});
+
+describe('diverging seeds', () => {
+    /** Same seed set, same everything, except that seed 502 flips from an enemy win to a player
+     *  win and takes three rounds longer. */
+    const flipOneSeed = () => {
+        const base = aggregate(10, 6, 1000, 0);
+        const variant = aggregate(10, 6, 1000, 0);
+        variant.runs[2] = { ...variant.runs[2], winner: 'player', lastRound: 9 };
+        base.runs[2] = { ...base.runs[2], winner: 'enemy', lastRound: 6 };
+        return { base, variant };
+    };
+
+    it('lists only the seeds whose winner changed', () => {
+        const { base, variant } = flipOneSeed();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        expect(screen.getByText('502')).toBeInTheDocument();
+        expect(screen.getByText('6 → 9')).toBeInTheDocument();
+        expect(screen.getAllByRole('button', { name: /open/i })).toHaveLength(1);
+    });
+
+    it('hands the seed back when a row is opened', () => {
+        const { base, variant } = flipOneSeed();
+        const onOpenDivergence = vi.fn();
+        render(
+            <RunComparison
+                baseline={pinned(base)}
+                current={variant}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={onOpenDivergence}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /open/i }));
+        expect(onOpenDivergence).toHaveBeenCalledWith(502);
+    });
+
+    it('says the two configurations agreed rather than showing an empty table', () => {
+        const same = aggregate(10, 6, 1000, 0);
+        render(
+            <RunComparison
+                baseline={pinned(same)}
+                current={aggregate(10, 6, 1400, 0)}
+                currentOverrides={currentOverrides}
+                onOpenDivergence={() => {}}
+            />
+        );
+        expect(screen.getByText(/same winner on every seed/i)).toBeInTheDocument();
     });
 });
