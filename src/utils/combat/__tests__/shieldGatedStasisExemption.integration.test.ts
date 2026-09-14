@@ -371,11 +371,18 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
 //
 // Mirror of the player fixture with the sides flipped, lifted from
 // `perFootprintStasisBreak.integration.test.ts`'s section (3). The enemy breaker's pool comes
-// from `preFight.startingShieldPctOfHp` and nothing on the board damages it, so the pool is a
-// clean single axis: >0 ⇒ exempt, 0 ⇒ breaks.
+// from `preFight.startingShieldPctOfHp` and, by default, nothing on the board damages it, so the
+// pool is a clean single axis: >0 ⇒ exempt, 0 ⇒ breaks. `playerVictim`'s optional `reflectPct`
+// adds a drain vector for the lift arm below: same `damage-reflection` passive shape `enemyVictim`
+// uses, just carried by a team actor instead of an enemy attacker (the ability is read off
+// `incomingAbilitiesOf`, which is side-agnostic).
 // ---------------------------------------------------------------------------------------------
 
-const playerVictim = (id: string, position: Position): TeamActorEngineInput => ({
+const playerVictim = (
+    id: string,
+    position: Position,
+    reflectPct?: number
+): TeamActorEngineInput => ({
     id,
     speed: 1,
     chargeCount: 0,
@@ -386,7 +393,25 @@ const playerVictim = (id: string, position: Position): TeamActorEngineInput => (
     target: parsedTarget('front'),
     pattern: basePattern(),
     walk: {
-        shipSkills: { slots: [basicAttack()] },
+        shipSkills: {
+            slots: [
+                basicAttack(),
+                ...(reflectPct === undefined
+                    ? []
+                    : [
+                          {
+                              slot: 'passive' as const,
+                              abilities: [
+                                  ab({
+                                      type: 'modifier',
+                                      target: 'self',
+                                      config: { type: 'damage-reflection', pct: reflectPct },
+                                  }),
+                              ],
+                          },
+                      ]),
+            ],
+        },
         stats: {
             attack: 1,
             crit: 0,
@@ -458,7 +483,16 @@ const enemyStasisBot = (id: string, position: Position, sel: Selection): EnemyAt
     shipSkills: { slots: [stasisInflictAttack(STASIS_LONG)] },
 });
 
-const enemyGatedBreaker = (startingShieldPctOfHp: number): EnemyAttacker => ({
+// The breaker's pool is `hp(1_000_000_000) * startingShieldPctOfHp / 100` (createActor's seeding
+// formula) with no round-start re-grant. POOL_PCT sizes a 1,000-point pool; against the breaker's
+// ATTACK(5,000) * multiplier(2,500%) = 125,000-point hit, DRAIN_PCT reflects back ~1,250 — enough
+// to empty that pool in the ONE bounce sub-hit 0 causes.
+const POOL_PCT = 0.0001;
+const DRAIN_PCT = 1;
+
+// `hits` parameterises the firing active so a reflect vector can drain the pool mid-cast — same
+// multi-hit shape as the player fixture's `attackerKit`.
+const enemyGatedBreaker = (startingShieldPctOfHp: number, hits: number): EnemyAttacker => ({
     id: 'enemy-breaker',
     stats: {
         attack: 5_000,
@@ -475,7 +509,20 @@ const enemyGatedBreaker = (startingShieldPctOfHp: number): EnemyAttacker => ({
     position: 'M1',
     target: parsedTarget('front'),
     pattern: lineRange1Pattern(),
-    shipSkills: { slots: [basicAttack()] },
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    ab({
+                        type: 'damage',
+                        target: 'enemy',
+                        config: { type: 'damage', multiplier: 2_500, hits },
+                    }),
+                ],
+            },
+        ],
+    },
     stasisBreakExemptWhen: SELF_SHIELD_GATE,
     preFight: {
         outgoingDamage: 0,
@@ -488,11 +535,30 @@ const enemyGatedBreaker = (startingShieldPctOfHp: number): EnemyAttacker => ({
     },
 });
 
-const enemySideRun = (startingShieldPctOfHp: number): { anchor: number[]; covered: number[] } => {
+interface EnemySideRunArgs {
+    startingShieldPctOfHp: number;
+    /** Sub-hits on the breaker's firing active. Defaults to 1 (single-hit, drain-free arms). */
+    hits?: number;
+    /** Thorns % on the player anchor victim — the enemy-side drain vector. */
+    reflectPct?: number;
+}
+
+interface EnemySideRun {
+    anchor: number[];
+    covered: number[];
+    /** The breaker's shield pool at the END of each round. */
+    breakerPool: number[];
+}
+
+const enemySideRun = ({
+    startingShieldPctOfHp,
+    hits = 1,
+    reflectPct,
+}: EnemySideRunArgs): EnemySideRun => {
     const bus = createEventBus();
     const performed: Extract<CombatEvent, { type: 'ability-performed' }>[] = [];
     bus.on('ability-performed', (e) => performed.push(e));
-    runCombat({
+    const result = runCombat({
         attack: 0,
         crit: 0,
         critDamage: 0,
@@ -520,31 +586,46 @@ const enemySideRun = (startingShieldPctOfHp: number): { anchor: number[]; covere
         pattern: basePattern(),
         bus,
         teamActors: [
-            playerVictim('pl-anchor', 'M4'),
+            playerVictim('pl-anchor', 'M4', reflectPct),
             playerVictim('pl-covered', 'M3'),
             playerCuller(),
         ],
         enemyAttackers: [
             enemyStasisBot('ebot-f', 'M4', 'front'),
             enemyStasisBot('ebot-b', 'M3', 'back'),
-            enemyGatedBreaker(startingShieldPctOfHp),
+            enemyGatedBreaker(startingShieldPctOfHp, hits),
         ],
     });
     const rounds = (id: string): number[] =>
         performed.filter((e) => e.actorId === id).map((e) => e.round);
-    return { anchor: rounds('pl-anchor'), covered: rounds('pl-covered') };
+    return {
+        anchor: rounds('pl-anchor'),
+        covered: rounds('pl-covered'),
+        breakerPool: result.rounds.map((r) => r.perActorShield?.['enemy-breaker']?.pool ?? 0),
+    };
 };
 
 describe('shield-gated Stasis exemption — team symmetry (enemy carrier)', () => {
     it('a SHIELDED enemy carrier breaks neither player victim', () => {
-        const r = enemySideRun(1);
+        const r = enemySideRun({ startingShieldPctOfHp: 1 });
         expect(r.anchor).toHaveLength(0);
         expect(r.covered).toHaveLength(0);
     });
 
     it('the SAME enemy carrier with an empty pool breaks both', () => {
-        const r = enemySideRun(0);
+        const r = enemySideRun({ startingShieldPctOfHp: 0 });
         expect(r.anchor.length).toBeGreaterThan(0);
         expect(r.covered.length).toBeGreaterThan(0);
+    });
+
+    // THE LIFT, ENEMY SIDE: the breaker's pool comes from a one-time pre-fight seed with no
+    // round-start re-grant, so thorns sized to empty it in ONE bounce turn that seed into a
+    // mid-cast drain. Sub-hit 0 connects while the pool is up (exempt) and empties it; sub-hit 1
+    // connects with the pool at zero and breaks the anchor's Stasis — the enemy-carrier twin of
+    // the player fixture's 'hits:2 + draining thorns' arm.
+    it('the lift is symmetric: an enemy carrier whose pool drains mid-cast breaks its ANCHOR', () => {
+        const r = enemySideRun({ startingShieldPctOfHp: POOL_PCT, hits: 2, reflectPct: DRAIN_PCT });
+        expect(r.breakerPool[0]).toBe(0);
+        expect(r.anchor.length).toBeGreaterThan(0);
     });
 });
