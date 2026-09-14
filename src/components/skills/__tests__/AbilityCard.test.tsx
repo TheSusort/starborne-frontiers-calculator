@@ -1305,4 +1305,137 @@ describe('AbilityCard — the top-up buff-steal name accepts multi-word statuses
             })
         );
     });
+
+    // A charge ability's `amount` is `number | 'all'`; `'all'` is the unbounded quantifier
+    // ("removes all charges from the enemy charged skill", Zenith), so it has no numeric editor.
+    // `Input` accepts `string | number` for `value`, so feeding `'all'` to the number field would
+    // have type-checked clean and silently rendered an empty box that any edit turned into a
+    // count — the checkbox is what keeps the two states distinguishable.
+    describe("charge amount: the 'all' quantifier", () => {
+        const chargeAbility = (
+            amount: number | 'all',
+            target: Ability['target'] = 'enemy'
+        ): Ability => ({
+            id: 'a-charge-amount',
+            type: 'charge',
+            target,
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'charge', amount },
+        });
+
+        it("shows the numeric Amount field for a count and hides it for 'all'", () => {
+            const { unmount } = render(
+                <AbilityCard ability={chargeAbility(2)} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.getByLabelText<HTMLInputElement>('Amount').value).toBe('2');
+            expect(screen.getByLabelText('Remove all charges')).not.toBeChecked();
+            unmount();
+
+            render(
+                <AbilityCard ability={chargeAbility('all')} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.queryByLabelText('Amount')).not.toBeInTheDocument();
+            expect(screen.getByLabelText('Remove all charges')).toBeChecked();
+        });
+
+        it('gives each card its own checkbox id, so one card cannot toggle another', () => {
+            // Checkbox falls back to an id derived from its LABEL, and its visible control is a
+            // `label htmlFor` over an sr-only input. Two charge cards therefore put the same id in
+            // the DOM twice, and clicking the second one drives the first — `getAllByLabelText`
+            // resolves both labels to whichever input the browser matched first.
+            const onSecond = vi.fn();
+            render(
+                <>
+                    <AbilityCard
+                        ability={{ ...chargeAbility(2), id: 'first' }}
+                        onChange={vi.fn()}
+                        onRemove={vi.fn()}
+                    />
+                    <AbilityCard
+                        ability={{ ...chargeAbility(2), id: 'second' }}
+                        onChange={onSecond}
+                        onRemove={vi.fn()}
+                    />
+                </>
+            );
+
+            const boxes = screen.getAllByLabelText<HTMLInputElement>('Remove all charges');
+            expect(boxes).toHaveLength(2);
+            expect(new Set(boxes.map((b) => b.id)).size).toBe(2);
+
+            fireEvent.click(boxes[1]);
+            expect(onSecond).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'charge', amount: 'all' }),
+                })
+            );
+        });
+
+        it("ticking the checkbox writes 'all'; unticking falls back to the count 1", () => {
+            const onChange = vi.fn();
+            const { unmount } = render(
+                <AbilityCard ability={chargeAbility(2)} onChange={onChange} onRemove={vi.fn()} />
+            );
+            fireEvent.click(screen.getByLabelText('Remove all charges'));
+            expect(onChange).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'charge', amount: 'all' }),
+                })
+            );
+            unmount();
+
+            const onChange2 = vi.fn();
+            render(
+                <AbilityCard
+                    ability={chargeAbility('all')}
+                    onChange={onChange2}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Remove all charges'));
+            expect(onChange2).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'charge', amount: 1 }),
+                })
+            );
+        });
+
+        it('offers the checkbox on enemy targets only — a GAIN has no pool to empty', () => {
+            const { unmount } = render(
+                <AbilityCard
+                    ability={chargeAbility(1, 'self')}
+                    onChange={vi.fn()}
+                    onRemove={vi.fn()}
+                />
+            );
+            expect(screen.queryByLabelText('Remove all charges')).not.toBeInTheDocument();
+            expect(screen.getByLabelText<HTMLInputElement>('Amount').value).toBe('1');
+            unmount();
+
+            render(
+                <AbilityCard ability={chargeAbility(1)} onChange={vi.fn()} onRemove={vi.fn()} />
+            );
+            expect(screen.getByLabelText('Remove all charges')).toBeInTheDocument();
+        });
+
+        it("coerces a stray 'all' back to 1 when the target leaves the enemy side", () => {
+            const onChange = vi.fn();
+            render(
+                <AbilityCard
+                    ability={chargeAbility('all')}
+                    onChange={onChange}
+                    onRemove={vi.fn()}
+                />
+            );
+            fireEvent.click(screen.getByLabelText('Target'));
+            fireEvent.click(within(screen.getByRole('listbox')).getByText('Self'));
+            expect(onChange).toHaveBeenLastCalledWith(
+                expect.objectContaining({
+                    target: 'self',
+                    config: expect.objectContaining({ type: 'charge', amount: 1 }),
+                })
+            );
+        });
+    });
 });

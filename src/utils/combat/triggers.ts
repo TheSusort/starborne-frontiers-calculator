@@ -1749,7 +1749,7 @@ export interface IntentExecContext {
      *  advantage over the applier); omit it to disable the gate. The optional `emitBus` stamps the
      *  `charge-changed` when called during a reactive intent — see grantAllyCharges. */
     removeEnemyCharges: (
-        amount: number,
+        amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
@@ -1760,7 +1760,7 @@ export interface IntentExecContext {
      *  optional `emitBus`. */
     removeChargesFrom: (
         targetId: string,
-        amount: number,
+        amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
@@ -3775,6 +3775,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         // Dispatch by the total `CHARGE_TARGET_KIND` lookup (declared above `executeIntent`) —
         // see that Record's doc comment for why, and for what each arm below does (#399).
         const chargeKind = CHARGE_TARGET_KIND[intent.ability.target];
+        // The removal arms below pass `cfg.amount` straight through, `'all'` included. The GAIN
+        // arms read this instead: `'all'` is empty-the-pool and a gain has no pool to empty, so
+        // it is dropped rather than guessed at a count — see the `charge` config's doc comment in
+        // types/abilities.ts.
+        const gainAmount = cfg.amount === 'all' ? undefined : cfg.amount;
         switch (chargeKind) {
             // #399: each SELECTOR target names exactly ONE opposing actor, resolved at
             // drain time. Routing them through `removeEnemyCharges` would strip charges off every
@@ -3838,15 +3843,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             case 'lowest-hp-ally': {
                 // Required delegate — see IntentExecContext.lowestHpAllyIdFor's doc comment.
                 const rid = ctx.lowestHpAllyIdFor(intent.ownerId);
-                if (rid !== undefined) {
-                    ctx.grantAllyCharges(cfg.amount, { recipientIds: [rid], emitBus: ctx.bus });
+                if (rid !== undefined && gainAmount !== undefined) {
+                    ctx.grantAllyCharges(gainAmount, { recipientIds: [rid], emitBus: ctx.bus });
                 }
                 return;
             }
             // Charge follow-up routes by the ability's target: ally/all-allies bumps
             // EVERY same-side actor (per-actor cap, skip chargeCount 0); self bumps the owner only.
             case 'ally-bulk': {
-                ctx.grantAllyCharges(cfg.amount, {
+                if (gainAmount === undefined) return;
+                ctx.grantAllyCharges(gainAmount, {
                     recipientIds: footprintFilteredRecipients(intent, ctx, ctx.playerIds),
                     emitBus: ctx.bus,
                 });
@@ -3864,10 +3870,10 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             }
         }
         // Owner-only charge gain, capped as on the cast path; no-op when chargeCount 0.
-        if (owner.actor.chargeCount === 0) return;
+        if (owner.actor.chargeCount === 0 || gainAmount === undefined) return;
         if (chargeGuardKey) ctx.reactionFiredThisAttack?.add(chargeGuardKey);
         const oldChargeManip = owner.actor.charges;
-        owner.actor.charges = Math.min(owner.actor.charges + cfg.amount, owner.actor.chargeCount);
+        owner.actor.charges = Math.min(owner.actor.charges + gainAmount, owner.actor.chargeCount);
         if (owner.actor.charges !== oldChargeManip) {
             ctx.bus.emit({
                 type: 'charge-changed',

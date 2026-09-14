@@ -1122,8 +1122,10 @@ export function simulateBattle(
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
             // (Isha/Nayra reciprocal Affinity Override gate).
             name: plan.name,
-            // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
+            // §4.5 Stasis-break exemption: thread BOTH forms from ShipSkills — the static flag
+            // (Akula/Tygr) and the gated one (Zenith), which the engine re-evaluates per break-mark.
             doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
+            stasisBreakExemptWhen: plan.shipSkills.stasisBreakExemptWhen,
             chargeLossImmune: plan.shipSkills.chargeLossImmune,
             ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
             // W6: ship-wide stealth-targeting bypass (Lodolite's "This Unit ignores Stealth
@@ -1166,9 +1168,10 @@ export function simulateBattle(
                 faction: asFactionKey(plan.faction),
                 // SP-F F4: thread the ship name for the live `ally-on-team` roster check.
                 name: plan.name,
-                // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills into the
-                // engine input so the break-mark gate reads the flag from the CombatActor.
+                // §4.5 Stasis-break exemption: thread BOTH forms into the engine input so the
+                // break-mark gate reads them from the CombatActor (enemy-side Zenith included).
                 doesntBreakStasis: plan.shipSkills.doesntBreakStasis,
+                stasisBreakExemptWhen: plan.shipSkills.stasisBreakExemptWhen,
                 chargeLossImmune: plan.shipSkills.chargeLossImmune,
                 ignoresForcedTargeting: plan.shipSkills.ignoresForcedTargeting,
                 // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/
@@ -1252,8 +1255,9 @@ export function simulateBattle(
         faction: asFactionKey(focus.faction),
         // SP-F F4: thread the focus actor's ship name for the live `ally-on-team` roster check.
         name: focus.name,
-        // §4.5 Akula exception: thread doesntBreakStasis from ShipSkills.
+        // §4.5 Stasis-break exemption: thread BOTH forms from ShipSkills (see the team branch).
         doesntBreakStasis: focus.shipSkills.doesntBreakStasis,
+        stasisBreakExemptWhen: focus.shipSkills.stasisBreakExemptWhen,
         chargeLossImmune: focus.shipSkills.chargeLossImmune,
         ignoresForcedTargeting: focus.shipSkills.ignoresForcedTargeting,
         // W6: ship-wide stealth-targeting bypass. Team-symmetric with the teamActors/

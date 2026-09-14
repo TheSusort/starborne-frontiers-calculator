@@ -97,7 +97,7 @@ import {
     parseIgnoresDefense,
     parseIgnoresStealth,
     parseForceAffinityAdvantage,
-    parseDoesntBreakStasis,
+    parseStasisBreakExemption,
     parseChargeLossImmune,
     detectIgnoresForcedTargeting,
     detectIgnoresStealth,
@@ -371,6 +371,13 @@ function forEachCondition(sentence: string): Condition | null {
     const m = sentence.match(/for each\s+([^.,;]*)/i);
     if (!m) return null;
     const what = m[1].toLowerCase();
+    // Zenith: "for each ally with a shield". A COUNT of own-side UNITS holding a shield pool —
+    // the own-side mirror of `enemy-stealth-count`, and sim-derivable for the same reason (the
+    // engine reads every own-side actor's live shieldPool). Placed above the generic
+    // buff/debuff arms below because "shield" is not a named buff in this model: it is a pool on
+    // the actor, so `self-buff` would count the wrong thing and count it on the wrong unit.
+    if (/^all(?:y|ies)\b.*\bshield\b/.test(what.trim()))
+        return { subject: 'ally-shield-count', derivable: true };
     if (/destroy/.test(what)) return { subject: 'enemy-destroyed', derivable: false };
     // Enemy DEBUFF counts ARE sim-derivable (landed debuffs + DoT entries per round) —
     // matches mapConditionPhrase; enemy BUFF counts below are not (manual).
@@ -2205,13 +2212,15 @@ function abilitiesFromText(
               // same-pct repairs) takes the SAME precedence as damageReaction above.
               h.ownCleanseReaction
               ? ('on-own-cleanse' as const)
-              : // Epic PR4: Chimei's "At the start of the round, all allies with Stealth repairs
-                // 10% of this unit's max HP" parsed on-cast — the SAME phrase already resolves to
-                // start-of-round for buff grants (detectReactiveTrigger) and Judge's passive
-                // damage (detectStartOfRoundTrigger, added alongside this call). Checked for
-                // heals only (no corpus shield carries this phrase — Xcellence/Volk's start-of-
-                // turn shield/heal use a DIFFERENT phrase and stay untouched).
-                ((h.kind === 'heal' ? detectStartOfRoundTrigger(text, healPos) : undefined) ??
+              : // A repair or shield whose anchor falls in an "at the start of (the|each|every)
+                // round" sentence rides start-of-round — it grants once per round, not on every
+                // cast (Chimei's round-start ally repair, Zenith's round-start self shield). The
+                // same phrase already resolves to start-of-round for buff grants
+                // (detectReactiveTrigger) and passive damage (detectStartOfRoundTrigger). The
+                // detector is sentence-scoped, so a per-TURN grant ("at the start of each turn",
+                // "every turn") falls through to detectEveryTurnTrigger below, and a
+                // start-of-COMBAT one to detectPreCombatShieldTrigger.
+                (detectStartOfRoundTrigger(text, healPos) ??
                 // Epic PR4 (start-of-combat one-time grant family): Crucialis's "At the start of
                 // combat, this Unit gains a Shield equal to 20% of its Max HP …" and FrontLine's
                 // "This Unit gains Shield equal to 25% of its Max HP at the start of combat" parsed
@@ -3887,13 +3896,20 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
         slots.push({ slot, abilities: positioned.map((p) => p.ability) });
     }
 
-    // §4.5 Akula exception: check ALL skill rows for the don't-break-Stasis clause and
-    // fold the result onto the ShipSkills object. Only the refit-active passive applies in
-    // game, but getShipSkillRows already resolves that — scan only the rows that were used
-    // for ability building (the same rows iterated above, now re-queried via getShipSkillRows).
-    const doesntBreakStasis = getShipSkillRows(ship).some((row) =>
-        parseDoesntBreakStasis(row.text)
-    );
+    // §4.5 Stasis-break exemption: check ALL skill rows for the don't-break/don't-reduce-Stasis
+    // clause and fold the result onto the ShipSkills object. Only the refit-active passive applies
+    // in game, but getShipSkillRows already resolves that — scan only the rows that were used for
+    // ability building (the same rows iterated above, now re-queried via getShipSkillRows).
+    // An UNGATED clause (Akula/Tygr) rides the static `doesntBreakStasis` boolean; a GATED one
+    // (Zenith, "when this Unit has a shield") rides `stasisBreakExemptWhen` instead, whose
+    // conditions the engine re-evaluates at every break-mark. The two are disjoint by
+    // construction: a gated clause must NEVER set the boolean, because every engine break site
+    // reads `!actor.doesntBreakStasis` and would exempt the ship unconditionally.
+    const stasisExemptions = getShipSkillRows(ship)
+        .map((row) => parseStasisBreakExemption(row.text))
+        .filter((x): x is { conditions: Condition[] } => x !== null);
+    const doesntBreakStasis = stasisExemptions.some((x) => x.conditions.length === 0);
+    const stasisBreakExemptWhen = stasisExemptions.find((x) => x.conditions.length > 0)?.conditions;
 
     const chargeLossImmune = getShipSkillRows(ship).some((row) => parseChargeLossImmune(row.text));
 
@@ -3909,6 +3925,7 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
     return {
         slots,
         ...(doesntBreakStasis ? { doesntBreakStasis: true } : {}),
+        ...(!doesntBreakStasis && stasisBreakExemptWhen ? { stasisBreakExemptWhen } : {}),
         ...(chargeLossImmune ? { chargeLossImmune: true } : {}),
         ...(ignoresForcedTargeting ? { ignoresForcedTargeting: true } : {}),
         ...(ignoresStealth ? { ignoresStealth: true } : {}),

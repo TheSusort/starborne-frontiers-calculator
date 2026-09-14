@@ -7,10 +7,12 @@ import { tagShip } from '../../../src/utils/combat/audit/classes';
 import { composeBattle, type TaggedShip } from '../../../src/utils/combat/audit/compose';
 import { runSeededBattle } from '../../../src/utils/simulator/seededRuns';
 import { runDifferential } from '../../../src/utils/combat/audit/fingerprint';
+import { buildShipAbilities } from '../../../src/utils/abilities/buildShipAbilities';
 import type {
     BattleResult,
     BattleSimulationInput,
 } from '../../../src/utils/calculators/battleSimulator';
+import type { AbilityConfig } from '../../../src/types/abilities';
 import type { Position } from '../../../src/types/encounters';
 import type { Ship } from '../../../src/types/ship';
 import type { FingerprintDiff } from '../../../src/utils/combat/audit/types';
@@ -65,25 +67,46 @@ const inertPoolFrom = (tagged: TaggedShip[]): Ship[] =>
     tagged.filter((t) => t.classes.size === 0).map((t) => t.ship);
 
 /**
- * The subject the finding was filed against. The SHIP is the load-bearing part, not the seed:
- * FINDING-003's canned arm reports a `cleanse` differential precisely because Makoli cleanses, so
- * a re-anchor onto some other ship would silently stop testing the reported case.
+ * The subject the finding was filed against. The SHIP is the load-bearing part, not the seed: the
+ * canned arm's `cleanse` differential is Makoli's own cleanse firing in the canned baseline, where
+ * `buildStandardScenario`'s debuffer filler always hands it something to remove. A re-anchor onto
+ * a ship that does not cleanse would silently stop testing the reported case.
  */
 const SUBJECT = 'Makoli';
 
+/** The `AbilityConfig` variants that place a status on an ENEMY. Every other variant deals damage,
+ *  acts on its own side, or only modifies a status already on the board, so it cannot by itself put
+ *  anything on the subject. `tagShip`'s interaction classes cannot express this — there is no
+ *  plain-debuff class, so a ship carrying `debuff` abilities can wear any tag set or none — which
+ *  is why this reads the parsed kit that `tagShip` itself consumes. */
+const ENEMY_STATUS_CONFIGS = new Set<AbilityConfig['type']>(['debuff', 'control', 'dot']);
+
+/** True when `ship` can put a status on its enemy. A deliberate SUPERSET of what a cleanse removes
+ *  — DoTs live in their own store, not the timed/accumulating ones `cleanse` gathers from — so
+ *  screening an opponent out on this can only make a seed search stricter, never admit one that
+ *  leaves the subject a debuff to cleanse. */
+function appliesEnemyStatus(ship: Ship): boolean {
+    return buildShipAbilities(ship).slots.some((slot) =>
+        slot.abilities.some((a) => ENEMY_STATUS_CONFIGS.has(a.config.type))
+    );
+}
+
 /**
- * The anchor seed is DERIVED, never pinned (#364).
+ * The anchor seed is DERIVED, never pinned (#364). A pinned seed is good for exactly one corpus:
+ * every ship added reshuffles `composeBattle`'s seeded draw, so the seed that composed this case
+ * composes an unrelated battle instead, the `beforeAll` assertion throws, and all five tests in
+ * this file report SKIPPED rather than red — a regression left with nothing running.
  *
- * It was `335` until the 2026-08-22 ship-data refresh took the corpus from 148 to 149 ships, which
- * shifted `composeBattle`'s seeded selection: seed 335 now composes Lodolite, the `beforeAll`
- * assertion threw, and all five tests in this file SKIPPED — a merged fix left with no running
- * regression, and nothing red enough to notice beyond this one hook. A freshly pinned seed would
- * buy exactly one corpus and break again on ship 150, so the seed is searched for instead: the
- * first one that reproduces the shape the finding needs.
- *
- * Two properties are required, and both are asserted rather than assumed by the caller:
- *   - playerTeam[0] is the SUBJECT, so the canned arm still reports its cleanse differential;
- *   - the composition has MORE than one player ship, which the actor-id test below needs.
+ * The search returns the first seed whose composition carries all three properties the case needs.
+ * Each is load-bearing:
+ *   - playerTeam[0] is the SUBJECT, so the arms compare the ship the finding was filed against;
+ *   - the composition has MORE than one player ship, which the actor-id test below needs;
+ *   - enemyTeam[0] — the only opponent the minimized repro keeps — places NOTHING on the subject.
+ *     The canned baseline hands the subject a debuff to remove on every run: its `enemyDebuffer`
+ *     filler carries hacking 260, above every corpus ship's security, so its Defense Down II
+ *     always lands. `cleanse` is therefore in the subject's canned fingerprint either way, and it
+ *     survives into the DIFFERENTIAL only while the composition arm has nothing to cleanse. An
+ *     opponent that debuffs the subject makes it cleanse in both arms and the token cancels out.
  * The minimized repro then keeps playerTeam[0] alone, which is what makes ally interference
  * impossible by construction.
  */
@@ -94,15 +117,22 @@ function anchorSeed(): number {
     const tagged = buildTaggedCorpus();
     for (let seed = 1; seed <= SEED_SEARCH_LIMIT; seed++) {
         const c = composeBattle(seed, tagged);
-        if (c.playerTeam[0]?.ship.name === SUBJECT && c.playerTeam.length > 1) {
+        const opponent = c.enemyTeam[0]?.ship;
+        if (
+            c.playerTeam[0]?.ship.name === SUBJECT &&
+            c.playerTeam.length > 1 &&
+            opponent &&
+            !appliesEnemyStatus(opponent)
+        ) {
             cachedSeed = seed;
             return seed;
         }
     }
     throw new Error(
-        `no seed in 1..${SEED_SEARCH_LIMIT} composes ${SUBJECT} at playerTeam[0] with allies — ` +
-            `the corpus may no longer contain ${SUBJECT}, in which case this regression needs a ` +
-            `new subject that CLEANSES (see SUBJECT above), not a wider search`
+        `no seed in 1..${SEED_SEARCH_LIMIT} composes ${SUBJECT} at playerTeam[0], with allies, ` +
+            `against an enemyTeam[0] that applies no status of its own — the corpus may no longer ` +
+            `contain ${SUBJECT}, in which case this regression needs a new subject that CLEANSES ` +
+            `(see SUBJECT above), not a wider search`
     );
 }
 
@@ -163,12 +193,11 @@ describe('differential baseline — FINDING-003 (Makoli, derived anchor seed)', 
         requireReferenceData();
         // The ddmin'd repro, rebuilt from the fuzz composition it came from rather than
         // hand-transcribed: the minimizer kept playerTeam[0] and enemyTeam[0] and dropped the
-        // rest. Originally seed 335 / player Makoli / enemy Nuqtu; the seed is now derived (#364)
-        // so the OPPONENT is whatever that seed composes. Only the subject is asserted — the
-        // finding was about ally interference on the subject, and the canned arm's differential
-        // comes from the subject's own cleanse, so the opponent's identity was never load-bearing.
-        // It is still a REAL corpus ship, which is the property that made the canned baseline
-        // (three synthetic fillers at security 20) differ in the first place.
+        // rest. The OPPONENT is whatever the derived seed composes, and it IS load-bearing — the
+        // canned arm reports a `cleanse` differential only while that opponent leaves the subject
+        // nothing to cleanse, which is the property anchorSeed() screens for. It is a REAL corpus
+        // ship, which is what made the canned baseline (three synthetic fillers at security 20)
+        // differ in the first place.
         const tagged = buildTaggedCorpus();
         pool = inertPoolFrom(tagged);
         const compInput = composeBattle(anchorSeed(), tagged);

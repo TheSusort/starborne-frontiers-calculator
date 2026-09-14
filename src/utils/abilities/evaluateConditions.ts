@@ -113,6 +113,14 @@ export interface ConditionContext {
      *  and since SP-4b-2b no caller can express a roster-less run (the normalization boundary
      *  throws). It is justified by CONTENT — no opposing actor holds Stealth. */
     stealthedEnemyCount?: number;
+    /** Count of LIVING OWN-SIDE actors holding a shield pool, the owner INCLUDED. The own-side
+     *  mirror of `stealthedEnemyCount`, for Zenith's "for each ally with a shield" scaling.
+     *  Live-derived by the combat engine on BOTH sides. Unlike its mirror, the DPS default of 0
+     *  is NOT faithful to a real run — a DPS-mode focus does hold a real shieldPool — so every
+     *  engine cast ctx populates it in every mode; the `?? 0` below is only for a caller that does
+     *  not supply it. The reactive DRAIN ctx (triggers.ts) is one such caller, exactly as it is
+     *  for `stealthedEnemyCount` above: neither count reaches a reactive proc today. */
+    shieldedAllyCount?: number;
     /** Sub-project I, PR I4a — the ACTING unit's own live crit power (effective critDamage
      *  stat, e.g. 150), a continuous MAGNITUDE scaling source (distinct from every other
      *  scaling source above, which are entity COUNTS). Used by Wildfire's dotDamage-channel
@@ -262,6 +270,8 @@ export function evaluateCondition(cond: Condition, ctx: ConditionContext): numbe
             throw new Error(`evaluateCondition: ${cond.subject} must resolve above the switch`);
         case 'enemy-stealth-count':
             return ctx.stealthedEnemyCount ?? 0;
+        case 'ally-shield-count':
+            return ctx.shieldedAllyCount ?? 0;
         case 'self-crit-power':
             return ctx.selfCritPower ?? 0;
         // SP-4d: was `?? 1` — a cast that resolved no victim booked a footprint of ONE. Absent now

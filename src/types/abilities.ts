@@ -494,6 +494,16 @@ export type ConditionSubject =
     // combat engine from ConditionContext.stealthedEnemyCount; defaults to 0 (DPS mode
     // has no enemy attackers to count) — inert/byte-identical there. Always derivable:true.
     | 'enemy-stealth-count'
+    // COUNT subject: the number of LIVING OWN-SIDE actors currently holding a shield pool
+    // (`shieldPool > 0`), the condition owner INCLUDED (owner ruling 2026-09-14). The own-side
+    // mirror of `enemy-stealth-count` above, and used the same way — as a SCALING source, e.g.
+    // Zenith's "8% more direct damage for each ally with a shield" (perUnit 8, no cap). A shield
+    // is a POOL on the actor, not a named buff, so no `self-buff`/`enemy-buff` name read can
+    // answer this. Live-derived by the combat engine from ConditionContext.shieldedAllyCount in
+    // EVERY mode — unlike Selenite's subject it is NOT inert in DPS mode, because a DPS-mode
+    // focus holds a real shieldPool (see `roundStartAttackShield.test.ts`). Defaults to 0 only
+    // for contexts that never carry the field at all. Always derivable:true.
+    | 'ally-shield-count'
     // SCALING-SOURCE subject (sub-project I, PR I4a): the ACTING unit's own live crit
     // power (effective critDamage stat, e.g. 150), as a continuous magnitude — not a
     // count of entities like the other scaling sources above. Used by Wildfire's
@@ -884,7 +894,15 @@ export type AbilityConfig =
     // Echoing Burst-style debuff: gathers the direct damage dealt to the enemy while
     // active (`turns`), then detonates for `pct`% of the accumulated total on expiry.
     | { type: 'accumulate-detonate'; turns: number; pct: number }
-    | { type: 'charge'; amount: number }
+    /** Charge-skill charges moved by this ability. A number is the count added (self/ally
+     *  targets) or subtracted (enemy targets). `'all'` is EMPTY-THE-POOL and is only meaningful
+     *  on an ENEMY target ("removes all charges from the enemy charged skill", Zenith): it sets
+     *  the victim's charges to 0 outright rather than subtracting a count. An `'all'` on a
+     *  self/ally (GAIN) target has no meaning — a gain has no pool to empty — and every summing
+     *  consumer drops it rather than guessing a count. `'all'` never bypasses the ability's own
+     *  gates: conditions, the landing/affinity charge-manip gate and chargeLossImmune all still
+     *  decide whether the removal runs at all. */
+    | { type: 'charge'; amount: number | 'all' }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
     | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
@@ -1310,6 +1328,13 @@ export interface ShipSkills {
      *  (Akula / Tygr). Threaded onto CombatActor.doesntBreakStasis by the engine adapter
      *  and gated at the break-mark site (§4.5 Akula exception). */
     doesntBreakStasis?: boolean;
+    /** The CONDITIONAL form of the same exemption (Zenith: "when this Unit has a shield its
+     *  attacks do not reduce Stasis"). Present only when the clause carries a gate, and then
+     *  `doesntBreakStasis` is absent — the two are mutually exclusive, because every engine
+     *  break site reads `!actor.doesntBreakStasis` and a gated ship setting that boolean would
+     *  be exempt unconditionally. The engine re-evaluates these conditions against the
+     *  attacker's LIVE state at each break-mark, never at build time. */
+    stasisBreakExemptWhen?: Condition[];
     /** True when the ship's passive text declares immunity to charge loss effects (Lev).
      *  Threaded onto CombatActor.chargeLossImmune by the engine adapter; enemy-sourced
      *  charge removal is a no-op against actors with this flag set. */

@@ -1045,6 +1045,44 @@ describe('buildShipAbilities', () => {
         expect(mod.target).toBe('self'); // self-scoped — no team distribution, no per-victim
     });
 
+    it('Zenith passive: "for each ally with a shield" scales on the DERIVABLE own-side shielded count', () => {
+        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`). The
+        // own-side mirror of Selenite's enemy-stealth count: Zenith COUNTS ITSELF (owner ruling),
+        // so its own round-start shield floors the bonus at +8% on any board. Linear, no cap.
+        const s = ship({
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>8% more direct damage</unit-damage> for each ally with a shield.',
+        } as Partial<Ship>);
+        const mod = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'modifier'
+        )!;
+        expect(mod.conditions[0]).toMatchObject({
+            subject: 'ally-shield-count',
+            derivable: true,
+        });
+        expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 8 });
+        expect(mod.scaling?.cap).toBeUndefined(); // the text states no maximum
+        expect(mod.config).toMatchObject({ channel: 'outgoingDamage', value: 0 });
+        // "ally", not "allies" — the clause describes WHO IS COUNTED, not who receives the
+        // bonus, so the modifier stays self-scoped (no team distribution).
+        expect(mod.target).toBe('self');
+    });
+
+    it('Zenith R2: the same clause at 5% scales at 5 per shielded ally', () => {
+        const s = ship({
+            refits: [{}, {}],
+            secondPassiveSkillText:
+                'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>5% more direct damage</unit-damage> for each ally with a shield.',
+        } as Partial<Ship>);
+        const mod = abilityOfType(
+            slot(buildShipAbilities(s).slots, 'passive')!.abilities,
+            'modifier'
+        )!;
+        expect(mod.scaling).toMatchObject({ conditionIndex: 0, perUnit: 5 });
+    });
+
     describe('Wildfire dotDamage crit-power scaling (sub-project I, PR I4a)', () => {
         // Real CSV text (docs/ship-skills.csv row 156, first/second_passive_skill_text).
         const baseText =
@@ -3494,6 +3532,37 @@ describe('buildShipAbilities doesntBreakStasis', () => {
         const result = buildShipAbilities(s);
         expect(result.doesntBreakStasis).toBeFalsy();
     });
+
+    it('Akula / Tygr carry NO gate — the unconditional flag is the whole exemption', () => {
+        const akula = buildShipAbilities(
+            ship({
+                firstPassiveSkillText:
+                    "This Unit's attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target's current HP percentage; the higher the percentage, the more the damage.",
+            })
+        );
+        expect(akula.stasisBreakExemptWhen).toBeUndefined();
+        const tygr = buildShipAbilities(
+            ship({
+                firstPassiveSkillText:
+                    "This Unit's attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.",
+            })
+        );
+        expect(tygr.stasisBreakExemptWhen).toBeUndefined();
+    });
+
+    it('Zenith R4: "do not reduce Stasis" while shielded → a SELF-SHIELD-GATED exemption, never the unconditional flag', () => {
+        // Verbatim third_passive_skill_text from docs/ship-skills.csv (`grep '^Zenith,'`).
+        const s = ship({
+            refits: [{}, {}, {}, {}],
+            thirdPassiveSkillText:
+                'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>8% more direct damage</unit-damage> for each ally with a shield.',
+        } as Partial<Ship>);
+        const result = buildShipAbilities(s);
+        // The unconditional flag must stay FALSY: every engine break site reads
+        // `!actor.doesntBreakStasis`, so a truthy value here would exempt Zenith with no shield.
+        expect(result.doesntBreakStasis).toBeFalsy();
+        expect(result.stasisBreakExemptWhen).toEqual([{ subject: 'self-shield', derivable: true }]);
+    });
 });
 
 // ── Phase 0 Task 6: chargeLossImmune ──────────────────────────────────────────────────────
@@ -4523,6 +4592,56 @@ describe('buildShipAbilities — enemy-targeted charge removal (Phase 1 Task 3)'
         );
     });
 
+    it("Zenith charged: 'removes all charges' emits an enemy removal with amount 'all'", () => {
+        // Verbatim `charge_skill_text` from docs/ship-skills.csv (Zenith). The "all" quantifier
+        // is the corpus's first — every other removal names a count ("removes 1 charge").
+        const s = ship({
+            chargeSkillText:
+                'This Unit deals <unit-damage>310% damage</unit-damage> and <unit-aid>removes all charges</unit-aid> from the enemy charged skill.',
+            chargeSkillCharge: 3,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const charged = slot(slots, 'charged')!;
+
+        // The damage clause must be untouched by the quantifier work.
+        expect(charged.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'damage',
+                config: { type: 'damage', multiplier: 310 },
+            })
+        );
+        expect(charged.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'charge',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'charge', amount: 'all' },
+            })
+        );
+    });
+
+    it("Zenith active: the numeric quantifier still parses as a number, not 'all'", () => {
+        // Verbatim `active_skill_text` from docs/ship-skills.csv (Zenith). Guards the numeric
+        // branch against the "all" branch swallowing it.
+        const s = ship({
+            activeSkillText:
+                'This Unit deals <unit-damage>230% damage</unit-damage> and <unit-aid>removes 1 charge</unit-aid> from the enemy charged skill.',
+            chargeSkillCharge: 3,
+        });
+
+        const { slots } = buildShipAbilities(s);
+        const active = slot(slots, 'active')!;
+        expect(active.abilities).toContainEqual(
+            expect.objectContaining({
+                type: 'charge',
+                target: 'enemy',
+                trigger: 'on-cast',
+                config: { type: 'charge', amount: 1 },
+            })
+        );
+    });
+
     it('does not emit a removal ability for a pure charge-gain ship', () => {
         // Negative test: a ship whose only charge-related text is a self gain must not produce
         // any enemy-targeted charge ability.
@@ -5522,5 +5641,68 @@ describe('buildShipAbilities — epic PR12(C) incoming-damage-reduction phrasing
                 condition: 'self-shield',
             },
         });
+    });
+});
+
+describe('buildShipAbilities — round-start self shields', () => {
+    // Verbatim from docs/ship-skills.csv (Zenith row), including the newline the CSV's
+    // multi-line quoted passive carries after each `<br /><br />`.
+    const ZENITH_R4 =
+        'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.<br /><br />\nThis Unit deals <unit-damage>8% more direct damage</unit-damage> for each ally with a shield.';
+    const ZENITH_R0 =
+        'When this Unit has a <unit-aid>Shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its attack.';
+
+    it('Zenith R4 passive: the round-start self shield rides start-of-round, not on-cast', () => {
+        const s = ship({ thirdPassiveSkillText: ZENITH_R4 });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        const shield = abilityOfType(passive.abilities, 'shield');
+        expect(shield).toMatchObject({
+            type: 'shield',
+            target: 'self',
+            trigger: 'start-of-round',
+            config: { type: 'shield', pct: 50, basis: 'attack' },
+        });
+    });
+
+    it('Zenith R0 passive: the same clause at 25% also rides start-of-round', () => {
+        const s = ship({ refits: [], firstPassiveSkillText: ZENITH_R0 });
+        const passive = slot(buildShipAbilities(s).slots, 'passive')!;
+        expect(abilityOfType(passive.abilities, 'shield')).toMatchObject({
+            trigger: 'start-of-round',
+            config: { type: 'shield', pct: 25, basis: 'attack' },
+        });
+    });
+
+    it('a per-TURN self shield keeps start-of-turn (Xcellence, Kinetik — verbatim CSV)', () => {
+        // The round-start detector is position-scoped on the phrase "start of the/each/every
+        // ROUND"; these two say "turn" and must fall through to detectEveryTurnTrigger.
+        const xcellence = ship({
+            refits: [],
+            firstPassiveSkillText:
+                'This Unit has 20% Shield Penetration.<br /><br />At the start of each turn this Unit gains <unit-damage>Shield equal to 10%</unit-damage> of its Max HP.',
+        });
+        expect(
+            abilityOfType(slot(buildShipAbilities(xcellence).slots, 'passive')!.abilities, 'shield')
+        ).toMatchObject({ trigger: 'start-of-turn', config: { pct: 10, basis: 'hp' } });
+
+        const kinetik = ship({
+            refits: [],
+            firstPassiveSkillText:
+                'This Unit gains a <unit-damage>Shield equal to 4%</unit-damage> of its Max HP every turn.',
+        });
+        expect(
+            abilityOfType(slot(buildShipAbilities(kinetik).slots, 'passive')!.abilities, 'shield')
+        ).toMatchObject({ trigger: 'start-of-turn', config: { pct: 4, basis: 'hp' } });
+    });
+
+    it('a start-of-COMBAT self shield keeps pre-combat (Crucialis — verbatim CSV)', () => {
+        const s = ship({
+            refits: [],
+            firstPassiveSkillText:
+                'At the start of combat, this Unit gains a <unit-damage>Shield equal to 20%</unit-damage> of its Max HP.',
+        });
+        expect(
+            abilityOfType(slot(buildShipAbilities(s).slots, 'passive')!.abilities, 'shield')
+        ).toMatchObject({ trigger: 'pre-combat', config: { pct: 20, basis: 'hp' } });
     });
 });

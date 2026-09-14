@@ -4277,6 +4277,29 @@ exports[`kit fingerprints > Yuyan 1`] = `
 }
 `;
 
+exports[`kit fingerprints > Zenith 1`] = `
+{
+  "plain": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "richEnemy": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield",
+  ],
+  "wounded": [
+    "attack:active",
+    "attack:charged",
+    "charge-changed",
+    "shield",
+  ],
+}
+`;
+
 exports[`kit fingerprints > Zeolite 1`] = `
 {
   "plain": [
@@ -4351,7 +4374,7 @@ exports[`kit fingerprints > Zosimos 1`] = `
 
 exports[`suite health > pins the corpus shape so a data refresh announces itself in ONE diff 1`] = `
 {
-  "digest": -644615505,
-  "shipCount": 149,
+  "digest": 135998631,
+  "shipCount": 150,
 }
 `;
