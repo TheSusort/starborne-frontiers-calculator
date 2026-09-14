@@ -3,6 +3,7 @@ import { stepInput, runStatSweepAsync } from '../statSweep';
 import type { BattleSimulationInput, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Position } from '../../../types/encounters';
 import type { Ship } from '../../../types/ship';
+import { sweepBoardInput } from '../__testutils__/sweepBoardFixture';
 
 const placement = (id: string, position: Position): BattlePlacement => ({
     ship: { id, name: id } as unknown as Ship,
@@ -13,48 +14,6 @@ const placement = (id: string, position: Position): BattlePlacement => ({
 const input = (): BattleSimulationInput => ({
     playerTeam: [placement('p1', 'T1'), placement('p2', 'M2')],
     enemyTeam: [placement('e1', 'T1')],
-});
-
-/** A placement the engine can actually fight with: a ship with no skill text resolves to zero
- *  abilities, so every fight is a 0-damage draw regardless of `statOverrides`. */
-const combatant = (
-    id: string,
-    position: Position,
-    stats: BattlePlacement['statOverrides']
-): BattlePlacement => ({
-    ship: {
-        id,
-        name: id,
-        type: 'ATTACKER',
-        baseStats: {},
-        equipment: {},
-        refits: [],
-        activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
-        activeTarget: 'front',
-        activePattern: 'Pattern-Base',
-    } as unknown as Ship,
-    position,
-    statOverrides: stats,
-});
-
-const combatStats = (attack: number, speed: number) => ({
-    attack,
-    crit: 50,
-    critDamage: 150,
-    hacking: 200,
-    security: 100,
-    defence: 500,
-    hp: 20000,
-    speed,
-});
-
-/** A lopsided fight so outcomes are non-degenerate (someone dies) while staying cheap. */
-const battleInput = (): BattleSimulationInput => ({
-    playerTeam: [
-        combatant('striker', 'T1', combatStats(4000, 120)),
-        combatant('wing', 'M2', combatStats(3000, 110)),
-    ],
-    enemyTeam: [combatant('dummy', 'T1', combatStats(800, 100))],
 });
 
 describe('stepInput', () => {
@@ -108,7 +67,7 @@ describe('runStatSweepAsync', () => {
     const target = { side: 'player', position: 'T1' } as const;
 
     it('runs every step on the same seed set', async () => {
-        const result = await runStatSweepAsync(battleInput(), target, 'speed', steps, 999, 3);
+        const result = await runStatSweepAsync(sweepBoardInput(), target, 'speed', steps, 999, 3);
         expect(result).not.toBeNull();
         expect(result!.steps).toHaveLength(2);
         for (const step of result!.steps) {
@@ -120,7 +79,7 @@ describe('runStatSweepAsync', () => {
 
     it('reports progress in battles and reaches the total exactly once', async () => {
         const onProgress = vi.fn();
-        await runStatSweepAsync(battleInput(), target, 'speed', steps, 1, 3, { onProgress });
+        await runStatSweepAsync(sweepBoardInput(), target, 'speed', steps, 1, 3, { onProgress });
         const totals = onProgress.mock.calls.filter(([done, total]) => done === total);
         expect(totals).toHaveLength(1);
         expect(onProgress.mock.calls.at(-1)).toEqual([6, 6]);
@@ -128,7 +87,7 @@ describe('runStatSweepAsync', () => {
 
     it('resolves null on abort and never a partial sweep', async () => {
         const controller = new AbortController();
-        const promise = runStatSweepAsync(battleInput(), target, 'speed', steps, 1, 5, {
+        const promise = runStatSweepAsync(sweepBoardInput(), target, 'speed', steps, 1, 5, {
             signal: controller.signal,
             onProgress: () => controller.abort(),
         });
@@ -141,7 +100,7 @@ describe('runStatSweepAsync', () => {
             if (done >= 1) controller.abort();
             void total;
         });
-        await runStatSweepAsync(battleInput(), target, 'speed', steps, 1, 5, {
+        await runStatSweepAsync(sweepBoardInput(), target, 'speed', steps, 1, 5, {
             signal: controller.signal,
             onProgress,
         });
