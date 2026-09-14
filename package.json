@@ -54,6 +54,9 @@
         "fetch:ascension-stats": "tsx scripts/fetch-ascension-stats.ts",
         "audit": "node scripts/audit.mjs"
     },
+    "engines": {
+        "node": ">=22"
+    },
     "browserslist": {
         "production": [
             ">0.2%",
