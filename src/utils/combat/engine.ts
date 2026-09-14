@@ -8092,8 +8092,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // per-round map so the RoundData row can expose perTargetDamage. Shared by
                     // every positional cast site, so it lives here.
                     // §4.5 NOTE: the Stasis break is NOT wired here. Every positional victim,
-                    // anchor and covered alike, is marked from `onVictimPreImpact` inside
-                    // `drivePositionalTurnApply`, which resolves the break after the apply.
+                    // anchor and covered alike, is MARKED from `onVictimPreImpact` inside
+                    // `drivePositionalTurnApply`. Only the covered mark is RESOLVED there too (the
+                    // unconditional drain into `stasisBreakPending` right after the walk); the
+                    // anchor's mark is handed back to the call site, which resolves it via
+                    // `resolveAnchorStasisBreak` after this drive returns.
                     emitHit: (victim, damage) => {
                         roundPerTargetDamage.set(
                             victim.id,

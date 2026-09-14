@@ -741,9 +741,10 @@ export interface PlayerTurnArgs {
     /** Stasis direct-damage break hook. When supplied, fires AFTER scheduled
      *  debuffs are applied (sourceFired) but BEFORE the ability timed-debuff loop, so the break
      *  correctly precedes any Stasis re-application from the same attack's debuff abilities.
-     *  Receives the resolved enemy target id (`targetId`). The engine supplies this for DIRECT-
-     *  channel apply boundaries (non-positional and positional via emitHit override); absent for
-     *  DPS/standalone callers → inert. */
+     *  Receives the resolved enemy target id (`targetId`). The engine wires this for every
+     *  direct-channel turn with a live, currently-stasised target, positional or not; absent for
+     *  DPS/standalone callers → inert. The mark it writes is consumed only when the turn does NOT
+     *  apply positionally — see `resolveAnchorStasisBreak` (engine.ts). */
     onHitBreakStasis?: (targetId: string) => void;
     /**
      * The firing skill's footprint victim ids, supplied by the engine in
@@ -2294,11 +2295,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
 
     // §4.5 Direct-damage Stasis break. Fires AFTER scheduled debuffs (sourceFired)
     // but BEFORE the ability timed-debuff loop, so a Stasis re-application from THIS attack's
-    // debuff abilities is not inadvertently removed. The engine supplies `onHitBreakStasis` only
-    // for direct-channel apply boundaries (non-positional and positional emitHit paths); DPS/
-    // standalone callers leave it absent → no-op. Receives the resolved target id so the break
-    // can key the statusEngine's per-actor enemy store correctly (side-symmetric: same key
-    // regardless of whether the actor is a player or enemy).
+    // debuff abilities is not inadvertently removed. The engine wires `onHitBreakStasis` for
+    // every direct-channel turn with a live, currently-stasised target, positional or not; DPS/
+    // standalone callers leave it absent → no-op. The mark this call writes is CONSUMED only when
+    // the turn does not apply positionally — a positional apply's own per-victim
+    // `onVictimPreImpact` marks supersede it (see `resolveAnchorStasisBreak`'s call sites). Receives
+    // the resolved target id so the break can key the statusEngine's per-actor enemy store
+    // correctly (side-symmetric: same key regardless of whether the actor is a player or enemy).
     // Only fire when targetId is defined (the engine always supplies it for direct-channel
     // break-eligible turns; DPS/standalone callers without a real targetId are inert).
     if (targetId !== undefined) onHitBreakStasis?.(targetId);

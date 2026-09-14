@@ -324,8 +324,9 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
         const r = run({ hits: 2, reflectPct: 1 });
         expect(r.coveredFired.length).toBeGreaterThan(0);
         // The pool really was emptied inside the cast. It is re-granted at every round start
-        // (`granted` is 100 in every round of every arm), so a zero here is a mid-cast drain.
-        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+        // (`granted` is 100 in every round of every arm), so a zero at round 1's end is a
+        // mid-cast drain, not next round's carryover.
+        expect(r.attackerPool[0]).toBe(0);
         // The anchor is shielded at BOTH impacts here — the pool is 100 at the first and 50 at
         // the second, because one bounce does not empty it. It stays exempt for the right reason:
         // every hit that landed on it connected while the pool was up.
@@ -340,17 +341,18 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
         const r = run({ hits: 1, reflectPct: 0, coveredReflectPct: 10 });
         expect(r.coveredFired).toHaveLength(0);
         // The bounce really did empty the pool — otherwise the arm asserts nothing.
-        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+        expect(r.attackerPool[0]).toBe(0);
     });
 
     // THE LIFT: thorns big enough to empty the pool in ONE bounce. Sub-attack 0's anchor hit
     // connects with the pool full (exempt) and empties it; sub-attack 1's anchor hit connects
-    // with the pool at zero, so THAT hit breaks the anchor's Stasis. The arm above cannot show
-    // this — its thorns survive one bounce, so its anchor is shielded at both impacts.
+    // with the pool at zero, so THAT hit breaks the anchor's Stasis. The `hits: 2 + thorns` arm
+    // two above cannot show this — its thorns survive one bounce, so its anchor is shielded at
+    // both impacts.
     it('hits:2 + draining thorns — the SECOND hit breaks the ANCHOR', () => {
         const r = run({ hits: 2, reflectPct: 3 });
         expect(r.anchorFired.length).toBeGreaterThan(0);
-        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+        expect(r.attackerPool[0]).toBe(0);
     });
 
     // Its partner, and the reason the arm above is not just "more hits break more things":
@@ -360,7 +362,7 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
     it('hits:1 + draining thorns — the anchor stays exempt, its own bounce does not count', () => {
         const r = run({ hits: 1, reflectPct: 3 });
         expect(r.anchorFired).toHaveLength(0);
-        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+        expect(r.attackerPool[0]).toBe(0);
     });
 });
 
