@@ -13,7 +13,13 @@ import {
     SPREAD_CORROSION_TIER,
     SPREAD_CORROSION_DURATION,
 } from '../../constants/toxicOverflow';
-import { Ability, AbilityTarget, IncomingHitContext, ShipSkills } from '../../types/abilities';
+import {
+    Ability,
+    AbilityTarget,
+    Condition,
+    IncomingHitContext,
+    ShipSkills,
+} from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { ParsedTarget, ParsedPattern } from '../targetingParser';
@@ -29,6 +35,7 @@ import {
     modifierTotalsFromAbilities,
 } from '../abilities/applyAbilities';
 import { conditionsMet, type ConditionContext } from '../abilities/evaluateConditions';
+import { buildRoundContext } from '../abilities/roundContext';
 import {
     isEnemyTarget,
     isAllEnemiesTarget,
@@ -742,6 +749,8 @@ export interface EnemyActorInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Conditional form of the flag above (Zenith). See CombatActor.stasisBreakExemptWhen. */
+    stasisBreakExemptWhen?: Condition[];
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
      *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
@@ -883,6 +892,7 @@ export function buildEnemyPlayerActorRuntime(
         ignoresForcedTargeting: e.ignoresForcedTargeting,
         ignoresStealth: e.ignoresStealth,
         doesntBreakStasis: e.doesntBreakStasis,
+        stasisBreakExemptWhen: e.stasisBreakExemptWhen,
         chargeLossImmune: e.chargeLossImmune,
         affinity: e.affinity,
         preFight: e.preFight,
@@ -1391,6 +1401,8 @@ export type TeamActorEngineInput = TeamActorInput & {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Conditional form of the flag above (Zenith). See CombatActor.stasisBreakExemptWhen. */
+    stasisBreakExemptWhen?: Condition[];
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
      *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
@@ -1550,6 +1562,8 @@ export interface CombatEngineInput {
         /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
          *  site (§4.5 Akula exception). Optional — undefined treated as false. */
         doesntBreakStasis?: boolean;
+        /** Conditional form of the flag above (Zenith). See CombatActor.stasisBreakExemptWhen. */
+        stasisBreakExemptWhen?: Condition[];
         /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
          *  no-op against actors with this flag set. Optional — undefined = false. */
         chargeLossImmune?: boolean;
@@ -1601,6 +1615,8 @@ export interface CombatEngineInput {
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
      *  site (§4.5 Akula exception). Optional — undefined treated as false. */
     doesntBreakStasis?: boolean;
+    /** Conditional form of the flag above (Zenith). See CombatActor.stasisBreakExemptWhen. */
+    stasisBreakExemptWhen?: Condition[];
     /** Attacker is immune to charge loss effects (Lev). Enemy-sourced charge removal is a
      *  no-op against actors with this flag set. Optional — undefined = false. */
     chargeLossImmune?: boolean;
@@ -1752,7 +1768,7 @@ interface ReactiveSideCtx {
      *  targets); omit it to disable the gate. The optional `emitBus` stamps the `charge-changed`
      *  when called during a reactive intent (pass ctx.bus). */
     removeEnemyCharges: (
-        amount: number,
+        amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
@@ -1761,7 +1777,7 @@ interface ReactiveSideCtx {
      *  `applierAffinity` charge-manip gate as removeEnemyCharges, and the same optional `emitBus`. */
     removeChargesFrom: (
         targetId: string,
-        amount: number,
+        amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
@@ -2123,6 +2139,40 @@ export function __resetResolvedVictimTurnCounts(): void {
     resolvedVictimTurns = 0;
     deadVictimTurns = 0;
 }
+
+/**
+ * §4.5 — does a direct hit by `actor` break the Stasis it lands on, right now?
+ *
+ * Two exemption forms, and this is the ONLY place that knows both:
+ *  - `doesntBreakStasis` — the static, unconditional flag (Akula, Tygr).
+ *  - `stasisBreakExemptWhen` — a GATE re-read at every break-mark (Zenith: "when this Unit has a
+ *    shield its attacks do not reduce Stasis"). The attacker's shield pool is live state, so the
+ *    answer can differ between two hits of the same cast; baking it into a boolean at actor
+ *    construction would exempt the ship for the whole fight.
+ *
+ * The gate ctx is NEUTRAL apart from `selfShielded` (same construction as triggers.ts's
+ * NEUTRAL_NAMES_CTX): `parseStasisBreakExemption` emits no other subject, and
+ * `stasisBreakExemptionSubjects.test.ts` fails over the whole corpus the day one appears — a
+ * subject this ctx does not carry would read as unmet and silently un-exempt the ship.
+ */
+function attackBreaksStasis(actor: CombatActor): boolean {
+    if (actor.doesntBreakStasis) return false;
+    const gate = actor.stasisBreakExemptWhen;
+    if (gate === undefined) return true;
+    return !conditionsMet(
+        gate,
+        buildRoundContext({
+            selfBuffNames: [],
+            landedEnemyDebuffCount: 0,
+            corrosionEntryCount: 0,
+            infernoEntryCount: 0,
+            bombCount: 0,
+            effectiveCritRate: 0,
+            selfShielded: actor.shieldPool > 0,
+        })
+    );
+}
+
 /**
  * The combat-engine turn loop (combat-system.md §10). Each round seeds a per-actor action
  * pool (one pending action each) and repeatedly selects the unacted actor with the highest
@@ -2276,6 +2326,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         ignoresForcedTargeting: input.ignoresForcedTargeting,
         ignoresStealth: input.ignoresStealth,
         doesntBreakStasis: input.doesntBreakStasis,
+        stasisBreakExemptWhen: input.stasisBreakExemptWhen,
         chargeLossImmune: input.chargeLossImmune,
         affinity: input.affinity,
         preFight: input.preFight,
@@ -2391,6 +2442,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             ignoresForcedTargeting: t.ignoresForcedTargeting,
             ignoresStealth: t.ignoresStealth,
             doesntBreakStasis: t.doesntBreakStasis,
+            stasisBreakExemptWhen: t.stasisBreakExemptWhen,
             chargeLossImmune: t.chargeLossImmune,
             // RAW affinity rides on the walk bundle (set by the adapter from TeamActorInput.affinity
             // — the SAME source as the walk's affinityDamageModifier). Legacy (no walk) → undefined.
@@ -3172,6 +3224,23 @@ export function runCombat(rawInput: CombatEngineInput): {
         countOwnersWithSelfBuff(statusEngine, livingEnemyAttackerIds(), 'Stealth');
     const enemyStealthedEnemyCount = (): number =>
         countOwnersWithSelfBuff(statusEngine, playerIds, 'Stealth');
+    // OWN-SIDE count of actors holding a shield pool, for Zenith's "for each ally with a shield"
+    // damage scaling. The structural mirror of the stealth pair directly above, with two
+    // differences that are the whole point of the subject:
+    //  - it reads the actor's live `shieldPool`, not a named status (a shield is a pool, and no
+    //    status name tracks it);
+    //  - it counts the OWN side, the acting actor INCLUDED (owner ruling 2026-09-14) — Zenith
+    //    shields itself every round, so its own pool floors the bonus.
+    // ALIVE-gated on `destroyedRound` (the engine's canonical death signal, as
+    // `isActorAlive`/`livingEnemyAttackerIds` use): a destroyed actor can still carry a residual
+    // pool, and a corpse is nobody's shielded ally.
+    const shieldedCountAmong = (ids: string[]): number =>
+        ids.filter((id) => {
+            const a = allActorsById.get(id);
+            return a !== undefined && a.destroyedRound === undefined && a.shieldPool > 0;
+        }).length;
+    const playerShieldedAllyCount = (): number => shieldedCountAmong(playerIds);
+    const enemyShieldedAllyCount = (): number => shieldedCountAmong(enemyAttackerActorIds);
     const ownerDebuffNames = (ownerId: string): string[] =>
         ownerDebuffNamesFor(statusEngine, ownerId);
     // NAMES on a resolved (real) opposing target for name-specific
@@ -3281,7 +3350,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         /** Subtract `amount` charges from every OPPOSING-side actor (floored at 0), skipping
          *  actors that are `chargeLossImmune` or have no charged skill (chargeCount 0). The
          *  subtractive mirror of grantAllyCharges; flips the side internally so callers pass
-         *  THIS side's context (never pre-flipped).
+         *  THIS side's context (never pre-flipped). `amount: 'all'` empties each affected actor's
+         *  pool instead of subtracting a count — see the `charge` config's doc comment in
+         *  types/abilities.ts. Every skip and gate below applies to it unchanged.
          *
          *  Charge Manipulation affinity gate: when `applierAffinity` is supplied, an opposing
          *  actor with affinity ADVANTAGE over the applier (applier disadvantaged vs it) is SKIPPED
@@ -3290,19 +3361,20 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  The optional `emitBus` overrides the captured outer bus for the `charge-changed`
          *  emission — see grantAllyCharges. */
         removeEnemyCharges: (
-            amount: number,
+            amount: number | 'all',
             applierAffinity?: AffinityName,
             emitBus?: CombatEventBus
         ) => void;
         /** Single-target charge removal: subtract `amount` from ONE actor by id (floored at 0,
-         *  chargeLossImmune / chargeCount-0 actors skipped). Used for "decrease THAT enemy's
+         *  chargeLossImmune / chargeCount-0 actors skipped), or empty its pool when `amount` is
+         *  `'all'`. Used for "decrease THAT enemy's
          *  charge" (Zosimos), routed by eventCtx.repairerId. Does NOT require the opposing-side
          *  filter — the caller passes a known-opposing id. Same `applierAffinity` charge-manip gate
          *  as removeEnemyCharges: an affinity-advantaged target is skipped when the affinity is
          *  supplied. The optional `emitBus` overrides the captured outer bus — see grantAllyCharges. */
         removeChargesFrom: (
             targetId: string,
-            amount: number,
+            amount: number | 'all',
             applierAffinity?: AffinityName,
             emitBus?: CombatEventBus
         ) => void;
@@ -3358,9 +3430,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             },
             // Enemy-targeted charge removal: subtract from each opposing actor, floored at 0,
             // skipping immune actors and those with no charged skill. Mirror of grantAllyCharges
-            // but on the opposing side, and subtractive.
+            // but on the opposing side, and subtractive. `amount: 'all'` empties the pool of each
+            // actor that clears the same skips/gates — it never widens WHO is affected.
             removeEnemyCharges: (
-                amount: number,
+                amount: number | 'all',
                 applierAffinity?: AffinityName,
                 emitBus?: CombatEventBus
             ): void => {
@@ -3374,7 +3447,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                     )
                         continue;
                     const oldCharge = a.charges;
-                    a.charges = Math.max(0, a.charges - amount);
+                    a.charges = amount === 'all' ? 0 : Math.max(0, a.charges - amount);
                     if (a.charges !== oldCharge) {
                         (emitBus ?? bus).emit({
                             type: 'charge-changed',
@@ -3392,7 +3465,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // by eventCtx.repairerId. Mirror of removeEnemyCharges but one actor, not all.
             removeChargesFrom: (
                 targetId: string,
-                amount: number,
+                amount: number | 'all',
                 applierAffinity?: AffinityName,
                 emitBus?: CombatEventBus
             ): void => {
@@ -3406,7 +3479,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 )
                     return;
                 const oldCharge = a.charges;
-                a.charges = Math.max(0, a.charges - amount);
+                a.charges = amount === 'all' ? 0 : Math.max(0, a.charges - amount);
                 if (a.charges !== oldCharge) {
                     (emitBus ?? bus).emit({
                         type: 'charge-changed',
@@ -7522,10 +7595,18 @@ export function runCombat(rawInput: CombatEngineInput): {
         // This is LOCAL to the same turn (no cross-turn casterId state needed), making the check
         // immune to the "same attacker later fires pure-damage hits" bug.
         //
-        // AKULA EXCEPTION (§4.5): an acting attacker carrying `doesntBreakStasis` never records a
-        // hit victim into `stasisHitVictims` — the turn-loop cast sites compute
-        // `tgtWasStasised` behind `!actor.doesntBreakStasis`, and `onHitBreakStasis` is only
-        // wired when that is true.
+        // EXEMPT ATTACKERS (§4.5): an acting attacker whose hits do not break Stasis never
+        // records a hit victim into `stasisHitVictims`. `attackBreaksStasis` answers that for both
+        // exemption forms, and the two are wired differently on purpose:
+        //  - STATIC (Akula/Tygr): the turn-loop cast sites compute `tgtWasStasised` behind
+        //    `!actor.doesntBreakStasis`, so `onHitBreakStasis` is never wired at all.
+        //  - GATED (Zenith, "while it has a shield"): the hook IS wired and returns early when the
+        //    gate holds. The gate reads live state (the attacker's shield pool), so it must be
+        //    answered when the hook fires, not when it is wired.
+        // GRANULARITY: this hook fires ONCE PER CAST (playerTurn.ts calls it before the positional
+        // hit loop), so a gated attacker's anchor victim is decided once per cast. The covered
+        // (non-anchor) footprint victims are marked from `onVictimResolved`, which runs per
+        // sub-attack, and there the gate IS answered per hit.
 
         // Per-victim enemy-debuff-derived modifiers. Reads the victim's OWN per-actor
         // enemy-debuff store — BOTH channels: scheduled (__enemy__ global) + ability (per-victim
@@ -8496,6 +8577,8 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyBuffNamesUnion: () => string[];
             // Count (not union) of opposing actors holding Stealth.
             stealthedEnemyCount: () => number;
+            // Count of living OWN-SIDE actors holding a shield pool, this actor included.
+            shieldedAllyCount: () => number;
             healEventOnly: boolean;
             // Matches drivePositionalApply's applyToVictim param type exactly. Returns the
             // resolved VictimDamageOutcome (both impls wrap applyOutgoingToEnemy /
@@ -8522,6 +8605,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             enemyTypeArg: enemyType,
             enemyBuffNamesUnion: playerEnemyBuffNames,
             stealthedEnemyCount: playerStealthedEnemyCount,
+            shieldedAllyCount: playerShieldedAllyCount,
             healEventOnly: false,
             applyToVictim: (victim, damage, isAnchor, targetMitigation, preMitigation) =>
                 applyOutgoingToEnemy(damage, victim, isAnchor, targetMitigation, preMitigation),
@@ -8542,6 +8626,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // enemy has no such gate → inert today; computed for the full-kit enemy.
             enemyBuffNamesUnion: enemyEnemyBuffNames,
             stealthedEnemyCount: enemyStealthedEnemyCount,
+            shieldedAllyCount: enemyShieldedAllyCount,
             healEventOnly: true,
             // An enemy supporter running runPlayerTurn grants charges to its OWN (enemy) team via
             // bySide('enemy').grantAllyCharges (resolved in buildTurnArgs by side), NEVER the player
@@ -9077,6 +9162,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // skills, so it never gains Stealth). No caller is structurally 0 — see
                 // `stealthedEnemyCount`'s own note.
                 stealthedEnemyCount: tb.stealthedEnemyCount(),
+                // Count of living OWN-SIDE actors holding a shield pool (this actor included),
+                // for Zenith's "for each ally with a shield" damage scaling. Team-symmetric via
+                // `tb`. Deliberately NOT withheld under `mode: 'dps'` like `enemyDestroyedCount`
+                // below: a DPS-mode focus holds a REAL shield pool (roundStartAttackShield.test.ts
+                // measures it ratcheting round on round), so withholding it would under-report a
+                // self-shielding ship's own damage in the DPS calculator by a full step.
+                shieldedAllyCount: tb.shieldedAllyCount(),
                 // Judge R2 ("20% more direct damage for each destroyed enemy, up to max of
                 // 100%"): opposing actors destroyed SO FAR THIS BATTLE, regardless of who landed
                 // the kill and cumulative across rounds (owner ruling 2026-08-30). `destroyedRound`
@@ -9465,9 +9557,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                         prev.hitOutcomes.push(didCrit);
                         bySubAttack.set(victim.id, prev);
                     }
-                    // Record covered (non-anchor) victims stasised at hit time for the post-apply break.
+                    // Record covered (non-anchor) victims stasised at hit time for the post-apply
+                    // break. This callback runs per (sub-attack × victim), so `attackBreaksStasis`
+                    // is answered PER HIT here: a gated attacker whose shield is stripped by
+                    // sub-attack 0 (reflect thorns fire inline inside applyVictimDamage) stops
+                    // being exempt for sub-attack 1's covered victims.
                     if (
-                        !actor.doesntBreakStasis &&
+                        attackBreaksStasis(actor) &&
                         victim.id !== sel.tgt.id &&
                         isStasised(victim.id)
                     ) {
@@ -11043,8 +11139,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // §4.5: inject break hook into runPlayerTurn. The hook marks stasisHitVictims
                             // only when the victim was stasised at hit time. The actual statusEngine
                             // removal happens AFTER drainIntentsFor('player')/drainIntentsFor('enemy') (below).
-                            // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis, the
-                            // victim is never recorded → no break-mark, no stasisBreakPending entry.
+                            // §4.5 exemption: an attacker with the STATIC flag (Akula/Tygr) never
+                            // wires the hook at all, so the victim is never recorded → no
+                            // break-mark, no stasisBreakPending entry. A GATED attacker (Zenith)
+                            // does wire it and is answered inside the hook body instead, because
+                            // its gate reads live state that this line is too early to see.
                             // No victim ⇒ no hit ⇒ nothing to break out of Stasis, so the
                             // hook is never injected (the honest no-victim answer is `false`, not
                             // "the dummy was not stasised").
@@ -11099,6 +11198,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 deferAbilityPerformedToEngine: willApplyPositionally,
                                 onHitBreakStasis: tgtWasStasised
                                     ? (targetId: string) => {
+                                          // A GATED exemption is answered HERE, when the hook
+                                          // fires inside the turn — see attackBreaksStasis.
+                                          if (!attackBreaksStasis(actor)) return;
                                           turnStasisHitVictims.add(targetId);
                                       }
                                     : undefined,
@@ -11431,9 +11533,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 ? parsedChargedPatternFor(actor)
                                 : parsedPatternFor(actor);
                             // §4.5: inject break hook into runPlayerTurn (mirrors focus site).
-                            // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
-                            // the victim is never recorded → no break-mark, no stasisBreakPending.
-                            // Mirror of the focus site — no victim ⇒ no hit ⇒ no break.
+                            // Static flag ⇒ never wired; GATED ⇒ wired and answered in the hook
+                            // body. Mirror of the focus site — no victim ⇒ no hit ⇒ no break.
                             const teamTgtWasStasised =
                                 !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const teamTurnStasisHitVictims = new Set<string>();
@@ -11456,6 +11557,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                 deferAbilityPerformedToEngine: teamWillApplyPositionally,
                                 onHitBreakStasis: teamTgtWasStasised
                                     ? (targetId: string) => {
+                                          // Gated exemption answered at fire time — focus mirror.
+                                          if (!attackBreaksStasis(actor)) return;
                                           teamTurnStasisHitVictims.add(targetId);
                                       }
                                     : undefined,
@@ -11799,13 +11902,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                             // §4.5: inject break hook into runPlayerTurn for the enemy turn (mirrors
                             // focus/team sites). Captured BEFORE runPlayerTurn so Stasis re-applied
                             // by the same attack's debuff ability is not inadvertently broken.
-                            // §4.5 Akula exception: if the ACTING ATTACKER has doesntBreakStasis,
-                            // the victim is never recorded → no break-mark, no stasisBreakPending.
+                            // Static flag ⇒ never wired; GATED ⇒ wired and answered in the hook
+                            // body (an enemy-side Zenith gets the identical treatment).
                             const enemyTgtWasStasised =
                                 !actor.doesntBreakStasis && tgt !== undefined && isStasised(tgt.id);
                             const enemyTurnStasisHitVictims = new Set<string>();
                             const enemyBreakHook = enemyTgtWasStasised
                                 ? (targetId: string) => {
+                                      // Gated exemption answered at fire time — focus mirror.
+                                      if (!attackBreaksStasis(actor)) return;
                                       enemyTurnStasisHitVictims.add(targetId);
                                   }
                                 : undefined;

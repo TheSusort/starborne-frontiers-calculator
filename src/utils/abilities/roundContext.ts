@@ -90,6 +90,12 @@ export function buildRoundContext(state: {
      *  (the normalization boundary throws on an empty roster). The 0 is about CONTENT: no
      *  opposing actor carries Stealth. See ConditionContext.stealthedEnemyCount. */
     stealthedEnemyCount?: number;
+    /** Count of LIVING own-side actors holding a shield pool, the acting actor INCLUDED, for
+     *  Zenith's "for each ally with a shield" scaling. The combat engine supplies a live count in
+     *  EVERY mode (a DPS-mode focus holds a real pool, so a 0 there would under-report a real
+     *  fight). Default 0 only for callers that model no shields at all. See
+     *  ConditionContext.shieldedAllyCount. */
+    shieldedAllyCount?: number;
     /** Sub-project I, PR I4a — the acting unit's own live crit power (effective critDamage),
      *  for Wildfire's "…for every 10% crit power" dotDamage scaling. Default 0 (no live crit
      *  power known to this caller — DPS-safe / inert for every ship besides Wildfire). Only
@@ -204,6 +210,7 @@ export function buildRoundContext(state: {
         isLastStanding: state.lastStanding ?? false,
         turnsTaken: state.turnsTaken ?? 0,
         stealthedEnemyCount: state.stealthedEnemyCount ?? 0,
+        shieldedAllyCount: state.shieldedAllyCount ?? 0,
         selfCritPower: state.selfCritPower ?? 0,
         selfSpeed: state.selfSpeed ?? 0,
         selfCurrentHp: state.selfCurrentHp ?? 0,

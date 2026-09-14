@@ -1,3 +1,4 @@
+import type { Condition } from '../../types/abilities';
 import type { Position } from '../../types/encounters';
 import type { AffinityName } from '../../types/ship';
 import type { CombatEventBus } from './events';
@@ -214,6 +215,12 @@ export interface CombatActor {
      *  site in engine.ts (§4.5 Akula exception) — if true, the victim is never recorded into
      *  turnStasisHitVictims and stasisBreakPending is never set. */
     doesntBreakStasis?: boolean;
+    /** The CONDITIONAL form of the exemption above (Zenith). Conditions are re-evaluated
+     *  against this actor's LIVE state at every break-mark — never cached — so the exemption
+     *  can lapse mid-fight when the gate stops holding. Mutually exclusive with
+     *  `doesntBreakStasis`; both are read through engine.ts's `attackBreaksStasis`, which is
+     *  the only place either field may be consulted. */
+    stasisBreakExemptWhen?: Condition[];
     /** RAW affinity of this actor, set at construction. The positional damage calculator's
      *  `defenseProfileOf(victim)` reads it for per-victim affinity re-resolution.
      *  Absent → treated as neutral downstream. */
@@ -244,6 +251,7 @@ export function createActor(
         ignoresForcedTargeting?: boolean;
         ignoresStealth?: boolean;
         doesntBreakStasis?: boolean;
+        stasisBreakExemptWhen?: Condition[];
         affinity?: AffinityName;
         chargeLossImmune?: boolean;
         preFight?: PreFightCombatModifiers;
@@ -271,6 +279,7 @@ export function createActor(
         ignoresForcedTargeting: partial.ignoresForcedTargeting,
         ignoresStealth: partial.ignoresStealth,
         doesntBreakStasis: partial.doesntBreakStasis,
+        stasisBreakExemptWhen: partial.stasisBreakExemptWhen,
         affinity: partial.affinity,
         turnsTaken: 0,
         chargeLossImmune: partial.chargeLossImmune ?? false,

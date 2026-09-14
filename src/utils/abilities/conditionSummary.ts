@@ -42,6 +42,7 @@ export const CONDITION_SUBJECT_LABELS: Partial<Record<ConditionSubject, string>>
     'enemy-dot-count': 'per DoT effect on the enemy',
     'every-n-turns': 'on a recurring turn interval',
     'stat-vs-target': "when a stat compares favourably to the target's",
+    'ally-shield-count': 'per ally with a shield',
 };
 
 /** Human-facing name for `Condition.hpSubject`. 'self' is deliberately absent — it

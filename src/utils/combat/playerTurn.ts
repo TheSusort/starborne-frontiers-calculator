@@ -662,7 +662,7 @@ export interface PlayerTurnArgs {
      *  the applier); omit it to disable the gate. The optional `emitBus` is unused on the on-turn
      *  cast path (charge changes here are NOT reactions) — it exists only for signature parity. */
     removeEnemyCharges?: (
-        amount: number,
+        amount: number | 'all',
         applierAffinity?: AffinityName,
         emitBus?: CombatEventBus
     ) => void;
@@ -717,6 +717,13 @@ export interface PlayerTurnArgs {
      *  count (every DPS run carries a real enemy; `normalizeCombatRoster` throws on a
      *  roster-less input). */
     stealthedEnemyCount?: number;
+    /** Count of living OWN-SIDE actors holding a shield pool, THIS ACTOR INCLUDED, for its
+     *  `ally-shield-count` scaling condition (Zenith's "8% more direct damage for each ally with
+     *  a shield"). Sourced by the engine from the live `shieldPool` of its own side's roster.
+     *  Defaults to 0 for any caller that does not supply it — but unlike `stealthedEnemyCount`
+     *  above, that 0 is NOT a faithful DPS answer, so the engine supplies a real count in every
+     *  mode: a DPS-mode focus holds a real pool the moment its own kit grants one. */
+    shieldedAllyCount?: number;
     /** NAMES on the opposing (primary) target for this actor's
      *  name-specific `enemy-debuff` condition gates (Tygr's "to enemies with Stasis or
      *  Disable", Incinerator's "to enemies afflicted with Inferno"). SENTINEL: `undefined`
@@ -1205,16 +1212,44 @@ function chargeGainFromSkill(args: {
                   ? isEnemy
                   : !isAlly && !isEnemy;
         if (!matches) continue;
-        const primary = ability.conditions[0];
-        const scale =
-            !primary || primary.countComparator != null
-                ? 1
-                : // An unresolvable scaling source contributes no charge.
-                  (evaluateCondition(primary, args.ctxFor.get(ability.id) ?? args.fallbackCtx) ??
-                  0);
-        gain += scale * ability.config.amount;
+        // `'all'` is empty-the-pool, not a count, so it cannot join this sum. The enemy-removal
+        // caller reads it through `firesFullChargeWipe` below; on the own/ally (gain) filters it
+        // has no meaning — see the `charge` config's doc comment in types/abilities.ts.
+        if (ability.config.amount === 'all') continue;
+        gain += chargeAbilityScale(ability, args.ctxFor, args.fallbackCtx) * ability.config.amount;
     }
     return gain;
+}
+
+/** Condition SCALE for one charge ability: 1 when it has no condition or a thresholded one (the
+ *  flat amount contributes once), otherwise the evaluated count/probability. An unresolvable
+ *  source evaluates to 0 and contributes no charge. */
+function chargeAbilityScale(
+    ability: Ability,
+    ctxFor: Map<string, ConditionContext>,
+    fallbackCtx: ConditionContext
+): number {
+    const primary = ability.conditions[0];
+    if (!primary || primary.countComparator != null) return 1;
+    return evaluateCondition(primary, ctxFor.get(ability.id) ?? fallbackCtx) ?? 0;
+}
+
+/** Whether a gated skill carries an ENEMY-targeted charge ability with the unbounded `'all'`
+ *  amount, gated in this cast (Zenith's charged skill: "removes all charges from the enemy
+ *  charged skill"). `'all'` empties the victim's pool outright rather than subtracting a count,
+ *  so it is read here instead of through `chargeGainFromSkill`'s sum. A zero scale — an unmet or
+ *  unresolvable condition — fires nothing, exactly as it would contribute nothing to a count. */
+function firesFullChargeWipe(args: {
+    gatedSkill: Skill | undefined;
+    ctxFor: Map<string, ConditionContext>;
+    fallbackCtx: ConditionContext;
+}): boolean {
+    for (const ability of chargeAbilitiesFromSkill(args.gatedSkill)) {
+        if (ability.config.type !== 'charge' || ability.config.amount !== 'all') continue;
+        if (!isEnemyTarget(ability.target)) continue;
+        if (chargeAbilityScale(ability, args.ctxFor, args.fallbackCtx) !== 0) return true;
+    }
+    return false;
 }
 
 // Step 2.95: Detonate active DoTs of a type — consume them and deal their full remaining
@@ -1490,6 +1525,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         selectorEnemyIdFor,
         enemyBuffNames: enemyBuffNamesArg = [],
         stealthedEnemyCount: stealthedEnemyCountArg = 0,
+        shieldedAllyCount: shieldedAllyCountArg = 0,
         // No default — undefined is the DPS-parity sentinel (see PlayerTurnArgs doc).
         enemyDebuffNames: enemyDebuffNamesArg,
         selfDebuffNames: selfDebuffNamesArg = [],
@@ -2888,6 +2924,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // across the delta computation — no per-victim distribution, matching the design
         // (this is a global count, not a per-target gate).
         stealthedEnemyCount: stealthedEnemyCountArg,
+        // Own-side shielded count (Zenith's count-scaling passive) — same "only the modifier ctx
+        // needs this" rationale and same constant-across-victims property as the neighbour above:
+        // it is a global count of the CASTER's own side, not a per-target gate.
+        shieldedAllyCount: shieldedAllyCountArg,
         // The acting unit's own live crit power (Wildfire's
         // dotDamage scaling source). Only modifierCtx needs it — same "only the modifier
         // ctx needs this" rationale as stealthedEnemyCount above. critDamageForGates is the
@@ -3474,6 +3514,15 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // own/ally gains. The engine supplies removeEnemyCharges (per-actor floor loop on the opposing
     // side); absent (standalone callers without an opposing roster) → no-op.
     if ((action === 'active' || action === 'charged') && removeEnemyCharges) {
+        // An unbounded `'all'` removal in either slot DOMINATES any count removed alongside it:
+        // emptying the pool subsumes subtracting from it.
+        const wipesAllCharges =
+            firesFullChargeWipe({ gatedSkill, ctxFor, fallbackCtx: ctx }) ||
+            firesFullChargeWipe({
+                gatedSkill: gatedPassive,
+                ctxFor: passiveCtxFor,
+                fallbackCtx: ctx,
+            });
         const enemyChargeRemoval =
             chargeGainFromSkill({ gatedSkill, ctxFor, fallbackCtx: ctx, targetFilter: 'enemy' }) +
             chargeGainFromSkill({
@@ -3482,7 +3531,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 fallbackCtx: ctx,
                 targetFilter: 'enemy',
             });
-        if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval, attackerAffinity);
+        if (wipesAllCharges) removeEnemyCharges('all', attackerAffinity);
+        else if (enemyChargeRemoval > 0) removeEnemyCharges(enemyChargeRemoval, attackerAffinity);
     }
 
     // Extra-action grants (game-verified: a full extra turn; the engine re-inserts

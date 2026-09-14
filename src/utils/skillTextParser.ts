@@ -841,8 +841,11 @@ const PER_BUFF_CHARGE_RE =
 // (decreases by one, no captured number → default amount 1). Curly apostrophes (U+2018/U+2019)
 // are normalised to straight (U+0027) by parseChargeRemoval before this regex runs, so only a
 // plain straight apostrophe is needed here.
+// The quantifier also accepts the unbounded word "all" ("removes all charges from the enemy
+// charged skill", Zenith), which parseChargeRemoval surfaces as amount `'all'` — empty the pool,
+// not a count. `all` precedes `an`/`a` in the alternation so the word is consumed whole.
 export const REMOVE_CHARGE_RE =
-    /\bremoves?\s+(\d+|a|an)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy's charge\b/i;
+    /\bremoves?\s+(\d+|all|an|a)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy's charge\b/i;
 
 // "every second repair" — qualifies the Zosimos removal as an every-Nth-event gate.
 const EVERY_SECOND_REPAIR_RE = /every second repair/i;
@@ -3522,26 +3525,47 @@ export function parseForceAffinityAdvantage(text: string | null | undefined): bo
     return FORCE_AFFINITY_ADVANTAGE_RE.test(stripUnitTags(text));
 }
 
-// MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break stasis" ONLY. NOT "affected by
-// stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or "inflicts Stasis".
-// Input is normalised (curly/smart apostrophes → ASCII \x27) before matching so both game-data
-// forms are detected with a simple ASCII-only regex.
-const DOESNT_BREAK_STASIS_RE = /\b(?:do(?:es)?n\x27?t|does not|do not)\s+break\s+stasis\b/i;
-/** True iff this skill text declares the unit’s attacks don’t break Stasis (Akula + Tygr).
- *  Boolean only — each ship’s other clauses (extra-action, +damage-vs-stasised) are parsed
- *  elsewhere, untouched. */
-export function parseDoesntBreakStasis(text: string | null | undefined): boolean {
-    if (!text) return false;
+// MATCHES "don’t"/"doesn’t"/"does not"/bare "do not" + "break"/"reduce" + "stasis" ONLY. NOT
+// "affected by stasis" (parseExtraAction owns that), "damage to enemies under Stasis", or
+// "inflicts Stasis". "reduce" and "break" are the SAME mechanic (owner ruling 2026-09-14): the
+// struck enemy keeps its Stasis with its full remaining duration. Input is normalised
+// (curly/smart apostrophes → ASCII \x27) before matching so both game-data forms are detected
+// with a simple ASCII-only regex.
+const DOESNT_BREAK_STASIS_RE =
+    /\b(?:do(?:es)?n\x27?t|does not|do not)\s+(?:break|reduce)\s+stasis\b/i;
+// "When this Unit has a shield its attacks do not reduce Stasis" (Zenith) — the exemption is
+// GATED on the attacker holding a shield pool, and the engine re-reads that pool at each
+// break-mark site rather than baking the answer at build time.
+const WHILE_SELF_SHIELDED_RE = /\bwhen\s+this\s+unit\s+has\s+a\s+shield\b/i;
+
+/** The unit's attacks do not break the Stasis they land on, or null when the text makes no such
+ *  declaration. `conditions` is the GATE the exemption is subject to, evaluated live per
+ *  break-mark: `[]` is unconditional (Akula, Tygr) and `[{subject:'self-shield'}]` holds only
+ *  while the attacker's own shield pool is non-empty (Zenith). Sentence-scoped, so a shield
+ *  lead-in belonging to some other clause in the same passive cannot gate this one.
+ *
+ *  Every other clause of these ships (extra-action, +damage-vs-stasised, the round-start shield)
+ *  is parsed elsewhere, untouched. */
+export function parseStasisBreakExemption(
+    text: string | null | undefined
+): { conditions: Condition[] } | null {
+    if (!text) return null;
     // Normalise U+2018 (left) / U+2019 (right) single quotation marks to ASCII apostrophe
     // before testing so the simple \x27 in the regex matches both curly and straight forms.
     const normalised = stripUnitTags(text).replace(/[‘’]/g, '\x27');
-    return DOESNT_BREAK_STASIS_RE.test(normalised);
+    if (!DOESNT_BREAK_STASIS_RE.test(normalised)) return null;
+    const sentence = splitSentences(normalised.replace(/<br\s*\/?>/gi, '. ')).find((s) =>
+        DOESNT_BREAK_STASIS_RE.test(s)
+    );
+    return WHILE_SELF_SHIELDED_RE.test(sentence ?? '')
+        ? { conditions: [{ subject: 'self-shield', derivable: true }] }
+        : { conditions: [] };
 }
 
 /** True iff this skill text declares the unit is immune to charge loss effects (Lev). */
 const CHARGE_LOSS_IMMUNE_RE = /\bimmune to charge[- ]?loss\b/i;
 export function parseChargeLossImmune(text: string | null | undefined): boolean {
-    // No apostrophe-normalisation (unlike parseDoesntBreakStasis): the matched phrase
+    // No apostrophe-normalisation (unlike parseStasisBreakExemption): the matched phrase
     // "immune to charge loss" contains no apostrophe, so curly/straight quotes can't affect it.
     return !!text && CHARGE_LOSS_IMMUNE_RE.test(stripUnitTags(text));
 }
@@ -3618,7 +3642,7 @@ export function parseWhileShieldedFlatDefence(text: string | null | undefined): 
  * (Opal/Provider/Demolisher/Sefuba/Zosimos have no such lead-in and are unaffected).
  */
 export function parseChargeRemoval(text: string | null | undefined): {
-    amount: number;
+    amount: number | 'all';
     trigger: AbilityTrigger;
     everyNthEvent?: number;
     requiredEnemyType?: EnemyBaseClass;
@@ -3630,11 +3654,18 @@ export function parseChargeRemoval(text: string | null | undefined): {
     const plain = stripUnitTags(text).replace(/[‘’]/g, '\x27');
     const m = REMOVE_CHARGE_RE.exec(plain);
     if (!m) return null;
-    // m[1] is the captured count from the "removes N charges" alternation; the
+    // m[1] is the captured quantifier from the "removes N charges" alternation; the
     // "decreases that enemy's charge" alternation has no capture → amount 1 ("by one").
+    // "all" is the unbounded quantifier and stays a sentinel rather than becoming a count —
+    // see the `charge` config's doc comment in types/abilities.ts.
     const raw = (m[1] ?? '').toLowerCase();
-    const amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
-    if (!amount || isNaN(amount)) return null;
+    let amount: number | 'all';
+    if (raw === 'all') {
+        amount = 'all';
+    } else {
+        amount = raw === '' || raw === 'a' || raw === 'an' ? 1 : parseInt(raw, 10);
+        if (!amount || isNaN(amount)) return null;
+    }
 
     // The enemy-repair TRIGGER and the every-Nth CADENCE are independent facts about the clause.
     // They were conjoined, so Zosimos's R4 row — which phrases the cadence as plain "for every

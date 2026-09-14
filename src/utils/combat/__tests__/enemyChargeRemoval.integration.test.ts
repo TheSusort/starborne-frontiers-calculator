@@ -562,7 +562,10 @@ describe('enemy charge removal — team symmetry (ENEMY casts, PLAYER charges dr
 // ─── Type shape assertions ───────────────────────────────────────────────────────
 
 it('IntentExecContext exposes removeChargesFrom (single-target removal)', () => {
-    const fn: IntentExecContext['removeChargesFrom'] = (_targetId: string, _amount: number) => {};
+    const fn: IntentExecContext['removeChargesFrom'] = (
+        _targetId: string,
+        _amount: number | 'all'
+    ) => {};
     expect(typeof fn).toBe('function');
 });
 

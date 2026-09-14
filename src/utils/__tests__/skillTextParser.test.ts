@@ -45,7 +45,7 @@ import {
     statusEffectCondition,
     parseControlInflicts,
     detectIgnoresForcedTargeting,
-    parseDoesntBreakStasis,
+    parseStasisBreakExemption,
     parseChargeRemoval,
     parseEnemyChargedCastReaction,
     parseCounterAbilities,
@@ -4492,53 +4492,81 @@ describe('detectIgnoresForcedTargeting', () => {
     });
 });
 
-describe('parseDoesntBreakStasis', () => {
-    it('detects Akula curly-apostrophe "don\'t break Stasis"', () => {
+describe('parseStasisBreakExemption', () => {
+    const UNGATED = { conditions: [] };
+    const SHIELD_GATED = { conditions: [{ subject: 'self-shield', derivable: true }] };
+
+    it('detects Akula curly-apostrophe "don\'t break Stasis" — UNGATED', () => {
         expect(
-            parseDoesntBreakStasis(
+            parseStasisBreakExemption(
                 'This Unit’s attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target’s current HP percentage; the higher the percentage, the more the damage.'
             )
-        ).toBe(true);
+        ).toEqual(UNGATED);
     });
 
     it('detects bare "do not break Stasis" (Tygr — regression guard)', () => {
         expect(
-            parseDoesntBreakStasis(
+            parseStasisBreakExemption(
                 'This Unit’s attacks do not break Stasis and deal 30% more damage to enemies with Stasis or Disable.'
             )
-        ).toBe(true);
+        ).toEqual(UNGATED);
     });
 
     it('detects straight-apostrophe "don\'t break Stasis"', () => {
-        expect(parseDoesntBreakStasis("This Unit's attacks don't break Stasis.")).toBe(true);
+        expect(parseStasisBreakExemption("This Unit's attacks don't break Stasis.")).toEqual(
+            UNGATED
+        );
     });
 
-    it('returns false for "affected by Stasis" (parseExtraAction owns that)', () => {
+    it('Zenith: "do not REDUCE Stasis" behind a shield lead-in → a self-shield gate', () => {
         expect(
-            parseDoesntBreakStasis(
+            parseStasisBreakExemption(
+                'When this Unit has a <unit-aid>shield</unit-aid> its attacks do not reduce <unit-skill>Stasis</unit-skill>. <br /><br />\nAt the start of each round this Unit gains a <unit-damage>shield equal to 50%</unit-damage> of its attack.'
+            )
+        ).toEqual(SHIELD_GATED);
+    });
+
+    it('a shield sentence ELSEWHERE in the passive does not gate an ungated clause', () => {
+        // Sentence-scoped: only the sentence carrying the exemption can supply its gate.
+        expect(
+            parseStasisBreakExemption(
+                'When this Unit has a shield it gains 2500 additional Defense. This Unit’s attacks do not break Stasis.'
+            )
+        ).toEqual(UNGATED);
+    });
+
+    it('returns null for "affected by Stasis" (parseExtraAction owns that)', () => {
+        expect(
+            parseStasisBreakExemption(
                 'After dealing damage to an enemy affected by Stasis, once per round, give one extra action.'
             )
-        ).toBe(false);
+        ).toBeNull();
     });
 
-    it('returns false for "damage to enemies under Stasis"', () => {
-        expect(parseDoesntBreakStasis('deal 20% more damage to enemies under Stasis')).toBe(false);
+    it('returns null for "damage to enemies under Stasis"', () => {
+        expect(
+            parseStasisBreakExemption('deal 20% more damage to enemies under Stasis')
+        ).toBeNull();
     });
 
-    it('returns false for "inflicts Stasis for 2 turns"', () => {
-        expect(parseDoesntBreakStasis('inflicts Stasis for 2 turns')).toBe(false);
+    it('returns null for "inflicts Stasis for 2 turns"', () => {
+        expect(parseStasisBreakExemption('inflicts Stasis for 2 turns')).toBeNull();
     });
 
-    it('returns false for empty string', () => {
-        expect(parseDoesntBreakStasis('')).toBe(false);
+    it('returns null for "reduces the duration of Stasis" (no negation)', () => {
+        expect(parseStasisBreakExemption('reduces Stasis by 1 turn')).toBeNull();
     });
 
-    it('returns false for null', () => {
-        expect(parseDoesntBreakStasis(null)).toBe(false);
+    it('returns null for empty string', () => {
+        expect(parseStasisBreakExemption('')).toBeNull();
     });
 
-    it('returns false for undefined', () => {
-        expect(parseDoesntBreakStasis(undefined)).toBe(false);
+    it('returns null for null', () => {
+        expect(parseStasisBreakExemption(null)).toBeNull();
+    });
+
+    it('returns null for undefined', () => {
+        expect(parseStasisBreakExemption(undefined)).toBeNull();
     });
 });
 

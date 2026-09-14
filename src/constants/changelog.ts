@@ -39,6 +39,11 @@ export const UNRELEASED_CHANGES: string[] = [
     'Cloud sync: enabling sync or re-syncing now uploads before clearing the cloud.',
     'Combat simulator: your boards, overrides, leaders and seed now survive a reload.',
     'Combat simulator: save a setup under a name and load it back later.',
+    'Combat simulator: Zenith leaves enemy Stasis intact while it holds a shield.',
+    'Combat simulator: Zenith deals more damage for each shielded ally, itself included.',
+    "Combat simulator: Zenith's charged skill strips every charge from its target.",
+    'Combat simulator: Zenith shields itself at the start of each round.',
+    'Ability editor: a charge removal can now empty an enemy pool outright.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

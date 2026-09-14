@@ -20,7 +20,7 @@ import { CheckboxGroup } from '../ui/CheckboxGroup';
 import { Button } from '../ui/Button';
 import { ChevronUpIcon, ChevronDownIcon } from '../ui/icons/ChevronIcons';
 import { GameBuffPicker } from '../calculator/GameBuffPicker';
-import { targetSideAllowedForType } from '../../utils/abilities/abilityTargetSide';
+import { targetSideAllowedForType, isEnemyTarget } from '../../utils/abilities/abilityTargetSide';
 import {
     isAbilityNotSimulated,
     isVictimlessInfliction,
@@ -459,17 +459,43 @@ export const AbilityCard: React.FC<Props> = ({
                     </div>
                 );
 
-            case 'charge':
+            case 'charge': {
+                // `amount: 'all'` is the unbounded quantifier ("removes all charges from the
+                // enemy charged skill") — it empties the victim's pool rather than naming a
+                // count, so it has no numeric editor. The checkbox is the only way in and out of
+                // it; unticking it falls back to 1. See the `charge` config's doc comment in
+                // types/abilities.ts.
+                //
+                // Offered on ENEMY targets only: `'all'` on a self/ally GAIN has no pool to empty
+                // and every consumer drops it, so the control would provably do nothing — the
+                // same rule the Target select's own comment states further down. The Target
+                // onChange coerces a stray `'all'` back to 1 when the target leaves the enemy
+                // side, so the hidden control can never leave invisible state behind.
+                const removesAll = config.amount === 'all';
                 return (
-                    <Input
-                        label="Amount"
-                        type="number"
-                        value={config.amount}
-                        onChange={(e) =>
-                            updateConfig({ ...config, amount: toNumber(e.target.value) })
-                        }
-                    />
+                    <div className="space-y-2">
+                        {isEnemyTarget(ability.target) && (
+                            <Checkbox
+                                label="Remove all charges"
+                                checked={removesAll}
+                                onChange={(checked) =>
+                                    updateConfig({ ...config, amount: checked ? 'all' : 1 })
+                                }
+                            />
+                        )}
+                        {!removesAll && (
+                            <Input
+                                label="Amount"
+                                type="number"
+                                value={config.amount}
+                                onChange={(e) =>
+                                    updateConfig({ ...config, amount: toNumber(e.target.value) })
+                                }
+                            />
+                        )}
+                    </div>
                 );
+            }
 
             case 'extra-action':
                 return (
@@ -1119,8 +1145,19 @@ export const AbilityCard: React.FC<Props> = ({
                     // a self-mute the editor gives no way to see.
                     const { factionFilter, recipientFilter, ...rest } = ability;
                     const keepsRecipientScope = FACTION_FILTERABLE_TARGETS.has(target);
+                    // A charge `amount` of `'all'` only means something on an enemy target (empty
+                    // the victim's pool). Its checkbox is hidden off the enemy side, so leaving
+                    // `'all'` in place here would strand state the editor gives no way to see and
+                    // every consumer silently drops — coerce it to the count 1 instead.
+                    const config =
+                        rest.config.type === 'charge' &&
+                        rest.config.amount === 'all' &&
+                        !isEnemyTarget(target)
+                            ? { ...rest.config, amount: 1 }
+                            : rest.config;
                     onChange({
                         ...rest,
+                        config,
                         ...(keepsRecipientScope &&
                         factionFilterHonoredForType &&
                         factionFilter !== undefined
