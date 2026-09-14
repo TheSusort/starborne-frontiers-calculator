@@ -16,6 +16,8 @@ type DotProps = { cx: number; cy: number; payload: Record<string, unknown>; inde
 let capturedData: Array<Record<string, unknown>> = [];
 let capturedDot: ((props: DotProps) => React.ReactElement) | null = null;
 let capturedReferenceLines: Array<{ x?: number }> = [];
+let capturedXAxis: { ticks?: number[] } | null = null;
+let capturedYAxis: { domain?: unknown } | null = null;
 
 vi.mock('recharts', () => {
     const Pass = ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
@@ -38,8 +40,14 @@ vi.mock('recharts', () => {
             capturedReferenceLines.push(props);
             return null;
         },
-        XAxis: () => null,
-        YAxis: () => null,
+        XAxis: (props: { ticks?: number[] }) => {
+            capturedXAxis = props;
+            return null;
+        },
+        YAxis: (props: { domain?: unknown }) => {
+            capturedYAxis = props;
+            return null;
+        },
         CartesianGrid: () => null,
         Tooltip: () => null,
         ResponsiveContainer: Pass,
@@ -101,6 +109,29 @@ beforeEach(() => {
     capturedData = [];
     capturedDot = null;
     capturedReferenceLines = [];
+    capturedXAxis = null;
+    capturedYAxis = null;
+});
+
+describe('StatSweepChart axes', () => {
+    it('gives win rate the whole 0-100% range rather than fitting the observed spread', () => {
+        // Fitting the axis to the data redraws a couple of wins' wobble as a dramatic curve —
+        // the exact misreading the distinguishability markers exist to prevent.
+        render(<StatSweepChart points={points} series="winRate" statLabel="Speed" />);
+        expect(capturedYAxis?.domain).toEqual([0, 1]);
+    });
+
+    it('measures a magnitude series from zero', () => {
+        render(<StatSweepChart points={points} series="playerDamage" statLabel="Speed" />);
+        expect(capturedYAxis?.domain).toEqual([0, 'auto']);
+    });
+
+    it('puts a tick on every swept value', () => {
+        // Auto ticks land between steps, and a reader hunting a breakpoint cannot then tell
+        // which value a point sits at.
+        render(<StatSweepChart points={points} series="winRate" statLabel="Speed" />);
+        expect(capturedXAxis?.ticks).toEqual([100, 110, 120]);
+    });
 });
 
 describe('StatSweepChart', () => {

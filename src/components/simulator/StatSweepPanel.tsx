@@ -275,7 +275,8 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
                                         : 'text-theme-text-secondary'
                                 }`}
                             >
-                                {stepCount} steps x {count} seeds = {battles} battles
+                                {stepCount} {stepCount === 1 ? 'step' : 'steps'} x {count} seeds ={' '}
+                                {battles} battles
                             </span>
                         )}
                         {/* Mounted unconditionally, empty until there is progress: a screen reader

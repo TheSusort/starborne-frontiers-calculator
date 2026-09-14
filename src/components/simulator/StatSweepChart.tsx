@@ -26,6 +26,12 @@ const SERIES_LABELS: Record<SweepSeries, string> = {
 const formatMetric = (series: SweepSeries, metric: number): string =>
     series === 'winRate' ? `${Math.round(metric * 100)}%` : metric.toFixed(1);
 
+/** Win rate is a proportion and owns the full 0-100% range; every other series is a magnitude
+ *  measured from zero. Neither ever crops to the observed spread — an axis fitted to the data
+ *  redraws a couple of wins' wobble as a dramatic curve. */
+const yAxisDomain = (series: SweepSeries): [number, number | 'auto'] =>
+    series === 'winRate' ? [0, 1] : [0, 'auto'];
+
 const SERIES_COLOR = CHART_LINE_COLORS[0];
 const MUTED_COLOR = '#6b7280';
 const CHART_GROUND = '#141414';
@@ -142,10 +148,18 @@ const StatSweepChart: React.FC<StatSweepChartProps> = ({
                         dataKey="value"
                         type="number"
                         domain={['dataMin', 'dataMax']}
+                        // The swept values ARE the ticks. An auto tick set lands between steps,
+                        // and a reader hunting a breakpoint cannot then tell which value a point
+                        // sits at.
+                        ticks={rows.map((row) => row.value)}
                         stroke="#9ca3af"
                         label={{ value: statLabel, position: 'insideBottom', offset: -8 }}
                     />
                     <YAxis
+                        // Win rate is a proportion, so its axis is the whole 0-100% range. An
+                        // auto domain zooms into whatever spread the run happened to produce,
+                        // magnifying exactly the noise the paired test exists to discount.
+                        domain={yAxisDomain(series)}
                         stroke="#9ca3af"
                         tickFormatter={(metric: number) => formatMetric(series, metric)}
                     />
@@ -158,7 +172,15 @@ const StatSweepChart: React.FC<StatSweepChartProps> = ({
                             x={reference.value}
                             stroke="#ffffff"
                             strokeDasharray="4 4"
-                            label={{ value: 'Current value', fill: '#ffffff', fontSize: 12 }}
+                            // Anchored inside the plot to the line's right: the default centres
+                            // the label on the axis, where it lands on top of the y-axis ticks
+                            // whenever the reference step is the leftmost one.
+                            label={{
+                                value: 'Current value',
+                                fill: '#ffffff',
+                                fontSize: 12,
+                                position: 'insideTopRight',
+                            }}
                         />
                     )}
                     <Line
