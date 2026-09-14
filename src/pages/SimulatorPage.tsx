@@ -7,6 +7,7 @@ import { Position, ShipPosition } from '../types/encounters';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useEngineeringStats } from '../hooks/useEngineeringStats';
 import { useSimulatorRuns } from '../hooks/useSimulatorRuns';
+import { useStatSweep } from '../hooks/useStatSweep';
 import { combatStatsFromShip, shipFinalStats } from '../utils/ship/combatStats';
 import { hasAnyOverride, StatOverrides } from '../utils/simulator/statOverrides';
 import PlacementBoard, { BoardState, Placement } from '../components/simulator/PlacementBoard';
@@ -16,6 +17,7 @@ import DivergencePlayback from '../components/simulator/DivergencePlayback';
 import SeedRunControls, { randomSeed } from '../components/simulator/SeedRunControls';
 import SeedSetResults from '../components/simulator/SeedSetResults';
 import RunComparison from '../components/simulator/RunComparison';
+import StatSweepPanel from '../components/simulator/StatSweepPanel';
 import { Button } from '../components/ui/Button';
 import SquadLeaderPicker from '../components/simulator/SquadLeaderPicker';
 import { SquadLeaderSelection } from '../utils/combat/preFight';
@@ -236,6 +238,7 @@ const SimulatorPage: React.FC = () => {
         effectiveRunCount,
         currentOverrides,
         canRun,
+        buildInput,
         handleRun,
         handleOpenSeed,
         handlePinBaseline,
@@ -365,6 +368,11 @@ const SimulatorPage: React.FC = () => {
         writeSavedSetups(next);
     };
 
+    // A sweep owns its own state, abort controller and seed set. It deliberately writes none of
+    // the run state above, and ignores any pinned baseline: its reference is its own
+    // resolved-value step.
+    const sweep = useStatSweep({ buildInput, getGearPiece });
+
     return (
         <>
             <Seo {...SEO_CONFIG.simulator} />
@@ -446,7 +454,7 @@ const SimulatorPage: React.FC = () => {
                             onSeedChange={setSeed}
                             onRunCountChange={setRunCount}
                             onRun={handleRun}
-                            canRun={canRun}
+                            canRun={canRun && !sweep.isSweeping}
                             locked={baseline !== null}
                             lockedReason="Seed and run count are fixed by the pinned baseline. Unpin to change them."
                             onUnpin={handleUnpinBaseline}
@@ -464,6 +472,21 @@ const SimulatorPage: React.FC = () => {
                     {runError && (
                         <div className="card text-red-400">Simulation error: {runError}</div>
                     )}
+
+                    <StatSweepPanel
+                        playerBoard={playerBoard}
+                        enemyBoard={enemyBoard}
+                        statsDeps={statsDeps}
+                        seed={effectiveSeed}
+                        points={sweep.points}
+                        provenance={sweep.provenance}
+                        isSweeping={sweep.isSweeping}
+                        progress={sweep.progress}
+                        error={sweep.error}
+                        onRunSweep={sweep.runSweep}
+                        onCancelSweep={sweep.cancelSweep}
+                        disabled={isRunning}
+                    />
 
                     {/* Squad-leader effects the sim could not model, surfaced so the outcome is
                         never mistaken for a full simulation of the selected leaders. A divergence

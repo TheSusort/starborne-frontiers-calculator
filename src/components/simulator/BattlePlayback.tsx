@@ -18,6 +18,8 @@ interface BattlePlaybackProps {
     round?: number;
 }
 
+// Consumed by DivergencePlayback; it is not itself a component so it does not affect HMR.
+// eslint-disable-next-line react-refresh/only-export-components
 export const outcomeLabel = (result: BattleResult): string => {
     const { winner } = result.outcome;
     return winner === 'player' ? 'Your team wins' : winner === 'enemy' ? 'Enemy wins' : 'Draw';

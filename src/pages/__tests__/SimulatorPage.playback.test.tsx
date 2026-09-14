@@ -233,7 +233,7 @@ describe('SimulatorPage playback', () => {
         fireEvent.click(screen.getByText(/select Enemy Team/i));
         fireEvent.click(screen.getByText(/pick Enemy Team/i));
 
-        fireEvent.click(screen.getByRole('button', { name: /Run/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Run Simulation/i }));
 
         // Outcome surfaced.
         expect(screen.getByText('Your team wins')).toBeInTheDocument();

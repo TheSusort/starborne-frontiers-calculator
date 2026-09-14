@@ -35,7 +35,7 @@ describe('SimulatorPage', () => {
         expect(screen.getByText('Combat Simulator')).toBeInTheDocument();
         // One FormationGrid per side (player + enemy), each root has role="grid".
         expect(screen.getAllByRole('grid')).toHaveLength(2);
-        expect(screen.getByRole('button', { name: /Run/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Run Simulation/i })).toBeInTheDocument();
     });
 
     it('renders the seed and run-count controls', () => {
@@ -44,8 +44,9 @@ describe('SimulatorPage', () => {
                 <SimulatorPage />
             </MemoryRouter>
         );
-        expect(screen.getByLabelText(/seed/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/runs/i)).toBeInTheDocument();
+        // Exact labels: the stat sweep panel carries its own seed-count field.
+        expect(screen.getByLabelText('Seed')).toBeInTheDocument();
+        expect(screen.getByLabelText('Runs')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /new seed/i })).toBeInTheDocument();
     });
 });

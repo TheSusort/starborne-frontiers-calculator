@@ -7,10 +7,21 @@ interface CollapsibleAccordionProps {
     id?: string;
 }
 
+/**
+ * Children stay mounted while closed so the height transition has something to animate, which
+ * would otherwise leave every control inside a closed accordion in the tab order. `inert` removes
+ * them from it without affecting layout, so the animation is unchanged.
+ *
+ * Spread as a raw attribute because React 18's JSX types do not declare `inert`; it is a boolean
+ * HTML attribute, so presence alone is what disables the subtree.
+ */
+const inertWhenClosed = (isOpen: boolean) => (isOpen ? {} : { inert: '' }) as { inert?: string };
+
 export const CollapsibleAccordion: React.FC<CollapsibleAccordionProps> = memo(
     ({ isOpen, children, id }) => {
         return (
             <div
+                {...inertWhenClosed(isOpen)}
                 id={id}
                 className="transition-all duration-300 ease-in-out overflow-hidden"
                 style={{

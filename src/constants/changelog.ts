@@ -6,6 +6,8 @@ export const CURRENT_VERSION = '1.67.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: sweep one stat across a range and chart the result.',
+    'Combat simulator: sweep points show which differences beat the noise.',
     'Import: a failed engineering-stats upload no longer empties your cloud stats.',
     'Cloud sync: an engineering stat saved during a sync is no longer removed by it.',
     'Cloud sync: a failed engineering-stats save now leaves your saved stats intact.',
