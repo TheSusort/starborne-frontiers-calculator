@@ -7,9 +7,7 @@ import { Button } from '../ui/Button';
 import { Modal } from '../ui/layout/Modal';
 import { Input } from '../ui/Input';
 import { useEncounterNotes } from '../../hooks/useEncounterNotes';
-import { useShips } from '../../contexts/ShipsContext';
-import { useShipsData } from '../../hooks/useShipsData';
-import { parseReferenceShipId, referenceShip } from '../../utils/ship/referenceShip';
+import { useShipIdResolver } from '../../hooks/useShipIdResolver';
 import type { StatOverrides } from '../../utils/simulator/statOverrides';
 import { UnitVersionSelector } from './UnitVersionSelector';
 
@@ -75,8 +73,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
     resolveShip,
 }) => {
     const { encounters, addEncounter } = useEncounterNotes();
-    const { getShipById } = useShips();
-    const { ships: units, getAscensionStats } = useShipsData();
+    const resolveStoredShip = useShipIdResolver();
 
     const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
     const [encounterName, setEncounterName] = useState('');
@@ -95,19 +92,6 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
         }
     };
 
-    /**
-     * A saved formation stores ids only, and a reference unit's id belongs to no owned row —
-     * looking it up among the player's ships silently drops the cell. Rebuild it from the
-     * template instead.
-     */
-    const resolveSavedShip = (shipId: string): Ship | null => {
-        const reference = parseReferenceShipId(shipId);
-        if (!reference) return getShipById(shipId) ?? null;
-        const template = units.find((unit) => unit.id === reference.templateId);
-        if (!template) return null;
-        return referenceShip(template, reference.variant, getAscensionStats(template.id));
-    };
-
     const handleLoadEncounter = (encounterId: string) => {
         if (!encounterId) return;
         const encounter = encounters.find((e) => e.id === encounterId);
@@ -120,7 +104,7 @@ const PlacementBoard: React.FC<PlacementBoardProps> = ({
             // Formation comes from the encounter store (DB trust boundary); skip any
             // malformed entry rather than trusting its shape.
             if (!item?.shipId || !item?.position) continue;
-            const ship = resolveSavedShip(item.shipId);
+            const ship = resolveStoredShip(item.shipId);
             if (ship) board[item.position] = { ship };
         }
         onLoadEncounter(board);
