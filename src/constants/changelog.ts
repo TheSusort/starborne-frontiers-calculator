@@ -35,6 +35,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Sign-in: your gear and implants now carry over to the cloud.',
     'Cloud sync: disabling or re-syncing no longer leaves stale cloud data behind.',
     'Cloud sync: enabling sync or re-syncing now uploads before clearing the cloud.',
+    'Combat simulator: your boards, overrides, leaders and seed now survive a reload.',
+    'Combat simulator: save a setup under a name and load it back later.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

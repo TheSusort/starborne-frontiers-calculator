@@ -216,6 +216,32 @@ describe('useSimulatorRuns', () => {
         expect(result.current.aggregate).not.toBe(pinnedBaseline?.aggregate);
     });
 
+    it('handleClearRunState discards every displayed result, the provenance and the baseline', async () => {
+        const { result } = renderHook(
+            (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),
+            { initialProps: baseArgs() }
+        );
+
+        await act(async () => {
+            result.current.handleRun();
+        });
+        act(() => result.current.handlePinBaseline());
+        act(() => result.current.handleOpenDivergence(11));
+        expect(result.current.aggregate).not.toBeNull();
+        expect(result.current.baseline).not.toBeNull();
+        expect(result.current.divergence).not.toBeNull();
+        expect(result.current.currentOverrides).not.toBeNull();
+
+        act(() => result.current.handleClearRunState());
+
+        expect(result.current.battleResult).toBeNull();
+        expect(result.current.aggregate).toBeNull();
+        expect(result.current.baseline).toBeNull();
+        expect(result.current.divergence).toBeNull();
+        expect(result.current.currentOverrides).toBeNull();
+        expect(result.current.runError).toBeNull();
+    });
+
     it('pins the input that RAN, not a fresh read of the boards at pin time', async () => {
         const { result, rerender } = renderHook(
             (props: Parameters<typeof useSimulatorRuns>[0]) => useSimulatorRuns(props),

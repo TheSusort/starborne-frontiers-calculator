@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
@@ -88,6 +88,10 @@ vi.mock('../../hooks/useEngineeringStats', () => ({
 vi.mock('../../hooks/useEncounterNotes', () => ({
     useEncounterNotes: () => ({ encounters: [], loading: false }),
 }));
+
+// The page autosaves its setup to localStorage and restores it on mount, so a setup left
+// behind by one test would load itself into the next one's boards.
+beforeEach(() => localStorage.clear());
 
 describe('SimulatorPage divergence wiring', () => {
     it('passes handleOpenDivergence (not a no-op) to RunComparison', () => {

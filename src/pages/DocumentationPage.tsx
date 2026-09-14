@@ -3909,6 +3909,37 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Saving a Setup</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Both boards, every stat override, both squad leaders, the
+                                        seed and the run count are kept as you work and come back
+                                        when you reload the page
+                                    </li>
+                                    <li>
+                                        Type a name and press &quot;Save&quot; to keep a setup you
+                                        can come back to; saving under a name you already used
+                                        replaces that setup
+                                    </li>
+                                    <li>
+                                        A setup stores ships by reference rather than as a snapshot
+                                        of their stats, so re-gearing a ship changes what every
+                                        setup holding it does
+                                    </li>
+                                    <li>
+                                        Ships you no longer own — deleted, re-imported, or belonging
+                                        to another profile — are left out when a setup loads, and
+                                        the page says how many cells it skipped
+                                    </li>
+                                    <li>
+                                        Loading a setup clears the results on screen, including a
+                                        pinned baseline: they describe the boards that produced them
+                                    </li>
+                                    <li>Saved setups are kept on this device only</li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
                                     Editing a Ship&apos;s Stats
                                 </h4>

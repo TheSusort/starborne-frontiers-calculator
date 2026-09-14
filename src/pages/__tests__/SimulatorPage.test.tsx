@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import SimulatorPage from '../SimulatorPage';
@@ -20,6 +20,10 @@ vi.mock('../../hooks/useEncounterNotes', () => ({
 vi.mock('../../components/ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 vi.mock('../../hooks/useShipsData', () => ({ useShipsData: () => ({ ships: [] }) }));
 vi.mock('../../components/seo/Seo', () => ({ default: () => null }));
+
+// The page autosaves its setup to localStorage and restores it on mount, so a setup left
+// behind by one test would load itself into the next one's boards.
+beforeEach(() => localStorage.clear());
 
 describe('SimulatorPage', () => {
     it('renders the page title, two placement boards, and a Run button', () => {

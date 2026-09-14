@@ -61,6 +61,10 @@ export interface UseSimulatorRunsResult {
     progress: { completed: number; total: number } | null;
     /** Aborts the run in flight. A cancelled run writes no result — see `handleRun`. */
     handleCancel: () => void;
+    /** Discards every displayed result and the pinned baseline. Call when the boards are replaced
+     *  wholesale: a result describes the boards that produced it, and nothing re-derives it from
+     *  live state. */
+    handleClearRunState: () => void;
     /** The two fights behind one diverging seed: the pinned baseline's and the current run's,
      *  replayed under the same seed. Mutually exclusive with `battleResult` — the page shows a
      *  pair or a single fight, never both. */
@@ -207,6 +211,21 @@ export function useSimulatorRuns({
 
     const handleCancel = () => abortRef.current?.abort();
 
+    // Aborting and bumping the generation is what stops a run already in flight from landing its
+    // result onto boards it never fought on.
+    const handleClearRunState = useCallback(() => {
+        abortRef.current?.abort();
+        generationRef.current++;
+        setIsRunning(false);
+        setProgress(null);
+        setBattleResult(null);
+        setAggregate(null);
+        setProvenance(null);
+        setBaseline(null);
+        setDivergence(null);
+        setRunError(null);
+    }, []);
+
     // Replays one seed from the input that produced the CURRENT aggregate, so the playback
     // always matches the row it was opened from regardless of any board edit made since that
     // run. Never rebuild from the live boards here.
@@ -298,6 +317,7 @@ export function useSimulatorRuns({
         isRunning,
         progress,
         handleCancel,
+        handleClearRunState,
         divergence,
         handleOpenDivergence,
         handleCloseDivergence,
