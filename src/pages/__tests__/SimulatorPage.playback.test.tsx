@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import type { BattleResult } from '../../utils/calculators/battleSimulator';
@@ -214,6 +214,10 @@ vi.mock('../../utils/ship/combatStats', () => ({
     shipFinalStats: () => ({}),
     combatStatsFromShip: () => ({}),
 }));
+
+// The page autosaves its setup to localStorage and restores it on mount, so a setup left
+// behind by one test would load itself into the next one's boards.
+beforeEach(() => localStorage.clear());
 
 describe('SimulatorPage playback', () => {
     it('after a Run shows the boards with HP content and the outcome', () => {

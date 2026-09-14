@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageLayout } from '../components/ui';
 import Seo from '../components/seo/Seo';
 import { SEO_CONFIG } from '../constants/seo';
@@ -24,6 +24,24 @@ import {
     readStoredSquadLeaderSelection,
     writeStoredSquadLeaderSelection,
 } from '../utils/simulator/squadLeaderSelection';
+import SimulatorSetupBar from '../components/simulator/SimulatorSetupBar';
+import { useShipIdResolver } from '../hooks/useShipIdResolver';
+import { useShips } from '../contexts/ShipsContext';
+import { useShipsData } from '../hooks/useShipsData';
+import {
+    AUTOSAVE_SETUP_NAME,
+    deserializeSetup,
+    serializeSetup,
+    type DeserializedSetup,
+    type SimulatorSetup,
+} from '../utils/simulator/simulatorSetup';
+import {
+    MAX_SAVED_SETUPS,
+    readAutosavedSetup,
+    readSavedSetups,
+    writeAutosavedSetup,
+    writeSavedSetups,
+} from '../utils/simulator/setupStorage';
 
 type Side = 'player' | 'enemy';
 
@@ -45,6 +63,12 @@ const UnsimulatedEffectsList: React.FC<{ entries: UnsimulatedEntry[] }> = ({ ent
 const SimulatorPage: React.FC = () => {
     const { getGearPiece } = useInventory();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
+    const resolveStoredShip = useShipIdResolver();
+    // The owned roster and the unit catalogue are the two sources `resolveStoredShip` reads. Both
+    // arrive after the first render, so the restore effect below waits on their loading flags and
+    // re-runs on their sizes.
+    const { loading: shipsLoading, ships: ownedShips } = useShips();
+    const { loading: unitsLoading, ships: units } = useShipsData();
 
     // Shared combat-stat resolution — see src/utils/ship/combatStats.ts (mirrors DPSCalculatorPage).
     const statsDeps = { getGearPiece, getEngineeringStatsForShipType };
@@ -69,6 +93,17 @@ const SimulatorPage: React.FC = () => {
         (side === 'player' ? setPlayerSquadLeader : setEnemySquadLeader)(selection);
         writeStoredSquadLeaderSelection(SQUAD_LEADER_STORAGE_KEYS[side], selection);
     };
+
+    const [savedSetups, setSavedSetups] = useState<SimulatorSetup[]>(() => readSavedSetups());
+    const [loadNotice, setLoadNotice] = useState<string | null>(null);
+    // The autosaved setup while it is still waiting to be restored; `undefined` before it has
+    // been read, `null` once there is nothing left to restore.
+    const pendingRestoreRef = useRef<SimulatorSetup | null | undefined>(undefined);
+    // Gates the autosave write: nothing is persisted before the restore has had its first chance.
+    const restoreAttemptedRef = useRef(false);
+    // Whether the setup last applied to these boards lost cells to ids that did not resolve. Also
+    // gates the autosave write — see it for what an unresolved id costs.
+    const appliedSetupLostCellsRef = useRef(false);
 
     // The cell whose stat editor is open, or null when none is. One modal for the whole
     // page, not one per cell — a placement's own overrides are looked up by side + position.
@@ -208,6 +243,7 @@ const SimulatorPage: React.FC = () => {
         isRunning,
         progress,
         handleCancel,
+        handleClearRunState,
     } = useSimulatorRuns({
         playerBoard,
         enemyBoard,
@@ -218,6 +254,116 @@ const SimulatorPage: React.FC = () => {
         seed,
         runCount,
     });
+
+    /** The one place a stored setup becomes live state. */
+    const applySetup = (result: DeserializedSetup) => {
+        setPlayerBoard(result.playerBoard);
+        setEnemyBoard(result.enemyBoard);
+        setPlayerSelected(undefined);
+        setEnemySelected(undefined);
+        setSeed(result.seed);
+        setRunCount(result.runCount);
+        // Leaders route through the change handler: it is what write-throughs to
+        // SQUAD_LEADER_STORAGE_KEYS, so the live selection and the stored one cannot diverge.
+        handleSquadLeaderChange('player', result.playerSquadLeader);
+        handleSquadLeaderChange('enemy', result.enemySquadLeader);
+        // A displayed result describes the boards that produced it and is never re-derived from
+        // live state, so replacing the boards has to discard it.
+        handleClearRunState();
+        appliedSetupLostCellsRef.current = result.dropped.length > 0;
+        setLoadNotice(
+            result.dropped.length > 0
+                ? `${result.dropped.length} ship${result.dropped.length === 1 ? '' : 's'} in this setup could no longer be found and ${result.dropped.length === 1 ? 'was' : 'were'} left out.`
+                : null
+        );
+    };
+
+    // Restore the autosaved setup. The owned roster and the unit catalogue both arrive after the
+    // first render, so the stored setup stays pending while it resolves nothing and a later
+    // arrival gets another attempt; an id resolved too early is indistinguishable from a deleted
+    // ship.
+    useEffect(() => {
+        if (shipsLoading || unitsLoading) return;
+        if (pendingRestoreRef.current === undefined)
+            pendingRestoreRef.current = readAutosavedSetup();
+        const stored = pendingRestoreRef.current;
+        restoreAttemptedRef.current = true;
+        if (!stored) return;
+        const result = deserializeSetup(stored, resolveStoredShip);
+        const placed =
+            Object.keys(result.playerBoard).length + Object.keys(result.enemyBoard).length;
+        if (placed > 0 || result.dropped.length === 0) pendingRestoreRef.current = null;
+        applySetup(result);
+        // Keyed on how many ships each source holds, not on the resolver: the resolver is rebuilt
+        // every render, so depending on it would re-apply the setup on every render forever.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [ownedShips.length, units.length, shipsLoading, unitsLoading]);
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            // Nothing is autosaved before the first restore attempt, and a setup that lost every
+            // cell is not written back while the boards are still empty: those ships may simply
+            // not have loaded, and persisting the emptiness would destroy them.
+            if (!restoreAttemptedRef.current) return;
+            if (appliedSetupLostCellsRef.current && playerCount === 0 && enemyCount === 0) return;
+            writeAutosavedSetup(
+                serializeSetup({
+                    name: AUTOSAVE_SETUP_NAME,
+                    playerBoard,
+                    enemyBoard,
+                    playerSquadLeader,
+                    enemySquadLeader,
+                    seed,
+                    runCount,
+                    savedAt: Date.now(),
+                })
+            );
+        }, 250);
+        return () => clearTimeout(timer);
+    }, [
+        playerBoard,
+        enemyBoard,
+        playerSquadLeader,
+        enemySquadLeader,
+        seed,
+        runCount,
+        playerCount,
+        enemyCount,
+    ]);
+
+    const handleSaveSetup = (name: string) => {
+        const setup = serializeSetup({
+            name,
+            playerBoard,
+            enemyBoard,
+            playerSquadLeader,
+            enemySquadLeader,
+            seed,
+            runCount,
+            savedAt: Date.now(),
+        });
+        // Name-keyed: saving under an existing name replaces that entry rather than growing the
+        // list a copy at a time.
+        const next = [...savedSetups.filter((entry) => entry.name !== name), setup].slice(
+            -MAX_SAVED_SETUPS
+        );
+        setSavedSetups(next);
+        writeSavedSetups(next);
+    };
+
+    const handleLoadSetup = (name: string) => {
+        const stored = savedSetups.find((entry) => entry.name === name);
+        if (!stored) return;
+        // A named load is the user's choice and supersedes an autosave still waiting to restore.
+        pendingRestoreRef.current = null;
+        applySetup(deserializeSetup(stored, resolveStoredShip));
+    };
+
+    const handleDeleteSetup = (name: string) => {
+        const next = savedSetups.filter((entry) => entry.name !== name);
+        setSavedSetups(next);
+        writeSavedSetups(next);
+    };
 
     return (
         <>
@@ -232,6 +378,17 @@ const SimulatorPage: React.FC = () => {
                 }
             >
                 <div className="space-y-6">
+                    <SimulatorSetupBar
+                        saved={savedSetups}
+                        onSave={handleSaveSetup}
+                        onLoad={handleLoadSetup}
+                        onDelete={handleDeleteSetup}
+                        canSave={playerCount > 0 || enemyCount > 0}
+                        canLoad={!shipsLoading && !unitsLoading}
+                    />
+                    <div aria-live="polite">
+                        {loadNotice && <p className="text-sm text-amber-400">{loadNotice}</p>}
+                    </div>
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <PlacementBoard
