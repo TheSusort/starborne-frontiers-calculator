@@ -1339,6 +1339,39 @@ describe('AbilityCard — the top-up buff-steal name accepts multi-word statuses
             expect(screen.getByLabelText('Remove all charges')).toBeChecked();
         });
 
+        it('gives each card its own checkbox id, so one card cannot toggle another', () => {
+            // Checkbox falls back to an id derived from its LABEL, and its visible control is a
+            // `label htmlFor` over an sr-only input. Two charge cards therefore put the same id in
+            // the DOM twice, and clicking the second one drives the first — `getAllByLabelText`
+            // resolves both labels to whichever input the browser matched first.
+            const onSecond = vi.fn();
+            render(
+                <>
+                    <AbilityCard
+                        ability={{ ...chargeAbility(2), id: 'first' }}
+                        onChange={vi.fn()}
+                        onRemove={vi.fn()}
+                    />
+                    <AbilityCard
+                        ability={{ ...chargeAbility(2), id: 'second' }}
+                        onChange={onSecond}
+                        onRemove={vi.fn()}
+                    />
+                </>
+            );
+
+            const boxes = screen.getAllByLabelText<HTMLInputElement>('Remove all charges');
+            expect(boxes).toHaveLength(2);
+            expect(new Set(boxes.map((b) => b.id)).size).toBe(2);
+
+            fireEvent.click(boxes[1]);
+            expect(onSecond).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    config: expect.objectContaining({ type: 'charge', amount: 'all' }),
+                })
+            );
+        });
+
         it("ticking the checkbox writes 'all'; unticking falls back to the count 1", () => {
             const onChange = vi.fn();
             const { unmount } = render(

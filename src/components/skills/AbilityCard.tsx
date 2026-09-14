@@ -476,6 +476,11 @@ export const AbilityCard: React.FC<Props> = ({
                     <div className="space-y-2">
                         {isEnemyTarget(ability.target) && (
                             <Checkbox
+                                // Checkbox derives its id from the label when none is given, and
+                                // its visible control is a `label htmlFor` over an sr-only input —
+                                // so two charge cards sharing a label would put the same id in the
+                                // DOM twice and the second card's click would toggle the first.
+                                id={`remove-all-charges-${ability.id}`}
                                 label="Remove all charges"
                                 checked={removesAll}
                                 onChange={(checked) =>
