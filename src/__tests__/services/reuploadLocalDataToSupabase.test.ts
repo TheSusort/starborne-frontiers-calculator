@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { reuploadLocalDataToSupabase } from '../../services/userDataService';
 import { StorageKey } from '../../constants/storage';
 import { getFromIndexedDB } from '../../hooks/useStorage';
-import { deletesOn, fakeSupabase } from './fakeSupabase';
+import { deletesOn, fakeSupabase, upsertsOn } from './fakeSupabase';
 
 const USER = '33333333-3333-4333-8333-333333333333';
 
@@ -19,56 +19,13 @@ describe('reuploadLocalDataToSupabase', () => {
     });
 
     /**
-     * engineering_stats holds many rows per user and has no stable per-row identity, so it is
-     * replaced wholesale rather than pruned. The replacement has to be gated on the section
-     * being READABLE, not on it being non-empty: a user who cleared their engineering stats
-     * locally has a present, empty section, and skipping the delete for it leaves the cloud
-     * holding stats they removed.
+     * The section is written with an upsert on `(user_id, ship_type, stat_name)`, the table's
+     * primary key. Nothing here removes a row: a stat the local section no longer names is
+     * `pruneSupabaseDataNotInLocal`'s job, so a rejected write can never leave the user with
+     * neither their cloud stats nor a replacement.
      */
     describe('engineering stats', () => {
-        it('clears the cloud rows when the local section is present and empty', async () => {
-            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
-            const ops = fakeSupabase({});
-
-            await reuploadLocalDataToSupabase(USER);
-
-            expect(deletesOn(ops, 'engineering_stats')).toHaveLength(1);
-        });
-
-        it('leaves them alone when the local section is absent', async () => {
-            const ops = fakeSupabase({});
-
-            await reuploadLocalDataToSupabase(USER);
-
-            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
-        });
-
-        it('leaves them alone when the local section is unreadable', async () => {
-            localStorage.setItem(StorageKey.ENGINEERING_STATS, '{ not json');
-            const ops = fakeSupabase({});
-
-            await reuploadLocalDataToSupabase(USER);
-
-            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
-        });
-
-        // `readLocalSection`'s non-array branch accepted ANY parsed JSON, so a key holding
-        // `null` or a scalar read as present and the replacement then deleted every remote
-        // row and inserted nothing.
-        it.each([
-            ['null', 'null'],
-            ['a scalar', '5'],
-            ['an object with no stats', '{}'],
-        ])('leaves them alone when the local section is %s', async (_label, raw) => {
-            localStorage.setItem(StorageKey.ENGINEERING_STATS, raw);
-            const ops = fakeSupabase({});
-
-            await reuploadLocalDataToSupabase(USER);
-
-            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
-        });
-
-        it('still replaces them when the local section has stats', async () => {
+        it('upserts the local stats on their composite key', async () => {
             localStorage.setItem(
                 StorageKey.ENGINEERING_STATS,
                 engineering([
@@ -79,7 +36,47 @@ describe('reuploadLocalDataToSupabase', () => {
 
             await reuploadLocalDataToSupabase(USER);
 
-            expect(deletesOn(ops, 'engineering_stats')).toHaveLength(1);
+            const upserts = upsertsOn(ops, 'engineering_stats');
+            expect(upserts).toHaveLength(1);
+            expect(upserts[0].onConflict).toBe('user_id,ship_type,stat_name');
+            expect(upserts[0].payload).toEqual([
+                {
+                    user_id: USER,
+                    ship_type: 'ATTACKER',
+                    stat_name: 'attack',
+                    value: 10,
+                    type: 'flat',
+                },
+            ]);
+        });
+
+        it('issues no delete on the table', async () => {
+            localStorage.setItem(
+                StorageKey.ENGINEERING_STATS,
+                engineering([
+                    { shipType: 'ATTACKER', stats: [{ name: 'attack', value: 10, type: 'flat' }] },
+                ])
+            );
+            const ops = fakeSupabase({});
+
+            await reuploadLocalDataToSupabase(USER);
+
+            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
+        });
+
+        it.each([
+            ['present and empty', engineering([])],
+            ['absent', null],
+            ['unreadable', '{ not json'],
+            ['null', 'null'],
+            ['an object with no stats', '{}'],
+        ])('writes nothing when the local section is %s', async (_label, raw) => {
+            if (raw !== null) localStorage.setItem(StorageKey.ENGINEERING_STATS, raw);
+            const ops = fakeSupabase({});
+
+            await reuploadLocalDataToSupabase(USER);
+
+            expect(ops.filter((op) => op.table === 'engineering_stats')).toEqual([]);
         });
     });
 
@@ -88,12 +85,17 @@ describe('reuploadLocalDataToSupabase', () => {
     describe('a malformed object section', () => {
         it('does not abort the upload when the autogear configs are null', async () => {
             localStorage.setItem(StorageKey.AUTOGEAR_CONFIGS, 'null');
-            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            localStorage.setItem(
+                StorageKey.ENGINEERING_STATS,
+                engineering([
+                    { shipType: 'ATTACKER', stats: [{ name: 'attack', value: 10, type: 'flat' }] },
+                ])
+            );
             const ops = fakeSupabase({});
 
             await expect(reuploadLocalDataToSupabase(USER)).resolves.toEqual([]);
             // The section AFTER it still ran, which is what aborting would have skipped.
-            expect(deletesOn(ops, 'engineering_stats')).toHaveLength(1);
+            expect(upsertsOn(ops, 'engineering_stats')).toHaveLength(1);
         });
     });
 

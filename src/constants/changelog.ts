@@ -6,6 +6,10 @@ export const CURRENT_VERSION = '1.67.0';
 // CHANGELOG (with the new version + today's date), clear this array back to [],
 // and bump CURRENT_VERSION. All three steps must happen together.
 export const UNRELEASED_CHANGES: string[] = [
+    'Import: a failed engineering-stats upload no longer empties your cloud stats.',
+    'Cloud sync: an engineering stat saved during a sync is no longer removed by it.',
+    'Cloud sync: a failed engineering-stats save now leaves your saved stats intact.',
+    'Cloud sync: engineering stats removed locally are now cleared from the cloud.',
     'Cloud sync: autogear configs removed locally are now cleared from the cloud.',
     'Backup: restoring a file now clears autogear configs it does not carry.',
     'Combat simulator: place any unit in the game, not just ones you own.',

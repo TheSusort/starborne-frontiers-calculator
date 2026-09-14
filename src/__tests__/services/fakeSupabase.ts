@@ -19,17 +19,39 @@ export const PAGE_SIZE = 1000;
 /** Must match BATCH_SIZE in userDataService.ts; asserted by idReadsArePaged.test.ts. */
 export const BATCH_SIZE = 500;
 
+/** One equality or membership predicate, in the order it was chained. */
+export interface Filter {
+    column: string;
+    values: unknown[];
+    /** True for `.not(column, 'in', …)`: the row matches when it is NOT listed. */
+    negated?: boolean;
+}
+
 /** One recorded statement, in the order it was actually awaited. */
 export interface Op {
     table: string;
     kind: 'select' | 'delete' | 'update' | 'insert' | 'upsert';
+    /**
+     * The LAST predicate's column and values. Kept because most statements
+     * carry exactly one; a statement keyed on a composite identity has to be
+     * read off `filters`, which holds every predicate that was chained.
+     */
     column?: string;
     values?: unknown[];
+    filters?: Filter[];
     payload?: unknown;
+    /** The `onConflict` target of an upsert, verbatim. */
+    onConflict?: string;
     columns?: string[];
     /** Upper bounds from `.lte(column, value)`, by column. */
     upperBounds?: Record<string, unknown>;
     ordered?: boolean;
+    /**
+     * Columns handed to `.order()`, in order. A read of a table with no `id`
+     * must order by something else, and a test cannot tell unless the fake
+     * records which column it was.
+     */
+    orderedBy?: string[];
     range?: [number, number];
 }
 
@@ -60,8 +82,19 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
         Object.entries(cloud).map(([table, rows]) => [table, [...rows]])
     );
 
-    const matches = (row: Row, op: Op): boolean =>
-        op.column !== undefined && (op.values ?? []).includes(row[op.column]);
+    /**
+     * Every predicate must hold, not just the last one chained: a delete keyed
+     * on a composite identity (`user_id` AND `ship_type` AND `stat_name`) would
+     * otherwise remove rows Postgres would keep, and a test asserting on the
+     * survivors would pass against a delete that is too broad in production.
+     */
+    const matches = (row: Row, op: Op): boolean => {
+        const filters = op.filters ?? [];
+        if (filters.length === 0) return false;
+        return filters.every(({ column, values, negated }) =>
+            negated ? !values.includes(row[column]) : values.includes(row[column])
+        );
+    };
 
     /** The error Postgres would raise for `op`, or null if it is legal. */
     const violatedBy = (op: Op): { message: string } | null => {
@@ -109,31 +142,64 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
                 state.payload = payload;
                 return chain;
             },
-            upsert: (payload: unknown) => {
+            upsert: (payload: unknown, options?: { onConflict?: string }) => {
                 state.kind = 'upsert';
                 state.payload = payload;
+                // Recorded so a test can assert the conflict target. An upsert
+                // that names the wrong one inserts duplicates or errors in
+                // production while looking identical to the right one here.
+                state.onConflict = options?.onConflict;
                 return chain;
             },
             eq: (column: string, value: unknown) => {
                 state.column = column;
                 state.values = [value];
+                state.filters = [...(state.filters ?? []), { column, values: [value] }];
                 return chain;
             },
             in: (column: string, values: unknown[]) => {
                 state.column = column;
                 state.values = values;
+                state.filters = [...(state.filters ?? []), { column, values }];
                 return chain;
             },
-            not: () => chain,
+            not: (column: string, operator: string, value: unknown) => {
+                // Only the `in` form is modelled; anything else is recorded as
+                // a predicate the fake does not evaluate, the way `lte` is.
+                const values =
+                    operator === 'in' && typeof value === 'string'
+                        ? value
+                              .replace(/^\(|\)$/g, '')
+                              .split(',')
+                              .map((entry) => entry.trim().replace(/^"|"$/g, ''))
+                              .filter(Boolean)
+                        : [value];
+                state.filters = [...(state.filters ?? []), { column, values, negated: true }];
+                return chain;
+            },
             is: () => chain,
+            // PostgREST's `single`: one row or none, never a list. Recorded as the select it
+            // is, so a caller that reads a scalar row still shows up in `ops`.
+            single: () => ({
+                then: (
+                    resolve: (r: { data: Row | null; error: { message: string } | null }) => void
+                ) => {
+                    ops.push({ ...state });
+                    const rows = live[table] ?? [];
+                    resolve({ data: rows[0] ?? null, error: null });
+                },
+            }),
             // Recorded, not evaluated: the fake serves rows the way it does for
             // every other predicate, and tests assert on the bound that was sent.
             lte: (column: string, value: unknown) => {
                 state.upperBounds = { ...(state.upperBounds ?? {}), [column]: value };
                 return chain;
             },
-            order: () => {
+            order: (column?: string) => {
                 state.ordered = true;
+                if (column !== undefined) {
+                    state.orderedBy = [...(state.orderedBy ?? []), column];
+                }
                 return chain;
             },
             // Serves the slice the caller asked for, so a helper that reads only
@@ -196,3 +262,7 @@ export const indexOfDelete = (ops: Op[], table: string) =>
 /** Every value handed to a delete on `table`, across all of its batches. */
 export const deletedValues = (ops: Op[], table: string) =>
     deletesOn(ops, table).flatMap((op) => op.values ?? []);
+
+/** Every upsert issued against `table`, in the order they were awaited. */
+export const upsertsOn = (ops: Op[], table: string) =>
+    ops.filter((op) => op.table === table && op.kind === 'upsert');

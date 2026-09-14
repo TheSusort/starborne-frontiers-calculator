@@ -163,16 +163,6 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
             if (!isSupabaseSyncEnabled()) return;
 
             try {
-                const shipTypes = statsToSave.stats.map((stat) => stat.shipType);
-                if (shipTypes.length > 0) {
-                    const { error: deleteError } = await supabase
-                        .from('engineering_stats')
-                        .delete()
-                        .eq('user_id', activeProfileId)
-                        .in('ship_type', shipTypes);
-                    if (deleteError) throw deleteError;
-                }
-
                 const records = statsToSave.stats.flatMap((stat) =>
                     stat.stats.map((s) => ({
                         user_id: activeProfileId,
@@ -184,11 +174,35 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 );
 
                 if (records.length > 0) {
-                    const { error: insertError } = await supabase
+                    const { error: upsertError } = await supabase
                         .from('engineering_stats')
-                        .insert(records);
-                    if (insertError) throw insertError;
+                        .upsert(records, { onConflict: 'user_id,ship_type,stat_name' });
+                    if (upsertError) throw upsertError;
                 }
+
+                // The save replaces a ship type wholesale, so rows it no longer names are
+                // stale. PostgREST has no empty `in` list: a ship type saved with no stats
+                // takes the unfiltered delete instead of `not in ()`. The name list needs
+                // no escaping because `StatName` is a closed union of bare identifiers.
+                const pruned = await Promise.all(
+                    statsToSave.stats.map((stat) => {
+                        const savedNames = stat.stats.map((s) => s.name);
+                        const rowsOfShipType = supabase
+                            .from('engineering_stats')
+                            .delete()
+                            .eq('user_id', activeProfileId)
+                            .eq('ship_type', stat.shipType);
+                        return savedNames.length > 0
+                            ? rowsOfShipType.not(
+                                  'stat_name',
+                                  'in',
+                                  `(${savedNames.map((name) => `"${name}"`).join(',')})`
+                              )
+                            : rowsOfShipType;
+                    })
+                );
+                const deleteError = pruned.find((result) => result.error)?.error;
+                if (deleteError) throw deleteError;
 
                 addNotification('success', 'Engineering stats saved successfully');
             } catch (error) {
@@ -198,7 +212,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 throw error;
             }
         },
-        [activeProfileId, addNotification, engineeringStats, setEngineeringStats] // Simplified deps, loadEngineeringStats removed as it would cause re-fetch
+        [activeProfileId, addNotification, engineeringStats, setEngineeringStats]
     );
 
     const deleteEngineeringStats = useCallback(
