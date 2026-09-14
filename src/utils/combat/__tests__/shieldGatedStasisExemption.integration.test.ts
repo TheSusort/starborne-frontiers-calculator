@@ -8,12 +8,17 @@
  * exempt Zenith on a board where it holds no shield at all.
  *
  * THE PER-HIT AXIS. `attackBreaksStasis` re-reads the pool at every break-mark, and the covered
- * (non-anchor) footprint mark runs inside `onVictimResolved` — once per SUB-ATTACK per victim. The
- * fixture below turns that into an observable: the anchor victim wears Reflect thorns sized so that
- * ONE sub-attack's bounce-back leaves the attacker's pool alive and TWO drain it. The attacker's
- * cast then breaks the covered victim's Stasis at `hits: 2` and not at `hits: 1` — the ONLY
- * difference between the two runs is the hit count, so the exemption demonstrably lapses PART-WAY
- * THROUGH one cast.
+ * (non-anchor) footprint mark is read at `onVictimPreImpact` — once per SUB-ATTACK per victim,
+ * before that victim's own hit resolves. The fixture below turns that into an observable: the
+ * anchor victim wears Reflect thorns sized so that ONE sub-attack's bounce-back leaves the
+ * attacker's pool alive and TWO drain it. The attacker's cast then breaks the covered victim's
+ * Stasis at `hits: 2` and not at `hits: 1` — the ONLY difference between the two runs is the hit
+ * count, so the exemption demonstrably lapses PART-WAY THROUGH one cast.
+ *
+ * THE AT-IMPACT DISCRIMINATOR. Reading the gate before impact also means a victim's OWN thorns
+ * can never un-exempt the hit that triggered them: the pool is read as it stood when the hit
+ * landed, not after that hit's own reflect bounce drained it. `coveredReflectPct` gives the
+ * covered victim its own thorns sized to empty the pool in a single bounce, proving that case.
  *
  * WHAT THIS CANNOT SHOW, and why. The ANCHOR victim's mark is made by `onHitBreakStasis`, which
  * playerTurn.ts fires once per CAST, before the positional hit loop — so the anchor's gate is read
@@ -157,8 +162,9 @@ const playerStasisBot = (id: string, position: Position, sel: Selection): TeamAc
 });
 
 /** A high-HP enemy victim with a basicAttack so it CAN emit ability-performed once freed.
- *  `reflectPct` (anchor only) is the mid-cast shield-strip vector: thorns resolve INSIDE
- *  applyVictimDamage, i.e. inside the positional hit loop. */
+ *  `reflectPct` is the mid-cast shield-strip vector: thorns resolve INSIDE applyVictimDamage,
+ *  i.e. inside the positional hit loop. Reflect is not anchor-gated (`damage-reflection` here
+ *  never sets `requirePrimaryTarget`), so any victim given this can bounce damage back. */
 const enemyVictim = (id: string, position: Position, reflectPct?: number): EnemyAttacker => ({
     id,
     stats: {
@@ -223,11 +229,19 @@ interface Arm {
     hits: number;
     /** Thorns % on the ANCHOR victim. 0 ⇒ nothing drains the attacker's pool mid-cast. */
     reflectPct: number;
+    /** Thorns % on the COVERED victim. 0/omitted ⇒ the covered victim carries no thorns of its
+     *  own, so only the anchor's bounce (if any) can drain the pool before it is hit. */
+    coveredReflectPct?: number;
     /** Omit the gate to get an attacker with no exemption at all (the break-fires control). */
     gated?: boolean;
 }
 
-const input = ({ hits, reflectPct, gated = true }: Arm): CombatEngineInput => ({
+const input = ({
+    hits,
+    reflectPct,
+    coveredReflectPct = 0,
+    gated = true,
+}: Arm): CombatEngineInput => ({
     attack: ATTACK,
     crit: 0,
     critDamage: 0,
@@ -257,7 +271,7 @@ const input = ({ hits, reflectPct, gated = true }: Arm): CombatEngineInput => ({
     teamActors: [playerStasisBot('pbot-f', 'M4', 'front'), playerStasisBot('pbot-b', 'M3', 'back')],
     enemyAttackers: [
         enemyVictim('enemy-anchor', 'M4', reflectPct > 0 ? reflectPct : undefined),
-        enemyVictim('enemy-covered', 'M3'),
+        enemyVictim('enemy-covered', 'M3', coveredReflectPct > 0 ? coveredReflectPct : undefined),
         enemyCuller(),
     ],
 });
@@ -319,6 +333,17 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
         // The ANCHOR's gate was answered once, at cast time, while the pool was still full — see
         // this file's header on the anchor's once-per-cast granularity. It stays exempt.
         expect(r.anchorFired).toHaveLength(0);
+    });
+
+    // AT IMPACT: the covered victim's own thorns empty the pool as a consequence of the very
+    // hit that landed on it. That hit connected while the pool was still up, so it does NOT
+    // break that victim's Stasis — a hit is never un-exempted by damage it caused itself.
+    // Reading the gate after the victim resolved sees the drained pool and breaks it.
+    it('a victim whose OWN thorns drain the pool is still exempt for that hit', () => {
+        const r = run({ hits: 1, reflectPct: 0, coveredReflectPct: 10 });
+        expect(r.coveredFired).toHaveLength(0);
+        // The bounce really did empty the pool — otherwise the arm asserts nothing.
+        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
     });
 });
 

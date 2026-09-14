@@ -7605,8 +7605,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    answered when the hook fires, not when it is wired.
         // GRANULARITY: this hook fires ONCE PER CAST (playerTurn.ts calls it before the positional
         // hit loop), so a gated attacker's anchor victim is decided once per cast. The covered
-        // (non-anchor) footprint victims are marked from `onVictimResolved`, which runs per
-        // sub-attack, and there the gate IS answered per hit.
+        // (non-anchor) footprint victims are marked from `onVictimPreImpact`, which runs per
+        // sub-attack × victim AT IMPACT — before that victim's own hit can affect the pool the
+        // gate reads — and there the gate IS answered per hit.
 
         // Per-victim enemy-debuff-derived modifiers. Reads the victim's OWN per-actor
         // enemy-debuff store — BOTH channels: scheduled (__enemy__ global) + ability (per-victim
@@ -7974,6 +7975,15 @@ export function runCombat(rawInput: CombatEngineInput): {
                 didCrit: boolean,
                 subAttackIndex?: number
             ) => void;
+            // Repeated here for the same reason as `onVictimResolved`'s trailing param: this
+            // engine-side wrapper declares its OWN args type, so applyPositionalDamage's
+            // `onVictimPreImpact` hook is un-typeable by an engine caller until it is repeated
+            // here. See that hook's doc (positionalApply.ts) for its AT-IMPACT timing contract.
+            onVictimPreImpact?: (
+                victim: CombatActor,
+                isAnchor: boolean,
+                subAttackIndex: number
+            ) => void;
             // Per-victim crit resolver (per-victim crit). The anchor victim reuses hitCrits[h];
             // each COVERED footprint victim rolls the attacker's crit gate at ITS OWN affinity-
             // capped rate via this callback. Unsupplied → every victim uses hitCrits[h]. Each
@@ -8098,6 +8108,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     },
                     // E2: forward the per-direction leech hook (unsupplied by all current callers).
                     onVictimResolved: args.onVictimResolved,
+                    // Forward the AT-IMPACT per-victim hook verbatim.
+                    onVictimPreImpact: args.onVictimPreImpact,
                     // Forward the sub-attack boundary hooks (the per-sub-attack debuff landing).
                     onSubAttackStart: args.onSubAttackStart,
                     onSubAttackEnd: args.onSubAttackEnd,
@@ -9475,8 +9487,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                 debuffEmittersBySubAttack.set(index, at);
             };
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
-            // at hit time so its Stasis is broken too — the anchor break is handled at the call site.
-            // Covered victims have no same-turn re-apply vector → unconditional break.
+            // AT IMPACT (marked from `onVictimPreImpact`, per sub-attack × victim) so its Stasis is
+            // broken too — the anchor break is handled at the call site. Covered victims have no
+            // same-turn re-apply vector → unconditional break.
             const coveredStasisVictims = new Set<string>();
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
@@ -9557,16 +9570,16 @@ export function runCombat(rawInput: CombatEngineInput): {
                         prev.hitOutcomes.push(didCrit);
                         bySubAttack.set(victim.id, prev);
                     }
-                    // Record covered (non-anchor) victims stasised at hit time for the post-apply
-                    // break. This callback runs per (sub-attack × victim), so `attackBreaksStasis`
-                    // is answered PER HIT here: a gated attacker whose shield is stripped by
-                    // sub-attack 0 (reflect thorns fire inline inside applyVictimDamage) stops
-                    // being exempt for sub-attack 1's covered victims.
-                    if (
-                        attackBreaksStasis(actor) &&
-                        victim.id !== sel.tgt.id &&
-                        isStasised(victim.id)
-                    ) {
+                },
+                onVictimPreImpact: (victim, isAnchor) => {
+                    // Record covered (non-anchor) victims stasised AT IMPACT, before this hit's own
+                    // consequences (reflect thorns resolve inline inside applyToVictim) can affect
+                    // the read: a victim's own bounce must not un-exempt the hit that triggered it.
+                    // This runs per (sub-attack × victim), so `attackBreaksStasis` is still answered
+                    // PER HIT: a gated attacker whose shield was stripped by an EARLIER sub-attack, or
+                    // by a DIFFERENT victim's thorns within this same sub-attack, stops being exempt
+                    // for the next victim's mark.
+                    if (!isAnchor && attackBreaksStasis(actor) && isStasised(victim.id)) {
                         coveredStasisVictims.add(victim.id);
                     }
                 },
