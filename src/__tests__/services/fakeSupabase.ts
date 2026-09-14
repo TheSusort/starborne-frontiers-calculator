@@ -26,6 +26,9 @@ export interface Op {
     column?: string;
     values?: unknown[];
     payload?: unknown;
+    columns?: string[];
+    /** Upper bounds from `.lte(column, value)`, by column. */
+    upperBounds?: Record<string, unknown>;
     ordered?: boolean;
     range?: [number, number];
 }
@@ -81,8 +84,15 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
         const state: Op = { table, kind: 'select' };
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const chain: any = {
-            select: () => {
+            select: (columns?: string) => {
                 state.kind = 'select';
+                // Projected, not ignored: a caller that asks for the wrong columns
+                // must see rows missing them, or a test cannot tell `'id'` from
+                // `'id, ship_id'` and the column string is unverified.
+                state.columns = (columns ?? '*')
+                    .split(',')
+                    .map((column) => column.trim())
+                    .filter(Boolean);
                 return chain;
             },
             delete: () => {
@@ -116,6 +126,12 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
             },
             not: () => chain,
             is: () => chain,
+            // Recorded, not evaluated: the fake serves rows the way it does for
+            // every other predicate, and tests assert on the bound that was sent.
+            lte: (column: string, value: unknown) => {
+                state.upperBounds = { ...(state.upperBounds ?? {}), [column]: value };
+                return chain;
+            },
             order: () => {
                 state.ordered = true;
                 return chain;
@@ -148,7 +164,18 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
                 const page = state.range
                     ? rows.slice(state.range[0], state.range[1] + 1)
                     : rows.slice(0, PAGE_SIZE);
-                resolve({ data: page, error: null });
+                const columns = state.columns;
+                const projected =
+                    !columns || columns.includes('*')
+                        ? page
+                        : page.map((row) =>
+                              Object.fromEntries(
+                                  columns
+                                      .filter((column) => column in row)
+                                      .map((column) => [column, row[column]])
+                              )
+                          );
+                resolve({ data: projected, error: null });
             },
         };
         return chain;
