@@ -623,6 +623,18 @@ describe('pruneSupabaseDataNotInLocal', () => {
     describe('engineering stats', () => {
         const engineering = (stats: unknown[]) => JSON.stringify({ stats });
 
+        /**
+         * Microsecond precision, the way PostgREST returns it: the watermark is compared as a
+         * raw string, and `Date.parse` would truncate these to the same millisecond.
+         */
+        const STAMPS = ['2026-09-14T10:00:00.000001+00:00', '2026-09-14T10:00:00.000002+00:00'];
+
+        const cloudStat = (shipType: string, statName: string, updatedAt = STAMPS[0]) => ({
+            ship_type: shipType,
+            stat_name: statName,
+            updated_at: updatedAt,
+        });
+
         const attacker = (names: string[]) => [
             {
                 shipType: 'ATTACKER',
@@ -633,10 +645,7 @@ describe('pruneSupabaseDataNotInLocal', () => {
         it('deletes the cloud stats the local section does not name, and keeps the ones it does', async () => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(attacker(['attack'])));
             const ops = fakeSupabase({
-                engineering_stats: [
-                    { ship_type: 'ATTACKER', stat_name: 'attack' },
-                    { ship_type: 'ATTACKER', stat_name: 'hp' },
-                ],
+                engineering_stats: [cloudStat('ATTACKER', 'attack'), cloudStat('ATTACKER', 'hp')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -650,8 +659,8 @@ describe('pruneSupabaseDataNotInLocal', () => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(attacker(['attack'])));
             const ops = fakeSupabase({
                 engineering_stats: [
-                    { ship_type: 'ATTACKER', stat_name: 'attack' },
-                    { ship_type: 'DEFENDER', stat_name: 'attack' },
+                    cloudStat('ATTACKER', 'attack'),
+                    cloudStat('DEFENDER', 'attack'),
                 ],
             });
 
@@ -666,12 +675,48 @@ describe('pruneSupabaseDataNotInLocal', () => {
             ]);
         });
 
+        // Both writers of this table upsert on `(user_id, ship_type, stat_name)`, so one can
+        // UPDATE a row the local section does not name — a row this read already counted as
+        // stale. The bound is the newest row READ, not a clock: there is no server `now()` to
+        // select without an RPC, and a row bumped after the read carries a later stamp.
+        it('bounds the delete by the newest updated_at the read saw', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(attacker(['attack'])));
+            const ops = fakeSupabase({
+                engineering_stats: [
+                    cloudStat('ATTACKER', 'attack', STAMPS[1]),
+                    cloudStat('ATTACKER', 'hp', STAMPS[0]),
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const deletes = deletesOn(ops, 'engineering_stats');
+            expect(deletes).toHaveLength(1);
+            expect(deletes[0].upperBounds).toEqual({ updated_at: STAMPS[1] });
+        });
+
+        // The read asks for the column the bound is computed from. Reading only the identity
+        // columns leaves the watermark null and the prune silently stops deleting.
+        it('reads the column the bound is computed from', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            const ops = fakeSupabase({
+                engineering_stats: [cloudStat('ATTACKER', 'attack')],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const select = ops.find(
+                (op) => op.table === 'engineering_stats' && op.kind === 'select'
+            );
+            expect(select?.columns).toEqual(['ship_type', 'stat_name', 'updated_at']);
+        });
+
         // PostgREST errors on `order=id` for a table with no such column, so the read would
         // fail outright in production while an unordered fake served it happily.
         it('orders the paged read by the columns the table actually has', async () => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
             const ops = fakeSupabase({
-                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+                engineering_stats: [cloudStat('ATTACKER', 'attack')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -688,10 +733,7 @@ describe('pruneSupabaseDataNotInLocal', () => {
         it('prunes every stat when the local section is there and holds no entries', async () => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
             const ops = fakeSupabase({
-                engineering_stats: [
-                    { ship_type: 'ATTACKER', stat_name: 'attack' },
-                    { ship_type: 'DEFENDER', stat_name: 'hp' },
-                ],
+                engineering_stats: [cloudStat('ATTACKER', 'attack'), cloudStat('DEFENDER', 'hp')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -701,20 +743,17 @@ describe('pruneSupabaseDataNotInLocal', () => {
 
         // The cloud-side mirror of the local shape check: a row with no identity is in no
         // local key set, so it and every row read beside it would count as stale.
-        it.each([['stat_name'], ['ship_type']])(
+        it.each([['stat_name'], ['ship_type'], ['updated_at']])(
             'leaves every stat alone when a cloud row carries no %s',
             async (column) => {
                 localStorage.setItem(
                     StorageKey.ENGINEERING_STATS,
                     engineering(attacker(['attack']))
                 );
-                const broken: Record<string, string> = {
-                    ship_type: 'DEFENDER',
-                    stat_name: 'hp',
-                };
+                const broken: Record<string, string> = cloudStat('DEFENDER', 'hp');
                 delete broken[column];
                 const ops = fakeSupabase({
-                    engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }, broken],
+                    engineering_stats: [cloudStat('ATTACKER', 'attack'), broken],
                 });
 
                 await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -732,7 +771,7 @@ describe('pruneSupabaseDataNotInLocal', () => {
         ])('leaves every stat alone when %s', async (_label, stats) => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(stats));
             const ops = fakeSupabase({
-                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+                engineering_stats: [cloudStat('ATTACKER', 'attack')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -751,7 +790,7 @@ describe('pruneSupabaseDataNotInLocal', () => {
         ])('leaves every stat alone when the local section is %s', async (_label, raw) => {
             if (raw !== null) localStorage.setItem(StorageKey.ENGINEERING_STATS, raw);
             const ops = fakeSupabase({
-                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+                engineering_stats: [cloudStat('ATTACKER', 'attack')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
@@ -762,7 +801,7 @@ describe('pruneSupabaseDataNotInLocal', () => {
         it('leaves every stat alone when the caller did not name the section', async () => {
             localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
             const ops = fakeSupabase({
-                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+                engineering_stats: [cloudStat('ATTACKER', 'attack')],
             });
 
             await pruneSupabaseDataNotInLocal(USER, [StorageKey.SHIPS]);

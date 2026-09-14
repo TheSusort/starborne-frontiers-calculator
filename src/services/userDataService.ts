@@ -823,40 +823,65 @@ const engineeringPairs = (entries: EngineeringStat[]): Set<string> | null => {
  * type because the delete is keyed on the composite identity.
  *
  * A row missing either identity column makes the WHOLE prune return nothing, the cloud-side
- * mirror of `engineeringPairs`' rule. There is no `updated_at` on this table to bound the
- * delete by; the concurrent writer upserts on the same natural key rather than moving a
- * row's identity.
+ * mirror of `engineeringPairs`' rule.
+ *
+ * `watermark` is the newest `updated_at` the read itself saw, and the caller bounds its
+ * delete by it; read `staleConfigRows`' doc for why that bound is the newest row read rather
+ * than a clock. Both writers of this table upsert on `(user_id, ship_type, stat_name)`, and
+ * a natural-key upsert can UPDATE a row the local section does not name — which is exactly a
+ * row already counted as stale — so the window is reachable from ordinary use.
  */
+interface StaleEngineering {
+    byShipType: Map<string, string[]>;
+    watermark: string | null;
+}
+
 async function staleEngineeringRows(
     userId: string,
     localPairs: Set<string>
-): Promise<Map<string, string[]>> {
+): Promise<StaleEngineering> {
     const rows = await readAllRows<Record<string, unknown>>(
         'engineering_stats',
-        'ship_type, stat_name',
+        'ship_type, stat_name, updated_at',
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (query: any) => query.eq('user_id', userId),
         ['ship_type', 'stat_name']
     );
-    if (!rows.every((row) => usableIdentity(row.ship_type) && usableIdentity(row.stat_name))) {
-        console.error('A cloud engineering stat is missing an identity column; leaving it alone');
-        return new Map();
+    if (
+        !rows.every((row) =>
+            ['ship_type', 'stat_name', 'updated_at'].every((key) => usableIdentity(row[key]))
+        )
+    ) {
+        console.error('A cloud engineering stat is missing a column; leaving the section alone');
+        return { byShipType: new Map(), watermark: null };
     }
-    const typed = rows as unknown as Array<{ ship_type: string; stat_name: string }>;
-    const stale = new Map<string, string[]>();
+    const typed = rows as unknown as Array<{
+        ship_type: string;
+        stat_name: string;
+        updated_at: string;
+    }>;
+    const watermark = typed.reduce<string | null>(
+        (newest, row) => (newest === null || row.updated_at > newest ? row.updated_at : newest),
+        null
+    );
+    const byShipType = new Map<string, string[]>();
     for (const row of typed) {
         if (localPairs.has(engineeringKey(row.ship_type, row.stat_name))) continue;
-        stale.set(row.ship_type, [...(stale.get(row.ship_type) ?? []), row.stat_name]);
+        byShipType.set(row.ship_type, [...(byShipType.get(row.ship_type) ?? []), row.stat_name]);
     }
-    return stale;
+    return { byShipType, watermark };
 }
 
 /**
- * Deletes the named stats of each ship type. The `ship_type` predicate is half the row's
- * identity: without it the statement takes those stat names out of every ship type the user
- * has.
+ * Deletes the named stats of each ship type, bounded by the read's watermark. The
+ * `ship_type` predicate is half the row's identity: without it the statement takes those
+ * stat names out of every ship type the user has.
  */
-async function deleteEngineeringStats(userId: string, stale: Map<string, string[]>): Promise<void> {
+async function deleteEngineeringStats(
+    userId: string,
+    stale: Map<string, string[]>,
+    bound: string
+): Promise<void> {
     for (const [shipType, names] of stale) {
         for (let i = 0; i < names.length; i += BATCH_SIZE) {
             const { error } = await supabase
@@ -864,7 +889,8 @@ async function deleteEngineeringStats(userId: string, stale: Map<string, string[
                 .delete()
                 .eq('user_id', userId)
                 .eq('ship_type', shipType)
-                .in('stat_name', names.slice(i, i + BATCH_SIZE));
+                .in('stat_name', names.slice(i, i + BATCH_SIZE))
+                .lte('updated_at', bound);
             if (error) throw error;
         }
     }
@@ -1042,7 +1068,7 @@ export async function pruneSupabaseDataNotInLocal(
     const staleEngineering =
         restored.has(StorageKey.ENGINEERING_STATS) && localEngineeringPairs !== null
             ? await staleEngineeringRows(userId, localEngineeringPairs)
-            : new Map<string, string[]>();
+            : { byShipType: new Map<string, string[]>(), watermark: null };
 
     // Encounter notes: votes and formations both FK to the note.
     if (staleNoteIds.length > 0) {
@@ -1086,8 +1112,12 @@ export async function pruneSupabaseDataNotInLocal(
 
     // No table references engineering_stats, and its rows carry their own composite
     // identity, so this is independent of every delete around it.
-    if (staleEngineering.size > 0) {
-        await deleteEngineeringStats(userId, staleEngineering);
+    if (staleEngineering.byShipType.size > 0 && staleEngineering.watermark !== null) {
+        await deleteEngineeringStats(
+            userId,
+            staleEngineering.byShipType,
+            staleEngineering.watermark
+        );
     }
 
     // Ships are deleted last of the parents: five tables reference a ship, and
