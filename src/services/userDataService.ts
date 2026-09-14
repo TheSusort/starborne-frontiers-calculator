@@ -5,7 +5,7 @@ import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { LocalEncounterNote } from '../types/encounters';
 import { Loadout, TeamLoadout } from '../types/loadout';
-import { EngineeringStats } from '../types/stats';
+import { EngineeringStat, EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
 import { AutogearTeam } from '../types/autogearTeam';
 import { tryEncodeGearStats } from '../utils/gear/statsCodec';
@@ -155,20 +155,21 @@ const loadLocalData = <T>(key: string, isArray: boolean = true): T =>
     readLocalSection<T>(key, isArray).value;
 
 /**
+ * The bar every identity column is held to, local or cloud: a non-empty string. It is
+ * deliberately the minimum consumers need, because an over-strict check is itself a way to
+ * lose data — an unreadable section is never pruned, but it is also never reconciled.
+ */
+const usableIdentity = (value: unknown): value is string =>
+    typeof value === 'string' && value.length > 0;
+
+/**
  * A prunable section is compared ROW BY ROW against the cloud, so the shape check has to
  * reach the rows: a list of objects with no `id` reads as a perfectly good empty id set, and
  * every cloud row then counts as stale. One unusable row makes the whole section unreadable
  * — a partial id set is a wrong answer, not a smaller one.
- *
- * The bar is deliberately the minimum consumers need, a non-empty string `id`: an
- * over-strict check here is itself a way to lose data, since an unreadable section is never
- * pruned but is also never reconciled.
  */
 const hasUsableId = (row: unknown): row is { id: string } =>
-    typeof row === 'object' &&
-    row !== null &&
-    typeof (row as { id?: unknown }).id === 'string' &&
-    (row as { id: string }).id.length > 0;
+    typeof row === 'object' && row !== null && usableIdentity((row as { id?: unknown }).id);
 
 const asPrunableSection = <T extends { id: string }>(
     label: string,
@@ -202,14 +203,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
-    // engineering_stats is REPLACED wholesale from this value, so the read has to reach the
-    // field that replacement walks: an object without a `stats` array yields no records, and
-    // replacing from it would delete every remote row and insert nothing.
-    const engineeringRead = readLocalSection<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
-    const engineeringSection = Array.isArray(engineeringRead.value?.stats)
-        ? engineeringRead
-        : { value: engineeringRead.value, present: false };
-    const engineeringStats = engineeringSection.value;
+    const engineeringStats = loadLocalData<EngineeringStats>(StorageKey.ENGINEERING_STATS, false);
     const autogearConfigs = loadLocalData<Record<string, SavedAutogearConfig>>(
         StorageKey.AUTOGEAR_CONFIGS,
         false
@@ -590,40 +584,32 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
         }
     }
 
-    // Step 6: Replace engineering stats.
+    // Step 6: Upsert engineering stats.
     //
-    // Gated on the local section being READABLE, not on it being non-empty. A user who
-    // cleared their engineering stats locally has a present, empty section, and skipping the
-    // delete for it would leave the cloud holding stats they removed. An unreadable section
-    // is left alone, the same rule `pruneSupabaseDataNotInLocal` follows.
-    if (engineeringSection.present) {
-        const statsRecords = (engineeringStats?.stats ?? [])
-            .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
-            .flatMap((stat) =>
-                (stat.stats || [])
-                    .filter((s) => s && s.name && s.value !== undefined)
-                    .map((s) => ({
-                        user_id: userId,
-                        ship_type: stat.shipType,
-                        stat_name: s.name,
-                        value: typeof s.value === 'number' ? s.value : parseFloat(s.value),
-                        type: s.type || 'flat',
-                    }))
-            )
-            .filter((record) => record.ship_type && record.stat_name && !isNaN(record.value));
+    // Nothing here removes a row: a stat the local section no longer names is
+    // `pruneSupabaseDataNotInLocal`'s to delete, so a rejected write leaves the user's cloud
+    // stats standing rather than emptied.
+    const statsRecords = (engineeringStats?.stats ?? [])
+        .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
+        .flatMap((stat) =>
+            (stat.stats || [])
+                .filter((s) => s && s.name && s.value !== undefined)
+                .map((s) => ({
+                    user_id: userId,
+                    ship_type: stat.shipType,
+                    stat_name: s.name,
+                    value: typeof s.value === 'number' ? s.value : parseFloat(s.value),
+                    type: s.type || 'flat',
+                }))
+        )
+        .filter((record) => record.ship_type && record.stat_name && !isNaN(record.value));
 
-        // Delete and re-insert (no stable composite PK for engineering_stats)
-        const { error: deleteError } = await supabase
+    for (let i = 0; i < statsRecords.length; i += CHILD_BATCH_SIZE) {
+        const batch = statsRecords.slice(i, i + CHILD_BATCH_SIZE);
+        const { error } = await supabase
             .from('engineering_stats')
-            .delete()
-            .eq('user_id', userId);
-        if (deleteError) throw deleteError;
-
-        for (let i = 0; i < statsRecords.length; i += CHILD_BATCH_SIZE) {
-            const batch = statsRecords.slice(i, i + CHILD_BATCH_SIZE);
-            const { error } = await supabase.from('engineering_stats').insert(batch);
-            if (error) throw error;
-        }
+            .upsert(batch, { onConflict: 'user_id,ship_type,stat_name' });
+        if (error) throw error;
     }
 
     // Step 7: Upsert autogear configs
@@ -693,12 +679,14 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
  * caller act on a partial picture: rows meant to go survive, and a truncated
  * CHILD read deletes some of a parent's children and then fails the parent
  * delete on the FK, aborting the sequence partway. Every row enumeration in
- * this file goes through `readAllRows`, ordered by `id` so pages cannot overlap
- * or skip; `idReadsArePaged.test.ts` fails if a select is added that does not.
+ * this file goes through `readAllRows`, ordered so pages cannot overlap or
+ * skip; `idReadsArePaged.test.ts` fails if a select is added that does not.
  *
- * Ordering is by `id` for every table, not by the columns being read: `id` is
- * the primary key everywhere here, so it is the one column guaranteed unique
- * and therefore the one that makes the page boundaries total.
+ * The order must be TOTAL over the rows the filter admits, or a page boundary
+ * can drop or repeat a row. `id` is that column for every table that has one,
+ * which is why it is the default. `engineering_stats` has no `id`: it is keyed
+ * `(user_id, ship_type, stat_name)`, and since every read here filters to one
+ * `user_id`, the remaining two columns are total over what the read returns.
  */
 const ID_PAGE_SIZE = 1000;
 
@@ -706,13 +694,17 @@ async function readAllRows<T>(
     table: string,
     columns: string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    filter: (query: any) => any
+    filter: (query: any) => any,
+    orderBy: readonly string[] = ['id']
 ): Promise<T[]> {
     const rows: T[] = [];
     for (let from = 0; ; from += ID_PAGE_SIZE) {
-        const { data, error } = await filter(supabase.from(table).select(columns))
-            .order('id')
-            .range(from, from + ID_PAGE_SIZE - 1);
+        const ordered = orderBy.reduce(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (query: any, column) => query.order(column),
+            filter(supabase.from(table).select(columns))
+        );
+        const { data, error } = await ordered.range(from, from + ID_PAGE_SIZE - 1);
         if (error) throw error;
         const page = (data ?? []) as T[];
         rows.push(...page);
@@ -738,8 +730,8 @@ async function staleIds(table: string, userId: string, localIds: Set<string>): P
 
 /**
  * Row ids of the user's autogear configs whose ship the local section does not
- * name. The only prune that matches on a column other than `id`, because the
- * local section is keyed by ship id and carries no row id at all.
+ * name. Matched on `ship_id` while the delete still goes by `id`: the local
+ * section is keyed by ship id and carries no row id at all.
  *
  * A row missing any of the three columns makes the WHOLE prune return nothing,
  * the cloud-side mirror of `asPrunableSection`'s rule: a row with no `ship_id`
@@ -771,9 +763,11 @@ async function staleConfigRows(userId: string, localShipIds: Set<string>): Promi
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (query: any) => query.eq('user_id', userId)
     );
-    const usable = (value: unknown): value is string =>
-        typeof value === 'string' && value.length > 0;
-    if (!rows.every((row) => ['id', 'ship_id', 'updated_at'].every((key) => usable(row[key])))) {
+    if (
+        !rows.every((row) =>
+            ['id', 'ship_id', 'updated_at'].every((key) => usableIdentity(row[key]))
+        )
+    ) {
         console.error('A cloud autogear config is missing a column; leaving the section alone');
         return { ids: [], watermark: null };
     }
@@ -789,6 +783,91 @@ async function staleConfigRows(userId: string, localShipIds: Set<string>): Promi
         ids: typed.filter((row) => !localShipIds.has(row.ship_id)).map((row) => row.id),
         watermark,
     };
+}
+
+/**
+ * An `engineering_stats` row is identified by `(ship_type, stat_name)` — the table has no
+ * `id` — and both sides of the comparison key on this string. The separator is safe because
+ * the columns hold `ShipTypeName` and `StatName`, closed unions of bare identifiers.
+ */
+const engineeringKey = (shipType: string, statName: string) => `${shipType}\u0000${statName}`;
+
+/**
+ * The pairs the local engineering section names, or null when any entry is unusable. One
+ * unusable entry makes the whole section unreadable, for the reason `asPrunableSection`
+ * refuses a row with no id: the pairs it fails to contribute read as stale, and the cloud
+ * rows holding them would be deleted from a local value that describes nothing.
+ */
+const engineeringPairs = (entries: EngineeringStat[]): Set<string> | null => {
+    const pairs = new Set<string>();
+    for (const entry of entries) {
+        if (!entry || !usableIdentity(entry.shipType) || !Array.isArray(entry.stats)) {
+            console.error(
+                'Local section engineering stats holds an entry with no ship type or stats'
+            );
+            return null;
+        }
+        for (const stat of entry.stats) {
+            if (!stat || !usableIdentity(stat.name)) {
+                console.error('Local section engineering stats holds a stat with no name');
+                return null;
+            }
+            pairs.add(engineeringKey(entry.shipType, stat.name));
+        }
+    }
+    return pairs;
+};
+
+/**
+ * The user's cloud engineering stats that the local section does not name, grouped by ship
+ * type because the delete is keyed on the composite identity.
+ *
+ * A row missing either identity column makes the WHOLE prune return nothing, the cloud-side
+ * mirror of `engineeringPairs`' rule. There is no `updated_at` on this table to bound the
+ * delete by; the concurrent writer upserts on the same natural key rather than moving a
+ * row's identity.
+ */
+async function staleEngineeringRows(
+    userId: string,
+    localPairs: Set<string>
+): Promise<Map<string, string[]>> {
+    const rows = await readAllRows<Record<string, unknown>>(
+        'engineering_stats',
+        'ship_type, stat_name',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (query: any) => query.eq('user_id', userId),
+        ['ship_type', 'stat_name']
+    );
+    if (!rows.every((row) => usableIdentity(row.ship_type) && usableIdentity(row.stat_name))) {
+        console.error('A cloud engineering stat is missing an identity column; leaving it alone');
+        return new Map();
+    }
+    const typed = rows as unknown as Array<{ ship_type: string; stat_name: string }>;
+    const stale = new Map<string, string[]>();
+    for (const row of typed) {
+        if (localPairs.has(engineeringKey(row.ship_type, row.stat_name))) continue;
+        stale.set(row.ship_type, [...(stale.get(row.ship_type) ?? []), row.stat_name]);
+    }
+    return stale;
+}
+
+/**
+ * Deletes the named stats of each ship type. The `ship_type` predicate is half the row's
+ * identity: without it the statement takes those stat names out of every ship type the user
+ * has.
+ */
+async function deleteEngineeringStats(userId: string, stale: Map<string, string[]>): Promise<void> {
+    for (const [shipType, names] of stale) {
+        for (let i = 0; i < names.length; i += BATCH_SIZE) {
+            const { error } = await supabase
+                .from('engineering_stats')
+                .delete()
+                .eq('user_id', userId)
+                .eq('ship_type', shipType)
+                .in('stat_name', names.slice(i, i + BATCH_SIZE));
+            if (error) throw error;
+        }
+    }
 }
 
 /**
@@ -855,12 +934,13 @@ export const PRUNABLE_SECTIONS: readonly string[] = [
     StorageKey.TEAM_LOADOUTS,
     StorageKey.AUTOGEAR_TEAMS,
     StorageKey.AUTOGEAR_CONFIGS,
+    StorageKey.ENGINEERING_STATS,
 ];
 
 /**
- * Removes the ships, gear and encounter notes a user has in Supabase but not in
- * their current local snapshot, so a restore lands the backup as a snapshot
- * rather than merging it into whatever was already in the cloud.
+ * Removes what a user has in Supabase but not in their current local snapshot,
+ * across the sections `PRUNABLE_SECTIONS` names, so a restore lands the backup
+ * as a snapshot rather than merging it into whatever was already in the cloud.
  *
  * Runs only AFTER `reuploadLocalDataToSupabase` has resolved: every row the
  * local snapshot describes already exists remotely by then, so a failure here
@@ -892,6 +972,17 @@ export async function pruneSupabaseDataNotInLocal(
         StorageKey.AUTOGEAR_CONFIGS,
         false
     );
+    // An OBJECT section whose rows live under `stats`: `present` admits any object, and one
+    // carrying no `stats` array names no pair at all, which would read as every cloud row
+    // stale. Null when the section is unusable in any of those ways.
+    const localEngineering = readLocalSection<EngineeringStats>(
+        StorageKey.ENGINEERING_STATS,
+        false
+    );
+    const localEngineeringPairs =
+        localEngineering.present && Array.isArray(localEngineering.value?.stats)
+            ? engineeringPairs(localEngineering.value.stats)
+            : null;
 
     // IndexedDB resolves `undefined` for a key it has no record for, which is a
     // different fact from a record holding an empty array: the first is a
@@ -938,9 +1029,8 @@ export async function pruneSupabaseDataNotInLocal(
         restored.has(StorageKey.AUTOGEAR_TEAMS) && localAutogearTeams.present
             ? await staleIds('autogear_teams', userId, idSet(localAutogearTeams.value))
             : [];
-    // autogear_configs is the one table whose local key is not the row's `id`:
-    // the local section is keyed by ship id, so the comparison is ship id
-    // against ship id while the delete still goes by `id`. Comparing instead
+    // The local autogear-config section is keyed by ship id, so the comparison
+    // is ship id against ship id while the delete still goes by `id`. Comparing instead
     // against the ships being pruned would miss a config removed for a ship the
     // snapshot KEEPS (#521). The `(user_id, ship_id)` conflict target the
     // upsert above uses is a PRODUCTION constraint that
@@ -949,6 +1039,10 @@ export async function pruneSupabaseDataNotInLocal(
         restored.has(StorageKey.AUTOGEAR_CONFIGS) && localAutogearConfigs.present
             ? await staleConfigRows(userId, new Set(Object.keys(localAutogearConfigs.value)))
             : { ids: [], watermark: null };
+    const staleEngineering =
+        restored.has(StorageKey.ENGINEERING_STATS) && localEngineeringPairs !== null
+            ? await staleEngineeringRows(userId, localEngineeringPairs)
+            : new Map<string, string[]>();
 
     // Encounter notes: votes and formations both FK to the note.
     if (staleNoteIds.length > 0) {
@@ -988,6 +1082,12 @@ export async function pruneSupabaseDataNotInLocal(
             'updated_at',
             staleConfigs.watermark
         );
+    }
+
+    // No table references engineering_stats, and its rows carry their own composite
+    // identity, so this is independent of every delete around it.
+    if (staleEngineering.size > 0) {
+        await deleteEngineeringStats(userId, staleEngineering);
     }
 
     // Ships are deleted last of the parents: five tables reference a ship, and

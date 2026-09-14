@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { pruneSupabaseDataNotInLocal } from '../../services/userDataService';
+import { pruneSupabaseDataNotInLocal, PRUNABLE_SECTIONS } from '../../services/userDataService';
 import { StorageKey, inventoryCacheKey } from '../../constants/storage';
 import { getFromIndexedDB } from '../../hooks/useStorage';
 import { deletedValues, deletesOn, fakeSupabase, indexOfDelete, PAGE_SIZE } from './fakeSupabase';
@@ -18,6 +18,7 @@ const ALL_SECTIONS = [
     StorageKey.TEAM_LOADOUTS,
     StorageKey.AUTOGEAR_TEAMS,
     StorageKey.AUTOGEAR_CONFIGS,
+    StorageKey.ENGINEERING_STATS,
 ];
 
 vi.mock('../../config/supabase', () => ({ supabase: { from: vi.fn() } }));
@@ -28,6 +29,12 @@ describe('pruneSupabaseDataNotInLocal', () => {
         vi.clearAllMocks();
         localStorage.clear();
         (getFromIndexedDB as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    });
+
+    // A section added to the service and not to this fixture would be exercised by
+    // no test here, and every case below would pass while never reaching it.
+    it('names every section the service knows how to prune', () => {
+        expect([...ALL_SECTIONS].sort()).toEqual([...PRUNABLE_SECTIONS].sort());
     });
 
     it('deletes only the cloud ships that the local snapshot does not have', async () => {
@@ -605,6 +612,162 @@ describe('pruneSupabaseDataNotInLocal', () => {
             for (const select of selects) {
                 expect(select.ordered, 'every paged read must be ordered').toBe(true);
             }
+        });
+    });
+
+    /**
+     * engineering_stats is keyed `(user_id, ship_type, stat_name)` and has no `id`, so both
+     * the read's order and the delete's predicates are composite. The local section is one
+     * object whose rows live under `stats`, keyed by the same pair.
+     */
+    describe('engineering stats', () => {
+        const engineering = (stats: unknown[]) => JSON.stringify({ stats });
+
+        const attacker = (names: string[]) => [
+            {
+                shipType: 'ATTACKER',
+                stats: names.map((name) => ({ name, value: 1, type: 'flat' })),
+            },
+        ];
+
+        it('deletes the cloud stats the local section does not name, and keeps the ones it does', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(attacker(['attack'])));
+            const ops = fakeSupabase({
+                engineering_stats: [
+                    { ship_type: 'ATTACKER', stat_name: 'attack' },
+                    { ship_type: 'ATTACKER', stat_name: 'hp' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletedValues(ops, 'engineering_stats')).toEqual(['hp']);
+        });
+
+        // Without the ship_type predicate the delete takes that stat name out of EVERY ship
+        // type, so the surviving row here is the whole point of asserting on all three.
+        it('scopes the delete to the user, the ship type and the stat names', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(attacker(['attack'])));
+            const ops = fakeSupabase({
+                engineering_stats: [
+                    { ship_type: 'ATTACKER', stat_name: 'attack' },
+                    { ship_type: 'DEFENDER', stat_name: 'attack' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const deletes = deletesOn(ops, 'engineering_stats');
+            expect(deletes).toHaveLength(1);
+            expect(deletes[0].filters).toEqual([
+                { column: 'user_id', values: [USER] },
+                { column: 'ship_type', values: ['DEFENDER'] },
+                { column: 'stat_name', values: ['attack'] },
+            ]);
+        });
+
+        // PostgREST errors on `order=id` for a table with no such column, so the read would
+        // fail outright in production while an unordered fake served it happily.
+        it('orders the paged read by the columns the table actually has', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            const ops = fakeSupabase({
+                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            const selects = ops.filter(
+                (op) => op.table === 'engineering_stats' && op.kind === 'select'
+            );
+            expect(selects.length).toBeGreaterThan(0);
+            for (const select of selects) {
+                expect(select.orderedBy).toEqual(['ship_type', 'stat_name']);
+            }
+        });
+
+        it('prunes every stat when the local section is there and holds no entries', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            const ops = fakeSupabase({
+                engineering_stats: [
+                    { ship_type: 'ATTACKER', stat_name: 'attack' },
+                    { ship_type: 'DEFENDER', stat_name: 'hp' },
+                ],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletedValues(ops, 'engineering_stats')).toEqual(['attack', 'hp']);
+        });
+
+        // The cloud-side mirror of the local shape check: a row with no identity is in no
+        // local key set, so it and every row read beside it would count as stale.
+        it.each([['stat_name'], ['ship_type']])(
+            'leaves every stat alone when a cloud row carries no %s',
+            async (column) => {
+                localStorage.setItem(
+                    StorageKey.ENGINEERING_STATS,
+                    engineering(attacker(['attack']))
+                );
+                const broken: Record<string, string> = {
+                    ship_type: 'DEFENDER',
+                    stat_name: 'hp',
+                };
+                delete broken[column];
+                const ops = fakeSupabase({
+                    engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }, broken],
+                });
+
+                await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+                expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
+            }
+        );
+
+        // A local entry with no ship type or a stat with no name contributes no pair, so its
+        // cloud rows would read as stale from a local value that describes nothing.
+        it.each([
+            ['an entry carries no ship type', [{ stats: [{ name: 'attack', value: 1 }] }]],
+            ['a stat carries no name', [{ shipType: 'ATTACKER', stats: [{ value: 1 }] }]],
+            ['an entry carries no stats array', [{ shipType: 'ATTACKER' }]],
+        ])('leaves every stat alone when %s', async (_label, stats) => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering(stats));
+            const ops = fakeSupabase({
+                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
+        });
+
+        // The section is an OBJECT, so `readLocalSection` accepts any object: `{}` and an
+        // object whose `stats` is not an array read as present and name no pair at all.
+        it.each([
+            ['absent entirely', null],
+            ['unparseable JSON', '{ not json'],
+            ['null', 'null'],
+            ['an object with no stats', '{}'],
+            ['an object whose stats is not a list', '{"stats":5}'],
+        ])('leaves every stat alone when the local section is %s', async (_label, raw) => {
+            if (raw !== null) localStorage.setItem(StorageKey.ENGINEERING_STATS, raw);
+            const ops = fakeSupabase({
+                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, ALL_SECTIONS);
+
+            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
+        });
+
+        it('leaves every stat alone when the caller did not name the section', async () => {
+            localStorage.setItem(StorageKey.ENGINEERING_STATS, engineering([]));
+            const ops = fakeSupabase({
+                engineering_stats: [{ ship_type: 'ATTACKER', stat_name: 'attack' }],
+            });
+
+            await pruneSupabaseDataNotInLocal(USER, [StorageKey.SHIPS]);
+
+            expect(deletesOn(ops, 'engineering_stats')).toEqual([]);
         });
     });
 });
