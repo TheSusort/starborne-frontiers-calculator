@@ -7,25 +7,21 @@
  * duration) behind a condition, so it cannot ride `doesntBreakStasis` — a static boolean would
  * exempt Zenith on a board where it holds no shield at all.
  *
- * THE PER-HIT AXIS. `attackBreaksStasis` re-reads the pool at every break-mark, and the covered
- * (non-anchor) footprint mark is read at `onVictimPreImpact` — once per SUB-ATTACK per victim,
- * before that victim's own hit resolves. The fixture below turns that into an observable: the
- * anchor victim wears Reflect thorns sized so that ONE sub-attack's bounce-back leaves the
- * attacker's pool alive and TWO drain it. The attacker's cast then breaks the covered victim's
- * Stasis at `hits: 2` and not at `hits: 1` — the ONLY difference between the two runs is the hit
- * count, so the exemption demonstrably lapses PART-WAY THROUGH one cast.
+ * THE PER-HIT AXIS. On a positional cast the gate is answered once per (hit × victim), AT IMPACT,
+ * for the anchor and the covered footprint alike: both marks are made at `onVictimPreImpact`,
+ * which runs once per SUB-ATTACK per victim, before that victim's own hit resolves. The fixture
+ * below turns that into an observable twice over. For the covered victim, the anchor wears Reflect
+ * thorns sized so ONE sub-attack's bounce-back leaves the attacker's pool alive and TWO drain it,
+ * and the cast breaks the covered victim's Stasis at `hits: 2` and not at `hits: 1`. For the
+ * anchor, thorns three times that size empty the pool in a single bounce, and the anchor's own
+ * Stasis then breaks at `hits: 2` and not at `hits: 1`. In each pair the ONLY difference between
+ * the two runs is the hit count, so the exemption demonstrably lapses PART-WAY THROUGH one cast.
  *
  * THE AT-IMPACT DISCRIMINATOR. Reading the gate before impact also means a victim's OWN thorns
  * can never un-exempt the hit that triggered them: the pool is read as it stood when the hit
  * landed, not after that hit's own reflect bounce drained it. `coveredReflectPct` gives the
- * covered victim its own thorns sized to empty the pool in a single bounce, proving that case.
- *
- * WHAT THIS CANNOT SHOW, and why. The ANCHOR victim's mark is made by `onHitBreakStasis`, which
- * playerTurn.ts fires once per CAST, before the positional hit loop — so the anchor's gate is read
- * once per cast no matter what the pool does mid-cast. Lifting the anchor to per-hit means moving
- * its re-apply resolution (engine.ts's `stasisBreakPending` write) after the positional drive; that
- * reorder is out of this file's scope, and the anchor assertions below pin the current behaviour
- * rather than the desired one.
+ * covered victim its own thorns sized to empty the pool in a single bounce, proving that case;
+ * the `hits: 1` half of the anchor pair proves it on the anchor side.
  *
  * HARNESS. Board layout, stasis-bot/culler staging and the reduce-by-one observation model are
  * lifted from `perFootprintStasisBreak.integration.test.ts` — read its header for the grid
@@ -330,8 +326,9 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
         // The pool really was emptied inside the cast. It is re-granted at every round start
         // (`granted` is 100 in every round of every arm), so a zero here is a mid-cast drain.
         expect(r.attackerPool.some((p) => p === 0)).toBe(true);
-        // The ANCHOR's gate was answered once, at cast time, while the pool was still full — see
-        // this file's header on the anchor's once-per-cast granularity. It stays exempt.
+        // The anchor is shielded at BOTH impacts here — the pool is 100 at the first and 50 at
+        // the second, because one bounce does not empty it. It stays exempt for the right reason:
+        // every hit that landed on it connected while the pool was up.
         expect(r.anchorFired).toHaveLength(0);
     });
 
@@ -343,6 +340,26 @@ describe('shield-gated Stasis exemption — answered per HIT inside one cast', (
         const r = run({ hits: 1, reflectPct: 0, coveredReflectPct: 10 });
         expect(r.coveredFired).toHaveLength(0);
         // The bounce really did empty the pool — otherwise the arm asserts nothing.
+        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+    });
+
+    // THE LIFT: thorns big enough to empty the pool in ONE bounce. Sub-attack 0's anchor hit
+    // connects with the pool full (exempt) and empties it; sub-attack 1's anchor hit connects
+    // with the pool at zero, so THAT hit breaks the anchor's Stasis. The arm above cannot show
+    // this — its thorns survive one bounce, so its anchor is shielded at both impacts.
+    it('hits:2 + draining thorns — the SECOND hit breaks the ANCHOR', () => {
+        const r = run({ hits: 2, reflectPct: 3 });
+        expect(r.anchorFired.length).toBeGreaterThan(0);
+        expect(r.attackerPool.some((p) => p === 0)).toBe(true);
+    });
+
+    // Its partner, and the reason the arm above is not just "more hits break more things":
+    // the SAME draining thorns over ONE hit leave the anchor exempt, because the only hit that
+    // landed on it connected while the pool was up. The pair is a two-point measurement — hit
+    // count is the only variable, and it moves the answer.
+    it('hits:1 + draining thorns — the anchor stays exempt, its own bounce does not count', () => {
+        const r = run({ hits: 1, reflectPct: 3 });
+        expect(r.anchorFired).toHaveLength(0);
         expect(r.attackerPool.some((p) => p === 0)).toBe(true);
     });
 });
