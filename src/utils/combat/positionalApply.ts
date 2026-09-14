@@ -299,6 +299,12 @@ export function applyPositionalDamage(args: {
         didCrit: boolean,
         subAttackIndex?: number
     ) => void;
+    /** Fires once per (sub-attack x victim), immediately BEFORE the victim takes the hit —
+     *  so it observes the attacker's state as it stands AT IMPACT, before this hit's own
+     *  consequences (reflect thorns resolve inline inside `applyToVictim`). A gate that must
+     *  not be un-answered by damage the hit itself caused reads here, not in
+     *  `onVictimResolved`. */
+    onVictimPreImpact?: (victim: CombatActor, isAnchor: boolean, subAttackIndex: number) => void;
     /**
      * OPTIONAL per-sub-hit incoming %-reduction hook. Invoked per footprint victim with
      * that victim's per-hit crit outcome; the returned percentage points are folded additively
@@ -371,6 +377,7 @@ export function applyPositionalDamage(args: {
         applyToVictim,
         emitHit,
         onVictimResolved,
+        onVictimPreImpact,
         incomingReductionFor,
         outgoingAmplificationFor,
         rollVictimCrit,
@@ -463,6 +470,7 @@ export function applyPositionalDamage(args: {
             const ampPct = outgoingAmplificationFor?.(victim, didCrit, h) ?? 0;
             const dmg = ampPct !== 0 ? dmgBase * (1 + ampPct / 100) : dmgBase;
             const rawDmg = ampPct !== 0 ? rawBase * (1 + ampPct / 100) : rawBase;
+            onVictimPreImpact?.(victim, isAnchor, h);
             const outcome = applyToVictim(
                 victim,
                 dmg,
