@@ -2,18 +2,17 @@
 -- `updated_at <= <max updated_at seen in the read>`, so that a stat saved
 -- between the stale read and the delete survives the prune.
 --
--- The window is reachable because both writers upsert on the natural key
--- `(user_id, ship_type, stat_name)`: EngineeringStatsProvider.saveEngineeringStats
--- and step 6 of reuploadLocalDataToSupabase. A natural-key upsert can UPDATE a
--- cloud row the local snapshot does not name — which is exactly a row the prune
--- has already counted as stale.
+-- The window is reachable because every writer of this table upserts on the
+-- natural key `(user_id, ship_type, stat_name)`. A natural-key upsert can UPDATE
+-- a cloud row the local snapshot does not name — which is exactly a row the
+-- prune has already counted as stale.
 --
 -- The column is added here rather than at table creation, so existing rows need
 -- a backfill: without one their NULL `updated_at` fails `<=` and the prune
 -- silently stops removing them.
 --
 -- The gate is inert without the trigger: `updated_at`'s DEFAULT applies only on
--- INSERT, and neither upsert site sets the column, so the UPDATE branch of an
+-- INSERT, and no upsert site sets the column, so the UPDATE branch of an
 -- upsert would leave the timestamp at its original value.
 --
 -- Reuses `public.update_updated_at_column()`, declared in

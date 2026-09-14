@@ -10,6 +10,11 @@ import { EngineeringStats } from '../types/stats';
 import { WishlistEntry } from '../types/wishlist';
 import { AutogearTeam } from '../types/autogearTeam';
 import { getFromIndexedDB, setInIndexedDB } from '../hooks/useStorage';
+import {
+    engineeringRecords,
+    upsertEngineeringStats,
+    pruneEngineeringStatsNotNamed,
+} from '../services/userDataService';
 import { tryEncodeGearStats } from './gear/statsCodec';
 
 interface MigrationResult {
@@ -931,51 +936,11 @@ export const syncMigratedDataToSupabase = async (
         // Step 7: Upload engineering stats
         if (engineeringStats?.stats && engineeringStats.stats.length > 0) {
             try {
-                // Format and validate engineering stats more carefully
-                const statsRecords = engineeringStats.stats
-                    .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
-                    .flatMap((stat) =>
-                        (stat.stats || [])
-                            .filter((s) => s && s.name && s.value !== undefined)
-                            .map((s) => ({
-                                user_id: userId,
-                                ship_type: stat.shipType,
-                                stat_name: s.name,
-                                value: typeof s.value === 'number' ? s.value : parseFloat(s.value),
-                                type: s.type || 'flat',
-                            }))
-                    )
-                    .filter(
-                        (record) => record.ship_type && record.stat_name && !isNaN(record.value)
-                    );
-
-                // delete all engineering stats for the user
-                const { error: deleteError } = await supabase
-                    .from('engineering_stats')
-                    .delete()
-                    .eq('user_id', userId);
-
-                if (deleteError) throw deleteError;
-
-                if (statsRecords.length > 0) {
-                    // Insert in smaller batches to prevent errors
-                    const batchSize = 50;
-                    for (let i = 0; i < statsRecords.length; i += batchSize) {
-                        const batch = statsRecords.slice(i, i + batchSize);
-                        const { error: statsError } = await supabase
-                            .from('engineering_stats')
-                            .insert(batch);
-
-                        if (statsError) {
-                            console.error(
-                                'Error inserting engineering stats batch:',
-                                statsError,
-                                batch
-                            );
-                            throw statsError;
-                        }
-                    }
-                }
+                // No prune follows this path, so removing what the local section no longer
+                // names is this step's job — after the write, never before it.
+                const statsRecords = engineeringRecords(userId, engineeringStats);
+                await upsertEngineeringStats(userId, statsRecords, supabase);
+                await pruneEngineeringStatsNotNamed(userId, statsRecords, supabase);
             } catch (error) {
                 console.error('Error migrating engineering stats:', error);
                 // Continue instead of halting completely

@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { migratePlayerData } from '../../utils/migratePlayerData';
+import { migratePlayerData, syncMigratedDataToSupabase } from '../../utils/migratePlayerData';
+import { fakeSupabase } from '../services/fakeSupabase';
+import { EngineeringStats } from '../../types/stats';
 import { StorageKey, inventoryCacheKey } from '../../constants/storage';
 import { getFromIndexedDB, setInIndexedDB } from '../../hooks/useStorage';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { Loadout, TeamLoadout } from '../../types/loadout';
 
-vi.mock('../../config/supabase', () => ({ supabase: { from: vi.fn() } }));
+vi.mock('../../config/supabase', () => ({
+    supabase: {
+        from: vi.fn(),
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+    },
+}));
 vi.mock('../../hooks/useStorage', () => ({
     getFromIndexedDB: vi.fn(),
     setInIndexedDB: vi.fn().mockResolvedValue(undefined),
@@ -168,5 +175,108 @@ describe('migratePlayerData', () => {
         const result = await migratePlayerData(USER_ID);
 
         expect(result.inventory[2].calibration?.shipId).toBe(result.ships[0].id);
+    });
+});
+
+/**
+ * The sign-in and import paths run no `pruneSupabaseDataNotInLocal` afterwards, so this step
+ * is the only thing that removes an engineering stat the user dropped locally. It replaced
+ * the section with a delete followed by an insert, inside a `catch` that logs and continues:
+ * a rejected insert emptied the user's cloud stats silently.
+ */
+describe('syncMigratedDataToSupabase engineering stats', () => {
+    const EMPTY = {
+        ships: [],
+        inventory: [],
+        encounters: [],
+        loadouts: [],
+        teamLoadouts: [],
+        wishlistEntries: [],
+        autogearTeams: [],
+    };
+
+    const section = (entries: Array<{ shipType: string; names: string[] }>) => ({
+        stats: entries.map(({ shipType, names }) => ({
+            shipType,
+            stats: names.map((name) => ({ name, value: 1, type: 'flat' })),
+        })),
+    });
+
+    const cloudRow = (shipType: string, statName: string) => ({
+        user_id: USER_ID,
+        ship_type: shipType,
+        stat_name: statName,
+        value: 1,
+        type: 'flat',
+    });
+
+    const sync = async (
+        entries: Array<{ shipType: string; names: string[] }>,
+        cloud: Array<Record<string, unknown>>
+    ) => {
+        const ops = fakeSupabase({ engineering_stats: cloud });
+        await syncMigratedDataToSupabase(USER_ID, {
+            ...EMPTY,
+            engineeringStats: section(entries) as EngineeringStats,
+        });
+        return ops.filter((op) => op.table === 'engineering_stats');
+    };
+
+    it('upserts on the composite key and never deletes the whole section', async () => {
+        const ops = await sync(
+            [{ shipType: 'ATTACKER', names: ['attack'] }],
+            [cloudRow('ATTACKER', 'attack')]
+        );
+
+        const upsert = ops.find((op) => op.kind === 'upsert');
+        expect(upsert?.onConflict).toBe('user_id,ship_type,stat_name');
+        // The old shape: a delete keyed on user_id alone, taking every row the user has.
+        expect(ops.filter((op) => op.kind === 'delete' && op.filters?.length === 1)).toHaveLength(
+            0
+        );
+    });
+
+    it('writes before it removes, so a rejected write leaves the cloud standing', async () => {
+        const ops = await sync(
+            [{ shipType: 'ATTACKER', names: ['attack'] }],
+            [cloudRow('ATTACKER', 'attack')]
+        );
+
+        expect(ops.findIndex((op) => op.kind === 'upsert')).toBeLessThan(
+            ops.findIndex((op) => op.kind === 'delete')
+        );
+    });
+
+    it('removes a stat name the section no longer carries for a ship type it names', async () => {
+        const ops = await sync(
+            [{ shipType: 'ATTACKER', names: ['attack'] }],
+            [cloudRow('ATTACKER', 'attack'), cloudRow('ATTACKER', 'hp')]
+        );
+
+        expect(ops.filter((op) => op.kind === 'delete')).toContainEqual(
+            expect.objectContaining({
+                filters: [
+                    { column: 'user_id', values: [USER_ID] },
+                    { column: 'ship_type', values: ['ATTACKER'] },
+                    { column: 'stat_name', values: ['attack'], negated: true },
+                ],
+            })
+        );
+    });
+
+    it('removes a ship type the section drops entirely, which no per-type delete names', async () => {
+        const ops = await sync(
+            [{ shipType: 'ATTACKER', names: ['attack'] }],
+            [cloudRow('ATTACKER', 'attack'), cloudRow('DEFENDER', 'hp')]
+        );
+
+        expect(ops.filter((op) => op.kind === 'delete')).toContainEqual(
+            expect.objectContaining({
+                filters: [
+                    { column: 'user_id', values: [USER_ID] },
+                    { column: 'ship_type', values: ['ATTACKER'], negated: true },
+                ],
+            })
+        );
     });
 });

@@ -184,22 +184,25 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
                 // stale. PostgREST has no empty `in` list: a ship type saved with no stats
                 // takes the unfiltered delete instead of `not in ()`. The name list needs
                 // no escaping because `StatName` is a closed union of bare identifiers.
-                for (const stat of statsToSave.stats) {
-                    const savedNames = stat.stats.map((s) => s.name);
-                    const rowsOfShipType = supabase
-                        .from('engineering_stats')
-                        .delete()
-                        .eq('user_id', activeProfileId)
-                        .eq('ship_type', stat.shipType);
-                    const { error: deleteError } = await (savedNames.length > 0
-                        ? rowsOfShipType.not(
-                              'stat_name',
-                              'in',
-                              `(${savedNames.map((name) => `"${name}"`).join(',')})`
-                          )
-                        : rowsOfShipType);
-                    if (deleteError) throw deleteError;
-                }
+                const pruned = await Promise.all(
+                    statsToSave.stats.map((stat) => {
+                        const savedNames = stat.stats.map((s) => s.name);
+                        const rowsOfShipType = supabase
+                            .from('engineering_stats')
+                            .delete()
+                            .eq('user_id', activeProfileId)
+                            .eq('ship_type', stat.shipType);
+                        return savedNames.length > 0
+                            ? rowsOfShipType.not(
+                                  'stat_name',
+                                  'in',
+                                  `(${savedNames.map((name) => `"${name}"`).join(',')})`
+                              )
+                            : rowsOfShipType;
+                    })
+                );
+                const deleteError = pruned.find((result) => result.error)?.error;
+                if (deleteError) throw deleteError;
 
                 addNotification('success', 'Engineering stats saved successfully');
             } catch (error) {

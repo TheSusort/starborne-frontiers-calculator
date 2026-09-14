@@ -178,6 +178,17 @@ export const fakeSupabase = (cloud: Cloud, options: FakeSupabaseOptions = {}) =>
                 return chain;
             },
             is: () => chain,
+            // PostgREST's `single`: one row or none, never a list. Recorded as the select it
+            // is, so a caller that reads a scalar row still shows up in `ops`.
+            single: () => ({
+                then: (
+                    resolve: (r: { data: Row | null; error: { message: string } | null }) => void
+                ) => {
+                    ops.push({ ...state });
+                    const rows = live[table] ?? [];
+                    resolve({ data: rows[0] ?? null, error: null });
+                },
+            }),
             // Recorded, not evaluated: the fake serves rows the way it does for
             // every other predicate, and tests assert on the bound that was sent.
             lte: (column: string, value: unknown) => {

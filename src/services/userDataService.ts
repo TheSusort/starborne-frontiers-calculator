@@ -1,3 +1,4 @@
+import { SupabaseClient } from '@supabase/supabase-js';
 import { supabase } from '../config/supabase';
 import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { getFromIndexedDB } from '../hooks/useStorage';
@@ -198,6 +199,102 @@ const readPrunableSection = <T extends { id: string }>(key: string): LocalSectio
  * the section here instead. A caller about to prune must exclude what it is told, or it
  * removes cloud rows against a local picture the upload never finished writing.
  */
+/** One `engineering_stats` row as the table stores it. */
+export interface EngineeringRecord {
+    user_id: string;
+    ship_type: string;
+    stat_name: string;
+    value: number;
+    type: string;
+}
+
+/**
+ * The cloud rows an engineering section describes. Entries that carry no ship type, no stat
+ * name or an unparseable value are dropped rather than written: the column is `NOT NULL`
+ * numeric, and one bad entry would reject the whole batch it lands in.
+ */
+export const engineeringRecords = (
+    userId: string,
+    section: EngineeringStats | undefined
+): EngineeringRecord[] =>
+    (section?.stats ?? [])
+        .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
+        .flatMap((stat) =>
+            (stat.stats || [])
+                .filter((s) => s && s.name && s.value !== undefined)
+                .map((s) => ({
+                    user_id: userId,
+                    ship_type: stat.shipType,
+                    stat_name: s.name,
+                    value: typeof s.value === 'number' ? s.value : parseFloat(s.value),
+                    type: s.type || 'flat',
+                }))
+        )
+        .filter((record) => record.ship_type && record.stat_name && !isNaN(record.value));
+
+/**
+ * Writes engineering rows on their composite identity. Removing a row the section no longer
+ * names is a separate step at every call site, so a rejected write here leaves the user's
+ * cloud stats standing rather than emptied.
+ */
+export async function upsertEngineeringStats(
+    userId: string,
+    records: EngineeringRecord[],
+    client: SupabaseClient = supabase
+): Promise<void> {
+    for (let i = 0; i < records.length; i += CHILD_BATCH_SIZE) {
+        const { error } = await client
+            .from('engineering_stats')
+            .upsert(records.slice(i, i + CHILD_BATCH_SIZE), {
+                onConflict: 'user_id,ship_type,stat_name',
+            });
+        if (error) throw error;
+    }
+}
+
+/**
+ * Removes every cloud engineering row the section does not name, for a caller that holds the
+ * user's COMPLETE local picture and runs no `pruneSupabaseDataNotInLocal` afterwards.
+ *
+ * Runs only after `upsertEngineeringStats` has resolved, so a failure leaves extra rows
+ * rather than missing ones. Two statements are needed because a ship type absent from the
+ * section entirely is named by no per-type delete: PostgREST has no empty `in` list, so a
+ * section with no usable rows at all is left alone rather than sent `not in ()`.
+ */
+export async function pruneEngineeringStatsNotNamed(
+    userId: string,
+    records: EngineeringRecord[],
+    client: SupabaseClient = supabase
+): Promise<void> {
+    const byShipType = new Map<string, string[]>();
+    for (const record of records) {
+        byShipType.set(record.ship_type, [
+            ...(byShipType.get(record.ship_type) ?? []),
+            record.stat_name,
+        ]);
+    }
+    if (byShipType.size === 0) return;
+
+    const list = (values: string[]) => `(${values.map((value) => `"${value}"`).join(',')})`;
+
+    for (const [shipType, names] of byShipType) {
+        const { error } = await client
+            .from('engineering_stats')
+            .delete()
+            .eq('user_id', userId)
+            .eq('ship_type', shipType)
+            .not('stat_name', 'in', list(names));
+        if (error) throw error;
+    }
+
+    const { error } = await client
+        .from('engineering_stats')
+        .delete()
+        .eq('user_id', userId)
+        .not('ship_type', 'in', list([...byShipType.keys()]));
+    if (error) throw error;
+}
+
 export async function reuploadLocalDataToSupabase(userId: string): Promise<string[]> {
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS);
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
@@ -589,28 +686,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
     // Nothing here removes a row: a stat the local section no longer names is
     // `pruneSupabaseDataNotInLocal`'s to delete, so a rejected write leaves the user's cloud
     // stats standing rather than emptied.
-    const statsRecords = (engineeringStats?.stats ?? [])
-        .filter((stat) => stat && stat.shipType && Array.isArray(stat.stats))
-        .flatMap((stat) =>
-            (stat.stats || [])
-                .filter((s) => s && s.name && s.value !== undefined)
-                .map((s) => ({
-                    user_id: userId,
-                    ship_type: stat.shipType,
-                    stat_name: s.name,
-                    value: typeof s.value === 'number' ? s.value : parseFloat(s.value),
-                    type: s.type || 'flat',
-                }))
-        )
-        .filter((record) => record.ship_type && record.stat_name && !isNaN(record.value));
-
-    for (let i = 0; i < statsRecords.length; i += CHILD_BATCH_SIZE) {
-        const batch = statsRecords.slice(i, i + CHILD_BATCH_SIZE);
-        const { error } = await supabase
-            .from('engineering_stats')
-            .upsert(batch, { onConflict: 'user_id,ship_type,stat_name' });
-        if (error) throw error;
-    }
+    await upsertEngineeringStats(userId, engineeringRecords(userId, engineeringStats));
 
     // Step 7: Upsert autogear configs
     // autogear_configs is written directly by AutogearConfigContext (not by syncMigratedDataToSupabase)
