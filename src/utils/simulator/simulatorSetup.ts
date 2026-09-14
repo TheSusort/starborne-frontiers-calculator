@@ -13,6 +13,10 @@ export const SIMULATOR_SETUP_VERSION = 1;
  *  without colliding with the saved list, which is keyed by user-typed names. */
 export const AUTOSAVE_SETUP_NAME = '(autosave)';
 
+/** The longest name a setup may carry. The schema rejects anything longer, so a field that let a
+ *  longer name through would save in the session and vanish on the next read. */
+export const SETUP_NAME_MAX_LENGTH = 120;
+
 export interface SerializedPlacement {
     /** An owned ship's id, or a reference id (`template:<templateId>:<variant>`). */
     shipId: string;

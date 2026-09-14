@@ -3,7 +3,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select } from '../ui/Select';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
-import type { SimulatorSetup } from '../../utils/simulator/simulatorSetup';
+import { SETUP_NAME_MAX_LENGTH, type SimulatorSetup } from '../../utils/simulator/simulatorSetup';
 
 interface Props {
     saved: SimulatorSetup[];
@@ -13,10 +13,21 @@ interface Props {
     onDelete: (name: string) => void;
     /** False when there is nothing worth saving (both boards empty). */
     canSave: boolean;
+    /** False while the ship data a setup resolves against is still arriving. Loading then would
+     *  drop every cell the data has not reached yet and replace the live boards with the
+     *  remainder. */
+    canLoad?: boolean;
 }
 
 /** Save the current boards under a name, and load or delete a previously saved setup. */
-const SimulatorSetupBar: React.FC<Props> = ({ saved, onSave, onLoad, onDelete, canSave }) => {
+const SimulatorSetupBar: React.FC<Props> = ({
+    saved,
+    onSave,
+    onLoad,
+    onDelete,
+    canSave,
+    canLoad = true,
+}) => {
     const [name, setName] = useState('');
     const [selected, setSelected] = useState('');
     const [pendingOverwrite, setPendingOverwrite] = useState<string | null>(null);
@@ -24,7 +35,9 @@ const SimulatorSetupBar: React.FC<Props> = ({ saved, onSave, onLoad, onDelete, c
 
     const handleSave = () => {
         const trimmed = name.trim();
-        if (!trimmed || !canSave) return;
+        // A name past the stored limit is refused rather than truncated: the schema rejects it on
+        // read, so saving one would appear to work and be gone after a reload.
+        if (!trimmed || !canSave || trimmed.length > SETUP_NAME_MAX_LENGTH) return;
         if (saved.some((setup) => setup.name === trimmed)) {
             setPendingOverwrite(trimmed);
             return;
@@ -41,6 +54,7 @@ const SimulatorSetupBar: React.FC<Props> = ({ saved, onSave, onLoad, onDelete, c
                     label="Setup name"
                     value={name}
                     placeholder="Wave 3 attempt"
+                    maxLength={SETUP_NAME_MAX_LENGTH}
                     onChange={(e) => setName(e.target.value)}
                 />
                 <Button variant="primary" disabled={!canSave} onClick={handleSave}>
@@ -56,7 +70,11 @@ const SimulatorSetupBar: React.FC<Props> = ({ saved, onSave, onLoad, onDelete, c
                     options={saved.map((setup) => ({ value: setup.name, label: setup.name }))}
                     onChange={setSelected}
                 />
-                <Button variant="secondary" disabled={!selected} onClick={() => onLoad(selected)}>
+                <Button
+                    variant="secondary"
+                    disabled={!selected || !canLoad}
+                    onClick={() => onLoad(selected)}
+                >
                     Load
                 </Button>
                 <Button

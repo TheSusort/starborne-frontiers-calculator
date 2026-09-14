@@ -1,12 +1,38 @@
 import { z } from 'zod';
 import { SQUAD_LEADERS } from '../constants/squadLeaders';
-import { OVERRIDABLE_STATS } from '../utils/simulator/statOverrides';
+import { OVERRIDABLE_STATS, OVERRIDE_MIN } from '../utils/simulator/statOverrides';
 import { ALL_POSITIONS } from '../utils/targeting/board';
-import { SIMULATOR_SETUP_VERSION, type SimulatorSetup } from '../utils/simulator/simulatorSetup';
+import {
+    SETUP_NAME_MAX_LENGTH,
+    SIMULATOR_SETUP_VERSION,
+    type SimulatorSetup,
+} from '../utils/simulator/simulatorSetup';
+import { MAX_RUN_COUNT, MIN_RUN_COUNT } from '../utils/simulator/seedRunInputs';
 
 // `z.record` over an enum key is EXHAUSTIVE — it requires every key present. A board and an
 // override set are both sparse by design, so both take `partialRecord`.
-const overridesSchema = z.partialRecord(z.enum(OVERRIDABLE_STATS), z.number().finite()).optional();
+/** Far above any stat the game produces, and low enough that a restored setup cannot make the
+ *  engine do arithmetic on absurd magnitudes. */
+const MAX_OVERRIDE_VALUE = 1e9;
+
+// Bounded to what the stat editor itself can produce. A stored override is user-editable, and it
+// flows straight into the engine, where a below-floor value produces a meaningless fight with no
+// error — an actor built at 0 HP starts on the corpse path.
+const overridesSchema = z
+    .partialRecord(
+        z.enum(OVERRIDABLE_STATS),
+        z.number().finite().nonnegative().max(MAX_OVERRIDE_VALUE)
+    )
+    .refine(
+        (overrides) =>
+            Object.entries(overrides ?? {}).every(
+                ([stat, value]) =>
+                    value === undefined ||
+                    value >= (OVERRIDE_MIN[stat as keyof typeof OVERRIDE_MIN] ?? 0)
+            ),
+        { message: 'Override below the stat floor' }
+    )
+    .optional();
 
 const placementSchema = z.object({
     shipId: z.string().min(1).max(200),
@@ -36,13 +62,20 @@ const squadLeaderSchema = z
 
 const setupSchema = z.object({
     version: z.literal(SIMULATOR_SETUP_VERSION),
-    name: z.string().min(1).max(120),
+    name: z.string().min(1).max(SETUP_NAME_MAX_LENGTH),
     playerBoard: boardSchema,
     enemyBoard: boardSchema,
     playerSquadLeader: squadLeaderSchema,
     enemySquadLeader: squadLeaderSchema,
-    seed: z.number().int().finite(),
-    runCount: z.number().int().finite(),
+    // The same bounds `clampSeed` and `clampRunCount` enforce on the controls. Stored values do
+    // not pass through those clamps on the way back in, and an out-of-range run count restores a
+    // sweep-sized workload onto a button the user thinks runs one fight.
+    seed: z
+        .number()
+        .int()
+        .min(0)
+        .max(2 ** 31 - 1),
+    runCount: z.number().int().min(MIN_RUN_COUNT).max(MAX_RUN_COUNT),
     savedAt: z.number().finite(),
 });
 

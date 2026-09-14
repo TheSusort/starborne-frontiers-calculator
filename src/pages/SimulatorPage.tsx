@@ -384,6 +384,7 @@ const SimulatorPage: React.FC = () => {
                         onLoad={handleLoadSetup}
                         onDelete={handleDeleteSetup}
                         canSave={playerCount > 0 || enemyCount > 0}
+                        canLoad={!shipsLoading && !unitsLoading}
                     />
                     <div aria-live="polite">
                         {loadNotice && <p className="text-sm text-amber-400">{loadNotice}</p>}

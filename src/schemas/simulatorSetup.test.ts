@@ -51,6 +51,51 @@ describe('parseSimulatorSetup', () => {
         ).toBeNull();
     });
 
+    it('rejects a run count outside what the controls can produce', () => {
+        // A restored setup does not pass back through clampRunCount, so an out-of-range value
+        // would put a sweep-sized workload behind a button the user thinks runs one fight.
+        expect(parseSimulatorSetup({ ...valid, runCount: 0 })).toBeNull();
+        expect(parseSimulatorSetup({ ...valid, runCount: 100000 })).toBeNull();
+        expect(parseSimulatorSetup({ ...valid, runCount: 1000 })).not.toBeNull();
+    });
+
+    it('rejects a seed outside the 32-bit range clampSeed enforces', () => {
+        expect(parseSimulatorSetup({ ...valid, seed: -1 })).toBeNull();
+        expect(parseSimulatorSetup({ ...valid, seed: 2 ** 31 })).toBeNull();
+        expect(parseSimulatorSetup({ ...valid, seed: 2 ** 31 - 1 })).not.toBeNull();
+    });
+
+    it('rejects an override below its stat floor', () => {
+        // hp floors at 1: an actor built at 0 HP starts the fight on the engine's corpse path.
+        const withHp = (hp: number) => ({
+            ...valid,
+            playerBoard: { T1: { shipId: 'owned-1', overrides: { hp } } },
+        });
+        expect(parseSimulatorSetup(withHp(0))).toBeNull();
+        expect(parseSimulatorSetup(withHp(1))).not.toBeNull();
+        // A stat with no floor still accepts 0.
+        expect(
+            parseSimulatorSetup({
+                ...valid,
+                playerBoard: { T1: { shipId: 'owned-1', overrides: { crit: 0 } } },
+            })
+        ).not.toBeNull();
+    });
+
+    it('rejects a negative or absurd override magnitude', () => {
+        const withSpeed = (speed: number) => ({
+            ...valid,
+            playerBoard: { T1: { shipId: 'owned-1', overrides: { speed } } },
+        });
+        expect(parseSimulatorSetup(withSpeed(-5))).toBeNull();
+        expect(parseSimulatorSetup(withSpeed(1e12))).toBeNull();
+    });
+
+    it('rejects a name longer than the stored limit', () => {
+        expect(parseSimulatorSetup({ ...valid, name: 'x'.repeat(121) })).toBeNull();
+        expect(parseSimulatorSetup({ ...valid, name: 'x'.repeat(120) })).not.toBeNull();
+    });
+
     it('rejects a non-object', () => {
         expect(parseSimulatorSetup('nope')).toBeNull();
         expect(parseSimulatorSetup(null)).toBeNull();

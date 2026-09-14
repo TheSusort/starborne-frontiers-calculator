@@ -16,15 +16,18 @@ vi.mock('../../components/simulator/PlacementBoard', () => ({
         formation,
         onSelectPosition,
         onPickShip,
+        onRemoveShip,
     }: {
         title: string;
         formation: { shipId: string }[];
         onSelectPosition: (p: 'T1') => void;
         onPickShip: (s: Ship) => void;
+        onRemoveShip: (p: 'T1') => void;
     }) => (
         <div>
             <button onClick={() => onSelectPosition('T1')}>select {title}</button>
             <button onClick={() => onPickShip(fakeShip)}>pick {title}</button>
+            <button onClick={() => onRemoveShip('T1')}>remove {title}</button>
             <span data-testid={`formation-${title}`}>
                 {formation.map((entry) => entry.shipId).join(',')}
             </span>
@@ -133,8 +136,11 @@ describe('SimulatorPage named setups', () => {
         fireEvent.click(screen.getByRole('button', { name: /^save$/i }));
         await waitFor(() => expect(localStorage.getItem(SETUP_STORAGE_KEYS.saved)).not.toBeNull());
 
-        // Clear the board, then load the saved setup back onto it.
-        fireEvent.click(screen.getByText(/select Your Team/i));
+        // The board must actually be EMPTY before the load, or the final assertion passes
+        // whether or not loading does anything.
+        fireEvent.click(screen.getByText(/remove Your Team/i));
+        expect(screen.getByTestId('formation-Your Team')).toHaveTextContent('');
+
         fireEvent.click(screen.getByRole('button', { name: /saved setups/i }));
         fireEvent.click(screen.getByRole('option', { name: 'Wave 3' }));
         fireEvent.click(screen.getByRole('button', { name: /load/i }));
