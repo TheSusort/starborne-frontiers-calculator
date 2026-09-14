@@ -84,8 +84,8 @@ describe('analyseSweep', () => {
         // verdict turns on how pairedDelta handles mean/0 rather than on the rule being tested.
         const spread = (a: number, b: number) =>
             Array.from({ length: 12 }, (_, i) => (i % 2 ? a : b));
-        const base = aggregate(Array(12).fill(L), spread(10, 11), spread(100, 120));
-        const better = aggregate(Array(12).fill(W), spread(4, 6), spread(900, 860));
+        const base = aggregate(new Array<typeof L>(12).fill(L), spread(10, 11), spread(100, 120));
+        const better = aggregate(new Array<typeof W>(12).fill(W), spread(4, 6), spread(900, 860));
         const points = analyseSweep(
             sweep([
                 { value: 100, isReference: true, aggregate: base },
@@ -136,8 +136,16 @@ describe('analyseSweep', () => {
         });
 
         it('rates four same-direction flips out of twelve a coin flip', () => {
-            const base = aggregate(baseWinners, Array(12).fill(10), Array(12).fill(100));
-            const flipped = aggregate(flippedWinners, Array(12).fill(10), Array(12).fill(100));
+            const base = aggregate(
+                baseWinners,
+                new Array<number>(12).fill(10),
+                new Array<number>(12).fill(100)
+            );
+            const flipped = aggregate(
+                flippedWinners,
+                new Array<number>(12).fill(10),
+                new Array<number>(12).fill(100)
+            );
             const points = analyseSweep(
                 sweep([
                     { value: 100, isReference: true, aggregate: base },

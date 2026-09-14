@@ -51,6 +51,10 @@ export interface UseSimulatorRunsResult {
      *  `RunProvenance`'s doc. */
     currentOverrides: OverrideSnapshot | null;
     canRun: boolean;
+    /** The fully-resolved engine input for the boards as they stand right now. Exposed so another
+     *  consumer (the stat sweep) runs the same input this hook's own runs do, from one
+     *  definition. */
+    buildInput: () => BattleSimulationInput;
     handleRun: () => void;
     handleOpenSeed: (seed: number) => void;
     handlePinBaseline: () => void;
@@ -310,6 +314,7 @@ export function useSimulatorRuns({
         effectiveRunCount,
         currentOverrides: provenance?.overrides ?? null,
         canRun,
+        buildInput,
         handleRun,
         handleOpenSeed,
         handlePinBaseline,

@@ -4030,6 +4030,40 @@ const DocumentationPage: React.FC = () => {
                             </div>
 
                             <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">Stat Sweeps</h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>
+                                        Pick one placed ship and one of its stats, give a range, and
+                                        the sweep runs a fight at every step in that range and
+                                        charts win rate, mean rounds and your side&apos;s total
+                                        damage
+                                    </li>
+                                    <li>
+                                        Every step runs the same seed set, and the ship&apos;s
+                                        current value is always one of the steps — the marked
+                                        reference line — so each step is measured against the ship
+                                        you actually have
+                                    </li>
+                                    <li>
+                                        A filled point differs from the current value by more than
+                                        seed-to-seed luck can explain at that run count; a hollow
+                                        point does not. A sweep where every point is hollow is an
+                                        answer: this stat does not move the fight here
+                                    </li>
+                                    <li>
+                                        The sweep keeps its own run count, because its cost is steps
+                                        multiplied by seeds; the cost preview shows how many battles
+                                        the current settings will run
+                                    </li>
+                                    <li>
+                                        A sweep holds every other stat fixed, while a real gear
+                                        piece moves several at once — so it answers what a stat is
+                                        worth, not what a piece is worth
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">Squad Leaders</h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
