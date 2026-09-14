@@ -19,7 +19,7 @@ import {
 } from '../../utils/simulator/statOverrides';
 import { sweepSteps, type SweepTarget } from '../../utils/simulator/statSweep';
 import type { SweepPoint, SweepSeries } from '../../utils/simulator/sweepAnalysis';
-import type { RunSweepArgs } from '../../hooks/useStatSweep';
+import type { RunSweepArgs, SweepProvenance } from '../../hooks/useStatSweep';
 import { clampRunCount, MAX_RUN_COUNT, MIN_RUN_COUNT } from '../../utils/simulator/seedRunInputs';
 import StatSweepChart from './StatSweepChart';
 import type { BoardState, Placement } from './PlacementBoard';
@@ -31,7 +31,9 @@ interface StatSweepPanelProps {
     /** The seed the page displays. A sweep run on a seed the user cannot see is unreproducible. */
     seed: number;
     points: SweepPoint[] | null;
-    sweptStat: OverridableStat | null;
+    /** What produced `points`. The chart is captioned from this, never from the live selections
+     *  above it — those keep moving while a result stays on screen. */
+    provenance: SweepProvenance | null;
     isSweeping: boolean;
     progress: { completed: number; total: number } | null;
     error: string | null;
@@ -101,7 +103,7 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
     statsDeps,
     seed,
     points,
-    sweptStat,
+    provenance,
     isSweeping,
     progress,
     error,
@@ -159,8 +161,13 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
     }
     const battles = stepCount === null ? null : stepCount * count;
 
+    // simulateBattle throws on an empty side, so a sweep with one empty board can only fail —
+    // the same guard `canRun` puts on an ordinary run.
+    const bothSidesManned =
+        Object.keys(playerBoard).length > 0 && Object.keys(enemyBoard).length > 0;
+
     const handleRun = () => {
-        if (!selected) return;
+        if (!selected || !bothSidesManned) return;
         onRunSweep({
             target: selected.target,
             stat,
@@ -297,7 +304,7 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
                             <Button
                                 variant="primary"
                                 onClick={handleRun}
-                                disabled={!selected || disabled}
+                                disabled={!selected || !bothSidesManned || disabled}
                             >
                                 Run sweep
                             </Button>
@@ -325,9 +332,24 @@ const StatSweepPanel: React.FC<StatSweepPanelProps> = ({
                                 points={points}
                                 series={series}
                                 statLabel={
-                                    sweptStat ? STATS[sweptStat as StatName].label : statLabel
+                                    provenance
+                                        ? STATS[provenance.stat as StatName].label
+                                        : statLabel
                                 }
                             />
+                            {provenance && (
+                                <p
+                                    className="text-sm text-theme-text-secondary"
+                                    data-testid="sweep-provenance"
+                                >
+                                    {STATS[provenance.stat as StatName].label} on{' '}
+                                    {provenance.target.side === 'player'
+                                        ? 'your team'
+                                        : 'the enemy'}{' '}
+                                    {provenance.target.position}, seeds {provenance.baseSeed}-
+                                    {provenance.baseSeed + provenance.count - 1}
+                                </p>
+                            )}
                         </div>
                     )}
                 </div>

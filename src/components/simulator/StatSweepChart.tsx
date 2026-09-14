@@ -203,8 +203,9 @@ const StatSweepChart: React.FC<StatSweepChartProps> = ({
             />
             {!anyDistinguishable && (
                 <p className="mt-2 text-sm text-theme-text-secondary text-center">
-                    No step is distinguishable from the current value at this seed count — this stat
-                    does not move the fight here.
+                    No step is distinguishable from the current value at this seed count. An effect
+                    smaller than the seed-to-seed noise looks the same as none, so raise the seed
+                    count before reading this as the stat doing nothing.
                 </p>
             )}
         </div>

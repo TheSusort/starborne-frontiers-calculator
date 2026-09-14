@@ -4029,7 +4029,7 @@ const DocumentationPage: React.FC = () => {
                                 </ul>
                             </div>
 
-                            <div className="p-4 bg-dark-lighter">
+                            <div className="card">
                                 <h4 className="font-semibold text-primary mb-2">Stat Sweeps</h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>
@@ -4047,8 +4047,10 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         A filled point differs from the current value by more than
                                         seed-to-seed luck can explain at that run count; a hollow
-                                        point does not. A sweep where every point is hollow is an
-                                        answer: this stat does not move the fight here
+                                        point does not. All-hollow means the sweep found no
+                                        difference it can tell apart from luck at that run count — a
+                                        real effect smaller than the noise would look the same, so
+                                        raise the seed count before concluding the stat does nothing
                                     </li>
                                     <li>
                                         The sweep keeps its own run count, because its cost is steps

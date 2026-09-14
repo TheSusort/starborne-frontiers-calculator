@@ -57,7 +57,7 @@ const renderPanel = (props: Partial<React.ComponentProps<typeof StatSweepPanel>>
             statsDeps={statsDeps}
             seed={4242}
             points={null}
-            sweptStat={null}
+            provenance={null}
             isSweeping={false}
             progress={null}
             error={null}
@@ -202,9 +202,47 @@ describe('StatSweepPanel', () => {
         expect(screen.getByText(/holds every other stat fixed/i)).toBeInTheDocument();
     });
 
+    it('refuses a sweep while one side of the board is empty', () => {
+        // simulateBattle throws on an empty side, so a sweep that could start here could only
+        // fail — the same guard `canRun` puts on an ordinary run.
+        const { onRunSweep } = renderPanel({ enemyBoard: {} });
+        pickTarget(/Ranger/);
+        const run = screen.getByRole('button', { name: /run sweep/i });
+        expect(run).toBeDisabled();
+        fireEvent.click(run);
+        expect(onRunSweep).not.toHaveBeenCalled();
+    });
+
+    it('captions the chart from the run that produced it, not the live selections', () => {
+        // A result outlives the controls that made it. Captioning from live state would relabel
+        // an existing chart with a stat and ship that never ran.
+        renderPanel({
+            points: [
+                { value: 100, isReference: true, winRate: 0.5, meanRounds: 9, playerDamage: 900 },
+            ],
+            provenance: {
+                stat: 'attack',
+                target: { side: 'enemy', position: 'T1' },
+                baseSeed: 900,
+                count: 20,
+            },
+        });
+        pickStat('Speed');
+        const caption = screen.getByTestId('sweep-provenance');
+        expect(caption).toHaveTextContent(/Attack/i);
+        expect(caption).not.toHaveTextContent(/Speed/i);
+        expect(caption).toHaveTextContent(/T1/);
+        expect(caption).toHaveTextContent(/900-919/);
+    });
+
     it('switches the charted series', () => {
         renderPanel({
-            sweptStat: 'speed',
+            provenance: {
+                stat: 'speed',
+                target: { side: 'player', position: 'T1' },
+                baseSeed: 7,
+                count: 20,
+            },
             points: [
                 { value: 120, isReference: true, winRate: 0.5, meanRounds: 10, playerDamage: 900 },
             ],

@@ -479,7 +479,7 @@ const SimulatorPage: React.FC = () => {
                         statsDeps={statsDeps}
                         seed={effectiveSeed}
                         points={sweep.points}
-                        sweptStat={sweep.stat}
+                        provenance={sweep.provenance}
                         isSweeping={sweep.isSweeping}
                         progress={sweep.progress}
                         error={sweep.error}

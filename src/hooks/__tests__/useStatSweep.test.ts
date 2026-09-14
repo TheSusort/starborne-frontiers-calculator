@@ -39,7 +39,12 @@ describe('useStatSweep', () => {
         act(() => result.current.runSweep(args));
         await waitFor(() => expect(result.current.isSweeping).toBe(false));
         expect(result.current.points?.map((p) => p.value)).toEqual([100, 110, 120]);
-        expect(result.current.stat).toBe('speed');
+        expect(result.current.provenance).toEqual({
+            stat: 'speed',
+            target: args.target,
+            baseSeed: args.baseSeed,
+            count: args.count,
+        });
         expect(result.current.error).toBeNull();
     });
 
@@ -88,7 +93,7 @@ describe('useStatSweep', () => {
         await waitFor(() => expect(result.current.points).not.toBeNull());
         act(() => result.current.clearSweep());
         expect(result.current.points).toBeNull();
-        expect(result.current.stat).toBeNull();
+        expect(result.current.provenance).toBeNull();
         expect(result.current.error).toBeNull();
         expect(result.current.progress).toBeNull();
     });

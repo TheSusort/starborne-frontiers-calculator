@@ -24,9 +24,19 @@ export interface RunSweepArgs {
     count: number;
 }
 
+/** What produced the displayed `points`, frozen at the moment that sweep started. Read this
+ *  rather than the live panel selections: a sweep result outlives every control that produced it,
+ *  and a chart captioned from live state describes a configuration that never ran. */
+export interface SweepProvenance {
+    stat: OverridableStat;
+    target: SweepTarget;
+    baseSeed: number;
+    count: number;
+}
+
 export interface UseStatSweepResult {
     points: SweepPoint[] | null;
-    stat: OverridableStat | null;
+    provenance: SweepProvenance | null;
     isSweeping: boolean;
     progress: { completed: number; total: number } | null;
     error: string | null;
@@ -48,7 +58,7 @@ export interface UseStatSweepResult {
  */
 export function useStatSweep({ buildInput, getGearPiece }: UseStatSweepArgs): UseStatSweepResult {
     const [points, setPoints] = useState<SweepPoint[] | null>(null);
-    const [stat, setStat] = useState<OverridableStat | null>(null);
+    const [provenance, setProvenance] = useState<SweepProvenance | null>(null);
     const [isSweeping, setIsSweeping] = useState(false);
     const [progress, setProgress] = useState<{ completed: number; total: number } | null>(null);
     const [error, setError] = useState<string | null>(null);
@@ -115,7 +125,12 @@ export function useStatSweep({ buildInput, getGearPiece }: UseStatSweepArgs): Us
                     // whatever result is currently being read.
                     if (result === null) return;
                     setPoints(analyseSweep(result));
-                    setStat(result.stat);
+                    setProvenance({
+                        stat: result.stat,
+                        target: result.target,
+                        baseSeed: result.baseSeed,
+                        count: result.count,
+                    });
                 })
                 .catch((err) => {
                     if (!isCurrent()) return;
@@ -133,11 +148,11 @@ export function useStatSweep({ buildInput, getGearPiece }: UseStatSweepArgs): Us
         abortRef.current?.abort();
         generationRef.current++;
         setPoints(null);
-        setStat(null);
+        setProvenance(null);
         setIsSweeping(false);
         setProgress(null);
         setError(null);
     }, []);
 
-    return { points, stat, isSweeping, progress, error, runSweep, cancelSweep, clearSweep };
+    return { points, provenance, isSweeping, progress, error, runSweep, cancelSweep, clearSweep };
 }
