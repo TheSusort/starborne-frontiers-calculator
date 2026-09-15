@@ -7,6 +7,7 @@ export const CURRENT_VERSION = '1.67.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Recruitment: Zenith is no longer counted as a recruitable ship.',
     'Combat simulator: sweep one stat across a range and chart the result.',
     'Combat simulator: sweep points show which differences beat the noise.',
     'Import: a failed engineering-stats upload no longer empties your cloud stats.',

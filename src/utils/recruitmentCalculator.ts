@@ -11,6 +11,7 @@ const NON_RECRUITABLE_SHIPS = [
     'Asphodel',
     'Lev',
     'Incinerator',
+    'Zenith',
 ];
 
 // Ships that are only available during events (event-only ships)
