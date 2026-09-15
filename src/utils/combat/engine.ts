@@ -3318,6 +3318,18 @@ export function runCombat(rawInput: CombatEngineInput): {
     // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
     // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
     statusEngine.setTurnBlockedReader(isTurnBlocked);
+    /** Drop a turn-blocked owner's SHIP-PASSIVE entries from a passive-slot-derived list.
+     *
+     *  Every list this guards is built by walking `slot.slot === 'passive'` alone, so the only
+     *  question left per entry is provenance: a gear-set bonus or implant effect keeps working
+     *  while its holder is stasised or disabled, a ship's own passive skill does not (owner ruling
+     *  2026-09-15). Read `Ability.source` for why provenance rides the entry rather than the slot.
+     *  Applied at the READ, not at the build: a ship is not blocked when its lists are assembled. */
+    const livePassiveEntries = <T extends { source?: 'equipment' }>(
+        ownerId: string,
+        entries: readonly T[]
+    ): T[] =>
+        isTurnBlocked(ownerId) ? entries.filter((e) => e.source === 'equipment') : (entries as T[]);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
@@ -4362,6 +4374,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  the `on-own-repair-to-ally` re-entrancy guard has its key. IN-MEMORY ONLY — never
          *  serialise it (`nextId()` runs off a never-reset module counter). */
         abilityId: string;
+        /** Provenance for the turn-block suppression — see `livePassiveEntries`. */
+        source?: 'equipment';
     }
     const standingLeeches = new Map<string, StandingLeech[]>();
     if (healTarget) {
@@ -4379,6 +4393,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             scope: c.leechScope ?? 'all',
                             abilityId: a.id,
+                            ...(a.source ? { source: a.source } : {}),
                         });
                     }
                 }
@@ -4400,6 +4415,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         requiresHpDamage: boolean;
         /** #447 — see the sibling field on `StandingLeech`. */
         abilityId: string;
+        /** Provenance for the turn-block suppression — see `livePassiveEntries`. */
+        source?: 'equipment';
     }
     const takenLeechesByOwner = new Map<string, TakenLeech[]>();
     if (healTarget) {
@@ -4416,6 +4433,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             requiresHpDamage: c.requiresHpDamage ?? false,
                             abilityId: a.id,
+                            ...(a.source ? { source: a.source } : {}),
                         });
                     }
                 }
@@ -4536,10 +4554,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // carrier's aura stops protecting its allies from the moment it dies. Returns the stored array
     // BY REFERENCE for any actor with no ally-scoped entries.
     const incomingAbilitiesOf = (id: string): Ability[] =>
-        withLiveAllyScopedOwners(
-            incomingAbilitiesById.get(id) ?? [],
-            allyScopedOwnerByRecipient.get(id),
-            isActorAlive
+        livePassiveEntries(
+            id,
+            withLiveAllyScopedOwners(
+                incomingAbilitiesById.get(id) ?? [],
+                allyScopedOwnerByRecipient.get(id),
+                isActorAlive
+            )
         );
 
     // Per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
@@ -4560,7 +4581,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
     }
     const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
-        incomingHealAmpAbilitiesById.get(id) ?? [];
+        livePassiveEntries(id, incomingHealAmpAbilitiesById.get(id) ?? []);
 
     // Per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
     // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
@@ -4580,7 +4601,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         if (outgoing.length) outgoingAbilitiesById.set(rt.actor.id, outgoing);
     }
-    const outgoingAbilitiesOf = (id: string): Ability[] => outgoingAbilitiesById.get(id) ?? [];
+    const outgoingAbilitiesOf = (id: string): Ability[] =>
+        livePassiveEntries(id, outgoingAbilitiesById.get(id) ?? []);
 
     // Meatshield (R4 refit-active passive — APPROXIMATION): per-actor set of ids
     // carrying an active `defense-substitution` passive, side-agnostic (a carrier can be on
@@ -4854,7 +4876,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         channel: LeechChannel
     ): void => {
         if (!healingCtx || amount <= 0) return;
-        const entries = standingLeeches.get(sourceId);
+        const entries = livePassiveEntries(sourceId, standingLeeches.get(sourceId) ?? []);
         if (!entries) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
@@ -5194,7 +5216,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!healingCtx || damageTaken <= 0) return;
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
         if (outcome.barriered) return;
-        const entries = takenLeechesByOwner.get(victim.id);
+        const entries = livePassiveEntries(victim.id, takenLeechesByOwner.get(victim.id) ?? []);
         if (!entries) return;
         const rt = allRuntimesById.get(victim.id);
         // #424: scoped to the whole proc call (all entries), not to one entry — see the emit
