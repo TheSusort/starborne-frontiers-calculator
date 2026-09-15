@@ -10618,7 +10618,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         drainIntentsFor('player');
         drainIntentsFor('enemy');
 
-        // §4.5 Stasis-break pending map. Reset fresh each round (new Map here).
+        // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
+        // whole fight — see its declaration for why a round-scoped map dropped the break entirely
+        // whenever the attacker acted after the victim.
         // Keys: victimIds whose Stasis should be removed when their skip branch runs.
         // Values: always true (present = break approved; absent = no break queued).
         // An entry is added by the ATTACKER's turn block, from two sources:

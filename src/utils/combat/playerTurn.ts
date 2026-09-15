@@ -2312,6 +2312,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // exactly as a real hit would. Reuses `hasDamageAbility` deliberately: it is the same
     // predicate that decides `positionalScalars`, so this non-positional gate and the positional
     // drive's own can never disagree about whether the cast hit.
+    //
+    // KNOWN GAP (#537): `hasDamageAbility` is PRE-GATE. A cast whose only damage ability is gated
+    // off by `gateFiringAbilities` — which does not run until it has a round context, far below —
+    // deals nothing and still marks a break. 26 corpus slots can reach that.
     if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
