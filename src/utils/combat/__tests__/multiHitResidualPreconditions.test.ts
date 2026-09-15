@@ -48,8 +48,10 @@
  * has run, at every actor site — focus, walked-team, and enemy (search `resolveAnchorStasisBreak(`
  * in engine.ts; each call site is named by which turn's `inflictedEnemyDebuffs` it passes —
  * `turn.`, `teamTurn.`, `enemyTurn.`). Only the focus site has an automated witness:
- * `reInflictedStasisBreak.integration.test.ts`. The walked-team and enemy sites have none, so
- * their `inflictedEnemyDebuffs` argument is currently unpinned. Building a
+ * `reInflictedStasisBreak.integration.test.ts`. Neither the walked-team nor the enemy site has a
+ * re-inflict witness. Note that "no witness" is not "unpinned": the enemy call's
+ * `inflictedEnemyDebuffs` argument is held incidentally by an unrelated single-hit test, while the
+ * walked-team call's is held by nothing at all. Building a
  * real witness for either needs the SAME precondition as R1/R2 (a multi-hit ship with a
  * firing-slot Stasis clause), because re-inflict-on-a-later-sub-attack does not exist below
  * `hits: 2`. When that ship lands, note that the landing stream is keyed `${actorId}:landing`, so

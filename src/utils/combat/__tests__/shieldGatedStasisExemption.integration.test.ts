@@ -26,7 +26,9 @@
  * HARNESS. Board layout, stasis-bot/culler staging and the reduce-by-one observation model are
  * lifted from `perFootprintStasisBreak.integration.test.ts` — read its header for the grid
  * reasoning. Stasis(6) over 4 rounds: a victim whose Stasis is broken every round it is hit resumes
- * acting inside the run; a victim never broken never acts.
+ * acting inside the run; a victim never broken never acts. The enemy-carrier describe at the foot
+ * of the file does NOT use that model — it runs 8 rounds and reads the round the victim first
+ * acts, because at 4 rounds "never acts" there measures the truncation rather than the gate.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -608,25 +610,31 @@ const enemySideRun = ({
     };
 };
 
-// The enemy breaker's pool is a ONE-TIME pre-fight seed with no round-start re-grant, so it is
-// empty from the end of round 1 and every hit from round 2 on breaks regardless of the gate.
-// Round 1 is the only round the gate can decide, and each arm below reads that decision off the
-// round the anchor FIRST acts: the earlier it acts, the earlier its Stasis was broken. Asserting
-// "never acts" instead would only be measuring where the run was truncated.
+// The enemy breaker's pool is a ONE-TIME pre-fight seed with no round-start re-grant. In the
+// POOL_PCT arms that seed is sized to be gone by the end of round 1, so every hit from round 2 on
+// breaks regardless of the gate and round 1 is the only round the gate can decide. (The
+// `startingShieldPctOfHp: 1` arm is the opposite case — its pool outlasts the whole run.) Each arm
+// reads its decision off the round the anchor FIRST acts: the earlier it acts, the earlier its
+// Stasis was broken. Asserting "never acts" instead would only be measuring where the run was
+// truncated.
 const ENEMY_ROUNDS = 8;
 
 /** Round 1's cast broke the anchor. Same as an unshielded breaker's — the gate never applied. */
 const BROKEN_IN_ROUND_1 = 4;
 /** Round 1's cast did NOT break the anchor; the break lands in round 2, one round later. */
 const EXEMPT_IN_ROUND_1 = 5;
-/** No hit ever breaks: the Stasis runs its own course and the victim acts when it expires. */
-const NEVER_BROKEN = 7;
+/** The Stasis runs its own course and the victim acts when it EXPIRES, no break involved.
+ *  Deliberately not read as "never broken": the measured mapping is `broken in round N` → `first
+ *  acts in round N+3`, so a break in round 4 would also land here. It discriminates only because
+ *  the shielded arm's pool outlasts this run — if that arm is ever re-sized, this constant stops
+ *  separating "no break" from "a late break" and the arm needs a different observable. */
+const STASIS_EXPIRES_UNBROKEN = 7;
 
 describe('shield-gated Stasis exemption — team symmetry (enemy carrier)', () => {
     it('a SHIELDED enemy carrier breaks neither player victim', () => {
         const r = enemySideRun({ startingShieldPctOfHp: 1, rounds: ENEMY_ROUNDS });
-        expect(r.anchor[0]).toBe(NEVER_BROKEN);
-        expect(r.covered[0]).toBe(NEVER_BROKEN);
+        expect(r.anchor[0]).toBe(STASIS_EXPIRES_UNBROKEN);
+        expect(r.covered[0]).toBe(STASIS_EXPIRES_UNBROKEN);
     });
 
     it('the SAME enemy carrier with an empty pool breaks both', () => {
