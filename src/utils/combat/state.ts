@@ -212,8 +212,9 @@ export interface CombatActor {
      *  resolvePositionalTarget via acting.ignoresStealth. */
     ignoresStealth?: boolean;
     /** Attacker's direct hits do NOT break Stasis (Akula / Tygr). Gated at the break-mark
-     *  site in engine.ts (§4.5 Akula exception) — if true, the victim is never recorded into
-     *  turnStasisHitVictims and stasisBreakPending is never set. */
+     *  site in engine.ts (§4.5 Akula exception) — if true, the victim's hit is never recorded
+     *  as a Stasis break mark, so stasisBreakPending is never set for it. Read through
+     *  engine.ts's `attackBreaksStasis`, same as the conditional form below. */
     doesntBreakStasis?: boolean;
     /** The CONDITIONAL form of the exemption above (Zenith). Conditions are re-evaluated
      *  against this actor's LIVE state at every break-mark — never cached — so the exemption

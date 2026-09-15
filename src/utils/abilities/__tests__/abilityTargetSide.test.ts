@@ -114,12 +114,12 @@ describe('#403 ABILITY_TARGET_SELECTOR — the footprint axis', () => {
 });
 
 /**
- * #390 board-coverage axis. Decides whether an enemy-side AURA/ACCUMULATING status registered into
+ * #531 board-coverage axis. Decides whether an enemy-side AURA/ACCUMULATING status registered into
  * the singular '__enemy__' bucket may be folded into every per-victim read. `'all'` folds (every
  * enemy is a recipient by definition, so there is nothing to get wrong); `'subset'` does not (the
  * bucket has no victim id, so folding would smear a one-victim debuff across the whole board).
  */
-describe('#390 ABILITY_TARGET_ENEMY_SCOPE — the board-coverage axis', () => {
+describe('#531 ABILITY_TARGET_ENEMY_SCOPE — the board-coverage axis', () => {
     it('classifies all-enemies as the ONLY board-wide scope', () => {
         const boardWide = (Object.keys(ABILITY_TARGET_ENEMY_SCOPE) as AbilityTarget[]).filter(
             (t) => ABILITY_TARGET_ENEMY_SCOPE[t] === 'all'

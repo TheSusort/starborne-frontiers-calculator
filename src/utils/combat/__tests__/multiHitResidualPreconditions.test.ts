@@ -1,17 +1,30 @@
 /**
- * multiHitResidualPreconditions.test.ts — the tripwire for the multi-hit epic's three LATENT
- * residuals.
+ * multiHitResidualPreconditions.test.ts — the tripwire for the multi-hit epic's two remaining
+ * LATENT defects (R1, R2) and one remaining COVERAGE GAP (R3).
  *
- * Three known defects survived the multi-hit epic. All three are real in the code and all three are
- * currently UNREACHABLE: each needs a multi-hit ship carrying a particular kind of firing-slot
- * clause, and no such ship exists. Rather than restructure three hot engine paths speculatively —
- * two of them move event ordering the epic deliberately pinned as byte-identical — the preconditions
- * are pinned HERE, so the day a ship arrives that can reach one, this file goes red and names it.
+ * R1 and R2 are real defects in the code today, and both are currently UNREACHABLE: each needs a
+ * multi-hit ship carrying a particular kind of firing-slot clause, and no such ship exists. R1's
+ * fix means widening `registerActorAbilityStatuses`'s classification so an accumulating status
+ * still reaches `timedEnemyBySlot`; R2's fix means moving its `control-applied` emit relative to
+ * `ability-performed`, an event-ordering change the epic deliberately pinned as byte-identical.
+ * Rather than make either change speculatively, their preconditions are pinned HERE, so the day a
+ * ship arrives that can reach one, this file goes red and names it.
+ *
+ * R3 no longer names a defect: `resolveAnchorStasisBreak` (engine.ts) answers the same-cast
+ * re-inflict question after the positional drive has run, at every actor site, so a Stasis landed
+ * on sub-attack >= 1 is already in `inflictedEnemyDebuffs` by the time it reads. What R3 guards now
+ * is a coverage gap — see the R3 section below — gated by the SAME precondition, because a witness
+ * for it needs the same kind of ship R1/R2 need.
  *
  * This file asserts the ABSENCE of a trigger condition. That makes it a characterisation test whose
  * whole value is in failing later, so it deliberately passes on first run. If you are reading this
- * because it went red: the corpus changed, and one of the residuals below is now live. Do not
- * "fix" it by widening the allowance — go fix the residual it names.
+ * because it went red: the corpus changed, and one of R1/R2/R3 is now live.
+ *   - R1 or R2 red: the residual it names is a real bug — go fix it (see that section).
+ *   - R3 red: nothing is broken. Add re-inflict witnesses for the walked-team and enemy
+ *     `resolveAnchorStasisBreak` call sites (search `resolveAnchorStasisBreak(` in engine.ts — one
+ *     call per actor kind: focus, walked-team, enemy), mirroring
+ *     `reInflictedStasisBreak.integration.test.ts` (which covers only the focus site). See the R3
+ *     section for why each new site needs its own seed search.
  *
  * ── R1 · the accumulating enemy-status family ────────────────────────────────────────────────
  * `registerActorAbilityStatuses` classifies a firing-slot clause carrying `stackTrigger +
@@ -30,15 +43,24 @@
  * sub-attack hooks after it has returned — so this cannot be fixed in place without moving the
  * event relative to `ability-performed`.
  *
- * ── R3 · `reInflictedStasis` cannot see a late Stasis ────────────────────────────────────────
- * At all three actor sites the `turn.inflictedEnemyDebuffs` read precedes the positional drive, so
- * a Stasis landing on sub-attack >= 1 is appended too late for the re-inflict check. The break then
- * resolves as "not re-inflicted" and shaves a turn off the fresh Stasis.
+ * ── R3 · the re-inflict check has no witness at two of its three sites ──────────────────────
+ * `resolveAnchorStasisBreak` answers the same-cast re-inflict question after the positional drive
+ * has run, at every actor site — focus, walked-team, and enemy (search `resolveAnchorStasisBreak(`
+ * in engine.ts; each call site is named by which turn's `inflictedEnemyDebuffs` it passes —
+ * `turn.`, `teamTurn.`, `enemyTurn.`). Only the focus site has an automated witness:
+ * `reInflictedStasisBreak.integration.test.ts`. Swapping the walked-team call's
+ * `inflictedEnemyDebuffs` argument for `[]` reddens nothing today; doing the same at the enemy call
+ * reddens only one incidental test, not a re-inflict witness — so neither site has one. Building a
+ * real witness for either needs the SAME precondition as R1/R2 (a multi-hit ship with a
+ * firing-slot Stasis clause), because re-inflict-on-a-later-sub-attack does not exist below
+ * `hits: 2`. When that ship lands, note that the landing stream is keyed `${actorId}:landing`, so
+ * each new site's witness needs its own seed search rather than reusing
+ * `reInflictedStasisBreak.integration.test.ts`'s seed 7.
  *
  * WHY THE PRECONDITION IS "a multi-hit ship with clause X" rather than "clause X": at `hits: 1`
  * there is exactly one sub-attack, so "once per cast" and "once per sub-attack" coincide, the
- * cast-time resisted set is the only set, and nothing can land after the read. All three residuals
- * are strictly multi-hit phenomena.
+ * cast-time resisted set is the only set for R1/R2, and R3 has no later sub-attack to re-inflict
+ * on. All three preconditions are strictly multi-hit phenomena.
  *
  * CORPUS ACCESS: `docs/ship-skills.csv` is gitignored, so this file skips on a clean checkout —
  * the same pattern the other corpus-scanning tests use. That does mean a fresh clone gets no
@@ -178,9 +200,11 @@ describe.skipIf(!csvAvailable())('multi-hit residual preconditions (tripwire)', 
                 .filter(isStasis)
                 .map((a) => `${name}:${a.id}`)
         );
-        // If this fails: `reInflictedStasis` reads before the positional drive at all three actor
-        // sites, so a Stasis landing on sub-attack >= 1 is invisible to it and the break shaves a
-        // turn off the fresh Stasis. See R3 in the header.
+        // If this fails: nothing is broken — `resolveAnchorStasisBreak` already answers this
+        // correctly. Add re-inflict witnesses for the walked-team and enemy call sites (the focus
+        // site already has one) mirroring `reInflictedStasisBreak.integration.test.ts`. See R3 in
+        // the header for what to mirror and why the landing-stream key means each site needs its
+        // own seed.
         expect(offenders).toEqual([]);
     });
 });

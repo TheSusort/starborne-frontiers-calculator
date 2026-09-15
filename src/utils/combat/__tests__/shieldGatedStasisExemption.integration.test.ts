@@ -628,4 +628,13 @@ describe('shield-gated Stasis exemption — team symmetry (enemy carrier)', () =
         expect(r.breakerPool[0]).toBe(0);
         expect(r.anchor.length).toBeGreaterThan(0);
     });
+
+    // Its partner, mirroring the player-side pair: the SAME pool and drain settings over ONE hit
+    // leave the anchor exempt, because the only hit that landed on it connected while the pool was
+    // still up. Hit count is the only variable between this arm and the one above.
+    it('the lift, twinned: the SAME drain over ONE hit leaves the enemy carrier anchor exempt', () => {
+        const r = enemySideRun({ startingShieldPctOfHp: POOL_PCT, hits: 1, reflectPct: DRAIN_PCT });
+        expect(r.breakerPool[0]).toBe(0);
+        expect(r.anchor).toHaveLength(0);
+    });
 });

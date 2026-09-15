@@ -95,7 +95,7 @@ interface AbilityStatusBase {
      *  how Centurion's charged "grants all adjacent allies 2 stacks of Core Charge I" was landing
      *  those stacks on Centurion instead of on his neighbours. */
     allyScope?: 'adjacent-allies';
-    /** #390: set to `'all'` ONLY on an enemy-side status whose source target covers the whole
+    /** #531: set to `'all'` ONLY on an enemy-side status whose source target covers the whole
      *  opposing board (`all-enemies` — see `ABILITY_TARGET_ENEMY_SCOPE`). Enemy-side aura and
      *  accumulating statuses are registered once at actor construction, under the singular
      *  `DEFAULT_ENEMY_TARGET` key, because no victim id exists yet; `activeAbilityStatuses` folds
@@ -595,7 +595,7 @@ interface TimedSourceSets {
 export const DEFAULT_ENEMY_TARGET = '__enemy__';
 
 /**
- * #390 — the DEFAULT_ENEMY_TARGET fold, for the AURA store only. Enemy-side aura and accumulating
+ * #531 — the DEFAULT_ENEMY_TARGET fold, for the AURA store only. Enemy-side aura and accumulating
  * statuses are both registered once at actor construction, into the singular
  * `DEFAULT_ENEMY_TARGET` bucket, because no victim id exists that early. Every reader looks them
  * up under the resolved victim's REAL id, so before this the bucket was written and never read —
@@ -1950,7 +1950,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // Self-side auras are per-owner — only the requested owner's list is read so a team
         // ship's aura doesn't silently fold into the attacker's round totals and vice versa.
         // Enemy-side auras are per-target — only the requested target's list is read (mirrors
-        // self), PLUS the board-wide entries from the singular DEFAULT_ENEMY_TARGET bucket (#390).
+        // self), PLUS the board-wide entries from the singular DEFAULT_ENEMY_TARGET bucket (#531).
         const perTargetAuras = side === 'enemy' ? (auraEnemyMaps.get(enemyTargetId) ?? []) : [];
         const perTargetAuraNames = new Set(perTargetAuras.map((a) => a.payload.buffName));
         const auraList =
@@ -1997,10 +1997,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             side === 'self'
                 ? (accumSelfMaps.get(ownerId) ?? new Map<string, AccumulatingState>())
                 : (accumEnemyMaps.get(enemyTargetId) ?? new Map<string, AccumulatingState>());
-        // #390: the board-wide entries from the DEFAULT_ENEMY_TARGET bucket, minus any buffName
+        // #531: the board-wide entries from the DEFAULT_ENEMY_TARGET bucket, minus any buffName
         // the per-target map already holds — a real per-target entry is the more specific answer
         // and must not be doubled by the bucket's copy.
-        // #390: the DEFAULT_ENEMY_TARGET fold is deliberately NOT applied to the accumulating
+        // #531: the DEFAULT_ENEMY_TARGET fold is deliberately NOT applied to the accumulating
         // store, even for a board-wide target. `removeNewestFirst` (cleanse) gathers its
         // accumulating candidates from `accumEnemyMaps.get(actorId)` alone, so a folded entry
         // would be visible in every victim's read yet absent from every victim's cleanse — a

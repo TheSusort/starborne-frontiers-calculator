@@ -485,7 +485,7 @@ function registerActorAbilityStatuses(
                 ...(side === 'self' && ability.target === 'adjacent-allies'
                     ? { allyScope: 'adjacent-allies' as const }
                     : {}),
-                // #390: mark the enemy-side statuses whose target covers the whole opposing board.
+                // #531: mark the enemy-side statuses whose target covers the whole opposing board.
                 // The aura/accumulating registration below has no victim id to key by (it runs at
                 // actor construction, before any cast), so it writes into the singular
                 // DEFAULT_ENEMY_TARGET bucket; statusEngine folds that bucket into a per-victim
@@ -9494,8 +9494,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             };
             // Per-footprint Stasis-break: collect EVERY covered footprint victim (≠ anchor) stasised
             // AT IMPACT (marked from `onVictimPreImpact`, per sub-attack × victim) so its Stasis is
-            // broken too. Covered victims have no same-turn re-apply vector → unconditional break,
-            // performed below.
+            // broken. Covered victims break unconditionally, performed below.
             const coveredStasisVictims = new Set<string>();
             // The anchor's marks, kept apart from the covered set because only the anchor has a
             // same-turn re-apply vector: the call site hands these to `resolveAnchorStasisBreak`,
@@ -9631,8 +9630,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
             });
-            // Set the DEFERRED Stasis break for every covered victim (unconditional — covered victims
-            // have no same-turn re-apply vector). The victim's own skip branch consumes it next turn.
+            // Set the DEFERRED Stasis break for every covered victim — unconditional, full stop.
+            // The victim's own skip branch consumes it next turn.
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             for (const victimId of coveredStasisVictims) {

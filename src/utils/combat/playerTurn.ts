@@ -405,8 +405,8 @@ export interface PlayerTurnResult {
      * Sub-attack 0 is NOT served by this — it keeps its cast-time draw, because consumers
      * read that outcome before the positional loop runs: `resistedTimedEnemyNames` (gates this
      * turn's `control-applied` emission, inside this function), `resistedEnemyDebuffs` (the round
-     * display list), and `inflictedEnemyDebuffs` (the engine's `reInflictedStasis` check, which
-     * runs immediately after this function returns). Keeping the k=0 draw where it is also keeps
+     * display list), and `inflictedEnemyDebuffs` (the engine's `resolveAnchorStasisBreak` check,
+     * which runs immediately after this function returns). Keeping the k=0 draw where it is also keeps
      * the `${ownerId}:landing` RNG stream's draw order untouched for a single-hit cast.
      *
      * `phase` selects clause order WITHIN the sub-attack: `'before-damage'` for clauses written
@@ -2416,8 +2416,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                 //    control-applied emission, are untouched;
                 //  - `inflictedEnemyDebuffs`, a record of what THIS cast inflicted rather than of
                 //    store state. The Stasis-break re-inflict check reads it back before the
-                //    flush runs (engine, `reInflictedStasis`); deferring the row let that check
-                //    conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
+                //    flush runs (engine, `resolveAnchorStasisBreak`); deferring the row let that
+                //    check conclude "not re-inflicted" and shave a turn off a freshly applied Stasis.
                 // Single source of truth for the store write — both the deferred `applyState`
                 // path and the cast-time inline branch below call this instead of each keeping
                 // their own copy of `statusEngine.applyTimedAbilityStatus(...)` (a second copy is

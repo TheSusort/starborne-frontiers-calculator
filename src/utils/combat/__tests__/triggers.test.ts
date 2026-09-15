@@ -230,7 +230,7 @@ describe('Phase 3 reactive triggers', () => {
     // Scenario 3 — standing aura debuff grants nothing (recurring fold never
     // emits debuff-applied, so the trigger never fires). Cadence = baseline.
     //
-    // ⚠️ #390: THIS FIXTURE IS STILL VACUOUS, AND THE REASON IS NOT THE ONE ABOVE. An enemy-side
+    // ⚠️ #531: THIS FIXTURE IS STILL VACUOUS, AND THE REASON IS NOT THE ONE ABOVE. An enemy-side
     // `duration: 'recurring'` status is registered under the side-wide '__enemy__' key but folded
     // under the resolved victim's real id, so this debuff never lands at all. The assertion below
     // therefore cannot tell the stated rule ("the aura DID land, and a recurring re-application

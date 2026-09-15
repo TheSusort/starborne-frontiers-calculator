@@ -8,9 +8,9 @@ import {
 } from '../defenseSurvivabilitySim';
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// #390 — THE ENEMY-SIDE AURA CHANNEL: REPAIRED FOR `all-enemies`, STILL DEAD FOR SUBSET SCOPES
+// #531 — THE ENEMY-SIDE AURA CHANNEL: REPAIRED FOR `all-enemies`, STILL DEAD FOR SUBSET SCOPES
 //
-// WHAT #390 REPORTED. A 12-shape sweep in #388 reported "no movement" for a defender-applied
+// WHAT #531 REPORTED. A 12-shape sweep in #388 reported "no movement" for a defender-applied
 // enemy debuff across two slots, three target scopes, two debuff types and two triggers. Every
 // reading in it was of a debuff that had never landed, because every shape carried
 // `duration: 'recurring'`. The conclusion happened to survive re-measurement on a landing-proven
@@ -156,7 +156,7 @@ const suppress = (
 /** No debuff at all — the reference the two dead arms must be indistinguishable from. */
 const NO_DEBUFF = 40_000; // 4 rounds x 10,000 thrown, defence 0
 
-describe('#390 enemy-side aura debuff channel', () => {
+describe('#531 enemy-side aura debuff channel', () => {
     // ── ARM 1: THE INSTRUMENT CAN REPORT THE OPPOSITE ────────────────────────────────────────
     // Without this arm every reading below would hold just as well on an engine that folded no
     // enemy-applied outgoing modifier at all, and this whole file would be measuring nothing.
@@ -196,7 +196,7 @@ describe('#390 enemy-side aura debuff channel', () => {
     });
 
     // ── THE DISCRIMINATOR, STATED AS AN ASSERTION ────────────────────────────────────────────
-    // What #390 asked for, restated for the post-repair world: on an `all-enemies` debuff the
+    // What #531 asked for, restated for the post-repair world: on an `all-enemies` debuff the
     // `duration` field no longer decides whether the fixture measures anything, but on a
     // subset-scoped one it still does. Anyone writing a new enemy-debuff fixture should read this.
     it('the vacuity rule: subset-scoped durationless fixtures are still dead instruments', () => {

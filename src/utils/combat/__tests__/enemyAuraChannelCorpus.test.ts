@@ -8,7 +8,7 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-// #390 — THE STANDING CENSUS OF THE ENEMY-SIDE AURA/ACCUMULATING CHANNEL
+// #531 — THE STANDING CENSUS OF THE ENEMY-SIDE AURA/ACCUMULATING CHANNEL
 //
 // WHAT THIS GUARDS. Enemy-side AURA and ACCUMULATING statuses are registered once at actor
 // construction into the singular `DEFAULT_ENEMY_TARGET` bucket (no victim id exists that early).
@@ -50,7 +50,7 @@ import { csvAvailable } from '../../../../scripts/lib/shipSkillCsv';
 // remove on EITHER side — `removeNewestFirst`'s own "NOT in these maps" note says so: auras
 // re-derive each round. They were uncleansable before this repair and are uncleansable after it,
 // so folding them changes nothing about removability. That is a pre-existing property of the aura
-// model, not something #390 introduced.
+// model, not something #531 introduced.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 /** Refit levels swept. Only the refit-active passive applies in-game, so a status can be present
@@ -128,14 +128,14 @@ function sweep(includeTimed: boolean): Row[] {
 const describeRow = (r: Row): string =>
     `${r.ship} [${r.slot}] "${r.buffName}" target=${r.target} duration=${r.duration} kind=${r.kind}`;
 
-describe('#390 enemy-side aura/accumulating channel — corpus census', () => {
+describe('#531 enemy-side aura/accumulating channel — corpus census', () => {
     let rows: Row[];
 
     beforeAll(() => {
         if (!csvAvailable()) {
             throw new Error(
                 'docs/ship-skills.csv is missing from this worktree (gitignored reference data) — ' +
-                    'the #390 census cannot run without it. Copy it in from the main checkout.'
+                    'the #531 census cannot run without it. Copy it in from the main checkout.'
             );
         }
         rows = sweep(false);
@@ -167,7 +167,7 @@ describe('#390 enemy-side aura/accumulating channel — corpus census', () => {
         if (repaired.length > 0) {
             // eslint-disable-next-line no-console
             console.log(
-                `#390: ${repaired.length} corpus status(es) now ride the board-wide aura fold:\n` +
+                `#531: ${repaired.length} corpus status(es) now ride the board-wide aura fold:\n` +
                     repaired.map((r) => `  ${describeRow(r)}`).join('\n')
             );
         }

@@ -48,7 +48,7 @@ export function isEnemyTarget(target: AbilityTarget): boolean {
  * total `Record` over the same derived key set, same instrument and same reason: `tsc` rejects a
  * new `AbilityTarget` until somebody classifies it here.
  *
- * WHY (#390). Enemy-side AURA and ACCUMULATING statuses are registered ONCE at actor construction,
+ * WHY (#531). Enemy-side AURA and ACCUMULATING statuses are registered ONCE at actor construction,
  * into a bucket keyed `DEFAULT_ENEMY_TARGET` ('__enemy__') — before any cast has resolved, so no
  * victim id exists to key them by. Every reader looks them up under the resolved victim's REAL id,
  * so the bucket was never read and the whole channel was inert (`statusEngine.ts`'s
@@ -83,7 +83,7 @@ export const ABILITY_TARGET_ENEMY_SCOPE: Record<AbilityTarget, 'all' | 'subset' 
 };
 
 /**
- * Does `target` cover every enemy on the board? Backs the #390 aura/accumulating fold.
+ * Does `target` cover every enemy on the board? Backs the #531 aura/accumulating fold.
  *
  * The `=== 'all'` comparison (rather than a truthiness check) is load-bearing for the same reason
  * `enemySelectorKind`'s `?? null` is: ability configs are user-persisted and unvalidated on read,

@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { parsePattern, parseTarget } from '../../targetingParser';
-import { applyPositionalDamage, type VictimDamageOutcome } from '../positionalApply';
+import {
+    applyPositionalDamage,
+    type SubAttackOutcome,
+    type VictimDamageOutcome,
+} from '../positionalApply';
 import type { AttackerDamageScalars, VictimDefenseProfile } from '../victimDamage';
 import type { CombatActor } from '../state';
 
@@ -47,13 +51,18 @@ function runTwoHitTwoVictimCast(hooks: {
         isAnchor?: boolean,
         subAttackIndex?: number
     ) => VictimDamageOutcome;
-}): void {
+}): {
+    anyCrit: boolean;
+    critPairs: number;
+    critVictimIds: string[];
+    subAttacks: SubAttackOutcome[];
+} {
     const pattern = parsePattern('Pattern-Line-Range-1');
     const target = parseTarget('front');
     const anchorActor = actor('anchor', 'M4');
     const covered = actor('covered', 'M3');
 
-    applyPositionalDamage({
+    return applyPositionalDamage({
         hitCrits: [false, false],
         scalars: scalars(),
         pattern,
@@ -93,6 +102,10 @@ describe('onVictimPreImpact', () => {
     });
 
     it('is optional — omitting it changes nothing', () => {
-        expect(() => runTwoHitTwoVictimCast({})).not.toThrow();
+        // Same fixture, the ONLY difference being whether `onVictimPreImpact` is supplied — a
+        // no-op hook must produce the byte-identical resolved aggregate.
+        const withHook = runTwoHitTwoVictimCast({ onVictimPreImpact: () => {} });
+        const withoutHook = runTwoHitTwoVictimCast({});
+        expect(withoutHook).toEqual(withHook);
     });
 });
