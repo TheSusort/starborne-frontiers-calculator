@@ -263,8 +263,14 @@ export function detonationsFromSkill(
  * so the base damage still fires unconditionally — the group only scales the bonus.
  * A lone scaling condition is its own singleton group → filters just that one index,
  * identical to the previous behavior for every existing single-condition scaling.
+ *
+ * Exported so a reachability census can ask the question the GATE asks. Counting
+ * `ability.conditions` instead is a structural proxy for a different question: it counts every
+ * conditioned damage ability, and almost all of them are scalers that never drop (Gallant's
+ * "115%, increased to 135% against Defenders"). `gatedDamageStasisReach.corpus.test.ts` holds
+ * the census both predicates disagree about.
  */
-function gateConditions(ability: Ability): Ability['conditions'] {
+export function gateConditions(ability: Ability): Ability['conditions'] {
     const idx = ability.scaling?.conditionIndex;
     if (idx == null) return ability.conditions;
     const scalingCond = ability.conditions[idx];

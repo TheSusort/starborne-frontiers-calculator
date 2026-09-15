@@ -2313,9 +2313,13 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // predicate that decides `positionalScalars`, so this non-positional gate and the positional
     // drive's own can never disagree about whether the cast hit.
     //
-    // KNOWN GAP (#537): `hasDamageAbility` is PRE-GATE. A cast whose only damage ability is gated
-    // off by `gateFiringAbilities` — which does not run until it has a round context, far below —
-    // deals nothing and still marks a break. 26 corpus slots can reach that.
+    // KNOWN GAP (#537): `hasDamageAbility` is PRE-GATE — `gateFiringAbilities` has no round
+    // context to gate against until far below — so a cast whose damage ability gates OFF deals
+    // nothing and still marks a break. The SAME pre-gate predicate decides `positionalScalars`,
+    // which is what lets the engine drive its positional apply and mark stasised victims at
+    // impact, so a placement-board cast reaches the gap by that route instead: the two seams move
+    // together or not at all. Corpus-unreachable today — `gatedDamageStasisReach.corpus.test.ts`
+    // measures it and fails the day a firing slot can cast with every damage ability gated off.
     if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.

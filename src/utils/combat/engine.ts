@@ -9630,6 +9630,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // gated attacker whose shield was stripped by an EARLIER sub-attack, or by a
                     // DIFFERENT victim's thorns within this same sub-attack, stops being exempt for
                     // the next mark.
+                    // No damage check here: the drive only runs for a cast whose damage ability
+                    // was present PRE-gate, which is the #537 gap the playerTurn.ts hook documents.
                     if (!attackBreaksStasis(actor) || !isStasised(victim.id)) return;
                     (isAnchor ? anchorStasisVictims : coveredStasisVictims).add(victim.id);
                 },
