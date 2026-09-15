@@ -2,9 +2,10 @@ import { ChangelogEntry } from '../types/changelog';
 
 export const CURRENT_VERSION = '1.67.0';
 
-// RELEASE CHECKLIST: move these strings into a new ChangelogEntry at the top of
-// CHANGELOG (with the new version + today's date), clear this array back to [],
-// and bump CURRENT_VERSION. All three steps must happen together.
+// Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
+// top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
+// bumped version whose entries are still unreleased shows users a what's-new dialog listing
+// nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: sweep one stat across a range and chart the result.',
     'Combat simulator: sweep points show which differences beat the noise.',

@@ -86,9 +86,31 @@ Read `src/components/ui/` (plus its `layout/`, `tables/`, `charts/`, `icons/` su
 
 When building or changing user-facing features, update `src/pages/DocumentationPage.tsx` to keep in-app docs in sync with the codebase.
 
+### Branches and Releasing
+
+`main` is continuously integrated and **is not deployed**. Netlify builds `production`, which
+advances only when a release is cut. Every build costs minutes against a capped monthly budget, so
+the site moves once per release rather than once per merge — at roughly two deploys a day before
+the budget bites.
+
+- **PRs target `main`**, exactly as before. Nothing about day-to-day work changes.
+- **A release is `npm run release`**, run from a clean `main` that matches `origin/main`. It folds
+  `UNRELEASED_CHANGES` into a new `CHANGELOG` entry, bumps `CURRENT_VERSION`, commits, and tags
+  `vX.Y.Z`. It prints the push commands; `--push` runs them. `--patch` / `--major` /
+  `--version X.Y.Z` override the default minor bump.
+- **The deploy is `git push origin main:production`** — a fast-forward. If it is ever rejected,
+  `production` has diverged from `main`; work out why rather than forcing it, because forcing
+  overwrites what is live.
+- **Rolling back** is pointing `production` at an earlier `main` commit and pushing. The tags give
+  you the targets.
+- **There is no deployed preview of merged-but-unreleased work.** Verify locally (`npm start`,
+  port 3000) before merging; the site will not show it until the next release.
+
+An agent never cuts a release or pushes `production` on its own — both are the user's call.
+
 ### Changelog Entries
 
-The project uses a weekly release cycle. Features ship continuously but changelog entries are batched. When making a `feat:` or `fix:` commit for something user-facing, add an entry to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
+Entries are batched into a release, so `UNRELEASED_CHANGES` accumulates between deploys. When making a `feat:` or `fix:` commit for something user-facing, add an entry to `UNRELEASED_CHANGES` in `src/constants/changelog.ts` **before** committing. Skip minor refactors, test-only changes, and internal tooling — include meaningful new features, behaviour changes, and fixes users would notice.
 
 **Entries are SHORT: an area prefix plus 8–12 words.** `Combat simulator: Asphyxiator's crit-landed debuffs now last one turn longer.` Name what changed and who notices it; the reader is a player skimming a release, not an engineer reviewing the fix.
 
