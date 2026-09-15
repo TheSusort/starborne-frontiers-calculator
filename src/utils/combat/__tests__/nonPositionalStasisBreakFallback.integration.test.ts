@@ -14,6 +14,17 @@
  * positional drive. The second describe at each site is the ruling's own witness: the same
  * attacker stripped down to a pure debuff breaks nothing.
  *
+ * ⚠️ THE PREMISE ABOVE IS STALE, AND THESE ARMS DO NOT MEASURE THE FALLBACK. Measured by logging
+ * the focus site's `positional` decision: the headline damage arm runs `positional=true` in every
+ * round. `pattern: undefined` does not survive the boundary — `normalizeCombatRoster` fills an
+ * absent pattern with `DEFAULT_BASE_PATTERN` (documented at `dpsEnemyPlacement.ts`), so a damage
+ * cast with a resolved victim ALWAYS drives positionally and `resolveAnchorStasisBreak` never
+ * reads its `?? <cast-time set>` operand. The damage arms still assert something TRUE — a
+ * positional damage cast breaks Stasis, a debuff-only one does not — so they are mislabelled
+ * rather than wrong, and they are left alone here. The cast-time fallback and playerTurn's
+ * `onHitBreakStasis` that feeds it are unreachable through `runCombat`; nothing below this line
+ * can measure them.
+ *
  * FIXTURE. Geometry lifted from `perFootprintStasisBreak.integration.test.ts`'s focus-site
  * section: a fast player stasis-bot (M4) seeds Stasis on the enemy front victim (M4) in round 1,
  * an enemy culler (T1, Line-Range-1) one-shots the bot that same round so Stasis is applied

@@ -9542,6 +9542,13 @@ export function runCombat(rawInput: CombatEngineInput): {
             // reaching past the anchor AND a multi-cell damage footprint. Pinned by
             // `coveredVictimReInflict.corpus.test.ts`; merging the two sets is unruled.
             const anchorStasisVictims = new Set<string>();
+            /** §4.5 marks APPROVED at impact but not yet committed, keyed `victimId:subAttackIndex`;
+             *  the value is that hit's `isAnchor`. The gate (`attackBreaksStasis` + `isStasised`)
+             *  must be read BEFORE the hit resolves, but whether the hit LANDED is only known
+             *  after — so the answer waits here between `onVictimPreImpact` and `onVictimResolved`.
+             *  Per HIT, not per victim: a cast whose first hit is nullified and whose second lands
+             *  still reduces Stasis. */
+            const stasisMarkByHit = new Map<string, boolean>();
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
             const detonationTargets = new Map<string, CombatActor>();
@@ -9578,6 +9585,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // Injected per-site leech direction (Note A): standing (player→enemy) vs taken
                     // (enemy→player, which also captures the focus victim's shield-hit flag).
                     onVictimResolved(victim, damage, outcome, didCrit);
+                    // §4.5 commit point for the mark `onVictimPreImpact` approved for this hit.
+                    // ONLY A HIT THAT LANDED REDUCES STASIS (owner ruling 2026-09-15): a hit
+                    // nullified by Barrier never reached the victim, so it reduces nothing. A hit
+                    // the victim's SHIELD absorbed did land and does reduce — `barriered` is the
+                    // only outcome that means "nothing arrived", which is why it is the only one
+                    // read here. This hook is reached for every victim the pre-impact hook fired
+                    // on: the footprint loop between them is straight-line.
+                    const markKey = `${victim.id}:${subAttackIndex ?? 0}`;
+                    const markIsAnchor = stasisMarkByHit.get(markKey);
+                    if (markIsAnchor !== undefined) {
+                        stasisMarkByHit.delete(markKey);
+                        if (!outcome.barriered) {
+                            (markIsAnchor ? anchorStasisVictims : coveredStasisVictims).add(
+                                victim.id
+                            );
+                        }
+                    }
                     detonationTargets.set(victim.id, victim);
                     // A hit whose FULL post-block damage was converted into a DoT (Voron/Orel's
                     // transform-incoming-to-dot) dealt NO direct damage — it is not a direct hit,
@@ -9586,8 +9610,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // a hit that never landed. The transform is all-or-nothing, so transformedToDot
                     // > 0 ⟺ zero direct damage. When Voron is stasised/disabled the transform never
                     // runs (transformedToDot stays 0) and the hit signals normally — no special case
-                    // needed here. Detonation / stasis-break bookkeeping above stays unconditional
-                    // (the victim WAS targeted).
+                    // needed here. Detonation bookkeeping above stays unconditional (the victim WAS
+                    // targeted); the §4.5 mark above reads `barriered` only, so a fully transformed
+                    // hit still reduces Stasis even though it is not a direct hit for any reaction.
+                    // That asymmetry is UNRULED, not decided.
                     const fullyTransformedToDot = (outcome.transformedToDot ?? 0) > 0;
                     if (!fullyTransformedToDot) {
                         // Bucket by sub-attack first. `subAttackIndex` is OPTIONAL on the callback
@@ -9622,18 +9648,17 @@ export function runCombat(rawInput: CombatEngineInput): {
                         bySubAttack.set(victim.id, prev);
                     }
                 },
-                onVictimPreImpact: (victim, isAnchor) => {
-                    // Record EVERY victim stasised AT IMPACT, before this hit's own consequences
-                    // (reflect thorns resolve inline inside applyToVictim) can affect the read: a
-                    // victim's own bounce must not un-exempt the hit that triggered it. This runs
-                    // per (sub-attack × victim), so `attackBreaksStasis` is answered PER HIT: a
-                    // gated attacker whose shield was stripped by an EARLIER sub-attack, or by a
+                onVictimPreImpact: (victim, isAnchor, subAttackIndex) => {
+                    // Read the gate for EVERY victim stasised AT IMPACT, before this hit's own
+                    // consequences (reflect thorns resolve inline inside applyToVictim) can affect
+                    // it: a victim's own bounce must not un-exempt the hit that triggered it. This
+                    // runs per (sub-attack × victim), so `attackBreaksStasis` is answered PER HIT —
+                    // a gated attacker whose shield was stripped by an EARLIER sub-attack, or by a
                     // DIFFERENT victim's thorns within this same sub-attack, stops being exempt for
-                    // the next mark.
-                    // No damage check here: the drive only runs for a cast whose damage ability
-                    // was present PRE-gate, which is the #537 gap the playerTurn.ts hook documents.
+                    // the next mark. The answer is STASHED, not committed: only a hit that actually
+                    // lands reduces Stasis, and Barrier is not resolved until `applyToVictim`.
                     if (!attackBreaksStasis(actor) || !isStasised(victim.id)) return;
-                    (isAnchor ? anchorStasisVictims : coveredStasisVictims).add(victim.id);
+                    stasisMarkByHit.set(`${victim.id}:${subAttackIndex}`, isAnchor);
                 },
                 onSubAttackStart: (sub) => {
                     // Clauses written BEFORE the damage clause apply ahead of this sub-attack's

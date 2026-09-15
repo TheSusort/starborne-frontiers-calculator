@@ -1954,14 +1954,18 @@ describe('B3 Task 2 — direct-damage break', () => {
         expect(capturedIsStasised!('enemy-front')).toBe(true);
     });
 
-    // (viii) full-absorb (Barrier) direct hit still breaks Stasis — spec §3/§4.5 coverage
-    it('(viii) direct hit fully absorbed by Barrier (0 HP loss) still breaks Stasis: victim acts in round 2, not round 4', () => {
+    // (viii) a hit NULLIFIED by Barrier breaks nothing — §4.5
+    it('(viii) a direct hit nullified by Barrier does NOT break Stasis: the victim keeps its full duration', () => {
         idc = 0;
         /**
-         * Spec §3: "ANY landed direct attack breaks Stasis, regardless of shield/Barrier absorb
-         * (about the attack connecting, not HP loss)." This test proves the strongest form:
-         * when a Barrier grants FULL damage immunity, a direct hit deals ZERO HP loss yet
-         * Stasis STILL breaks.
+         * LOCKED RULING (owner, 2026-09-15): a hit the victim's SHIELD absorbed DID land and
+         * reduces Stasis; a hit BARRIER nullified never arrived and reduces nothing. Barrier is
+         * full damage immunity, so the hit does not connect at all — "0 HP loss" is not the
+         * discriminator (a shield-absorbed hit also moves no HP and DOES reduce).
+         *
+         * This arm previously asserted the opposite, citing a spec line that read "ANY landed
+         * direct attack breaks Stasis, regardless of shield/Barrier absorb". The owner's ruling
+         * supersedes it for the Barrier half; the shield half stands.
          *
          * Setup (healing mode — `healTargetId:'attacker'` — so round-level HP snapshots are
          * available to confirm the Barrier fully absorbed):
@@ -1979,15 +1983,16 @@ describe('B3 Task 2 — direct-damage break', () => {
          *   stasis-bot fires Stasis(3) on focus.
          *   killer kills stasis-bot (hp=1, attack=10000).
          *   breaker-enemy fires basicAttack on stasised focus.
-         *     → Barrier fully absorbs 3000 → 0 HP loss (barrierAbsorbed=3000, HP unchanged).
-         *     → Direct hit "connected" → break mark set on focus.
-         *   focus stasised → skip. Break mark consumed → Stasis removed.
-         *   Post-turn: Stasis would have decremented, but it was removed by the break.
+         *     → Barrier nullifies 3000 → 0 HP loss (barrierAbsorbed=3000, HP unchanged).
+         *     → Nothing arrived → NO break mark.
+         *   focus stasised → skip. Post-turn: Stasis 3 → 2.
          *
-         * Round 2: stasis-bot dead. focus NOT stasised → fires in EXACTLY round 2.
+         * Rounds 2-3 repeat, so Stasis runs its natural course and focus first fires in round 4 —
+         * the same schedule as a focus nothing ever hit.
          *
-         * No-break baseline (without the breaker-enemy): Stasis(3) keeps focus stasised in
-         * rounds 1, 2, 3 → focus fires in round 4. Contrast: with the break, it fires in round 2.
+         * WHAT KEEPS THIS FROM BEING VACUOUS: the acting round alone cannot tell "Barrier stopped
+         * the break" from "the breaker never hit". `barrierAbsorbed === 3000` is the witness that
+         * the hit was thrown and connected with the Barrier; it is asserted below and must stay.
          *
          * Two assertions prove both halves of spec §3:
          *   (A) 0 HP loss: result.healing!.rounds[1].targetHpPctStart ≈ 100% (round-2 start
@@ -2055,8 +2060,7 @@ describe('B3 Task 2 — direct-damage break', () => {
                     shipSkills: { slots: [stasisInflictAttack(3)] },
                 },
                 // breaker-enemy: fires a direct 3000-damage hit at the stasised focus each round.
-                // Barrier fully absorbs the hit (0 HP loss), but the direct attack still "connects"
-                // and must break Stasis (spec §3).
+                // Barrier nullifies each hit, so nothing arrives and no Stasis break is marked.
                 {
                     id: 'breaker-enemy',
                     stats: {
@@ -2079,7 +2083,7 @@ describe('B3 Task 2 — direct-damage break', () => {
             ],
         });
 
-        // ── (A) Barrier fully absorbed: 0 HP loss ──────────────────────────────────────────
+        // ── (A) Barrier nullified the hit: 0 HP loss, and the hit WAS thrown ───────────────
         const rounds = result.healing!.rounds;
 
         // Round 1's breaker-enemy 3000 attack was FULLY absorbed by Barrier (0 HP drain).
@@ -2090,7 +2094,7 @@ describe('B3 Task 2 — direct-damage break', () => {
         // 100% confirms full absorption (distinguishes from partial or no absorption).
         expect(rounds[1].targetHpPctStart).toBeCloseTo(100, 6);
 
-        // ── (B) Stasis STILL breaks despite 0 HP loss ─────────────────────────────────────
+        // ── (B) Stasis is NOT broken: the victim keeps its full duration ──────────────────
         const abilityPerformed = events.filter(
             (e): e is Extract<CombatEvent, { type: 'ability-performed' }> =>
                 e.type === 'ability-performed'
@@ -2102,15 +2106,12 @@ describe('B3 Task 2 — direct-damage break', () => {
         // Focus was stasised in round 1 (stasis-bot applied Stasis before focus acted).
         expect(focusFiredRounds).not.toContain(1);
 
-        // The Barrier-absorbed hits (breaker-enemy speed=150 > focus speed=100) still reduce Stasis
-        // each round (reduce-by-one): R1 3→break2→post1; R2 1→break0 expired; focus fires round 3.
+        // The Barrier-nullified hits reduce nothing, so Stasis(3) decays only on the natural
+        // post-turn tick: R1 3→2, R2 2→1, R3 1→0; focus first fires in round 4. Under the old
+        // rule (every connected hit breaks) this read 3 — one round earlier — which is the delta
+        // this arm measures.
         const firstFiredRound = focusFiredRounds.length > 0 ? Math.min(...focusFiredRounds) : 999;
-        expect(firstFiredRound).toBe(3);
-
-        // NON-VACUITY: without a breaking hit, Stasis(3) would keep focus locked in rounds 1–3
-        // and fire only in round 4. The focus fires in round 3 here — one round earlier than the
-        // no-break baseline. This early fire is only possible if the Barrier-absorbed direct hit
-        // still reduced Stasis despite delivering 0 HP loss (spec §3 case).
+        expect(firstFiredRound).toBe(4);
     });
 
     // (vii) REGRESSION: same attacker applies Stasis(5) then fires pure-damage hits → breaks
