@@ -9498,7 +9498,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             const coveredStasisVictims = new Set<string>();
             // The anchor's marks, kept apart from the covered set because only the anchor has a
             // same-turn re-apply vector: the call site hands these to `resolveAnchorStasisBreak`,
-            // which suppresses them when the cast itself re-inflicted Stasis.
+            // which suppresses them when the cast itself re-inflicted Stasis. That a covered victim
+            // has no such vector is a corpus fact, not a rule — a cast would need a Stasis clause
+            // reaching past the anchor AND a multi-cell damage footprint. Pinned by
+            // `coveredVictimReInflict.corpus.test.ts`; merging the two sets is unruled.
             const anchorStasisVictims = new Set<string>();
             // Collect EVERY footprint victim hit by this cast's firing damage (unique by id) so each
             // can detonate its OWN containers after the firing hits land.
@@ -9630,8 +9633,10 @@ export function runCombat(rawInput: CombatEngineInput): {
                     );
                 },
             });
-            // Set the DEFERRED Stasis break for every covered victim — unconditional, full stop.
-            // The victim's own skip branch consumes it next turn.
+            // Set the DEFERRED Stasis break for every covered victim. Unconditional HERE only in
+            // the sense that `resolveAnchorStasisBreak`'s re-inflict suppression does not apply:
+            // the gate itself already ran, in `onVictimPreImpact`, which is the only thing that
+            // puts an id in this set. The victim's own skip branch consumes it next turn.
             // Pure state, no events: hoisted ABOVE the emission block so the
             // interleaved event/attacked pairs below stay adjacent, with nothing between them.
             for (const victimId of coveredStasisVictims) {

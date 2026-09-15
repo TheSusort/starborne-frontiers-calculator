@@ -404,10 +404,12 @@ export interface PlayerTurnResult {
      *
      * Sub-attack 0 is NOT served by this — it keeps its cast-time draw, because consumers
      * read that outcome before the positional loop runs: `resistedTimedEnemyNames` (gates this
-     * turn's `control-applied` emission, inside this function), `resistedEnemyDebuffs` (the round
-     * display list), and `inflictedEnemyDebuffs` (the engine's `resolveAnchorStasisBreak` check,
-     * which runs immediately after this function returns). Keeping the k=0 draw where it is also keeps
-     * the `${ownerId}:landing` RNG stream's draw order untouched for a single-hit cast.
+     * turn's `control-applied` emission, inside this function) and `resistedEnemyDebuffs` (the
+     * round display list). Keeping the k=0 draw where it is also keeps the `${ownerId}:landing`
+     * RNG stream's draw order untouched for a single-hit cast.
+     *
+     * `inflictedEnemyDebuffs` is NOT one of those consumers: `resolveAnchorStasisBreak` reads it
+     * after the positional drive returns, so it constrains nothing here.
      *
      * `phase` selects clause order WITHIN the sub-attack: `'before-damage'` for clauses written
      * ahead of the damage clause (applied at the sub-attack's start), `'after-damage'` for those

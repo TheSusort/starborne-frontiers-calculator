@@ -541,6 +541,8 @@ interface EnemySideRunArgs {
     hits?: number;
     /** Thorns % on the player anchor victim — the enemy-side drain vector. */
     reflectPct?: number;
+    /** Rounds to run. Defaults to the file-wide ROUNDS. */
+    rounds?: number;
 }
 
 interface EnemySideRun {
@@ -554,6 +556,7 @@ const enemySideRun = ({
     startingShieldPctOfHp,
     hits = 1,
     reflectPct,
+    rounds: numRounds = ROUNDS,
 }: EnemySideRunArgs): EnemySideRun => {
     const bus = createEventBus();
     const performed: Extract<CombatEvent, { type: 'ability-performed' }>[] = [];
@@ -565,7 +568,7 @@ const enemySideRun = ({
         defensePenetration: 0,
         chargeCount: 0,
         shipSkills: { slots: [] },
-        numRounds: ROUNDS,
+        numRounds,
         selfBuffs: [],
         enemyDebuffs: [],
         selfDotModifier: 0,
@@ -605,36 +608,75 @@ const enemySideRun = ({
     };
 };
 
+// The enemy breaker's pool is a ONE-TIME pre-fight seed with no round-start re-grant, so it is
+// empty from the end of round 1 and every hit from round 2 on breaks regardless of the gate.
+// Round 1 is the only round the gate can decide, and each arm below reads that decision off the
+// round the anchor FIRST acts: the earlier it acts, the earlier its Stasis was broken. Asserting
+// "never acts" instead would only be measuring where the run was truncated.
+const ENEMY_ROUNDS = 8;
+
+/** Round 1's cast broke the anchor. Same as an unshielded breaker's — the gate never applied. */
+const BROKEN_IN_ROUND_1 = 4;
+/** Round 1's cast did NOT break the anchor; the break lands in round 2, one round later. */
+const EXEMPT_IN_ROUND_1 = 5;
+/** No hit ever breaks: the Stasis runs its own course and the victim acts when it expires. */
+const NEVER_BROKEN = 7;
+
 describe('shield-gated Stasis exemption — team symmetry (enemy carrier)', () => {
     it('a SHIELDED enemy carrier breaks neither player victim', () => {
-        const r = enemySideRun({ startingShieldPctOfHp: 1 });
-        expect(r.anchor).toHaveLength(0);
-        expect(r.covered).toHaveLength(0);
+        const r = enemySideRun({ startingShieldPctOfHp: 1, rounds: ENEMY_ROUNDS });
+        expect(r.anchor[0]).toBe(NEVER_BROKEN);
+        expect(r.covered[0]).toBe(NEVER_BROKEN);
     });
 
     it('the SAME enemy carrier with an empty pool breaks both', () => {
-        const r = enemySideRun({ startingShieldPctOfHp: 0 });
-        expect(r.anchor.length).toBeGreaterThan(0);
-        expect(r.covered.length).toBeGreaterThan(0);
+        const r = enemySideRun({ startingShieldPctOfHp: 0, rounds: ENEMY_ROUNDS });
+        expect(r.anchor[0]).toBe(BROKEN_IN_ROUND_1);
+        expect(r.covered[0]).toBe(BROKEN_IN_ROUND_1);
     });
 
-    // THE LIFT, ENEMY SIDE: the breaker's pool comes from a one-time pre-fight seed with no
-    // round-start re-grant, so thorns sized to empty it in ONE bounce turn that seed into a
-    // mid-cast drain. Sub-hit 0 connects while the pool is up (exempt) and empties it; sub-hit 1
-    // connects with the pool at zero and breaks the anchor's Stasis — the enemy-carrier twin of
-    // the player fixture's 'hits:2 + draining thorns' arm.
+    // THE LIFT, ENEMY SIDE: thorns sized to empty the seed in ONE bounce turn it into a mid-cast
+    // drain. Sub-hit 0 connects while the pool is up (exempt) and empties it; sub-hit 1 connects
+    // with the pool at zero and breaks the anchor's Stasis — the enemy-carrier twin of the player
+    // fixture's 'hits:2 + draining thorns' arm.
     it('the lift is symmetric: an enemy carrier whose pool drains mid-cast breaks its ANCHOR', () => {
-        const r = enemySideRun({ startingShieldPctOfHp: POOL_PCT, hits: 2, reflectPct: DRAIN_PCT });
+        const r = enemySideRun({
+            startingShieldPctOfHp: POOL_PCT,
+            hits: 2,
+            reflectPct: DRAIN_PCT,
+            rounds: ENEMY_ROUNDS,
+        });
         expect(r.breakerPool[0]).toBe(0);
-        expect(r.anchor.length).toBeGreaterThan(0);
+        expect(r.anchor[0]).toBe(BROKEN_IN_ROUND_1);
     });
 
-    // Its partner, mirroring the player-side pair: the SAME pool and drain settings over ONE hit
-    // leave the anchor exempt, because the only hit that landed on it connected while the pool was
-    // still up. Hit count is the only variable between this arm and the one above.
-    it('the lift, twinned: the SAME drain over ONE hit leaves the enemy carrier anchor exempt', () => {
-        const r = enemySideRun({ startingShieldPctOfHp: POOL_PCT, hits: 1, reflectPct: DRAIN_PCT });
-        expect(r.breakerPool[0]).toBe(0);
-        expect(r.anchor).toHaveLength(0);
+    // Its partner, mirroring the player-side pair: the SAME pool and drain over ONE hit leaves
+    // round 1's cast exempt, because the only hit that landed connected while the pool was still
+    // up and a hit is never un-exempted by its own bounce. The anchor is still broken from round 2
+    // — the seed is gone by then — so the lift is worth exactly one round. Hit count is the only
+    // variable between this arm and the one above.
+    it('the lift, twinned: the SAME drain over ONE hit spares the enemy carrier anchor for a round', () => {
+        const oneHit = enemySideRun({
+            startingShieldPctOfHp: POOL_PCT,
+            hits: 1,
+            reflectPct: DRAIN_PCT,
+            rounds: ENEMY_ROUNDS,
+        });
+        const twoHit = enemySideRun({
+            startingShieldPctOfHp: POOL_PCT,
+            hits: 2,
+            reflectPct: DRAIN_PCT,
+            rounds: ENEMY_ROUNDS,
+        });
+        expect(oneHit.breakerPool[0]).toBe(0);
+        expect(oneHit.anchor[0]).toBe(EXEMPT_IN_ROUND_1);
+        expect(oneHit.anchor[0]).toBe(twoHit.anchor[0] + 1);
+    });
+
+    // The drain is what moves the arm above, not the extra hit: a second hit with nothing to drain
+    // the pool leaves round 1 exempt exactly as one hit does.
+    it('hits:2 with NO drain stays exempt in round 1 — the pool is what decides', () => {
+        const r = enemySideRun({ startingShieldPctOfHp: POOL_PCT, hits: 2, rounds: ENEMY_ROUNDS });
+        expect(r.anchor[0]).toBe(EXEMPT_IN_ROUND_1);
     });
 });
