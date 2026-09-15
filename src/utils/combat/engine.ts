@@ -5448,6 +5448,28 @@ export function runCombat(rawInput: CombatEngineInput): {
     // cross-ship re-apply case that shares the cause — the map is keyed by VICTIM, not by the
     // Stasis instance the break was approved against.
     const stasisBreakPending = new Map<string, true>();
+    // A pending mark is SETTLED the moment any fresh Stasis is applied to that victim, before the
+    // incoming application reaches the family contest — #535.
+    //
+    // In game the hit reduces the victim's Stasis as it lands, so a Stasis arriving afterwards is
+    // weighed against the ALREADY-REDUCED incumbent. This engine defers the reduction, so without
+    // this the contest weighs the unreduced one and the queued mark then shaves whatever survives —
+    // a fresh Stasis from a DIFFERENT ship, which the ruling says keeps its full duration.
+    //
+    // Resolving here rather than clearing the mark is what makes the arithmetic agree in all three
+    // shapes. Incumbent 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2:
+    // reduce to 1, challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3,
+    // challenger loses, 3 — the case a bare clear gets wrong, leaving 4.
+    //
+    // It also disarms a STRANDED mark: one whose Stasis was cleansed before the victim's next turn
+    // is never consumed (only a blocked turn consumes one), and would otherwise wait indefinitely
+    // to shave an unrelated later Stasis. Reducing an absent entry is a no-op, and the mark goes.
+    statusEngine.setBeforeTimedEnemyApplication((targetId, buffName) => {
+        if (!isStasis(buffName)) return;
+        if (!stasisBreakPending.has(targetId)) return;
+        stasisBreakPending.delete(targetId);
+        for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+    });
 
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks

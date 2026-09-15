@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.67.0';
 export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: a slower attacker's hits now reduce Stasis like a faster one's.",
     'Combat simulator: damage-free casts and damage-over-time no longer reduce Stasis.',
+    'Combat simulator: a fresh Stasis from another ship now lasts its full duration.',
     'Recruitment: Zenith is no longer counted as a recruitable ship.',
     'Combat simulator: sweep one stat across a range and chart the result.',
     'Combat simulator: sweep points show which differences beat the noise.',
