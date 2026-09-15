@@ -1417,6 +1417,7 @@ exports[`kit fingerprints > Iridium 1`] = `
   "statusRich": [
     "attack",
     "attack:active",
+    "attack:charged",
     "buff-expired",
     "charge-changed",
     "control:charged",

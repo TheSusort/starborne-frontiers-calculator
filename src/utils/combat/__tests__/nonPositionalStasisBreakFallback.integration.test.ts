@@ -2,26 +2,23 @@
  * nonPositionalStasisBreakFallback.integration.test.ts — the `?? <cast-time set>` fallback in
  * `resolveAnchorStasisBreak(<site>DriveAnchorStasis ?? <site>TurnStasisHitVictims, ...)`.
  *
- * `<site>DriveAnchorStasis` is assigned only when `drivePositionalTurnApply` actually ran, which
- * requires a damage ability to have fired this cast (`positionalScalars` is `hasDamageAbility ?
- * ... : undefined` — see playerTurn.ts). A PURE debuff cast (no damage ability at all) never sets
- * `positionalScalars`, so the `positional` gate is false regardless of board layout and
- * `<site>DriveAnchorStasis` stays `undefined` — the fallback operand,
- * `<site>TurnStasisHitVictims`, is what `resolveAnchorStasisBreak` actually reads.
+ * `<site>DriveAnchorStasis` is assigned only when `drivePositionalTurnApply` actually ran. A cast
+ * that deals damage but resolves NON-positionally (no pattern, so `willApplyPositionally` is false
+ * whatever the board looks like) therefore leaves it `undefined`, and the fallback operand,
+ * `<site>TurnStasisHitVictims`, is what `resolveAnchorStasisBreak` reads. That set is populated by
+ * the cast-time `onHitBreakStasis` hook in playerTurn.ts.
  *
- * `<site>TurnStasisHitVictims` is populated by the cast-time `onHitBreakStasis` hook
- * (playerTurn.ts), which fires once per turn whenever this cast has a live, currently-stasised
- * target and the attacker does not carry `doesntBreakStasis` — independent of whether any ability
- * in the kit deals damage. So a debuff-only attacker with a stasised front target exercises the
- * fallback operand on every turn it takes.
+ * ONLY DIRECT DAMAGE REDUCES STASIS (owner ruling 2026-09-15). A DoT tick does not, and neither
+ * does a cast that inflicts a debuff without dealing damage. So the SUT here is a patternless
+ * DAMAGE cast — damage is what earns the break, the missing pattern is what keeps it off the
+ * positional drive. The second describe at each site is the ruling's own witness: the same
+ * attacker stripped down to a pure debuff breaks nothing.
  *
  * FIXTURE. Geometry lifted from `perFootprintStasisBreak.integration.test.ts`'s focus-site
  * section: a fast player stasis-bot (M4) seeds Stasis on the enemy front victim (M4) in round 1,
  * an enemy culler (T1, Line-Range-1) one-shots the bot that same round so Stasis is applied
  * exactly once, and the SUT breaker sits at the player rear column (M1) so the culler's
- * front-anchored AoE never reaches it. The SUT's kit here is a single DEBUFF ability with no
- * damage component — the one difference from that file's breaker, and the one that keeps this
- * cast off the positional drive for its whole run.
+ * front-anchored AoE never reaches it.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput, TeamActorEngineInput } from '../engine';
@@ -87,9 +84,16 @@ const stasisInflictAttack = (turns: number): ShipSkills['slots'][number] => ({
     ],
 });
 
-/** The SUT's kit: ONE debuff ability, no damage ability anywhere in the slot list. With no
- *  damage ability firing, `positionalScalars` stays `undefined` for this cast — see file header —
- *  so this attacker's turns never reach `drivePositionalTurnApply`, on ANY board layout. */
+/** The SUT's kit: a DAMAGE ability. Damage is what reduces Stasis; the SUT stays off the
+ *  positional drive because its input carries no pattern, not because it deals nothing. */
+const patternlessDamageAttack = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } }),
+    ],
+});
+
+/** The ruling's witness kit: ONE debuff ability, no damage anywhere. Must break nothing. */
 const debuffOnlyAttack = (): ShipSkills['slots'][number] => ({
     slot: 'active',
     abilities: [
@@ -204,13 +208,16 @@ const enemyCuller = (): EnemyAttacker => ({
     shipSkills: { slots: [basicAttack()] },
 });
 
-const SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
+const SUT_BASE = (
+    doesntBreakStasis: boolean,
+    kit: ShipSkills['slots'][number] = patternlessDamageAttack()
+): CombatEngineInput => ({
     attack: 1,
     crit: 0,
     critDamage: 0,
     defensePenetration: 0,
     chargeCount: 0,
-    shipSkills: { slots: [debuffOnlyAttack()] },
+    shipSkills: { slots: [kit] },
     numRounds: ROUNDS,
     selfBuffs: [],
     enemyDebuffs: [],
@@ -230,27 +237,38 @@ const SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
     position: 'M1',
     speed: 100,
     target: parsedTarget('front'),
-    pattern: basePattern(),
+    // NO pattern: this is what keeps a DAMAGE cast off the positional drive, so
+    // `resolveAnchorStasisBreak` reads the cast-time fallback operand.
+    pattern: undefined,
     teamActors: [playerStasisBot()],
     enemyAttackers: [enemyVictim(), enemyCuller()],
 });
 
 describe('the non-positional cast-time Stasis-break fallback (focus site)', () => {
-    it("a debuff-only attacker (no damage ability, never positional) breaks the front victim's Stasis", () => {
+    it("a patternless DAMAGE attacker (never positional) breaks the front victim's Stasis", () => {
         const { performed } = collectAbilityPerformed(SUT_BASE(false));
 
         // Stasis(6) ≫ 4 rounds under natural decay alone — it could only have acted because
-        // something broke it, and the SUT here has no damage ability, so the drive's
+        // something broke it, and the SUT here has no pattern, so the drive's
         // `onVictimPreImpact` mark never ran: this can only be the cast-time `onHitBreakStasis`
         // fallback resolving through `resolveAnchorStasisBreak`.
         expect(firedRounds(performed, 'enemy-victim').length).toBeGreaterThan(0);
     });
 
-    it('NON-VACUOUS control: the SAME debuff-only attacker WITH doesntBreakStasis never breaks it', () => {
+    it('NON-VACUOUS control: the SAME attacker WITH doesntBreakStasis never breaks it', () => {
         const { performed } = collectAbilityPerformed(SUT_BASE(true));
 
         // doesntBreakStasis ⇒ `onHitBreakStasis` is never wired at all (tgtWasStasised is
         // false), so the aggregate set stays empty and the victim keeps its Stasis the whole run.
+        expect(firedRounds(performed, 'enemy-victim')).toHaveLength(0);
+    });
+
+    // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15). Same attacker, same board, kit
+    // stripped to a pure debuff: it still casts every round on a live stasised target, so the
+    // cast-time hook would fire on target liveness alone — and must not, because nothing hit.
+    it('a DEBUFF-ONLY cast breaks nothing: only direct damage reduces Stasis', () => {
+        const { performed } = collectAbilityPerformed(SUT_BASE(false, debuffOnlyAttack()));
+
         expect(firedRounds(performed, 'enemy-victim')).toHaveLength(0);
     });
 });
@@ -261,7 +279,10 @@ describe('the non-positional cast-time Stasis-break fallback (focus site)', () =
 // 'enemy-victim' is the walked team actor's `teamDriveAnchorStasis ?? teamTurnStasisHitVictims`.
 // ---------------------------------------------------------------------------------------------
 
-const teamDebuffOnlySut = (doesntBreakStasis: boolean): TeamActorEngineInput => ({
+const teamSut = (
+    doesntBreakStasis: boolean,
+    kit: ShipSkills['slots'][number] = patternlessDamageAttack()
+): TeamActorEngineInput => ({
     id: 'team-sut',
     speed: 100,
     chargeCount: 0,
@@ -271,9 +292,9 @@ const teamDebuffOnlySut = (doesntBreakStasis: boolean): TeamActorEngineInput => 
     doesntBreakStasis,
     position: 'M1',
     target: parsedTarget('front'),
-    pattern: basePattern(),
+    pattern: undefined,
     walk: {
-        shipSkills: { slots: [debuffOnlyAttack()] },
+        shipSkills: { slots: [kit] },
         stats: {
             attack: 1,
             crit: 0,
@@ -293,7 +314,10 @@ const teamDebuffOnlySut = (doesntBreakStasis: boolean): TeamActorEngineInput => 
     },
 });
 
-const TEAM_SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
+const TEAM_SUT_BASE = (
+    doesntBreakStasis: boolean,
+    kit: ShipSkills['slots'][number] = patternlessDamageAttack()
+): CombatEngineInput => ({
     attack: 1,
     crit: 0,
     critDamage: 0,
@@ -321,12 +345,12 @@ const TEAM_SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
     speed: 1,
     target: ALLY_TARGET,
     pattern: basePattern(),
-    teamActors: [playerStasisBot(), teamDebuffOnlySut(doesntBreakStasis)],
+    teamActors: [playerStasisBot(), teamSut(doesntBreakStasis, kit)],
     enemyAttackers: [enemyVictim(), enemyCuller()],
 });
 
 describe('the non-positional cast-time Stasis-break fallback (team site)', () => {
-    it("a debuff-only walked team actor (no damage ability, never positional) breaks the front victim's Stasis", () => {
+    it("a patternless DAMAGE walked team actor (never positional) breaks the front victim's Stasis", () => {
         const { performed } = collectAbilityPerformed(TEAM_SUT_BASE(false));
 
         expect(firedRounds(performed, 'enemy-victim').length).toBeGreaterThan(0);
@@ -334,6 +358,15 @@ describe('the non-positional cast-time Stasis-break fallback (team site)', () =>
 
     it('NON-VACUOUS control: the SAME walked team actor WITH doesntBreakStasis never breaks it', () => {
         const { performed } = collectAbilityPerformed(TEAM_SUT_BASE(true));
+
+        expect(firedRounds(performed, 'enemy-victim')).toHaveLength(0);
+    });
+
+    // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15). Same attacker, same board, kit
+    // stripped to a pure debuff: it still casts every round on a live stasised target, so the
+    // cast-time hook would fire on target liveness alone — and must not, because nothing hit.
+    it('a DEBUFF-ONLY cast breaks nothing: only direct damage reduces Stasis', () => {
+        const { performed } = collectAbilityPerformed(TEAM_SUT_BASE(false, debuffOnlyAttack()));
 
         expect(firedRounds(performed, 'enemy-victim')).toHaveLength(0);
     });
@@ -432,7 +465,10 @@ const playerCuller = (): TeamActorEngineInput => ({
 });
 
 // The enemy debuff-only SUT: rear column M1, outside the player culler's Line-Range-1 footprint.
-const enemyDebuffOnlySut = (doesntBreakStasis: boolean): EnemyAttacker => ({
+const enemySut = (
+    doesntBreakStasis: boolean,
+    kit: ShipSkills['slots'][number] = patternlessDamageAttack()
+): EnemyAttacker => ({
     id: 'enemy-sut',
     stats: {
         attack: 1,
@@ -449,11 +485,14 @@ const enemyDebuffOnlySut = (doesntBreakStasis: boolean): EnemyAttacker => ({
     doesntBreakStasis,
     position: 'M1',
     target: parsedTarget('front'),
-    pattern: basePattern(),
-    shipSkills: { slots: [debuffOnlyAttack()] },
+    pattern: undefined,
+    shipSkills: { slots: [kit] },
 });
 
-const ENEMY_SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
+const ENEMY_SUT_BASE = (
+    doesntBreakStasis: boolean,
+    kit: ShipSkills['slots'][number] = patternlessDamageAttack()
+): CombatEngineInput => ({
     attack: 1,
     crit: 0,
     critDamage: 0,
@@ -481,11 +520,11 @@ const ENEMY_SUT_BASE = (doesntBreakStasis: boolean): CombatEngineInput => ({
     target: ALLY_TARGET,
     pattern: basePattern(),
     teamActors: [playerVictim(), playerCuller()],
-    enemyAttackers: [enemyStasisBot(), enemyDebuffOnlySut(doesntBreakStasis)],
+    enemyAttackers: [enemyStasisBot(), enemySut(doesntBreakStasis, kit)],
 });
 
 describe('the non-positional cast-time Stasis-break fallback (enemy site)', () => {
-    it("a debuff-only enemy attacker (no damage ability, never positional) breaks the player victim's Stasis", () => {
+    it("a patternless DAMAGE enemy attacker (never positional) breaks the player victim's Stasis", () => {
         const { performed } = collectAbilityPerformed(ENEMY_SUT_BASE(false));
 
         expect(firedRounds(performed, 'player-victim').length).toBeGreaterThan(0);
@@ -493,6 +532,15 @@ describe('the non-positional cast-time Stasis-break fallback (enemy site)', () =
 
     it('NON-VACUOUS control: the SAME enemy attacker WITH doesntBreakStasis never breaks it', () => {
         const { performed } = collectAbilityPerformed(ENEMY_SUT_BASE(true));
+
+        expect(firedRounds(performed, 'player-victim')).toHaveLength(0);
+    });
+
+    // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15). Same attacker, same board, kit
+    // stripped to a pure debuff: it still casts every round on a live stasised target, so the
+    // cast-time hook would fire on target liveness alone — and must not, because nothing hit.
+    it('a DEBUFF-ONLY cast breaks nothing: only direct damage reduces Stasis', () => {
+        const { performed } = collectAbilityPerformed(ENEMY_SUT_BASE(false, debuffOnlyAttack()));
 
         expect(firedRounds(performed, 'player-victim')).toHaveLength(0);
     });

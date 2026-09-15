@@ -5432,6 +5432,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         allPlayerActors.every((a) => a.destroyedRound !== undefined);
     let matchOver = false;
 
+    // §4.5 Deferred Stasis break marks, keyed by victim id. Lives ACROSS rounds on purpose: the
+    // mark is spent on the victim's own next turn, and that turn is in the NEXT round whenever the
+    // attacker acts after the victim in the turn order. Scoped per round, such a mark was dropped
+    // at the round boundary and the break simply never happened — a slow attacker was
+    // indistinguishable from one carrying `doesntBreakStasis`, measured across both Stasis(3) and
+    // Stasis(4). A mark is only ever set for a victim stasised at the moment of the hit, and is
+    // deleted as soon as it is spent.
+    const stasisBreakPending = new Map<string, true>();
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -10593,7 +10602,6 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
         // NO casterId lookup: the per-turn inflictedEnemyDebuffs signal is sufficient and correct
         // regardless of which attacker fires on later turns (fixes the casterId-identity bug).
-        const stasisBreakPending = new Map<string, true>();
         /**
          * Queue the anchor victim's §4.5 Stasis break for one cast, unless that same cast
          * re-inflicted Stasis — a same-turn re-apply wins over the break, so the victim keeps the
