@@ -2309,13 +2309,10 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15): a DoT tick does not, and
     // neither does a cast that inflicts a debuff without dealing damage. The engine wires this
     // hook off target liveness alone, so without this gate a damage-less cast marks a break
-    // exactly as a real hit would. `damageInputsFromSkill` reports `hits: 1` even for a slot with
-    // no damage ability, so the multiplier is the discriminator — plus `scalingAbility`, which
-    // carries its own damage behind a 0 multiplier ("damage equal to 30% of its Defense").
-    const breakInputs = damageInputsFromSkill(firingSkill);
-    const castDealsDirectDamage =
-        breakInputs.multiplier > 0 || breakInputs.scalingAbility !== undefined;
-    if (targetId !== undefined && castDealsDirectDamage) onHitBreakStasis?.(targetId);
+    // exactly as a real hit would. Reuses `hasDamageAbility` deliberately: it is the same
+    // predicate that decides `positionalScalars`, so this non-positional gate and the positional
+    // drive's own can never disagree about whether the cast hit.
+    if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
     // Each application that passes its condition gate draws the landing decision here:

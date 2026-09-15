@@ -5437,8 +5437,16 @@ export function runCombat(rawInput: CombatEngineInput): {
     // attacker acts after the victim in the turn order. Scoped per round, such a mark was dropped
     // at the round boundary and the break simply never happened — a slow attacker was
     // indistinguishable from one carrying `doesntBreakStasis`, measured across both Stasis(3) and
-    // Stasis(4). A mark is only ever set for a victim stasised at the moment of the hit, and is
-    // deleted as soon as it is spent.
+    // Stasis(4).
+    //
+    // A mark is only ever set for a victim stasised at the moment of the hit, and is deleted when
+    // spent — on the victim's next BLOCKED turn, which is the only site that consumes one. A mark
+    // is therefore NOT guaranteed to be spent: if the victim's Stasis is cleansed or purged before
+    // that turn (Stasis is not in UNREMOVABLE_STATUSES), the victim's turn is unblocked, nothing
+    // consumes the mark, and it survives to shave a later Stasis. Round-scoping used to bound that
+    // to one round; it is now bounded only by the fight. Tracked in #535, together with the
+    // cross-ship re-apply case that shares the cause — the map is keyed by VICTIM, not by the
+    // Stasis instance the break was approved against.
     const stasisBreakPending = new Map<string, true>();
 
     for (let r = 1; r <= numRounds; r++) {
@@ -10600,8 +10608,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
         // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
         // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
-        // NO casterId lookup: the per-turn inflictedEnemyDebuffs signal is sufficient and correct
-        // regardless of which attacker fires on later turns (fixes the casterId-identity bug).
+        // The re-apply suppression reads the ACTING attacker's own `inflictedEnemyDebuffs`, so it
+        // answers "did this cast re-inflict Stasis" and nothing else. A Stasis applied by a
+        // DIFFERENT ship after the mark is queued is invisible to it, and the queued mark then
+        // shaves that fresh Stasis — #535, whose ruling is that a cross-ship fresh Stasis keeps its
+        // full duration. Closing that needs the mark keyed to the Stasis INSTANCE, or cleared at
+        // the apply seam; neither is done here.
         /**
          * Queue the anchor victim's §4.5 Stasis break for one cast, unless that same cast
          * re-inflicted Stasis — a same-turn re-apply wins over the break, so the victim keeps the
