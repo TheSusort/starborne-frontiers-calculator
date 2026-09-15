@@ -203,6 +203,12 @@ export interface StatusEngine {
      *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
      *  draws against the correct per-turn chance — not the attacker's setup-time scalar. */
     setLandsTimedEnemyApplication(fn: (buff: SelectedGameBuff) => boolean): void;
+    /** Observer run IMMEDIATELY BEFORE an enemy-side timed application reaches the family contest,
+     *  with the target's store id and the incoming buff name. It exists so the engine can settle
+     *  business the game settles at hit time but this engine defers — a pending Stasis break, whose
+     *  reduction must land BEFORE the incoming status so the contest weighs the REDUCED incumbent.
+     *  The observer may mutate the target's store; whatever it leaves is what the contest sees. */
+    setBeforeTimedEnemyApplication(fn: (targetId: string, buffName: string) => void): void;
     /** The round's active lists. Pure read.
      *  `ownerId` selects which player-side carrier's maps to read; defaults to
      *  'attacker'. Always-active and accumulating scheduled buffs are
@@ -641,6 +647,12 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     let landsTimedEnemyApplication = input.landsTimedEnemyApplication ?? (() => true);
     const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
         landsTimedEnemyApplication = fn;
+    };
+    let beforeTimedEnemyApplication: (targetId: string, buffName: string) => void = () => {};
+    const setBeforeTimedEnemyApplication = (
+        fn: (targetId: string, buffName: string) => void
+    ): void => {
+        beforeTimedEnemyApplication = fn;
     };
     const buffDurationExtensionFor = input.buffDurationExtensionFor ?? (() => 0);
 
@@ -1886,6 +1898,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         const extension =
             status.side === 'self' ? buffDurationExtensionFor(status.casterId ?? 'attacker') : 0;
         const duration = status.duration + extension;
+        if (status.side === 'enemy') {
+            beforeTimedEnemyApplication(enemyEffectiveId, status.payload.buffName);
+        }
         const existing = map.get(familyKey);
         // A landed-but-family-blocked application is silently absorbed: the landing roll
         // was already consumed by the caller's gate (the family rule runs AFTER the landing
@@ -2098,6 +2113,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         beginRound,
         sourceFired,
         setLandsTimedEnemyApplication,
+        setBeforeTimedEnemyApplication,
         snapshot,
         decrementPlayer,
         beginTurn,

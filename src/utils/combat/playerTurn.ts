@@ -2306,7 +2306,17 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // correctly (side-symmetric: same key regardless of whether the actor is a player or enemy).
     // Only fire when targetId is defined (the engine always supplies it for direct-channel
     // break-eligible turns; DPS/standalone callers without a real targetId are inert).
-    if (targetId !== undefined) onHitBreakStasis?.(targetId);
+    // ONLY DIRECT DAMAGE reduces Stasis (owner ruling 2026-09-15): a DoT tick does not, and
+    // neither does a cast that inflicts a debuff without dealing damage. The engine wires this
+    // hook off target liveness alone, so without this gate a damage-less cast marks a break
+    // exactly as a real hit would. Reuses `hasDamageAbility` deliberately: it is the same
+    // predicate that decides `positionalScalars`, so this non-positional gate and the positional
+    // drive's own can never disagree about whether the cast hit.
+    //
+    // KNOWN GAP (#537): `hasDamageAbility` is PRE-GATE. A cast whose only damage ability is gated
+    // off by `gateFiringAbilities` — which does not run until it has a round context, far below —
+    // deals nothing and still marks a break. 26 corpus slots can reach that.
+    if (targetId !== undefined && hasDamageAbility) onHitBreakStasis?.(targetId);
 
     // (b) Gate + apply this round's firing-skill TIMED enemy debuff abilities.
     // Each application that passes its condition gate draws the landing decision here:

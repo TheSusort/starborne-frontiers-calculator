@@ -5432,6 +5432,45 @@ export function runCombat(rawInput: CombatEngineInput): {
         allPlayerActors.every((a) => a.destroyedRound !== undefined);
     let matchOver = false;
 
+    // §4.5 Deferred Stasis break marks, keyed by victim id. Lives ACROSS rounds on purpose: the
+    // mark is spent on the victim's own next turn, and that turn is in the NEXT round whenever the
+    // attacker acts after the victim in the turn order. Scoped per round, such a mark was dropped
+    // at the round boundary and the break simply never happened — a slow attacker was
+    // indistinguishable from one carrying `doesntBreakStasis`, measured across both Stasis(3) and
+    // Stasis(4).
+    //
+    // A mark is only ever set for a victim stasised at the moment of the hit, and is deleted when
+    // spent — on the victim's next BLOCKED turn, which is the only site that consumes one. A mark
+    // is therefore NOT guaranteed to be spent: if the victim's Stasis is cleansed or purged before
+    // that turn (Stasis is not in UNREMOVABLE_STATUSES), the victim's turn is unblocked, nothing
+    // consumes the mark, and it survives to shave a later Stasis. Round-scoping used to bound that
+    // to one round; it is now bounded only by the fight. Tracked in #535, together with the
+    // cross-ship re-apply case that shares the cause — the map is keyed by VICTIM, not by the
+    // Stasis instance the break was approved against.
+    const stasisBreakPending = new Map<string, true>();
+    // A pending mark is SETTLED the moment any fresh Stasis is applied to that victim, before the
+    // incoming application reaches the family contest — #535.
+    //
+    // In game the hit reduces the victim's Stasis as it lands, so a Stasis arriving afterwards is
+    // weighed against the ALREADY-REDUCED incumbent. This engine defers the reduction, so without
+    // this the contest weighs the unreduced one and the queued mark then shaves whatever survives —
+    // a fresh Stasis from a DIFFERENT ship, which the ruling says keeps its full duration.
+    //
+    // Resolving here rather than clearing the mark is what makes the arithmetic agree in all three
+    // shapes. Incumbent 2 + incoming 4: reduce to 1, challenger wins, 4. Incumbent 2 + incoming 2:
+    // reduce to 1, challenger now wins on duration, 2. Incumbent 4 + incoming 2: reduce to 3,
+    // challenger loses, 3 — the case a bare clear gets wrong, leaving 4.
+    //
+    // It also disarms a STRANDED mark: one whose Stasis was cleansed before the victim's next turn
+    // is never consumed (only a blocked turn consumes one), and would otherwise wait indefinitely
+    // to shave an unrelated later Stasis. Reducing an absent entry is a no-op, and the mark goes.
+    statusEngine.setBeforeTimedEnemyApplication((targetId, buffName) => {
+        if (!isStasis(buffName)) return;
+        if (!stasisBreakPending.has(targetId)) return;
+        stasisBreakPending.delete(targetId);
+        for (const name of STASIS_BUFFS) statusEngine.reduceTimedEnemyStatus(targetId, name);
+    });
+
     for (let r = 1; r <= numRounds; r++) {
         // Advance the status engine's round counter (per-round accumulating stacks
         // tick here, before any turn fires). Sources notify via sourceFired in turn.
@@ -10579,7 +10618,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         drainIntentsFor('player');
         drainIntentsFor('enemy');
 
-        // §4.5 Stasis-break pending map. Reset fresh each round (new Map here).
+        // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
+        // whole fight — see its declaration for why a round-scoped map dropped the break entirely
+        // whenever the attacker acted after the victim.
         // Keys: victimIds whose Stasis should be removed when their skip branch runs.
         // Values: always true (present = break approved; absent = no break queued).
         // An entry is added by the ATTACKER's turn block, from two sources:
@@ -10591,9 +10632,12 @@ export function runCombat(rawInput: CombatEngineInput): {
         // its next turn (Stasis gone). The same-round drain guard (drainIntentsFor('player') / drainIntentsFor('enemy'))
         // runs BEFORE the break resolution → on-attacked reactive sees isStasised=true (test iii).
         // Re-apply check is performed at the ATTACKER's turn, not at consume time, so there is
-        // NO casterId lookup: the per-turn inflictedEnemyDebuffs signal is sufficient and correct
-        // regardless of which attacker fires on later turns (fixes the casterId-identity bug).
-        const stasisBreakPending = new Map<string, true>();
+        // The re-apply suppression reads the ACTING attacker's own `inflictedEnemyDebuffs`, so it
+        // answers "did this cast re-inflict Stasis" and nothing else. A Stasis applied by a
+        // DIFFERENT ship after the mark is queued is invisible to it, and the queued mark then
+        // shaves that fresh Stasis — #535, whose ruling is that a cross-ship fresh Stasis keeps its
+        // full duration. Closing that needs the mark keyed to the Stasis INSTANCE, or cleared at
+        // the apply seam; neither is done here.
         /**
          * Queue the anchor victim's §4.5 Stasis break for one cast, unless that same cast
          * re-inflicted Stasis — a same-turn re-apply wins over the break, so the victim keeps the
