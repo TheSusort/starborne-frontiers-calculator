@@ -53,6 +53,7 @@
         "fetch:ship-data": "tsx scripts/fetch-ship-data.ts",
         "fetch:ascension-stats": "tsx scripts/fetch-ascension-stats.ts",
         "audit": "node scripts/audit.mjs",
+        "admin:delete-inactive": "tsx scripts/delete-inactive-accounts.ts",
         "release": "tsx scripts/release.ts"
     },
     "engines": {
