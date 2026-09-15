@@ -9610,10 +9610,13 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // a hit that never landed. The transform is all-or-nothing, so transformedToDot
                     // > 0 ⟺ zero direct damage. When Voron is stasised/disabled the transform never
                     // runs (transformedToDot stays 0) and the hit signals normally — no special case
-                    // needed here. Detonation bookkeeping above stays unconditional (the victim WAS
-                    // targeted); the §4.5 mark above reads `barriered` only, so a fully transformed
-                    // hit still reduces Stasis even though it is not a direct hit for any reaction.
-                    // That asymmetry is UNRULED, not decided.
+                    // needed here — except that the engine does NOT yet disable a stasised or
+                    // disabled owner's passives, which is the game rule (owner, 2026-09-15). Measured in
+                    // `transformSuppressesAttacked.test.ts`'s KNOWN GAP arm. Consequence at the
+                    // §4.5 mark above, which reads `barriered` only: a stasised victim's transform
+                    // still fires and its Stasis is still reduced. Under the real rule the passive
+                    // would be off, the hit would land in full, and the reduction would be correct
+                    // — so the mark's answer is right for the wrong reason until that rule lands.
                     const fullyTransformedToDot = (outcome.transformedToDot ?? 0) > 0;
                     if (!fullyTransformedToDot) {
                         // Bucket by sub-attack first. `subAttackIndex` is OPTIONAL on the callback
