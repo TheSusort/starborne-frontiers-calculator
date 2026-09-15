@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.67.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: implants and gear sets keep working while a ship is stasised.',
+    "Combat simulator: a stasised ship's passive no longer buffs its team.",
     'Combat simulator: a hit nullified by Barrier no longer reduces Stasis.',
     "Combat simulator: a slower attacker's hits now reduce Stasis like a faster one's.",
     'Combat simulator: damage-free casts and damage-over-time no longer reduce Stasis.',

@@ -472,6 +472,9 @@ function registerActorAbilityStatuses(
                 conditions: liveGateConditions(ability.conditions),
                 casterId: ownerId,
                 recipients,
+                // Provenance for the turn-block suppression — see `Ability.source`. Attached only
+                // when the ability carries it, so a ship-skill status omits the key entirely.
+                ...(ability.source ? { source: ability.source } : {}),
                 // #363 (Fuying): carry the recipient FACTION scope onto the status. `recipients`
                 // above is the roster-wide ally fan-out; the faction intersection happens at
                 // APPLICATION time in playerTurn (where the actor→faction map is in scope), not
@@ -3311,6 +3314,10 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  three turn-action gates AND the reactive drain filter (drainQueue). The Stasis-only break /
      *  immunity sites intentionally keep using isStasised — Disable never breaks. */
     const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
+    // A passive-slot AURA or accumulating status from a SHIP skill stops contributing while its
+    // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
+    // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
+    statusEngine.setTurnBlockedReader(isTurnBlocked);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp

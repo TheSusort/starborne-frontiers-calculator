@@ -264,3 +264,89 @@ describe("a turn-blocked owner's ship passive does not fire", () => {
         expect(reactionsFired(build({ block: 'Stasis', source: 'equipment' }))).toBeGreaterThan(0);
     });
 });
+
+describe("a turn-blocked owner's passive AURA stops contributing", () => {
+    // The aura channel is not a reaction: it is registered once at combat start and re-read on
+    // every other actor's turn. So the suppression has to be a READ-time question, and it is —
+    // `statusEngine.setTurnBlockedReader`. Consequence, which this block is what pins: the aura
+    // vanishes the instant the Stasis lands and returns the instant it is removed, rather than at
+    // some round boundary.
+    //
+    // OBSERVABLE: the damage an ALLY deals. The aura buffs the ally's attack, the ally is never
+    // stasised, and only the CARRIER's state changes between arms — so a drop in the ally's damage
+    // is the aura going away and nothing else.
+    const AURA_BUFF = 'Squad Attack Up';
+
+    const auraCarrier = (source?: 'equipment'): TeamActorEngineInput => {
+        const a = reactor(source);
+        a.id = 'carrier';
+        a.position = 'M4';
+        a.walk!.shipSkills = {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            ...(source ? { source } : {}),
+                            config: {
+                                type: 'buff',
+                                buffName: AURA_BUFF,
+                                parsedEffects: { attack: 100 },
+                                stacks: 1,
+                                isStackable: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return a;
+    };
+
+    /** A fast ally that attacks a dummy every round. Its damage is the aura's readout. */
+    const allyAttacker = (): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'ally';
+        a.position = 'M2';
+        a.speed = 50;
+        a.walk!.stats.attack = 1000;
+        a.walk!.shipSkills = { slots: [basicAttack()] };
+        return a;
+    };
+
+    const allyDamage = (opts: { block?: 'Stasis'; source?: 'equipment' }): number => {
+        const bus = createEventBus();
+        let dealt = 0;
+        bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+            if (e.attackerId === 'ally') dealt += e.damage ?? 0;
+        });
+        runCombat({
+            ...build({ block: opts.block }),
+            teamActors: [auraCarrier(opts.source), allyAttacker()],
+            bus,
+        });
+        return dealt;
+    };
+
+    it('control: an unblocked carrier buffs its ally', () => {
+        // Both halves of the instrument: the aura must be worth measurable damage, and the ally
+        // must actually be swinging.
+        const withAura = allyDamage({});
+        expect(withAura).toBeGreaterThan(0);
+        expect(withAura).toBeGreaterThan(allyDamage({ block: 'Stasis' }));
+    });
+
+    it('a stasised carrier contributes nothing to its ally', () => {
+        // Same board, same ally, same everything but the carrier's Stasis.
+        expect(allyDamage({ block: 'Stasis' })).toBeLessThan(allyDamage({}));
+    });
+
+    it('but an EQUIPMENT-sourced aura keeps contributing while the carrier is stasised', () => {
+        expect(allyDamage({ block: 'Stasis', source: 'equipment' })).toBe(
+            allyDamage({ source: 'equipment' })
+        );
+    });
+});

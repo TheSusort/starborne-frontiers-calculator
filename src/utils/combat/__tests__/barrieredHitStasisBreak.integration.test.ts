@@ -66,15 +66,22 @@ const basicAttack = (): ShipSkills['slots'][number] => ({
     ],
 });
 
-/** An always-active self-Barrier on the passive slot: full damage immunity for the whole run
- *  (no `duration` — the always-active form), so every hit of every round is nullified. The HP
- *  witness in each describe below is what proves it stayed up. */
+/** An always-active self-Barrier, full damage immunity for the whole run (no `duration` — the
+ *  always-active form), so every hit of every round is nullified.
+ *
+ *  `source: 'equipment'` is REQUIRED, not decoration: the victims here are stasised, and a ship's
+ *  own passive skill grants nothing while its owner is turn-blocked (owner ruling 2026-09-15) —
+ *  a Barrier-granting PASSIVE would simply never apply and every arm below would measure an
+ *  unprotected victim. An implant keeps working, which is the case the ruling describes: Barrier
+ *  survives Stasis because it is a standing buff on the ship, not a passive that has to fire.
+ *  The HP witness in each describe is what proves it stayed up. */
 const alwaysBarrierPassive = (): ShipSkills['slots'][number] => ({
     slot: 'passive',
     abilities: [
         ab({
             type: 'buff',
             target: 'self',
+            source: 'equipment',
             config: {
                 type: 'buff',
                 buffName: 'Barrier',
