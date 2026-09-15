@@ -10150,7 +10150,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
                     // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
                     // directly — Disable never breaks and does not grant immunity.
-                    if (isTurnBlocked(intent.ownerId)) continue;
+                    //
+                    // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
+                    // switches off is the ship's own PASSIVE SKILL:
+                    //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
+                    //    skill and keeps firing. It shares the passive slot with the ship's
+                    //    refits, so the provenance rides the ability — read `Ability.source`.
+                    //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
+                    //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
+                    //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
+                    //    dead-owner gate.
+                    if (
+                        isTurnBlocked(intent.ownerId) &&
+                        intent.ability.source !== 'equipment' &&
+                        !intent.eventCtx?.fromOwnDeath
+                    ) {
+                        continue;
+                    }
                     executeIntent(intent, {
                         round: r,
                         statusEngine,

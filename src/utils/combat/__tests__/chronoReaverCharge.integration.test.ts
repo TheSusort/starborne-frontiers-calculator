@@ -634,35 +634,27 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
         enemyAttackers: opts.enemyAttackers,
     });
 
-    it('banks NO periodic charge on the turn-blocked proc turn; the next proc lands on the original residue', () => {
+    it('banks the IMPLANT proc on a turn-blocked proc turn, but no turn baseline', () => {
         // Legendary CR (period 2, chargeCount 8). A Stasis(3) lands on the focus at the head of
-        // round 1 (the speed-300 bot acts first), so the focus is turn-blocked across rounds 1–3 —
+        // round 1 (the speed-300 bot acts first), so the focus is turn-blocked across rounds 1-3 —
         // spanning the round-2 proc turn (t2, 2 % 2 === 0). The bot is killed in round 1, so Stasis
         // is never re-applied and the focus recovers from round 4.
         //
+        // TWO SOURCES, ONE BLOCKED. `advanceChargeCadence`'s +1 baseline is the TURN ITSELF, so a
+        // skipped turn banks none. The Chrono Reaver proc is an IMPLANT, and equipment keeps
+        // working while its holder is stasised or disabled (owner ruling 2026-09-15) — only a
+        // ship's own PASSIVE SKILL is suppressed. So a blocked proc turn banks the proc alone.
+        //
         // Per-turn ledger (turnsTaken bumps UNCONDITIONALLY at turn-start, even on skipped turns →
-        // turnsTaken === round; advanceChargeCadence's +1 baseline AND the CR proc are BOTH gated on
-        // !isTurnBlocked / the §4.4 drain filter, so a blocked turn banks neither):
-        //   R1 (t1): turnsTaken 0→1. Stasis(3) → turn-blocked → SKIP. No baseline. Not a proc turn.
-        //            Post-Turn: Stasis 3→2.                                          → charges 0
-        //   R2 (t2): turnsTaken 1→2. Stasis(2) → turn-blocked → SKIP. No baseline.
-        //            PROC TURN (2%2=0): the end-of-turn CR intent is enqueued by the turn-ended bus
-        //            event. Within the actor's OWN turn, drainIntents/drainEnemyIntents fire BEFORE
-        //            turn-ended is emitted, so the queue was empty at that mid-turn drain and nothing
-        //            was dropped then. The intent is instead dropped by a SUBSEQUENT drain pass (the
-        //            next actor's post-action drain, or the round-end drain) — at that point Stasis has
-        //            already decremented (3→2→1 here) but is still ≥1, so the owner remains
-        //            turn-blocked and the §4.4 filter drops it.
-        //            // ~engine.ts
-        //            Post-Turn: 2→1.
-        //                                                                              → charges 0  ← proc SUPPRESSED
-        //   R3 (t3): turnsTaken 2→3. Stasis(1) → turn-blocked → SKIP. Not a proc turn.
-        //            Post-Turn: Stasis 1→0 → EXPIRED.                                  → charges 0
-        //   R4 (t4): turnsTaken 3→4. NOT blocked → acts. baseline 0→1. PROC (4%2=0) +1 → charges 2
-        //   R5 (t5): active, adv 2→3, no proc                                          → charges 3
-        //   R6 (t6): active, adv 3→4, PROC +1                                          → charges 5
-        //   R7 (t7): active, adv 5→6, no proc                                          → charges 6
-        //   R8 (t8): active, adv 6→7, PROC +1                                          → charges 8
+        // turnsTaken === round):
+        //   R1 (t1): blocked → SKIP, no baseline. Not a proc turn.       → charges 0
+        //   R2 (t2): blocked → SKIP, no baseline. PROC TURN (2%2=0) +1   → charges 1
+        //   R3 (t3): blocked → SKIP, no baseline. Not a proc turn.       → charges 1
+        //   R4 (t4): acts. baseline +1, PROC (4%2=0) +1                  → charges 3
+        //   R5 (t5): acts. baseline +1, no proc                          → charges 4
+        //   R6 (t6): acts. baseline +1, PROC +1                          → charges 6
+        //   R7 (t7): acts. baseline +1, no proc                          → charges 7
+        //   R8 (t8): acts. baseline +1, PROC +1 → 9, CAPPED at chargeCount 8
         const cr = resolveChronoReaver('legendary');
         let isStasisedTap: ((id: string) => boolean) | undefined;
         const stasised = runCombat({
@@ -677,27 +669,27 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
         });
 
         expect(ledger(stasised)).toEqual([
-            ['active', 0], // R1: turn-blocked skip
-            ['active', 0], // R2: turn-blocked skip — PROC SUPPRESSED (intent dropped at drain)
-            ['active', 0], // R3: turn-blocked skip
-            ['active', 2], // R4: recovered — proc lands on the ORIGINAL even-turn residue (t4)
-            ['active', 3],
-            ['active', 5], // R6: proc (t6)
-            ['active', 6],
-            ['active', 8], // R8: proc (t8)
+            ['active', 0], // R1: blocked skip, not a proc turn
+            ['active', 1], // R2: blocked skip — the IMPLANT proc still lands, the baseline does not
+            ['active', 1], // R3: blocked skip, not a proc turn
+            ['active', 3], // R4: recovered — baseline + proc on the original even-turn residue
+            ['active', 4],
+            ['active', 6], // R6: proc (t6)
+            ['active', 7],
+            ['active', 8], // R8: proc (t8), capped at chargeCount
         ]);
 
         // Stasis expired by the end of the run (applied once, never re-applied).
         expect(isStasisedTap?.('attacker')).toBe(false);
 
-        // CONTROL: the SAME legendary CR with NO stasis (the un-stasised legendary run). Its proc
-        // fires on every even turn from t2, so by R2 it is already AHEAD of the stasised run.
+        // CONTROL: the SAME legendary CR with NO stasis. It banks BOTH sources every turn, so it
+        // stays ahead of the stasised run for as long as the Stasis cost it baselines.
         const control = runCombat(
             buildInput({ chargeCount: 8, numRounds: 8, passiveAbilities: [cr] })
         );
         expect(ledger(control)).toEqual([
             ['active', 1],
-            ['active', 3], // R2 proc LANDED (control) vs 0 (stasised) — the suppressed proc
+            ['active', 3],
             ['active', 4],
             ['active', 6],
             ['active', 7],
@@ -706,25 +698,23 @@ describe('Chrono Reaver — stasis suppression (periodic proc dropped on turn-bl
             ['active', 2],
         ]);
 
-        // SUPPRESSION SIGNAL: from the skipped proc turn (R2) up to — but not including — the round
-        // the control fires its charged skill (R7, where it RESETS to 0), the stasised run has
-        // STRICTLY FEWER charges than the control. The dropped R2 proc plus the two surrounding
-        // skipped baselines (R1,R3) put it behind and it never recovers the lost ticks. (After the
-        // control's R7 reset the raw counts cross — the control banks from 0 again — so the window
-        // is the pre-reset rounds R2–R6, which is where the suppression is observable.)
-        for (let i = 1; i <= 5; i++) {
+        // THE SUPPRESSION SIGNAL IS THE BASELINE, NOT THE PROC. Across the blocked rounds the
+        // stasised run is strictly behind the control, and the whole gap is the three skipped
+        // turn baselines — the proc itself landed in both. The window stops before R7, where the
+        // control fires its charged skill and RESETS to 0, after which the raw counts cross.
+        for (let i = 0; i <= 5; i++) {
             expect(stasised.rounds[i].charges).toBeLessThan(control.rounds[i].charges);
         }
-        // Specifically the skipped proc turn R2: control banked the proc (3), stasised banked nothing (0).
-        expect(stasised.rounds[1].charges).toBe(0);
+        // Specifically the blocked proc turn R2: both banked the proc; the control also banked two
+        // turn baselines (t1, t2) and the stasised run banked none.
+        expect(stasised.rounds[1].charges).toBe(1);
         expect(control.rounds[1].charges).toBe(3);
 
-        // MONOTONIC CADENCE: the next proc after the suppressed R2 lands on R4 (t4 — the next even
-        // own-turn = the ORIGINAL residue), NOT shifted earlier to R3. turnsTaken stayed monotonic
-        // through the skips (1,2,3,4), so the every-2nd-turn gate did not re-fire on a frozen value.
-        // R3 (odd t3) banks 0 (skip + non-proc); R4 (even t4) is the first post-recovery proc (0→1
-        // baseline +1 proc = 2).
-        expect(stasised.rounds[2].charges).toBe(0); // R3: no early proc
-        expect(stasised.rounds[3].charges).toBe(2); // R4: proc on the original even-turn residue
+        // MONOTONIC CADENCE: the procs stay on the ORIGINAL even-turn residue through the skips —
+        // t2, t4, t6, t8 — rather than shifting to the first turns the focus actually takes.
+        // turnsTaken stayed monotonic (1,2,3,4) through the skipped turns, so the every-2nd-turn
+        // gate never re-fired on a frozen value. R3 (odd t3) banks nothing.
+        expect(stasised.rounds[2].charges).toBe(1); // R3: unchanged from R2 — no odd-turn proc
+        expect(stasised.rounds[3].charges).toBe(3); // R4: baseline + proc
     });
 });

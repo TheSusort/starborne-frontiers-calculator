@@ -1175,6 +1175,15 @@ export interface Ability {
     target: AbilityTarget;
     trigger: AbilityTrigger;
     conditions: Condition[];
+    /** Where this ability came from. `'equipment'` marks a gear-set bonus or an implant effect;
+     *  ABSENT marks a ship's own skill, which is the safe default for every fixture that omits it.
+     *
+     *  Load-bearing, not bookkeeping: a ship's PASSIVE SKILL is inactive while its owner is
+     *  stasised or disabled (owner ruling 2026-09-15), but its gear and implants keep working —
+     *  and `buildShipAbilitiesWithEquipment` appends equipment abilities to the SAME passive slot,
+     *  so the slot alone cannot tell the two apart. Every suppression site reads this field.
+     *  `equipmentAbilityProvenance.test.ts` pins both directions over the real corpus. */
+    source?: 'equipment';
     /** Hit filter for attacked-family reactive triggers (on-attacked): 'crit' fires only
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
