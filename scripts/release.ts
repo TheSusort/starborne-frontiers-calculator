@@ -27,13 +27,19 @@ const CHANGELOG_PATH = join(ROOT, 'src/constants/changelog.ts');
 
 const git = (...args: string[]): string => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
 
-/** `1.67.0` + minor -> `1.68.0`. Throws on anything that is not three dot-separated integers,
- *  because a malformed version reaches the tag, the changelog and the app's "what's new" gate. */
-export function nextVersion(current: string, bump: string): string {
-    const parts = String(current).split('.');
+/** Three dot-separated integers, or it throws. A malformed version reaches the git tag, the
+ *  changelog and the app's "what's new" gate, so nothing downstream re-checks it. */
+export function assertVersion(value: unknown, label: string): string {
+    const parts = String(value).split('.');
     if (parts.length !== 3 || parts.some((p) => !/^\d+$/.test(p))) {
-        throw new Error(`CURRENT_VERSION is not a three-part version: ${current}`);
+        throw new Error(`${label} is not a three-part version: ${String(value)}`);
     }
+    return String(value);
+}
+
+/** `1.67.0` + minor -> `1.68.0`. */
+export function nextVersion(current: string, bump: string): string {
+    const parts = assertVersion(current, 'CURRENT_VERSION').split('.');
     const [major, minor, patch] = parts.map(Number);
     if (bump === 'major') return `${major + 1}.0.0`;
     if (bump === 'patch') return `${major}.${minor}.${patch + 1}`;
@@ -47,6 +53,15 @@ export function readCurrentVersion(source: string): string {
 }
 
 /** The strings in UNRELEASED_CHANGES, in file order. Returns [] for an empty array literal. */
+/** A source literal's body carries escape sequences; the runtime string does not. Without this,
+ *  `'Pilot\\'s ship'` round-trips through JSON.stringify as a value containing a real backslash,
+ *  which the changelog then renders to the reader verbatim. */
+const ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' };
+
+export function decodeLiteral(raw: string): string {
+    return raw.replace(/\\(.)/g, (_, char: string) => ESCAPES[char] ?? char);
+}
+
 export function readUnreleased(source: string): string[] {
     // Non-greedy to the first `];` so this also matches the one-line `[]` a release leaves
     // behind — otherwise the release after a release reports the array as missing rather than
@@ -55,7 +70,7 @@ export function readUnreleased(source: string): string[] {
     if (!match) throw new Error('UNRELEASED_CHANGES not found in changelog.ts');
     const body = match[1];
     const entries = [...body.matchAll(/^\s*(['"])((?:\\.|(?!\1).)*)\1,\s*$/gm)];
-    return entries.map((entry) => entry[2]);
+    return entries.map((entry) => decodeLiteral(entry[2]));
 }
 
 /**
@@ -103,6 +118,22 @@ export function rewriteChangelog(source: string, { version, date, changes }: Rel
 
 const isMain = () => git('rev-parse', '--abbrev-ref', 'HEAD') === 'main';
 
+/** True when `production` can fast-forward to `main`. A `production` that does not exist yet is
+ *  the first release and is allowed. */
+function productionCanFastForward(): boolean {
+    const exists = execFileSync('git', ['ls-remote', '--heads', 'origin', 'production'], {
+        cwd: ROOT,
+        encoding: 'utf8',
+    }).trim();
+    if (exists === '') return true;
+    try {
+        git('merge-base', '--is-ancestor', 'origin/production', 'HEAD');
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 function assertReleasable() {
     if (!isMain()) throw new Error('a release is cut from main');
     if (git('status', '--porcelain') !== '') {
@@ -111,6 +142,14 @@ function assertReleasable() {
     git('fetch', 'origin', '--quiet');
     if (git('rev-parse', 'HEAD') !== git('rev-parse', 'origin/main')) {
         throw new Error('local main and origin/main disagree — pull or push first');
+    }
+    // Checked BEFORE anything is written: with --push, a diverged production means the release
+    // commit and tag publish and only the deploy fails, leaving a cut release that is not live
+    // and a changelog already committed.
+    if (!productionCanFastForward()) {
+        throw new Error(
+            'origin/production has diverged from main — reconcile it before cutting a release'
+        );
     }
 }
 
@@ -124,7 +163,9 @@ function main() {
     assertReleasable();
 
     const version =
-        explicit !== -1 ? argv[explicit + 1] : nextVersion(readCurrentVersion(source), bump);
+        explicit !== -1
+            ? assertVersion(argv[explicit + 1], '--version')
+            : nextVersion(readCurrentVersion(source), bump);
     const changes = readUnreleased(source);
     const date = new Date().toISOString().slice(0, 10);
 
