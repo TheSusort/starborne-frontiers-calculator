@@ -557,6 +557,11 @@ interface AccumulatingContribution {
     granterId: string;
     rate: number;
     trigger: StackTrigger;
+    /** Where the granting ability came from, for the turn-block suppression — a PASSIVE-slot
+     *  share from a SHIP skill accrues nothing while its granter is turn-blocked. Absent on
+     *  scheduled entries, which have no slot and always accrue. */
+    sourceSlot?: SkillSlot;
+    source?: 'equipment';
 }
 
 interface AccumulatingState {
@@ -974,7 +979,23 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // registration REPLACED the first, so only one share existed.
                 let amount = 0;
                 for (const c of state.contributions) {
-                    if (c.trigger === 'per-round') amount += c.rate;
+                    if (c.trigger !== 'per-round') continue;
+                    // A turn-blocked granter's SHIP passive banks nothing further. Stacks it
+                    // already banked stay — they are standing state, the same line that keeps a
+                    // stasised ship's Barrier working. The `per-active`/`per-charge` triggers need
+                    // no gate: they accrue on the granter's own cast, which a blocked ship
+                    // does not take.
+                    if (
+                        c.sourceSlot !== undefined &&
+                        shipPassiveSuppressed({
+                            sourceSlot: c.sourceSlot,
+                            source: c.source,
+                            casterId: c.granterId,
+                        })
+                    ) {
+                        continue;
+                    }
+                    amount += c.rate;
                 }
                 addAccumStacks(state, amount);
             }
@@ -1818,6 +1839,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     granterId: s.casterId ?? 'attacker',
                     rate: s.payload.stacks,
                     trigger: s.stackTrigger,
+                    sourceSlot: s.sourceSlot,
+                    ...(s.source ? { source: s.source } : {}),
                 };
                 const existing = map.get(s.payload.buffName);
                 if (existing) {

@@ -4737,7 +4737,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // or expires. `hasShield` is declared later in this closure (below) but is already
         // initialized by the time this function is actually CALLED (deep in the battle loop) —
         // same closure-ordering convention as every other helper this function reads.
-        const conditionalDefenceBonus = conditionalDefenceBonusByActorId.get(victim.id);
+        // Both defence channels below are SHIP passives — no equipment builder emits
+        // `conditional-stat` or `defense-substitution`, pinned by
+        // `turnBlockedDefenceChannels.test.ts` — so each is gated on its own owner being able to
+        // act, with no provenance split to make (see `livePassiveEntries` for the general rule).
+        const conditionalDefenceBonus = isTurnBlocked(victim.id)
+            ? undefined
+            : conditionalDefenceBonusByActorId.get(victim.id);
         const shieldDefenceBonus =
             conditionalDefenceBonus !== undefined && hasShield(victim.id)
                 ? conditionalDefenceBonus
@@ -4756,6 +4762,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         let bestDefence: number | undefined;
         for (const carrierId of defenseSubstitutionCarrierIds) {
             if (carrierId === victim.id) continue; // a carrier never substitutes for itself
+            // The CARRIER's passive is what substitutes, so it is the carrier's own turn-block
+            // that switches it off — not the victim's.
+            if (isTurnBlocked(carrierId)) continue;
             const carrier = allActorsById.get(carrierId);
             if (!carrier || carrier.currentHp <= 0 || carrier.side !== victim.side) continue;
             const carrierDefence = effectiveStatsOf(statusEngine, selfBuffLookup, carrier).defence;

@@ -350,3 +350,84 @@ describe("a turn-blocked owner's passive AURA stops contributing", () => {
         );
     });
 });
+
+describe("a turn-blocked owner's accumulating passive banks no further stacks", () => {
+    // The grant-vs-standing-status line once more: stacks ALREADY banked are standing state and
+    // keep contributing, exactly as a stasised ship's Barrier does. What stops is the per-round
+    // ACCRUAL, because that is the passive still firing. `per-active` / `per-charge` accrual needs
+    // no gate at all — it rides the granter's own cast, which a turn-blocked ship never takes.
+    //
+    // OBSERVABLE: the ally's damage, the same instrument the aura block uses. The stacks buff the
+    // ally's attack, so a run where the carrier keeps banking out-damages one where it cannot.
+    // This measures the ACCRUAL stopping; it does not by itself measure banked stacks persisting,
+    // which would need the Stasis to land mid-run.
+    const ACCUM_BUFF = 'Squad Blast';
+
+    const accumCarrier = (source?: 'equipment'): TeamActorEngineInput => {
+        const a = reactor(source);
+        a.id = 'carrier';
+        a.position = 'M4';
+        a.walk!.shipSkills = {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'buff',
+                            target: 'all-allies',
+                            ...(source ? { source } : {}),
+                            config: {
+                                type: 'buff',
+                                buffName: ACCUM_BUFF,
+                                parsedEffects: { attack: 50 },
+                                stacks: 1,
+                                isStackable: true,
+                                stackTrigger: 'per-round',
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return a;
+    };
+
+    const allyAttacker = (): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'ally';
+        a.position = 'M2';
+        a.speed = 50;
+        a.walk!.stats.attack = 1000;
+        a.walk!.shipSkills = { slots: [basicAttack()] };
+        return a;
+    };
+
+    const allyDamage = (opts: { block?: 'Stasis'; source?: 'equipment' }): number => {
+        const bus = createEventBus();
+        let dealt = 0;
+        bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+            if (e.attackerId === 'ally') dealt += e.damage ?? 0;
+        });
+        runCombat({
+            ...build({ block: opts.block }),
+            teamActors: [accumCarrier(opts.source), allyAttacker()],
+            bus,
+        });
+        return dealt;
+    };
+
+    it('control: an unblocked carrier banks stacks its ally feels', () => {
+        expect(allyDamage({})).toBeGreaterThan(0);
+    });
+
+    it('a stasised carrier banks none, so its ally hits for less', () => {
+        expect(allyDamage({ block: 'Stasis' })).toBeLessThan(allyDamage({}));
+    });
+
+    it('but an EQUIPMENT-sourced accumulator keeps banking while the carrier is stasised', () => {
+        expect(allyDamage({ block: 'Stasis', source: 'equipment' })).toBe(
+            allyDamage({ source: 'equipment' })
+        );
+    });
+});
