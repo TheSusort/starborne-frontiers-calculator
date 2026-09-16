@@ -5,9 +5,14 @@
  * NO direct damage occurred. A fully-transformed hit is not a direct hit, so it must emit no
  * `attacked` event.
  *
- * When Voron is stasised/disabled the transform passive doesn't run, so the hit lands as direct
- * damage and the `attacked` event fires normally — covered by the non-transform control here
- * (Orel without Taunt = transform gate closed = identical "no transform → attacked fires" path).
+ * ⚠️ "When Voron is stasised the transform passive doesn't run" IS THE GAME RULE (owner,
+ * 2026-09-15: EVERY passive is disabled while its owner is stasised OR disabled, so the hit
+ * connects and takes full damage. A standing STATUS is unaffected — Barrier keeps nullifying hits
+ * on a stasised ship because it is a buff consumed on hit, not a passive that fires; a passive
+ * that GRANTS Barrier would grant nothing.) AND THE ENGINE DOES NOT IMPLEMENT IT. `incomingAbilitiesOf` filters only dead ally-scoped
+ * owners, and Voron's transform condition is `always`, so nothing consults the victim's Stasis.
+ * MEASURED by the third arm below. The Orel-gate-closed control is a stand-in for the shape, not
+ * evidence that Stasis produces it.
  */
 import { describe, it, expect } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -61,7 +66,7 @@ const parsedTarget = (selection: ParsedTarget['selection']): ParsedTarget => ({
 });
 const basePattern = (): ParsedPattern => ({ raw: 'base', shape: 'base', range: 0, modifiers: {} });
 
-const victimActor = (id: string, position: Position, passive: Ability): TeamActor => ({
+const victimActor = (id: string, position: Position, passive: Ability | undefined): TeamActor => ({
     id,
     speed: 1000,
     chargeCount: 0,
@@ -71,7 +76,7 @@ const victimActor = (id: string, position: Position, passive: Ability): TeamActo
     position,
     walk: {
         shipSkills: {
-            slots: [{ slot: 'passive', abilities: [passive] }] as ShipSkills['slots'],
+            slots: passive ? [{ slot: 'passive', abilities: [passive] }] : [],
         },
         stats: {
             attack: 0,
@@ -100,6 +105,59 @@ const offensiveEnemy = (id: string, position: Position): EnemyAttacker => ({
     target: parsedTarget('front'),
     pattern: basePattern(),
     shipSkills: { slots: [{ slot: 'active', abilities: [basicAttack()] }] },
+});
+
+/** Fast enemy whose cast lands Stasis(4) on the front player actor before the hitter acts. */
+const stasiserEnemy = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: {
+        attack: 1,
+        crit: 0,
+        critDamage: 0,
+        defence: 0,
+        hp: HP,
+        speed: 900,
+        hacking: 500,
+        security: 0,
+    },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: {
+        slots: [
+            {
+                slot: 'active',
+                abilities: [
+                    {
+                        id: `${id}-dmg`,
+                        type: 'damage',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: { type: 'damage', multiplier: 0 },
+                    },
+                    {
+                        id: `${id}-stasis`,
+                        type: 'debuff',
+                        target: 'enemy',
+                        trigger: 'on-cast',
+                        conditions: [],
+                        config: {
+                            type: 'debuff',
+                            buffName: 'Stasis',
+                            application: 'inflict',
+                            duration: 4,
+                            stacks: 1,
+                            isStackable: false,
+                            parsedEffects: {},
+                        },
+                    },
+                ],
+            },
+        ],
+    },
 });
 
 const noopActive: ShipSkills['slots'][number] = {
@@ -174,5 +232,34 @@ describe('a fully DoT-transformed hit emits no `attacked` event', () => {
             'orel'
         );
         expect(attacked.length).toBeGreaterThan(0);
+    });
+
+    it('KNOWN GAP: a STASISED Voron still transforms, so the hit still emits no attacked', () => {
+        // The game rule is that a stasised or disabled owner's passives are all inactive — a
+        // stasised Voron should take the hit as ordinary direct damage. Nothing in the funnel reads the victim's Stasis for
+        // this ability (its condition is `always`), so the transform fires anyway. Pinned as the
+        // CURRENT behaviour, not the correct one: when the general rule lands, this arm flips to
+        // `toBeGreaterThan(0)` and the header's warning comes out.
+        const stasised = attackedFor(
+            BASE({
+                numRounds: 2,
+                teamActors: [victimActor('voron', 'M4', voronTransform)],
+                enemyAttackers: [stasiserEnemy('stasiser', 'M2'), offensiveEnemy('enemy-1', 'M1')],
+            }),
+            'voron'
+        );
+        expect(stasised).toHaveLength(0);
+
+        // NON-VACUITY: the same board with NO transform passive DOES emit `attacked`, so the zero
+        // above is the transform firing and not the hitter missing.
+        const noPassive = attackedFor(
+            BASE({
+                numRounds: 2,
+                teamActors: [victimActor('plain', 'M4', undefined)],
+                enemyAttackers: [stasiserEnemy('stasiser', 'M2'), offensiveEnemy('enemy-1', 'M1')],
+            }),
+            'plain'
+        );
+        expect(noPassive.length).toBeGreaterThan(0);
     });
 });
