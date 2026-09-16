@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { dedupeCandidates, GeneticStrategy } from '../GeneticStrategy';
+import { dedupeCandidates, GeneticStrategy, MAX_EXPOSED_CANDIDATES } from '../GeneticStrategy';
 import { clearScoreCache } from '../../scoring';
 import type { GearSuggestion, StatPriority } from '../../../../types/autogear';
 import type { Ship } from '../../../../types/ship';
@@ -40,8 +40,6 @@ describe('dedupeCandidates', () => {
     });
 });
 
-// Fixture shape copied from GeneticStrategy.test.ts, which already knows what a runnable
-// inventory looks like.
 const BASE: BaseStats = {
     hp: 100000,
     attack: 5000,
@@ -185,5 +183,32 @@ describe('GeneticStrategy candidates field', () => {
         for (const candidate of result.candidates!) {
             expect(candidate.some((s) => s.gearId === 'w1')).toBe(true);
         }
+    });
+
+    it('caps candidates at MAX_EXPOSED_CANDIDATES when more distinct zero-violation loadouts exist', async () => {
+        const strategy = new GeneticStrategy();
+        // 5 weapons x 5 hulls = 25 distinct builds. Attack/hp values are spaced by 1 so no
+        // build is meaningfully fitter than another under a single 'attack' priority (hull
+        // doesn't affect attack at all), leaving the population free to hold many of them at
+        // once instead of converging on one.
+        const inventory = [
+            ...['w1', 'w2', 'w3', 'w4', 'w5'].map((id, i) =>
+                makeGear(id, 'weapon', 'attack', 1000 - i)
+            ),
+            ...['h1', 'h2', 'h3', 'h4', 'h5'].map((id, i) => makeGear(id, 'hull', 'hp', 10000 - i)),
+        ];
+        const getGearPiece = (id: string) => inventory.find((g) => g.id === id);
+        const getEng = (_t: ShipTypeName): EngineeringStat | undefined => undefined;
+
+        const result = await strategy.findOptimalGear(
+            makeShip(),
+            [{ stat: 'attack', weight: 1 }],
+            inventory,
+            getGearPiece,
+            getEng
+        );
+
+        expect(result.candidates).toBeDefined();
+        expect(result.candidates!.length).toBe(MAX_EXPOSED_CANDIDATES);
     });
 });

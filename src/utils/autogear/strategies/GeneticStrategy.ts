@@ -34,7 +34,7 @@ const EMPTY_PIECES: readonly GearPiece[] = [];
 
 /** How many runner-ups leave the strategy. A converged population holds thousands of near-copies;
  *  past a handful of DISTINCT loadouts the extra rows cost a sim run each and say nothing new. */
-const MAX_EXPOSED_CANDIDATES = 8;
+export const MAX_EXPOSED_CANDIDATES = 8;
 
 /** A loadout's identity is the SET of pieces it wears — two individuals that reached the same
  *  gear by different slot order are one candidate, and a converged population holds many. */
@@ -191,10 +191,10 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const hasHardRequirements = priorities.some((p) => p.hardRequirement);
         const attemptCount = hasHardRequirements ? MAX_ATTEMPTS : 1;
 
-        let overallBest: Individual | null = null;
-        // The population that produced overallBest — only this attempt's individuals were
-        // scored under the same constraint pressure as the returned result.
-        let overallPopulation: Individual[] = [];
+        // `best` and `population` are always assigned together: a ranking (fitness, violation)
+        // is only commensurate within the population that produced it, so `candidates` must be
+        // drawn from the same attempt as the returned `best`.
+        let overall: { best: Individual; population: Individual[] } | null = null;
         let attempts = 0;
 
         for (let attempt = 1; attempt <= attemptCount; attempt++) {
@@ -223,21 +223,20 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     fastContext
                 );
 
-            if (overallBest === null || compareIndividuals(bestOfThisRun, overallBest) < 0) {
-                overallBest = bestOfThisRun;
-                overallPopulation = populationOfThisRun;
+            if (overall === null || compareIndividuals(bestOfThisRun, overall.best) < 0) {
+                overall = { best: bestOfThisRun, population: populationOfThisRun };
             }
-            if (overallBest.violation === 0) break;
+            if (overall.best.violation === 0) break;
         }
 
         this.completeProgress();
         performanceTracker.endTimer('GeneticAlgorithm');
 
-        const best = overallBest!;
+        const best = overall!.best;
         const hardRequirementsMet = best.violation === 0;
         const bestSuggestions = this.toSuggestions(best);
         const candidates = dedupeCandidates(
-            overallPopulation
+            overall!.population
                 .filter((individual) => individual.violation === 0)
                 .map((individual) => this.toSuggestions(individual)),
             bestSuggestions
