@@ -220,6 +220,47 @@ describe('useSimRerank', () => {
         expect(result.current.state.table).toEqual([]);
     });
 
+    it('uses the CONFIGURED role, not focus.type, as the own role — for the role loop and ownBestExcluded', async () => {
+        const { result } = renderHook(() => useSimRerank());
+        await act(async () => {
+            await result.current.run({
+                ...baseArgs(),
+                // Focus is typed DEBUFFER but configured as a DEFENDER for this build. DEBUFFER
+                // is also offered as a compared role here — under the old `focus.type`-as-own-role
+                // behaviour this would dedupe DEFENDER away entirely (the configured role would
+                // never run), and the ship's actual own build would never be stripped-checked.
+                ownRole: 'DEFENDER',
+                comparedRoles: ['DEBUFFER'],
+                source: {
+                    kind: 'encounter' as const,
+                    note: {
+                        id: 'e1',
+                        name: 'Team',
+                        createdAt: 0,
+                        formation: [
+                            { shipId: 'focus', position: 'M4' as const },
+                            { shipId: 'ally', position: 'T2' as const },
+                        ],
+                    },
+                },
+                resolveShip: (id: string) => ({ focus, ally })[id as 'focus' | 'ally'] ?? null,
+                // The CONFIGURED role's (DEFENDER's) best loadout is the one stripped here.
+                gearToShipMap: new Map([['gear-DEFENDER', 'ally']]),
+            });
+        });
+        await waitFor(() => expect(result.current.state.status).toBe('done'));
+
+        expect(runAutogearFor).toHaveBeenCalledWith('DEFENDER');
+        expect(runAutogearFor).toHaveBeenCalledWith('DEBUFFER');
+
+        // ownBestExcluded follows the CONFIGURED role (DEFENDER), not focus.type (DEBUFFER) —
+        // DEBUFFER's build used a different piece and survives untouched.
+        expect(result.current.state.ownBestExcluded).toBe(true);
+        expect(result.current.state.excluded).toHaveLength(1);
+        expect(result.current.state.excluded[0].role).toBe('DEFENDER');
+        expect(result.current.state.rows.map((r) => r.role)).toEqual(['DEBUFFER']);
+    });
+
     it('surfaces cells the resolved fight dropped, e.g. a saved ship id that no longer resolves', async () => {
         const { result } = renderHook(() => useSimRerank());
         await act(async () => {

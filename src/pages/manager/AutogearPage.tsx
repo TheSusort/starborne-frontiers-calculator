@@ -1784,6 +1784,9 @@ export const AutogearPage: React.FC = () => {
                         });
                     }}
                     simRerank={{
+                        configuredRole: shipSettings
+                            ? (getShipConfig(shipSettings.id).shipRole ?? shipSettings.type)
+                            : undefined,
                         encounters,
                         savedSetups,
                         deps: combatStatsDeps,

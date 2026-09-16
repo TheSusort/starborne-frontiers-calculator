@@ -67,6 +67,13 @@ function buildSourceOptions(
 
 export interface SimRerankSectionProps {
     ship: Ship;
+    /** The ship's CONFIGURED autogear role (`shipConfig.shipRole`), which can differ from
+     *  `ship.type` — a player may gear an ATTACKER-typed ship as a DEFENDER. This is the role
+     *  the optimizer scores the own-role row under, so every role-derived choice here (compared
+     *  roles, suggested sort column, row labelling) must follow it instead of `ship.type`, or
+     *  the own-role row and a compared row collide. Falls back to `ship.type` when the ship has
+     *  no configured role (Custom mode). */
+    configuredRole?: ShipTypeName;
     encounters: LocalEncounterNote[];
     savedSetups: SimulatorSetup[];
     deps: CombatStatsDeps;
@@ -89,6 +96,7 @@ export interface SimRerankSectionProps {
  */
 export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     ship,
+    configuredRole,
     encounters,
     savedSetups,
     deps,
@@ -98,12 +106,13 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     runAutogearFor,
     onApply,
 }) => {
+    const ownRole = configuredRole ?? ship.type;
     const [open, setOpen] = useState(false);
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [seed, setSeed] = useState(() => randomSeed());
     const [runCount, setRunCount] = useState(DEFAULT_RUN_COUNT);
     const [sort, setSort] = useState<{ metric: SimMetric; direction: 'asc' | 'desc' }>(() => ({
-        metric: suggestedPrimary(ship.type),
+        metric: suggestedPrimary(ownRole),
         direction: 'desc',
     }));
 
@@ -115,7 +124,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     const selectedSource =
         sourceOptions.find((option) => option.key === sourceKey) ?? sourceOptions[0];
 
-    const availableRoles = useMemo(() => defaultComparedRoles(ship.type), [ship.type]);
+    const availableRoles = useMemo(() => defaultComparedRoles(ownRole), [ownRole]);
     const [excludedRoles, setExcludedRoles] = useState<Set<ShipTypeName>>(new Set());
     const toggleRole = (role: ShipTypeName, checked: boolean) => {
         setExcludedRoles((prev) => {
@@ -132,6 +141,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     const handleRun = () => {
         void run({
             focus: ship,
+            ownRole,
             source: selectedSource.source,
             comparedRoles: availableRoles.filter((role) => !excludedRoles.has(role)),
             seed,
@@ -302,8 +312,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                             <ul className="list-disc list-inside">
                                 {state.excluded.map((excluded, index) => (
                                     <li key={index}>
-                                        {roleRankLabel(ship.type, excluded.role, excluded.rank)}{' '}
-                                        needs{' '}
+                                        {roleRankLabel(ownRole, excluded.role, excluded.rank)} needs{' '}
                                         {Array.from(
                                             new Set(
                                                 excluded.stripped.map((piece) => piece.fromShipName)
@@ -318,9 +327,9 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
 
                     {state.status === 'done' && (
                         <SimRerankTable
-                            ownRole={ship.type}
+                            ownRole={ownRole}
                             rows={tableRows}
-                            suggestedPrimary={suggestedPrimary(ship.type)}
+                            suggestedPrimary={suggestedPrimary(ownRole)}
                             sortMetric={sort.metric}
                             sortDirection={sort.direction}
                             onSort={handleSort}

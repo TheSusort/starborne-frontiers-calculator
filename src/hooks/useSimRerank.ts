@@ -56,6 +56,11 @@ export interface SimRerankState {
 
 export interface SimRerankRunArgs {
     focus: Ship;
+    /** The role `focus` is CONFIGURED under, which can differ from `focus.type` — a player may
+     *  gear an ATTACKER-typed ship as a DEFENDER. Row identity (which role counts as "own",
+     *  `ownBestExcluded`) follows this, not `focus.type`, matching the optimizer, which scores
+     *  the own-role row under the configured role too. Falls back to `focus.type` when omitted. */
+    ownRole?: ShipTypeName;
     source: FightSource;
     comparedRoles: ShipTypeName[];
     seed: number;
@@ -164,6 +169,7 @@ export async function collectCandidateRuns(
 ): Promise<CollectCandidateRunsResult> {
     const {
         focus,
+        ownRole = focus.type,
         source,
         comparedRoles,
         seed,
@@ -183,7 +189,7 @@ export async function collectCandidateRuns(
     // The ship's own role goes first; a role already present among the caller's compared roles
     // is not re-run.
     const roles: ShipTypeName[] = [];
-    for (const role of [focus.type, ...comparedRoles]) {
+    for (const role of [ownRole, ...comparedRoles]) {
         if (!roles.includes(role)) roles.push(role);
     }
 
@@ -210,7 +216,7 @@ export async function collectCandidateRuns(
             });
             if (stripped.length > 0) {
                 excluded.push({ role: loadout.role, rank: loadout.rank, stripped });
-                if (loadout.rank === 'best' && role === focus.type) ownBestExcluded = true;
+                if (loadout.rank === 'best' && role === ownRole) ownBestExcluded = true;
                 continue;
             }
             pending.push({

@@ -260,6 +260,53 @@ describe('SimRerankSection', () => {
         expect(screen.getByText(/1 ship.*no longer exist/i)).toBeInTheDocument();
     });
 
+    it("follows the ship's CONFIGURED role, not its game-data type, when the two differ", () => {
+        // Typed ATTACKER in the game data, but configured as a DEFENDER for this build.
+        const attackerTypedShip: Ship = { ...ship, type: 'ATTACKER' };
+        hookState.current = {
+            ...hookState.current,
+            status: 'done',
+            rows: [
+                {
+                    id: 'DEFENDER:best',
+                    role: 'DEFENDER',
+                    rank: 'best',
+                    run: stubRun('DEFENDER:best'),
+                },
+            ] as SimRerankRow[],
+            table: [
+                {
+                    id: 'DEFENDER:best',
+                    cells: {
+                        winRate: cell('winRate', 0, false),
+                        rounds: cell('rounds', 0, false),
+                        focusDamageDealt: cell('focusDamageDealt', 0, false),
+                        focusDamageTaken: cell('focusDamageTaken', -500, true),
+                        focusHealingDone: cell('focusHealingDone', 0, false),
+                        teamDamageDealt: cell('teamDamageDealt', 0, false),
+                    },
+                },
+            ] as unknown as CandidateRow[],
+        };
+        render(
+            <SimRerankSection {...props({ ship: attackerTypedShip, configuredRole: 'DEFENDER' })} />
+        );
+        open();
+
+        // The configured role is the own-role row, so it must not also be offered as something
+        // to compare against — that would run and show the same build twice.
+        expect(screen.queryByLabelText('Defender')).not.toBeInTheDocument();
+        // A family sharing neither the ship's type nor its configured role is still offered.
+        expect(screen.getByLabelText('Attacker')).toBeInTheDocument();
+
+        // The suggested-primary column follows the configured role (Defender -> damage taken),
+        // not the ship's ATTACKER type (which would suggest damage dealt).
+        expect(screen.getByText('Damage taken (suggested)')).toBeInTheDocument();
+
+        // The own-role row is labelled by the configured role, not the ship's type.
+        expect(screen.getByText('Defender (current role)')).toBeInTheDocument();
+    });
+
     it('calls onApply with the clicked row', () => {
         const onApply = vi.fn();
         const row = {
