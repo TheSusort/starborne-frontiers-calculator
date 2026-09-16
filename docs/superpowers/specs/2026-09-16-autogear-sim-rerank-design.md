@@ -24,6 +24,52 @@ cannot run that often. For some ships the proxy cannot be right *in principle*:
 The combat sim has none of these problems, because it does not need to *know* any of it — it
 plays the fight.
 
+## Measured evidence
+
+Spiked against the real engine before committing to the design: Xcellence built from his verbatim
+`docs/ship-skills.csv` text at 2 refits (so the R2 passive with the on-resist channel is the
+active one), at `M4` with two plain allies against three plain enemies, 12–20 seeds per point,
+attack held at 5,000 throughout. One variable moved at a time.
+
+**Hacking is a cliff, and above it is inert** (HP fixed at 56k, enemy security 100):
+
+| hacking | 60 | 100 | 140 | 180 | 220 | 260 | 300 | 400 | 480 | 600 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| focus damage | 167,571 | 167,571 | 174,119 | 132,412 | 77,955 | 77,955 | 77,955 | 77,955 | 77,955 | 77,955 |
+| mean rounds | 4.8 | 4.8 | 5.3 | 7.9 | 9.9 | 9.9 | 9.9 | 9.9 | 9.9 | 9.9 |
+
+The whole transition sits between 140 and 220. Past 220 the stat does nothing at all — identical
+to the unit across every seed.
+
+**HP is worth a lot, or nothing, depending on a different stat:**
+
+| max HP | 30,000 | 42,000 | 56,000 | 72,000 | 90,000 | 110,000 |
+|---|---|---|---|---|---|---|
+| focus damage @ hacking 140 | 126,154 | 158,423 | 174,119 | 195,024 | 224,248 | 233,097 |
+| focus damage @ hacking 480 | 77,955 | 77,955 | 77,955 | 77,955 | 77,955 | 77,955 |
+
+At low hacking, HP nearly doubles his damage. At high hacking it is perfectly inert. This is not a
+weighting a formula got wrong — it is a conditional, and `customFormulaScore(stats, formula)` has
+no term that can hold it.
+
+**The same build is twice as good against a different opponent** (hacking 300, HP 56k):
+
+| enemy security | 50 | 100 | 200 | 400 | 800 | 1600 |
+|---|---|---|---|---|---|---|
+| focus damage | 77,955 | 77,955 | 77,955 | 167,571 | 167,571 | 167,571 |
+
+"Best build for Xcellence" is undefined without naming the fight.
+
+**And the role formula picks the wrong side of the cliff.** `DEBUFFER` seeds as
+`core('hacking') × core('directDamage')` (`customFormulaSeeds.ts:45`), so the optimizer drives
+hacking up — into the ≥220 regime, where hacking buys nothing, HP buys nothing, and his damage is
+2.2× worse than the low-hacking build over a fight that lasts twice as long.
+
+Caveat on the sharpness: every enemy in the fixture carries the same security, so the resist rate
+is one number and outcomes cluster hard at each regime. A real fight with mixed enemies will show
+a softer transition. The *existence* of the cliff, the conditional, and the opponent-dependence do
+not depend on that.
+
 ## What this is
 
 **A comparison tool, not an oracle.** After the optimizer finishes, the player can run a handful
