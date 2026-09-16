@@ -41,8 +41,9 @@ const ENEMY_POSITIONS: Position[] = ['M4', 'T2', 'B2'];
 
 /** The healing calculator's constants have no `attack` field (a practice target for healing
  *  doesn't hit back), so this fixture needs its own. Tuned so the player side — the focus plus
- *  two sparring allies — wins roughly 60-90% of fights against three sparring enemies rather than
- *  every fight: a blowout would leave every metric insensitive to the focus ship's own gear. */
+ *  two sparring allies — wins most but not all fights against three sparring enemies (measured
+ *  70-95% across base seeds) rather than every one of them: a blowout leaves every metric
+ *  insensitive to the focus ship's own gear, which is the only thing this board exists to vary. */
 const SPARRING_ENEMY_ATTACK = 4_800;
 
 /**
