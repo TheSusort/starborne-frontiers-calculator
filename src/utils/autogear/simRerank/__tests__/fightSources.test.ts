@@ -117,4 +117,82 @@ describe('resolveFight', () => {
         const fight = resolveFight({ kind: 'setup', setup }, regeared, resolveShip);
         expect(fight.playerBoard.M4?.ship.equipment.weapon).toBe('w1');
     });
+
+    it('setup: throws when every enemy ship id fails to resolve, rather than fighting an empty board', () => {
+        const setup: SimulatorSetup = {
+            version: SIMULATOR_SETUP_VERSION,
+            name: 'Old Rival',
+            playerBoard: { M4: { shipId: 'focus' } },
+            enemyBoard: { M4: { shipId: 'gone-1' }, T2: { shipId: 'gone-2' } },
+            seed: 7,
+            runCount: 20,
+            savedAt: 0,
+        };
+        expect(() => resolveFight({ kind: 'setup', setup }, focus, resolveShip)).toThrow(
+            /Old Rival.*enemy ships.*resolve/
+        );
+    });
+
+    it('setup: reports a partially unresolvable enemy board in dropped, and still fights the rest', () => {
+        const setup: SimulatorSetup = {
+            version: SIMULATOR_SETUP_VERSION,
+            name: 'saved',
+            playerBoard: { M4: { shipId: 'focus' } },
+            enemyBoard: { M4: { shipId: 'foe' }, T2: { shipId: 'gone' } },
+            seed: 7,
+            runCount: 20,
+            savedAt: 0,
+        };
+        const fight = resolveFight({ kind: 'setup', setup }, focus, resolveShip);
+        expect(fight.enemyBoard.M4?.ship.id).toBe('foe');
+        expect(fight.enemyBoard.T2).toBeUndefined();
+        expect(fight.dropped).toEqual([{ side: 'enemy', position: 'T2' }]);
+    });
+
+    it('setup: reports an unresolvable ally in dropped, and still fights without it', () => {
+        const setup: SimulatorSetup = {
+            version: SIMULATOR_SETUP_VERSION,
+            name: 'saved',
+            playerBoard: { M4: { shipId: 'focus' }, T2: { shipId: 'gone' } },
+            enemyBoard: { M4: { shipId: 'foe' } },
+            seed: 7,
+            runCount: 20,
+            savedAt: 0,
+        };
+        const fight = resolveFight({ kind: 'setup', setup }, focus, resolveShip);
+        expect(fight.playerBoard.T2).toBeUndefined();
+        expect(fight.dropped).toEqual([{ side: 'player', position: 'T2' }]);
+    });
+
+    it('encounter: reports an unresolvable ally in dropped rather than silently dropping it', () => {
+        const note: LocalEncounterNote = {
+            id: 'e1',
+            name: 'My team',
+            createdAt: 0,
+            formation: [
+                { shipId: 'focus', position: 'M4' },
+                { shipId: 'unknown-mate', position: 'T2' },
+            ],
+        };
+        const fight = resolveFight({ kind: 'encounter', note }, focus, resolveShip);
+        expect(fight.playerBoard.T2).toBeUndefined();
+        expect(fight.dropped).toEqual([{ side: 'player', position: 'T2' }]);
+    });
+
+    it('practice and a fully-resolvable encounter report no dropped cells', () => {
+        const practiceFight = resolveFight({ kind: 'practice' }, focus, resolveShip);
+        expect(practiceFight.dropped).toEqual([]);
+
+        const note: LocalEncounterNote = {
+            id: 'e1',
+            name: 'My team',
+            createdAt: 0,
+            formation: [
+                { shipId: 'focus', position: 'M4' },
+                { shipId: 'mate', position: 'T2' },
+            ],
+        };
+        const encounterFight = resolveFight({ kind: 'encounter', note }, focus, resolveShip);
+        expect(encounterFight.dropped).toEqual([]);
+    });
 });

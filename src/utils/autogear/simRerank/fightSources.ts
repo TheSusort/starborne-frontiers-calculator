@@ -2,7 +2,11 @@ import type { Ship } from '../../../types/ship';
 import type { LocalEncounterNote, Position } from '../../../types/encounters';
 import type { BoardState } from '../../../components/simulator/PlacementBoard';
 import type { SquadLeaderSelection } from '../../combat/preFight';
-import { deserializeSetup, type SimulatorSetup } from '../../simulator/simulatorSetup';
+import {
+    deserializeSetup,
+    type DroppedCell,
+    type SimulatorSetup,
+} from '../../simulator/simulatorSetup';
 import { practiceBoards } from './practiceBoard';
 
 export interface FightBoards {
@@ -18,6 +22,9 @@ export interface FightBoards {
     /** True when both sides are real ships the player chose. A practice or encounter fight is
      *  not. */
     realOpponent: boolean;
+    /** Cells a saved setup named whose ship no longer resolves. The fight still runs without them,
+     *  but it is not the fight that was saved, so a caller showing this source must say so. */
+    dropped: DroppedCell[];
 }
 
 export type FightSource =
@@ -78,14 +85,19 @@ export function resolveFight(
             boardShipIds: shipIdsOf(playerBoard),
             focusPosition: findFocusPosition(playerBoard, focus.id),
             realOpponent: false,
+            dropped: [],
         };
     }
 
     if (source.kind === 'encounter') {
         const playerBoard: BoardState = {};
+        const dropped: DroppedCell[] = [];
         for (const entry of source.note.formation) {
             const ship = entry.shipId === focus.id ? focus : resolveShip(entry.shipId);
-            if (!ship) continue;
+            if (!ship) {
+                dropped.push({ side: 'player', position: entry.position });
+                continue;
+            }
             playerBoard[entry.position] = { ship };
         }
         return {
@@ -94,10 +106,16 @@ export function resolveFight(
             boardShipIds: shipIdsOf(playerBoard),
             focusPosition: findFocusPosition(playerBoard, focus.id),
             realOpponent: false,
+            dropped,
         };
     }
 
     const deserialized = deserializeSetup(source.setup, resolveShip);
+    if (Object.keys(deserialized.enemyBoard).length === 0) {
+        throw new Error(
+            `setup "${source.setup.name}" has no opponent: none of its saved enemy ships resolve`
+        );
+    }
     const playerBoard = substituteFocus(deserialized.playerBoard, focus);
     return {
         playerBoard,
@@ -107,5 +125,6 @@ export function resolveFight(
         boardShipIds: shipIdsOf(playerBoard),
         focusPosition: findFocusPosition(playerBoard, focus.id),
         realOpponent: true,
+        dropped: deserialized.dropped,
     };
 }
