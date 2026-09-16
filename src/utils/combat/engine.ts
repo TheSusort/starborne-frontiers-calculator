@@ -3325,15 +3325,16 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  while its holder is stasised or disabled, a ship's own passive skill does not (owner ruling
      *  2026-09-15). Read `Ability.source` for why provenance rides the entry rather than the slot.
      *  Applied at the READ, not at the build: a ship is not blocked when its lists are assembled. */
-    /** Per-entry form of the same question `livePassiveEntries` asks in bulk, for a list whose
-     *  entries do not all answer to the same owner. */
-    const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
-        entry.source !== 'equipment' && isTurnBlocked(ownerId);
     const livePassiveEntries = <T extends { source?: 'equipment' }>(
         ownerId: string,
         entries: readonly T[]
     ): T[] =>
         isTurnBlocked(ownerId) ? entries.filter((e) => e.source === 'equipment') : (entries as T[]);
+    /** Per-entry form of the same question, for a list whose entries do not all answer to the same
+     *  owner. `isTurnBlocked` walks the whole status store, so callers on a per-hit path should
+     *  reach for `livePassiveEntries` (one read for the list) wherever one owner covers it. */
+    const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
+        entry.source !== 'equipment' && isTurnBlocked(ownerId);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
@@ -4554,9 +4555,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             }
         }
     }
-    // Reads the owner's CURRENT liveness on every call (this closure runs per hit), so a destroyed
-    // carrier's aura stops protecting its allies from the moment it dies. Returns the stored array
-    // BY REFERENCE for any actor with no ally-scoped entries.
+    // Reads the owner's CURRENT liveness AND turn-block on every call (this closure runs per hit),
+    // so a carrier's aura stops protecting its allies the moment it dies or is stasised. Returns
+    // the stored array BY REFERENCE for an actor with no ally-scoped entries and nothing
+    // suppressed.
     // `incomingAbilitiesById` holds the #363 ALLY-SCOPED fan-out: a carrier's `all-allies`
     // incoming-reduction is written into every RECIPIENT's list, with the real owner recorded in
     // `allyScopedOwnerByRecipient`. So "is this passive suppressed" is the OWNER's question, not
@@ -4565,11 +4567,18 @@ export function runCombat(rawInput: CombatEngineInput): {
     // of a teammate's protection and let a stasised carrier go on protecting.
     const incomingAbilitiesOf = (id: string): Ability[] => {
         const ownerByAbilityId = allyScopedOwnerByRecipient.get(id);
-        return withLiveAllyScopedOwners(
+        const live = withLiveAllyScopedOwners(
             incomingAbilitiesById.get(id) ?? [],
             ownerByAbilityId,
             isActorAlive
-        ).filter((a) => !passiveSuppressedFor(ownerByAbilityId?.get(a.id) ?? id, a));
+        );
+        // Common case: no ally-scoped entry, so every ability is this actor's own and ONE
+        // `isTurnBlocked` read (a full status-store walk) answers for the whole list — and an
+        // unsuppressed list comes back by reference. The per-entry path below is the rare one.
+        if (ownerByAbilityId === undefined || ownerByAbilityId.size === 0) {
+            return livePassiveEntries(id, live);
+        }
+        return live.filter((a) => !passiveSuppressedFor(ownerByAbilityId.get(a.id) ?? id, a));
     };
 
     // Per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
@@ -9388,9 +9397,11 @@ export function runCombat(rawInput: CombatEngineInput): {
                         x,
                         abilities: (allAlliesModifierAbilitiesById.get(x.id) ?? []).filter(
                             (ab) =>
-                                !passiveSuppressedFor(x.id, ab) &&
                                 ab.config.type === 'modifier' &&
-                                ab.config.channel === 'dotDamage'
+                                ab.config.channel === 'dotDamage' &&
+                                // Last: a turn-block read walks the whole status store, and the
+                                // two channel tests above reject almost every ability for free.
+                                !passiveSuppressedFor(x.id, ab)
                         ),
                     }))
                     .filter((entry) => entry.abilities.length > 0)

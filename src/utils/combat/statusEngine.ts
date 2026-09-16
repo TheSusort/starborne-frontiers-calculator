@@ -671,18 +671,23 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setTurnBlockedReader = (fn: (actorId: string) => boolean): void => {
         isTurnBlockedReader = fn;
     };
+    let readingTurnBlock = false;
     /** A passive-slot status from a SHIP skill contributes nothing while its caster is
      *  turn-blocked. The two exemptions are the ruling's own: a status from EQUIPMENT, and any
      *  status that is not a passive (a cast-sourced aura is the cast's standing effect, not a
-     *  passive that has to keep firing). */
-    // RE-ENTRANCY GUARD, and it is load-bearing rather than defensive. The reader routes back into
-    // this store: engine `isStasised`/`isDisabled` -> `ownerDebuffNamesFor` (triggers.ts) ->
-    // `activeAbilityStatuses('enemy', ...)` -> this predicate again. A passive-slot BOARD-WIDE
-    // enemy aura re-enters through `boardWideEnemyExtras`' `__enemy__` fold and recurses until the
-    // stack blows. While a reader call is in flight the nested question answers "not suppressed",
-    // which is the pre-suppression reading and exactly what "am I stasised" wants: the names it is
-    // collecting decide the block, so they cannot themselves depend on the block.
-    let readingTurnBlock = false;
+     *  passive that has to keep firing).
+     *
+     *  RE-ENTRANCY GUARD, load-bearing rather than defensive. The reader routes back into this
+     *  store: engine `isStasised`/`isDisabled` -> `ownerDebuffNamesFor` (triggers.ts) ->
+     *  `activeAbilityStatuses('enemy', ...)` -> here again. A passive-slot BOARD-WIDE enemy aura
+     *  re-enters through `boardWideEnemyExtras`' `__enemy__` fold and recurses until the stack
+     *  blows. While a reader call is in flight the nested question answers "not suppressed".
+     *
+     *  That answer is EXACT at depth 1: the block being resolved is decided by the names being
+     *  collected, so they cannot depend on it. It is an APPROXIMATION from depth 2 — a passive
+     *  aura that inflicts Stasis/Disable, read while resolving another ship's block, is treated as
+     *  active whatever its own caster's state. No corpus kit has a passive-slot Stasis or Disable
+     *  aura, so depth 2 is unreachable today; keying the guard by caster would close it. */
     const shipPassiveSuppressed = (a: {
         sourceSlot: SkillSlot;
         source?: 'equipment';

@@ -445,13 +445,17 @@ const selectingEnemy = (
     speed: number,
     slot: ShipSkills['slots'][number],
     attack: number,
-    selection: Selection
+    selection: Selection,
+    /** One actor per cell: `SelectTargetsContext.enemyOccupied` assumes it, and two enemies on one
+     *  cell make `colsFrontToBack` return that column twice — whichever actor the position map
+     *  shadows then silently decides the readout. */
+    position: 'M4' | 'M3'
 ): EnemyAttacker => ({
     id,
     stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: HP, speed, hacking: 500, security: 0 },
     chargeCount: 0,
     startCharged: false,
-    position: 'M4',
+    position,
     target: parsedTarget(selection),
     pattern: basePattern(),
     shipSkills: { slots: [slot] },
@@ -469,9 +473,9 @@ const splitBoard = (opts: {
     teamActors: [opts.front, opts.back],
     enemyAttackers: [
         ...(opts.block
-            ? [selectingEnemy('blocker', 900, blockingAttack('Stasis'), 1, opts.block)]
+            ? [selectingEnemy('blocker', 900, blockingAttack('Stasis'), 1, opts.block, 'M4')]
             : []),
-        selectingEnemy('hitter', 500, basicAttack(), 5000, 'back'),
+        selectingEnemy('hitter', 500, basicAttack(), 5000, 'back', 'M3'),
     ],
 });
 
@@ -523,8 +527,6 @@ describe('the suppression asks the OWNER of the passive, not whoever it lands on
         bus.on('hp-changed', (e: Extract<CombatEvent, { type: 'hp-changed' }>) => {
             if (e.targetId === 'protected') seen.push(e.newPct);
         });
-        // Whoever is blocked goes to the FRONT column, where the blocker reaches it; the readout
-        // ally is always the `back` hitter's target, so it takes damage in every arm.
         // Positions never move: the carrier is always at the front and the protected ally always
         // behind it, so the `back`-targeting hitter reaches the ally in every arm. Only which
         // SELECTION the blocker uses changes, which is how one arm stasises one specific ship.
