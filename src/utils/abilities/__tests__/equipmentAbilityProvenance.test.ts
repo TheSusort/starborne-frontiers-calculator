@@ -15,7 +15,6 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
-import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
 import { buildShipAbilities } from '../buildShipAbilities';
@@ -26,11 +25,13 @@ import type { GearSlotName } from '../../../constants/gearTypes';
 import type { Ship } from '../../../types/ship';
 
 function requireReferenceData(): void {
-    if (!csvAvailable() || !shipDataAvailable()) {
+    // The CSV alone: `buildTraceShip` resolves a CSV-only record on fallback stats, and the
+    // "no ship ability is stamped" half reads only what the PARSER produces from skill text.
+    if (!csvAvailable()) {
         throw new Error(
-            'docs/ship-skills.csv and/or docs/ship-data.json are missing from this worktree ' +
-                '(gitignored reference data). This tripwire must read real parsed ship kits — a ' +
-                'synthetic fallback would make the "no ship ability is stamped" half vacuous.'
+            'docs/ship-skills.csv is missing from this worktree (gitignored reference data). ' +
+                'This tripwire must read real parsed ship kits — a synthetic fallback would ' +
+                'make the "no ship ability is stamped" half vacuous.'
         );
     }
 }
