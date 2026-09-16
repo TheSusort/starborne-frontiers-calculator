@@ -123,6 +123,9 @@ export const SimRerankTable: React.FC<SimRerankTableProps> = ({
             sortBy={sortMetric}
             sortDirection={sortDirection}
             emptyMessage="No candidates to compare yet."
+            // This table already sits inside SimRerankSection's own `card` — DataTable's card
+            // border/padding would otherwise double up as a box within a box.
+            className="border-0 p-0"
         />
     );
 };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveFight } from '../fightSources';
+import { isRealOpponentSource, resolveFight } from '../fightSources';
 import type { Ship } from '../../../../types/ship';
 import type { LocalEncounterNote } from '../../../../types/encounters';
 import type { SimulatorSetup } from '../../../simulator/simulatorSetup';
@@ -194,5 +194,40 @@ describe('resolveFight', () => {
         };
         const encounterFight = resolveFight({ kind: 'encounter', note }, focus, resolveShip);
         expect(encounterFight.dropped).toEqual([]);
+    });
+});
+
+describe('isRealOpponentSource', () => {
+    it('is true only for a saved setup', () => {
+        expect(isRealOpponentSource('setup')).toBe(true);
+        expect(isRealOpponentSource('practice')).toBe(false);
+        expect(isRealOpponentSource('encounter')).toBe(false);
+    });
+
+    it('agrees with resolveFight.realOpponent for every kind', () => {
+        const note: LocalEncounterNote = {
+            id: 'e1',
+            name: 'My team',
+            createdAt: 0,
+            formation: [{ shipId: 'focus', position: 'M4' }],
+        };
+        const setup: SimulatorSetup = {
+            version: SIMULATOR_SETUP_VERSION,
+            name: 'saved',
+            playerBoard: { M4: { shipId: 'focus' } },
+            enemyBoard: { M4: { shipId: 'foe' } },
+            seed: 7,
+            runCount: 20,
+            savedAt: 0,
+        };
+
+        const practiceFight = resolveFight({ kind: 'practice' }, focus, resolveShip);
+        expect(practiceFight.realOpponent).toBe(isRealOpponentSource('practice'));
+
+        const encounterFight = resolveFight({ kind: 'encounter', note }, focus, resolveShip);
+        expect(encounterFight.realOpponent).toBe(isRealOpponentSource('encounter'));
+
+        const setupFight = resolveFight({ kind: 'setup', setup }, focus, resolveShip);
+        expect(setupFight.realOpponent).toBe(isRealOpponentSource('setup'));
     });
 });

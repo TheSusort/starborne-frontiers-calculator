@@ -78,7 +78,10 @@ const stubRun = (id: string): CandidateRun =>
 describe('SimRerankSection', () => {
     it('is collapsed until opened', () => {
         render(<SimRerankSection {...props()} />);
-        expect(screen.queryByRole('button', { name: /^run$/i })).not.toBeInTheDocument();
+        // CollapsibleAccordion keeps the body mounted (so its height transition has something to
+        // animate) and marks it `inert` instead — a collapsed control is not visible to the user,
+        // not absent from the DOM.
+        expect(screen.getByRole('button', { name: /^run$/i })).not.toBeVisible();
     });
 
     it('says a practice fight is not a team-aware answer', () => {
@@ -113,9 +116,9 @@ describe('SimRerankSection', () => {
     it('keeps seed and run count behind the advanced disclosure', () => {
         render(<SimRerankSection {...props()} />);
         open();
-        expect(screen.queryByLabelText(/seed/i)).not.toBeInTheDocument();
+        expect(screen.getByLabelText(/seed/i)).not.toBeVisible();
         fireEvent.click(screen.getByText(/advanced/i));
-        expect(screen.getByLabelText(/seed/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/seed/i)).toBeVisible();
     });
 
     const cell = (metric: string, mean: number, distinguishable: boolean) => ({

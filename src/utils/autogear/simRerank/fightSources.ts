@@ -32,6 +32,13 @@ export type FightSource =
     | { kind: 'encounter'; note: LocalEncounterNote }
     | { kind: 'setup'; setup: SimulatorSetup };
 
+/** Only a saved setup supplies both sides as the player's actual opponent — practice and
+ *  encounter sources both borrow the practice enemy. Mirrors `resolveFight`'s `realOpponent`
+ *  without resolving the fight, so a caller can show the "not a real team" note cheaply. */
+export function isRealOpponentSource(kind: FightSource['kind']): boolean {
+    return kind === 'setup';
+}
+
 const shipIdsOf = (board: BoardState): string[] =>
     Object.values(board)
         .filter((placement): placement is NonNullable<typeof placement> => !!placement)
@@ -84,7 +91,7 @@ export function resolveFight(
             enemyBoard,
             boardShipIds: shipIdsOf(playerBoard),
             focusPosition: findFocusPosition(playerBoard, focus.id),
-            realOpponent: false,
+            realOpponent: isRealOpponentSource(source.kind),
             dropped: [],
         };
     }
@@ -105,7 +112,7 @@ export function resolveFight(
             enemyBoard: practiceBoards(focus).enemyBoard,
             boardShipIds: shipIdsOf(playerBoard),
             focusPosition: findFocusPosition(playerBoard, focus.id),
-            realOpponent: false,
+            realOpponent: isRealOpponentSource(source.kind),
             dropped,
         };
     }
@@ -124,7 +131,7 @@ export function resolveFight(
         enemySquadLeader: deserialized.enemySquadLeader,
         boardShipIds: shipIdsOf(playerBoard),
         focusPosition: findFocusPosition(playerBoard, focus.id),
-        realOpponent: true,
+        realOpponent: isRealOpponentSource(source.kind),
         dropped: deserialized.dropped,
     };
 }

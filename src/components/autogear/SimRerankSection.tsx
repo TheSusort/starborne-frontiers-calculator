@@ -1,12 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Checkbox, ChevronDownIcon, Input, Select } from '../ui';
+import { Button, Checkbox, ChevronDownIcon, CollapsibleAccordion, Input, Select } from '../ui';
 import { randomSeed } from '../simulator/SeedRunControls';
 import { clampRunCount, clampSeed } from '../../utils/simulator/seedRunInputs';
 import type { Ship } from '../../types/ship';
 import type { LocalEncounterNote } from '../../types/encounters';
 import type { SimulatorSetup } from '../../utils/simulator/simulatorSetup';
 import type { CombatStatsDeps } from '../../utils/ship/combatStats';
-import type { FightSource } from '../../utils/autogear/simRerank/fightSources';
+import {
+    isRealOpponentSource,
+    type FightSource,
+} from '../../utils/autogear/simRerank/fightSources';
 import type { AutogearResult } from '../../utils/autogear/AutogearStrategy';
 import { type ShipTypeName } from '../../constants';
 import { defaultComparedRoles } from '../../utils/autogear/simRerank/comparedRoles';
@@ -180,7 +183,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                 </span>
             </Button>
 
-            {open && (
+            <CollapsibleAccordion isOpen={open} id="sim-rerank-body">
                 <div className="space-y-4">
                     <p className="text-xs text-theme-text-secondary">
                         Runs this ship&apos;s build, plus a handful of other roles, through the
@@ -197,7 +200,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                             label: option.label,
                         }))}
                     />
-                    {selectedSource.source.kind !== 'setup' && (
+                    {!isRealOpponentSource(selectedSource.source.kind) && (
                         <p className="text-xs text-amber-400">
                             This is not a real team fight — the practice enemy stands in for a real
                             opponent, so the result won&apos;t reflect the board you actually face.
@@ -229,8 +232,8 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                         >
                             Advanced
                         </Button>
-                        {advancedOpen && (
-                            <div className="flex gap-3 items-end mt-2">
+                        <CollapsibleAccordion isOpen={advancedOpen} id="sim-rerank-advanced">
+                            <div className="flex gap-3 items-end">
                                 <Input
                                     label="Seed"
                                     type="number"
@@ -250,7 +253,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                                     disabled={isRunning}
                                 />
                             </div>
-                        )}
+                        </CollapsibleAccordion>
                     </div>
 
                     <div className="flex items-center gap-3">
@@ -325,7 +328,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                         />
                     )}
                 </div>
-            )}
+            </CollapsibleAccordion>
         </div>
     );
 };
