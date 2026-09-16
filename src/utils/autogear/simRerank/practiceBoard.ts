@@ -39,6 +39,12 @@ const FOCUS_POSITION: Position = 'M4';
 const ALLY_POSITIONS: Position[] = ['T2', 'B2'];
 const ENEMY_POSITIONS: Position[] = ['M4', 'T2', 'B2'];
 
+/** The healing calculator's constants have no `attack` field (a practice target for healing
+ *  doesn't hit back), so this fixture needs its own. Tuned so the player side — the focus plus
+ *  two sparring allies — wins roughly 60-90% of fights against three sparring enemies rather than
+ *  every fight: a blowout would leave every metric insensitive to the focus ship's own gear. */
+const SPARRING_ENEMY_ATTACK = 4_800;
+
 /**
  * The fight used when the player has picked no encounter or saved setup.
  *
@@ -48,8 +54,9 @@ const ENEMY_POSITIONS: Position[] = ['M4', 'T2', 'B2'];
  * Enemy stats come from the healing calculator's practice-target constants so the two practice
  * opponents in this app cannot drift into different numbers.
  *
- * This is deliberately NOT a team-aware answer. The board carries no real ally kit and no real
- * opponent, and the UI says so where the source is chosen.
+ * This is deliberately NOT a team-aware answer: the board carries no real ally kit and no real
+ * opponent, so it cannot say whether a build is better with the player's actual team against the
+ * player's actual enemy — only how it performs against this generic sparring pair.
  */
 export function practiceBoards(focus: Ship): {
     playerBoard: BoardState;
@@ -65,7 +72,11 @@ export function practiceBoards(focus: Ship): {
     const enemyBoard: BoardState = {};
     ENEMY_POSITIONS.forEach((position, index) => {
         enemyBoard[position] = {
-            ship: sparringPartner(`practice-enemy-${index}`, 4_400, DEFAULT_ENEMY_SPEED + index),
+            ship: sparringPartner(
+                `practice-enemy-${index}`,
+                SPARRING_ENEMY_ATTACK,
+                DEFAULT_ENEMY_SPEED + index
+            ),
         };
     });
 

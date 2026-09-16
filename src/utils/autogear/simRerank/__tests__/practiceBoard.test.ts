@@ -3,6 +3,12 @@ import { practiceBoards } from '../practiceBoard';
 import { buildTeam } from '../../../simulator/buildTeam';
 import { runSeedSet } from '../../../simulator/seededRuns';
 import type { Ship } from '../../../../types/ship';
+import {
+    DEFAULT_ENEMY_HP,
+    DEFAULT_ENEMY_DEFENCE,
+    DEFAULT_ENEMY_SECURITY,
+    DEFAULT_ENEMY_SPEED,
+} from '../../../calculators/healingDefaultEnemy';
 
 const focus = (): Ship =>
     ({
@@ -59,6 +65,20 @@ describe('practiceBoards', () => {
                 expect(placement.ship.activeSkillText ?? '').not.toBe('');
             }
         }
+    });
+
+    it('ties each enemy placement to the DEFAULT_ENEMY_* constant it is meant to feed', () => {
+        const { enemyBoard } = practiceBoards(focus());
+        const enemies = Object.values(enemyBoard).filter(Boolean) as Array<{ ship: Ship }>;
+        expect(enemies.length).toBeGreaterThan(0);
+        for (const { ship } of enemies) {
+            expect(ship.baseStats.hp).toBe(DEFAULT_ENEMY_HP);
+            expect(ship.baseStats.defence).toBe(DEFAULT_ENEMY_DEFENCE);
+            expect(ship.baseStats.security).toBe(DEFAULT_ENEMY_SECURITY);
+        }
+        // Speed is DEFAULT_ENEMY_SPEED plus a per-position offset, so the constant is the floor.
+        const speeds = enemies.map(({ ship }) => ship.baseStats.speed);
+        expect(Math.min(...speeds)).toBe(DEFAULT_ENEMY_SPEED);
     });
 
     it('deals damage in the fight, so the fixture is not silently inert', () => {
