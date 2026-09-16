@@ -1652,6 +1652,75 @@ const DocumentationPage: React.FC = () => {
                                         </li>
                                     </ul>
                                 </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold">Simulate Candidates</h4>
+                                    <p className="text-theme-text">
+                                        The role scoring above is a cheap proxy, built to compare
+                                        thousands of gear combinations in seconds — it&apos;s what
+                                        finds candidates, not what tells you how they&apos;ll
+                                        actually perform. How a build plays also depends on the rest
+                                        of your team and on the enemy, which no formula over one
+                                        ship&apos;s stats can see. The collapsed{' '}
+                                        <strong>Simulate candidates</strong> panel takes a handful
+                                        of the formula&apos;s own top picks and runs them through
+                                        the real combat engine, then reports how they actually
+                                        played. It&apos;s opt-in because each run costs a few
+                                        seconds of compute.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Pick a <strong>fight source</strong> first:
+                                    </p>
+                                    <ul className="text-theme-text list-disc pl-4 space-y-1 mt-1">
+                                        <li>
+                                            <strong>Practice fight</strong> (default) — generic
+                                            allies and enemies. Fast, but not a team-aware answer;
+                                            the panel says so.
+                                        </li>
+                                        <li>
+                                            <strong>Saved encounter</strong> — your real team
+                                            against a generic enemy.
+                                        </li>
+                                        <li>
+                                            <strong>Saved simulator setup</strong> — your real team
+                                            against a real enemy. This is the only source that is a
+                                            real fight on both sides.
+                                        </li>
+                                    </ul>
+                                    <p className="text-theme-text mt-2">
+                                        The roles compared are chosen for you: the ship&apos;s own
+                                        configured role, plus one representative of every other role
+                                        family. A single autogear run only ever explores the region
+                                        of gear space its own formula rewards; gearing the same ship
+                                        for a different role is what reaches a different region,
+                                        which is the point of this panel.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        An <strong>Advanced</strong> section, hidden by default,
+                                        holds the random seed and the number of simulated runs per
+                                        candidate (20 by default).
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        The results table has one row per candidate and six columns
+                                        — win rate, rounds, damage dealt, damage taken, repairs, and
+                                        team damage — each comparing that candidate against your
+                                        currently equipped build across the same set of simulated
+                                        fights. The ship&apos;s role suggests which column to sort
+                                        by, but you can pick another without re-running anything.
+                                        When a column can&apos;t tell two builds apart, it says{' '}
+                                        <strong>no clear difference</strong> instead of showing a
+                                        number — that&apos;s a real result, not a failed
+                                        measurement. The table never declares an overall winner;
+                                        weighing the columns against each other is left to you.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Click <strong>Apply</strong> on any row to equip that build.
+                                        A candidate that would need gear already equipped by another
+                                        ship in the same fight is left out of the table and listed
+                                        separately instead — even when it was autogear&apos;s own
+                                        top pick.
+                                    </p>
+                                </div>
                             </div>
 
                             <h3 className="text-xl font-semibold mt-6 mb-2">
