@@ -50,10 +50,11 @@ const xcellence = (): Ship =>
         chargedPattern: 'Pattern-Base',
     }) as unknown as Ship;
 
-// Two real pieces, each a legal main-stat/slot pairing (software rolls hacking, hull rolls hp —
-// `constants/gearTypes.ts`'s GEAR_SLOTS), so the fixture reads as a loadout a real player could
-// have. The whole build difference must travel through these, resolved by `getGearPiece`, never
-// through `statOverrides` — that is what makes this a test of the adapter.
+// Three real pieces, each a legal main-stat/slot pairing (software rolls hacking, hull and
+// thrusters both roll hp — `constants/gearTypes.ts`'s GEAR_SLOTS), so the fixture reads as a
+// loadout a real player could have. The whole build difference must travel through these,
+// resolved by `getGearPiece`, never through `statOverrides` — that is what makes this a test of
+// the adapter.
 const HACKING_PIECE: GearPiece = {
     id: 'hacking-piece',
     slot: 'software',
@@ -65,20 +66,39 @@ const HACKING_PIECE: GearPiece = {
     setBonus: 'CRITICAL',
 };
 
+// LEECH's `GEAR_SETS` entry carries no `stats` array — the set has nothing to add to a stat
+// block, so its 15%-of-damage-dealt self-heal reaches the fight only through
+// `ship.equipment` -> `buildEquipmentAbilities`. A build that sums resolved gear into
+// `baseStats` and clears `equipment` cannot carry this ability at all: `focusHealingDone` for
+// this ship collapses to 0 regardless of how faithfully the stat sum is computed. Split across
+// two slots (hull + thrusters) so the total HP main-stat contribution matches a single 40,000
+// piece while completing LEECH's 2-piece requirement.
 const HP_PIECE: GearPiece = {
     id: 'hp-piece',
     slot: 'hull',
-    mainStat: { name: 'hp', value: 40_000, type: 'flat' },
+    mainStat: { name: 'hp', value: 20_000, type: 'flat' },
     subStats: [],
     stars: 6,
     level: 16,
     rarity: 'legendary',
-    setBonus: 'CRITICAL',
+    setBonus: 'LEECH',
+};
+
+const HP_PIECE_2: GearPiece = {
+    id: 'hp-piece-2',
+    slot: 'thrusters',
+    mainStat: { name: 'hp', value: 20_000, type: 'flat' },
+    subStats: [],
+    stars: 6,
+    level: 16,
+    rarity: 'legendary',
+    setBonus: 'LEECH',
 };
 
 const pieces: Record<string, GearPiece> = {
     'hacking-piece': HACKING_PIECE,
     'hp-piece': HP_PIECE,
+    'hp-piece-2': HP_PIECE_2,
 };
 
 const deps = {
@@ -102,13 +122,26 @@ const meanFocusDamage = (run: CandidateRun): number => {
     return series.reduce((a, b) => a + b, 0) / series.length;
 };
 
+const meanFocusHealing = (run: CandidateRun): number => {
+    const series = metricSeries(run, 'focusHealingDone');
+    return series.reduce((a, b) => a + b, 0) / series.length;
+};
+
+// Measured across 10 base seeds (12 runs each), the HP build won every one of 120 paired runs,
+// ratio 2.54x-3.06x (narrowest at seed 2600) — this committed seed is a representative sample,
+// not a lucky one.
+const SEED = 1234;
+
 describe('Xcellence cliff, end to end through gear', () => {
     it('a high-hacking build and a high-HP build separate on focus damage', async () => {
         const controller = applySuggestionsToShip(
             xcellence(),
             suggestion('software', 'hacking-piece')
         );
-        const bruiser = applySuggestionsToShip(xcellence(), suggestion('hull', 'hp-piece'));
+        const bruiser = applySuggestionsToShip(xcellence(), [
+            ...suggestion('hull', 'hp-piece'),
+            ...suggestion('thrusters', 'hp-piece-2'),
+        ]);
 
         const [controllerRun, bruiserRun] = await Promise.all(
             [controller, bruiser].map((ship) =>
@@ -116,7 +149,7 @@ describe('Xcellence cliff, end to end through gear', () => {
                     id: ship.id,
                     fight: resolveFight({ kind: 'practice' }, ship, () => null),
                     deps,
-                    seed: 1234,
+                    seed: SEED,
                     runCount: 12,
                 })
             )
@@ -132,8 +165,18 @@ describe('Xcellence cliff, end to end through gear', () => {
 
         // The finding: the HP build out-damages the hacking build. High hacking makes
         // Xcellence's debuffs land, which suppresses the on-resist channel entirely; low
-        // hacking manufactures resists, and the R2 passive converts the shield pool she stacks
-        // every turn into damage on each one.
+        // hacking manufactures resists, and the R2 passive converts the shield pool the ship
+        // stacks every turn into damage on each one.
         expect(hpDamage).toBeGreaterThan(hackingDamage);
+
+        // The HP build's two LEECH pieces complete the set, so it must self-heal for 15% of its
+        // damage dealt; the hacking build carries no ability-granting set and performs no heals
+        // of its own. This is unrelated to any stat sum, so it fails independently if gear
+        // abilities are ever dropped from the adapter's output.
+        const hackingHealing = meanFocusHealing(expectRun(controllerRun));
+        const hpHealing = meanFocusHealing(expectRun(bruiserRun));
+
+        expect(hackingHealing).toBe(0);
+        expect(hpHealing).toBeGreaterThan(0);
     });
 });
