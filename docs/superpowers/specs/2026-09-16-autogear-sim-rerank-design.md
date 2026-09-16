@@ -162,16 +162,29 @@ useless.
 **Candidates:**
 
 1. Autogear's returned best, under the ship's own configured role/formula.
-2. **One additional autogear run per extra role or formula the user adds.** This is the source
-   that reaches a *different basin*, and the measured evidence above says nothing else does: every
+2. **One additional autogear run per compared role — chosen by default, not by the user.** This is
+   the source that reaches a *different basin*, and the measured evidence above says nothing else
+   does: every
    `DEBUFFER*` seed leads with `core('hacking')`, so all five drive Xcellence into the regime where
    hacking and HP are both inert. `DEFENDER` (`core('effectiveHp')`) and `DEFENDER_SECURITY` carry
    no hacking term at all, and gearing him as a defender is what lands in the basin that deals
    2.2× the damage.
 
-   Mechanically this is the existing role selector run a second time — no new optimizer, no new
-   scoring. Cost is one extra autogear run per added role, which dominates the sim time and must
-   be inside the same cancellable progress job.
+   **The compared roles are picked for the user.** Asking them to name an extra role asks them to
+   already know the answer — a player who knew Xcellence wants a defender build would not need
+   this tool. The default set is the ship's own role plus one representative of each *structurally
+   different* objective it is not already in: `ATTACKER` (damage), `DEFENDER` (survival),
+   `DEBUFFER` (control), `SUPPORTER` (repair). Four runs, no knowledge required, and it is the set
+   that would have found the measured Xcellence result unaided. The user can edit the set, but
+   never has to.
+
+   Affordable because autogear's cost is capped and inventory-independent: `getGenerations` holds
+   `populationSize × generations` at `baseOperations` — 105,000 evaluations, 360,000 with implants
+   — so four runs is a small multiple of a wait the user already accepts.
+
+   Mechanically this is the existing role selector run N times — no new optimizer, no new scoring.
+   The optimizer runs dominate the job and sit inside the same cancellable progress report as the
+   sim.
 3. Distinct runners-up from `GeneticStrategy`'s final population, subject to all of:
    - `violation === 0` (a hard-requirement violator is not a build the user asked for),
    - deduped by equipment ID-set (a converged GA's top N are near-copies; without this the table
@@ -280,10 +293,15 @@ No overall "winner" is emitted.
 ### §5 UI
 
 A collapsed **Simulate candidates** section under Strategy in `AutogearSettings`, off by default —
-the feature is opt-in and costs seconds of compute. Contents: the fight-source dropdown, a
-multi-select for extra roles/formulas to gear against, seed and run-count inputs (reusing
-`clampSeed` / `clampRunCount` and the existing `SeedRunControls` bounds), a Run button, progress
-with Cancel, and the results table.
+the feature is opt-in and costs seconds of compute. Contents: the fight-source dropdown, the
+compared-roles set (pre-filled per §3 and editable), a Run button, progress with Cancel, and the
+results table.
+
+**Seed and run count are not front-of-house.** A player does not know what a seed is, and the
+defaults are the whole point of having them: 20 runs, and a seed the page picks. Both live behind
+a further "Advanced" disclosure inside the section, reusing `clampSeed` / `clampRunCount` and the
+existing `SeedRunControls` bounds, so reproducing a specific run stays possible without making
+every user answer for it.
 
 Each candidate row names where it came from — the ship's own role, an added role, or a runner-up —
 because "the defender build out-damages the debuffer build" is the finding, and a row that does
@@ -322,6 +340,22 @@ primitives). No raw `<button>`, no hand-rolled boxes.
 - `src/pages/DocumentationPage.tsx` — the in-app docs gain the feature, including the statement
   that a practice fight is not a team-aware answer.
 - One `UNRELEASED_CHANGES` entry in `src/constants/changelog.ts`.
+
+## Deferred to after first real use
+
+These need to be designed against real output, not imagined output. Listed so they are not
+rediscovered as bugs:
+
+- **A plain-language verdict per row.** The table is six columns of mean / standard error /
+  distinguishable — a statistics table. The sentence a player wants is "the defender build deals
+  2.2× the damage and ends fights 5 rounds sooner", with the statistics behind a toggle. Worth
+  doing; worth seeing the real numbers first so the sentence is not wrong.
+- **Saying *why* a role won.** When a compared role wins, the interesting part is which stat
+  moved — the measured evidence says it was hacking falling below a cliff. Showing the geared stat
+  deltas beside the outcome deltas would turn a result into an explanation.
+- **Discoverability.** A collapsed advanced section is found by almost nobody. There is no
+  detector for "this ship's kit defeats its formula", so there is nothing honest to surface it
+  with yet — the cliff was found by measurement, not by inspection.
 
 ## Deliberately excluded
 
