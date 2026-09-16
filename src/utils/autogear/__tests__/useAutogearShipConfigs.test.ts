@@ -15,7 +15,8 @@ const ship = {
 describe('useAutogearShipConfigs', () => {
     // Regression test for the bug where "Simulate candidates" scored a ship's own-role row with
     // whatever `shipConfigs` held when the page FIRST rendered, not what the user actually
-    // configured — see `buildSimRerankConfig`'s doc comment in `runShipOptimizer.ts`.
+    // configured — see `useAutogearShipConfigs`'s doc comment in `runShipOptimizer.ts`, which
+    // covers `buildSimRerankConfig` too.
     it("buildSimRerankConfig's own-role row reflects the ship's CURRENT configuration, not a snapshot from an earlier render", () => {
         const { result } = renderHook(() => useAutogearShipConfigs(() => ship, null));
 

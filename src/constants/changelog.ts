@@ -7,8 +7,7 @@ export const CURRENT_VERSION = '1.68.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: compare candidate builds by simulating them against a real fight.',
-    'Autogear: builds can now be compared against other roles automatically.',
+    'Autogear: compare candidate gear builds through the combat simulator.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

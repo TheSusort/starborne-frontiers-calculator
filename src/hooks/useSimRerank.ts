@@ -46,7 +46,7 @@ export interface SimRerankState {
     excluded: ExcludedCandidate[];
     /** True when autogear's own best was excluded — stated, not buried in a count. */
     ownBestExcluded: boolean;
-    /** Cells the resolved fight dropped. Mirrors `FightBoards.dropped` so a later UI can tell the
+    /** Cells the resolved fight dropped. Mirrors `FightBoards.dropped` so the UI can tell the
      *  player the comparison did not run the fight they saved. */
     dropped: DroppedCell[];
     /** Set only alongside a status that was just reset to `'idle'` with rows/table/baseline

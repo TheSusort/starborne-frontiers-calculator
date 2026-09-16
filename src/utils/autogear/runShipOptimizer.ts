@@ -139,12 +139,7 @@ export function buildSimRerankShipConfig(
     const isOwnRole = role === configuredRole;
     const arenaModifiers =
         shipConfig.useArenaModifiers && activeSeason?.rules
-            ? getMatchingModifiers(
-                  activeSeason.rules,
-                  ship.faction || '',
-                  ship.rarity || '',
-                  isOwnRole ? configuredRole : role
-              )
+            ? getMatchingModifiers(activeSeason.rules, ship.faction || '', ship.rarity || '', role)
             : null;
 
     return {
@@ -176,6 +171,7 @@ export function buildSimRerankShipConfig(
  * omits `getShipConfig` (or any other value `getShipConfig` itself closes over) keeps returning
  * the function built at whichever render created the memo — silently scoring with whatever
  * `shipConfigs` held at that render, forever, regardless of what the user configures afterwards.
+ * Pinned by `__tests__/useAutogearShipConfigs.test.ts`.
  */
 export function useAutogearShipConfigs(
     getShipById: (id: string) => Ship | undefined,

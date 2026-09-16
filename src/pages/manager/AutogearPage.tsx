@@ -21,7 +21,6 @@ import {
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
-import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import { readSavedSetups } from '../../utils/simulator/setupStorage';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
@@ -111,7 +110,6 @@ export const AutogearPage: React.FC = () => {
     const { teams, saveTeam, updateTeamOrder, deleteTeam } = useAutogearTeams();
     const { activeProfileId } = useActiveProfile();
     const { startGroup, hasCompletedGroup } = useTutorial();
-    const { encounters } = useEncounterNotes();
 
     // Auto-start tutorial on first visit (only when ships exist)
     React.useEffect(() => {
@@ -483,6 +481,14 @@ export const AutogearPage: React.FC = () => {
             prevSelectedShips.map((selectedShip) =>
                 selectedShip ? getShipById(selectedShip.id) || selectedShip : null
             )
+        );
+        // The Settings modal's own ship mirrors the same refresh, or a sim-rerank "Apply" (which
+        // equips gear while the modal stays open) leaves `shipSettings` pointing at the
+        // now-stale pre-equip ship — the next Run then reads the old build as both the
+        // "currently equipped" baseline and the focus to re-gear, scoring the build just applied
+        // as an improvement over itself.
+        setShipSettings((prevShipSettings) =>
+            prevShipSettings ? getShipById(prevShipSettings.id) || prevShipSettings : null
         );
     }, [ships, getShipById]);
 
@@ -1787,7 +1793,6 @@ export const AutogearPage: React.FC = () => {
                         configuredRole: shipSettings
                             ? (getShipConfig(shipSettings.id).shipRole ?? shipSettings.type)
                             : undefined,
-                        encounters,
                         savedSetups,
                         deps: combatStatsDeps,
                         getShipById,

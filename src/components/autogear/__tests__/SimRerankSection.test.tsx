@@ -11,6 +11,12 @@ import type { SimulatorSetup } from '../../../utils/simulator/simulatorSetup';
 // unresolvable under Vitest. Same workaround as the other component tests in this project.
 vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 
+// SimRerankSection fetches its own encounter list (see its doc comment); stub it rather than
+// wiring up the real hook's Supabase/ActiveProfile dependencies.
+vi.mock('../../../hooks/useEncounterNotes', () => ({
+    useEncounterNotes: () => ({ encounters: [], loading: false }),
+}));
+
 const hookState = vi.hoisted(() => {
     const current: SimRerankState = {
         status: 'idle',
@@ -59,7 +65,6 @@ const setupWithShip: SimulatorSetup = {
 
 const props = (overrides: Partial<React.ComponentProps<typeof SimRerankSection>> = {}) => ({
     ship,
-    encounters: [],
     savedSetups: [],
     deps: { getGearPiece: () => undefined, getEngineeringStatsForShipType: () => undefined },
     getShipById: () => undefined,

@@ -1720,6 +1720,11 @@ const DocumentationPage: React.FC = () => {
                                         separately instead — even when it was autogear&apos;s own
                                         top pick.
                                     </p>
+                                    <p className="text-theme-text mt-2">
+                                        Only the Genetic algorithm produces runner-up builds per
+                                        role. With Two-Pass or Set-First selected, each role
+                                        contributes just its one best build to the table.
+                                    </p>
                                 </div>
                             </div>
 

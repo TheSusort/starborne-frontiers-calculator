@@ -22,8 +22,9 @@ export interface FightBoards {
     /** True when both sides are real ships the player chose. A practice or encounter fight is
      *  not. */
     realOpponent: boolean;
-    /** Cells a saved setup named whose ship no longer resolves. The fight still runs without them,
-     *  but it is not the fight that was saved, so a caller showing this source must say so. */
+    /** Cells the source named whose ship no longer resolves — a saved setup's own roster, or an
+     *  encounter's formation. The fight still runs without them, but it is not the fight that was
+     *  saved, so a caller showing this source must say so. */
     dropped: DroppedCell[];
 }
 

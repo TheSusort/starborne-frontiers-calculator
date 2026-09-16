@@ -1,11 +1,20 @@
 import React, { useMemo, useState } from 'react';
-import { Button, Checkbox, ChevronDownIcon, CollapsibleAccordion, Input, Select } from '../ui';
+import {
+    Button,
+    Checkbox,
+    ChevronDownIcon,
+    CollapsibleAccordion,
+    GroupLabel,
+    Input,
+    Select,
+} from '../ui';
 import { randomSeed } from '../simulator/SeedRunControls';
 import { clampRunCount, clampSeed } from '../../utils/simulator/seedRunInputs';
 import type { Ship } from '../../types/ship';
 import type { LocalEncounterNote } from '../../types/encounters';
 import type { SimulatorSetup } from '../../utils/simulator/simulatorSetup';
 import type { CombatStatsDeps } from '../../utils/ship/combatStats';
+import { useEncounterNotes } from '../../hooks/useEncounterNotes';
 import {
     isRealOpponentSource,
     type FightSource,
@@ -74,7 +83,6 @@ export interface SimRerankSectionProps {
      *  the own-role row and a compared row collide. Falls back to `ship.type` when the ship has
      *  no configured role (Custom mode). */
     configuredRole?: ShipTypeName;
-    encounters: LocalEncounterNote[];
     savedSetups: SimulatorSetup[];
     deps: CombatStatsDeps;
     getShipById: (id: string) => Ship | undefined;
@@ -97,7 +105,6 @@ export interface SimRerankSectionProps {
 export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     ship,
     configuredRole,
-    encounters,
     savedSetups,
     deps,
     getShipById,
@@ -107,6 +114,10 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
     onApply,
 }) => {
     const ownRole = configuredRole ?? ship.type;
+    // Fetched here rather than by the page: this section only mounts while the Settings modal is
+    // open, so the Supabase-backed query it feeds (`sourceOptions`' encounter list) runs only for
+    // a player who actually opens the panel, not on every Autogear page load.
+    const { encounters } = useEncounterNotes();
     const [open, setOpen] = useState(false);
     const [advancedOpen, setAdvancedOpen] = useState(false);
     const [seed, setSeed] = useState(() => randomSeed());
@@ -218,9 +229,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                     )}
 
                     <div className="space-y-2">
-                        <span className="text-xs uppercase tracking-wide text-theme-text-secondary">
-                            Compare against
-                        </span>
+                        <GroupLabel>Compare against</GroupLabel>
                         <div className="flex flex-wrap gap-4">
                             {availableRoles.map((role) => (
                                 <Checkbox
@@ -291,7 +300,7 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
                     {state.dropped.length > 0 && (
                         <p className="text-sm text-amber-400">
                             {state.dropped.length} ship{state.dropped.length === 1 ? '' : 's'} in
-                            this setup no longer exist — the fight ran without them.
+                            this fight no longer exist — it ran without them.
                         </p>
                     )}
 
