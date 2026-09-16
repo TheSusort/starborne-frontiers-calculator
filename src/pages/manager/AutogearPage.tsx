@@ -26,6 +26,7 @@ import {
 import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { clearScoreCache } from '../../utils/autogear/scoring';
+import { applySuggestionsToShip } from '../../utils/autogear/simRerank/candidateShip';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
 import { GEAR_SETS, SHIP_TYPES, ShipTypeName, getLimitStatLabel } from '../../constants';
@@ -96,29 +97,6 @@ function formatImplantType(type: string): string {
 }
 
 export const AutogearPage: React.FC = () => {
-    // Helper functions (before hooks)
-    const getSuggestedEquipment = (suggestions: GearSuggestion[], ship: Ship | null) => {
-        if (!ship) return {};
-        const equipment = { ...ship.equipment };
-        suggestions
-            .filter((s) => !s.slotName.startsWith('implant_')) // Only gear
-            .forEach((suggestion) => {
-                equipment[suggestion.slotName] = suggestion.gearId;
-            });
-        return equipment;
-    };
-
-    const getSuggestedImplants = (suggestions: GearSuggestion[], ship: Ship | null) => {
-        if (!ship) return {};
-        const implants = { ...ship.implants };
-        suggestions
-            .filter((s) => s.slotName.startsWith('implant_')) // Only implants
-            .forEach((suggestion) => {
-                implants[suggestion.slotName] = suggestion.gearId;
-            });
-        return implants;
-    };
-
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece, upgrades, simulateUpgrades } = useGearUpgrades();
@@ -804,8 +782,8 @@ export const AutogearPage: React.FC = () => {
             // Calculate stats and run simulations for this ship
             performanceTracker.startTimer('PostProcessing');
             const currentEquipment = ship.equipment;
-            const suggestedEquipment = getSuggestedEquipment(newSuggestions, ship);
-            const suggestedImplants = getSuggestedImplants(newSuggestions, ship);
+            const { equipment: suggestedEquipment, implants: suggestedImplants } =
+                applySuggestionsToShip(ship, newSuggestions);
 
             // Get active sets
             const currentSets = Object.values(currentEquipment).reduce(
