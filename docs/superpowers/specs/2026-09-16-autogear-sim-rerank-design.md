@@ -161,8 +161,18 @@ useless.
 
 **Candidates:**
 
-1. Autogear's returned best.
-2. Distinct runners-up from `GeneticStrategy`'s final population, subject to all of:
+1. Autogear's returned best, under the ship's own configured role/formula.
+2. **One additional autogear run per extra role or formula the user adds.** This is the source
+   that reaches a *different basin*, and the measured evidence above says nothing else does: every
+   `DEBUFFER*` seed leads with `core('hacking')`, so all five drive Xcellence into the regime where
+   hacking and HP are both inert. `DEFENDER` (`core('effectiveHp')`) and `DEFENDER_SECURITY` carry
+   no hacking term at all, and gearing him as a defender is what lands in the basin that deals
+   2.2× the damage.
+
+   Mechanically this is the existing role selector run a second time — no new optimizer, no new
+   scoring. Cost is one extra autogear run per added role, which dominates the sim time and must
+   be inside the same cancellable progress job.
+3. Distinct runners-up from `GeneticStrategy`'s final population, subject to all of:
    - `violation === 0` (a hard-requirement violator is not a build the user asked for),
    - deduped by equipment ID-set (a converged GA's top N are near-copies; without this the table
      is N identical rows),
@@ -197,8 +207,11 @@ candidates were dropped and which board allies they would have stripped — beca
 cannot tell "bad" from "not evaluated" is being misled. When the #1 itself is excluded, that is
 stated at the top of the table, not buried in a count.
 
-**Realistic size.** GA convergence plus dedupe plus exclusion means 2–4 rows, sometimes the
-baseline alone. That is a correct outcome and the table says it plainly.
+**Realistic size.** Within one role, GA convergence plus dedupe plus exclusion means 2–4 rows —
+and the measured evidence says those rows are often *byte-identical in outcome*, because they
+differ by gear inside a regime where the deciding stat is inert. A table of indistinguishable rows
+is a correct result and the table says it plainly; it is also why source 2 is in scope rather than
+deferred, since without it the feature's own motivating case reports nothing.
 
 **Every row is applyable.** A row the user cannot act on changes nothing; applying a row uses the
 same path as applying autogear's suggestion today.
@@ -215,7 +228,9 @@ sub-streams desync downstream of the first divergence even under one seed. This 
 that; it does not claim more.
 
 **Async and cancellable.** A measured 5v5 battle runs ~27 ms (30-round cap, both sides surviving —
-a conservative upper bound). Four candidates × 20 seeds ≈ 2.2 s; ten × 20 ≈ 5.3 s. Synchronous
+a conservative upper bound). Four candidates × 20 seeds ≈ 2.2 s; ten × 20 ≈ 5.3 s. The *optimizer*
+runs dominate this once extra roles are added — one full autogear pass each — so progress covers
+the whole job (gearing, then simulating) and Cancel aborts either phase. Synchronous
 that is a frozen page, so runs go through `runSeedSetAsync` with an `AbortSignal` and
 `onProgress`, reported across the whole job (candidate *i* of *n*, seed *j* of *k*).
 
@@ -265,9 +280,14 @@ No overall "winner" is emitted.
 ### §5 UI
 
 A collapsed **Simulate candidates** section under Strategy in `AutogearSettings`, off by default —
-the feature is opt-in and costs seconds of compute. Contents: the fight-source dropdown, seed and
-run-count inputs (reusing `clampSeed` / `clampRunCount` and the existing `SeedRunControls`
-bounds), a Run button, progress with Cancel, and the results table.
+the feature is opt-in and costs seconds of compute. Contents: the fight-source dropdown, a
+multi-select for extra roles/formulas to gear against, seed and run-count inputs (reusing
+`clampSeed` / `clampRunCount` and the existing `SeedRunControls` bounds), a Run button, progress
+with Cancel, and the results table.
+
+Each candidate row names where it came from — the ship's own role, an added role, or a runner-up —
+because "the defender build out-damages the debuffer build" is the finding, and a row that does
+not say which role produced it cannot deliver it.
 
 Existing UI components throughout (`Button`, `Select`, `Input`, the `card` class, the `ui/tables/`
 primitives). No raw `<button>`, no hand-rolled boxes.
@@ -286,9 +306,16 @@ primitives). No raw `<button>`, no hand-rolled boxes.
   tripwire, not a comment: the failure it guards is silent.
 - **Metric kind**: the win-rate column takes the sign test and the rest take the t rule,
   asserted against `deltaStats` directly.
+- **Cross-config**: adding a role produces a candidate geared under *that* role's formula, not the
+  ship's own, and the row is labelled with its source role.
 - **Non-vacuity**: the practice-board fixture must produce a fight where builds actually separate
   on at least one metric. A fixture where every candidate ties is a vacuous test that reads as a
-  pass.
+  pass — and the measured evidence shows that is the *default* outcome inside one basin, so this
+  tripwire is guarding a live failure mode, not a theoretical one.
+- **The Xcellence regression**: the spike's finding, as a test. Two builds either side of the
+  hacking cliff, run through the real adapter from gear rather than `statOverrides`, must separate
+  on focus damage. This is the one test that proves the whole feature works end to end, and it
+  fails if the adapter ever starts baking stats.
 
 ## Also in scope
 
@@ -301,9 +328,6 @@ primitives). No raw `<button>`, no hand-rolled boxes.
 - **Rank correlation (formula order vs sim order).** The issue proposes it as the validation
   instrument. Spearman over 2–4 candidates is noise, and the paired deltas already say whether the
   sim agrees with the formula's order.
-- **Cross-config candidates** (autogear the same ship under two roles and compare). This is what
-  would actually surface Xcellence's second basin — a converged GA explores one. Worth a follow-up
-  once the table proves readable; out of scope here.
 - **Optimising the whole team at once.** Out of reach: the comparison is one ship's builds against
   a fixed team.
 - **Web workers.** Autogear is already main-thread and CPU-bound; this adds a cancellable async
