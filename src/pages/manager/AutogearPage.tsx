@@ -4,14 +4,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { arrayMove } from '../../utils/arrayMove';
-import {
-    GearSuggestion,
-    StatPriority,
-    SetPriority,
-    StatBonus,
-    FleetBuff,
-} from '../../types/autogear';
-import type { CustomFormula } from '../../types/autogear';
+import { GearSuggestion } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
 import { partitionScoreableShips } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
@@ -24,7 +17,7 @@ import { clearScoreCache } from '../../utils/autogear/scoring';
 import { applySuggestionsToShip } from '../../utils/autogear/simRerank/candidateShip';
 import {
     findOptimalGearForShip,
-    type ShipOptimizerConfig,
+    useAutogearShipConfigs,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
@@ -130,30 +123,11 @@ export const AutogearPage: React.FC = () => {
 
     // useState hooks
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
-    const [shipConfigs, setShipConfigs] = useState<
-        Record<
-            string,
-            {
-                shipRole: ShipTypeName | null;
-                statPriorities: StatPriority[];
-                setPriorities: SetPriority[];
-                statBonuses: StatBonus[];
-                ignoreEquipped: boolean;
-                ignoreUnleveled: boolean;
-                useUpgradedStats: boolean;
-                tryToCompleteSets: boolean;
-                selectedAlgorithm: AutogearAlgorithm;
-                showSecondaryRequirements: boolean;
-                optimizeImplants: boolean;
-                includeCalibratedGear: boolean;
-                assumeCalibrated: boolean;
-                useArenaModifiers: boolean;
-                excludedImplantTypes: string[];
-                fleetBuffs: FleetBuff[];
-                customFormula: CustomFormula | undefined;
-            }
-        >
-    >({});
+    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
+    const { getShipConfig, updateShipConfig, buildSimRerankConfig } = useAutogearShipConfigs(
+        getShipById,
+        activeSeason
+    );
     const [shipResults, setShipResults] = useState<
         Record<
             string,
@@ -191,7 +165,6 @@ export const AutogearPage: React.FC = () => {
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
-    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
     const [donorContext, setDonorContext] = useState<{
         donorIds: Set<string>;
         equippedShipId: string;
@@ -275,45 +248,6 @@ export const AutogearPage: React.FC = () => {
         ).final;
     }, [shipSettings, getGearPiece, getEngineeringStatsForShipType]);
 
-    // Helper function to get config for a specific ship
-    const getShipConfig = (shipId: string) => {
-        const ship = getShipById(shipId);
-        const defaultRole = ship?.type || 'ATTACKER';
-
-        return (
-            shipConfigs[shipId] || {
-                shipRole: defaultRole,
-                statPriorities: [],
-                setPriorities: [],
-                statBonuses: [],
-                ignoreEquipped: false,
-                ignoreUnleveled: true,
-                useUpgradedStats: false,
-                tryToCompleteSets: false,
-                selectedAlgorithm: AutogearAlgorithm.Genetic,
-                showSecondaryRequirements: false,
-                optimizeImplants: false,
-                includeCalibratedGear: false,
-                assumeCalibrated: false,
-                useArenaModifiers: false,
-                excludedImplantTypes: [],
-                fleetBuffs: [],
-                customFormula: undefined,
-            }
-        );
-    };
-
-    // Helper function to update config for a specific ship
-    const updateShipConfig = (shipId: string, updates: Partial<(typeof shipConfigs)[string]>) => {
-        setShipConfigs((prev) => ({
-            ...prev,
-            [shipId]: {
-                ...getShipConfig(shipId),
-                ...updates,
-            },
-        }));
-    };
-
     // Re-read on every settings-modal open so a setup saved in the Simulator tab earlier this
     // session is offered without a full page reload. Simulator setups are throwaway per-device
     // storage (see `setupStorage.ts`), not part of the useStorage/Supabase pipeline, so there is
@@ -333,63 +267,17 @@ export const AutogearPage: React.FC = () => {
         [getGearPiece, getEngineeringStatsForShipType]
     );
 
-    /**
-     * The optimizer inputs for one role's sim-rerank candidate.
-     *
-     * `role === ship.type` is the ship's OWN row: it scores with whatever this ship is actually
-     * configured to use today (a real role's formula, or Custom's user-authored one) — identical
-     * to what "Find optimal gear" would run for it right now.
-     *
-     * Any other role is a COMPARED role: it must score under THAT role's own built-in formula,
-     * not this ship's configured priorities/set priorities/stat bonuses/custom formula — carrying
-     * those over would score every compared role with the same formula, making the comparison
-     * pure optimizer noise (#498). Inventory-eligibility and environment settings (algorithm,
-     * ignoreEquipped/ignoreUnleveled, upgraded-stats, calibration handling, fleet buffs, arena
-     * modifiers) still match the ship's own configuration, so the formula is the only axis that
-     * differs between rows.
-     */
-    const buildSimRerankConfig = useCallback(
-        (ship: Ship, role: ShipTypeName): ShipOptimizerConfig => {
-            const shipConfig = getShipConfig(ship.id);
-            const isOwnRole = role === ship.type;
-            const arenaModifiers =
-                shipConfig.useArenaModifiers && activeSeason?.rules
-                    ? getMatchingModifiers(
-                          activeSeason.rules,
-                          ship.faction || '',
-                          ship.rarity || '',
-                          isOwnRole ? shipConfig.shipRole || ship.type : role
-                      )
-                    : null;
-
-            return {
-                shipRole: isOwnRole ? shipConfig.shipRole : role,
-                statPriorities: isOwnRole ? shipConfig.statPriorities : [],
-                setPriorities: isOwnRole ? shipConfig.setPriorities : [],
-                statBonuses: isOwnRole ? shipConfig.statBonuses : [],
-                tryToCompleteSets: isOwnRole ? shipConfig.tryToCompleteSets : false,
-                customFormula: isOwnRole ? shipConfig.customFormula : undefined,
-                ignoreEquipped: shipConfig.ignoreEquipped,
-                ignoreUnleveled: shipConfig.ignoreUnleveled,
-                useUpgradedStats: shipConfig.useUpgradedStats,
-                selectedAlgorithm: shipConfig.selectedAlgorithm,
-                optimizeImplants: shipConfig.optimizeImplants,
-                includeCalibratedGear: shipConfig.includeCalibratedGear,
-                assumeCalibrated: shipConfig.assumeCalibrated,
-                excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
-                fleetBuffs: shipConfig.fleetBuffs,
-                arenaModifiers,
-            };
-        },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        [activeSeason]
-    );
-
     const runAutogearFor = useCallback(
         async (role: ShipTypeName) => {
             if (!shipSettings) {
                 throw new Error('Simulate candidates requires a ship to be open in Settings');
             }
+            // The scoreCache key omits gear stats (it tracks role/bonuses/arena/fleet/formula,
+            // plus equipment IDs — not what those pieces' stats resolve to), so a setting that
+            // changes a piece's own stats without changing its id ("Use upgraded stats",
+            // "Assume all gear is calibrated") would otherwise read scores computed under
+            // whatever setting was active the last time this ship/role pair was scored.
+            clearScoreCache();
             const { result } = await findOptimalGearForShip(
                 shipSettings,
                 buildSimRerankConfig(shipSettings, role),
@@ -444,11 +332,32 @@ export const AutogearPage: React.FC = () => {
         }
     };
 
+    /** Ships currently holding a piece a suggestion list would move onto `equippedShipId` — using
+     *  `gearToShipMap` (the reliable source for current gear ownership; `gear.shipId` is stale
+     *  from import). */
+    const donorIdsForSuggestions = (
+        suggestions: GearSuggestion[],
+        equippedShipId: string
+    ): Set<string> => {
+        const donorIds = new Set<string>();
+        suggestions.forEach((suggestion) => {
+            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
+            if (currentOwnerId && currentOwnerId !== equippedShipId) {
+                donorIds.add(currentOwnerId);
+            }
+        });
+        return donorIds;
+    };
+
     const handleApplySimRerankRow = (row: SimRerankRow) => {
         if (!shipSettings) return;
-        const shipName = shipSettings.name;
-        void equipSuggestions(shipSettings.id, row.loadout).then(() => {
-            addNotification('success', `Equipped the compared build for ${shipName}`);
+        const donorIds = donorIdsForSuggestions(row.loadout, shipSettings.id);
+        const configuredRole = getShipConfig(shipSettings.id).shipRole ?? shipSettings.type;
+        const isOwnRow = row.role === configuredRole;
+        void applyGearSuggestionsForShip(shipSettings.id, donorIds, row.loadout, {
+            successMessage: isOwnRow
+                ? `Suggested gear equipped successfully for ${shipSettings.name}`
+                : `Equipped the compared build for ${shipSettings.name}`,
         });
     };
 
@@ -943,37 +852,35 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleEquipSuggestionsForShip = (shipId: string) => {
-        const ship = selectedShips.find((s) => s?.id === shipId);
-        if (!ship) return;
-
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        // Capture donor ship IDs before equipping, using gearToShipMap (the reliable
-        // source for current gear ownership — gear.shipId is stale from import).
-        const donorIds = new Set<string>();
-        currentShipResults.suggestions.forEach((suggestion) => {
-            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
-            if (currentOwnerId && currentOwnerId !== shipId) {
-                donorIds.add(currentOwnerId);
-            }
-        });
+        const donorIds = donorIdsForSuggestions(currentShipResults.suggestions, shipId);
         void applyGearSuggestionsForShip(shipId, donorIds);
     };
 
+    /** Equips a suggestion list onto a ship — the one path both a batch autogear run's "Equip"
+     *  button and a sim-rerank row's "Apply" go through, so donor ships are captured and
+     *  surfaced identically either way. Defaults to the ship's own batch autogear suggestions;
+     *  a sim-rerank row passes its own loadout instead. */
     const applyGearSuggestionsForShip = async (
         shipId: string,
-        donorIds: Set<string> = new Set()
+        donorIds: Set<string> = new Set(),
+        suggestionsOverride?: GearSuggestion[],
+        options?: { successMessage?: string }
     ) => {
         const ship = selectedShips.find((s) => s?.id === shipId);
         if (!ship) return;
 
-        const currentShipResults = shipResults[shipId];
-        if (!currentShipResults) return;
+        const suggestions = suggestionsOverride ?? shipResults[shipId]?.suggestions;
+        if (!suggestions) return;
 
-        await equipSuggestions(shipId, currentShipResults.suggestions);
+        await equipSuggestions(shipId, suggestions);
 
-        addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
+        addNotification(
+            'success',
+            options?.successMessage ?? `Suggested gear equipped successfully for ${ship.name}`
+        );
 
         // Trigger suggestion list computation and un-dismiss if previously hidden.
         setDonorContext({

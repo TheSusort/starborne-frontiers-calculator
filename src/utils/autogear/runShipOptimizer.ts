@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Ship } from '../../types/ship';
 import type { GearPiece } from '../../types/gear';
 import type {
@@ -9,10 +10,12 @@ import type {
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat } from '../../types/stats';
-import type { AutogearAlgorithm, AutogearProgress, AutogearResult } from './AutogearStrategy';
+import type { ArenaSeason } from '../../types/arena';
+import { AutogearAlgorithm, type AutogearProgress, type AutogearResult } from './AutogearStrategy';
 import { getAutogearStrategy } from './getStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
 import { filterTopImplantsPerSlot } from './implantFilter';
+import { getMatchingModifiers } from './arenaModifiers';
 
 /** Every field a single ship's optimizer pass needs to decide WHAT gear counts and HOW it is
  *  scored. Deliberately excludes anything about other ships in a batch — `usedGearIds` on
@@ -66,14 +69,151 @@ export interface ShipOptimizerRun {
     getGearForShip: (id: string) => GearPiece | undefined;
 }
 
+/** Every per-ship control the manual autogear/sim-rerank UI tracks — role, priorities, and every
+ *  toggle that changes what a run hands to {@link ShipOptimizerConfig}. */
+export interface AutogearShipConfig {
+    shipRole: ShipTypeName | null;
+    statPriorities: StatPriority[];
+    setPriorities: SetPriority[];
+    statBonuses: StatBonus[];
+    ignoreEquipped: boolean;
+    ignoreUnleveled: boolean;
+    useUpgradedStats: boolean;
+    tryToCompleteSets: boolean;
+    selectedAlgorithm: AutogearAlgorithm;
+    showSecondaryRequirements: boolean;
+    optimizeImplants: boolean;
+    includeCalibratedGear: boolean;
+    assumeCalibrated: boolean;
+    useArenaModifiers: boolean;
+    excludedImplantTypes: string[];
+    fleetBuffs: FleetBuff[];
+    customFormula: CustomFormula | undefined;
+}
+
+export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearShipConfig {
+    return {
+        shipRole: defaultRole,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        ignoreEquipped: false,
+        ignoreUnleveled: true,
+        useUpgradedStats: false,
+        tryToCompleteSets: false,
+        selectedAlgorithm: AutogearAlgorithm.Genetic,
+        showSecondaryRequirements: false,
+        optimizeImplants: false,
+        includeCalibratedGear: false,
+        assumeCalibrated: false,
+        useArenaModifiers: false,
+        excludedImplantTypes: [],
+        fleetBuffs: [],
+        customFormula: undefined,
+    };
+}
+
+/**
+ * The optimizer inputs for one role's sim-rerank candidate.
+ *
+ * The own row is `role` equal to this ship's CONFIGURED role (`shipConfig.shipRole`, falling
+ * back to the ship's type when that is null, i.e. Custom mode): it scores with whatever this
+ * ship is actually configured to use today — identical to what "Find optimal gear" would run
+ * for it right now.
+ *
+ * Any other role is a COMPARED role: it scores under THAT role's own built-in formula, not this
+ * ship's configured priorities/set priorities/stat bonuses/custom formula — carrying those over
+ * would score every compared role with the same formula, making the comparison pure optimizer
+ * noise (#498). Inventory-eligibility and environment settings (algorithm,
+ * ignoreEquipped/ignoreUnleveled, upgraded-stats, calibration handling, fleet buffs, arena
+ * modifiers) still match the ship's own configuration, so the formula is the only axis that
+ * differs between rows.
+ */
+export function buildSimRerankShipConfig(
+    ship: Ship,
+    role: ShipTypeName,
+    shipConfig: AutogearShipConfig,
+    activeSeason: ArenaSeason | null
+): ShipOptimizerConfig {
+    const configuredRole = shipConfig.shipRole ?? ship.type;
+    const isOwnRole = role === configuredRole;
+    const arenaModifiers =
+        shipConfig.useArenaModifiers && activeSeason?.rules
+            ? getMatchingModifiers(
+                  activeSeason.rules,
+                  ship.faction || '',
+                  ship.rarity || '',
+                  isOwnRole ? configuredRole : role
+              )
+            : null;
+
+    return {
+        shipRole: isOwnRole ? shipConfig.shipRole : role,
+        statPriorities: isOwnRole ? shipConfig.statPriorities : [],
+        setPriorities: isOwnRole ? shipConfig.setPriorities : [],
+        statBonuses: isOwnRole ? shipConfig.statBonuses : [],
+        tryToCompleteSets: isOwnRole ? shipConfig.tryToCompleteSets : false,
+        customFormula: isOwnRole ? shipConfig.customFormula : undefined,
+        ignoreEquipped: shipConfig.ignoreEquipped,
+        ignoreUnleveled: shipConfig.ignoreUnleveled,
+        useUpgradedStats: shipConfig.useUpgradedStats,
+        selectedAlgorithm: shipConfig.selectedAlgorithm,
+        optimizeImplants: shipConfig.optimizeImplants,
+        includeCalibratedGear: shipConfig.includeCalibratedGear,
+        assumeCalibrated: shipConfig.assumeCalibrated,
+        excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
+        fleetBuffs: shipConfig.fleetBuffs,
+        arenaModifiers,
+    };
+}
+
+/**
+ * Owns the per-ship autogear/sim-rerank config map, the `getShipConfig`/`updateShipConfig`
+ * accessors every caller reads and writes it through, and `buildSimRerankConfig`.
+ *
+ * `buildSimRerankConfig` is a plain function, not a memoised one: it must read `getShipConfig`'s
+ * CURRENT closure over `shipConfigs` on every call. A `useCallback` version whose dependency list
+ * omits `getShipConfig` (or any other value `getShipConfig` itself closes over) keeps returning
+ * the function built at whichever render created the memo — silently scoring with whatever
+ * `shipConfigs` held at that render, forever, regardless of what the user configures afterwards.
+ */
+export function useAutogearShipConfigs(
+    getShipById: (id: string) => Ship | undefined,
+    activeSeason: ArenaSeason | null
+) {
+    const [shipConfigs, setShipConfigs] = useState<Record<string, AutogearShipConfig>>({});
+
+    const getShipConfig = (shipId: string): AutogearShipConfig => {
+        const ship = getShipById(shipId);
+        const defaultRole = ship?.type || 'ATTACKER';
+        return shipConfigs[shipId] || defaultAutogearShipConfig(defaultRole);
+    };
+
+    const updateShipConfig = (shipId: string, updates: Partial<AutogearShipConfig>) => {
+        setShipConfigs((prev) => ({
+            ...prev,
+            [shipId]: {
+                ...getShipConfig(shipId),
+                ...updates,
+            },
+        }));
+    };
+
+    const buildSimRerankConfig = (ship: Ship, role: ShipTypeName): ShipOptimizerConfig =>
+        buildSimRerankShipConfig(ship, role, getShipConfig(ship.id), activeSeason);
+
+    return { shipConfigs, getShipConfig, updateShipConfig, buildSimRerankConfig };
+}
+
 /**
  * Runs one ship through its configured autogear strategy: filters the shared inventory down to
  * what this ship may equip, builds the fast/slow scoring views from that one filtered list (see
  * `gearScoringInputs.ts` for why both views must come from the same source), and calls the
  * strategy's `findOptimalGear`.
  *
- * Shared by the team autogear run and the sim-rerank candidate comparison so the two cannot
- * silently drift on inventory eligibility rules or which arguments reach the strategy.
+ * Every caller gets the same inventory-eligibility rules applied in the same order and the same
+ * argument order forwarded to the strategy — a caller cannot special-case either without going
+ * through `config`.
  */
 export async function findOptimalGearForShip(
     ship: Ship,

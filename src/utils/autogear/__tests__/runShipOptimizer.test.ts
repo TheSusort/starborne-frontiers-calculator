@@ -214,4 +214,124 @@ describe('findOptimalGearForShip', () => {
         });
         expect(getGearForShip('a')?.id).toBe('a');
     });
+
+    it('excludes gear calibrated for another ship unless includeCalibratedGear is set', async () => {
+        const inventory = [
+            gear({ id: 'a', calibration: { shipId: 'someone-else' } }),
+            gear({ id: 'b', calibration: { shipId: ship.id } }),
+            gear({ id: 'c' }),
+        ];
+        await findOptimalGearForShip(ship, baseConfig, { ...baseDeps, inventory });
+        const excluded = findOptimalGear.mock.calls[0][2];
+        expect(excluded.map((g) => g.id).sort()).toEqual(['b', 'c']);
+
+        findOptimalGear.mockClear();
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, includeCalibratedGear: true },
+            { ...baseDeps, inventory }
+        );
+        const included = findOptimalGear.mock.calls[0][2];
+        expect(included.map((g) => g.id).sort()).toEqual(['a', 'b', 'c']);
+    });
+
+    it('excludes gear whose set bonus has a count-0 set priority', async () => {
+        const inventory = [
+            gear({ id: 'a', setBonus: 'ATTACK' }),
+            gear({ id: 'b', setBonus: 'DEFENSE' }),
+        ];
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, setPriorities: [{ setName: 'ATTACK', count: 0 }] },
+            { ...baseDeps, inventory }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory.map((g) => g.id)).toEqual(['b']);
+    });
+
+    it('excludes unleveled gear when ignoreUnleveled is set and useUpgradedStats is off', async () => {
+        const inventory = [gear({ id: 'a', level: 0 }), gear({ id: 'b', level: 10 })];
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, ignoreUnleveled: true, useUpgradedStats: false },
+            { ...baseDeps, inventory }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory.map((g) => g.id)).toEqual(['b']);
+    });
+
+    it('bypasses the ignoreUnleveled filter when useUpgradedStats is on, scoring via the upgraded getter', async () => {
+        const stored = gear({
+            id: 'a',
+            level: 0,
+            mainStat: { name: 'attack', value: 100, type: 'flat' },
+        });
+        const upgraded: GearPiece = {
+            ...stored,
+            mainStat: { name: 'attack', value: 999, type: 'flat' },
+        };
+        const inventory = [stored];
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, ignoreUnleveled: true, useUpgradedStats: true },
+            {
+                ...baseDeps,
+                inventory,
+                upgradedGearGetter: (id: string) => (id === 'a' ? upgraded : undefined),
+            }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory).toHaveLength(1);
+        expect(passedInventory[0].mainStat?.value).toBe(999);
+    });
+
+    it('excludes implant types the ship has blacklisted, when optimizeImplants is on', async () => {
+        const inventory = [
+            gear({ id: 'imp-a', slot: 'implant_major', setBonus: 'MARTYRDOM' }),
+            gear({ id: 'imp-b', slot: 'implant_major', setBonus: 'HASTE' }),
+        ];
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, optimizeImplants: true, excludedImplantTypes: ['MARTYRDOM'] },
+            { ...baseDeps, inventory }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory.map((g) => g.id)).toEqual(['imp-b']);
+    });
+
+    it('trims implant candidates to the top scorers per slot when optimizeImplants is on and priorities are set', async () => {
+        const implants = Array.from({ length: 30 }, (_, i) =>
+            gear({
+                id: `imp-${i}`,
+                slot: 'implant_major',
+                setBonus: 'MARTYRDOM',
+                subStats: [{ name: 'attack', value: i, type: 'flat' }],
+            })
+        );
+        await findOptimalGearForShip(
+            ship,
+            {
+                ...baseConfig,
+                optimizeImplants: true,
+                statPriorities: [{ stat: 'attack', minLimit: 0 }],
+            },
+            { ...baseDeps, inventory: implants }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        // 30 implants sharing one setBonus: filterTopImplantsPerSlot's K = max(20, ceil(30*0.25)).
+        expect(passedInventory).toHaveLength(20);
+    });
+
+    it('keeps every implant candidate when optimizeImplants is on but no priorities or bonuses rank them', async () => {
+        const implants = Array.from({ length: 30 }, (_, i) =>
+            gear({ id: `imp-${i}`, slot: 'implant_major', setBonus: 'MARTYRDOM' })
+        );
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, optimizeImplants: true },
+            { ...baseDeps, inventory: implants }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory).toHaveLength(30);
+    });
 });
