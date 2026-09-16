@@ -67,7 +67,15 @@ describe('focusActorId', () => {
     });
 
     it('throws rather than guessing when no player holds that cell', () => {
-        const aggregate = { roster: [] } as unknown as SeedSetAggregate;
+        // A populated roster where only an ENEMY stands in the named cell. An empty roster would
+        // make this pass against an implementation that simply indexes the array, which throws a
+        // TypeError of its own — `toThrow()` cannot tell that apart from a deliberate guard.
+        const aggregate = {
+            roster: [
+                { actorId: 'e:foe:0', side: 'enemy', name: 'Foe', position: 'M4' },
+                { actorId: 'attacker', side: 'player', name: 'Ally', position: 'T2' },
+            ],
+        } as unknown as SeedSetAggregate;
         expect(() => focusActorId(aggregate, 'M4')).toThrow();
     });
 });
@@ -84,7 +92,7 @@ describe('runCandidate', () => {
             runCount: 2,
         });
         expect(run).not.toBeNull();
-        // Pins rule 1: the practice board seats the focus at M4 behind a T2 ally, so index 0
+        // The practice board seats the focus at M4 behind a T2 ally, so index 0
         // (`'attacker'`) is the ally. Asserting only damageDealt > 0 would still pass if
         // focusActorId had returned the ally's id.
         expect(run!.focusActorId).not.toBe('attacker');
