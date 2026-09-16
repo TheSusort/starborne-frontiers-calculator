@@ -26,6 +26,9 @@ export interface SimRerankRow {
     role: ShipTypeName;
     rank: CandidateRank;
     run: CandidateRun;
+    /** The gear this row's build wears. Lets a consumer equip the row (via
+     *  `applySuggestionsToShip`) without re-deriving it from `role`/`rank`. */
+    loadout: GearSuggestion[];
 }
 
 export interface ExcludedCandidate {
@@ -97,6 +100,7 @@ interface PendingCandidate {
     role: ShipTypeName;
     rank: CandidateRank;
     ship: Ship;
+    loadout: GearSuggestion[];
 }
 
 /** One loadout a role's autogear pass produced: the best suggestion, or one of the genetic
@@ -214,6 +218,7 @@ export async function collectCandidateRuns(
                 role: loadout.role,
                 rank: loadout.rank,
                 ship: applySuggestionsToShip(focus, loadout.suggestions),
+                loadout: loadout.suggestions,
             });
         }
 
@@ -264,6 +269,7 @@ export async function collectCandidateRuns(
             role: candidate.role,
             rank: candidate.rank,
             run,
+            loadout: candidate.loadout,
         });
         simCompleted++;
         reportSimProgress();

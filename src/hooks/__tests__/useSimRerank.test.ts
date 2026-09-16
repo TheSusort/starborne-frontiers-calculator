@@ -108,6 +108,13 @@ describe('useSimRerank', () => {
         expect(new Set(result.current.state.rows.map((r) => r.role))).toEqual(
             new Set(['DEBUFFER', 'DEFENDER'])
         );
+
+        // Each row carries the loadout that produced it — Apply has nothing to equip without
+        // this, so a row must not just describe its build (role/rank), it must contain it.
+        const debufferRow = result.current.state.rows.find((r) => r.role === 'DEBUFFER');
+        const defenderRow = result.current.state.rows.find((r) => r.role === 'DEFENDER');
+        expect(debufferRow?.loadout).toEqual(suggestion('gear-DEBUFFER'));
+        expect(defenderRow?.loadout).toEqual(suggestion('gear-DEFENDER'));
     });
 
     it('runs every candidate on the same seed set, so the deltas are paired', async () => {
@@ -267,6 +274,13 @@ describe('useSimRerank', () => {
         expect(result.current.state.rows.every((r) => r.role === 'DEBUFFER')).toBe(true);
         // The metric table must contain the runner-up too, not just the best.
         expect(result.current.state.table).toHaveLength(2);
+
+        // The runner-up's row carries its OWN loadout, distinct from the best's — a bug that
+        // reused `suggestions.suggestions` for every rank would give both rows the same gear.
+        const bestRow = result.current.state.rows.find((r) => r.rank === 'best');
+        const altRow = result.current.state.rows.find((r) => typeof r.rank === 'object');
+        expect(bestRow?.loadout).toEqual(suggestion('gear-DEBUFFER'));
+        expect(altRow?.loadout).toEqual(suggestion('gear-DEBUFFER-alt'));
     });
 
     it('stops the gearing phase between roles once cancelled, never starting a later role', async () => {
