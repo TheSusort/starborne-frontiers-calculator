@@ -11,6 +11,8 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: a stasised ship's passive no longer buffs its team.",
     "Combat simulator: a stasised ship's passive no longer reduces or reflects incoming damage.",
     "Combat simulator: a stasised ship's passive stops banking stacks and lending defence.",
+    "Combat simulator: a stasised ship keeps the damage reduction a teammate's passive grants it.",
+    "Combat simulator: a stasised ship's team-wide damage passive no longer applies.",
     'Combat simulator: a hit nullified by Barrier no longer reduces Stasis.',
     "Combat simulator: a slower attacker's hits now reduce Stasis like a faster one's.",
     'Combat simulator: damage-free casts and damage-over-time no longer reduce Stasis.',

@@ -3325,6 +3325,10 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  while its holder is stasised or disabled, a ship's own passive skill does not (owner ruling
      *  2026-09-15). Read `Ability.source` for why provenance rides the entry rather than the slot.
      *  Applied at the READ, not at the build: a ship is not blocked when its lists are assembled. */
+    /** Per-entry form of the same question `livePassiveEntries` asks in bulk, for a list whose
+     *  entries do not all answer to the same owner. */
+    const passiveSuppressedFor = (ownerId: string, entry: { source?: 'equipment' }): boolean =>
+        entry.source !== 'equipment' && isTurnBlocked(ownerId);
     const livePassiveEntries = <T extends { source?: 'equipment' }>(
         ownerId: string,
         entries: readonly T[]
@@ -4553,15 +4557,20 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Reads the owner's CURRENT liveness on every call (this closure runs per hit), so a destroyed
     // carrier's aura stops protecting its allies from the moment it dies. Returns the stored array
     // BY REFERENCE for any actor with no ally-scoped entries.
-    const incomingAbilitiesOf = (id: string): Ability[] =>
-        livePassiveEntries(
-            id,
-            withLiveAllyScopedOwners(
-                incomingAbilitiesById.get(id) ?? [],
-                allyScopedOwnerByRecipient.get(id),
-                isActorAlive
-            )
-        );
+    // `incomingAbilitiesById` holds the #363 ALLY-SCOPED fan-out: a carrier's `all-allies`
+    // incoming-reduction is written into every RECIPIENT's list, with the real owner recorded in
+    // `allyScopedOwnerByRecipient`. So "is this passive suppressed" is the OWNER's question, not
+    // the recipient's — the same axis `withLiveAllyScopedOwners` uses for the dead-owner filter
+    // and the aura gate uses via `casterId`. Asking the recipient would both strip a stasised ship
+    // of a teammate's protection and let a stasised carrier go on protecting.
+    const incomingAbilitiesOf = (id: string): Ability[] => {
+        const ownerByAbilityId = allyScopedOwnerByRecipient.get(id);
+        return withLiveAllyScopedOwners(
+            incomingAbilitiesById.get(id) ?? [],
+            ownerByAbilityId,
+            isActorAlive
+        ).filter((a) => !passiveSuppressedFor(ownerByAbilityId?.get(a.id) ?? id, a));
+    };
 
     // Per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
     // side-agnostic (a ship can be a heal recipient on either team). Built once from BOTH runtime
@@ -4886,7 +4895,7 @@ export function runCombat(rawInput: CombatEngineInput): {
     ): void => {
         if (!healingCtx || amount <= 0) return;
         const entries = livePassiveEntries(sourceId, standingLeeches.get(sourceId) ?? []);
-        if (!entries) return;
+        if (entries.length === 0) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
         const ownerIsEnemy = owner.actor.side === 'enemy';
@@ -5226,7 +5235,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
         if (outcome.barriered) return;
         const entries = livePassiveEntries(victim.id, takenLeechesByOwner.get(victim.id) ?? []);
-        if (!entries) return;
+        if (entries.length === 0) return;
         const rt = allRuntimesById.get(victim.id);
         // #424: scoped to the whole proc call (all entries), not to one entry — see the emit
         // below for the one-roll-per-attack ruling that fixes this scope.
@@ -9349,9 +9358,14 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // uses; team-symmetric via `a.side`). Merged into `modifierAbilities` in
                 // playerTurn.ts, so it folds into BOTH the per-turn dmgStats AND perVictimOutgoing
                 // for free. No aura sources → the flatMap is [].
+                // Each ally's own passive, so each answers to ITS OWN turn-block.
                 allyModifierAbilities: sameSideLivingFor(a)
                     .filter((x) => x.id !== a.id)
-                    .flatMap((x) => allAlliesModifierAbilitiesById.get(x.id) ?? []),
+                    .flatMap((x) =>
+                        (allAlliesModifierAbilitiesById.get(x.id) ?? []).filter(
+                            (ab) => !passiveSuppressedFor(x.id, ab)
+                        )
+                    ),
                 // Per-SOURCE breakdown of ally `all-allies` `dotDamage`-
                 // channel modifier abilities (Wildfire's refit-3 team aura) — needed alongside
                 // `allyModifierAbilities` above because that flat list loses PROVENANCE (which
@@ -9374,7 +9388,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         x,
                         abilities: (allAlliesModifierAbilitiesById.get(x.id) ?? []).filter(
                             (ab) =>
-                                ab.config.type === 'modifier' && ab.config.channel === 'dotDamage'
+                                !passiveSuppressedFor(x.id, ab) &&
+                                ab.config.type === 'modifier' &&
+                                ab.config.channel === 'dotDamage'
                         ),
                     }))
                     .filter((entry) => entry.abilities.length > 0)

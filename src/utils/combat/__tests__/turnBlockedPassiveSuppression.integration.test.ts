@@ -431,3 +431,231 @@ describe("a turn-blocked owner's accumulating passive banks no further stacks", 
         );
     });
 });
+
+// ── Owner-vs-recipient, and the two channels the first pass missed ───────────────────────────
+// These three share a board the earlier blocks do not: the ship under test sits at the FRONT
+// column so a `front`-targeting blocker always reaches IT and nobody else, and the readout ship
+// sits behind it with a `back`-targeting hitter of its own. That separation is what lets an arm
+// stasis one specific ship.
+const SUT_FRONT = 'M4';
+const READOUT_BACK = 'M2';
+
+const selectingEnemy = (
+    id: string,
+    speed: number,
+    slot: ShipSkills['slots'][number],
+    attack: number,
+    selection: Selection
+): EnemyAttacker => ({
+    id,
+    stats: { attack, crit: 0, critDamage: 0, defence: 0, hp: HP, speed, hacking: 500, security: 0 },
+    chargeCount: 0,
+    startCharged: false,
+    position: 'M4',
+    target: parsedTarget(selection),
+    pattern: basePattern(),
+    shipSkills: { slots: [slot] },
+});
+
+/** Positions never move between arms. The blocker picks its victim by SELECTION, so an arm can
+ *  stasis exactly one ship without changing who the hitter reaches; the hitter always reaches the
+ *  `back` ship, which is therefore the readout everywhere. */
+const splitBoard = (opts: {
+    front: TeamActorEngineInput;
+    back: TeamActorEngineInput;
+    block?: 'front' | 'back';
+}): CombatEngineInput => ({
+    ...build({}),
+    teamActors: [opts.front, opts.back],
+    enemyAttackers: [
+        ...(opts.block
+            ? [selectingEnemy('blocker', 900, blockingAttack('Stasis'), 1, opts.block)]
+            : []),
+        selectingEnemy('hitter', 500, basicAttack(), 5000, 'back'),
+    ],
+});
+
+describe('the suppression asks the OWNER of the passive, not whoever it lands on', () => {
+    // `incomingAbilitiesById` holds the #363 ally-scoped fan-out: a carrier's `all-allies`
+    // incoming-reduction is stored in every RECIPIENT's list, with the real owner recorded
+    // alongside. Gating that list on the recipient asks the wrong ship in BOTH directions, and
+    // both directions are arms here.
+    const protectionCarrier = (position: string): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'carrier';
+        a.position = position as TeamActorEngineInput['position'];
+        a.walk!.shipSkills = {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'all-allies',
+                            config: {
+                                type: 'incoming-reduction',
+                                scope: 'direct',
+                                condition: 'always',
+                                pct: 50,
+                                critFamily: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return a;
+    };
+
+    const protectedAlly = (position: string): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'protected';
+        a.position = position as TeamActorEngineInput['position'];
+        a.walk!.shipSkills = { slots: [basicAttack()] };
+        return a;
+    };
+
+    /** Lowest HP% the PROTECTED ally reaches — more reduction leaves a higher floor. */
+    const allyHpFloor = (blocked?: 'carrier' | 'protected'): number => {
+        const bus = createEventBus();
+        const seen: number[] = [];
+        bus.on('hp-changed', (e: Extract<CombatEvent, { type: 'hp-changed' }>) => {
+            if (e.targetId === 'protected') seen.push(e.newPct);
+        });
+        // Whoever is blocked goes to the FRONT column, where the blocker reaches it; the readout
+        // ally is always the `back` hitter's target, so it takes damage in every arm.
+        // Positions never move: the carrier is always at the front and the protected ally always
+        // behind it, so the `back`-targeting hitter reaches the ally in every arm. Only which
+        // SELECTION the blocker uses changes, which is how one arm stasises one specific ship.
+        runCombat({
+            ...splitBoard({
+                front: protectionCarrier(SUT_FRONT),
+                back: protectedAlly(READOUT_BACK),
+                ...(blocked === 'carrier'
+                    ? { block: 'front' as const }
+                    : blocked === 'protected'
+                      ? { block: 'back' as const }
+                      : {}),
+            }),
+            bus,
+        });
+        return seen.length === 0 ? 100 : Math.min(...seen);
+    };
+
+    it('control: the ally is hit, and the carrier is worth a measurable share of it', () => {
+        expect(allyHpFloor()).toBeLessThan(100);
+        expect(allyHpFloor()).toBeGreaterThan(allyHpFloor('carrier'));
+    });
+
+    it('a stasised CARRIER stops protecting its allies', () => {
+        expect(allyHpFloor('carrier')).toBeLessThan(allyHpFloor());
+    });
+
+    it('but a stasised RECIPIENT keeps the protection its teammate grants it', () => {
+        // The passive belongs to the carrier, which can act; the victim's own Stasis has nothing
+        // to do with it. Asking the recipient dropped the reduction here.
+        expect(allyHpFloor('protected')).toBe(allyHpFloor());
+    });
+});
+
+describe("a turn-blocked owner's all-allies MODIFIER aura stops too", () => {
+    // `allAlliesModifierAbilitiesById` is its own channel, read straight off each living ally
+    // rather than through the status store, so it needs its own gate and its own arm.
+    const modifierCarrier = (): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'carrier';
+        a.position = SUT_FRONT;
+        a.walk!.shipSkills = {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'modifier',
+                            target: 'all-allies',
+                            config: {
+                                type: 'modifier',
+                                channel: 'outgoingDamage',
+                                value: 100,
+                                isMultiplicative: false,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        return a;
+    };
+
+    const allyAttacker = (): TeamActorEngineInput => {
+        const a = reactor();
+        a.id = 'ally';
+        a.position = READOUT_BACK;
+        a.speed = 50;
+        a.walk!.stats.attack = 1000;
+        a.walk!.shipSkills = { slots: [basicAttack()] };
+        return a;
+    };
+
+    /** Damage the ALLY deals. Only the carrier's Stasis differs between arms. */
+    const allyDamage = (blockCarrier: boolean): number => {
+        const bus = createEventBus();
+        let dealt = 0;
+        bus.on('attacked', (e: Extract<CombatEvent, { type: 'attacked' }>) => {
+            if (e.attackerId === 'ally') dealt += e.damage ?? 0;
+        });
+        runCombat({
+            ...splitBoard({
+                front: modifierCarrier(),
+                back: allyAttacker(),
+                ...(blockCarrier ? { block: 'front' as const } : {}),
+            }),
+            bus,
+        });
+        return dealt;
+    };
+
+    it('the ally swings in both arms, and swings harder with a free carrier', () => {
+        expect(allyDamage(true)).toBeGreaterThan(0);
+        expect(allyDamage(false)).toBeGreaterThan(allyDamage(true));
+    });
+});
+
+describe('a board-wide enemy aura on a passive slot does not blow the stack', () => {
+    // The suppression reader routes back into the status store (engine isStasised ->
+    // ownerDebuffNamesFor -> activeAbilityStatuses -> the aura branch), and a board-wide enemy
+    // aura re-enters through the `__enemy__` fold. Without the re-entrancy guard in
+    // `shipPassiveSuppressed` this throws `RangeError: Maximum call stack size exceeded` out of
+    // runCombat — every fight, not one number. No corpus kit carries such a passive today.
+    it('runs a fight whose attacker holds an all-enemies passive aura', () => {
+        const carrier = reactor();
+        carrier.id = 'aura-carrier';
+        carrier.walk!.shipSkills = {
+            slots: [
+                basicAttack(),
+                {
+                    slot: 'passive',
+                    abilities: [
+                        ab({
+                            type: 'debuff',
+                            target: 'all-enemies',
+                            config: {
+                                type: 'debuff',
+                                buffName: 'Board Wide Weaken',
+                                application: 'inflict',
+                                stacks: 1,
+                                isStackable: false,
+                                parsedEffects: { attack: -10 },
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        expect(() =>
+            runCombat({ ...build({ block: 'Stasis' }), teamActors: [carrier] })
+        ).not.toThrow();
+    });
+});

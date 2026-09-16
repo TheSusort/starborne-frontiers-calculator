@@ -675,14 +675,28 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
      *  turn-blocked. The two exemptions are the ruling's own: a status from EQUIPMENT, and any
      *  status that is not a passive (a cast-sourced aura is the cast's standing effect, not a
      *  passive that has to keep firing). */
+    // RE-ENTRANCY GUARD, and it is load-bearing rather than defensive. The reader routes back into
+    // this store: engine `isStasised`/`isDisabled` -> `ownerDebuffNamesFor` (triggers.ts) ->
+    // `activeAbilityStatuses('enemy', ...)` -> this predicate again. A passive-slot BOARD-WIDE
+    // enemy aura re-enters through `boardWideEnemyExtras`' `__enemy__` fold and recurses until the
+    // stack blows. While a reader call is in flight the nested question answers "not suppressed",
+    // which is the pre-suppression reading and exactly what "am I stasised" wants: the names it is
+    // collecting decide the block, so they cannot themselves depend on the block.
+    let readingTurnBlock = false;
     const shipPassiveSuppressed = (a: {
         sourceSlot: SkillSlot;
         source?: 'equipment';
         casterId?: string;
-    }): boolean =>
-        a.sourceSlot === 'passive' &&
-        a.source !== 'equipment' &&
-        isTurnBlockedReader(a.casterId ?? 'attacker');
+    }): boolean => {
+        if (readingTurnBlock) return false;
+        if (a.sourceSlot !== 'passive' || a.source === 'equipment') return false;
+        readingTurnBlock = true;
+        try {
+            return isTurnBlockedReader(a.casterId ?? 'attacker');
+        } finally {
+            readingTurnBlock = false;
+        }
+    };
 
     let beforeTimedEnemyApplication: (targetId: string, buffName: string) => void = () => {};
     const setBeforeTimedEnemyApplication = (
