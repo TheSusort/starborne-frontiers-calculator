@@ -1,64 +1,31 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.67.0';
+export const CURRENT_VERSION = '1.68.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: implants and gear sets keep working while a ship is stasised.',
-    "Combat simulator: a stasised ship's passive no longer buffs its team.",
-    "Combat simulator: a stasised ship's passive no longer reduces or reflects incoming damage.",
-    "Combat simulator: a stasised ship's passive stops banking stacks and lending defence.",
-    "Combat simulator: a stasised ship keeps the damage reduction a teammate's passive grants it.",
-    "Combat simulator: a stasised ship's team-wide damage passive no longer applies.",
-    'Combat simulator: a hit nullified by Barrier no longer reduces Stasis.',
-    "Combat simulator: a slower attacker's hits now reduce Stasis like a faster one's.",
-    'Combat simulator: damage-free casts and damage-over-time no longer reduce Stasis.',
-    'Combat simulator: a fresh Stasis from another ship now lasts its full duration.',
-    'Recruitment: Zenith is no longer counted as a recruitable ship.',
-    'Combat simulator: sweep one stat across a range and chart the result.',
-    'Combat simulator: sweep points show which differences beat the noise.',
-    'Import: a failed engineering-stats upload no longer empties your cloud stats.',
-    'Cloud sync: an engineering stat saved during a sync is no longer removed by it.',
-    'Cloud sync: a failed engineering-stats save now leaves your saved stats intact.',
-    'Cloud sync: engineering stats removed locally are now cleared from the cloud.',
-    'Cloud sync: autogear configs removed locally are now cleared from the cloud.',
-    'Backup: restoring a file now clears autogear configs it does not carry.',
-    'Combat simulator: place any unit in the game, not just ones you own.',
-    'Combat simulator: fight a unit at R0 level 60 or fully refitted.',
-    'Import: shield penetration from refits is no longer dropped.',
-    'Combat simulator: baseline comparisons now list every seed where the winner disagrees.',
-    'Combat simulator: a diverging seed now opens both fights stacked and stepped together.',
-    'Autogear: tweak values can now be reached and edited with the keyboard.',
-    'Autogear: set, bonus and buff rows no longer carry reorder arrows.',
-    'Combat simulator: runs are now seeded and can be repeated over many seeds.',
-    'Combat simulator: a board can be copied to the opposing side in one click.',
-    "Combat simulator: any placed ship's stats can now be tweaked for one simulation.",
-    'Combat simulator: pin a run as a baseline and compare a tweaked run against it.',
-    'Combat simulator: multi-seed runs show live progress and can be cancelled.',
-    'Combat simulator: a multi-seed run can now cover up to 1,000 seeds.',
-    'Combat simulator: multi-seed results now show seeds a page at a time.',
-    'Combat simulator: baseline comparisons now flag deltas too small to trust.',
-    'Combat simulator: a comparison now warns when skewed round counts make the mean unreliable.',
-    'Backup: downloaded backups now contain your gear inventory.',
-    'Restore: restoring a backup while signed in no longer deletes your cloud gear and ships.',
-    'Restore: restored gear now shows up in your inventory.',
-    'Restore: cloud data now matches every section your backup file contains.',
-    'Sign-in: your gear and implants now carry over to the cloud.',
-    'Cloud sync: disabling or re-syncing no longer leaves stale cloud data behind.',
-    'Cloud sync: enabling sync or re-syncing now uploads before clearing the cloud.',
-    'Combat simulator: your boards, overrides, leaders and seed now survive a reload.',
-    'Combat simulator: save a setup under a name and load it back later.',
-    'Combat simulator: Zenith leaves enemy Stasis intact while it holds a shield.',
-    'Combat simulator: Zenith deals more damage for each shielded ally, itself included.',
-    "Combat simulator: Zenith's charged skill strips every charge from its target.",
-    'Combat simulator: Zenith shields itself at the start of each round.',
-    'Ability editor: a charge removal can now empty an enemy pool outright.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.68.0',
+        date: '2026-09-16',
+        changes: [
+            'Combat simulator: place any unit in the game, at R0 or fully refitted.',
+            'Combat simulator: save setups, copy a board to the other side, and tweak a ship for one run.',
+            'Combat simulator: pin a baseline, repeat it over up to 1,000 seeds, and compare the results.',
+            'Combat simulator: sweep one stat across a range and chart the result.',
+            'Combat simulator: passives now switch off while a ship is stasised or disabled.',
+            'Combat simulator: 4 fixes to what reduces Stasis and for how long.',
+            'Combat simulator: Zenith reworked — self-shield, damage per shielded ally, full charge strip.',
+            'Restore: restoring a backup while signed in no longer deletes your cloud gear and ships.',
+            'Cloud sync: 12 fixes so gear, implants and stats survive backups, restores and sign-in.',
+            'Autogear, import and recruitment: 4 smaller fixes.',
+            'Ability editor: a charge removal can now empty an enemy pool outright.',
+        ],
+    },
     {
         version: '1.67.0',
         date: '2026-09-10',
