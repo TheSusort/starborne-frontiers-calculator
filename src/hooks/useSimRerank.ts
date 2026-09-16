@@ -15,15 +15,22 @@ import {
 import { runCandidate, type CandidateRun } from '../utils/autogear/simRerank/runCandidates';
 import { buildMetricTable, type CandidateRow } from '../utils/autogear/simRerank/metricTable';
 
+/** A loadout's standing within its role's autogear pass: the optimizer's best suggestion, or one
+ *  of its distinct runner-ups (1-indexed). Structured so a consumer can branch on standing without
+ *  parsing a display string — building the player-facing label (e.g. via `SHIP_TYPES[role].name`)
+ *  is the UI's job, not this hook's. */
+export type CandidateRank = 'best' | { alt: number };
+
 export interface SimRerankRow {
     id: string;
-    label: string;
-    sourceRole?: ShipTypeName;
+    role: ShipTypeName;
+    rank: CandidateRank;
     run: CandidateRun;
 }
 
 export interface ExcludedCandidate {
-    label: string;
+    role: ShipTypeName;
+    rank: CandidateRank;
     stripped: StolenPiece[];
 }
 
@@ -39,6 +46,8 @@ export interface SimRerankState {
     /** Cells the resolved fight dropped. Mirrors `FightBoards.dropped` so a later UI can tell the
      *  player the comparison did not run the fight they saved. */
     dropped: DroppedCell[];
+    /** Set only alongside a status that was just reset to `'idle'` with rows/table/baseline
+     *  cleared; never appears together with any other status. */
     error?: string;
 }
 
@@ -85,27 +94,32 @@ function withFocusShip(fight: FightBoards, ship: Ship): FightBoards {
 
 interface PendingCandidate {
     id: string;
-    label: string;
-    sourceRole: ShipTypeName;
+    role: ShipTypeName;
+    rank: CandidateRank;
     ship: Ship;
 }
 
-/** One named loadout a role's autogear pass produced: the best suggestion, or one of the genetic
+/** One loadout a role's autogear pass produced: the best suggestion, or one of the genetic
  *  strategy's distinct runner-ups. */
 interface Loadout {
-    label: string;
+    role: ShipTypeName;
+    rank: CandidateRank;
     suggestions: GearSuggestion[];
-    isBest: boolean;
 }
 
 const loadoutsFor = (role: ShipTypeName, result: AutogearResult): Loadout[] => [
-    { label: `${role} (best)`, suggestions: result.suggestions, isBest: true },
+    { role, rank: 'best', suggestions: result.suggestions },
     ...(result.candidates ?? []).map((suggestions, index) => ({
-        label: `${role} (alt ${index + 1})`,
+        role,
+        rank: { alt: index + 1 },
         suggestions,
-        isBest: false,
     })),
 ];
+
+/** A React-key-stable id for one loadout. Carries no display text — `role`/`rank` on the row are
+ *  the identity a consumer branches on. */
+const candidateId = (role: ShipTypeName, rank: CandidateRank): string =>
+    rank === 'best' ? `${role}:best` : `${role}:alt:${rank.alt}`;
 
 export interface CollectCandidateRunsArgs extends SimRerankRunArgs {
     signal: AbortSignal;
@@ -191,14 +205,14 @@ export async function collectCandidateRuns(
                 gearToShipMap,
             });
             if (stripped.length > 0) {
-                excluded.push({ label: loadout.label, stripped });
-                if (loadout.isBest && role === focus.type) ownBestExcluded = true;
+                excluded.push({ role: loadout.role, rank: loadout.rank, stripped });
+                if (loadout.rank === 'best' && role === focus.type) ownBestExcluded = true;
                 continue;
             }
             pending.push({
-                id: loadout.label,
-                label: loadout.label,
-                sourceRole: role,
+                id: candidateId(loadout.role, loadout.rank),
+                role: loadout.role,
+                rank: loadout.rank,
                 ship: applySuggestionsToShip(focus, loadout.suggestions),
             });
         }
@@ -215,16 +229,26 @@ export async function collectCandidateRuns(
     const reportSimProgress = () =>
         onProgress(roles.length + simCompleted, roles.length + simTotal);
     reportSimProgress();
+    // Advances the same overall counter mid-candidate, using the seed set's own completed/total —
+    // otherwise the bar holds still for the whole of a long candidate's run.
+    const reportInnerProgress = (completed: number, total: number) =>
+        onProgress(roles.length + simCompleted + completed / total, roles.length + simTotal);
 
-    if (signal.aborted) return CANCELLED;
-    const baseline = await runCandidate({ id: 'equipped', fight, deps, seed, runCount, signal });
-    if (!baseline || signal.aborted) return CANCELLED;
+    const baseline = await runCandidate({
+        id: 'equipped',
+        fight,
+        deps,
+        seed,
+        runCount,
+        signal,
+        onProgress: reportInnerProgress,
+    });
+    if (!baseline) return CANCELLED;
     simCompleted++;
     reportSimProgress();
 
     const rows: SimRerankRow[] = [];
     for (const candidate of pending) {
-        if (signal.aborted) return CANCELLED;
         const run = await runCandidate({
             id: candidate.id,
             fight: withFocusShip(fight, candidate.ship),
@@ -232,12 +256,13 @@ export async function collectCandidateRuns(
             seed,
             runCount,
             signal,
+            onProgress: reportInnerProgress,
         });
-        if (!run || signal.aborted) return CANCELLED;
+        if (!run) return CANCELLED;
         rows.push({
             id: candidate.id,
-            label: candidate.label,
-            sourceRole: candidate.sourceRole,
+            role: candidate.role,
+            rank: candidate.rank,
             run,
         });
         simCompleted++;

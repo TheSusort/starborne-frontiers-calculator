@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useSimRerank } from '../useSimRerank';
+import { useSimRerank, collectCandidateRuns } from '../useSimRerank';
 import type { Ship } from '../../types/ship';
 import type { GearSuggestion } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
@@ -105,7 +105,7 @@ describe('useSimRerank', () => {
         expect(runAutogearFor).toHaveBeenCalledWith('DEBUFFER');
         expect(runAutogearFor).toHaveBeenCalledWith('DEFENDER');
         expect(result.current.state.rows).toHaveLength(2);
-        expect(new Set(result.current.state.rows.map((r) => r.sourceRole))).toEqual(
+        expect(new Set(result.current.state.rows.map((r) => r.role))).toEqual(
             new Set(['DEBUFFER', 'DEFENDER'])
         );
     });
@@ -163,13 +163,15 @@ describe('useSimRerank', () => {
 
         expect(result.current.state.excluded).toHaveLength(1);
         expect(result.current.state.excluded[0].stripped[0].fromShipName).toBe('Ally');
-        expect(result.current.state.rows.map((r) => r.sourceRole)).not.toContain('DEFENDER');
+        expect(result.current.state.excluded[0].role).toBe('DEFENDER');
+        expect(result.current.state.excluded[0].rank).toBe('best');
+        expect(result.current.state.rows.map((r) => r.role)).not.toContain('DEFENDER');
 
         // The exclusion is of the DEFENDER candidate specifically, not a side effect of the
         // ship's OWN role also getting flagged — its own DEBUFFER build used a different piece
         // and must survive.
         expect(result.current.state.ownBestExcluded).toBe(false);
-        expect(result.current.state.rows.map((r) => r.sourceRole)).toContain('DEBUFFER');
+        expect(result.current.state.rows.map((r) => r.role)).toContain('DEBUFFER');
         // The optimizer still ran under DEFENDER — exclusion happens to its OUTPUT, it does not
         // short-circuit the role out of the job.
         expect(runAutogearFor).toHaveBeenCalledWith('DEFENDER');
@@ -202,11 +204,69 @@ describe('useSimRerank', () => {
 
         expect(result.current.state.ownBestExcluded).toBe(true);
         expect(result.current.state.excluded).toHaveLength(1);
+        expect(result.current.state.excluded[0].role).toBe('DEBUFFER');
+        expect(result.current.state.excluded[0].rank).toBe('best');
         expect(result.current.state.rows).toHaveLength(0);
         // Nothing survived to compare, but the baseline still ran so the page has something to
         // show against.
         expect(result.current.state.baseline).toBeDefined();
         expect(result.current.state.table).toEqual([]);
+    });
+
+    it('surfaces cells the resolved fight dropped, e.g. a saved ship id that no longer resolves', async () => {
+        const { result } = renderHook(() => useSimRerank());
+        await act(async () => {
+            await result.current.run({
+                ...baseArgs(),
+                comparedRoles: [],
+                // 'ghost' is not in the resolver below, so the fight drops its cell and runs
+                // without it.
+                source: {
+                    kind: 'encounter' as const,
+                    note: {
+                        id: 'e1',
+                        name: 'Team',
+                        createdAt: 0,
+                        formation: [
+                            { shipId: 'focus', position: 'M4' as const },
+                            { shipId: 'ghost', position: 'T2' as const },
+                        ],
+                    },
+                },
+                resolveShip: (id: string) => ({ focus, ally })[id as 'focus' | 'ally'] ?? null,
+            });
+        });
+        await waitFor(() => expect(result.current.state.status).toBe('done'));
+
+        expect(result.current.state.dropped).toEqual([{ side: 'player', position: 'T2' }]);
+    });
+
+    it("turns the genetic optimizer's runner-ups into their own rows, distinct from the role's best", async () => {
+        const { result } = renderHook(() => useSimRerank());
+        const withRunnerUp = vi.fn(async (role: ShipTypeName) => ({
+            suggestions: suggestion(`gear-${role}`),
+            hardRequirementsMet: true,
+            attempts: 1,
+            candidates: role === 'DEBUFFER' ? [suggestion(`gear-${role}-alt`)] : [],
+        }));
+
+        await act(async () => {
+            await result.current.run({
+                ...baseArgs(),
+                comparedRoles: [],
+                runAutogearFor: withRunnerUp,
+            });
+        });
+        await waitFor(() => expect(result.current.state.status).toBe('done'));
+
+        expect(result.current.state.rows).toHaveLength(2);
+        expect(new Set(result.current.state.rows.map((r) => r.id)).size).toBe(2);
+        const ranks = result.current.state.rows.map((r) => r.rank);
+        expect(ranks).toContainEqual('best');
+        expect(ranks).toContainEqual({ alt: 1 });
+        expect(result.current.state.rows.every((r) => r.role === 'DEBUFFER')).toBe(true);
+        // The metric table must contain the runner-up too, not just the best.
+        expect(result.current.state.table).toHaveLength(2);
     });
 
     it('stops the gearing phase between roles once cancelled, never starting a later role', async () => {
@@ -243,5 +303,27 @@ describe('useSimRerank', () => {
         expect(captured.signal?.aborted).toBe(true);
         expect(result.current.state.table).toEqual([]);
         expect(result.current.state.baseline).toBeUndefined();
+    });
+});
+
+describe('collectCandidateRuns', () => {
+    it('runs the gearing-then-simulating sequence directly, with no renderer involved', async () => {
+        const phases: Array<'gearing' | 'simulating'> = [];
+        const controller = new AbortController();
+
+        const result = await collectCandidateRuns({
+            ...baseArgs(),
+            signal: controller.signal,
+            onProgress: () => {},
+            onPhase: (phase) => phases.push(phase),
+        });
+
+        expect(phases).toEqual(['gearing', 'simulating']);
+        expect(result.status).toBe('done');
+        expect(result.baseline).toBeDefined();
+        expect(result.rows.length).toBeGreaterThan(0);
+        expect(result.table.map((row) => row.id).sort()).toEqual(
+            result.rows.map((row) => row.id).sort()
+        );
     });
 });
