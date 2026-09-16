@@ -28,7 +28,6 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
-import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import {
@@ -49,11 +48,15 @@ const SEAMS =
     'Fixing only the hook leaves every placement-board cast still breaking Stasis.';
 
 function requireReferenceData(): void {
-    if (!csvAvailable() || !shipDataAvailable()) {
+    // The CSV alone. `buildTraceShip` resolves a CSV-only record on fallback stats, and this
+    // census reads only what the PARSER produces from skill text — measured identical with and
+    // without `docs/ship-data.json` (150 ships resolved either way, same two slots), so requiring
+    // the snapshot would fail a worktree that can answer the question perfectly well.
+    if (!csvAvailable()) {
         throw new Error(
-            'docs/ship-skills.csv and/or docs/ship-data.json are missing from this worktree ' +
-                '(gitignored reference data). This census must read the real corpus — a ' +
-                'synthetic fallback would turn a missing-data worktree into a green vacuous run.'
+            'docs/ship-skills.csv is missing from this worktree (gitignored reference data). ' +
+                'This census must read the real corpus — a synthetic fallback would turn a ' +
+                'missing-data worktree into a green vacuous run.'
         );
     }
 }
