@@ -169,17 +169,18 @@ Expected: PASS, 4 tests.
 - [ ] **Step 5: Use it in the page, so there is one implementation**
 
 In `src/pages/manager/AutogearPage.tsx`, delete the local `getSuggestedEquipment` and
-`getSuggestedImplants` (lines ~100–119) and import the new helper. Replace each call site:
+`getSuggestedImplants` (lines ~100–119) and import the new helper. The two are called adjacently
+on the same inputs at lines ~807–808, so replace both with ONE call destructured — calling
+`applySuggestionsToShip` twice would redo the same work:
 
 ```ts
-// was: getSuggestedEquipment(suggestions, ship)
-applySuggestionsToShip(ship, suggestions).equipment
-// was: getSuggestedImplants(suggestions, ship)
-applySuggestionsToShip(ship, suggestions).implants
+const { equipment: suggestedEquipment, implants: suggestedImplants } =
+    applySuggestionsToShip(ship, newSuggestions);
 ```
 
-Both old helpers returned `{}` for a null ship; keep that by guarding the call site with the
-existing null check rather than pushing null-handling into the helper.
+Both old helpers returned `{}` for a null ship. `ship` is already non-null at that call site;
+confirm that (read the enclosing scope) and keep the guard there rather than pushing
+null-handling into the helper. If it turns out `ship` can be null there, guard before the call.
 
 - [ ] **Step 6: Typecheck and run the full suite**
 
@@ -2259,7 +2260,10 @@ describe('SimRerankSection', () => {
         expect(screen.getByLabelText(/seed/i)).toBeInTheDocument();
     });
 
-    it('re-sorts on a header click without running the sim again', () => {
+    // The last two cases both need a rendered table, so the fixture is shared here rather than
+    // left as state the fifth test mutates for the sixth — an order-dependent fixture passes or
+    // fails on test ordering, which is not what either case is about.
+    const withTable = () => {
         hookState.current = {
             ...hookState.current,
             status: 'done',
@@ -2285,7 +2289,10 @@ describe('SimRerankSection', () => {
                 },
             ],
         } as unknown as SimRerankState;
+    };
 
+    it('re-sorts on a header click without running the sim again', () => {
+        withTable();
         render(<SimRerankSection {...props()} />);
         open();
         run.mockClear();
@@ -2294,17 +2301,17 @@ describe('SimRerankSection', () => {
     });
 
     it('says a cell is not distinguishable rather than showing a delta', () => {
+        withTable();
         render(<SimRerankSection {...props()} />);
         open();
-        expect(screen.getAllByText(/no clear difference/i).length).toBeGreaterThan(0);
+        // focusDamageTaken and focusHealingDone both carry distinguishable: false.
+        expect(screen.getAllByText(/no clear difference/i).length).toBe(2);
     });
 });
 ```
 
 The `vi.hoisted` state object is how the other component tests in this project drive a mocked
-hook — mutate `hookState.current` before `render` to put the component in the state under test.
-The last two cases share the table fixture set up in the fifth; if you reorder them, move the
-fixture into a `beforeEach`.
+hook — call `withTable()` before `render` to put the component in the state under test.
 
 - [ ] **Step 2: Run it and watch it fail**
 
