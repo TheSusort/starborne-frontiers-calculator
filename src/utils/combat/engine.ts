@@ -472,6 +472,9 @@ function registerActorAbilityStatuses(
                 conditions: liveGateConditions(ability.conditions),
                 casterId: ownerId,
                 recipients,
+                // Provenance for the turn-block suppression — see `Ability.source`. Attached only
+                // when the ability carries it, so a ship-skill status omits the key entirely.
+                ...(ability.source ? { source: ability.source } : {}),
                 // #363 (Fuying): carry the recipient FACTION scope onto the status. `recipients`
                 // above is the roster-wide ally fan-out; the faction intersection happens at
                 // APPLICATION time in playerTurn (where the actor→faction map is in scope), not
@@ -3311,6 +3314,22 @@ export function runCombat(rawInput: CombatEngineInput): {
      *  three turn-action gates AND the reactive drain filter (drainQueue). The Stasis-only break /
      *  immunity sites intentionally keep using isStasised — Disable never breaks. */
     const isTurnBlocked = (actorId: string): boolean => isStasised(actorId) || isDisabled(actorId);
+    // A passive-slot AURA or accumulating status from a SHIP skill stops contributing while its
+    // caster is turn-blocked — the status store reads this per call, so the aura vanishes the
+    // instant the Stasis lands and returns the instant it is removed. See the setter's doc.
+    statusEngine.setTurnBlockedReader(isTurnBlocked);
+    /** Drop a turn-blocked owner's SHIP-PASSIVE entries from a passive-slot-derived list.
+     *
+     *  Every list this guards is built by walking `slot.slot === 'passive'` alone, so the only
+     *  question left per entry is provenance: a gear-set bonus or implant effect keeps working
+     *  while its holder is stasised or disabled, a ship's own passive skill does not (owner ruling
+     *  2026-09-15). Read `Ability.source` for why provenance rides the entry rather than the slot.
+     *  Applied at the READ, not at the build: a ship is not blocked when its lists are assembled. */
+    const livePassiveEntries = <T extends { source?: 'equipment' }>(
+        ownerId: string,
+        entries: readonly T[]
+    ): T[] =>
+        isTurnBlocked(ownerId) ? entries.filter((e) => e.source === 'equipment') : (entries as T[]);
 
     // Base-HP fallback for recipientMaxHp before an actor has taken its first turn (no ctx yet):
     // attacker → input.hp; walked team → walk stats hp; enemy attackers → their CombatActor hp
@@ -4355,6 +4374,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          *  the `on-own-repair-to-ally` re-entrancy guard has its key. IN-MEMORY ONLY — never
          *  serialise it (`nextId()` runs off a never-reset module counter). */
         abilityId: string;
+        /** Provenance for the turn-block suppression — see `livePassiveEntries`. */
+        source?: 'equipment';
     }
     const standingLeeches = new Map<string, StandingLeech[]>();
     if (healTarget) {
@@ -4372,6 +4393,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             scope: c.leechScope ?? 'all',
                             abilityId: a.id,
+                            ...(a.source ? { source: a.source } : {}),
                         });
                     }
                 }
@@ -4393,6 +4415,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         requiresHpDamage: boolean;
         /** #447 — see the sibling field on `StandingLeech`. */
         abilityId: string;
+        /** Provenance for the turn-block suppression — see `livePassiveEntries`. */
+        source?: 'equipment';
     }
     const takenLeechesByOwner = new Map<string, TakenLeech[]>();
     if (healTarget) {
@@ -4409,6 +4433,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                             noCrit: c.type === 'heal' ? (c.noCrit ?? false) : true,
                             requiresHpDamage: c.requiresHpDamage ?? false,
                             abilityId: a.id,
+                            ...(a.source ? { source: a.source } : {}),
                         });
                     }
                 }
@@ -4529,10 +4554,13 @@ export function runCombat(rawInput: CombatEngineInput): {
     // carrier's aura stops protecting its allies from the moment it dies. Returns the stored array
     // BY REFERENCE for any actor with no ally-scoped entries.
     const incomingAbilitiesOf = (id: string): Ability[] =>
-        withLiveAllyScopedOwners(
-            incomingAbilitiesById.get(id) ?? [],
-            allyScopedOwnerByRecipient.get(id),
-            isActorAlive
+        livePassiveEntries(
+            id,
+            withLiveAllyScopedOwners(
+                incomingAbilitiesById.get(id) ?? [],
+                allyScopedOwnerByRecipient.get(id),
+                isActorAlive
+            )
         );
 
     // Per-actor recipient-side incoming-heal-amplification abilities (Exuberance),
@@ -4553,7 +4581,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (heals.length) incomingHealAmpAbilitiesById.set(rt.actor.id, heals);
     }
     const incomingHealAmpAbilitiesOf = (id: string): Ability[] =>
-        incomingHealAmpAbilitiesById.get(id) ?? [];
+        livePassiveEntries(id, incomingHealAmpAbilitiesById.get(id) ?? []);
 
     // Per-actor attacker-side outgoing-amplification abilities (Menace/Giant Slayer),
     // side-agnostic (a ship amplifies on either team). Built once from BOTH runtime maps; empty for
@@ -4573,7 +4601,8 @@ export function runCombat(rawInput: CombatEngineInput): {
         }
         if (outgoing.length) outgoingAbilitiesById.set(rt.actor.id, outgoing);
     }
-    const outgoingAbilitiesOf = (id: string): Ability[] => outgoingAbilitiesById.get(id) ?? [];
+    const outgoingAbilitiesOf = (id: string): Ability[] =>
+        livePassiveEntries(id, outgoingAbilitiesById.get(id) ?? []);
 
     // Meatshield (R4 refit-active passive — APPROXIMATION): per-actor set of ids
     // carrying an active `defense-substitution` passive, side-agnostic (a carrier can be on
@@ -4708,7 +4737,13 @@ export function runCombat(rawInput: CombatEngineInput): {
         // or expires. `hasShield` is declared later in this closure (below) but is already
         // initialized by the time this function is actually CALLED (deep in the battle loop) —
         // same closure-ordering convention as every other helper this function reads.
-        const conditionalDefenceBonus = conditionalDefenceBonusByActorId.get(victim.id);
+        // Both defence channels below are SHIP passives — no equipment builder emits
+        // `conditional-stat` or `defense-substitution`, pinned by
+        // `turnBlockedDefenceChannels.test.ts` — so each is gated on its own owner being able to
+        // act, with no provenance split to make (see `livePassiveEntries` for the general rule).
+        const conditionalDefenceBonus = isTurnBlocked(victim.id)
+            ? undefined
+            : conditionalDefenceBonusByActorId.get(victim.id);
         const shieldDefenceBonus =
             conditionalDefenceBonus !== undefined && hasShield(victim.id)
                 ? conditionalDefenceBonus
@@ -4727,6 +4762,9 @@ export function runCombat(rawInput: CombatEngineInput): {
         let bestDefence: number | undefined;
         for (const carrierId of defenseSubstitutionCarrierIds) {
             if (carrierId === victim.id) continue; // a carrier never substitutes for itself
+            // The CARRIER's passive is what substitutes, so it is the carrier's own turn-block
+            // that switches it off — not the victim's.
+            if (isTurnBlocked(carrierId)) continue;
             const carrier = allActorsById.get(carrierId);
             if (!carrier || carrier.currentHp <= 0 || carrier.side !== victim.side) continue;
             const carrierDefence = effectiveStatsOf(statusEngine, selfBuffLookup, carrier).defence;
@@ -4847,7 +4885,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         channel: LeechChannel
     ): void => {
         if (!healingCtx || amount <= 0) return;
-        const entries = standingLeeches.get(sourceId);
+        const entries = livePassiveEntries(sourceId, standingLeeches.get(sourceId) ?? []);
         if (!entries) return;
         const owner = allRuntimesById.get(sourceId);
         if (!owner) return;
@@ -5187,7 +5225,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         if (!healingCtx || damageTaken <= 0) return;
         // Barrier carve-out (per victim): a fully-blocked hit deals no damage taken.
         if (outcome.barriered) return;
-        const entries = takenLeechesByOwner.get(victim.id);
+        const entries = livePassiveEntries(victim.id, takenLeechesByOwner.get(victim.id) ?? []);
         if (!entries) return;
         const rt = allRuntimesById.get(victim.id);
         // #424: scoped to the whole proc call (all entries), not to one entry — see the emit
@@ -10150,7 +10188,23 @@ export function runCombat(rawInput: CombatEngineInput): {
                     // UNTOUCHED — only the turn-blocked unit's OWN outgoing intents drop.
                     // NOTE: Stasis-only sites (break-on-hit, damage-immunity) intentionally keep using isStasised
                     // directly — Disable never breaks and does not grant immunity.
-                    if (isTurnBlocked(intent.ownerId)) continue;
+                    //
+                    // TWO CARVE-OUTS, both owner rulings (2026-09-15), because what a turn-block
+                    // switches off is the ship's own PASSIVE SKILL:
+                    //  - EQUIPMENT. A gear-set bonus or implant effect is not the ship's passive
+                    //    skill and keeps firing. It shares the passive slot with the ship's
+                    //    refits, so the provenance rides the ability — read `Ability.source`.
+                    //  - THE OWNER'S OWN DEATH REACTION. Death releases it: a ship that dies
+                    //    stasised still resolves Martyrdom's killer-Disable / Salvation's repair.
+                    //    Same `fromOwnDeath` stamp that exempts them from executeIntent's
+                    //    dead-owner gate.
+                    if (
+                        isTurnBlocked(intent.ownerId) &&
+                        intent.ability.source !== 'equipment' &&
+                        !intent.eventCtx?.fromOwnDeath
+                    ) {
+                        continue;
+                    }
                     executeIntent(intent, {
                         round: r,
                         statusEngine,

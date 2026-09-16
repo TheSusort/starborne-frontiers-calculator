@@ -7,6 +7,10 @@ export const CURRENT_VERSION = '1.67.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: implants and gear sets keep working while a ship is stasised.',
+    "Combat simulator: a stasised ship's passive no longer buffs its team.",
+    "Combat simulator: a stasised ship's passive no longer reduces or reflects incoming damage.",
+    "Combat simulator: a stasised ship's passive stops banking stacks and lending defence.",
     'Combat simulator: a hit nullified by Barrier no longer reduces Stasis.',
     "Combat simulator: a slower attacker's hits now reduce Stasis like a faster one's.",
     'Combat simulator: damage-free casts and damage-over-time no longer reduce Stasis.',

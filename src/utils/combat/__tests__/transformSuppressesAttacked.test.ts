@@ -234,12 +234,9 @@ describe('a fully DoT-transformed hit emits no `attacked` event', () => {
         expect(attacked.length).toBeGreaterThan(0);
     });
 
-    it('KNOWN GAP: a STASISED Voron still transforms, so the hit still emits no attacked', () => {
-        // The game rule is that a stasised or disabled owner's passives are all inactive — a
-        // stasised Voron should take the hit as ordinary direct damage. Nothing in the funnel reads the victim's Stasis for
-        // this ability (its condition is `always`), so the transform fires anyway. Pinned as the
-        // CURRENT behaviour, not the correct one: when the general rule lands, this arm flips to
-        // `toBeGreaterThan(0)` and the header's warning comes out.
+    it('a STASISED Voron does not transform — the hit lands and emits `attacked`', () => {
+        // The transform is a ship PASSIVE, so a stasised Voron does not have it: the hit arrives
+        // as ordinary direct damage and signals like any other.
         const stasised = attackedFor(
             BASE({
                 numRounds: 2,
@@ -248,10 +245,10 @@ describe('a fully DoT-transformed hit emits no `attacked` event', () => {
             }),
             'voron'
         );
-        expect(stasised).toHaveLength(0);
+        expect(stasised.length).toBeGreaterThan(0);
 
-        // NON-VACUITY: the same board with NO transform passive DOES emit `attacked`, so the zero
-        // above is the transform firing and not the hitter missing.
+        // The transform is genuinely the only difference: the same board with NO transform
+        // passive at all signals the same way.
         const noPassive = attackedFor(
             BASE({
                 numRounds: 2,

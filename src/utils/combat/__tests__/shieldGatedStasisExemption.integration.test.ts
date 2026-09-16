@@ -194,6 +194,11 @@ const enemyVictim = (id: string, position: Position, reflectPct?: number): Enemy
                               ab({
                                   type: 'modifier',
                                   target: 'self',
+                                  // Reflect is a GEAR SET, and these victims are stasised: a
+                                  // ship's own passive grants nothing while its owner is
+                                  // turn-blocked, so an unstamped thorn would never bounce and
+                                  // every drain arm below would measure an undrained pool.
+                                  source: 'equipment',
                                   config: { type: 'damage-reflection', pct: reflectPct },
                               }),
                           ],
@@ -407,6 +412,9 @@ const playerVictim = (
                                   ab({
                                       type: 'modifier',
                                       target: 'self',
+                                      // Reflect is a GEAR SET — see the sibling builder's note:
+                                      // a stasised ship's own passive grants nothing.
+                                      source: 'equipment',
                                       config: { type: 'damage-reflection', pct: reflectPct },
                                   }),
                               ],

@@ -67,6 +67,11 @@ interface AbilityStatusBase {
      *  read sites default it to 'attacker'. Historical/attacker-only statuses are casterId
      *  'attacker' → identical to today (the resolver returns the local ctx for the caster). */
     casterId?: string;
+    /** Provenance copied off the source `Ability.source`: `'equipment'` for a gear-set bonus or
+     *  implant effect, ABSENT for a ship's own skill. A PASSIVE-slot status from a SHIP skill is
+     *  suppressed while its caster is turn-blocked (see `setTurnBlockedReader`); an equipment one
+     *  is not. Read `Ability.source`'s doc for the rule. */
+    source?: 'equipment';
     /** Player-side RECIPIENTS that receive this status (ally routing): `self` → [casterId];
      *  `ally`/`all-allies` → every player actor id (fixed source order). Enemy-side statuses ignore
      *  this (enemy maps are singular). The ENGINE always sets this on the timed-by-slot statuses it
@@ -393,6 +398,13 @@ export interface StatusEngine {
         recipientId?: string,
         enemyTargetId?: string
     ): void;
+    /** Install the engine's Stasis-OR-Disable reader. A ship's PASSIVE SKILL is inactive while its
+     *  owner is turn-blocked (owner ruling 2026-09-15), so a passive-slot AURA or ACCUMULATING
+     *  status contributes nothing for as long as its caster is blocked, and contributes again the
+     *  moment the block ends — the effect is read per call, not cached. Equipment-sourced statuses
+     *  are exempt (`AbilityStatusBase.source`). Unset → nothing is suppressed, which is what the
+     *  statusEngine's own unit fixtures want. */
+    setTurnBlockedReader(fn: (actorId: string) => boolean): void;
     /** Aura + accumulating ability statuses whose conditions pass THIS ROUND, with payloads,
      *  for effect folding and snapshot inclusion. `ownerId` selects the player-side carrier
      *  (defaults to 'attacker'). Each status's gate evaluates against ITS CASTER's context —
@@ -545,6 +557,11 @@ interface AccumulatingContribution {
     granterId: string;
     rate: number;
     trigger: StackTrigger;
+    /** Where the granting ability came from, for the turn-block suppression — a PASSIVE-slot
+     *  share from a SHIP skill accrues nothing while its granter is turn-blocked. Absent on
+     *  scheduled entries, which have no slot and always accrue. */
+    sourceSlot?: SkillSlot;
+    source?: 'equipment';
 }
 
 interface AccumulatingState {
@@ -648,6 +665,25 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
     const setLandsTimedEnemyApplication = (fn: (buff: SelectedGameBuff) => boolean): void => {
         landsTimedEnemyApplication = fn;
     };
+    // Unset by default: a statusEngine built without the combat engine (unit fixtures, DPS
+    // helpers) suppresses nothing.
+    let isTurnBlockedReader: (actorId: string) => boolean = () => false;
+    const setTurnBlockedReader = (fn: (actorId: string) => boolean): void => {
+        isTurnBlockedReader = fn;
+    };
+    /** A passive-slot status from a SHIP skill contributes nothing while its caster is
+     *  turn-blocked. The two exemptions are the ruling's own: a status from EQUIPMENT, and any
+     *  status that is not a passive (a cast-sourced aura is the cast's standing effect, not a
+     *  passive that has to keep firing). */
+    const shipPassiveSuppressed = (a: {
+        sourceSlot: SkillSlot;
+        source?: 'equipment';
+        casterId?: string;
+    }): boolean =>
+        a.sourceSlot === 'passive' &&
+        a.source !== 'equipment' &&
+        isTurnBlockedReader(a.casterId ?? 'attacker');
+
     let beforeTimedEnemyApplication: (targetId: string, buffName: string) => void = () => {};
     const setBeforeTimedEnemyApplication = (
         fn: (targetId: string, buffName: string) => void
@@ -943,7 +979,23 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                 // registration REPLACED the first, so only one share existed.
                 let amount = 0;
                 for (const c of state.contributions) {
-                    if (c.trigger === 'per-round') amount += c.rate;
+                    if (c.trigger !== 'per-round') continue;
+                    // A turn-blocked granter's SHIP passive banks nothing further. Stacks it
+                    // already banked stay — they are standing state, the same line that keeps a
+                    // stasised ship's Barrier working. The `per-active`/`per-charge` triggers need
+                    // no gate: they accrue on the granter's own cast, which a blocked ship
+                    // does not take.
+                    if (
+                        c.sourceSlot !== undefined &&
+                        shipPassiveSuppressed({
+                            sourceSlot: c.sourceSlot,
+                            source: c.source,
+                            casterId: c.granterId,
+                        })
+                    ) {
+                        continue;
+                    }
+                    amount += c.rate;
                 }
                 addAccumStacks(state, amount);
             }
@@ -1787,6 +1839,8 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                     granterId: s.casterId ?? 'attacker',
                     rate: s.payload.stacks,
                     trigger: s.stackTrigger,
+                    sourceSlot: s.sourceSlot,
+                    ...(s.source ? { source: s.source } : {}),
                 };
                 const existing = map.get(s.payload.buffName);
                 if (existing) {
@@ -1981,6 +2035,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
                       ),
                   ];
         for (const a of auraList) {
+            if (shipPassiveSuppressed(a)) continue;
             // casterId defaults to 'attacker' (the engine always sets it; only unit-test
             // fixtures omit it) so the resolver returns the local ctx in the attacker-only path.
             if (!conditionsMet(a.conditions, resolveCtx(a.casterId ?? 'attacker'))) continue;
@@ -2113,6 +2168,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         beginRound,
         sourceFired,
         setLandsTimedEnemyApplication,
+        setTurnBlockedReader,
         setBeforeTimedEnemyApplication,
         snapshot,
         decrementPlayer,

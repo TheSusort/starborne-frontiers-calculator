@@ -1242,5 +1242,10 @@ export function buildEquipmentAbilities(
         }
     }
 
-    return abilities;
+    // ONE stamp for every equipment ability, at the single exit rather than at each mint site, so
+    // a builder added later cannot forget it. `source` is what tells a gear-set bonus or an
+    // implant effect apart from a ship's own passive skill after
+    // `buildShipAbilitiesWithEquipment` appends both into the same passive slot — read `source`'s
+    // doc on `Ability` for why that distinction is load-bearing.
+    return abilities.map((a) => ({ ...a, source: 'equipment' as const }));
 }
