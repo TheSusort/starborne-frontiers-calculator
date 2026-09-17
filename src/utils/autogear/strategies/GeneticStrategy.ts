@@ -2,7 +2,7 @@ import { AutogearStrategy, AutogearResult, HardRequirementViolation } from '../A
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
-import type { FleetBuff, CustomFormula } from '../../../types/autogear';
+import type { FleetBuff, CustomFormula, GearSuggestion } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import {
@@ -31,6 +31,37 @@ interface Individual {
 type InventoryBySlot = Map<GearSlotName, GearPiece[]>;
 
 const EMPTY_PIECES: readonly GearPiece[] = [];
+
+/** How many runner-ups leave the strategy. A converged population holds thousands of near-copies;
+ *  past a handful of DISTINCT loadouts the extra rows cost a sim run each and say nothing new. */
+export const MAX_EXPOSED_CANDIDATES = 8;
+
+/** A loadout's identity is the SET of pieces it wears — two individuals that reached the same
+ *  gear by different slot order are one candidate, and a converged population holds many. */
+const loadoutKey = (loadout: GearSuggestion[]): string =>
+    loadout
+        .map((s) => s.gearId)
+        .sort()
+        .join('|');
+
+/** Collapses loadouts that wear the same pieces (any slot order) to one entry, keeping the
+ *  first (best-ranked) occurrence, and drops any loadout matching `skip`. */
+export function dedupeCandidates(
+    loadouts: GearSuggestion[][],
+    skip?: GearSuggestion[]
+): GearSuggestion[][] {
+    const seen = new Set<string>();
+    if (skip) seen.add(loadoutKey(skip));
+
+    const result: GearSuggestion[][] = [];
+    for (const loadout of loadouts) {
+        const key = loadoutKey(loadout);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        result.push(loadout);
+    }
+    return result;
+}
 
 /**
  * Genetic Strategy
@@ -160,7 +191,10 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const hasHardRequirements = priorities.some((p) => p.hardRequirement);
         const attemptCount = hasHardRequirements ? MAX_ATTEMPTS : 1;
 
-        let overallBest: Individual | null = null;
+        // `best` and `population` are always assigned together: a ranking (fitness, violation)
+        // is only commensurate within the population that produced it, so `candidates` must be
+        // drawn from the same attempt as the returned `best`.
+        let overall: { best: Individual; population: Individual[] } | null = null;
         let attempts = 0;
 
         for (let attempt = 1; attempt <= attemptCount; attempt++) {
@@ -168,47 +202,50 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             this.initializeProgress(populationSize * generations);
             this.emitAttemptProgress(attempt, attemptCount);
 
-            const bestOfThisRun = await this.runSingleGAPass(
-                ship,
-                priorities,
-                availableInventory,
-                inventoryBySlot,
-                cachedGetGearPiece,
-                getEngineeringStatsForShipType,
-                shipRole,
-                setPriorities,
-                statBonuses,
-                tryToCompleteSets,
-                arenaModifiers,
-                fleetBuffs,
-                customFormula,
-                populationSize,
-                generations,
-                eliteSize,
-                fastContext
-            );
+            const { best: bestOfThisRun, population: populationOfThisRun } =
+                await this.runSingleGAPass(
+                    ship,
+                    priorities,
+                    availableInventory,
+                    inventoryBySlot,
+                    cachedGetGearPiece,
+                    getEngineeringStatsForShipType,
+                    shipRole,
+                    setPriorities,
+                    statBonuses,
+                    tryToCompleteSets,
+                    arenaModifiers,
+                    fleetBuffs,
+                    customFormula,
+                    populationSize,
+                    generations,
+                    eliteSize,
+                    fastContext
+                );
 
-            if (overallBest === null || compareIndividuals(bestOfThisRun, overallBest) < 0) {
-                overallBest = bestOfThisRun;
+            if (overall === null || compareIndividuals(bestOfThisRun, overall.best) < 0) {
+                overall = { best: bestOfThisRun, population: populationOfThisRun };
             }
-            if (overallBest.violation === 0) break;
+            if (overall.best.violation === 0) break;
         }
 
         this.completeProgress();
         performanceTracker.endTimer('GeneticAlgorithm');
 
-        const best = overallBest!;
+        const best = overall!.best;
         const hardRequirementsMet = best.violation === 0;
+        const bestSuggestions = this.toSuggestions(best);
+        const candidates = dedupeCandidates(
+            overall!.population
+                .filter((individual) => individual.violation === 0)
+                .map((individual) => this.toSuggestions(individual)),
+            bestSuggestions
+        ).slice(0, MAX_EXPOSED_CANDIDATES);
         const result: AutogearResult = {
-            suggestions: Object.entries(best.equipment)
-                .filter((entry): entry is [string, string] => entry[1] !== undefined)
-                .map(([slotName, gearId]) => ({
-                    slotName,
-                    gearId,
-                    score: best.fitness,
-                })),
+            suggestions: bestSuggestions,
             hardRequirementsMet,
             attempts,
+            candidates,
         };
         if (!hardRequirementsMet) {
             result.violations = this.computeViolations(
@@ -242,7 +279,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         generations: number,
         eliteSize: number,
         fastContext: FastScoringContext | null
-    ): Promise<Individual> {
+    ): Promise<{ best: Individual; population: Individual[] }> {
         performanceTracker.startTimer('InitializePopulation');
         let population = this.initializePopulation(
             availableInventory,
@@ -330,7 +367,18 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         }
         performanceTracker.endTimer('GeneticGenerations');
 
-        return bestIndividual;
+        return { best: bestIndividual, population };
+    }
+
+    /** Converts an individual's equipment map to the ranked-loadout shape callers see. */
+    private toSuggestions(individual: Individual): GearSuggestion[] {
+        return Object.entries(individual.equipment)
+            .filter((entry): entry is [string, string] => entry[1] !== undefined)
+            .map(([slotName, gearId]) => ({
+                slotName,
+                gearId,
+                score: individual.fitness,
+            }));
     }
 
     private computeViolations(
