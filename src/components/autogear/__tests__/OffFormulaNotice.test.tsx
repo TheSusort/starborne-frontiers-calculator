@@ -18,7 +18,9 @@ describe('OffFormulaNotice', () => {
             { stat: 'defence', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
-        expect(screen.getByText(/defence/i)).toBeInTheDocument();
+        // Pins the whole sentence, not just the word "defence" — a subject-verb mismatch like
+        // "damage scale off" (plural verb, singular subject) would slip past a bare word match.
+        expect(screen.getByText(/damage scales off Defence/)).toBeInTheDocument();
         expect(screen.getByText(/Attacker/)).toBeInTheDocument();
     });
 

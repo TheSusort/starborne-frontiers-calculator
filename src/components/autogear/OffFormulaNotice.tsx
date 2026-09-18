@@ -13,10 +13,12 @@ export interface OffFormulaNoticeProps {
     configuredRole: ShipTypeName | null;
 }
 
+// Carries its own verb so subject-verb agreement is correct per entry ("damage scales" is
+// singular, "repairs"/"shields" are plural).
 const PRODUCES_LABEL: Record<OffFormulaFinding['produces'], string> = {
-    damage: 'damage',
-    repair: 'repairs',
-    shield: 'shields',
+    damage: 'damage scales',
+    repair: 'repairs scale',
+    shield: 'shields scale',
 };
 
 const STAT_LABEL: Record<string, string> = {
@@ -37,7 +39,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({ ship, config
         <div className="card space-y-2">
             {findings.map((finding) => (
                 <p key={`${finding.stat}-${finding.produces}`} className="text-xs text-amber-400">
-                    {ship.name}&apos;s {PRODUCES_LABEL[finding.produces]} scale off{' '}
+                    {ship.name}&apos;s {PRODUCES_LABEL[finding.produces]} off{' '}
                     {STAT_LABEL[finding.stat] ?? finding.stat}.{' '}
                     {finding.severity === 'severe'
                         ? `The ${roleLabel} formula does not score it.`
