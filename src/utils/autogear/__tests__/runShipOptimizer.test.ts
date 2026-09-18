@@ -1,5 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { findOptimalGearForShip, type ShipOptimizerConfig } from '../runShipOptimizer';
+import {
+    findOptimalGearForShip,
+    buildOffFormulaTuningConfig,
+    runOffFormulaTuningPass,
+    defaultAutogearShipConfig,
+    type ShipOptimizerConfig,
+} from '../runShipOptimizer';
+import { bandPriorities } from '../simRerank/statBands';
+import { shipFinalStats } from '../../ship/combatStats';
+import { resolveLimitStatValue } from '../priorityScore';
 import { AutogearAlgorithm } from '../AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
@@ -333,5 +342,80 @@ describe('findOptimalGearForShip', () => {
         );
         const passedInventory = findOptimalGear.mock.calls[0][2];
         expect(passedInventory).toHaveLength(30);
+    });
+});
+
+describe('buildOffFormulaTuningConfig', () => {
+    // Hard requirement #3: hardRequirement is honoured only by GeneticStrategy, so a band that
+    // does not force Genetic silently degrades to a soft penalty that will not hold a build
+    // inside the range. Deleting the forcing line in buildOffFormulaTuningConfig fails this.
+    it('forces Genetic even when the ship is configured for a different algorithm', () => {
+        const shipConfig = {
+            ...defaultAutogearShipConfig('ATTACKER'),
+            selectedAlgorithm: AutogearAlgorithm.TwoPass,
+        };
+        const config = buildOffFormulaTuningConfig(
+            ship,
+            shipConfig,
+            null,
+            'hacking',
+            bandPriorities('hacking', { min: 100, max: 200 })
+        );
+        expect(config.selectedAlgorithm).toBe(AutogearAlgorithm.Genetic);
+    });
+
+    it("drops the ship's own priority on the tuned stat before appending the band constraint, so the two cannot fight", () => {
+        const shipConfig = {
+            ...defaultAutogearShipConfig('ATTACKER'),
+            statPriorities: [
+                { stat: 'hacking' as const, weight: 5 },
+                { stat: 'attack' as const, weight: 3 },
+            ],
+        };
+        const constraint = bandPriorities('hacking', { min: 100, max: 200 });
+        const config = buildOffFormulaTuningConfig(ship, shipConfig, null, 'hacking', constraint);
+        expect(config.statPriorities).toEqual([{ stat: 'attack', weight: 3 }, ...constraint]);
+    });
+
+    it("scores under the tuned ship's own configured role, not a compared role", () => {
+        const shipConfig = defaultAutogearShipConfig('SUPPORTER');
+        const config = buildOffFormulaTuningConfig(ship, shipConfig, null, 'hp', []);
+        expect(config.shipRole).toBe('SUPPORTER');
+    });
+});
+
+describe('runOffFormulaTuningPass', () => {
+    const tunedShip = {
+        id: 'tuning-ship',
+        name: 'Tuning Ship',
+        type: 'ATTACKER',
+        baseStats: {
+            hp: 12345,
+            attack: 100,
+            defence: 200,
+            hacking: 150,
+            security: 100,
+            speed: 100,
+            crit: 0,
+            critDamage: 0,
+        },
+        equipment: {},
+        implants: {},
+        refits: [],
+    } as unknown as Ship;
+
+    it("reads the landed value through the run's own getGearForShip, not the raw getGearPiece", async () => {
+        const result = await runOffFormulaTuningPass(tunedShip, baseConfig, baseDeps, 'hp');
+
+        // findOptimalGear (mocked) always returns no suggestions, so the built ship's equipment
+        // stays empty either way — this cross-checks the returned `landed` against the SAME
+        // resolution `resolveLimitStatValue`/`shipFinalStats` would produce independently,
+        // rather than asserting a guessed constant.
+        const expectedFinal = shipFinalStats(tunedShip, {
+            getGearPiece: baseDeps.getGearPiece,
+            getEngineeringStatsForShipType: baseDeps.getEngineeringStatsForShipType,
+        });
+        expect(result.landed).toBeCloseTo(resolveLimitStatValue(expectedFinal, 'hp'), 5);
+        expect(result.suggestions).toEqual([]);
     });
 });

@@ -47,10 +47,12 @@ export interface TuningRow {
     suggestions: GearSuggestion[];
 }
 
-/** The ship's current, unbanded build — "what autogear does today" — measured the same way as
- *  every band so a row can be compared against it. Not a `TuningRow`: it has no band and no
- *  `reachable`/`constraintHeld` (nothing to be unreachable against, and it IS the reference
- *  `constraintHeld` compares every band to). */
+/** Autogear's normal, UNBANDED pick for this ship's configured role — `runOptimizer([])`, no
+ *  limit on the tuned stat — measured the same way as every band so a row can be compared
+ *  against it. This is NOT the ship's equipped gear; it is what a plain "Find optimal gear" run
+ *  would suggest today. Not a `TuningRow`: it has no band and no `reachable`/`constraintHeld`
+ *  (nothing to be unreachable against, and it IS the reference `constraintHeld` compares every
+ *  band to). */
 export interface TuningBaselineRow {
     landed: number;
     byOpponent: number[];
@@ -61,8 +63,9 @@ export interface TuningState {
     status: 'idle' | 'probing' | 'gearing' | 'simulating' | 'done' | 'cancelled';
     progress: { completed: number; total: number };
     rows: TuningRow[];
-    /** Opponent labels, index-aligned with every row's `byOpponent`. Populated as soon as the
-     *  run starts — it does not depend on any optimizer result. */
+    /** Opponent labels, index-aligned with every row's `byOpponent`. Empty until `status` is
+     *  `'done'` — the hook only writes state once, on completion, matching every other field
+     *  here. */
     opponents: string[];
     baseline?: TuningBaselineRow;
     error?: string;

@@ -74,8 +74,9 @@ interface FindingsListProps {
     tuning: OffFormulaTuningDeps | undefined;
 }
 
-/** Split out so `openKey` can track which finding's panel is expanded without re-running
- *  `detectOffFormulaStats` on every keystroke inside that panel's own seed/run-count inputs. */
+/** Split out because `OffFormulaNotice` returns early (`findings.length === 0`) before any
+ *  hook call — React forbids a hook after a conditional return, so `openKey`'s `useState` needs
+ *  its own component that only mounts once there is something to show. */
 const FindingsList: React.FC<FindingsListProps> = ({
     ship,
     configuredRole,

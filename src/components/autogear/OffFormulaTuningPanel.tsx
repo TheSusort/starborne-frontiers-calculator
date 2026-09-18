@@ -32,8 +32,6 @@ const formatBand = (row: TuningRow): string =>
 
 interface TuningTableRow {
     row: TuningRow;
-    /** 1-indexed position among the bands shown, for a stable, order-independent label. */
-    index: number;
 }
 
 export interface OffFormulaTuningPanelProps {
@@ -96,7 +94,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
         });
     };
 
-    const tableRows: TuningTableRow[] = state.rows.map((row, index) => ({ row, index: index + 1 }));
+    const tableRows: TuningTableRow[] = state.rows.map((row) => ({ row }));
 
     const columns: Column<TuningTableRow>[] = [
         {
@@ -125,7 +123,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
         })),
         {
             key: 'constraint',
-            label: 'Vs. equipped',
+            label: 'Vs. unbanded',
             align: 'right',
             render: ({ row }) =>
                 row.constraintHeld ? (
@@ -193,8 +191,8 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
 
             {state.status === 'done' && state.baseline && (
                 <p className="text-sm text-theme-text-secondary">
-                    Equipped now: {statLabel(stat)} lands at{' '}
-                    {Math.round(state.baseline.landed).toLocaleString()}.
+                    Unbanded (what autogear picks today, with no limit on {statLabel(stat)}):{' '}
+                    {statLabel(stat)} lands at {Math.round(state.baseline.landed).toLocaleString()}.
                 </p>
             )}
 
