@@ -274,8 +274,11 @@ export interface OffFormulaFinding {
  *  components when deciding whether a stat is rewarded: `effectiveHp` lets a build trade defence
  *  for HP at no scoring cost, so a skill scaling off Defence SPECIFICALLY is still mis-scored.
  *  Expanding them is what makes Panon and Madax invisible. */
-const AGGREGATE_COMPONENTS: Record<string, readonly OffFormulaStat[]> = {
-    directDamage: ['attack'],
+const AGGREGATE_COMPONENTS: Record<string, readonly string[]> = {
+    // crit and critDamage can never BE a finding — no carrier scales an effect off them — but
+    // they are listed because this map documents what each aggregate stands for, and a future
+    // carrier that does read them must not silently classify them as severe.
+    directDamage: ['attack', 'crit', 'critDamage'],
     effectiveHp: ['hp', 'defence'],
 };
 
