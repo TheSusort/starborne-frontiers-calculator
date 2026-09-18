@@ -607,8 +607,8 @@ it.** Re-read this section against the owner's Stage 1 feedback before dispatchi
 **Files:**
 - Create: `src/utils/autogear/simRerank/roleObjectives.ts`
 - Test: `src/utils/autogear/simRerank/__tests__/roleObjectives.test.ts`
-- Modify: `src/utils/autogear/simRerank/metricTable.ts` (the `METRIC_LOWER_IS_BETTER` entry and
-  `suggestedPrimary`'s DEFENDER branch)
+- Modify: `src/utils/autogear/simRerank/metricTable.ts` (`suggestedPrimary`'s DEFENDER branch
+  ONLY — leave `METRIC_LOWER_IS_BETTER` alone)
 
 **Interfaces:**
 - Consumes: `SimMetric` from `./metricTable`; `matchesRoleCategory`, `ShipTypeName` from
@@ -636,9 +636,12 @@ it.** Re-read this section against the owner's Stage 1 feedback before dispatchi
 **The defender fix.** `metricTable.ts` currently carries
 `METRIC_LOWER_IS_BETTER: { focusDamageTaken: true, rounds: true }` and `suggestedPrimary` returns
 `focusDamageTaken` for DEFENDER, which rewards a defender for taking LESS damage. A defender that
-takes zero damage is not tanking, it is being ignored. Remove `focusDamageTaken` from
-`METRIC_LOWER_IS_BETTER` **only if** the new `focusDamageTakenShare` metric replaces its use in
-`suggestedPrimary`; raw `focusDamageTaken` remains lower-is-better for every other reader.
+takes zero damage is not tanking, it is being ignored.
+
+**Do NOT touch `METRIC_LOWER_IS_BETTER`.** It governs how the sim-rerank table renders a raw
+damage-taken delta, where lower genuinely is better for its own readers — that entry is correct
+and changing it would break an unrelated table. The fix is confined to `suggestedPrimary`'s
+DEFENDER branch, which is what encodes the wrong OBJECTIVE.
 
 - [ ] **Step 1: Write the failing test**
 
