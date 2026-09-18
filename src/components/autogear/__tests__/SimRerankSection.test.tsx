@@ -304,9 +304,9 @@ describe('SimRerankSection', () => {
         // A family sharing neither the ship's type nor its configured role is still offered.
         expect(screen.getByLabelText('Attacker')).toBeInTheDocument();
 
-        // The suggested-primary column follows the configured role (Defender -> team damage),
+        // The suggested-primary column follows the configured role (Defender -> win rate),
         // not the ship's ATTACKER type (which would suggest damage dealt).
-        expect(screen.getByText('Team damage (suggested)')).toBeInTheDocument();
+        expect(screen.getByText('Win rate (suggested)')).toBeInTheDocument();
 
         // The own-role row is labelled by the configured role, not the ship's type.
         expect(screen.getByText('Defender (current role)')).toBeInTheDocument();

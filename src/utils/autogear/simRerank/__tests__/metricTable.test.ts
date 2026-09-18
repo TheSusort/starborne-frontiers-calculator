@@ -85,8 +85,8 @@ describe('metricSeries', () => {
 describe('suggestedPrimary', () => {
     it('maps each role family to its own metric', () => {
         expect(suggestedPrimary('ATTACKER')).toBe('focusDamageDealt');
-        expect(suggestedPrimary('DEFENDER')).toBe('teamDamageDealt');
-        expect(suggestedPrimary('DEFENDER_SECURITY')).toBe('teamDamageDealt');
+        expect(suggestedPrimary('DEFENDER')).toBe('winRate');
+        expect(suggestedPrimary('DEFENDER_SECURITY')).toBe('winRate');
         expect(suggestedPrimary('SUPPORTER')).toBe('focusHealingDone');
         expect(suggestedPrimary('SUPPORTER_SHIELD')).toBe('focusHealingDone');
         expect(suggestedPrimary('DEBUFFER')).toBe('teamDamageDealt');

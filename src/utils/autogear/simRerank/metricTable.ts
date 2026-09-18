@@ -81,7 +81,11 @@ export function metricSeries(run: CandidateRun, metric: SimMetric): number[] {
  */
 export function suggestedPrimary(role: ShipTypeName | undefined): SimMetric {
     if (matchesRoleCategory(role, ['ATTACKER'])) return 'focusDamageDealt';
-    if (matchesRoleCategory(role, ['DEFENDER'])) return 'teamDamageDealt';
+    // Team damage is anti-correlated with tanking: a defender the enemy ignores leaves every
+    // ally free to deal unimpeded damage, so an ignored defender can outscore one actually
+    // absorbing hits on that column. Win rate moves the right direction instead — a defender
+    // that draws and survives focus fire converts that into wins.
+    if (matchesRoleCategory(role, ['DEFENDER'])) return 'winRate';
     if (matchesRoleCategory(role, ['SUPPORTER'])) return 'focusHealingDone';
     return 'teamDamageDealt';
 }

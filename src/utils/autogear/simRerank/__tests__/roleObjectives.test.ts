@@ -27,7 +27,7 @@ describe('roleObjective', () => {
 });
 
 describe('the defender objective', () => {
-    it('suggests team damage, not raw damage-taken which rewards a defender for being ignored', () => {
-        expect(suggestedPrimary('DEFENDER')).toBe('teamDamageDealt');
+    it('suggests win rate, not team damage which rewards a defender for being ignored', () => {
+        expect(suggestedPrimary('DEFENDER')).toBe('winRate');
     });
 });
