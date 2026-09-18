@@ -41,11 +41,14 @@ const ship = (id: string): Ship =>
         refits: [],
     }) as unknown as Ship;
 
-const finding = (stat: OffFormulaFinding['stat']): OffFormulaFinding => ({
+const finding = (
+    stat: OffFormulaFinding['stat'],
+    trigger: string = 'on-cast'
+): OffFormulaFinding => ({
     stat,
     produces: 'damage',
     severity: 'severe',
-    trigger: 'on-cast',
+    trigger,
 });
 
 const props = (overrides: Record<string, unknown> = {}) => ({
@@ -90,6 +93,21 @@ describe('OffFormulaTuningPanel', () => {
         const { rerender } = render(<OffFormulaTuningPanel {...props()} />);
         reset.mockClear();
         rerender(<OffFormulaTuningPanel {...props({ configuredRole: 'DEFENDER' })} />);
+        expect(reset).toHaveBeenCalled();
+    });
+
+    // The gating stat rides `finding.trigger`, not `finding.stat`: `gatingStatFor` maps 'on-cast'
+    // to 'defence' and 'on-debuff-resisted' to 'hacking'. Two findings on the SAME stat with
+    // different triggers are therefore different runs, and a dependency list keyed only on the
+    // stat would leave the first finding's table on screen for the second.
+    it('resets the run when the trigger changes the gating stat but the stat stays the same', () => {
+        const { rerender } = render(<OffFormulaTuningPanel {...props()} />);
+        reset.mockClear();
+        rerender(
+            <OffFormulaTuningPanel
+                {...props({ finding: finding('security', 'on-debuff-resisted') })}
+            />
+        );
         expect(reset).toHaveBeenCalled();
     });
 

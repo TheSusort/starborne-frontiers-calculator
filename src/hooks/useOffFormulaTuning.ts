@@ -11,7 +11,8 @@ import { sparringOpponents } from '../utils/autogear/simRerank/sparringOpponents
 import { roleObjective } from '../utils/autogear/simRerank/roleObjectives';
 import { objectiveSeries, survived } from '../utils/autogear/simRerank/objectiveMetrics';
 import {
-    probePriorities,
+    floorProbePriorities,
+    ceilingProbePriorities,
     bandsBetween,
     bandPriorities,
     classifyOutcome,
@@ -22,19 +23,13 @@ import { focusActorId } from '../utils/autogear/simRerank/runCandidates';
 import { buildTeam } from '../utils/simulator/buildTeam';
 import { runSeedSetAsync } from '../utils/simulator/seededRuns';
 
-/** Pins the ceiling probe far past anything a real build reaches, so the optimizer's nearest
- *  feasible answer is the inventory's true maximum for the tuned stat. `calculateHardViolation`
- *  normalizes by the limit (floored at 1), so this is unreachable-large without risking overflow
- *  or a divide-by-zero the way a literal 0 ceiling would. */
-const CEILING_PROBE_VALUE = 1e9;
-
 export interface TuningRow {
     band: StatBand;
     /** The stat value this band's optimizer pass actually reached. */
     landed: number;
     /** False when `landed` falls outside `band` — see `classifyOutcome`. The panel must show
-     *  this rather than presenting the row as a normal result: the optimizer returns the
-     *  nearest feasible build with no other signal that the band was unreachable. */
+     *  this rather than presenting the row as a normal result: the optimizer returns its best
+     *  infeasible build with no other signal that the band was unreachable. */
     reachable: boolean;
     /** The role's objective metric, averaged over the seed set, per opponent — index-aligned
      *  with `TuningState.opponents`. */
@@ -60,14 +55,18 @@ export interface TuningBaselineRow {
 }
 
 export interface TuningState {
-    status: 'idle' | 'probing' | 'gearing' | 'simulating' | 'done' | 'cancelled';
+    status: 'idle' | 'probing' | 'gearing' | 'simulating' | 'done' | 'cancelled' | 'error';
+    /** Counted WITHIN the current `status` phase, against that phase's own total: each phase
+     *  restarts at 0. The run cannot know how many bands there will be until the probes have
+     *  finished, so a single run-wide denominator would have to grow mid-run and make the count
+     *  jump backwards. A reader must show the phase alongside these two numbers. */
     progress: { completed: number; total: number };
     rows: TuningRow[];
     /** Opponent labels, index-aligned with every row's `byOpponent`. Empty until `status` is
-     *  `'done'` — the hook only writes state once, on completion, matching every other field
-     *  here. */
+     *  `'done'`: they come from the same single write that delivers `rows` and `baseline`. */
     opponents: string[];
     baseline?: TuningBaselineRow;
+    /** Set only when `status` is `'error'`. */
     error?: string;
 }
 
@@ -217,10 +216,10 @@ export async function collectTuningRows(
     onPhase('probing');
     onProgress(0, 2);
     if (signal.aborted) return CANCELLED;
-    const floorPass = await runOptimizer(probePriorities(stat, 0));
+    const floorPass = await runOptimizer(floorProbePriorities(stat));
     if (signal.aborted) return CANCELLED;
     onProgress(1, 2);
-    const ceilingPass = await runOptimizer(probePriorities(stat, CEILING_PROBE_VALUE));
+    const ceilingPass = await runOptimizer(ceilingProbePriorities(stat));
     if (signal.aborted) return CANCELLED;
     onProgress(2, 2);
 
@@ -233,11 +232,10 @@ export async function collectTuningRows(
 
     const gearTotal = 1 + bands.length;
     const simTotal = gearTotal * opponents.length;
-    const overallTotal = 2 + gearTotal + simTotal;
 
     onPhase('gearing');
     let gearCompleted = 0;
-    const reportGear = () => onProgress(2 + gearCompleted, overallTotal);
+    const reportGear = () => onProgress(gearCompleted, gearTotal);
     reportGear();
 
     const baselinePass = await runOptimizer([]);
@@ -256,9 +254,9 @@ export async function collectTuningRows(
 
     onPhase('simulating');
     let simCompleted = 0;
-    const reportSim = () => onProgress(2 + gearTotal + simCompleted, overallTotal);
+    const reportSim = () => onProgress(simCompleted, simTotal);
     const reportSimInner = (completed: number, total: number) =>
-        onProgress(2 + gearTotal + simCompleted + completed / total, overallTotal);
+        onProgress(simCompleted + completed / total, simTotal);
     reportSim();
 
     const measure = (suggestions: GearSuggestion[]) =>
@@ -335,8 +333,9 @@ export interface UseOffFormulaTuningResult {
 /**
  * Owns the tuning run's React state, the `AbortController` that cancels both the optimizer
  * phase and the simulation phase, and the generation counter that stops a superseded or
- * unmounted run from writing state. Copied verbatim from `useSimRerank.ts`, which this mirrors
- * deliberately — that hook's generation/abort handling is already reviewed.
+ * unmounted run from writing state. A run that is no longer the current generation writes
+ * nothing at all, so a superseded run can neither overwrite a newer run's rows nor move it out
+ * of a running status.
  */
 export function useOffFormulaTuning(): UseOffFormulaTuningResult {
     const [state, setState] = useState<TuningState>(INITIAL_STATE);
@@ -391,6 +390,7 @@ export function useOffFormulaTuning(): UseOffFormulaTuningResult {
             if (!isCurrent()) return;
             setState({
                 ...INITIAL_STATE,
+                status: 'error',
                 error: err instanceof Error ? err.message : 'Tuning run failed',
             });
         }

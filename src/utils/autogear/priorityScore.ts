@@ -255,21 +255,23 @@ function calculateShieldSupporterScore(
 /**
  * Sum of normalized violations for all hard-flagged priorities.
  * Returns 0 when all hard requirements are met (combo is "feasible").
- * Normalization divides by the limit (floored at 1) so cross-stat comparisons are meaningful
- * and a limit of exactly 0 — pinning a stat to its floor, e.g. `probePriorities(stat, 0)` —
- * does not divide by zero. A truthy check on `minLimit`/`maxLimit` here would treat a limit of
- * 0 as "no limit", silently turning that pin into a no-op.
+ * Normalization divides by the limit so cross-stat comparisons are meaningful.
+ *
+ * A `minLimit`/`maxLimit` of exactly 0 is read as "no limit", matching
+ * `calculatePriorityScore`'s soft penalties and `GeneticStrategy.computeViolations`. All three
+ * must agree: a limit honoured by one and ignored by another reports a build as infeasible
+ * without ever raising the warning that tells the player why.
  */
 export function calculateHardViolation(stats: BaseStats, priorities: StatPriority[]): number {
     let violation = 0;
     for (const p of priorities) {
         if (!p.hardRequirement) continue;
         const value = resolveLimitStatValue(stats, p.stat);
-        if (p.minLimit !== undefined && value < p.minLimit) {
-            violation += (p.minLimit - value) / Math.max(p.minLimit, 1);
+        if (p.minLimit && value < p.minLimit) {
+            violation += (p.minLimit - value) / p.minLimit;
         }
-        if (p.maxLimit !== undefined && value > p.maxLimit) {
-            violation += (value - p.maxLimit) / Math.max(p.maxLimit, 1);
+        if (p.maxLimit && value > p.maxLimit) {
+            violation += (value - p.maxLimit) / p.maxLimit;
         }
     }
     return violation;

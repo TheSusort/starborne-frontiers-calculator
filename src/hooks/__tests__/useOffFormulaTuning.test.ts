@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useOffFormulaTuning } from '../useOffFormulaTuning';
+import { useOffFormulaTuning, collectTuningRows } from '../useOffFormulaTuning';
 import { bandsBetween } from '../../utils/autogear/simRerank/statBands';
 import type { Ship } from '../../types/ship';
 import type { GearSuggestion } from '../../types/autogear';
@@ -63,6 +63,9 @@ describe('useOffFormulaTuning', () => {
         });
         expect(result.current.state.rows).toEqual([]);
         expect(result.current.state.error).toBeTruthy();
+        // A failed run must not report itself as never-started: 'idle' alongside an error is a
+        // shape no reader can act on.
+        expect(result.current.state.status).toBe('error');
     });
 
     it('runs the optimizer once per band PLUS a baseline and two probes', async () => {
@@ -143,5 +146,44 @@ describe('useOffFormulaTuning', () => {
         expect(result.current.state.status).toBe('idle');
         expect(result.current.state.rows).toEqual([]);
         expect(result.current.state.baseline).toBeUndefined();
+    });
+
+    // Progress is scoped to the current phase, so a reader that shows the phase alongside the
+    // numbers never sees the count run backwards inside one phase. A single run-wide denominator
+    // cannot do this: the band count is unknown until the probes finish.
+    it('reports progress against a total that is constant within each phase', async () => {
+        let call = 0;
+        const runOptimizer = vi.fn().mockImplementation(() => {
+            call++;
+            if (call === 1) return pass(100);
+            if (call === 2) return pass(600);
+            return pass(250);
+        });
+
+        let phase: string = 'probing';
+        const byPhase = new Map<string, Array<{ completed: number; total: number }>>();
+        const result = await collectTuningRows({
+            ...runArgs({ runOptimizer }),
+            signal: new AbortController().signal,
+            onPhase: (next) => {
+                phase = next;
+            },
+            onProgress: (completed, total) => {
+                const entries = byPhase.get(phase) ?? [];
+                entries.push({ completed, total });
+                byPhase.set(phase, entries);
+            },
+        });
+
+        expect(result.status).toBe('done');
+        expect([...byPhase.keys()]).toEqual(['probing', 'gearing', 'simulating']);
+        for (const entries of byPhase.values()) {
+            const totals = new Set(entries.map((e) => e.total));
+            expect(totals.size).toBe(1);
+            for (let i = 1; i < entries.length; i++) {
+                expect(entries[i].completed).toBeGreaterThanOrEqual(entries[i - 1].completed);
+            }
+            expect(entries[entries.length - 1].completed).toBe(entries[0].total);
+        }
     });
 });

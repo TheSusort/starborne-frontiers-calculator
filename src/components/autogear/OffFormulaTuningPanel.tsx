@@ -73,13 +73,14 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
         state.status === 'probing' || state.status === 'gearing' || state.status === 'simulating';
 
     // Hard requirement: a completed table must never survive a context change. ship/configuredRole
-    // /stat come from props the parent controls (a different ship or a different flagged stat can
-    // be selected while this panel stays mounted); seed/runCount are this panel's own inputs.
-    // Every value the run actually depends on is listed — nothing is omitted from this list to
-    // silence a lint warning, so this effect always sees the CURRENT context.
+    // /stat/gatingStat come from props the parent controls (a different ship, a different flagged
+    // stat, or the same stat flagged by a different trigger can be selected while this panel stays
+    // mounted); seed/runCount are this panel's own inputs. Every argument `handleRun` passes is
+    // listed — nothing is omitted from this list to silence a lint warning, so this effect always
+    // sees the CURRENT context.
     useEffect(() => {
         reset();
-    }, [ship.id, configuredRole, stat, seed, runCount, reset]);
+    }, [ship.id, configuredRole, stat, gatingStat, seed, runCount, reset]);
 
     const handleRun = () => {
         void run({

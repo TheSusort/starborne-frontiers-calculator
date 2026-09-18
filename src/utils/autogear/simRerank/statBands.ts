@@ -11,7 +11,7 @@ export interface BandOutcome {
     /** The stat value the optimizer actually reached. */
     landed: number;
     /** False when `landed` falls outside `band` — the inventory cannot satisfy the request, and
-     *  the optimizer returns the nearest build WITHOUT signalling it. */
+     *  the optimizer returns its best infeasible build WITHOUT signalling it. */
     reachable: boolean;
 }
 
@@ -20,10 +20,34 @@ export interface BandOutcome {
  *  largest compute spend in the app. */
 export const BAND_COUNT = 5;
 
-/** Pins a stat to one value. Used to discover the inventory's floor and ceiling: a band nothing
- *  can satisfy lands on the nearest reachable value, which is exactly the bound we want. */
-export function probePriorities(stat: LimitableStat, value: number): StatPriority[] {
+/** The ceiling probe pins the stat here. Every real build falls short of it, so
+ *  `calculatePriorityScore`'s soft minLimit penalty leaves a fitness of
+ *  `roleScore * value / CEILING_PROBE_VALUE` — the search maximises the role score TIMES the
+ *  stat, which pushes the stat up. A trade-off rather than a pure maximiser: a build that scores
+ *  far better on the role formula can still outrank a slightly higher stat value. */
+const CEILING_PROBE_VALUE = 1e9;
+
+/** The floor probe pins the stat here, NOT at 0: `calculatePriorityScore` and
+ *  `calculateHardViolation` both truthy-check the limits, so a limit of 0 is read as "no limit"
+ *  and the probe degrades into an unconstrained run. At 1, every real build overshoots by more
+ *  than 100% of the limit, the penalty drives `Math.max(0, ...)` to exactly 0 for the whole
+ *  population, and `compareIndividuals` falls through to its violation tiebreak — which orders
+ *  by `value - 1`, i.e. by the stat itself, ascending. That tiebreak, not the penalty gradient,
+ *  is what makes this probe an exact minimiser. */
+const FLOOR_PROBE_VALUE = 1;
+
+function pinPriorities(stat: LimitableStat, value: number): StatPriority[] {
     return [{ stat, minLimit: value, maxLimit: value, hardRequirement: true }];
+}
+
+/** Drives the optimizer to the LOWEST value of `stat` its inventory can reach. */
+export function floorProbePriorities(stat: LimitableStat): StatPriority[] {
+    return pinPriorities(stat, FLOOR_PROBE_VALUE);
+}
+
+/** Drives the optimizer towards the HIGHEST value of `stat` its inventory can reach. */
+export function ceilingProbePriorities(stat: LimitableStat): StatPriority[] {
+    return pinPriorities(stat, CEILING_PROBE_VALUE);
 }
 
 /**

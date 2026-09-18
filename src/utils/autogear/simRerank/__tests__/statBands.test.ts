@@ -3,7 +3,8 @@ import {
     bandsBetween,
     bandPriorities,
     classifyOutcome,
-    probePriorities,
+    floorProbePriorities,
+    ceilingProbePriorities,
     BAND_COUNT,
 } from '../statBands';
 
@@ -125,11 +126,34 @@ describe('classifyOutcome', () => {
     });
 });
 
-describe('probePriorities', () => {
-    it('pins a single value, so the optimizer lands on the nearest reachable one', () => {
-        const [priority] = probePriorities('hacking', 0);
-        expect(priority.minLimit).toBe(0);
-        expect(priority.maxLimit).toBe(0);
+describe('floorProbePriorities', () => {
+    // The measured failure this pins: `calculatePriorityScore` and `calculateHardViolation` both
+    // truthy-check the limits, so a probe pinned to 0 contributes no penalty and no violation and
+    // the run returns the UNCONSTRAINED pick. Measured against the real GeneticStrategy, a 0-pin
+    // floor probe and an unlimited run landed on the same value for every stat tried.
+    it('pins to a nonzero limit, which the scorers actually read', () => {
+        const [priority] = floorProbePriorities('hacking');
+        expect(priority.minLimit).toBeTruthy();
+        expect(priority.maxLimit).toBeTruthy();
+        expect(priority.hardRequirement).toBe(true);
+        expect(priority.stat).toBe('hacking');
+    });
+
+    // Every real build overshoots by more than 100% of the limit, which is what drives every
+    // fitness to 0 and hands the ranking to `compareIndividuals`' violation tiebreak. A limit
+    // large enough for a real build to sit within 2x of it would leave a positive fitness and
+    // turn the probe back into a role-score trade-off.
+    it('pins far below anything a real build reaches', () => {
+        const [priority] = floorProbePriorities('hp');
+        expect(priority.maxLimit).toBeLessThan(2);
+    });
+});
+
+describe('ceilingProbePriorities', () => {
+    it('pins far above anything a real build reaches', () => {
+        const [priority] = ceilingProbePriorities('hacking');
+        expect(priority.minLimit).toBeGreaterThan(1e6);
+        expect(priority.maxLimit).toBe(priority.minLimit);
         expect(priority.hardRequirement).toBe(true);
     });
 });
