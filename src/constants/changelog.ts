@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.68.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: compare candidate gear builds through the combat simulator.',
+    'Autogear: flags ships that score off a stat their role ignores.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

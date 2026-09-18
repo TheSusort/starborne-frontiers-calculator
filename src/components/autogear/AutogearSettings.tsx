@@ -34,6 +34,7 @@ import { StatBonusRow } from './StatBonusRow';
 import { FleetBuffForm } from './FleetBuffForm';
 import { FleetBuffRow } from './FleetBuffRow';
 import { SimRerankSection, type SimRerankSectionProps } from './SimRerankSection';
+import { OffFormulaNotice } from './OffFormulaNotice';
 
 type TweakView =
     | { mode: 'list' }
@@ -421,6 +422,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 )}
             </div>
 
+            {selectedShip && (
+                <OffFormulaNotice ship={selectedShip} configuredRole={selectedShipRole} />
+            )}
             {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}
 
             {(selectedShipRole || isCustom) && (
