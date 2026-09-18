@@ -139,10 +139,10 @@ describe('floorProbePriorities', () => {
         expect(priority.stat).toBe('hacking');
     });
 
-    // Every real build overshoots by more than 100% of the limit, which is what drives every
-    // fitness to 0 and hands the ranking to `compareIndividuals`' violation tiebreak. A limit
-    // large enough for a real build to sit within 2x of it would leave a positive fitness and
-    // turn the probe back into a role-score trade-off.
+    // A build at or above twice the limit overshoots by more than 100%, which is what drives
+    // every fitness to 0 and hands the ranking to `compareIndividuals`' violation tiebreak. A
+    // limit large enough for a real build to sit within 2x of it would leave a positive fitness
+    // and turn the probe back into a role-score trade-off.
     it('pins far below anything a real build reaches', () => {
         const [priority] = floorProbePriorities('hp');
         expect(priority.maxLimit).toBeLessThan(2);

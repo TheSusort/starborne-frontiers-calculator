@@ -15,9 +15,10 @@ export interface BandOutcome {
     reachable: boolean;
 }
 
-/** Up to BAND_COUNT bands, plus a baseline pass plus two probes, at roughly 105,000 evaluations
- *  per optimizer pass. This is a COST CEILING, not a tuning constant — raising it multiplies the
- *  largest compute spend in the app. */
+/** Up to BAND_COUNT bands, plus a baseline pass, plus two probes. Each band and the baseline run
+ *  one GA attempt; each probe pins a value no build can satisfy, so it never meets its hard
+ *  requirement and runs every attempt `GeneticStrategy` allows. This is a COST CEILING, not a
+ *  tuning constant — raising it multiplies the largest compute spend in the app. */
 export const BAND_COUNT = 5;
 
 /** The ceiling probe pins the stat here. Every real build falls short of it, so
@@ -29,11 +30,16 @@ const CEILING_PROBE_VALUE = 1e9;
 
 /** The floor probe pins the stat here, NOT at 0: `calculatePriorityScore` and
  *  `calculateHardViolation` both truthy-check the limits, so a limit of 0 is read as "no limit"
- *  and the probe degrades into an unconstrained run. At 1, every real build overshoots by more
- *  than 100% of the limit, the penalty drives `Math.max(0, ...)` to exactly 0 for the whole
- *  population, and `compareIndividuals` falls through to its violation tiebreak — which orders
- *  by `value - 1`, i.e. by the stat itself, ascending. That tiebreak, not the penalty gradient,
- *  is what makes this probe an exact minimiser. */
+ *  and the probe degrades into an unconstrained run.
+ *
+ *  At 1, any build whose value is at least 2 overshoots by more than 100% of the limit, the
+ *  penalty drives `Math.max(0, ...)` to exactly 0, and `compareIndividuals` falls through to its
+ *  violation tiebreak — which orders by `value - 1`, i.e. by the stat itself, ascending. That
+ *  tiebreak, not the penalty gradient, is what makes this probe an exact minimiser wherever the
+ *  whole population sits at 2 or above, which is every flat stat on a real ship. A stat whose
+ *  achievable values are small single digits — `shield` is a per-round percentage — can put
+ *  builds below 2, where fitness stays positive and the probe becomes a role-score trade-off
+ *  like the ceiling probe rather than an exact minimiser. */
 const FLOOR_PROBE_VALUE = 1;
 
 function pinPriorities(stat: LimitableStat, value: number): StatPriority[] {
