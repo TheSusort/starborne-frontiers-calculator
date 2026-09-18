@@ -81,7 +81,7 @@ export function metricSeries(run: CandidateRun, metric: SimMetric): number[] {
  */
 export function suggestedPrimary(role: ShipTypeName | undefined): SimMetric {
     if (matchesRoleCategory(role, ['ATTACKER'])) return 'focusDamageDealt';
-    if (matchesRoleCategory(role, ['DEFENDER'])) return 'focusDamageTaken';
+    if (matchesRoleCategory(role, ['DEFENDER'])) return 'teamDamageDealt';
     if (matchesRoleCategory(role, ['SUPPORTER'])) return 'focusHealingDone';
     return 'teamDamageDealt';
 }
