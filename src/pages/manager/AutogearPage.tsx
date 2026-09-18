@@ -4,7 +4,7 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { arrayMove } from '../../utils/arrayMove';
-import { GearSuggestion } from '../../types/autogear';
+import { GearSuggestion, type StatPriority } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
 import { partitionScoreableShips } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
@@ -18,6 +18,8 @@ import { applySuggestionsToShip } from '../../utils/autogear/simRerank/candidate
 import {
     findOptimalGearForShip,
     useAutogearShipConfigs,
+    buildOffFormulaTuningConfig,
+    runOffFormulaTuningPass,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
@@ -295,6 +297,51 @@ export const AutogearPage: React.FC = () => {
         [
             shipSettings,
             buildSimRerankConfig,
+            inventory,
+            getGearPiece,
+            getUpgradedGearPiece,
+            getEngineeringStatsForShipType,
+            gearToShipMap,
+            getShipById,
+        ]
+    );
+
+    /** Runs one off-formula-tuning optimizer pass (a probe or a band) and reports the tuned
+     *  stat's landed value. `buildOffFormulaTuningConfig`/`runOffFormulaTuningPass` own forcing
+     *  `AutogearAlgorithm.Genetic` and reading `landed` through the run's own `getGearForShip` —
+     *  this closure only supplies the ship's config and the page's inventory/settings, exactly
+     *  like `runAutogearFor` above. */
+    const runOffFormulaTuningOptimizer = useCallback(
+        async (stat: LimitableStat, priorities: StatPriority[]) => {
+            if (!shipSettings) {
+                throw new Error('Measure it requires a ship to be open in Settings');
+            }
+            const config = buildOffFormulaTuningConfig(
+                shipSettings,
+                getShipConfig(shipSettings.id),
+                activeSeason,
+                stat,
+                priorities
+            );
+            return runOffFormulaTuningPass(
+                shipSettings,
+                config,
+                {
+                    inventory,
+                    usedGearIds: new Set<string>(),
+                    getGearPiece,
+                    upgradedGearGetter: getUpgradedGearPiece,
+                    getEngineeringStatsForShipType,
+                    gearToShipMap,
+                    getShipById,
+                },
+                stat
+            );
+        },
+        [
+            shipSettings,
+            getShipConfig,
+            activeSeason,
             inventory,
             getGearPiece,
             getUpgradedGearPiece,
@@ -1800,6 +1847,10 @@ export const AutogearPage: React.FC = () => {
                         resolveShip,
                         runAutogearFor,
                         onApply: handleApplySimRerankRow,
+                    }}
+                    offFormulaTuning={{
+                        deps: combatStatsDeps,
+                        runOptimizer: runOffFormulaTuningOptimizer,
                     }}
                 />
 

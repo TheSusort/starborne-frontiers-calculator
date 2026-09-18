@@ -185,6 +185,12 @@ export interface SeedSetRunOptions {
      *  cancelled before its last seed lands never receives the final call — see
      *  `runSeedSetAsync`'s doc. */
     onProgress?: (completed: number, total: number) => void;
+    /** Called once per completed seed with that seed's full `BattleResult`, before it is
+     *  reduced to a `SeedRunSummary`. Fires for EVERY seed (not throttled like `onProgress`)
+     *  and never after the signal aborts — a caller that needs round-level fields the summary
+     *  drops (`activeDebuffs`, `shieldGranted`, `alive`) reads them here instead of
+     *  re-simulating. */
+    onResult?: (result: BattleResult, seed: number) => void;
 }
 
 /**
@@ -209,7 +215,7 @@ export async function runSeedSetAsync(
     options: SeedSetRunOptions = {}
 ): Promise<SeedSetAggregate | null> {
     assertRunCount(count);
-    const { getGearPiece, signal, onProgress } = options;
+    const { getGearPiece, signal, onProgress, onResult } = options;
 
     // Each `onProgress` call re-renders every consumer of the result it reports (see
     // `SeedSetResults`), so a 1,000-seed run cannot fire one per seed without flooding the
@@ -230,6 +236,9 @@ export async function runSeedSetAsync(
         const result = runSeededBattle(input, seed, getGearPiece);
         if (i === 0) roster = result.roster;
         runs.push(summarizeRun(result, seed));
+        // Same abort guard as `onProgress` below: a cancellation seen at the top of the next
+        // iteration must not have already handed this seed's result to a caller.
+        if (!signal?.aborted) onResult?.(result, seed);
 
         const completed = i + 1;
         if (!signal?.aborted && (completed % reportEvery === 0 || completed === count)) {

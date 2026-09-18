@@ -34,7 +34,7 @@ import { StatBonusRow } from './StatBonusRow';
 import { FleetBuffForm } from './FleetBuffForm';
 import { FleetBuffRow } from './FleetBuffRow';
 import { SimRerankSection, type SimRerankSectionProps } from './SimRerankSection';
-import { OffFormulaNotice } from './OffFormulaNotice';
+import { OffFormulaNotice, type OffFormulaTuningDeps } from './OffFormulaNotice';
 
 type TweakView =
     | { mode: 'list' }
@@ -124,6 +124,9 @@ interface AutogearSettingsProps {
      *  autogear runner — that this component does not own; a caller not ready to supply it
      *  simply does not render the section. */
     simRerank?: Omit<SimRerankSectionProps, 'ship'>;
+    /** Wires the "Measure it" control on `OffFormulaNotice`. Optional for the same reason as
+     *  `simRerank`: it needs inventory/settings this component does not own. */
+    offFormulaTuning?: OffFormulaTuningDeps;
 }
 
 const SetPriorityForm: React.FC<{
@@ -311,6 +314,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemoveFormulaRow,
     onSeedFormula,
     simRerank,
+    offFormulaTuning,
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -423,7 +427,11 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShip && (
-                <OffFormulaNotice ship={selectedShip} configuredRole={selectedShipRole} />
+                <OffFormulaNotice
+                    ship={selectedShip}
+                    configuredRole={selectedShipRole}
+                    tuning={offFormulaTuning}
+                />
             )}
             {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}
 

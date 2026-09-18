@@ -181,6 +181,32 @@ describe('calculateHardViolation', () => {
         ];
         expect(calculateHardViolation(stats, priorities)).toBeCloseTo(1.0, 10);
     });
+
+    // Regression: a truthy check on minLimit/maxLimit treats a limit of exactly 0 as "no
+    // limit", which silently turns `probePriorities(stat, 0)` — used to find a stat's
+    // achievable floor — into a no-op with zero violation for any value.
+    it('enforces a maxLimit pinned to exactly 0', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'hacking', maxLimit: 0, hardRequirement: true },
+        ];
+        expect(calculateHardViolation({ ...stats, hacking: 500 }, priorities)).toBe(500);
+    });
+
+    it('reports no violation when a maxLimit of 0 is actually met', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'hacking', maxLimit: 0, hardRequirement: true },
+        ];
+        expect(calculateHardViolation({ ...stats, hacking: 0 }, priorities)).toBe(0);
+    });
+
+    it('enforces a minLimit pinned to exactly 0 without dividing by zero', () => {
+        // Every LimitableStat is non-negative, so value < 0 never actually fires — this
+        // pins the normalization behaviour (not Infinity/NaN) rather than a live violation.
+        const priorities: StatPriority[] = [
+            { stat: 'hacking', minLimit: 0, hardRequirement: true },
+        ];
+        expect(calculateHardViolation({ ...stats, hacking: 500 }, priorities)).toBe(0);
+    });
 });
 
 describe('evictOldestIfFull', () => {

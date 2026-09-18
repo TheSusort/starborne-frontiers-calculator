@@ -9,13 +9,17 @@ import type {
     CustomFormula,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import type { EngineeringStat } from '../../types/stats';
+import type { EngineeringStat, LimitableStat } from '../../types/stats';
 import type { ArenaSeason } from '../../types/arena';
+import { shipFinalStats } from '../ship/combatStats';
 import { AutogearAlgorithm, type AutogearProgress, type AutogearResult } from './AutogearStrategy';
 import { getAutogearStrategy } from './getStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
 import { filterTopImplantsPerSlot } from './implantFilter';
 import { getMatchingModifiers } from './arenaModifiers';
+import { clearScoreCache } from './scoring';
+import { resolveLimitStatValue } from './priorityScore';
+import { applySuggestionsToShip } from './simRerank/candidateShip';
 
 /** Every field a single ship's optimizer pass needs to decide WHAT gear counts and HOW it is
  *  scored. Deliberately excludes anything about other ships in a batch — `usedGearIds` on
@@ -345,4 +349,71 @@ export async function findOptimalGearForShip(
     );
 
     return { result, getGearForShip };
+}
+
+/**
+ * The optimizer config for one off-formula-tuning pass over `stat`: the ship's own
+ * configured-role formula (via `buildSimRerankShipConfig`'s own-role branch — this tuning run
+ * never compares roles, only bands one stat inside the role the ship already scores under),
+ * plus `statConstraint` (a probe or band's hard requirement on `stat`), with the algorithm
+ * forced to Genetic regardless of what the player has selected — `hardRequirement` is honoured
+ * only by `GeneticStrategy` (`calculateHardViolation` is called there and nowhere else), so a
+ * band run under any other strategy would silently degrade to a soft penalty that does not hold
+ * a build inside the range.
+ *
+ * Drops any of the ship's own priorities on `stat` before appending `statConstraint`: two
+ * priorities on the same stat would fight each other, and the tuning run's whole premise is
+ * that THIS pass's bound on `stat` is authoritative.
+ */
+export function buildOffFormulaTuningConfig(
+    ship: Ship,
+    shipConfig: AutogearShipConfig,
+    activeSeason: ArenaSeason | null,
+    stat: LimitableStat,
+    statConstraint: StatPriority[]
+): ShipOptimizerConfig {
+    const configuredRole = shipConfig.shipRole ?? ship.type;
+    const base = buildSimRerankShipConfig(ship, configuredRole, shipConfig, activeSeason);
+    return {
+        ...base,
+        selectedAlgorithm: AutogearAlgorithm.Genetic,
+        statPriorities: [
+            ...base.statPriorities.filter((priority) => priority.stat !== stat),
+            ...statConstraint,
+        ],
+    };
+}
+
+export interface OffFormulaTuningPassResult {
+    suggestions: AutogearResult['suggestions'];
+    /** The value `stat` actually resolves to on the ship wearing `suggestions`, read through
+     *  this run's own `getGearForShip` (not the raw `getGearPiece`) — the same rule
+     *  `ShipOptimizerRun.getGearForShip` documents for any post-run stat read. */
+    landed: number;
+}
+
+/**
+ * Run one off-formula-tuning optimizer pass and report the tuned stat's landed value.
+ *
+ * Clears the shared score cache first: `calculateTotalScore`'s cache key does not include
+ * `statPriorities` (only equipment/role/bonuses/arena/fleet/formula), so back-to-back passes
+ * for the same ship under the same role but a DIFFERENT `stat` constraint — exactly what a
+ * tuning run's probes and bands are — would otherwise read stale scores left by the previous
+ * pass's constraint. `runAutogearFor` in `AutogearPage.tsx` clears the same cache for the same
+ * reason.
+ */
+export async function runOffFormulaTuningPass(
+    ship: Ship,
+    config: ShipOptimizerConfig,
+    deps: ShipOptimizerDeps,
+    stat: LimitableStat
+): Promise<OffFormulaTuningPassResult> {
+    clearScoreCache();
+    const run = await findOptimalGearForShip(ship, config, deps);
+    const built = applySuggestionsToShip(ship, run.result.suggestions);
+    const finalStats = shipFinalStats(built, {
+        getGearPiece: run.getGearForShip,
+        getEngineeringStatsForShipType: deps.getEngineeringStatsForShipType,
+    });
+    return { suggestions: run.result.suggestions, landed: resolveLimitStatValue(finalStats, stat) };
 }

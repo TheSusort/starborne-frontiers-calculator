@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.68.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: compare candidate gear builds through the combat simulator.',
     'Autogear: flags ships that score off a stat their role ignores.',
+    'Autogear: measure how a flagged stat changes a ship in real fights.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

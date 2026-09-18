@@ -1726,6 +1726,30 @@ const DocumentationPage: React.FC = () => {
                                         contributes just its one best build to the table.
                                     </p>
                                 </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold">Measure It</h4>
+                                    <p className="text-theme-text">
+                                        Some ships have a passive or skill that scales off a stat
+                                        their configured role&apos;s formula doesn&apos;t reward —
+                                        Settings flags this with a note under the role selector. Its{' '}
+                                        <strong>Measure it</strong> button opens a panel that finds
+                                        the stat&apos;s achievable range in your inventory, splits
+                                        it into bands, gears each band with the real optimizer, and
+                                        replays every resulting build against three sparring
+                                        opponents to score the role&apos;s actual objective — not
+                                        the formula&apos;s proxy for it.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        The run always uses the Genetic algorithm, regardless of
+                                        which one you have selected elsewhere — it&apos;s the only
+                                        one that can hold a band in place. A band your inventory
+                                        cannot reach is marked{' '}
+                                        <strong>not reachable with your gear</strong> rather than
+                                        shown as a result. This panel only measures; it does not
+                                        change your ship&apos;s gear.
+                                    </p>
+                                </div>
                             </div>
 
                             <h3 className="text-xl font-semibold mt-6 mb-2">
