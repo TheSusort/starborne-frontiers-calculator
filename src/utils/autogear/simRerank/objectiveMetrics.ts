@@ -1,11 +1,6 @@
 import type { BattleResult } from '../../calculators/battleSimulator';
 import type { ObjectiveMetric } from './roleObjectives';
 
-/** True for every actor on the player side, including the reserved bare id `'attacker'` that
- *  player index 0 fights under. Only enemy actors carry the `e:` prefix, so this reads as "not an
- *  enemy" rather than "starts with `p:`" — the latter silently drops index 0. */
-const isPlayerActor = (actorId: string): boolean => !actorId.startsWith('e:');
-
 /** `ShipRoundState.damageDealt` / `damageTaken` / `healingDone` / `shieldGranted` are PER-ROUND
  *  rates, not running cumulatives, so a fight total is a sum across rounds
  *  (`seededRuns.ts` documents the same rule for its own aggregation). */
@@ -52,7 +47,7 @@ export function objectiveSeries(
             let playerTotal = 0;
             for (const round of result.rounds) {
                 for (const ship of round.ships) {
-                    if (isPlayerActor(ship.actorId)) playerTotal += ship.damageTaken;
+                    if (ship.side !== 'enemy') playerTotal += ship.damageTaken;
                 }
             }
             // A player side that never takes damage has no share to report, and 0/0 must not
@@ -66,13 +61,19 @@ export function objectiveSeries(
             let enemyRounds = 0;
             for (const round of result.rounds) {
                 for (const ship of round.ships) {
-                    if (isPlayerActor(ship.actorId)) continue;
+                    if (ship.side !== 'enemy') continue;
+                    // Nothing clears a dead actor's `activeDebuffs` — it freezes at whatever it
+                    // held at death and decays on the normal schedule, so a corpse's rows carry
+                    // no signal about the debuffer's performance and are excluded from both the
+                    // numerator and the denominator.
+                    if (!ship.alive) continue;
                     enemyRounds++;
                     if (ship.activeDebuffs.length > 0) debuffedEnemyRounds++;
                 }
             }
-            // No enemy-rounds to sample (e.g. a fight with no rounds recorded) reports no
-            // uptime rather than NaN.
+            // No living enemy-rounds to sample reports no uptime rather than NaN. This also
+            // catches a round-1 total wipe (every enemy dead in round 1, so zero living
+            // enemy-rounds survive the gate above) — a known blind spot of the metric, not a bug.
             if (enemyRounds === 0) return 0;
             return debuffedEnemyRounds / enemyRounds;
         }

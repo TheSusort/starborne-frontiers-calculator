@@ -6,7 +6,7 @@ const round = (
     ships: Array<
         Partial<{
             actorId: string;
-            side: string;
+            side: 'player' | 'enemy';
             damageDealt: number;
             damageTaken: number;
             healingDone: number;
@@ -86,6 +86,22 @@ describe('objectiveSeries', () => {
         // both rounds, so a denominator or numerator that folds player rows in would report
         // 3/6 or 5/4 instead — this fails under either mistake.
         expect(objectiveSeries(r, 'attacker', 'enemyDebuffUptime')).toBeCloseTo(0.75);
+    });
+
+    it('excludes a DEAD enemy-round from both the numerator and the denominator', () => {
+        const r = result([
+            round([
+                { actorId: 'e:a:0', side: 'enemy', alive: true, activeDebuffs: ['Burn'] },
+                { actorId: 'e:b:1', side: 'enemy', alive: true, activeDebuffs: [] },
+                // Dead but still carries a stale debuff from before it died — nothing clears
+                // `activeDebuffs` on death, so this row must not count either way.
+                { actorId: 'e:c:2', side: 'enemy', alive: false, activeDebuffs: ['Burn'] },
+            ]),
+        ]);
+        // 1 debuffed living enemy-round out of 2 living enemy-rounds = 0.5. Counting every row
+        // with no alive gate at all gives 2/3; gating only the numerator gives 1/3 — this
+        // fixture fails under both of those mistakes.
+        expect(objectiveSeries(r, 'attacker', 'enemyDebuffUptime')).toBeCloseTo(0.5);
     });
 
     it('does not count PLAYER debuffs as enemy uptime', () => {
