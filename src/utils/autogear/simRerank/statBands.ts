@@ -27,14 +27,17 @@ export function probePriorities(stat: LimitableStat, value: number): StatPriorit
 }
 
 /**
- * Splits `[floor, ceiling]` into up to `BAND_COUNT` contiguous integer bands.
+ * Splits `[floor, ceiling]` into up to `BAND_COUNT` contiguous bands.
  *
  * Each interior boundary is computed once and shared by the band below (as `max`) and the band
- * above (as `min`), so bands always touch exactly — there is no integer a real build could land
- * on that falls between two bands. When the range holds fewer distinct integers than
- * `BAND_COUNT` (e.g. a 3-point range split five ways), consecutive boundaries round to the same
- * integer; those duplicates collapse into one boundary rather than producing a zero-width band,
- * which would otherwise cost a full optimizer pass for a band identical to its neighbour.
+ * above (as `min`), so bands always touch exactly — there is no value a real build could land on
+ * that falls between two bands. The first and last boundaries are the exact `floor`/`ceiling`,
+ * not rounded approximations, so a build sitting at either edge of the achievable range always
+ * lands inside a band instead of just outside it. Interior boundaries are rounded to land on
+ * values a real build can reach; a boundary is kept only when it lands strictly between the
+ * previous kept boundary and `ceiling`, so a boundary that rounds below the (possibly fractional)
+ * `floor`, or that collides with or overshoots a neighbour, is dropped rather than producing an
+ * inverted (`min > max`) or degenerate (`min === max`) band.
  */
 export function bandsBetween(floor: number, ceiling: number): StatBand[] {
     if (floor > ceiling) {
@@ -43,19 +46,15 @@ export function bandsBetween(floor: number, ceiling: number): StatBand[] {
     if (floor === ceiling) return [{ min: floor, max: ceiling }];
 
     const width = (ceiling - floor) / BAND_COUNT;
-    const boundaries: number[] = [];
-    for (let i = 0; i <= BAND_COUNT; i++) {
-        // The first and last boundaries are the exact floor/ceiling, not rounded
-        // approximations, so a build sitting at either edge of the achievable range always
-        // lands inside a band instead of just outside it.
-        let boundary: number;
-        if (i === 0) boundary = floor;
-        else if (i === BAND_COUNT) boundary = ceiling;
-        else boundary = Math.round(floor + width * i);
-        if (boundaries.length === 0 || boundary !== boundaries[boundaries.length - 1]) {
+    const boundaries: number[] = [floor];
+    for (let i = 1; i < BAND_COUNT; i++) {
+        const boundary = Math.round(floor + width * i);
+        const last = boundaries[boundaries.length - 1];
+        if (boundary > last && boundary < ceiling) {
             boundaries.push(boundary);
         }
     }
+    boundaries.push(ceiling);
 
     const bands: StatBand[] = [];
     for (let i = 1; i < boundaries.length; i++) {

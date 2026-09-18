@@ -58,6 +58,43 @@ describe('bandsBetween', () => {
         expect(bands[0].min).toBe(100.4);
         expect(bands[bands.length - 1].max).toBe(600.5);
     });
+
+    it('never inverts a band on a narrow fractional range', () => {
+        // Math.round(100.4 + tiny) rounds DOWN to 100, which sits below the unrounded floor of
+        // 100.4 next to it in the boundary list. A boundary that would fall at or below the
+        // previous boundary is dropped instead of kept, so no band can have min > max.
+        const bands = bandsBetween(100.4, 100.6);
+        expect(bands).toEqual([{ min: 100.4, max: 100.6 }]);
+    });
+
+    it('collapses to a single band when floor and ceiling are equal and fractional', () => {
+        expect(bandsBetween(100.5, 100.5)).toEqual([{ min: 100.5, max: 100.5 }]);
+    });
+
+    it('never inverts a band across a spread of narrow fractional ranges', () => {
+        const ranges: [number, number][] = [
+            [100.4, 100.6],
+            [100.1, 100.9],
+            [99.5, 100.5],
+            [100.2, 101.8],
+            [100.49, 100.51],
+            [0.1, 0.3],
+            [100.5, 103.5],
+        ];
+        for (const [floor, ceiling] of ranges) {
+            const bands = bandsBetween(floor, ceiling);
+            expect(bands.length).toBeGreaterThan(0);
+            expect(bands.length).toBeLessThanOrEqual(BAND_COUNT);
+            expect(bands[0].min).toBe(floor);
+            expect(bands[bands.length - 1].max).toBe(ceiling);
+            for (const band of bands) {
+                expect(band.min).toBeLessThan(band.max);
+            }
+            for (let i = 1; i < bands.length; i++) {
+                expect(bands[i].min).toBe(bands[i - 1].max);
+            }
+        }
+    });
 });
 
 describe('bandPriorities', () => {
