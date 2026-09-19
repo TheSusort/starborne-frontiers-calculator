@@ -58,6 +58,7 @@ const props = (overrides: Record<string, unknown> = {}) => ({
     finding: finding('security'),
     deps: { getGearPiece: () => undefined, getEngineeringStatsForShipType: () => undefined },
     runOptimizer: vi.fn(),
+    statBounds: () => ({ floor: 0, ceiling: 100 }),
     ...overrides,
 });
 

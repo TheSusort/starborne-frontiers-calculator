@@ -10,51 +10,17 @@ export interface BandOutcome {
     band: StatBand;
     /** The stat value the optimizer actually reached. */
     landed: number;
-    /** False when `landed` falls outside `band` — the inventory cannot satisfy the request, and
-     *  the optimizer returns its best infeasible build WITHOUT signalling it. */
-    reachable: boolean;
+    /** False when `landed` falls outside `band`. Not a failure: the band is a preference, so
+     *  this says the optimizer PREFERRED to sit outside it — see `bandPriorities`. */
+    withinBand: boolean;
 }
 
-/** Up to BAND_COUNT bands, plus a baseline pass, plus two probes. Each band and the baseline run
- *  one GA attempt; each probe pins a value no build can satisfy, so it never meets its hard
- *  requirement and runs every attempt `GeneticStrategy` allows. This is a COST CEILING, not a
- *  tuning constant — raising it multiplies the largest compute spend in the app. */
+/** Up to BAND_COUNT bands, plus a baseline pass — one optimizer pass each, and the whole cost of
+ *  a tuning run's gearing phase. The achievable range itself is read off the inventory
+ *  (`statBoundsFromInventory`) rather than searched for, so no pass is spent finding it. This is
+ *  a COST CEILING, not a tuning constant — raising it multiplies the largest compute spend in
+ *  the app. */
 export const BAND_COUNT = 5;
-
-/** The ceiling probe pins the stat here. Every real build falls short of it, so
- *  `calculatePriorityScore`'s soft minLimit penalty leaves a fitness of
- *  `roleScore * value / CEILING_PROBE_VALUE` — the search maximises the role score TIMES the
- *  stat, which pushes the stat up. A trade-off rather than a pure maximiser: a build that scores
- *  far better on the role formula can still outrank a slightly higher stat value. */
-const CEILING_PROBE_VALUE = 1e9;
-
-/** The floor probe pins the stat here, NOT at 0: `calculatePriorityScore` and
- *  `calculateHardViolation` both truthy-check the limits, so a limit of 0 is read as "no limit"
- *  and the probe degrades into an unconstrained run.
- *
- *  At 1, any build whose value is at least 2 overshoots by more than 100% of the limit, the
- *  penalty drives `Math.max(0, ...)` to exactly 0, and `compareIndividuals` falls through to its
- *  violation tiebreak — which orders by `value - 1`, i.e. by the stat itself, ascending. That
- *  tiebreak, not the penalty gradient, is what makes this probe an exact minimiser wherever the
- *  whole population sits at 2 or above, which is every flat stat on a real ship. A stat whose
- *  achievable values are small single digits — `shield` is a per-round percentage — can put
- *  builds below 2, where fitness stays positive and the probe becomes a role-score trade-off
- *  like the ceiling probe rather than an exact minimiser. */
-const FLOOR_PROBE_VALUE = 1;
-
-function pinPriorities(stat: LimitableStat, value: number): StatPriority[] {
-    return [{ stat, minLimit: value, maxLimit: value, hardRequirement: true }];
-}
-
-/** Drives the optimizer to the LOWEST value of `stat` its inventory can reach. */
-export function floorProbePriorities(stat: LimitableStat): StatPriority[] {
-    return pinPriorities(stat, FLOOR_PROBE_VALUE);
-}
-
-/** Drives the optimizer towards the HIGHEST value of `stat` its inventory can reach. */
-export function ceilingProbePriorities(stat: LimitableStat): StatPriority[] {
-    return pinPriorities(stat, CEILING_PROBE_VALUE);
-}
 
 /**
  * Splits `[floor, ceiling]` into up to `BAND_COUNT` contiguous bands.
@@ -93,13 +59,23 @@ export function bandsBetween(floor: number, ceiling: number): StatBand[] {
     return bands;
 }
 
-/** `hardRequirement` is read only by `calculateHardViolation`, which only `GeneticStrategy`
- *  calls. Under every other strategy these degrade to a soft penalty that will not hold a build
- *  inside the range — banding requires running Genetic. */
+/**
+ * A band is a SOFT limit — deliberately no `hardRequirement`.
+ *
+ * `hardRequirement` states a bound the player already knows and is certain about ("this ship
+ * must reach 152 speed"). A tuning run is the opposite situation: nobody knows where the bound
+ * belongs, which is the thing being measured. Pinning a guess as a hard requirement would assert
+ * a certainty the run does not have and make the optimizer fail outright rather than report what
+ * it preferred.
+ *
+ * So the band biases the search and the optimizer may overrule it. Seeing WHERE it overruled the
+ * band, and by how much, is part of what the table is for — that is why `classifyOutcome`
+ * reports a landed value outside the band as a result rather than an error.
+ */
 export function bandPriorities(stat: LimitableStat, band: StatBand): StatPriority[] {
-    return [{ stat, minLimit: band.min, maxLimit: band.max, hardRequirement: true }];
+    return [{ stat, minLimit: band.min, maxLimit: band.max }];
 }
 
 export function classifyOutcome(band: StatBand, landed: number): BandOutcome {
-    return { band, landed, reachable: landed >= band.min && landed <= band.max };
+    return { band, landed, withinBand: landed >= band.min && landed <= band.max };
 }

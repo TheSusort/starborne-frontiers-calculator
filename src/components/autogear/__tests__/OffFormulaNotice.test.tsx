@@ -23,7 +23,11 @@ vi.mock('../OffFormulaTuningPanel', () => ({
 
 const ship = { id: 's', name: 'Chakara', type: 'ATTACKER' } as unknown as Ship;
 const mocked = vi.mocked(detectOffFormulaStats);
-const tuning = { deps: {} as never, runOptimizer: vi.fn() };
+const tuning = {
+    deps: {} as never,
+    runOptimizer: vi.fn(),
+    statBounds: () => ({ floor: 0, ceiling: 100 }),
+};
 
 describe('OffFormulaNotice', () => {
     it('names the stat and the role formula that ignores it', () => {

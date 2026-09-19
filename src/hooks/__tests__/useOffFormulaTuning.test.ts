@@ -37,6 +37,7 @@ const runArgs = (over: Record<string, unknown> = {}) => ({
     seed: 42,
     runCount: 2,
     runOptimizer: vi.fn(),
+    statBounds: () => ({ floor: 100, ceiling: 600 }),
     deps: { getGearPiece: () => undefined, getEngineeringStatsForShipType: () => undefined },
     ...over,
 });
@@ -68,48 +69,54 @@ describe('useOffFormulaTuning', () => {
         expect(result.current.state.status).toBe('error');
     });
 
-    it('runs the optimizer once per band PLUS a baseline and two probes', async () => {
-        // Call-order based: 1st call is the floor probe, 2nd the ceiling probe, everything
-        // after is the baseline plus one pass per band — matching collectTuningRows' own
-        // sequencing. Floor=100, ceiling=600 divides evenly into BAND_COUNT bands with no
-        // dedup collapsing, so the expected count is derived from the SAME bandsBetween call
-        // the hook makes, not hard-coded — a implementation that never actually probes (and
-        // so never varies floor/ceiling) cannot make this pass by accident.
-        let call = 0;
-        const runOptimizer = vi.fn().mockImplementation(() => {
-            call++;
-            if (call === 1) return pass(100);
-            if (call === 2) return pass(600);
-            return pass(250);
-        });
+    // The range comes from `statBounds`, never from an optimizer pass: every pass the run
+    // spends is a band or the baseline. The expected count is derived from the SAME
+    // bandsBetween call the hook makes, so a run that banded some other range cannot pass by
+    // coincidence.
+    it('runs the optimizer once per band PLUS a baseline, and never to find the range', async () => {
+        const runOptimizer = vi.fn().mockImplementation(() => pass(250));
+        const statBounds = vi.fn().mockReturnValue({ floor: 100, ceiling: 600 });
         const { result } = renderHook(() => useOffFormulaTuning());
         await act(async () => {
-            await result.current.run(runArgs({ runOptimizer }));
+            await result.current.run(runArgs({ runOptimizer, statBounds }));
         });
         await waitFor(() => expect(result.current.state.status).toBe('done'));
 
         const expectedBandPasses = bandsBetween(100, 600).length;
-        expect(runOptimizer).toHaveBeenCalledTimes(2 + 1 + expectedBandPasses);
+        expect(runOptimizer).toHaveBeenCalledTimes(1 + expectedBandPasses);
+        expect(statBounds).toHaveBeenCalledTimes(1);
     });
 
-    it('marks a row unreachable when the optimizer lands outside its band', async () => {
-        let call = 0;
-        const runOptimizer = vi.fn().mockImplementation(() => {
-            call++;
-            if (call === 1) return pass(100);
-            if (call === 2) return pass(600);
-            // Every gearing pass beyond the probes (baseline + every band) lands on the same
-            // value, which is inside only one of the five bands bandsBetween(100, 600) produces.
-            return pass(440);
+    // Non-vacuity for the case above: the band edges must come from what `statBounds` returned,
+    // not from a constant. A different range must produce different bands.
+    it('bands the range statBounds reports, not a fixed one', async () => {
+        const runOptimizer = vi.fn().mockImplementation(() => pass(250));
+        const { result } = renderHook(() => useOffFormulaTuning());
+        await act(async () => {
+            await result.current.run(
+                runArgs({ runOptimizer, statBounds: () => ({ floor: 1000, ceiling: 2000 }) })
+            );
         });
+        await waitFor(() => expect(result.current.state.status).toBe('done'));
+
+        const rows = result.current.state.rows;
+        expect(rows[0].band.min).toBe(1000);
+        expect(rows[rows.length - 1].band.max).toBe(2000);
+    });
+
+    // A soft band does not hold, so a pass can land outside the band it was given. Every
+    // gearing pass lands on the same value here, which is inside exactly one of the five bands
+    // bandsBetween(100, 600) produces.
+    it('marks a row outside its band when the optimizer preferred a value elsewhere', async () => {
+        const runOptimizer = vi.fn().mockImplementation(() => pass(440));
         const { result } = renderHook(() => useOffFormulaTuning());
         await act(async () => {
             await result.current.run(runArgs({ runOptimizer }));
         });
         await waitFor(() => expect(result.current.state.status).toBe('done'));
 
-        expect(result.current.state.rows.some((r) => !r.reachable)).toBe(true);
-        expect(result.current.state.rows.some((r) => r.reachable)).toBe(true);
+        expect(result.current.state.rows.some((r) => !r.withinBand)).toBe(true);
+        expect(result.current.state.rows.some((r) => r.withinBand)).toBe(true);
     });
 
     it('stops on cancel without writing rows', async () => {
@@ -149,18 +156,12 @@ describe('useOffFormulaTuning', () => {
     });
 
     // Progress is scoped to the current phase, so a reader that shows the phase alongside the
-    // numbers never sees the count run backwards inside one phase. A single run-wide denominator
-    // cannot do this: the band count is unknown until the probes finish.
+    // numbers never sees the count run backwards inside one phase. Gearing and simulating count
+    // different things, so one run-wide denominator would have to change meaning mid-run.
     it('reports progress against a total that is constant within each phase', async () => {
-        let call = 0;
-        const runOptimizer = vi.fn().mockImplementation(() => {
-            call++;
-            if (call === 1) return pass(100);
-            if (call === 2) return pass(600);
-            return pass(250);
-        });
+        const runOptimizer = vi.fn().mockImplementation(() => pass(250));
 
-        let phase: string = 'probing';
+        let phase: string = 'gearing';
         const byPhase = new Map<string, Array<{ completed: number; total: number }>>();
         const result = await collectTuningRows({
             ...runArgs({ runOptimizer }),
@@ -176,7 +177,7 @@ describe('useOffFormulaTuning', () => {
         });
 
         expect(result.status).toBe('done');
-        expect([...byPhase.keys()]).toEqual(['probing', 'gearing', 'simulating']);
+        expect([...byPhase.keys()]).toEqual(['gearing', 'simulating']);
         for (const entries of byPhase.values()) {
             const totals = new Set(entries.map((e) => e.total));
             expect(totals.size).toBe(1);

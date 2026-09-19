@@ -346,9 +346,9 @@ describe('findOptimalGearForShip', () => {
 });
 
 describe('buildOffFormulaTuningConfig', () => {
-    // Hard requirement #3: hardRequirement is honoured only by GeneticStrategy, so a band that
-    // does not force Genetic silently degrades to a soft penalty that will not hold a build
-    // inside the range. Deleting the forcing line in buildOffFormulaTuningConfig fails this.
+    // A measurement run must not report numbers that depend on which algorithm the player has
+    // selected elsewhere, and Genetic is the strategy whose results are worth measuring.
+    // Deleting the forcing line in buildOffFormulaTuningConfig fails this.
     it('forces Genetic even when the ship is configured for a different algorithm', () => {
         const shipConfig = {
             ...defaultAutogearShipConfig('ATTACKER'),

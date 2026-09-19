@@ -1,19 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
+    offFormulaStatBounds,
     runOffFormulaTuningPass,
     type ShipOptimizerConfig,
     type ShipOptimizerDeps,
 } from '../../runShipOptimizer';
-import { floorProbePriorities, ceilingProbePriorities } from '../statBands';
+import { bandPriorities } from '../statBands';
 import { AutogearAlgorithm } from '../../AutogearStrategy';
 import type { Ship } from '../../../../types/ship';
 import type { GearPiece } from '../../../../types/gear';
-import type { StatPriority } from '../../../../types/autogear';
 import type { LimitableStat } from '../../../../types/stats';
 
-// The probes are only meaningful against the REAL GeneticStrategy: their whole mechanism is how
-// `calculatePriorityScore`'s penalties and `compareIndividuals`' tiebreak rank a population. A
-// mocked strategy cannot fail any assertion here.
+// The bounds are checked against the REAL optimizer and the REAL stat resolver: the whole claim
+// is that no build this inventory permits falls outside them, which a mocked strategy or a
+// hand-computed stat block cannot test.
 
 const SLOT_MAIN: Array<[string, string, number]> = [
     ['weapon', 'attack', 1000],
@@ -108,34 +108,51 @@ const deps = {
 
 const stat: LimitableStat = 'hacking';
 
-const landed = async (priorities: StatPriority[]): Promise<number> =>
-    (await runOffFormulaTuningPass(ship, { ...config, statPriorities: priorities }, deps, stat))
-        .landed;
+describe('achievable-range bounds against the real inventory', () => {
+    it('reports exactly the closed-form floor and ceiling the fixture admits', () => {
+        const bounds = offFormulaStatBounds(ship, config, deps, stat);
+        expect(bounds.floor).toBe(FLOOR);
+        expect(bounds.ceiling).toBe(CEILING);
+    });
 
-describe('achievable-range probes against the real GeneticStrategy', () => {
-    it('the floor probe reaches the inventory minimum, which a 0-pinned probe cannot', async () => {
-        const unconstrained = await landed([]);
-        const floor = await landed(floorProbePriorities(stat));
-        // A limit of exactly 0 is "no limit" to every scorer in the chain, so this probe cannot
-        // constrain anything. It is the instrument check: it proves the fixture is capable of
-        // reporting "found nothing", which is what the floor probe used to do.
-        const zeroPinned = await landed([
-            { stat, minLimit: 0, maxLimit: 0, hardRequirement: true },
-        ]);
+    // The bound must be read off the pool the RUN may draw from, not the raw inventory. Locking
+    // every high-hacking piece onto another ship removes them from this ship's pool, and the
+    // ceiling has to fall with it.
+    it('follows the eligible pool, not the raw inventory', () => {
+        const owner = { id: 'other', equipmentLocked: true } as unknown as Ship;
+        const narrowed: ShipOptimizerDeps = {
+            ...deps,
+            gearToShipMap: new Map(
+                inventory.filter((g) => g.id.endsWith('-high')).map((g) => [g.id, 'other'])
+            ),
+            getShipById: () => owner,
+        };
+        const bounds = offFormulaStatBounds(ship, config, narrowed, stat);
+        expect(bounds.ceiling).toBeLessThan(CEILING);
+        expect(bounds.floor).toBe(FLOOR);
+    });
 
-        expect(floor).toBe(FLOOR);
-        expect(unconstrained).toBeGreaterThan(FLOOR);
-        expect(zeroPinned).toBe(unconstrained);
-    }, 60_000);
+    // The point of the bounds: every band lies inside them, and a real optimizer run under any
+    // band lands inside them too. A bound the optimizer can walk outside would band a range
+    // that does not describe the search.
+    it('brackets what the real optimizer reaches under every band', async () => {
+        const bounds = offFormulaStatBounds(ship, config, deps, stat);
+        const unconstrained = await runOffFormulaTuningPass(ship, config, deps, stat);
+        expect(unconstrained.landed).toBeGreaterThanOrEqual(bounds.floor);
+        expect(unconstrained.landed).toBeLessThanOrEqual(bounds.ceiling);
 
-    it('the ceiling probe drives the stat above the unconstrained pick', async () => {
-        const unconstrained = await landed([]);
-        const ceiling = await landed(ceilingProbePriorities(stat));
-
-        // Only an inequality: the ceiling probe leaves a positive fitness of
-        // `roleScore * value / limit`, so it maximises the role score TIMES the stat and can
-        // stop short of the true maximum when the role formula pulls the other way.
-        expect(ceiling).toBeGreaterThan(unconstrained);
-        expect(ceiling).toBeLessThanOrEqual(CEILING);
+        for (const band of [
+            { min: bounds.floor, max: bounds.floor },
+            { min: bounds.ceiling, max: bounds.ceiling },
+        ]) {
+            const run = await runOffFormulaTuningPass(
+                ship,
+                { ...config, statPriorities: bandPriorities(stat, band) },
+                deps,
+                stat
+            );
+            expect(run.landed).toBeGreaterThanOrEqual(bounds.floor);
+            expect(run.landed).toBeLessThanOrEqual(bounds.ceiling);
+        }
     }, 60_000);
 });

@@ -20,6 +20,7 @@ import { getMatchingModifiers } from './arenaModifiers';
 import { clearScoreCache } from './scoring';
 import { resolveLimitStatValue } from './priorityScore';
 import { applySuggestionsToShip } from './simRerank/candidateShip';
+import { statBoundsFromInventory, type StatBounds } from './simRerank/statBounds';
 
 /** Every field a single ship's optimizer pass needs to decide WHAT gear counts and HOW it is
  *  scored. Deliberately excludes anything about other ships in a batch — `usedGearIds` on
@@ -206,32 +207,22 @@ export function useAutogearShipConfigs(
 }
 
 /**
- * Runs one ship through its configured autogear strategy: filters the shared inventory down to
- * what this ship may equip, builds the fast/slow scoring views from that one filtered list (see
- * `gearScoringInputs.ts` for why both views must come from the same source), and calls the
- * strategy's `findOptimalGear`.
+ * The pieces one ship's optimizer pass may draw from: the shared inventory narrowed by every
+ * eligibility rule `config` expresses — implant handling, gear already claimed by an earlier
+ * ship in the batch, excluded sets, calibration, equipped-elsewhere and unleveled gear.
  *
- * Every caller gets the same inventory-eligibility rules applied in the same order and the same
- * argument order forwarded to the strategy — a caller cannot special-case either without going
- * through `config`.
+ * Exported because anything reasoning about what a run CAN reach — the off-formula tuning run's
+ * stat bounds, for one — has to ask the same question of the same pool. A caller filtering the
+ * raw inventory itself would bound the search over gear the run cannot use.
  */
-export async function findOptimalGearForShip(
+export function availableInventoryForShip(
     ship: Ship,
     config: ShipOptimizerConfig,
-    deps: ShipOptimizerDeps
-): Promise<ShipOptimizerRun> {
-    const {
-        inventory,
-        usedGearIds,
-        getGearPiece,
-        upgradedGearGetter,
-        getEngineeringStatsForShipType,
-        gearToShipMap,
-        getShipById,
-        onProgress,
-    } = deps;
+    deps: Pick<ShipOptimizerDeps, 'inventory' | 'usedGearIds' | 'gearToShipMap' | 'getShipById'>
+): GearPiece[] {
+    const { inventory, usedGearIds, gearToShipMap, getShipById } = deps;
 
-    const availableInventory = inventory
+    return inventory
         .filter((gear) => {
             const isImplant = gear.slot.startsWith('implant_');
 
@@ -303,6 +294,26 @@ export async function findOptimalGearForShip(
             // For gear, apply the ignoreUnleveled filter
             return !config.ignoreUnleveled || gear.level > 0;
         });
+}
+
+/**
+ * Runs one ship through its configured autogear strategy: narrows the shared inventory through
+ * {@link availableInventoryForShip}, builds the fast/slow scoring views from that one filtered
+ * list (see `gearScoringInputs.ts` for why both views must come from the same source), and calls
+ * the strategy's `findOptimalGear`.
+ *
+ * Every caller gets the same inventory-eligibility rules applied in the same order and the same
+ * argument order forwarded to the strategy — a caller cannot special-case either without going
+ * through `config`.
+ */
+export async function findOptimalGearForShip(
+    ship: Ship,
+    config: ShipOptimizerConfig,
+    deps: ShipOptimizerDeps
+): Promise<ShipOptimizerRun> {
+    const { getGearPiece, upgradedGearGetter, getEngineeringStatsForShipType, onProgress } = deps;
+
+    const availableInventory = availableInventoryForShip(ship, config, deps);
 
     // The array feeds the fast path's gear registry, the getter feeds the slow path, and both
     // are built from one source so the two paths cannot score the same piece differently.
@@ -355,11 +366,10 @@ export async function findOptimalGearForShip(
  * The optimizer config for one off-formula-tuning pass over `stat`: the ship's own
  * configured-role formula (via `buildSimRerankShipConfig`'s own-role branch — this tuning run
  * never compares roles, only bands one stat inside the role the ship already scores under),
- * plus `statConstraint` (a probe or band's hard requirement on `stat`), with the algorithm
- * forced to Genetic regardless of what the player has selected — `hardRequirement` is honoured
- * only by `GeneticStrategy` (`calculateHardViolation` is called there and nowhere else), so a
- * band run under any other strategy would silently degrade to a soft penalty that does not hold
- * a build inside the range.
+ * plus `statConstraint` (a band's soft preference on `stat` — see `bandPriorities`), with the
+ * algorithm forced to Genetic regardless of what the player has selected: Genetic is the
+ * strategy that produces meaningful results, and a measurement run must not report numbers that
+ * depend on which algorithm the player happens to have chosen elsewhere.
  *
  * Drops any of the ship's own priorities on `stat` before appending `statConstraint`: two
  * priorities on the same stat would fight each other, and the tuning run's whole premise is
@@ -416,4 +426,37 @@ export async function runOffFormulaTuningPass(
         getEngineeringStatsForShipType: deps.getEngineeringStatsForShipType,
     });
     return { suggestions: run.result.suggestions, landed: resolveLimitStatValue(finalStats, stat) };
+}
+
+/**
+ * The achievable range of `stat` for one off-formula-tuning run.
+ *
+ * Reads the bound off the pool `config` makes this ship eligible for, through the SAME gear
+ * getter the run will score with — a bound computed from the raw inventory, or from unwrapped
+ * pieces, would describe gear the run cannot equip or stats it will not see. See
+ * `statBoundsFromInventory` for what the bound does and does not account for.
+ */
+export function offFormulaStatBounds(
+    ship: Ship,
+    config: ShipOptimizerConfig,
+    deps: ShipOptimizerDeps,
+    stat: LimitableStat
+): StatBounds {
+    const availableInventory = availableInventoryForShip(ship, config, deps);
+    const { getGearForShip } = buildGearScoringInputs({
+        availableInventory,
+        getGearPiece: deps.getGearPiece,
+        upgradedGearGetter: deps.upgradedGearGetter,
+        useUpgradedStats: config.useUpgradedStats,
+        assumeCalibrated: config.assumeCalibrated,
+    });
+    return statBoundsFromInventory({
+        ship,
+        availableInventory,
+        stat,
+        deps: {
+            getGearPiece: getGearForShip,
+            getEngineeringStatsForShipType: deps.getEngineeringStatsForShipType,
+        },
+    });
 }

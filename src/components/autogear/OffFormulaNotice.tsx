@@ -4,6 +4,7 @@ import { type ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
 import type { LimitableStat } from '../../types/stats';
 import type { GearSuggestion, StatPriority } from '../../types/autogear';
 import type { CombatStatsDeps } from '../../utils/ship/combatStats';
+import type { StatBounds } from '../../utils/autogear/simRerank/statBounds';
 import {
     detectOffFormulaStats,
     type OffFormulaFinding,
@@ -17,6 +18,8 @@ export interface OffFormulaTuningDeps {
         stat: LimitableStat,
         priorities: StatPriority[]
     ) => Promise<{ suggestions: GearSuggestion[]; landed: number }>;
+    /** The achievable range of `stat` over the pool this ship's run draws from. */
+    statBounds: (stat: LimitableStat) => StatBounds;
 }
 
 export interface OffFormulaNoticeProps {
@@ -128,6 +131,7 @@ const FindingsList: React.FC<FindingsListProps> = ({
                                 finding={{ ...finding, tunableStat: lever }}
                                 deps={tuning.deps}
                                 runOptimizer={tuning.runOptimizer}
+                                statBounds={tuning.statBounds}
                             />
                         )}
                     </div>

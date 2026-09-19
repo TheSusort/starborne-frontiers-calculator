@@ -10,6 +10,7 @@ import {
     gatingStatFor,
     type TunableOffFormulaFinding,
 } from '../../utils/autogear/simRerank/offFormulaStats';
+import type { StatBounds } from '../../utils/autogear/simRerank/statBounds';
 import { randomSeed } from '../simulator/SeedRunControls';
 import { clampRunCount, clampSeed } from '../../utils/simulator/seedRunInputs';
 import { useOffFormulaTuning, type TuningRow } from '../../hooks/useOffFormulaTuning';
@@ -50,6 +51,9 @@ export interface OffFormulaTuningPanelProps {
         stat: LimitableStat,
         priorities: StatPriority[]
     ) => Promise<{ suggestions: GearSuggestion[]; landed: number }>;
+    /** The achievable range of `stat` over the pool this ship's run would draw from. Injected
+     *  by the page — see `offFormulaTuningBounds` in `AutogearPage.tsx`. */
+    statBounds: (stat: LimitableStat) => StatBounds;
 }
 
 /**
@@ -64,6 +68,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
     finding,
     deps,
     runOptimizer,
+    statBounds,
 }) => {
     const stat = finding.tunableStat as LimitableStat;
     const gatingStat = gatingStatFor(finding.trigger);
@@ -71,8 +76,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
     const [runCount, setRunCount] = useState(DEFAULT_RUN_COUNT);
     const { state, run, cancel, reset } = useOffFormulaTuning();
 
-    const isRunning =
-        state.status === 'probing' || state.status === 'gearing' || state.status === 'simulating';
+    const isRunning = state.status === 'gearing' || state.status === 'simulating';
 
     // Hard requirement: a completed table must never survive a context change. ship/configuredRole
     // /stat/gatingStat come from props the parent controls (a different ship, a different flagged
@@ -94,6 +98,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
             runCount,
             deps,
             runOptimizer: (priorities) => runOptimizer(stat, priorities),
+            statBounds: () => statBounds(stat),
         });
     };
 
@@ -110,11 +115,12 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
             label: 'Landed',
             align: 'right',
             render: ({ row }) =>
-                row.reachable ? (
+                row.withinBand ? (
                     Math.round(row.landed).toLocaleString()
                 ) : (
                     <span className="text-amber-400">
-                        {Math.round(row.landed).toLocaleString()} — not reachable with your gear
+                        {Math.round(row.landed).toLocaleString()} — optimizer preferred outside this
+                        band
                     </span>
                 ),
         },
@@ -141,10 +147,12 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
         <div className="card space-y-3">
             <p className="text-xs text-theme-text-secondary">
                 Bands {statLabel(stat)} across what your inventory can actually reach, gears each
-                band with the Genetic algorithm — forced for this run regardless of your selected
-                algorithm, since only Genetic holds a band in place — and replays every build
-                against three sparring opponents to measure the {SHIP_TYPES[configuredRole]?.name}
-                &apos;s real objective. Writes nothing; it only measures.
+                band with the Genetic algorithm — used for this run regardless of the algorithm you
+                have selected elsewhere, because it is the one that produces meaningful results —
+                and replays every build against three sparring opponents to measure the{' '}
+                {SHIP_TYPES[configuredRole]?.name}&apos;s real objective. A band is a preference,
+                not a wall: where the optimizer preferred a different value, the row says so. Writes
+                nothing; it only measures.
             </p>
 
             <div className="flex gap-3 items-end">
@@ -178,11 +186,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
                 )}
                 {isRunning && (
                     <span aria-live="polite" className="text-sm text-theme-text-secondary">
-                        {state.status === 'probing'
-                            ? 'Probing'
-                            : state.status === 'gearing'
-                              ? 'Gearing'
-                              : 'Simulating'}{' '}
+                        {state.status === 'gearing' ? 'Gearing' : 'Simulating'}{' '}
                         {Math.round(state.progress.completed)} / {Math.round(state.progress.total)}
                     </span>
                 )}

@@ -1,12 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-    bandsBetween,
-    bandPriorities,
-    classifyOutcome,
-    floorProbePriorities,
-    ceilingProbePriorities,
-    BAND_COUNT,
-} from '../statBands';
+import { bandsBetween, bandPriorities, classifyOutcome, BAND_COUNT } from '../statBands';
 
 describe('bandsBetween', () => {
     it('divides the achievable range into BAND_COUNT contiguous bands', () => {
@@ -99,9 +92,12 @@ describe('bandsBetween', () => {
 });
 
 describe('bandPriorities', () => {
-    it('emits a HARD requirement, which only Genetic honours', () => {
+    // A band is a PREFERENCE, never a hard requirement: nobody knows where the bound belongs —
+    // that is what the run measures — and a hard requirement asserts a certainty the run does
+    // not have. See `bandPriorities`' own doc.
+    it('emits a soft limit the optimizer may overrule', () => {
         const [priority] = bandPriorities('hacking', { min: 150, max: 300 });
-        expect(priority.hardRequirement).toBe(true);
+        expect(priority.hardRequirement).toBeUndefined();
         expect(priority.minLimit).toBe(150);
         expect(priority.maxLimit).toBe(300);
         expect(priority.stat).toBe('hacking');
@@ -109,51 +105,21 @@ describe('bandPriorities', () => {
 });
 
 describe('classifyOutcome', () => {
-    it('marks a landed value inside the band reachable', () => {
-        expect(classifyOutcome({ min: 150, max: 300 }, 220).reachable).toBe(true);
+    it('marks a landed value inside the band as within it', () => {
+        expect(classifyOutcome({ min: 150, max: 300 }, 220).withinBand).toBe(true);
     });
 
-    // The measured failure: asking for 0-150 against a 440 floor silently returns 440.
-    it('marks a landed value outside the band UNREACHABLE rather than accepting it', () => {
+    // A soft band does not stop the optimizer leaving it, and nothing else in the result says
+    // that it did. Reporting the landed value alone would present a build the run never asked
+    // for as the band's answer.
+    it('reports a landed value outside the band rather than accepting it as the band result', () => {
         const outcome = classifyOutcome({ min: 0, max: 150 }, 440);
-        expect(outcome.reachable).toBe(false);
+        expect(outcome.withinBand).toBe(false);
         expect(outcome.landed).toBe(440);
     });
 
     it('treats the boundaries as inside the band', () => {
-        expect(classifyOutcome({ min: 150, max: 300 }, 150).reachable).toBe(true);
-        expect(classifyOutcome({ min: 150, max: 300 }, 300).reachable).toBe(true);
-    });
-});
-
-describe('floorProbePriorities', () => {
-    // The measured failure this pins: `calculatePriorityScore` and `calculateHardViolation` both
-    // truthy-check the limits, so a probe pinned to 0 contributes no penalty and no violation and
-    // the run returns the UNCONSTRAINED pick. Measured against the real GeneticStrategy, a 0-pin
-    // floor probe and an unlimited run landed on the same value for every stat tried.
-    it('pins to a nonzero limit, which the scorers actually read', () => {
-        const [priority] = floorProbePriorities('hacking');
-        expect(priority.minLimit).toBeTruthy();
-        expect(priority.maxLimit).toBeTruthy();
-        expect(priority.hardRequirement).toBe(true);
-        expect(priority.stat).toBe('hacking');
-    });
-
-    // A build at or above twice the limit overshoots by more than 100%, which is what drives
-    // every fitness to 0 and hands the ranking to `compareIndividuals`' violation tiebreak. A
-    // limit large enough for a real build to sit within 2x of it would leave a positive fitness
-    // and turn the probe back into a role-score trade-off.
-    it('pins far below anything a real build reaches', () => {
-        const [priority] = floorProbePriorities('hp');
-        expect(priority.maxLimit).toBeLessThan(2);
-    });
-});
-
-describe('ceilingProbePriorities', () => {
-    it('pins far above anything a real build reaches', () => {
-        const [priority] = ceilingProbePriorities('hacking');
-        expect(priority.minLimit).toBeGreaterThan(1e6);
-        expect(priority.maxLimit).toBe(priority.minLimit);
-        expect(priority.hardRequirement).toBe(true);
+        expect(classifyOutcome({ min: 150, max: 300 }, 150).withinBand).toBe(true);
+        expect(classifyOutcome({ min: 150, max: 300 }, 300).withinBand).toBe(true);
     });
 });

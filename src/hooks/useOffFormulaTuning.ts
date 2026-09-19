@@ -11,13 +11,12 @@ import { sparringOpponents } from '../utils/autogear/simRerank/sparringOpponents
 import { roleObjective } from '../utils/autogear/simRerank/roleObjectives';
 import { objectiveSeries, survived } from '../utils/autogear/simRerank/objectiveMetrics';
 import {
-    floorProbePriorities,
-    ceilingProbePriorities,
     bandsBetween,
     bandPriorities,
     classifyOutcome,
     type StatBand,
 } from '../utils/autogear/simRerank/statBands';
+import type { StatBounds } from '../utils/autogear/simRerank/statBounds';
 import { applySuggestionsToShip } from '../utils/autogear/simRerank/candidateShip';
 import { focusActorId } from '../utils/autogear/simRerank/runCandidates';
 import { buildTeam } from '../utils/simulator/buildTeam';
@@ -27,10 +26,10 @@ export interface TuningRow {
     band: StatBand;
     /** The stat value this band's optimizer pass actually reached. */
     landed: number;
-    /** False when `landed` falls outside `band` — see `classifyOutcome`. The panel must show
-     *  this rather than presenting the row as a normal result: the optimizer returns its best
-     *  infeasible build with no other signal that the band was unreachable. */
-    reachable: boolean;
+    /** False when `landed` falls outside `band` — see `bandPriorities` for why a band is a
+     *  preference the optimizer may overrule. The panel must show this: where the optimizer
+     *  declined a band, and by how much, is part of the measurement. */
+    withinBand: boolean;
     /** The role's objective metric, averaged over the seed set, per opponent — index-aligned
      *  with `TuningState.opponents`. */
     byOpponent: number[];
@@ -45,9 +44,9 @@ export interface TuningRow {
 /** Autogear's normal, UNBANDED pick for this ship's configured role — `runOptimizer([])`, no
  *  limit on the tuned stat — measured the same way as every band so a row can be compared
  *  against it. This is NOT the ship's equipped gear; it is what a plain "Find optimal gear" run
- *  would suggest today. Not a `TuningRow`: it has no band and no `reachable`/`constraintHeld`
- *  (nothing to be unreachable against, and it IS the reference `constraintHeld` compares every
- *  band to). */
+ *  would suggest today. Not a `TuningRow`: it has no band and no `withinBand`/`constraintHeld`
+ *  (there is no band for it to sit inside, and it IS the reference `constraintHeld` compares
+ *  every band to). */
 export interface TuningBaselineRow {
     landed: number;
     byOpponent: number[];
@@ -55,11 +54,11 @@ export interface TuningBaselineRow {
 }
 
 export interface TuningState {
-    status: 'idle' | 'probing' | 'gearing' | 'simulating' | 'done' | 'cancelled' | 'error';
+    status: 'idle' | 'gearing' | 'simulating' | 'done' | 'cancelled' | 'error';
     /** Counted WITHIN the current `status` phase, against that phase's own total: each phase
-     *  restarts at 0. The run cannot know how many bands there will be until the probes have
-     *  finished, so a single run-wide denominator would have to grow mid-run and make the count
-     *  jump backwards. A reader must show the phase alongside these two numbers. */
+     *  restarts at 0. Gearing and simulating have different denominators, so a single run-wide
+     *  count would have to change meaning mid-run. A reader must show the phase alongside these
+     *  two numbers. */
     progress: { completed: number; total: number };
     rows: TuningRow[];
     /** Opponent labels, index-aligned with every row's `byOpponent`. Empty until `status` is
@@ -81,21 +80,23 @@ export interface TuningRunArgs {
     runCount: number;
     /** Runs one optimizer pass under the given stat priorities and reports the tuned stat's
      *  landed value. INJECTED: building the real `ShipOptimizerConfig` needs the page's
-     *  inventory/settings, and forcing `AutogearAlgorithm.Genetic` — required because
-     *  `hardRequirement` is honoured only by `GeneticStrategy` — belongs at that injection site,
-     *  not in this hook. See `buildOffFormulaTuningConfig`/`runOffFormulaTuningPass` in
-     *  `runShipOptimizer.ts`. */
+     *  inventory and settings, which this hook has no access to. See
+     *  `buildOffFormulaTuningConfig`/`runOffFormulaTuningPass` in `runShipOptimizer.ts`. */
     runOptimizer: (priorities: StatPriority[]) => Promise<{
         suggestions: GearSuggestion[];
         landed: number;
     }>;
+    /** The achievable range of `stat` over the pool the optimizer will actually draw from.
+     *  INJECTED for the same reason as `runOptimizer` — it is read off that pool, not searched
+     *  for. See `statBoundsFromInventory`. */
+    statBounds: () => StatBounds;
     deps: CombatStatsDeps;
 }
 
 export interface CollectTuningRowsArgs extends TuningRunArgs {
     signal: AbortSignal;
     onProgress: (completed: number, total: number) => void;
-    onPhase: (phase: 'probing' | 'gearing' | 'simulating') => void;
+    onPhase: (phase: 'gearing' | 'simulating') => void;
 }
 
 export interface CollectTuningRowsResult {
@@ -187,8 +188,9 @@ async function measureCandidate(
 }
 
 /**
- * Owns the tuning run's sequencing: probe the achievable floor and ceiling of `stat`, band that
- * range, run one optimizer pass per band plus one unconstrained baseline, then replay every
+ * Owns the tuning run's sequencing: read the achievable floor and ceiling of `stat` off the
+ * eligible pool, band that range, run one optimizer pass per band plus one unconstrained
+ * baseline, then replay every
  * resulting build against the three sparring opponents and score each on the role's real
  * objective. A plain function, not hook state, so the sequencing is testable without a renderer
  * — mirrors `collectCandidateRuns` in `useSimRerank.ts`.
@@ -204,6 +206,7 @@ export async function collectTuningRows(
         seed,
         runCount,
         runOptimizer,
+        statBounds,
         deps,
         signal,
         onProgress,
@@ -213,22 +216,14 @@ export async function collectTuningRows(
     const { playerBoard, opponents, focusPosition } = sparringOpponents(ship, gatingStat);
     const objective = roleObjective(configuredRole);
 
-    onPhase('probing');
-    onProgress(0, 2);
     if (signal.aborted) return CANCELLED;
-    const floorPass = await runOptimizer(floorProbePriorities(stat));
-    if (signal.aborted) return CANCELLED;
-    onProgress(1, 2);
-    const ceilingPass = await runOptimizer(ceilingProbePriorities(stat));
-    if (signal.aborted) return CANCELLED;
-    onProgress(2, 2);
-
-    // Sorted defensively: the genetic algorithm is stochastic, and a pathological inventory
-    // could in principle land the ceiling probe below the floor probe. bandsBetween throws on
-    // an inverted range, which would abort the whole run over what is really just noise.
-    const floor = Math.min(floorPass.landed, ceilingPass.landed);
-    const ceiling = Math.max(floorPass.landed, ceilingPass.landed);
-    const bands = bandsBetween(floor, ceiling);
+    const bounds = statBounds();
+    // Sorted defensively: `bandsBetween` throws on an inverted range, which would abort the
+    // whole run rather than band what there is.
+    const bands = bandsBetween(
+        Math.min(bounds.floor, bounds.ceiling),
+        Math.max(bounds.floor, bounds.ceiling)
+    );
 
     const gearTotal = 1 + bands.length;
     const simTotal = gearTotal * opponents.length;
@@ -293,7 +288,7 @@ export async function collectTuningRows(
         rows.push({
             band: pass.band,
             landed: pass.landed,
-            reachable: outcome.reachable,
+            withinBand: outcome.withinBand,
             byOpponent: measurement.byOpponent,
             constraintHeld,
             suggestions: pass.suggestions,
@@ -357,7 +352,7 @@ export function useOffFormulaTuning(): UseOffFormulaTuningResult {
         const generation = ++generationRef.current;
         const isCurrent = () => generation === generationRef.current;
 
-        setState({ ...INITIAL_STATE, status: 'probing' });
+        setState({ ...INITIAL_STATE, status: 'gearing' });
 
         try {
             const result = await collectTuningRows({

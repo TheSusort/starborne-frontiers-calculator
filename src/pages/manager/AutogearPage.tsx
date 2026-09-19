@@ -20,6 +20,7 @@ import {
     useAutogearShipConfigs,
     buildOffFormulaTuningConfig,
     runOffFormulaTuningPass,
+    offFormulaStatBounds,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
@@ -324,6 +325,48 @@ export const AutogearPage: React.FC = () => {
                 priorities
             );
             return runOffFormulaTuningPass(
+                shipSettings,
+                config,
+                {
+                    inventory,
+                    usedGearIds: new Set<string>(),
+                    getGearPiece,
+                    upgradedGearGetter: getUpgradedGearPiece,
+                    getEngineeringStatsForShipType,
+                    gearToShipMap,
+                    getShipById,
+                },
+                stat
+            );
+        },
+        [
+            shipSettings,
+            getShipConfig,
+            activeSeason,
+            inventory,
+            getGearPiece,
+            getUpgradedGearPiece,
+            getEngineeringStatsForShipType,
+            gearToShipMap,
+            getShipById,
+        ]
+    );
+
+    /** The achievable range of a tuned stat, read off the same eligible pool and through the
+     *  same gear getter `runOffFormulaTuningOptimizer` scores with. */
+    const offFormulaTuningBounds = useCallback(
+        (stat: LimitableStat) => {
+            if (!shipSettings) {
+                throw new Error('Measure it requires a ship to be open in Settings');
+            }
+            const config = buildOffFormulaTuningConfig(
+                shipSettings,
+                getShipConfig(shipSettings.id),
+                activeSeason,
+                stat,
+                []
+            );
+            return offFormulaStatBounds(
                 shipSettings,
                 config,
                 {
@@ -1851,6 +1894,7 @@ export const AutogearPage: React.FC = () => {
                     offFormulaTuning={{
                         deps: combatStatsDeps,
                         runOptimizer: runOffFormulaTuningOptimizer,
+                        statBounds: offFormulaTuningBounds,
                     }}
                 />
 

@@ -1733,8 +1733,8 @@ const DocumentationPage: React.FC = () => {
                                         Some ships have a passive or skill that scales off a stat
                                         their configured role&apos;s formula doesn&apos;t reward —
                                         Settings flags this with a note under the role selector. Its{' '}
-                                        <strong>Measure it</strong> button opens a panel that finds
-                                        the stat&apos;s achievable range in your inventory, splits
+                                        <strong>Measure it</strong> button opens a panel that reads
+                                        the stat&apos;s achievable range off your inventory, splits
                                         it into bands, gears each band with the real optimizer, and
                                         replays every resulting build against three sparring
                                         opponents to score the role&apos;s actual objective — not
@@ -1749,12 +1749,14 @@ const DocumentationPage: React.FC = () => {
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         The run always uses the Genetic algorithm, regardless of
-                                        which one you have selected elsewhere — it&apos;s the only
-                                        one that can hold a band in place. A band your inventory
-                                        cannot reach is marked{' '}
-                                        <strong>not reachable with your gear</strong> rather than
-                                        shown as a result. This panel only measures; it does not
-                                        change your ship&apos;s gear.
+                                        which one you have selected elsewhere — it&apos;s the one
+                                        whose results are worth measuring. A band is a preference,
+                                        not a wall: nobody knows yet where the right value sits,
+                                        which is what the run is finding out, so the optimizer is
+                                        free to overrule a band, and the row says when it did.
+                                        Seeing where it preferred something else is part of the
+                                        answer. This panel only measures; it does not change your
+                                        ship&apos;s gear.
                                     </p>
                                 </div>
                             </div>
