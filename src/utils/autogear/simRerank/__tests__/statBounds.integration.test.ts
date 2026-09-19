@@ -132,6 +132,30 @@ describe('achievable-range bounds against the real inventory', () => {
         expect(bounds.floor).toBe(FLOOR);
     });
 
+    // `applySuggestionsToShip` leaves a slot no suggestion names on its current piece, so gear
+    // the run will KEEP has to be inside the bounds. With `optimizeImplants` off — the default —
+    // no implant is in the pool, and every landed value carries the equipped implant's substats.
+    // A bound that cleared the implant slot anyway would sit a fixed amount below every real
+    // build, making the lowest band unreachable by construction.
+    it('keeps gear in slots the pool cannot fill, which every run also keeps', () => {
+        const IMPLANT_HACKING = 77;
+        const implant = piece('implant_major', 'attack', 0, 'implant-worn', [
+            ['hacking', IMPLANT_HACKING],
+        ]);
+        const wearing: Ship = { ...ship, implants: { implant_major: implant.id } };
+        const withImplant: ShipOptimizerDeps = {
+            ...deps,
+            getGearPiece: (id: string) =>
+                id === implant.id ? implant : inventory.find((g) => g.id === id),
+            upgradedGearGetter: (id: string) =>
+                id === implant.id ? implant : inventory.find((g) => g.id === id),
+        };
+
+        const bounds = offFormulaStatBounds(wearing, config, withImplant, stat);
+        expect(bounds.floor).toBe(FLOOR + IMPLANT_HACKING);
+        expect(bounds.ceiling).toBe(CEILING + IMPLANT_HACKING);
+    });
+
     // The point of the bounds: every band lies inside them, and a real optimizer run under any
     // band lands inside them too. A bound the optimizer can walk outside would band a range
     // that does not describe the search.

@@ -25,7 +25,23 @@ export interface StatBoundsArgs {
     deps: CombatStatsDeps;
 }
 
-const stripped = (ship: Ship): Ship => ({ ...ship, equipment: {}, implants: {} });
+/**
+ * The ship with only the slots the pool can fill emptied.
+ *
+ * `applySuggestionsToShip` leaves a slot the suggestions do not name on its current piece, so a
+ * slot with no eligible candidate keeps what is equipped in every real run. Clearing every slot
+ * here instead would drop that contribution from the bounds but not from the landed values —
+ * which is what `optimizeImplants: false`, the default, produces for every implant.
+ */
+const strippedToPool = (ship: Ship, poolSlots: ReadonlySet<string>): Ship => {
+    const equipment = { ...ship.equipment };
+    const implants = { ...ship.implants };
+    for (const slot of poolSlots) {
+        delete equipment[slot];
+        delete implants[slot];
+    }
+    return { ...ship, equipment, implants };
+};
 
 const suggestion = (slotName: string, gearId: string): GearSuggestion => ({
     slotName,
@@ -41,10 +57,13 @@ const suggestion = (slotName: string, gearId: string): GearSuggestion => ({
  * fills the other slots. That makes per-slot extremes compose: the cheapest piece in every slot
  * is a real buildable loadout and its value is the floor, and the same for the ceiling.
  *
- * Two contributions are deliberately outside this: SET BONUSES (which need a matching pair and
- * so are not a per-slot choice) and the cross-stat ultimate implants (CODE_GUARD, CIPHER_LINK).
- * A build can therefore land slightly outside these bounds. They bound the SEARCH SPACE well
- * enough to band it; they are not a promise about what any particular run returns.
+ * Three contributions are deliberately outside this: SET BONUSES (which need a matching pair and
+ * so are not a per-slot choice), the cross-stat ultimate implants (CODE_GUARD, CIPHER_LINK), and
+ * `filterTopImplantsPerSlot`, which narrows the implant pool the GA actually searches below the
+ * one seen here whenever `optimizeImplants` is set — that direction only makes the bounds wider
+ * than the search, never narrower. A build can therefore land outside these bounds. They bound
+ * the SEARCH SPACE well enough to band it; they are not a promise about what any particular run
+ * returns.
  */
 export function statBoundsFromInventory({
     ship,
@@ -52,7 +71,7 @@ export function statBoundsFromInventory({
     stat,
     deps,
 }: StatBoundsArgs): StatBounds {
-    const bare = stripped(ship);
+    const bare = strippedToPool(ship, new Set(availableInventory.map((piece) => piece.slot)));
     const baseline = resolveLimitStatValue(shipFinalStats(bare, deps), stat);
 
     const valueWith = (slotName: string, gearId: string): number =>

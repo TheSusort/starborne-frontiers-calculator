@@ -221,6 +221,27 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             expect(asAttacker.some((f) => f.stat === 'hp' && f.produces === 'repair')).toBe(true);
         });
 
+        // The chain must be followed BEFORE severity is read, or a role that rewards the root
+        // hides the whole chain instead of clearing it. Under SUPPORTER, whose seed carries HP
+        // directly, Xcellence's damage-off-shield-off-HP chain is aligned: the formula already
+        // pushes the stat that drives his damage, so there is nothing to report.
+        it('reports no damage finding for Xcellence under a role that rewards HP directly', () => {
+            const xcellence = corpus().find((c) => c.name === 'Xcellence');
+            const asSupporter = detectOffFormulaStats(xcellence!.ship, 'SUPPORTER');
+            expect(asSupporter.some((f) => f.produces === 'damage')).toBe(false);
+        });
+
+        // Positive control for the case above: the same chain under ATTACKER, whose seed carries
+        // no HP anywhere, must still surface with HP as the lever. Without this, a detector that
+        // returned [] for every role would pass the negative assertion.
+        it('still offers HP for that same chain under a role that rewards no HP', () => {
+            const xcellence = corpus().find((c) => c.name === 'Xcellence');
+            const asAttacker = detectOffFormulaStats(xcellence!.ship, 'ATTACKER');
+            const damage = asAttacker.filter((f) => f.produces === 'damage');
+            expect(damage).toHaveLength(1);
+            expect(damage[0].tunableStat).toBe('hp');
+        });
+
         it('returns nothing in Custom mode, where there is no role objective to diverge from', () => {
             const chakara = corpus().find((c) => c.name === 'Chakara');
             expect(detectOffFormulaStats(chakara!.ship, null)).toEqual([]);

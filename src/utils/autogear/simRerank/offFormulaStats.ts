@@ -42,6 +42,11 @@ const GEARABLE_STATS: ReadonlySet<string> = new Set<string>([
 
 const isGearable = (stat: OffFormulaStat): boolean => GEARABLE_STATS.has(stat);
 
+/** A carrier the walk found, before the role formula has been consulted. Every carrier is
+ *  recorded, aligned or not: a chain can only be followed while both of its links are still
+ *  present, so classification has to wait until the lever is known. */
+type CarrierFinding = Omit<OffFormulaFinding, 'severity'>;
+
 /**
  * Point every finding at the gearable stat a tuning run can band.
  *
@@ -49,31 +54,23 @@ const isGearable = (stat: OffFormulaStat): boolean => GEARABLE_STATS.has(stat);
  * actionable only when another finding PRODUCES that stat from a gearable one: the two collapse
  * into a single entry that keeps what the effect reads in `stat` and carries the lever in
  * `tunableStat`, and the producer is dropped because the collapsed entry already says what it
- * said. Severity is re-read on the lever — a chain whose root the role formula already rewards
- * is no divergence at all, so it drops out entirely. A finding with no gearable producer keeps
- * no `tunableStat`.
+ * said. A finding with no gearable producer keeps no `tunableStat`.
  */
-function withGearableLevers(
-    raw: OffFormulaFinding[],
-    classify: (stat: OffFormulaStat) => OffFormulaSeverity | null
-): OffFormulaFinding[] {
+function withGearableLevers(raw: CarrierFinding[]): CarrierFinding[] {
     const absorbed = new Set<number>();
-    const resolved: OffFormulaFinding[][] = raw.map((finding, index) => {
+    const resolved: CarrierFinding[][] = raw.map((finding, index) => {
         if (isGearable(finding.stat)) return [{ ...finding, tunableStat: finding.stat }];
 
-        let hasGearableProducer = false;
-        const chained: OffFormulaFinding[] = [];
+        const chained: CarrierFinding[] = [];
         raw.forEach((producer, producerIndex) => {
             if (producerIndex === index) return;
             if (producer.produces !== finding.stat) return;
             if (!isGearable(producer.stat)) return;
-            hasGearableProducer = true;
             absorbed.add(producerIndex);
-            const severity = classify(producer.stat);
-            if (severity) chained.push({ ...finding, severity, tunableStat: producer.stat });
+            chained.push({ ...finding, tunableStat: producer.stat });
         });
 
-        return hasGearableProducer ? chained : [finding];
+        return chained.length > 0 ? chained : [finding];
     });
 
     return resolved.flatMap((entries, index) => (absorbed.has(index) ? [] : entries));
@@ -133,16 +130,14 @@ export function detectOffFormulaStats(
         return rewardedViaAggregate.has(stat) ? 'substitution' : 'severe';
     };
 
-    const findings: OffFormulaFinding[] = [];
+    const carriers: CarrierFinding[] = [];
     const add = (
         stat: OffFormulaStat,
         produces: OffFormulaFinding['produces'],
         trigger: string
     ): void => {
-        const severity = classify(stat);
-        if (!severity) return;
-        if (findings.some((f) => f.stat === stat && f.produces === produces)) return;
-        findings.push({ stat, produces, severity, trigger });
+        if (carriers.some((f) => f.stat === stat && f.produces === produces)) return;
+        carriers.push({ stat, produces, trigger });
     };
 
     for (const slot of buildShipAbilities(ship).slots ?? []) {
@@ -184,5 +179,11 @@ export function detectOffFormulaStats(
         }
     }
 
-    return withGearableLevers(findings, classify);
+    // Severity is read on the LEVER, because the lever is the gearing decision the player would
+    // act on. A chain whose root the role formula already rewards is no divergence at all and
+    // drops out here.
+    return withGearableLevers(carriers).flatMap((finding) => {
+        const severity = classify(finding.tunableStat ?? finding.stat);
+        return severity ? [{ ...finding, severity }] : [];
+    });
 }
