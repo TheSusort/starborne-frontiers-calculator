@@ -2,17 +2,81 @@ import type { Ship } from '../../../types/ship';
 import type { ShipTypeName } from '../../../constants/shipTypes';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { CUSTOM_FORMULA_SEEDS } from '../customFormulaSeeds';
+import { GEAR_SLOTS } from '../../../constants/gearTypes';
+import { SUBSTAT_RANGES } from '../../../constants/statValues';
 
 export type OffFormulaStat = 'hp' | 'defence' | 'shield' | 'security' | 'attack';
 export type OffFormulaSeverity = 'severe' | 'substitution';
 
 export interface OffFormulaFinding {
+    /** The stat the effect READS. Not necessarily one gear can roll — `shield` is a pool the
+     *  kit generates, not a gear stat. */
     stat: OffFormulaStat;
     produces: 'damage' | 'repair' | 'shield';
+    /** Classified on `tunableStat` where there is one, because the lever is the gearing
+     *  decision the player would act on. */
     severity: OffFormulaSeverity;
     /** The ability trigger the effect rides. `gatingStatFor` turns this into the stat an
      *  opponent must vary for the measurement to mean anything. */
     trigger: string;
+    /** The gearable stat a tuning run bands to move this effect: `stat` itself when gear rolls
+     *  it, otherwise the stat that PRODUCES `stat`. Absent when no gearable stat drives the
+     *  effect at all — the finding still reports what the kit does, but there is nothing to
+     *  measure and no lever to offer. */
+    tunableStat?: OffFormulaStat;
+}
+
+/** An {@link OffFormulaFinding} a tuning run can actually act on. The panel takes this, so a
+ *  finding with no gearable lever cannot be measured by construction. */
+export type TunableOffFormulaFinding = OffFormulaFinding & { tunableStat: OffFormulaStat };
+
+/** The stats gear can move, read off the two tables that decide it: each slot's main-stat pool
+ *  and the substat roll table. Taken as a union rather than assumed equal — widening either
+ *  table must widen this set. Implant slots declare an empty main-stat pool, so they contribute
+ *  nothing here. `shield` appears in neither table: banding it could only ever report a value
+ *  no build reaches. */
+const GEARABLE_STATS: ReadonlySet<string> = new Set<string>([
+    ...Object.values(GEAR_SLOTS).flatMap((slot) => slot.availableMainStats),
+    ...Object.keys(SUBSTAT_RANGES),
+]);
+
+const isGearable = (stat: OffFormulaStat): boolean => GEARABLE_STATS.has(stat);
+
+/**
+ * Point every finding at the gearable stat a tuning run can band.
+ *
+ * A finding on a stat gear rolls is its own lever. A finding on a stat gear cannot roll is
+ * actionable only when another finding PRODUCES that stat from a gearable one: the two collapse
+ * into a single entry that keeps what the effect reads in `stat` and carries the lever in
+ * `tunableStat`, and the producer is dropped because the collapsed entry already says what it
+ * said. Severity is re-read on the lever — a chain whose root the role formula already rewards
+ * is no divergence at all, so it drops out entirely. A finding with no gearable producer keeps
+ * no `tunableStat`.
+ */
+function withGearableLevers(
+    raw: OffFormulaFinding[],
+    classify: (stat: OffFormulaStat) => OffFormulaSeverity | null
+): OffFormulaFinding[] {
+    const absorbed = new Set<number>();
+    const resolved: OffFormulaFinding[][] = raw.map((finding, index) => {
+        if (isGearable(finding.stat)) return [{ ...finding, tunableStat: finding.stat }];
+
+        let hasGearableProducer = false;
+        const chained: OffFormulaFinding[] = [];
+        raw.forEach((producer, producerIndex) => {
+            if (producerIndex === index) return;
+            if (producer.produces !== finding.stat) return;
+            if (!isGearable(producer.stat)) return;
+            hasGearableProducer = true;
+            absorbed.add(producerIndex);
+            const severity = classify(producer.stat);
+            if (severity) chained.push({ ...finding, severity, tunableStat: producer.stat });
+        });
+
+        return hasGearableProducer ? chained : [finding];
+    });
+
+    return resolved.flatMap((entries, index) => (absorbed.has(index) ? [] : entries));
 }
 
 /** Seed terms that stand for a COMBINATION of stats. They must never be expanded into their
@@ -120,5 +184,5 @@ export function detectOffFormulaStats(
         }
     }
 
-    return findings;
+    return withGearableLevers(findings, classify);
 }

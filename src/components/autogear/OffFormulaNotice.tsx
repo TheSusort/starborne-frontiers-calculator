@@ -45,6 +45,8 @@ const STAT_LABEL: Record<string, string> = {
     shield: 'its shield pool',
 };
 
+const statLabel = (stat: string): string => STAT_LABEL[stat] ?? stat;
+
 export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     ship,
     configuredRole,
@@ -89,18 +91,27 @@ const FindingsList: React.FC<FindingsListProps> = ({
     return (
         <div className="card space-y-2">
             {findings.map((finding) => {
-                const key = `${finding.stat}-${finding.produces}`;
+                const lever = finding.tunableStat;
+                const key = `${finding.stat}-${finding.produces}-${lever ?? 'none'}`;
                 const isOpen = openKey === key;
+                // A collapsed finding names the lever explicitly, because the sentence has
+                // already named a different stat as what the effect reads.
+                const scored = lever && lever !== finding.stat ? statLabel(lever) : 'it';
                 return (
                     <div key={key} className="space-y-2">
                         <p className="text-xs text-amber-400">
                             {ship.name}&apos;s {PRODUCES_LABEL[finding.produces]} off{' '}
-                            {STAT_LABEL[finding.stat] ?? finding.stat}.{' '}
+                            {statLabel(finding.stat)}
+                            {lever && lever !== finding.stat
+                                ? `, which ${statLabel(lever)} drives`
+                                : ''}
+                            .{' '}
                             {finding.severity === 'severe'
-                                ? `The ${roleLabel} formula does not score it.`
-                                : `The ${roleLabel} formula scores it only as part of a total it can trade away for another stat.`}
+                                ? `The ${roleLabel} formula does not score ${scored}.`
+                                : `The ${roleLabel} formula scores ${scored} only as part of a total it can trade away for another stat.`}
+                            {!lever && ' No gear stat moves it, so there is nothing to measure.'}
                         </p>
-                        {tuning && (
+                        {tuning && lever && (
                             <Button
                                 variant="link"
                                 size="sm"
@@ -110,11 +121,11 @@ const FindingsList: React.FC<FindingsListProps> = ({
                                 {isOpen ? 'Hide measurement' : 'Measure it'}
                             </Button>
                         )}
-                        {tuning && isOpen && (
+                        {tuning && lever && isOpen && (
                             <OffFormulaTuningPanel
                                 ship={ship}
                                 configuredRole={configuredRole}
-                                finding={finding}
+                                finding={{ ...finding, tunableStat: lever }}
                                 deps={tuning.deps}
                                 runOptimizer={tuning.runOptimizer}
                             />

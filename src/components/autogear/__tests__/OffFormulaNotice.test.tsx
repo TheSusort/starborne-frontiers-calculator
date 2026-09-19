@@ -28,7 +28,13 @@ const tuning = { deps: {} as never, runOptimizer: vi.fn() };
 describe('OffFormulaNotice', () => {
     it('names the stat and the role formula that ignores it', () => {
         mocked.mockReturnValue([
-            { stat: 'defence', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
         // Pins the whole sentence, not just the word "defence" — a subject-verb mismatch like
@@ -50,7 +56,13 @@ describe('OffFormulaNotice', () => {
     // phrase is absent, not just that its own phrase is present.
     it('reads a substitution finding differently from a severe one', () => {
         mocked.mockReturnValue([
-            { stat: 'defence', produces: 'damage', severity: 'substitution', trigger: 'on-cast' },
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
         ]);
         const { unmount } = render(<OffFormulaNotice ship={ship} configuredRole="DEFENDER" />);
         expect(screen.getByText(/trade/i)).toBeInTheDocument();
@@ -58,16 +70,61 @@ describe('OffFormulaNotice', () => {
         unmount();
 
         mocked.mockReturnValue([
-            { stat: 'defence', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="DEFENDER" />);
         expect(screen.getByText(/does not score/i)).toBeInTheDocument();
         expect(screen.queryByText(/trade/i)).not.toBeInTheDocument();
     });
 
+    // The collapse, from the notice's side: the sentence must name BOTH what the damage reads
+    // and the gearable stat behind it, or a player told to tune HP has no idea why.
+    it('names the chain when the lever is not what the effect reads', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'shield',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'hp',
+            },
+        ]);
+        render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" tuning={tuning} />);
+        expect(
+            screen.getByText(/damage scales off its shield pool, which HP drives/)
+        ).toBeInTheDocument();
+        // Severity names the LEVER, not a bare "it": the reader has just been shown two stats.
+        expect(screen.getByText(/does not score HP/)).toBeInTheDocument();
+        expect(screen.getByText(/measure it/i)).toBeInTheDocument();
+    });
+
+    // The gate. Non-vacuity for the case above: the same finding WITHOUT a lever must offer no
+    // control, or the panel would mount on a stat no band can reach.
+    it('offers no control for a finding with no gearable lever, but still reports it', () => {
+        mocked.mockReturnValue([
+            { stat: 'shield', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
+        ]);
+        render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" tuning={tuning} />);
+        expect(screen.getByText(/damage scales off its shield pool/)).toBeInTheDocument();
+        expect(screen.getByText(/nothing to measure/i)).toBeInTheDocument();
+        expect(screen.queryByText(/measure it/i)).not.toBeInTheDocument();
+    });
+
     it('offers no "Measure it" control when the caller supplies no tuning support', () => {
         mocked.mockReturnValue([
-            { stat: 'defence', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
         expect(screen.queryByText(/measure it/i)).not.toBeInTheDocument();
@@ -75,7 +132,13 @@ describe('OffFormulaNotice', () => {
 
     it('mounts the tuning panel for a finding only once "Measure it" is pressed', () => {
         mocked.mockReturnValue([
-            { stat: 'defence', produces: 'damage', severity: 'severe', trigger: 'on-cast' },
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" tuning={tuning} />);
 

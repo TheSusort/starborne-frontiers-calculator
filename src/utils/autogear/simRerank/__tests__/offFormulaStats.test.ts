@@ -1,6 +1,8 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
 import { detectOffFormulaStats, gatingStatFor } from '../offFormulaStats';
+import { GEAR_SLOTS } from '../../../../constants/gearTypes';
+import { SUBSTAT_RANGES } from '../../../../constants/statValues';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
@@ -136,6 +138,69 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                         f.trigger === 'on-enemy-debuff-resisted'
                 )
             ).toBe(true);
+        });
+
+        // The lever rule, over the whole corpus. `shield` is the only stat a carrier reads that
+        // no slot rolls and no substat rolls; a finding that offered it would band a value every
+        // build misses. Derived from the same two tables the detector reads, so a widening of
+        // either moves both together instead of leaving this list behind.
+        it('never offers a lever gear cannot roll', () => {
+            const gearable = new Set<string>([
+                ...Object.values(GEAR_SLOTS).flatMap((slot) => slot.availableMainStats),
+                ...Object.keys(SUBSTAT_RANGES),
+            ]);
+            expect(gearable.has('shield')).toBe(false);
+            let checked = 0;
+            for (const [name, findings] of flagged) {
+                for (const finding of findings) {
+                    if (!finding.tunableStat) continue;
+                    checked++;
+                    expect(`${name}:${finding.tunableStat}`).toBe(
+                        `${name}:${gearable.has(finding.tunableStat) ? finding.tunableStat : 'NOT-GEARABLE'}`
+                    );
+                }
+            }
+            // Without this the assertion is satisfied by a detector that sets no lever at all.
+            expect(checked).toBeGreaterThan(20);
+        });
+
+        // The collapse. Each of these reads its own shield POOL for damage and generates that
+        // pool from Max HP, so the lever at the root of the chain is HP. One entry, not two:
+        // the producer folds into the finding that names what the damage actually reads.
+        it.each([
+            ['Xcellence', 'severe'],
+            ['FrontLine', 'severe'],
+            ['Malvex', 'substitution'],
+        ])('%s offers HP, the root of his damage-off-shield-off-HP chain', (name, severity) => {
+            const findings = flagged.get(name) ?? [];
+            const damage = findings.filter((f) => f.produces === 'damage');
+            expect(damage).toHaveLength(1);
+            expect(damage[0].stat).toBe('shield');
+            expect(damage[0].tunableStat).toBe('hp');
+            // Severity follows the LEVER, not the stat the effect reads: HP sits inside
+            // DEFENDER's effectiveHp (a total it can trade away) and nowhere in ATTACKER's.
+            expect(damage[0].severity).toBe(severity);
+            // The producer is absorbed, so the shield-from-HP entry no longer stands alone.
+            expect(findings.some((f) => f.produces === 'shield')).toBe(false);
+        });
+
+        // Quixilver does NOT share that shape, whatever the family resemblance: his shield is
+        // generated from damage dealt and damage taken, never from a stat on his own block, so
+        // there is no chain to follow and no lever to offer. He is still reported — the
+        // misalignment is real — but with nothing to measure.
+        it('reports Quixilver with no lever, because nothing he can gear moves his shield pool', () => {
+            const findings = flagged.get('Quixilver') ?? [];
+            expect(findings.some((f) => f.stat === 'shield' && f.produces === 'damage')).toBe(true);
+            expect(findings.every((f) => f.tunableStat === undefined)).toBe(true);
+        });
+
+        // A single ordinary gearable finding must be untouched by any of the above: its own stat
+        // is its lever, and no collapse applies.
+        it('leaves a plain gearable finding alone — Chakara still bands Defence itself', () => {
+            const findings = flagged.get('Chakara') ?? [];
+            expect(findings).toHaveLength(1);
+            expect(findings[0].stat).toBe('defence');
+            expect(findings[0].tunableStat).toBe('defence');
         });
 
         // A supporter healing from HP is ALIGNED: SUPPORTER's seed carries core('hp') as its own row.

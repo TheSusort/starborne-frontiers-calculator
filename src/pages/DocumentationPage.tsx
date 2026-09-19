@@ -1741,6 +1741,13 @@ const DocumentationPage: React.FC = () => {
                                         the formula&apos;s proxy for it.
                                     </p>
                                     <p className="text-theme-text mt-2">
+                                        Sometimes the stat the skill reads is not one gear can roll
+                                        — a shield pool, for instance. The note then follows the
+                                        chain to the stat that generates it, so what you tune is
+                                        something your gear actually moves. Where nothing in your
+                                        gear moves it, the note says so and offers no measurement.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
                                         The run always uses the Genetic algorithm, regardless of
                                         which one you have selected elsewhere — it&apos;s the only
                                         one that can hold a band in place. A band your inventory

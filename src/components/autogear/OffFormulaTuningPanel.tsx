@@ -8,7 +8,7 @@ import type { GearSuggestion, StatPriority } from '../../types/autogear';
 import type { CombatStatsDeps } from '../../utils/ship/combatStats';
 import {
     gatingStatFor,
-    type OffFormulaFinding,
+    type TunableOffFormulaFinding,
 } from '../../utils/autogear/simRerank/offFormulaStats';
 import { randomSeed } from '../simulator/SeedRunControls';
 import { clampRunCount, clampSeed } from '../../utils/simulator/seedRunInputs';
@@ -39,7 +39,9 @@ export interface OffFormulaTuningPanelProps {
     /** Never null here — the panel only mounts from a finding, and `detectOffFormulaStats`
      *  never produces a finding in Custom mode. */
     configuredRole: ShipTypeName;
-    finding: OffFormulaFinding;
+    /** Typed to the tunable variant: a finding with no gearable lever has nothing to band, and
+     *  the notice offers no control for one. */
+    finding: TunableOffFormulaFinding;
     deps: CombatStatsDeps;
     /** Runs one optimizer pass for `stat` under `priorities` and reports the ship's actual
      *  configured-role formula plus that constraint, with the algorithm forced to Genetic.
@@ -63,7 +65,7 @@ export const OffFormulaTuningPanel: React.FC<OffFormulaTuningPanelProps> = ({
     deps,
     runOptimizer,
 }) => {
-    const stat = finding.stat as LimitableStat;
+    const stat = finding.tunableStat as LimitableStat;
     const gatingStat = gatingStatFor(finding.trigger);
     const [seed, setSeed] = useState(() => randomSeed());
     const [runCount, setRunCount] = useState(DEFAULT_RUN_COUNT);
