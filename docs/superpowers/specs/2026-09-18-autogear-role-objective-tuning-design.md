@@ -46,8 +46,9 @@ answer.
 
 ## The mechanism: a blended basis on a core row
 
-A core formula row on a derived stat may carry a **basis**: the list of stats, with weights, that
-feed the derived stat's primary factor.
+Any maximised core formula row may carry a **basis**: the list of stats, with weights, that feed
+that row's value. On a derived stat it replaces the derived stat's primary factor (attack for
+`directDamage`, HP for `effectiveHp`); on a plain stat it replaces the stat's own value.
 
 ```ts
 // types/autogear.ts
@@ -57,7 +58,10 @@ interface CustomFormulaRow {
     direction: 'max' | 'min';
     importance?: CoreImportance;
     percentage?: number;
-    /** Only meaningful on a `kind: 'core'`, `direction: 'max'` row naming a derived stat.
+    /** Only meaningful on a `kind: 'core'`, `direction: 'max'` row. On a DERIVED stat it
+     *  replaces that stat's primary factor; on a plain stat it replaces the stat's own value.
+     *  SUPPORTER's core is the plain stat `hp`, and that is the row Howler's and Makoli's fix
+     *  sits on, so restricting bases to derived stats would make Apply a no-op for both.
      *  Weights are in multiplier units divided by 100, so they are the game's own numbers:
      *  a 200% attack skill that also deals 25% of max HP is
      *  `[{ stat: 'attack', weight: 2.0 }, { stat: 'hp', weight: 0.25 }]`. */
@@ -88,13 +92,19 @@ This is why the shape is a basis *list* and not a scalar `k` blended against att
 
 - **`calculateDirectDamage` and `calculateEffectiveHP` take an optional basis** for their attack
   and HP factor respectively. `formulaRowTerm` already holds the row, so it passes the row's basis
-  through `resolveLimitStatValue`.
+  to those two for a derived stat and to `resolveBasisValue` for a plain one — never to
+  `resolveLimitStatValue`.
 - **`resolveLimitStatValue(stats, stat)` as used by `StatPriority` limits and `StatBonus` is
   UNCHANGED.** `directDamage` as a limit stat stays attack-only. A basis is a property of a
   formula row, not of the stat, and must not be threaded into the limit path.
-- **Bases are restricted to `direction: 'max'` core rows.** A minimised term is `1/(1 + n)`,
-  which is not scale-invariant, so a basis there would change ranking in ways nothing in this
-  design reasons about. A basis on a `min` row or a `bonus` row is ignored.
+- **Bases are restricted to `direction: 'max'` core rows** — but to ALL of them, derived or
+  plain. A minimised term is `1/(1 + n)`, which is not scale-invariant, so a basis there would
+  change ranking in ways nothing in this design reasons about. A basis on a `min` row or a
+  `bonus` row is ignored.
+- **A basis TERM must name a raw `BaseStats` key.** "Has a `MULTIPLIER_NORMALIZERS` entry" is the
+  wrong predicate: that table also keys `directDamage` and `effectiveHp`, which resolve off a stat
+  block as `undefined` and would contribute 0 — a term that silently disappears. See
+  `reference_total_record_is_compile_time_only`.
 - **`effectiveHp` basis semantics differ from `directDamage`.** `effectiveHp` is
   `hp × mitigation(defence)`, so a basis blends its **hp factor only** — a defence term in that
   basis is a deliberate *tilt* toward defence, not a transcription of a skill's equation, because
@@ -252,6 +262,12 @@ without the detector reading the basis at all. **This is accepted deliberately**
 switches to a hand-written Custom formula that ignores the stat also sees no notice, which is
 correct — Custom mode means the player wrote the scoring function and there is no declared role to
 diverge from.
+
+**But the excluded-carrier sentence must not clear with it.** For the ten passive-only ships that
+sentence is the only instruction the player has, and applying the formula is the only way to get a
+formula to edit — so Apply would destroy the very thing it exists to enable. The derived row
+therefore carries the excluded carriers as display-only text (`excludedNote`), which the formula
+editor renders above the basis terms. The scorer never reads it.
 
 ## What this design does not solve
 

@@ -106,7 +106,7 @@ const stats: BaseStats = {
     crit: 60, critDamage: 130, speed: 130,
 } as BaseStats;
 
-describe('an absent basis is today's behaviour', () => {
+describe('an absent basis is the old behaviour', () => {
     it('resolves directDamage identically', () => {
         expect(calculateDirectDamage(stats, undefined)).toBe(calculateDirectDamage(stats));
     });
@@ -149,6 +149,25 @@ describe('a blended basis', () => {
         const plain = calculateEffectiveHP(stats.hp, stats.defence, 0);
         expect(tilted / plain).toBeCloseTo((50000 + 14000) / 50000, 6);
     });
+
+    it('honours a basis on a PLAIN-stat core row, not only a derived one', () => {
+        // SUPPORTER's core is `core('hp')`. Howler's fix is a basis on that row, and Makoli's is
+        // [hp x1, defence x18.8] on it. Routing only directDamage/effectiveHp makes Apply a
+        // silent no-op for both.
+        const makoli: CustomFormulaRow = {
+            stat: 'hp', kind: 'core', direction: 'max',
+            basis: [{ stat: 'hp', weight: 1 }, { stat: 'defence', weight: 18.8 }],
+        };
+        const plainHp: CustomFormulaRow = { stat: 'hp', kind: 'core', direction: 'max' };
+        // 50000 + 7000*18.8 = 181600, against 50000.
+        expect(formulaRowTerm(stats, makoli) / formulaRowTerm(stats, plainHp))
+            .toBeCloseTo(181600 / 50000, 6);
+    });
+
+    it('a plain core row with NO basis is unchanged', () => {
+        expect(formulaRowTerm(stats, { stat: 'speed', kind: 'core', direction: 'max' }))
+            .toBe(stats.speed / 130);
+    });
 });
 
 describe('usableBasis rejects what the scorer cannot honour', () => {
@@ -158,6 +177,17 @@ describe('usableBasis rejects what the scorer cannot honour', () => {
     it('drops an entry naming a stat with no normalizer', () => {
         expect(usableBasis(core([{ stat: 'attack', weight: 1 }, { stat: 'nonsense', weight: 1 }])))
             .toEqual([{ stat: 'attack', weight: 1 }]);
+    });
+
+    it('drops a DERIVED stat used as a basis term', () => {
+        // directDamage and effectiveHp both have MULTIPLIER_NORMALIZERS entries, so a
+        // "has a normalizer" check admits them — and resolveBasisValue would then read
+        // stats['directDamage'] as undefined and contribute 0, silently deleting the term.
+        expect(usableBasis(core([
+            { stat: 'attack', weight: 1 },
+            { stat: 'directDamage', weight: 1 },
+            { stat: 'effectiveHp', weight: 1 },
+        ]))).toEqual([{ stat: 'attack', weight: 1 }]);
     });
 
     it('drops a non-finite or negative weight', () => {
@@ -294,18 +324,29 @@ In `src/utils/autogear/customFormula.ts`:
  * A row's basis, filtered to entries the scorer can honour. A stored row is untyped JSON and
  * reaches the scorer without passing through any form, so each entry is checked rather than
  * trusted — an unrecognised stat would resolve to 0 and silently delete a term, and a negative
- * weight would subtract one. Returns undefined when nothing survives, so the derived stat falls
- * back to its own default factor rather than scoring 0 for every candidate and tying the search.
+ * weight would subtract one. Returns undefined when nothing survives, so the row falls back to
+ * its own stat rather than scoring 0 for every candidate and tying the search.
+ *
+ * A basis TERM must name a raw `BaseStats` key. "Has a MULTIPLIER_NORMALIZERS entry" is the
+ * WRONG predicate: that table also keys `directDamage` and `effectiveHp`, which `resolveBasisValue`
+ * would read off the stat block as `undefined` and contribute as 0 — a term that silently
+ * disappears. See `reference_total_record_is_compile_time_only`.
  */
+const DERIVED_STATS: Record<DerivedStatName, true> = {
+    // Total on purpose: a third derived stat must fail the build here rather than slip into a
+    // basis and score as 0.
+    effectiveHp: true,
+    directDamage: true,
+};
+
+const isBasisStat = (stat: LimitableStat): boolean =>
+    MULTIPLIER_NORMALIZERS[stat] !== undefined && !(stat in DERIVED_STATS);
+
 export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
     if (row.kind !== 'core' || row.direction !== 'max') return undefined;
     if (!Array.isArray(row.basis)) return undefined;
     const kept = row.basis.filter(
-        (t) =>
-            t &&
-            MULTIPLIER_NORMALIZERS[t.stat] !== undefined &&
-            Number.isFinite(t.weight) &&
-            t.weight >= 0
+        (t) => t && isBasisStat(t.stat) && Number.isFinite(t.weight) && t.weight >= 0
     );
     return kept.length > 0 ? kept : undefined;
 }
@@ -317,16 +358,22 @@ and in `formulaRowTerm`:
 export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number {
     const normalizer = MULTIPLIER_NORMALIZERS[row.stat] || 1;
     const basis = usableBasis(row);
+    // A basis is honoured on ANY max core row, not only a derived one. SUPPORTER's core is
+    // `core('hp')` — a plain stat — and Howler's and Makoli's whole fix is a basis on that row,
+    // so routing only the two derived stats would make Apply a silent no-op for them.
     const raw =
         row.stat === 'directDamage'
             ? calculateDirectDamage(stats, basis)
             : row.stat === 'effectiveHp'
               ? calculateEffectiveHP(stats.hp, stats.defence, stats.damageReduction ?? 0, basis, stats)
-              : resolveLimitStatValue(stats, row.stat);
+              : resolveBasisValue(stats, basis, row.stat as keyof BaseStats);
     const n = raw / normalizer;
     return row.direction === 'min' ? 1 / (1 + n) : n;
 }
 ```
+
+`resolveBasisValue` already falls back to the named stat when `basis` is undefined, so a plain
+core row with no basis is unchanged.
 
 - [ ] **Step 6: Run the tests**
 
@@ -497,6 +544,10 @@ it.each([['Chakara', 2], ['Nuqtu', 3], ['Hemlock', 4], ['Prophet', 9]])(
     '%s fires its charged skill every %i rounds in a real fight',
     (name, expected) => {
         const resets = roundsWithChargeReset(runLongFight(shipNamed(name)));
+        // NON-VACUITY GATE, not decoration: `[].every(...)` is `true`, so with no bus wired
+        // (advanceChargeCadence emits only when `bus && round !== undefined`) this whole test
+        // passes while observing nothing. Assert the instrument saw casts BEFORE reading them.
+        expect(resets.length).toBeGreaterThanOrEqual(2);
         expect(gapsBetween(resets).every((g) => g === expected)).toBe(true);
         expect(chargePeriod(shipNamed(name))).toBe(expected);
     }
@@ -519,6 +570,21 @@ Expected: FAIL — `basisDerivation` does not exist.
 /** Charge abilities targeted at somebody else do not bank toward this ship's charged skill. */
 const OWN_TARGETED = (target: string): boolean =>
     !['ally', 'all-allies', 'lowest-hp-ally', 'enemy', 'all-enemies'].includes(target);
+
+/** Own-targeted `type: 'charge'` amounts summed over the named slots. */
+function ownChargeGain(ship: Ship, slots: readonly string[]): number {
+    let total = 0;
+    for (const slot of buildShipAbilities(ship).slots ?? []) {
+        if (!slots.includes(slot.slot)) continue;
+        for (const ability of slot.abilities ?? []) {
+            const config = ability.config as { type?: string; amount?: number };
+            if (config?.type !== 'charge') continue;
+            if (!OWN_TARGETED(ability.target as string)) continue;
+            total += config.amount ?? 0;
+        }
+    }
+    return total;
+}
 
 /**
  * Turns per charged cast, simulating the engine: `advanceChargeCadence` (combat/state.ts) resets
@@ -608,9 +674,9 @@ git commit -m "feat(autogear): derive a ship's scoring basis from its parsed kit
 - [ ] **Step 1: Write the failing tests**
 
 ```tsx
-it('states the derived equation in the ship's own numbers', () => {
+it('states the derived equation in the ship own numbers', () => {
     render(<OffFormulaNotice ship={prophet} configuredRole="ATTACKER" />);
-    expect(screen.getByText(/57\.8.*Security/)).toBeInTheDocument();
+    expect(screen.getByText(/Security x57\.778/)).toBeInTheDocument();
     expect(screen.getByText(/nothing from Attack/i)).toBeInTheDocument();
 });
 
@@ -618,7 +684,7 @@ it('names the excluded carrier verbatim rather than a general caveat', () => {
     render(<OffFormulaNotice ship={rikra} configuredRole="ATTACKER" />);
     // A basis equal to today's behaviour is indistinguishable from one that needed no change,
     // so the notice must say WHICH clause was left out and why.
-    expect(screen.getByText(/40% of max HP when an enemy is destroyed/i)).toBeInTheDocument();
+    expect(screen.getByText(/repairs 60% of max HP when an enemy is destroyed/i)).toBeInTheDocument();
     expect(screen.getByText(/a passive's frequency depends on the fight/i)).toBeInTheDocument();
 });
 
@@ -705,6 +771,33 @@ core row naming the derived stat. Set `shipRole: null`.
 // scoring function, so there is no declared role left to diverge from.
 ```
 
+**Carry the excluded carriers onto the row.** Because the notice unmounts on Apply, the sentence
+naming the excluded passive dies with it — and for the ten passive-only ships that sentence is the
+only instruction the player has. The derived row carries them so the editor can keep showing them:
+
+```ts
+    /** Kit clauses the derivation deliberately skipped, in the ship's own words ("repairs 60%
+     *  of max HP when an enemy is destroyed"). Passive frequency is not derivable, so these are
+     *  not in `basis` — but they are what the player is being invited to add by hand, and the
+     *  notice that named them unmounts as soon as the formula is applied. Display only; the
+     *  scorer never reads it. */
+    excludedNote?: string[];
+```
+
+- [ ] **Step 3b: Test that the instruction survives Apply**
+
+```tsx
+it('keeps naming the excluded carrier after the notice has gone', () => {
+    const onApply = vi.fn();
+    render(<OffFormulaNotice ship={rikra} configuredRole="ATTACKER" onApply={onApply} />);
+    fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+    const row = onApply.mock.calls[0][0].customFormula.rows[0];
+    expect(row.excludedNote).toContain(
+        'repairs 60% of max HP when an enemy is destroyed'
+    );
+});
+```
+
 - [ ] **Step 4: Unmount the band machinery**
 
 Remove `OffFormulaTuningPanel` from `AutogearSettings` and the `runOptimizer` / `statBounds` /
@@ -723,7 +816,7 @@ In `UNRELEASED_CHANGES`, one entry per user-visible change:
 
 ```
 'Autogear: ships scoring off an ignored stat now show their real damage equation.',
-'Autogear: apply a ship's derived scoring formula in one click.',
+"Autogear: apply a ship's derived scoring formula in one click.",
 ```
 
 - [ ] **Step 6: Run the tests and the guard**
@@ -797,8 +890,10 @@ Expected: FAIL — no basis controls.
 
 - [ ] **Step 3: Implement**
 
-Basis controls render only when `kind === 'core' && direction === 'max' && (stat === 'directDamage'
-|| stat === 'effectiveHp')`, matching `usableBasis` exactly. Each term is an `Input` for the weight
+Basis controls render on any `kind === 'core' && direction === 'max'` row, matching `usableBasis`
+exactly — SUPPORTER's core is the plain stat `hp`, and that is the row Howler's and Makoli's fix
+sits on. Render `excludedNote` above the terms, so the clause the notice named is still in front of
+the player after Apply removed the notice. Each term is an `Input` for the weight
 plus a `Select` over `FORMULA_STATS` for the stat, with a `Button` to add and remove. The form
 refuses to save a negative or non-finite weight, the same way it already refuses a negative bonus
 percentage.
@@ -914,7 +1009,8 @@ git commit -m "feat(autogear): share a custom formula in a community build"
 
 **Files:**
 - Modify: `src/pages/DocumentationPage.tsx`
-- Modify: whichever panel survives Stage 2 (the stale-results fix)
+- Modify: `src/components/autogear/SimRerankSection.tsx` (the stale-results fix — after Task 6
+  unmounts `OffFormulaTuningPanel`, this is the panel that survives)
 - Modify: `src/constants/changelog.ts`
 
 - [ ] **Step 1: Fix #541's stale-results defect**
@@ -922,7 +1018,7 @@ git commit -m "feat(autogear): share a custom formula in a community build"
 Results survive a change of role, fight source, seed, run count or equipped gear while the modal
 stays open, and `Apply` then forwards a stale loadout. `OffFormulaTuningPanel` already carries the
 correct pattern — a `useEffect` that resets on every input the run reads, with no omission to
-silence a lint warning. Apply the same shape to the surviving panel. **This must land before
+silence a lint warning. Apply the same shape to `SimRerankSection`. **This must land before
 merge**; it is a shipped defect on the draft PR, not new work.
 
 - [ ] **Step 2: Write the failing test**
@@ -952,7 +1048,7 @@ no mention of `CustomFormulaRow` or `buildShipAbilities`.
 - [ ] **Step 5: Changelog**
 
 ```
-'Autogear: share a ship's custom scoring formula with the community.',
+"Autogear: share a ship's custom scoring formula with the community.",
 'Autogear: candidate results now clear when you change role, seed or gear.',
 ```
 
