@@ -131,8 +131,12 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             row.basis = basis;
         }
         // Never authored by hand — carried through unchanged from the row Apply produced, so
-        // the clause it names is still visible after an unrelated edit (e.g. importance).
-        if (editingValue?.excludedNote) {
+        // the clause it names is still visible after an unrelated edit (e.g. importance). It
+        // survives wherever a basis COULD live, not only where terms already exist: a ship whose
+        // whole carrier sits in a passive derives an empty basis, and the note is then the only
+        // thing telling its owner what to add. It goes when the row can no longer hold a basis
+        // at all, where it would describe scoring that is not happening.
+        if (showsBasis && editingValue?.excludedNote) {
             row.excludedNote = editingValue.excludedNote;
         }
 

@@ -257,3 +257,18 @@ describe('CustomFormulaForm — adding and validating a basis term', () => {
         );
     });
 });
+
+describe('excludedNote travels with the basis', () => {
+    it('is dropped when the row is switched to one that cannot hold a basis', async () => {
+        // The note explains what a basis LEAVES OUT. On a bonus row, which the scorer never
+        // reads a basis from, it would describe scoring that is not happening.
+        const onSave = vi.fn();
+        render(<CustomFormulaForm onAdd={vi.fn()} onSave={onSave} editingValue={rikraRow} />);
+        await userEvent.click(screen.getByLabelText(/how it counts/i));
+        await userEvent.click(screen.getByText(/added/i));
+        await userEvent.click(screen.getByRole('button', { name: /save/i }));
+        expect(onSave).toHaveBeenCalledWith(
+            expect.not.objectContaining({ excludedNote: expect.anything() })
+        );
+    });
+});
