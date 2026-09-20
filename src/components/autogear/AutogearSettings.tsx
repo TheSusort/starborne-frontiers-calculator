@@ -314,7 +314,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onRemoveFormulaRow,
     onSeedFormula,
     simRerank,
-    offFormulaTuning,
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -427,11 +426,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
             </div>
 
             {selectedShip && (
-                <OffFormulaNotice
-                    ship={selectedShip}
-                    configuredRole={selectedShipRole}
-                    tuning={offFormulaTuning}
-                />
+                <OffFormulaNotice ship={selectedShip} configuredRole={selectedShipRole} />
             )}
             {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}
 
