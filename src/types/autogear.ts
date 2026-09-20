@@ -41,9 +41,10 @@ export type FormulaDirection = 'max' | 'min';
 /** Exponent applied to a core row's term. Slight / Normal / Heavy. */
 export type CoreImportance = 0.5 | 1 | 2;
 
-/** One stat feeding a derived stat's primary factor, weighted in the game's own multiplier
- *  units divided by 100: a 200% attack skill is `{ stat: 'attack', weight: 2.0 }` and a clause
- *  dealing 25% of max HP is `{ stat: 'hp', weight: 0.25 }`. */
+/** One stat feeding what a `basis`-bearing row scores on — a derived stat's primary factor, or
+ *  a plain stat's own value. Weighted in the game's own multiplier units divided by 100: a 200%
+ *  attack skill is `{ stat: 'attack', weight: 2.0 }` and a clause dealing 25% of max HP is
+ *  `{ stat: 'hp', weight: 0.25 }`. */
 export interface BasisTerm {
     stat: LimitableStat;
     weight: number;
