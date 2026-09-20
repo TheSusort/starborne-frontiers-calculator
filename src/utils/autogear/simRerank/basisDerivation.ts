@@ -22,7 +22,15 @@ export interface DerivedBasis {
 const OWN_TARGETED = (target: string): boolean =>
     !['ally', 'all-allies', 'lowest-hp-ally', 'enemy', 'all-enemies'].includes(target);
 
-/** Own-targeted `type: 'charge'` amounts summed over the named slots. */
+/**
+ * Own-targeted `type: 'charge'` amounts summed over the named slots, counting every matching
+ * ability as if it fired every round. A gated charge ability — one gated by an explicit
+ * `Ability.conditions` array (a speed comparison, a self-HP threshold, an enemy-buff check, enemy
+ * Stealth, a hit count) or by a reactive trigger that is itself the gate (`on-enemy-destroyed`,
+ * `on-debuff-inflicted`, `on-ally-crit`, `on-enemy-repaired`) — fires less often than this counts
+ * it. That makes the derived `chargePeriod` a LOWER BOUND on the ship's true period, so
+ * `deriveBasis`'s charged-slot cast-frequency weight sits at or above its true share.
+ */
 function ownChargeGain(ship: Ship, slots: readonly string[]): number {
     let total = 0;
     for (const slot of buildShipAbilities(ship).slots ?? []) {
@@ -44,6 +52,9 @@ function ownChargeGain(ship: Ship, slots: readonly string[]): number {
  * `chargeCadence.integration.test.ts`.
  *
  * Returns 0 when the ship has no charged skill, which weights the active slot at 1.
+ *
+ * See `ownChargeGain`'s doc for why the counted charge gain (`g` below), and therefore this
+ * period, is a lower bound rather than exact.
  */
 export function chargePeriod(ship: Ship): number {
     const n = ship.chargeSkillCharge ?? 0;
@@ -85,17 +96,39 @@ const isCasterBasis = (basis: string | undefined): basis is 'hp' | 'attack' | 'd
  *  always resolved to the stat that produces the pool, or dropped. */
 const STAT_ORDER: readonly OffFormulaStat[] = ['attack', 'hp', 'defence', 'security'];
 
-/** Fixed prose for the triggers that currently carry an excluded clause in the corpus. An
- *  unmapped trigger falls back to its raw name rather than inventing English. */
+/**
+ * Player-facing tail for an excluded clause's sentence, e.g. `repairs 60% of max HP {prose}`.
+ * Every `AbilityTrigger` that `excludedCarriers` can surface (a passive-slot additional-damage,
+ * heal/shield-with-caster-basis, or damage.hpBasisPct/shieldBasisPct clause) needs an entry here
+ * — `basisDerivation.test.ts`'s "every excluded trigger has prose" test walks the real corpus and
+ * fails the moment a new trigger reaches this map unmapped, so this is expected to grow on a data
+ * refresh rather than stay fixed. An unmapped trigger falls back to its raw name rather than
+ * inventing English.
+ */
 export const TRIGGER_PROSE: Record<string, string> = {
     'pre-combat': 'at the start of the fight',
     'start-of-turn': 'at the start of its turn',
+    'start-of-round': 'at the start of the round',
+    'on-cast': 'on cast',
+    'on-attacked': 'when it is attacked',
+    'on-ally-attacked': 'when an ally is attacked',
+    'on-destroyed': 'when it is destroyed',
+    'on-cheat-death-activated': 'when it cheats death',
     'on-enemy-destroyed': 'when an enemy is destroyed',
     'on-enemy-purged': 'when it purges an enemy buff',
+    'on-ally-purged': 'when a buff is purged from an ally',
     'on-debuff-inflicted': 'when it lands a debuff',
-    'on-ally-crit-dot': 'when an ally crits a damaged-over-time enemy',
-    'on-corrosion-spread': 'when Corrosion spreads',
+    'on-debuff-resisted': 'when it resists a debuff',
     'on-enemy-debuff-resisted': 'when an enemy resists a debuff',
+    'on-ally-crit': 'when an ally crits',
+    'on-ally-crit-dot': 'when an ally crits a damaged-over-time enemy',
+    'on-ally-debuffed': 'when an ally is debuffed',
+    'on-corrosion-spread': 'when Corrosion spreads',
+    'on-enemy-dot-damage': 'when an enemy takes damage from a damage-over-time effect',
+    'on-enemy-repaired': 'when an enemy repairs',
+    'on-own-cleanse': 'when it cleanses a debuff',
+    'on-own-shield-strip': 'when it strips Shield from an enemy',
+    'on-stasis-applied': 'when it applies Stasis',
 };
 
 export const triggerProse = (trigger: string): string => TRIGGER_PROSE[trigger] ?? trigger;

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
-import { chargePeriod, deriveBasis } from '../basisDerivation';
+import { chargePeriod, deriveBasis, TRIGGER_PROSE } from '../basisDerivation';
 import { detectOffFormulaStats } from '../offFormulaStats';
 import { buildShipAbilities } from '../../../abilities/buildShipAbilities';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
@@ -131,13 +131,57 @@ const shipWithNoChargedSkill: Ship = {
     activePattern: 'Pattern-Base',
 } as unknown as Ship;
 
+// Own-targeted (`target: 'self'`) charge ability on the CHARGED slot itself — no corpus ship
+// carries this shape. Sefuba's charged-slot charge ability is `target: 'enemy'`, so OWN_TARGETED
+// already filters it out before the slot list gets a say; this fixture isolates the slot rule
+// from the target rule so a widened slot list actually changes the answer.
+const shipWithOwnChargedSlotCharge: Ship = {
+    id: 'own-charged-slot-charge',
+    name: 'Own Charged Slot Charge',
+    type: 'ATTACKER',
+    baseStats: {
+        attack: 5000,
+        crit: 50,
+        critDamage: 150,
+        hacking: 100,
+        security: 100,
+        defence: 3000,
+        hp: 40000,
+        speed: 100,
+    },
+    equipment: {},
+    implants: {},
+    refits: [],
+    activeSkillText: 'This Unit deals <unit-damage>200% damage</unit-damage>.',
+    chargeSkillText:
+        'This Unit deals <unit-damage>300% damage</unit-damage> and gains 1 charge to its Charged Skill.',
+    chargeSkillCharge: 3,
+    activeTarget: 'front',
+    activePattern: 'Pattern-Base',
+    chargedTarget: 'front',
+    chargedPattern: 'Pattern-Base',
+} as unknown as Ship;
+
 const closeTo = (n: number, precision = 3) => expect.closeTo(n, precision);
 
 // Pure — no real corpus data needed, so it runs on every checkout regardless of whether the
 // gitignored reference files are present.
 describe('chargePeriod — no charged skill', () => {
     it('is 0 for a ship with no charged skill, and that ship weights active at 1', () => {
-        expect(deriveBasis(shipWithNoChargedSkill, 'damage').period).toBe(0);
+        const basis = deriveBasis(shipWithNoChargedSkill, 'damage');
+        expect(basis.period).toBe(0);
+        // wActive = 1 at period 0 (see deriveBasis), so the active slot's raw 120% multiplier
+        // reaches the term undiluted rather than blended against a charged slot.
+        expect(basis.terms).toEqual([{ stat: 'attack', weight: closeTo(1.2) }]);
+    });
+});
+
+describe('chargePeriod — charged-slot charge ability is ignored regardless of target', () => {
+    it('matches the period computed with g=0, not the g=1 a widened slot list would produce', () => {
+        // n=3, g=0 -> period 4 (same arithmetic as the corpus's Lodolite case). A slot list
+        // widened to include 'charged' would count the own-targeted gain above and produce g=1,
+        // hence period 3 — this assertion distinguishes the two.
+        expect(chargePeriod(shipWithOwnChargedSlotCharge)).toBe(4);
     });
 });
 
@@ -146,8 +190,9 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     () => {
         describe('chargePeriod', () => {
             // N and g measured 2026-09-20. g sums own-targeted charge abilities in the ACTIVE
-            // and PASSIVE slots only: charges accrue on active rounds (playerTurn.ts:3475), so
-            // Sefuba's charged-slot `enemy+2` must contribute nothing.
+            // and PASSIVE slots only: charges accrue on active rounds (runPlayerTurn's own-charge
+            // block, gated on `action === 'active'`), so Sefuba's charged-slot `enemy+2` must
+            // contribute nothing.
             it.each([
                 ['Chakara', 2], // N=2 g=1
                 ['Obsidian', 2], // N=3 g=2
@@ -245,6 +290,21 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
 
             it('flags exactly the corpus count, so a data refresh surfaces here', () => {
                 expect(flaggedShipCount()).toBe(47);
+            });
+
+            it('every trigger excludedCarriers surfaces across the corpus has TRIGGER_PROSE', () => {
+                // Reads deriveBasis's own `excluded` output (excludedCarriers's public path)
+                // rather than re-deriving a parallel filter, over every corpus ship (not only the
+                // flagged ones — excluded carriers show up outside a role-flagged ship too). Fails
+                // the moment a data refresh introduces a trigger this module's TRIGGER_PROSE
+                // doesn't cover, rather than silently degrading to a raw key in user-facing copy.
+                const unmapped = new Set<string>();
+                for (const { ship } of corpus()) {
+                    for (const carrier of deriveBasis(ship, 'damage').excluded) {
+                        if (!(carrier.trigger in TRIGGER_PROSE)) unmapped.add(carrier.trigger);
+                    }
+                }
+                expect([...unmapped]).toEqual([]);
             });
         });
     }

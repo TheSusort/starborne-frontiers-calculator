@@ -75,9 +75,10 @@ const ROUNDS = 40;
  * observe several of Prophet's 9-round cycles, and returns every `charge-changed` event the
  * FOCUS actor emitted.
  *
- * `chargePeriod` treats every own-targeted `charge` ability as unconditional — it has no static
- * view of an ability's own game CONDITION (Chakara's own-charge rides "if all damaged enemies
- * have more Speed than this Unit"; Hemlock's rides landing a debuff). The fight is built so both
+ * `chargePeriod` treats every own-targeted `charge` ability as unconditional (see `ownChargeGain`'s
+ * doc in `basisDerivation.ts`) — it has no static view of an ability's own game CONDITION
+ * (Chakara's own-charge rides "if all damaged enemies have more Speed than this Unit"; Hemlock's
+ * rides landing a debuff). The fight is built so both
  * kinds of condition hold on every round: the enemy is faster than any corpus ship (satisfies a
  * speed condition) and carries no Security against a focus hacking pinned far above any
  * corpus value (`liveDebuffLandingChance` clamps to 100%, so a debuff-gated charge gain never
@@ -145,9 +146,10 @@ const gapsBetween = (rounds: number[]): number[] => rounds.slice(1).map((r, i) =
 describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     'chargePeriod pinned against a real fight',
     () => {
-        // `chargePeriod` re-implements advanceChargeCadence (combat/state.ts) plus the
-        // active-round manip block (playerTurn.ts:3475). This asserts the re-implementation
-        // against the engine's real cast sequence.
+        // `chargePeriod` re-implements advanceChargeCadence (combat/state.ts) plus `runPlayerTurn`'s
+        // own-charge block (the `action === 'active'` branch that calls `chargeGainFromSkill` with
+        // `targetFilter: 'own'`). This asserts the re-implementation against the engine's real cast
+        // sequence.
         it.each([
             ['Chakara', 2],
             ['Nuqtu', 3],
