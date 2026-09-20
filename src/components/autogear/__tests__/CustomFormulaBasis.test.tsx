@@ -147,12 +147,12 @@ describe('CustomFormulaForm — basis controls follow usableBasis', () => {
         expect(screen.queryByRole('button', { name: /add stat/i })).not.toBeInTheDocument();
     });
 
-    it('hides basis controls while adding a brand-new row', () => {
-        // A basis refines a row that already exists; a fresh row is added plain and picks up a
-        // basis on the next edit. This also keeps "Add" (submit) and "Add stat" (basis term)
-        // unambiguous, since both would otherwise match the same name query.
+    it('offers basis controls on a brand-new core row, not only when editing one', () => {
+        // `usableBasis` honours a basis on any core/max row and knows nothing about whether the
+        // row already exists, so withholding the control while composing one would deny an
+        // author a basis the scorer would have honoured.
         render(<CustomFormulaForm onAdd={vi.fn()} />);
-        expect(screen.queryByRole('button', { name: /add stat/i })).not.toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /^add stat$/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /^add formula stat$/i })).toBeInTheDocument();
     });
 

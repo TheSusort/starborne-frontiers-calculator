@@ -77,13 +77,10 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
         }
     }, [editingValue]);
 
-    // A basis is only ever honoured by the scorer on a `core`/`max` row (`usableBasis`'s own
-    // gate) — mirrored here so the picker never offers a control the scorer would ignore.
-    // Also gated on editing an existing row: a basis refines a row that already exists (Apply's
-    // output, or a previously-added custom row), so a brand-new row is added plain and picks up
-    // a basis on the next edit — that keeps this form's single "Add" control unambiguous from
-    // the basis section's own "Add stat" control.
-    const showsBasis = !!editingValue && kind === 'core' && direction === 'max';
+    // A basis is only ever honoured by the scorer on a `core`/`max` row — this mirrors
+    // `usableBasis`'s own gate, so the picker never offers a control the scorer would ignore
+    // and never withholds one it would honour.
+    const showsBasis = kind === 'core' && direction === 'max';
 
     const addBasisTerm = () => {
         const used = new Set(basisTerms.map((t) => t.stat));

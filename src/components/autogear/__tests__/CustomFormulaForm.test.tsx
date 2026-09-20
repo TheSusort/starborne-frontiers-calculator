@@ -13,7 +13,7 @@ describe('CustomFormulaForm', () => {
     it('adds a core maximized row with Normal importance by default', async () => {
         const onAdd = vi.fn();
         render(<CustomFormulaForm onAdd={onAdd} />);
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'core',
@@ -27,7 +27,7 @@ describe('CustomFormulaForm', () => {
         render(<CustomFormulaForm onAdd={onAdd} />);
         await userEvent.click(screen.getByLabelText(/how it counts/i));
         await userEvent.click(screen.getByText(/added/i));
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'bonus',
@@ -44,7 +44,7 @@ describe('CustomFormulaForm', () => {
         const weightInput = screen.getByLabelText(/weight %/i);
         await userEvent.clear(weightInput);
         await userEvent.type(weightInput, '0');
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'bonus',
@@ -61,7 +61,7 @@ describe('CustomFormulaForm', () => {
         const weightInput = screen.getByLabelText(/weight %/i);
         await userEvent.clear(weightInput);
         await userEvent.type(weightInput, '-5');
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).not.toHaveBeenCalled();
     });
 
