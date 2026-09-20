@@ -64,6 +64,12 @@ export interface CustomFormulaRow {
      *  is `1/(1+n)` and so is not scale-invariant. Absent means the row scores exactly as it
      *  did before bases existed. */
     basis?: BasisTerm[];
+    /** Kit clauses the derivation deliberately skipped, in the ship's own words ("repairs 60%
+     *  of max HP when an enemy is destroyed"). Passive frequency is not derivable, so these are
+     *  not in `basis` — but they are what the player is being invited to add by hand, and the
+     *  notice that named them unmounts as soon as the formula is applied. Display only; the
+     *  scorer never reads it. */
+    excludedNote?: string[];
 }
 
 export interface CustomFormula {

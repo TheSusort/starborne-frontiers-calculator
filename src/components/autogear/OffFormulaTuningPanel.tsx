@@ -45,14 +45,15 @@ export interface OffFormulaTuningPanelProps {
     finding: TunableOffFormulaFinding;
     deps: CombatStatsDeps;
     /** Runs one optimizer pass for `stat` under `priorities` and reports the ship's actual
-     *  configured-role formula plus that constraint, with the algorithm forced to Genetic.
-     *  Injected by the page — see `runOffFormulaTuningOptimizer` in `AutogearPage.tsx`. */
+     *  configured-role formula plus that constraint, with the algorithm forced to Genetic. Not
+     *  currently wired to a caller — see `buildOffFormulaTuningConfig`/`runOffFormulaTuningPass`
+     *  in `runShipOptimizer.ts` for what a future caller would inject here. */
     runOptimizer: (
         stat: LimitableStat,
         priorities: StatPriority[]
     ) => Promise<{ suggestions: GearSuggestion[]; landed: number }>;
-    /** The achievable range of `stat` over the pool this ship's run would draw from. Injected
-     *  by the page — see `offFormulaTuningBounds` in `AutogearPage.tsx`. */
+    /** The achievable range of `stat` over the pool this ship's run would draw from. Not
+     *  currently wired to a caller — see `offFormulaStatBounds` in `runShipOptimizer.ts`. */
     statBounds: (stat: LimitableStat) => StatBounds;
 }
 

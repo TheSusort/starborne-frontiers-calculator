@@ -4,8 +4,9 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { arrayMove } from '../../utils/arrayMove';
-import { GearSuggestion, type StatPriority } from '../../types/autogear';
+import { GearSuggestion } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
+import type { OffFormulaApplyUpdate } from '../../components/autogear/OffFormulaNotice';
 import { partitionScoreableShips } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
@@ -18,9 +19,6 @@ import { applySuggestionsToShip } from '../../utils/autogear/simRerank/candidate
 import {
     findOptimalGearForShip,
     useAutogearShipConfigs,
-    buildOffFormulaTuningConfig,
-    runOffFormulaTuningPass,
-    offFormulaStatBounds,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
@@ -307,93 +305,6 @@ export const AutogearPage: React.FC = () => {
         ]
     );
 
-    /** Runs one off-formula-tuning optimizer pass (a probe or a band) and reports the tuned
-     *  stat's landed value. `buildOffFormulaTuningConfig`/`runOffFormulaTuningPass` own forcing
-     *  `AutogearAlgorithm.Genetic` and reading `landed` through the run's own `getGearForShip` —
-     *  this closure only supplies the ship's config and the page's inventory/settings, exactly
-     *  like `runAutogearFor` above. */
-    const runOffFormulaTuningOptimizer = useCallback(
-        async (stat: LimitableStat, priorities: StatPriority[]) => {
-            if (!shipSettings) {
-                throw new Error('Measure it requires a ship to be open in Settings');
-            }
-            const config = buildOffFormulaTuningConfig(
-                shipSettings,
-                getShipConfig(shipSettings.id),
-                activeSeason,
-                stat,
-                priorities
-            );
-            return runOffFormulaTuningPass(
-                shipSettings,
-                config,
-                {
-                    inventory,
-                    usedGearIds: new Set<string>(),
-                    getGearPiece,
-                    upgradedGearGetter: getUpgradedGearPiece,
-                    getEngineeringStatsForShipType,
-                    gearToShipMap,
-                    getShipById,
-                },
-                stat
-            );
-        },
-        [
-            shipSettings,
-            getShipConfig,
-            activeSeason,
-            inventory,
-            getGearPiece,
-            getUpgradedGearPiece,
-            getEngineeringStatsForShipType,
-            gearToShipMap,
-            getShipById,
-        ]
-    );
-
-    /** The achievable range of a tuned stat, read off the same eligible pool and through the
-     *  same gear getter `runOffFormulaTuningOptimizer` scores with. */
-    const offFormulaTuningBounds = useCallback(
-        (stat: LimitableStat) => {
-            if (!shipSettings) {
-                throw new Error('Measure it requires a ship to be open in Settings');
-            }
-            const config = buildOffFormulaTuningConfig(
-                shipSettings,
-                getShipConfig(shipSettings.id),
-                activeSeason,
-                stat,
-                []
-            );
-            return offFormulaStatBounds(
-                shipSettings,
-                config,
-                {
-                    inventory,
-                    usedGearIds: new Set<string>(),
-                    getGearPiece,
-                    upgradedGearGetter: getUpgradedGearPiece,
-                    getEngineeringStatsForShipType,
-                    gearToShipMap,
-                    getShipById,
-                },
-                stat
-            );
-        },
-        [
-            shipSettings,
-            getShipConfig,
-            activeSeason,
-            inventory,
-            getGearPiece,
-            getUpgradedGearPiece,
-            getEngineeringStatsForShipType,
-            gearToShipMap,
-            getShipById,
-        ]
-    );
-
     /** Equips a list of gear/implant suggestions onto a ship — the one write path both autogear's
      *  own "Equip" button and a sim-rerank row's "Apply" go through. */
     const equipSuggestions = async (shipId: string, suggestions: GearSuggestion[]) => {
@@ -447,6 +358,14 @@ export const AutogearPage: React.FC = () => {
                 ? `Suggested gear equipped successfully for ${shipSettings.name}`
                 : `Equipped the compared build for ${shipSettings.name}`,
         });
+    };
+
+    /** Writes the notice's derived formula into the open ship's config — the update itself
+     *  (the seeded formula, the basis, which row it lands on) is `OffFormulaNotice`'s job; this
+     *  only supplies the ship this settings panel has open. */
+    const handleApplyOffFormula = (update: OffFormulaApplyUpdate) => {
+        if (!shipSettings) return;
+        updateShipConfig(shipSettings.id, update);
     };
 
     const availableImplantTypes = useMemo(() => {
@@ -1891,11 +1810,7 @@ export const AutogearPage: React.FC = () => {
                         runAutogearFor,
                         onApply: handleApplySimRerankRow,
                     }}
-                    offFormulaTuning={{
-                        deps: combatStatsDeps,
-                        runOptimizer: runOffFormulaTuningOptimizer,
-                        statBounds: offFormulaTuningBounds,
-                    }}
+                    onApplyOffFormula={handleApplyOffFormula}
                 />
 
                 <MilestoneModal

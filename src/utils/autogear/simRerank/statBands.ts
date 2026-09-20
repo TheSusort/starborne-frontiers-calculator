@@ -1,3 +1,7 @@
+// Not mounted in the UI. Retained as the owner-side tool for locating the threshold on the two
+// GATED ships (Xcellence, Vindicator), whose off-stat channel switches on at a boundary against
+// the opponent's security/hacking and so cannot be expressed as a weighted basis. #544.
+
 import type { StatPriority } from '../../../types/autogear';
 import type { LimitableStat } from '../../../types/stats';
 

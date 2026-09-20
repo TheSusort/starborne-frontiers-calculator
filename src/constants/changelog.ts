@@ -9,7 +9,8 @@ export const CURRENT_VERSION = '1.68.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: compare candidate gear builds through the combat simulator.',
     'Autogear: flags ships that score off a stat their role ignores.',
-    'Autogear: measure how a flagged stat changes a ship in real fights.',
+    'Autogear: ships scoring off an ignored stat now show their real damage equation.',
+    "Autogear: apply a ship's derived scoring formula in one click.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

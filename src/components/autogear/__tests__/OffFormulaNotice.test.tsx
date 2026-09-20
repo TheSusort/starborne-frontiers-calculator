@@ -1,8 +1,9 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect, vi, beforeAll } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { OffFormulaNotice } from '../OffFormulaNotice';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
+import type { CustomFormulaRow } from '../../../types/autogear';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
@@ -172,6 +173,8 @@ const corpusShipNamed = (name: string): Ship => {
     return asShip(rec, d);
 };
 
+const closeTo = (n: number, precision = 3) => expect.closeTo(n, precision);
+
 describe.skipIf(!csvAvailable() || !shipDataAvailable())(
     'OffFormulaNotice over the real corpus',
     () => {
@@ -329,6 +332,74 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             expect(
                 screen.getByText(/No stat besides Attack feeds its active or charged basis/i)
             ).toBeInTheDocument();
+        });
+
+        describe('Apply', () => {
+            it('applies a formula seeded from the role, with the basis on its core row', () => {
+                mocked.mockImplementation(realDetect);
+                const cobalt = corpusShipNamed('Cobalt');
+                const onApply = vi.fn();
+                render(
+                    <OffFormulaNotice ship={cobalt} configuredRole="ATTACKER" onApply={onApply} />
+                );
+                fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+                expect(onApply).toHaveBeenCalledWith({
+                    shipRole: null,
+                    customFormula: {
+                        seededFrom: 'ATTACKER',
+                        rows: [
+                            expect.objectContaining({
+                                stat: 'directDamage',
+                                kind: 'core',
+                                basis: [
+                                    { stat: 'attack', weight: closeTo(2.1) },
+                                    { stat: 'hp', weight: closeTo(0.267) },
+                                ],
+                            }),
+                        ],
+                    },
+                });
+            });
+
+            it('keeps naming the excluded carrier after the notice has gone', () => {
+                mocked.mockImplementation(realDetect);
+                const rikra = corpusShipNamed('Rikra');
+                const onApply = vi.fn();
+                render(
+                    <OffFormulaNotice ship={rikra} configuredRole="ATTACKER" onApply={onApply} />
+                );
+                fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+                const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
+                const row = update.customFormula.rows[0];
+                expect(row.excludedNote).toContain(
+                    'repairs 60% of max HP when an enemy is destroyed'
+                );
+            });
+
+            // SUPPORTER's seed has no `directDamage` row at all — attaching Makoli's repair
+            // basis to "the first core row" rather than the row `roleCoreStat` actually names
+            // (`hp`) would either attach it to the wrong row or throw. Makoli's own repair basis
+            // is Defence-dominant (~19:1 over HP), so this also pins that the basis on the `hp`
+            // row keeps its real ratio rather than collapsing to a single term.
+            it('lands the basis on the hp core row, not a directDamage row SUPPORTER has none of', () => {
+                mocked.mockImplementation(realDetect);
+                const makoli = corpusShipNamed('Makoli');
+                const onApply = vi.fn();
+                render(
+                    <OffFormulaNotice ship={makoli} configuredRole="SUPPORTER" onApply={onApply} />
+                );
+                fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+                const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
+                const rows = update.customFormula.rows;
+
+                expect(rows.some((r: CustomFormulaRow) => r.stat === 'directDamage')).toBe(false);
+                const hpRow = rows.find((r: CustomFormulaRow) => r.stat === 'hp');
+                expect(hpRow?.basis).toBeDefined();
+
+                const hpWeight = hpRow!.basis!.find((t) => t.stat === 'hp')!.weight;
+                const defWeight = hpRow!.basis!.find((t) => t.stat === 'defence')!.weight;
+                expect(defWeight / hpWeight).toBeCloseTo(18.8, 1);
+            });
         });
     }
 );

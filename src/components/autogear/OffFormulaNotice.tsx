@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Button } from '../ui';
 import type { Ship } from '../../types/ship';
 import { type ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
 import {
@@ -13,23 +14,15 @@ import {
     type DerivedBasis,
     type ExcludedCarrier,
 } from '../../utils/autogear/simRerank/basisDerivation';
-import { CUSTOM_FORMULA_SEEDS } from '../../utils/autogear/customFormulaSeeds';
-import type { CombatStatsDeps } from '../../utils/ship/combatStats';
-import type { LimitableStat } from '../../types/stats';
-import type { GearSuggestion, StatPriority } from '../../types/autogear';
-import type { StatBounds } from '../../utils/autogear/simRerank/statBounds';
+import { CUSTOM_FORMULA_SEEDS, seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
+import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
 
-/** `AutogearSettings` and `AutogearSettingsModal` still declare an `offFormulaTuning` prop of
- *  this shape and thread it down to where `OffFormulaNotice` used to take it. This component no
- *  longer reads it; the type stays exported so those two files' prop declarations keep resolving. */
-export interface OffFormulaTuningDeps {
-    deps: CombatStatsDeps;
-    runOptimizer: (
-        stat: LimitableStat,
-        priorities: StatPriority[]
-    ) => Promise<{ suggestions: GearSuggestion[]; landed: number }>;
-    /** The achievable range of `stat` over the pool this ship's run draws from. */
-    statBounds: (stat: LimitableStat) => StatBounds;
+/** What Apply writes back to the ship's config: the derived formula, seeded from the role and
+ *  carrying the basis on its core row, plus `shipRole: null` to switch the ship into Custom
+ *  mode — the formula is now an ordinary editable one, not a role's built-in objective. */
+export interface OffFormulaApplyUpdate {
+    shipRole: null;
+    customFormula: CustomFormula;
 }
 
 export interface OffFormulaNoticeProps {
@@ -37,6 +30,10 @@ export interface OffFormulaNoticeProps {
     /** The CONFIGURED autogear role, which can differ from `ship.type`. Null means Custom mode,
      *  where the detector returns nothing. */
     configuredRole: ShipTypeName | null;
+    /** Writes the derived formula into the ship's config. Optional so a caller that has not
+     *  wired persistence (or a test only asserting the notice's copy) can omit it — the button
+     *  it drives simply does not render. */
+    onApply?: (update: OffFormulaApplyUpdate) => void;
 }
 
 /** Two sentence shapes an `OffFormulaFinding.produces` needs: `scales` for the aggregate finding
@@ -85,6 +82,16 @@ const excludedLine = (ship: Ship, carrier: ExcludedCarrier): string =>
         carrier.stat
     )} ${triggerProse(carrier.trigger)}; ${excludedReason(carrier.trigger)}.`;
 
+/**
+ * The excluded carrier's own clause, in the ship's own numbers, without the ship's name or the
+ * reason it was excluded — the fragment of `excludedLine` worth keeping once the notice itself
+ * has unmounted. Carried onto the applied row's `excludedNote` (see `CustomFormulaRow`'s doc).
+ */
+const excludedClauseText = (carrier: ExcludedCarrier): string =>
+    `${PRODUCES_LABEL[carrier.produces].clause} ${carrier.pct}% of ${percentBasisLabel(
+        carrier.stat
+    )} ${triggerProse(carrier.trigger)}`;
+
 /** Maps a derived-stat core row to the single stat that stands in for it in a basis comparison,
  *  per `BasisTerm`'s doc in types/autogear.ts: `directDamage`'s primary factor is Attack,
  *  `effectiveHp`'s is HP. A plain-stat core row (e.g. SUPPORTER's `core('hp')`) maps to itself. */
@@ -102,6 +109,18 @@ const VALID_BASIS_STATS: ReadonlySet<OffFormulaStat> = new Set([
 ]);
 
 /**
+ * The stat a core row's basis would compare against: `CORE_ROW_PRIMARY`'s entry for a derived
+ * stat's primary factor, or the row's own stat otherwise — `null` when neither names a stat a
+ * derived basis can carry a term on (e.g. `hacking`, `speed`). The single resolution both
+ * `roleCoreStat` (which core row is the role's baseline) and Apply (which core row the derived
+ * basis attaches to) read, so the two questions cannot drift into different answers.
+ */
+const rowCoreStat = (row: Pick<CustomFormulaRow, 'stat'>): OffFormulaStat | null => {
+    const mapped = CORE_ROW_PRIMARY[row.stat] ?? (row.stat as OffFormulaStat);
+    return VALID_BASIS_STATS.has(mapped) ? mapped : null;
+};
+
+/**
  * The stat `equationLine` treats as the role's baseline, read off `CUSTOM_FORMULA_SEEDS`: the
  * first core row (in the seed's own order) that resolves to a stat a derived basis can carry a
  * term on. Falls back to Attack when no core row resolves to one — every role whose real formula
@@ -112,8 +131,8 @@ const VALID_BASIS_STATS: ReadonlySet<OffFormulaStat> = new Set([
 const roleCoreStat = (role: ShipTypeName): OffFormulaStat => {
     for (const row of CUSTOM_FORMULA_SEEDS[role].rows) {
         if (row.kind !== 'core') continue;
-        const mapped = CORE_ROW_PRIMARY[row.stat] ?? (row.stat as OffFormulaStat);
-        if (VALID_BASIS_STATS.has(mapped)) return mapped;
+        const stat = rowCoreStat(row);
+        if (stat) return stat;
     }
     return 'attack';
 };
@@ -154,7 +173,11 @@ const equationLine = (
     }.`;
 };
 
-export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({ ship, configuredRole }) => {
+export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
+    ship,
+    configuredRole,
+    onApply,
+}) => {
     // `buildShipAbilities(ship)` (inside both `detectOffFormulaStats` and `deriveBasis`) is a
     // regex-driven skill-text parser, and `OffFormulaNotice` sits beside sibling `useState`s in
     // `AutogearSettings` that re-render it on unrelated UI interactions — memoised so it is
@@ -181,7 +204,35 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({ ship, config
 
     const roleLabel = SHIP_TYPES[configuredRole]?.name;
     const coreStat = roleCoreStat(configuredRole);
-    const excluded = basisByProduces.get(findings[0].produces)?.excluded ?? [];
+    const primaryBasis = basisByProduces.get(findings[0].produces) ?? null;
+    const excluded = primaryBasis?.excluded ?? [];
+    // Something to write: either an active/charged basis term, or a passive clause worth
+    // carrying onto the row as `excludedNote` even when the basis itself is empty (Rikra).
+    const canApply = !!primaryBasis && (primaryBasis.terms.length > 0 || excluded.length > 0);
+
+    // Applying sets shipRole to null (Custom mode), and detectOffFormulaStats returns [] when
+    // configuredRole is null — so the notice clears through that existing short-circuit rather
+    // than by re-reading the basis. That is deliberate: Custom mode means the player wrote the
+    // scoring function, so there is no declared role left to diverge from.
+    const handleApply = () => {
+        if (!onApply || !primaryBasis) return;
+        const formula = seedFormulaFromRole(configuredRole);
+        const targetIndex = formula.rows.findIndex(
+            (row) => row.kind === 'core' && rowCoreStat(row) === coreStat
+        );
+        const index = targetIndex === -1 ? 0 : targetIndex;
+        const excludedNote = excluded.map(excludedClauseText);
+        formula.rows = formula.rows.map((row, i) =>
+            i === index
+                ? {
+                      ...row,
+                      basis: primaryBasis.terms,
+                      ...(excludedNote.length > 0 ? { excludedNote } : {}),
+                  }
+                : row
+        );
+        onApply({ shipRole: null, customFormula: formula });
+    };
 
     return (
         <div className="card space-y-2">
@@ -226,6 +277,11 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({ ship, config
                         </p>
                     ))}
                 </div>
+            )}
+            {onApply && canApply && (
+                <Button variant="secondary" size="sm" onClick={handleApply}>
+                    Use this equation
+                </Button>
             )}
         </div>
     );

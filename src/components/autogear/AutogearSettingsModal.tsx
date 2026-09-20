@@ -9,7 +9,7 @@ import { ArenaSeason } from '../../types/arena';
 import { BaseStats } from '../../types/stats';
 import { AutogearSettings } from './AutogearSettings';
 import type { SimRerankSectionProps } from './SimRerankSection';
-import type { OffFormulaTuningDeps } from './OffFormulaNotice';
+import type { OffFormulaApplyUpdate } from './OffFormulaNotice';
 
 interface AutogearSettingsModalProps {
     isOpen: boolean;
@@ -70,9 +70,8 @@ interface AutogearSettingsModalProps {
     /** Wires the "Simulate candidates" section. Optional for the same reason as on
      *  `AutogearSettings` — a caller not ready to supply its inputs simply omits it. */
     simRerank?: Omit<SimRerankSectionProps, 'ship'>;
-    /** Wires the "Measure it" control on `OffFormulaNotice`, for the same reason as
-     *  `simRerank`. */
-    offFormulaTuning?: OffFormulaTuningDeps;
+    /** Wires the Apply control on `OffFormulaNotice`, for the same reason as `simRerank`. */
+    onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({
