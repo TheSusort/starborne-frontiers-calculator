@@ -125,7 +125,8 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({ ship, config
                             {finding.severity === 'severe'
                                 ? `The ${roleLabel} formula does not score ${scored}.`
                                 : `The ${roleLabel} formula scores ${scored} only as part of a total it can trade away for another stat.`}
-                            {!lever && ' No gear stat moves it, so there is nothing to measure.'}
+                            {!lever &&
+                                ' No gear stat drives it, so there is nothing to put in a formula.'}
                         </p>
                         {basis && (
                             <p className="text-xs text-theme-text-secondary">
