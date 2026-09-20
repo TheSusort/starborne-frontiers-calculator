@@ -1549,6 +1549,19 @@ const DocumentationPage: React.FC = () => {
                                         stat — an empty formula would score every combination the
                                         same.
                                     </p>
+                                    <p className="text-theme-text mt-2">
+                                        When a ship&apos;s kit deals damage, repairs, or shields off
+                                        a stat its role formula ignores, a notice under its
+                                        configuration shows the ship&apos;s own scoring equation and
+                                        a <strong>Use this equation</strong> button that writes it
+                                        into a Multiplied row as a weighted list of stats. That list
+                                        is editable afterwards: open the row to add, change, or
+                                        remove a weighted stat. This is also how you hand-add an
+                                        effect the notice explicitly calls out as skipped — a
+                                        passive whose firing frequency can&apos;t be derived
+                                        automatically — using the row&apos;s own note for the exact
+                                        wording and percentage to enter.
+                                    </p>
                                 </div>
 
                                 <div className="card">

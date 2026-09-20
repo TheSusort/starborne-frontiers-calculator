@@ -32,7 +32,10 @@ const DERIVED_STATS: Record<DerivedStatName, true> = {
     directDamage: true,
 };
 
-const isBasisStat = (stat: LimitableStat): boolean =>
+/** Whether `stat` is a term the scorer can read a value for. Exported so the formula editor can
+ *  offer only these stats in its basis-term picker, rather than letting a term be authored on
+ *  `directDamage`/`effectiveHp` and silently dropped here at score time. */
+export const isBasisStat = (stat: LimitableStat): boolean =>
     MULTIPLIER_NORMALIZERS[stat] !== undefined && !(stat in DERIVED_STATS);
 
 export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
@@ -43,6 +46,13 @@ export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
     );
     return kept.length > 0 ? kept : undefined;
 }
+
+/** Whether a basis on this row's own stat is a tilt rather than a transcription. `effectiveHp`
+ *  is the one case: `calculateEffectiveHP` already runs Defence through the mitigation curve on
+ *  its own real value, so a Defence term in that basis is a deliberate skew on top of that, not
+ *  a number copied from the ship's kit. Every other row (including `directDamage` and a plain
+ *  stat like `hp`) reads its basis as the kit's own equation. */
+export const isBasisTilt = (stat: LimitableStat): boolean => stat === 'effectiveHp';
 
 /**
  * One row's contribution, normalized so rows on different stats are comparable.

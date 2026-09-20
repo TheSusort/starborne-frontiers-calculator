@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: flags ships that score off a stat their role ignores.',
     'Autogear: ships scoring off an ignored stat now show their real damage equation.',
     "Autogear: apply a ship's derived scoring formula in one click.",
+    'Autogear: custom formula rows can now weight a stat by other stats.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
