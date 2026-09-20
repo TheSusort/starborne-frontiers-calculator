@@ -109,7 +109,7 @@ export const TRIGGER_PROSE: Record<string, string> = {
     'pre-combat': 'at the start of the fight',
     'start-of-turn': 'at the start of its turn',
     'start-of-round': 'at the start of the round',
-    'on-cast': 'on cast',
+    'on-cast': 'when it casts a skill',
     'on-attacked': 'when it is attacked',
     'on-ally-attacked': 'when an ally is attacked',
     'on-destroyed': 'when it is destroyed',
