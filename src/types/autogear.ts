@@ -41,6 +41,14 @@ export type FormulaDirection = 'max' | 'min';
 /** Exponent applied to a core row's term. Slight / Normal / Heavy. */
 export type CoreImportance = 0.5 | 1 | 2;
 
+/** One stat feeding a derived stat's primary factor, weighted in the game's own multiplier
+ *  units divided by 100: a 200% attack skill is `{ stat: 'attack', weight: 2.0 }` and a clause
+ *  dealing 25% of max HP is `{ stat: 'hp', weight: 0.25 }`. */
+export interface BasisTerm {
+    stat: LimitableStat;
+    weight: number;
+}
+
 export interface CustomFormulaRow {
     stat: LimitableStat;
     kind: FormulaRowKind;
@@ -49,6 +57,12 @@ export interface CustomFormulaRow {
     importance?: CoreImportance;
     /** Coefficient for a bonus row, as a percentage. Defaults to 100. Unused on a core row. */
     percentage?: number;
+    /** Replaces the primary factor of a DERIVED stat with a weighted sum. `directDamage`'s
+     *  primary factor is attack; `effectiveHp`'s is HP. Honoured only on a `kind: 'core'`,
+     *  `direction: 'max'` row — a minimised term is `1/(1+n)` and so is not scale-invariant.
+     *  Absent means the derived stat's own default factor, which is byte-identical to the
+     *  behaviour before bases existed. */
+    basis?: BasisTerm[];
 }
 
 export interface CustomFormula {

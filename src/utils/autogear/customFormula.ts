@@ -1,7 +1,48 @@
-import type { BaseStats, LimitableStat } from '../../types/stats';
-import type { CoreImportance, CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { BaseStats, DerivedStatName, LimitableStat } from '../../types/stats';
+import type {
+    BasisTerm,
+    CoreImportance,
+    CustomFormula,
+    CustomFormulaRow,
+} from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution';
+import {
+    MULTIPLIER_NORMALIZERS,
+    calculateDirectDamage,
+    calculateEffectiveHP,
+    resolveBasisValue,
+} from './statResolution';
+
+/**
+ * A row's basis, filtered to entries the scorer can honour. A stored row is untyped JSON and
+ * reaches the scorer without passing through any form, so each entry is checked rather than
+ * trusted — an unrecognised stat would resolve to 0 and silently delete a term, and a negative
+ * weight would subtract one. Returns undefined when nothing survives, so the row falls back to
+ * its own stat rather than scoring 0 for every candidate and tying the search.
+ *
+ * A basis TERM must name a raw `BaseStats` key. "Has a MULTIPLIER_NORMALIZERS entry" is the
+ * WRONG predicate: that table also keys `directDamage` and `effectiveHp`, which `resolveBasisValue`
+ * would read off the stat block as `undefined` and contribute as 0 — a term that silently
+ * disappears. See `reference_total_record_is_compile_time_only`.
+ */
+const DERIVED_STATS: Record<DerivedStatName, true> = {
+    // Total on purpose: a third derived stat must fail the build here rather than slip into a
+    // basis and score as 0.
+    effectiveHp: true,
+    directDamage: true,
+};
+
+const isBasisStat = (stat: LimitableStat): boolean =>
+    MULTIPLIER_NORMALIZERS[stat] !== undefined && !(stat in DERIVED_STATS);
+
+export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
+    if (row.kind !== 'core' || row.direction !== 'max') return undefined;
+    if (!Array.isArray(row.basis)) return undefined;
+    const kept = row.basis.filter(
+        (t) => t && isBasisStat(t.stat) && Number.isFinite(t.weight) && t.weight >= 0
+    );
+    return kept.length > 0 ? kept : undefined;
+}
 
 /**
  * One row's contribution, normalized so rows on different stats are comparable.
@@ -17,7 +58,23 @@ import { MULTIPLIER_NORMALIZERS, resolveLimitStatValue } from './statResolution'
  */
 export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number {
     const normalizer = MULTIPLIER_NORMALIZERS[row.stat] || 1;
-    const n = resolveLimitStatValue(stats, row.stat) / normalizer;
+    const basis = usableBasis(row);
+    // A basis is honoured on ANY max core row, not only a derived one. SUPPORTER's core is
+    // `core('hp')` — a plain stat — and Howler's and Makoli's whole fix is a basis on that row,
+    // so routing only the two derived stats would make Apply a silent no-op for them.
+    const raw =
+        row.stat === 'directDamage'
+            ? calculateDirectDamage(stats, basis)
+            : row.stat === 'effectiveHp'
+              ? calculateEffectiveHP(
+                    stats.hp,
+                    stats.defence,
+                    stats.damageReduction ?? 0,
+                    basis,
+                    stats
+                )
+              : resolveBasisValue(stats, basis, row.stat);
+    const n = raw / normalizer;
     return row.direction === 'min' ? 1 / (1 + n) : n;
 }
 
