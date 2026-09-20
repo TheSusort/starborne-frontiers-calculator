@@ -4,6 +4,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
 import type { CustomFormulaRow } from '../../../types/autogear';
+import type { ShipTypeName } from '../../../constants/shipTypes';
+import { CUSTOM_FORMULA_SEEDS } from '../../../utils/autogear/customFormulaSeeds';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
@@ -399,6 +401,55 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 const hpWeight = hpRow!.basis!.find((t) => t.stat === 'hp')!.weight;
                 const defWeight = hpRow!.basis!.find((t) => t.stat === 'defence')!.weight;
                 expect(defWeight / hpWeight).toBeCloseTo(18.8, 1);
+            });
+        });
+
+        // The invariant `handleApply`'s `-1 -> 0` fallback broke: `deriveBasis` never reads the
+        // configured role, so Cobalt's real damage basis (Attack x2.1 + HP x0.267, pinned above)
+        // is the same fixture across every role — only which row can HOST it changes. Independent
+        // of `rowCoreStat`'s own mapping, so a regression in that mapping can't launder itself
+        // through the same table on both sides.
+        describe('Apply — every role either hosts the basis or is not offered', () => {
+            const CORE_ROW_PRIMARY: Record<string, string> = {
+                directDamage: 'attack',
+                effectiveHp: 'hp',
+            };
+            const BASIS_STATS = new Set(['attack', 'hp', 'defence', 'security', 'shield']);
+            const rowHostsBasis = (row: CustomFormulaRow): boolean =>
+                row.kind === 'core' && BASIS_STATS.has(CORE_ROW_PRIMARY[row.stat] ?? row.stat);
+
+            it.each(Object.keys(CUSTOM_FORMULA_SEEDS))('%s', (role: ShipTypeName) => {
+                mocked.mockReturnValue([
+                    {
+                        stat: 'attack',
+                        produces: 'damage',
+                        severity: 'severe',
+                        trigger: 'on-cast',
+                        tunableStat: 'attack',
+                    },
+                ]);
+                const cobalt = corpusShipNamed('Cobalt');
+                const onApply = vi.fn();
+                render(<OffFormulaNotice ship={cobalt} configuredRole={role} onApply={onApply} />);
+
+                const seedHasHost = CUSTOM_FORMULA_SEEDS[role].rows.some(rowHostsBasis);
+                const button = screen.queryByRole('button', { name: /use this/i });
+
+                if (!seedHasHost) {
+                    // No row in this role's seed can carry the basis — Apply must not be
+                    // offered, not attach the basis to an unrelated row.
+                    expect(button).not.toBeInTheDocument();
+                    return;
+                }
+
+                expect(button).toBeInTheDocument();
+                fireEvent.click(button!);
+                const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
+                const appliedRow = update.customFormula.rows.find(
+                    (r: CustomFormulaRow) => r.basis !== undefined
+                );
+                expect(appliedRow).toBeDefined();
+                expect(rowHostsBasis(appliedRow!)).toBe(true);
             });
         });
     }

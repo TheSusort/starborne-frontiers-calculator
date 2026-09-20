@@ -208,7 +208,16 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     const excluded = primaryBasis?.excluded ?? [];
     // Something to write: either an active/charged basis term, or a passive clause worth
     // carrying onto the row as `excludedNote` even when the basis itself is empty (Rikra).
-    const canApply = !!primaryBasis && (primaryBasis.terms.length > 0 || excluded.length > 0);
+    const hasSomethingToApply =
+        !!primaryBasis && (primaryBasis.terms.length > 0 || excluded.length > 0);
+    // The row Apply would attach the basis to: the seeded formula's own core row for `coreStat`,
+    // per `rowCoreStat`'s resolution. Some roles' entire core is a stat a basis cannot name
+    // (DEBUFFER_CORROSION's hacking, SUPPORTER_BUFFER/SUPPORTER_OFFENSIVE's speed) — there is no
+    // row to attach to, and Apply must not guess one by falling back to row 0.
+    const hasBasisHost = CUSTOM_FORMULA_SEEDS[configuredRole].rows.some(
+        (row) => row.kind === 'core' && rowCoreStat(row) === coreStat
+    );
+    const canApply = hasSomethingToApply && hasBasisHost;
 
     // Applying sets shipRole to null (Custom mode), and detectOffFormulaStats returns [] when
     // configuredRole is null — so the notice clears through that existing short-circuit rather
@@ -220,10 +229,12 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         const targetIndex = formula.rows.findIndex(
             (row) => row.kind === 'core' && rowCoreStat(row) === coreStat
         );
-        const index = targetIndex === -1 ? 0 : targetIndex;
+        // `canApply` already requires this row to exist; bail rather than guess a row if it's
+        // ever reached without one.
+        if (targetIndex === -1) return;
         const excludedNote = excluded.map(excludedClauseText);
         formula.rows = formula.rows.map((row, i) =>
-            i === index
+            i === targetIndex
                 ? {
                       ...row,
                       basis: primaryBasis.terms,
@@ -277,6 +288,12 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                         </p>
                     ))}
                 </div>
+            )}
+            {onApply && hasSomethingToApply && !hasBasisHost && (
+                <p className="text-xs text-theme-text-secondary">
+                    {roleLabel}&apos;s formula has no row this equation can attach to. Add it to
+                    your custom formula by hand instead.
+                </p>
             )}
             {onApply && canApply && (
                 <Button variant="secondary" size="sm" onClick={handleApply}>
