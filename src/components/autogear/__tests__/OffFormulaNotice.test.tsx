@@ -109,7 +109,7 @@ describe('OffFormulaNotice', () => {
         ]);
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
         expect(screen.getByText(/damage scales off its shield pool/)).toBeInTheDocument();
-        expect(screen.getByText(/nothing to measure/i)).toBeInTheDocument();
+        expect(screen.getByText(/nothing to put in a formula/i)).toBeInTheDocument();
     });
 });
 
