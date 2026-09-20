@@ -197,6 +197,12 @@ to today's behaviour and the fix depends on the player editing it:
 
 APEX, Crocus, Crucialis, FrontLine, Hemlock, IonScorp, LUXX, Rikra, Sefuba, Xcellence.
 
+**The notice names the excluded carrier explicitly**, rather than stating the exclusion as a
+general caveat. A basis identical to today's behaviour is indistinguishable from one that needed
+no change, so the notice must say which clause was left out and why: "Rikra repairs for 40% of max
+HP when an enemy is destroyed — not counted, because a passive's frequency depends on the fight."
+That turns the edit into a concrete action instead of an invitation to guess.
+
 ### Derived bases (measured against the real corpus, 2026-09-20)
 
 | Ship | N | g | p | active/charged | Derived basis |
@@ -320,6 +326,11 @@ Flow: **detect → derive → show → apply → share**.
   optional basis.
 - `autogear/customFormula.ts` — `formulaRowTerm` passes the row's basis through; `isUsableRow`
   gains basis validation.
+- `components/autogear/CustomFormulaRow.tsx` / `CustomFormulaForm.tsx` — **the basis editor is the
+  existing formula editor, not a new surface.** A core row naming a derived stat expands to show
+  its basis terms, each an editable `(stat, weight)` pair, alongside the kind/direction/importance
+  controls the form already carries. This is what makes the passive-exclusion rule tenable: adding
+  back a passive the derivation skipped is the same gesture as any other formula edit.
 - `types/communityRecommendation.ts` — `SharedAutogearBuild` gains `customFormula` and a nullable
   `shipRole`, with the `version` bump the interface already anticipates.
 
@@ -384,12 +395,15 @@ Execution pauses at each stage boundary for the owner to test.
   section.
 - **The 47-ship detector table test stays**, including its instrument check.
 
-## Open questions for the owner
+## Decisions taken on the notice's reach
 
-1. **Should the notice fire on `severe` findings only?** 24 of the 47 are DEFENDER
-   `substitution` — the finding is only that `effectiveHp` lets the optimizer trade HP for Defence
-   at no scoring cost. If half the defenders in the game carry a banner, players stop reading
-   banners. Restricting to `severe` leaves 23 ships, each a real mis-scoring. Not resolved.
-2. **Whether the derived basis should be shown for the ten passive-only ships at all**, given it
-   is identical to today's behaviour for them. Showing it invites the edit; hiding it avoids
-   implying a fix that is not there.
+**Both severities keep their notice — all 47 ships.** The DEFENDER `substitution` bucket is not
+noise: `effectiveHp` treats HP and Defence as interchangeable through the mitigation curve, and a
+kit that scales off one of them specifically gives the player a reason to prefer that one which
+the curve alone will never pick. Panon wants more Defence than pure `effectiveHp` optimisation
+gives him; Madax wants more HP. Narrowing to `severe` would have silenced Panon and Vindicator,
+both of which the owner named by hand as known positives — which is the evidence that the
+substitution findings are real.
+
+**The ten passive-only ships keep their notice too**, even though their derived basis equals
+today's behaviour. Showing it is what invites the edit that actually fixes them.
