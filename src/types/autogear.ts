@@ -57,11 +57,11 @@ export interface CustomFormulaRow {
     importance?: CoreImportance;
     /** Coefficient for a bonus row, as a percentage. Defaults to 100. Unused on a core row. */
     percentage?: number;
-    /** Replaces the primary factor of a DERIVED stat with a weighted sum. `directDamage`'s
-     *  primary factor is attack; `effectiveHp`'s is HP. Honoured only on a `kind: 'core'`,
-     *  `direction: 'max'` row — a minimised term is `1/(1+n)` and so is not scale-invariant.
-     *  Absent means the derived stat's own default factor, which is byte-identical to the
-     *  behaviour before bases existed. */
+    /** A weighted sum that replaces what this row scores on: on a derived stat, its primary
+     *  factor (`directDamage`'s is attack; `effectiveHp`'s is HP); on a plain stat, the stat's
+     *  own value. Honoured only on a `kind: 'core'`, `direction: 'max'` row — a minimised term
+     *  is `1/(1+n)` and so is not scale-invariant. Absent means the row scores exactly as it
+     *  did before bases existed. */
     basis?: BasisTerm[];
 }
 

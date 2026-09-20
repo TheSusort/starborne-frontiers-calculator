@@ -1,6 +1,6 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import type { FleetBuff, CustomFormula } from '../../types/autogear';
+import type { BasisTerm, FleetBuff, CustomFormula } from '../../types/autogear';
 import { GearSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -145,6 +145,23 @@ function calculateArcaneSiegeMultiplier(
     return baseMultiplier;
 }
 
+/**
+ * A formula row's `basis` as a cache-key fragment. A basis is a sum, so term order is not
+ * significant — sorted here from a copy so two bases differing only in authored order collapse
+ * to one key. An absent or empty basis contributes '', so a basis-free row's key is unchanged
+ * from before `basis` existed.
+ */
+function basisKeyPart(basis: BasisTerm[] | undefined): string {
+    if (!basis || basis.length === 0) return '';
+    return (
+        ';' +
+        basis
+            .map((t) => `${t.stat}:${t.weight}`)
+            .sort()
+            .join(',')
+    );
+}
+
 // Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
@@ -215,7 +232,7 @@ export function calculateTotalScore(
         ? customFormula.rows
               .map(
                   (r) =>
-                      `${r.stat}:${r.kind}:${r.direction}:${r.importance ?? 1}:${r.percentage ?? 100}`
+                      `${r.stat}:${r.kind}:${r.direction}:${r.importance ?? 1}:${r.percentage ?? 100}${basisKeyPart(r.basis)}`
               )
               .join(',')
         : 'none';

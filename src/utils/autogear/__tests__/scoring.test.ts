@@ -8,7 +8,7 @@ import {
     clearScoreCache,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
-import { StatBonus, StatPriority } from '../../../types/autogear';
+import { CustomFormula, StatBonus, StatPriority } from '../../../types/autogear';
 import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
 import { GearPiece } from '../../../types/gear';
 
@@ -295,5 +295,72 @@ describe('clearScoreCache', () => {
 
         expect(second).toBe(first);
         expect(third).not.toBe(first);
+    });
+});
+
+describe('calculateTotalScore cache key basis sensitivity', () => {
+    // Same ship, same equipment IDs, same everything except one row's `basis` — the cache
+    // key must still tell the two formulas apart, or the second call returns the first
+    // formula's cached score.
+    function makeWeapon(): GearPiece {
+        return {
+            id: 'w-basis',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'attack', value: 5000, type: 'flat' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const ship = makeTestShip({ id: 'basis-cache-ship' });
+    const equipment = { weapon: 'w-basis' } as const;
+    const priorities: StatPriority[] = [];
+    const noEngineering = () => undefined;
+
+    const noBasisFormula: CustomFormula = {
+        rows: [{ stat: 'hp', kind: 'core', direction: 'max' }],
+    };
+    const basisFormula: CustomFormula = {
+        rows: [
+            {
+                stat: 'hp',
+                kind: 'core',
+                direction: 'max',
+                basis: [
+                    { stat: 'hp', weight: 1 },
+                    { stat: 'defence', weight: 18.8 },
+                ],
+            },
+        ],
+    };
+
+    function score(customFormula: CustomFormula): number {
+        return calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            makeWeapon,
+            noEngineering,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            customFormula
+        );
+    }
+
+    it('scores a basis formula differently from an otherwise-identical basis-free formula', () => {
+        clearScoreCache();
+        const withoutBasis = score(noBasisFormula);
+        // No clearScoreCache() here on purpose: both calls must go through the same cache,
+        // since the cache key is exactly what is under test.
+        const withBasis = score(basisFormula);
+
+        expect(withBasis).not.toBe(withoutBasis);
     });
 });
