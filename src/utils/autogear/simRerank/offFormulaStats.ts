@@ -24,6 +24,10 @@ export interface OffFormulaFinding {
      *  effect at all — the finding still reports what the kit does, but there is nothing to
      *  measure and no lever to offer. */
     tunableStat?: OffFormulaStat;
+    /** For a chained finding, the producing clause's percentage — the second factor of the
+     *  coefficient product. FrontLine's damage is 75% of his shield and his shield is 25% of max
+     *  HP, so the lever weight is 0.75 x 0.25. Absent when `stat` is its own lever. */
+    leverPct?: number;
 }
 
 /** An {@link OffFormulaFinding} a tuning run can actually act on. The panel takes this, so a
@@ -44,8 +48,12 @@ const isGearable = (stat: OffFormulaStat): boolean => GEARABLE_STATS.has(stat);
 
 /** A carrier the walk found, before the role formula has been consulted. Every carrier is
  *  recorded, aligned or not: a chain can only be followed while both of its links are still
- *  present, so classification has to wait until the lever is known. */
-type CarrierFinding = Omit<OffFormulaFinding, 'severity'>;
+ *  present, so classification has to wait until the lever is known. Carries its own clause's
+ *  percentage (`pct`) so a chained finding can report the producer's share of the coefficient
+ *  product — `pct` never survives into the returned finding itself, only as `leverPct` on the
+ *  finding it produces. */
+type CarrierFinding = Omit<OffFormulaFinding, 'severity' | 'leverPct'> & { pct: number };
+type ResolvedFinding = Omit<OffFormulaFinding, 'severity'>;
 
 /**
  * Point every finding at the gearable stat a tuning run can band.
@@ -53,24 +61,43 @@ type CarrierFinding = Omit<OffFormulaFinding, 'severity'>;
  * A finding on a stat gear rolls is its own lever. A finding on a stat gear cannot roll is
  * actionable only when another finding PRODUCES that stat from a gearable one: the two collapse
  * into a single entry that keeps what the effect reads in `stat` and carries the lever in
- * `tunableStat`, and the producer is dropped because the collapsed entry already says what it
- * said. A finding with no gearable producer keeps no `tunableStat`.
+ * `tunableStat` plus the producer's own percentage in `leverPct` (the second factor of the
+ * coefficient product — `stat`'s own pct is the first), and the producer is dropped because the
+ * collapsed entry already says what it said. A finding with no gearable producer keeps no
+ * `tunableStat` (and no `leverPct`).
  */
-function withGearableLevers(raw: CarrierFinding[]): CarrierFinding[] {
+function withGearableLevers(raw: CarrierFinding[]): ResolvedFinding[] {
     const absorbed = new Set<number>();
-    const resolved: CarrierFinding[][] = raw.map((finding, index) => {
-        if (isGearable(finding.stat)) return [{ ...finding, tunableStat: finding.stat }];
+    const resolved: ResolvedFinding[][] = raw.map((finding, index) => {
+        if (isGearable(finding.stat)) {
+            return [
+                {
+                    stat: finding.stat,
+                    produces: finding.produces,
+                    trigger: finding.trigger,
+                    tunableStat: finding.stat,
+                },
+            ];
+        }
 
-        const chained: CarrierFinding[] = [];
+        const chained: ResolvedFinding[] = [];
         raw.forEach((producer, producerIndex) => {
             if (producerIndex === index) return;
             if (producer.produces !== finding.stat) return;
             if (!isGearable(producer.stat)) return;
             absorbed.add(producerIndex);
-            chained.push({ ...finding, tunableStat: producer.stat });
+            chained.push({
+                stat: finding.stat,
+                produces: finding.produces,
+                trigger: finding.trigger,
+                tunableStat: producer.stat,
+                leverPct: producer.pct,
+            });
         });
 
-        return chained.length > 0 ? chained : [finding];
+        return chained.length > 0
+            ? chained
+            : [{ stat: finding.stat, produces: finding.produces, trigger: finding.trigger }];
     });
 
     return resolved.flatMap((entries, index) => (absorbed.has(index) ? [] : entries));
@@ -89,8 +116,9 @@ const AGGREGATE_COMPONENTS: Record<string, readonly string[]> = {
 };
 
 /** `additional-damage.stat` and `heal`/`shield`.`basis` spell it the American way; `BaseStats`
- *  and `StatPriority.stat` spell it the British way (types/abilities.ts:722-726). */
-const normalise = (stat: string): OffFormulaStat =>
+ *  and `StatPriority.stat` spell it the British way (types/abilities.ts:722-726). Exported so
+ *  `basisDerivation.ts` shares one idiom rather than re-deriving it. */
+export const normalise = (stat: string): OffFormulaStat =>
     (stat === 'defense' ? 'defence' : stat) as OffFormulaStat;
 
 export function gatingStatFor(trigger: string): 'hacking' | 'security' | 'defence' {
@@ -134,10 +162,11 @@ export function detectOffFormulaStats(
     const add = (
         stat: OffFormulaStat,
         produces: OffFormulaFinding['produces'],
-        trigger: string
+        trigger: string,
+        pct: number
     ): void => {
         if (carriers.some((f) => f.stat === stat && f.produces === produces)) return;
-        carriers.push({ stat, produces, trigger });
+        carriers.push({ stat, produces, trigger, pct });
     };
 
     for (const slot of buildShipAbilities(ship).slots ?? []) {
@@ -146,6 +175,7 @@ export function detectOffFormulaStats(
                 type?: string;
                 stat?: string;
                 basis?: string;
+                pct?: number;
                 hpBasisPct?: number;
                 shieldBasisPct?: number;
             };
@@ -153,7 +183,7 @@ export function detectOffFormulaStats(
             const trigger = ability.trigger as string;
 
             if (config.type === 'additional-damage' && config.stat) {
-                add(normalise(config.stat), 'damage', trigger);
+                add(normalise(config.stat), 'damage', trigger, config.pct ?? 0);
             }
 
             if ((config.type === 'heal' || config.type === 'shield') && config.basis) {
@@ -164,7 +194,8 @@ export function detectOffFormulaStats(
                     add(
                         normalise(config.basis),
                         config.type === 'heal' ? 'repair' : 'shield',
-                        trigger
+                        trigger,
+                        config.pct ?? 0
                     );
                 }
             }
@@ -173,8 +204,8 @@ export function detectOffFormulaStats(
             // attack x multiplier. Invisible to an 'additional-damage' query, and the only way
             // Vindicator and Xcellence's real damage channels are seen at all.
             if (config.type === 'damage') {
-                if (config.hpBasisPct) add('hp', 'damage', trigger);
-                if (config.shieldBasisPct) add('shield', 'damage', trigger);
+                if (config.hpBasisPct) add('hp', 'damage', trigger, config.hpBasisPct);
+                if (config.shieldBasisPct) add('shield', 'damage', trigger, config.shieldBasisPct);
             }
         }
     }
