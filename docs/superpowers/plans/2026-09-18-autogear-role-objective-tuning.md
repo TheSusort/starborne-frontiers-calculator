@@ -624,6 +624,27 @@ Then, for `deriveBasis(ship, produces)`:
 4. Divide every weight by 100
 5. Record every carrier found in a **passive** slot in `excluded`, never in `terms`
 
+**The excluded-carrier prose** is a fixed map, not free composition — a test asserts it verbatim.
+These are the only triggers that carry an excluded clause in the current corpus; an unmapped
+trigger falls back to its raw name rather than inventing English:
+
+```ts
+const TRIGGER_PROSE: Record<string, string> = {
+    'pre-combat': 'at the start of the fight',
+    'start-of-turn': 'at the start of its turn',
+    'on-enemy-destroyed': 'when an enemy is destroyed',
+    'on-enemy-purged': 'when it purges an enemy buff',
+    'on-debuff-inflicted': 'when it lands a debuff',
+    'on-ally-crit-dot': 'when an ally crits a damaged-over-time enemy',
+    'on-corrosion-spread': 'when Corrosion spreads',
+    'on-enemy-debuff-resisted': 'when an enemy resists a debuff',
+};
+```
+
+A note reads `{PRODUCES_LABEL[produces]} {pct}% of {STAT_LABEL[stat]} {TRIGGER_PROSE[trigger]}` —
+Rikra's is `repairs 60% of max HP when an enemy is destroyed`. `OffFormulaNotice` already owns
+`PRODUCES_LABEL` and `STAT_LABEL`; export them rather than restating the verb-agreement rule.
+
 Reuse `normalise` from `offFormulaStats.ts` for the `defense`/`defence` split.
 
 - [ ] **Step 5: Carry the shield coefficient in the detector**
