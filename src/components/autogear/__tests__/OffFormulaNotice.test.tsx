@@ -204,10 +204,43 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             expect(
                 screen.getByText(/repairs 60% of max HP when an enemy is destroyed/i)
             ).toBeInTheDocument();
+            // Rikra's exclusion trigger is `on-enemy-destroyed`, a reactive trigger, so the
+            // frequency-uncertainty reason is the right one for him (contrast the known-cadence
+            // ships below).
             expect(
                 screen.getByText(/a passive's frequency depends on the fight/i)
             ).toBeInTheDocument();
+            // Rikra's lever IS HP, so `equationLine` does run for him — but his repair basis has
+            // no active/charged term at all (the only repair carrier is the passive one just
+            // asserted above), so the "unchanged" branch fires and appends this pointer sentence.
+            // This is the only test in the file asserting the pointer's PRESENCE; every other
+            // test that touches it (Howler, below) asserts its absence instead.
+            expect(
+                screen.getByText(
+                    /The clause below is what a passive keeps the optimizer from counting/i
+                )
+            ).toBeInTheDocument();
         });
+
+        // FrontLine's exclusion trigger is `pre-combat`: guaranteed, exactly once, every fight —
+        // its frequency is not in question, so blaming "frequency depends on the fight" would be
+        // self-contradicting next to a sentence that just said "at the start of the fight".
+        it.each(['Crucialis', 'FrontLine', 'IonScorp'])(
+            "%s's pre-combat exclusion does not blame fight-dependent frequency",
+            (name) => {
+                mocked.mockImplementation(realDetect);
+                const ship = corpusShipNamed(name);
+                render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
+                expect(
+                    screen.queryByText(/a passive's frequency depends on the fight/i)
+                ).not.toBeInTheDocument();
+                expect(
+                    screen.getByText(
+                        /doesn't fit the active-versus-charged cast ratio the basis is built from/i
+                    )
+                ).toBeInTheDocument();
+            }
+        );
 
         it('shows the notice for a substitution finding, not only a severe one', () => {
             mocked.mockImplementation(realDetect);
@@ -215,9 +248,15 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             // Narrowing to `severe` would silence Panon and Vindicator, both owner-named known
             // positives (their finding survives only because effectiveHp's components are never
             // expanded when deciding whether the formula covers a stat). Both severities keep
-            // their notice — all 47 flagged ships.
+            // their notice — all 47 flagged ships. Panon's own tunable stat collapses onto what
+            // the effect reads (both are Defence), so the sentence reads "scores it", not a named
+            // stat — pinning the substitution phrasing itself, not just that his name rendered.
             render(<OffFormulaNotice ship={panon} configuredRole="DEFENDER" />);
-            expect(screen.getByText(/Panon/)).toBeInTheDocument();
+            expect(
+                screen.getByText(
+                    /The Defender formula scores it only as part of a total it can trade away for another stat/
+                )
+            ).toBeInTheDocument();
         });
 
         // `excludedCarriers` reports a `damage`-produces carrier too (a `shieldBasisPct` clause
@@ -234,16 +273,62 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             ).toBeInTheDocument();
         });
 
-        // Howler's repair is 100% Attack — no OTHER stat feeds it, but also no passive clause
-        // exists to blame, unlike Rikra/APEX above. The copy must not claim there is one.
-        it('states the scoring is unchanged with no passive clause to point at', () => {
+        // Xcellence carries TWO excluded clauses (the shieldBasisPct damage clause above, plus an
+        // hp-to-shield clause), the only one of the ten passive-only ships with more than one —
+        // the pointer sentence must agree in number rather than read "the clause below" over two.
+        it("uses the plural pointer for Xcellence's two excluded clauses", () => {
+            mocked.mockImplementation(realDetect);
+            const xcellence = corpusShipNamed('Xcellence');
+            render(<OffFormulaNotice ship={xcellence} configuredRole="ATTACKER" />);
+            expect(
+                screen.getByText(
+                    /The clauses below are what a passive keeps the optimizer from counting/i
+                )
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByText(
+                    /The clause below is what a passive keeps the optimizer from counting/i
+                )
+            ).not.toBeInTheDocument();
+        });
+
+        // Howler's repair is 100% Attack, and the SUPPORTER formula's core row scores HP — the
+        // basis is Attack-only, which does NOT match the role's own baseline, so this is a real
+        // change worth reporting, not the "unchanged" sentence (see `roleCoreStat`).
+        it("states what Attack displaces from the SUPPORTER formula's HP baseline", () => {
             mocked.mockImplementation(realDetect);
             const howler = corpusShipNamed('Howler');
             render(<OffFormulaNotice ship={howler} configuredRole="SUPPORTER" />);
             expect(
+                screen.getByText(/In its own numbers, this is Attack x1\.067, and nothing from HP/i)
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByText(/No stat besides Attack feeds its active or charged basis/i)
+            ).not.toBeInTheDocument();
+        });
+
+        // Graphite's shield is also 100% Attack under the same SUPPORTER core-on-HP baseline —
+        // a second ship pinning the same corrected sentence shape, not just Howler's numbers.
+        it("states the same displacement for Graphite's shield basis", () => {
+            mocked.mockImplementation(realDetect);
+            const graphite = corpusShipNamed('Graphite');
+            render(<OffFormulaNotice ship={graphite} configuredRole="SUPPORTER" />);
+            expect(
+                screen.getByText(/In its own numbers, this is Attack x1\.350, and nothing from HP/i)
+            ).toBeInTheDocument();
+        });
+
+        // The control case: APEX's real in-game role is DEBUFFER, but configured here as
+        // ATTACKER — a role whose own core row (directDamage) already scores Attack — and his
+        // derived damage basis is Attack-only, so the "unchanged" sentence is correct, unlike for
+        // Howler/Graphite above (SUPPORTER, whose core row scores HP instead).
+        it('still states the scoring is unchanged for an Attack-scored role with an Attack-only basis', () => {
+            mocked.mockImplementation(realDetect);
+            const apex = corpusShipNamed('APEX');
+            render(<OffFormulaNotice ship={apex} configuredRole="ATTACKER" />);
+            expect(
                 screen.getByText(/No stat besides Attack feeds its active or charged basis/i)
             ).toBeInTheDocument();
-            expect(screen.queryByText(/passive keeps the optimizer/i)).not.toBeInTheDocument();
         });
     }
 );

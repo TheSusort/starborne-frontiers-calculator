@@ -1,6 +1,11 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
-import { chargePeriod, deriveBasis, TRIGGER_PROSE } from '../basisDerivation';
+import {
+    chargePeriod,
+    deriveBasis,
+    TRIGGER_PROSE,
+    KNOWN_CADENCE_TRIGGERS,
+} from '../basisDerivation';
 import { detectOffFormulaStats } from '../offFormulaStats';
 import { buildShipAbilities } from '../../../abilities/buildShipAbilities';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
@@ -305,6 +310,16 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                     }
                 }
                 expect([...unmapped]).toEqual([]);
+            });
+
+            it('every KNOWN_CADENCE_TRIGGERS entry is a key of TRIGGER_PROSE', () => {
+                // The two tables classify the same trigger strings for different purposes —
+                // one prose, one cadence — so a trigger that drifts out of `TRIGGER_PROSE`
+                // (renamed, removed on a data refresh) must fail here rather than let
+                // `excludedReason` silently fall back to a wrong reason for an unmapped trigger.
+                for (const trigger of KNOWN_CADENCE_TRIGGERS) {
+                    expect(trigger in TRIGGER_PROSE).toBe(true);
+                }
             });
         });
     }

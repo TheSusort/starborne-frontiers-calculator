@@ -134,6 +134,20 @@ export const TRIGGER_PROSE: Record<string, string> = {
 export const triggerProse = (trigger: string): string => TRIGGER_PROSE[trigger] ?? trigger;
 
 /**
+ * Triggers whose firing cadence is fixed by the trigger itself rather than by how the fight
+ * plays out: `pre-combat` fires exactly once, `start-of-turn` and `start-of-round` fire every
+ * round. A carrier on one of these is still excluded from the derived basis, but the reason is
+ * that a one-shot or per-round cadence does not fit the active-versus-charged cast ratio the
+ * basis is built from — not that its frequency is unknown. Every other trigger (conditional or
+ * reactive) really does have a frequency the basis cannot measure.
+ */
+export const KNOWN_CADENCE_TRIGGERS: ReadonlySet<string> = new Set([
+    'pre-combat',
+    'start-of-turn',
+    'start-of-round',
+]);
+
+/**
  * Per-cast-slot raw contributions toward a requested `produces`, plus the shield-chain's
  * producing half (a `shield`-ability's own caster basis), collected regardless of the requested
  * `produces` since it resolves a `shield` carrier found only under `produces: 'damage'`.
