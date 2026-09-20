@@ -272,3 +272,30 @@ describe('excludedNote travels with the basis', () => {
         );
     });
 });
+
+describe('the summary shows only what the scorer honours', () => {
+    it('hides a term usableBasis drops, instead of claiming it counts', () => {
+        // A negative weight is filtered at score time. Showing "Attack x-5.000" would tell the
+        // player their build is scored on something it is not.
+        renderRow({
+            ...cobaltRow,
+            basis: [
+                { stat: 'attack', weight: 2.1 },
+                { stat: 'hp', weight: -5 },
+            ],
+        });
+        expect(screen.getByText(/Attack x2\.100/)).toBeInTheDocument();
+        expect(screen.queryByText(/x-5/)).not.toBeInTheDocument();
+    });
+
+    it('survives a stored weight that is not a number at all', () => {
+        // Stored config is untyped JSON. Reading the weight straight off the row sent a string
+        // to toFixed and took the whole formula panel down for that ship.
+        const corrupt = {
+            ...cobaltRow,
+            basis: [{ stat: 'attack', weight: 'abc' }],
+        } as unknown as CustomFormulaRow;
+        expect(() => renderRow(corrupt)).not.toThrow();
+        expect(screen.queryByText(/abc/)).not.toBeInTheDocument();
+    });
+});

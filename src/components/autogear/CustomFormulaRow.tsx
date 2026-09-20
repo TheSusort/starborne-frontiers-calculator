@@ -1,10 +1,10 @@
 import React from 'react';
 import { Button, CloseIcon, EditIcon } from '../ui';
-import type { CustomFormulaRow } from '../../types/autogear';
+import type { BasisTerm, CustomFormulaRow } from '../../types/autogear';
 import type { BaseStats } from '../../types/stats';
 import { getLimitStatLabel } from '../../constants';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
-import { isBasisTilt } from '../../utils/autogear/customFormula';
+import { isBasisTilt, usableBasis } from '../../utils/autogear/customFormula';
 
 const IMPORTANCE_LABEL: Record<string, string> = {
     '0.5': 'Slight',
@@ -12,10 +12,11 @@ const IMPORTANCE_LABEL: Record<string, string> = {
     '2': 'Heavy',
 };
 
-/** A row's basis is only ever honoured by the scorer on a `core`/`max` row (`usableBasis`'s own
- *  gate) — mirrored here so the summary never shows terms the scorer would ignore. */
-const showsBasis = (row: CustomFormulaRow): boolean =>
-    row.kind === 'core' && row.direction === 'max';
+/** The terms this row is actually scored on. Read through `usableBasis` rather than off the row,
+ *  because a stored row is untyped JSON: a term the scorer silently drops must not be shown as
+ *  though it counted, and a weight that is not a number at all would otherwise reach `toFixed`
+ *  and take the whole formula panel down with it. */
+const scoredBasis = (row: CustomFormulaRow): BasisTerm[] => usableBasis(row) ?? [];
 
 const basisIntro = (row: CustomFormulaRow): string =>
     isBasisTilt(row.stat)
@@ -45,7 +46,7 @@ export const CustomFormulaRowView: React.FC<Props> = ({
     // A maximized core row on a stat the build has none of scores every candidate 0, which
     // ties the whole search. The live score shows the symptom; this note gives the cause.
     const zeroesTheFormula = row.kind === 'core' && row.direction === 'max' && value === 0;
-    const basisTerms = showsBasis(row) ? (row.basis ?? []) : [];
+    const basisTerms = scoredBasis(row);
     const excludedNote = row.excludedNote ?? [];
 
     return (
