@@ -403,7 +403,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
 
                 const hpWeight = hpRow!.basis!.find((t) => t.stat === 'hp')!.weight;
                 const defWeight = hpRow!.basis!.find((t) => t.stat === 'defence')!.weight;
-                expect(defWeight / hpWeight).toBeCloseTo(18.8, 1);
+                expect(defWeight / hpWeight).toBeCloseTo(18.72, 1);
             });
         });
 

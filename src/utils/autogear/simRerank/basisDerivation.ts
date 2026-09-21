@@ -340,9 +340,16 @@ export function deriveBasis(ship: Ship, produces: 'damage' | 'repair' | 'shield'
         }
     }
 
-    const terms: BasisTerm[] = STAT_ORDER.filter((stat) => (finalWeights[stat] ?? 0) !== 0).map(
-        (stat) => ({ stat, weight: finalWeights[stat] as number })
-    );
+    // Three decimals, matching what the UI both displays and accepts: the editor renders a term
+    // as `x{weight.toFixed(3)}` and its weight field steps by 0.001, so an unrounded quotient
+    // like 520/9 is a value the player is shown as 57.778 and then cannot save without retyping.
+    // The source numbers are whole skill percentages, so this discards no real precision.
+    // A weight below 0.0005 rounds to zero, and a zero term in a core row would zero that row
+    // for every candidate — it is dropped instead, as a weight too small for the form to express.
+    const terms: BasisTerm[] = STAT_ORDER.map((stat) => ({
+        stat,
+        weight: Math.round((finalWeights[stat] ?? 0) * 1000) / 1000,
+    })).filter((term) => term.weight !== 0);
 
     return { terms, excluded: excludedCarriers(ship), period };
 }

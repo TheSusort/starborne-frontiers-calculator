@@ -259,10 +259,13 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
 
             it('keeps both terms and their real ratio', () => {
                 // Makoli: hp 5%/7%, defence 100%/120%, p=3 -> defence outweighs hp ~19:1.
+                // Weights are rounded to the 0.001 the editor can express, which moves his small
+                // hp term 0.0567 -> 0.057 and the ratio with it. The point of the assertion is
+                // the order of magnitude that inverts his role formula, not the third decimal.
                 const terms = deriveBasis(shipNamed('Makoli'), 'repair').terms;
                 const hp = terms.find((t) => t.stat === 'hp')!.weight;
                 const def = terms.find((t) => t.stat === 'defence')!.weight;
-                expect(def / hp).toBeCloseTo(18.8, 1);
+                expect(def / hp).toBeCloseTo(18.72, 1);
             });
         });
 
@@ -321,6 +324,42 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                     expect(trigger in TRIGGER_PROSE).toBe(true);
                 }
             });
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable() || !shipDataAvailable())(
+    'derived weights are expressible in the editor',
+    () => {
+        // The weight field steps by 0.001 and the summary prints toFixed(3). A raw quotient such
+        // as Prophet's 520/9 reaches the form as 57.77777777777778, which native validation
+        // rejects: the player is shown a value they cannot save without retyping it.
+        const STEP = 0.001;
+        const PRODUCES = ['damage', 'repair', 'shield'] as const;
+
+        it('derives only step-aligned, non-zero weights across the flagged corpus', () => {
+            const flagged = flaggedCorpus();
+            expect(flagged.length).toBeGreaterThan(0);
+            let seen = 0;
+            for (const { ship } of flagged) {
+                for (const produces of PRODUCES) {
+                    for (const term of deriveBasis(ship, produces).terms) {
+                        seen++;
+                        const steps = term.weight / STEP;
+                        expect(Math.abs(steps - Math.round(steps))).toBeLessThan(1e-6);
+                        // A zero term in a core row zeroes that row for every candidate.
+                        expect(term.weight).toBeGreaterThan(0);
+                    }
+                }
+            }
+            // Without this the two assertions above pass over an empty walk.
+            expect(seen).toBeGreaterThan(20);
+        });
+
+        it('rounds Prophet to the value the notice already prints', () => {
+            expect(deriveBasis(shipNamed('Prophet'), 'damage').terms).toEqual([
+                { stat: 'security', weight: 57.778 },
+            ]);
         });
     }
 );
