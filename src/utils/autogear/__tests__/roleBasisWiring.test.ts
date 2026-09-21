@@ -10,8 +10,7 @@ import type { FlexibleStats } from '../../../types/stats';
 /**
  * `findOptimalGearForShip` is the one entry point every UI caller funnels through
  * (`AutogearStrategy` doc, `runShipOptimizer.ts`). A `roleBasis` test that only calls a scorer
- * or a config builder directly proves nothing about whether a real run ever sees it — see
- * `.superpowers/sdd/task-2b-report.md` for the dead-field this class of test missed.
+ * or a config builder directly proves nothing about whether a real run ever sees it (#544).
  *
  * The weapon slot carries two candidates that diverge only on a foreign stat (hacking) the
  * ATTACKER formula never reads on its own — `weapon-a` wins the plain `attack` primary,
