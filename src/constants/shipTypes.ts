@@ -80,3 +80,19 @@ export function matchesRoleCategory(
     if (!type) return false;
     return categories.some((c) => type === c || type.startsWith(`${c}_`));
 }
+
+const ROLE_CATEGORIES: ShipRoleCategory[] = ['ATTACKER', 'DEFENDER', 'DEBUFFER', 'SUPPORTER'];
+
+/** Looks up `type` in a role-keyed table, falling back to its role CATEGORY's entry
+ *  (`matchesRoleCategory`) when `type` has no entry of its own — e.g. DEFENDER_SECURITY
+ *  falls back to DEFENDER. An exact-role entry always wins over the category fallback:
+ *  SUPPORTER_BUFFER keeps its own entry rather than falling back to SUPPORTER's.
+ *  Returns `undefined` when neither the exact role nor its category has an entry. */
+export function resolveRoleEntry<T>(
+    table: Partial<Record<ShipTypeName, T>>,
+    type: ShipTypeName
+): T | undefined {
+    if (table[type] !== undefined) return table[type];
+    const category = ROLE_CATEGORIES.find((c) => matchesRoleCategory(type, [c]));
+    return category ? table[category] : undefined;
+}

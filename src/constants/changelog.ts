@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: custom formula rows can now weight a stat by other stats.',
     'Autogear: custom-mode builds can now be shared to the community.',
     'Autogear: candidate results now clear when you change role, seed or gear.',
+    'Ship Details: no longer crashes opening a geared ship with a sub-role.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
