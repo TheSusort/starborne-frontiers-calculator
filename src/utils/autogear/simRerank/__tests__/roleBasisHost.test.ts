@@ -6,10 +6,9 @@ import type { OffFormulaStat } from '../offFormulaStats';
 
 /**
  * Expected role -> hosting axis/primary-stat table, typed as a total `Record<ShipTypeName, ...>`.
- * `tsc` gates authoring: a `ShipTypeName` added without a matching entry here fails type
- * checking. `vitest` does not type-check (esbuild strips types), so the 'key set equals the full
- * ShipTypeName union' test below is a separate RUNTIME gate against the same gap — it fails a
- * `vitest`-only run even when nobody has run `tsc`.
+ * `ShipTypeName` is `string` (#547), so `tsc` does not gate this table against a role added
+ * without a matching entry. The 'key set equals the full ShipTypeName union' test below is the
+ * only gate that does: it runs under `vitest` and fails on that gap at runtime.
  */
 const EXPECTED: Record<
     ShipTypeName,

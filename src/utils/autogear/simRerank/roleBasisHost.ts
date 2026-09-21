@@ -42,9 +42,10 @@ const noHost: RoleBasisHost = { axis: null, primaryStat: null };
  *   compresses a basis in a way no other hosting role's formula does, and nothing measures what
  *   that compression would do to rankings.
  *
- * A `ShipTypeName` added later that is missing here fails to TYPE-CHECK against this total
- * `Record` (`tsc`). `roleBasisHost.test.ts` carries an independent RUNTIME tripwire for the same
- * gap, since `tsc` does not run under `vitest`.
+ * `ShipTypeName` is `string` (#547), so `tsc` does not catch a `ShipTypeName` added later that
+ * is missing here — a `Record<ShipTypeName, RoleBasisHost>` type-checks with any subset of keys.
+ * The only gate against that gap is `roleBasisHost.test.ts`'s RUNTIME set-equality check, which
+ * compares this table's keys against `Object.keys(SHIP_TYPES)` under `vitest`.
  */
 const ROLE_BASIS_HOST: Record<ShipTypeName, RoleBasisHost> = {
     ATTACKER: { axis: 'damage', primaryStat: 'attack' },
