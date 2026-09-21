@@ -220,11 +220,15 @@ two reviews. This task's tripwire has to run through the real entry point.
 
 ### Task 3: Apply writes a role basis
 
-**Files:** `src/components/autogear/OffFormulaNotice.tsx`; tests alongside.
+**Files:** `src/components/autogear/OffFormulaNotice.tsx`, `src/pages/manager/AutogearPage.tsx`,
+`src/constants/changelog.ts`; tests alongside.
 
 - [ ] **Step 1 — write the failing tests.**
-  - Cobalt/ATTACKER Apply emits `{ shipRole: 'ATTACKER', roleBasis: [attack x2.100, hp x0.267] }`
-    — `shipRole` stays set and no `customFormula` is written.
+  - Cobalt/ATTACKER Apply emits
+    `{ shipRole: 'ATTACKER', roleBasis: { produces: 'damage', terms: [attack x2.100, hp x0.267] } }`
+    — `shipRole` stays set and no `customFormula` is written. Note the shape: `roleBasis` is
+    `{ produces, terms }`, NOT a bare term array. It carries the axis it was derived for, and the
+    scorer applies it only where `roleHostsBasis(role, produces)` agrees.
   - Makoli/SUPPORTER emits the repair basis.
   - **Panon/DEFENDER offers no Apply**, and renders **no equation line**.
   - **Corpus invariant** over all flagged ships x 12 roles: Apply is offered only where
