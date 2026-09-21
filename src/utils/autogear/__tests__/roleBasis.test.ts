@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { calculateRoleScore, calculatePriorityScore } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
 import { RoleBasis } from '../../../types/autogear';
-import { ShipTypeName } from '../../../constants';
+import { SHIP_TYPES, ShipTypeName } from '../../../constants';
+import { roleAxis, rolePrimaryStat } from '../simRerank/roleBasisHost';
 
 // Fixtures captured at aa42f528 by calling the REAL calculateRoleScore, before any basis code
 // existed (.superpowers/sdd/task-1-fixtures.md). Pinned literally — do not round, do not
@@ -45,14 +46,20 @@ describe('calculateRoleScore — regression pin (absent basis changes nothing)',
             expect(calculateRoleScore(role, stats)).toBe(pinned[role]);
         });
     }
+
+    it('the pin table covers exactly the roles SHIP_TYPES defines — a 13th role cannot go unpinned silently', () => {
+        expect(new Set(Object.keys(pinned))).toEqual(new Set(Object.keys(SHIP_TYPES)));
+    });
 });
 
 describe('calculateRoleScore — a SUPPORTER basis leaves every non-primary ratio unchanged', () => {
-    // Every stat 0 except hp/crit/critDamage/healModifier, matching the fixture exactly.
+    // defence is nonzero (unlike the fixture's own stat block) so the basis below sums two
+    // real terms — a basis that is a scalar on hp alone cannot tell a broken multi-term
+    // summation from a correct one.
     const base: BaseStats = {
         hp: 50000,
         attack: 0,
-        defence: 0,
+        defence: 3000,
         speed: 0,
         crit: 40,
         critDamage: 120,
@@ -65,18 +72,23 @@ describe('calculateRoleScore — a SUPPORTER basis leaves every non-primary rati
         shield: 0,
     };
 
-    // A real repair basis: `hp x0.6` stands in for a "repairs 60% of max HP" clause. Not the
-    // identity weight (1), so a bug that silently ignores the basis cannot hide behind a
-    // no-op transcription.
-    const basis: RoleBasis = { produces: 'repair', terms: [{ stat: 'hp', weight: 0.6 }] };
+    // The measured mixed-stat basis from `.superpowers/sdd/task-1-fixtures.md`, also used by
+    // "a basis moves the primary quantity" below: a foreign stat (defence), not a scalar on
+    // hp, the role's own primary stat — a scalar-only basis is linear in hp and so preserves
+    // every non-primary ratio automatically, discriminating nothing.
+    const basis: RoleBasis = {
+        produces: 'repair',
+        terms: [
+            { stat: 'hp', weight: 0.057 },
+            { stat: 'defence', weight: 1.067 },
+        ],
+    };
 
     const baseScoreNoBasis = calculateRoleScore('SUPPORTER', base);
     const baseScoreWithBasis = calculateRoleScore('SUPPORTER', base, undefined, basis);
 
     it('the basis actually changes the score — proves it is applied, not silently ignored', () => {
         expect(baseScoreNoBasis).toBe(13320);
-        // hp scaled by 0.6 scales the whole (otherwise-identical) formula by 0.6.
-        expect(baseScoreWithBasis).toBeCloseTo(13320 * 0.6, 6);
         expect(baseScoreWithBasis).not.toBe(baseScoreNoBasis);
     });
 
@@ -87,9 +99,9 @@ describe('calculateRoleScore — a SUPPORTER basis leaves every non-primary rati
         );
     }
 
-    it('+10,000 HP reads x1.2000', () => {
-        expect(ratio({ hp: 60000 })).toBeCloseTo(1.2, 4);
-    });
+    // No HP-ratio assertion here: hp is the primary quantity this basis replaces, and once
+    // defence enters the basis too, +10,000 HP no longer scales the score by a fixed x1.2 —
+    // see "a basis moves the primary quantity" below, where that same movement is the point.
 
     it("+30 crit reads the real formula's x1.2432, not the seeded copy's x1.0788", () => {
         expect(ratio({ crit: 70 })).toBeCloseTo(1.2432, 4);
@@ -184,6 +196,58 @@ describe('calculateRoleScore — hosting is gated by roleHostsBasis, not by pres
             calculateRoleScore('ATTACKER', stats)
         );
     });
+});
+
+describe('calculateRoleScore — binds every hosting role to roleBasisHost.ts, not just the ones with a dedicated test above', () => {
+    const stats: BaseStats = {
+        hp: 50000,
+        attack: 4000,
+        defence: 3000,
+        speed: 120,
+        crit: 40,
+        critDamage: 120,
+        hacking: 2500,
+        security: 2000,
+        healModifier: 20,
+        damageReduction: 0,
+        defensePenetration: 0,
+        hpRegen: 0,
+        shield: 0,
+    };
+
+    // Derived from `roleAxis`/`SHIP_TYPES`, not hand-listed: a role `roleBasisHost.ts` stops
+    // hosting drops out of this loop instead of leaving a stale case behind, and a role it
+    // starts hosting is picked up automatically.
+    const hostingRoles = Object.keys(SHIP_TYPES).filter((role) => roleAxis(role) !== null);
+
+    it('the hosting set used by this loop is non-empty', () => {
+        expect(hostingRoles.length).toBeGreaterThan(0);
+    });
+
+    for (const role of hostingRoles) {
+        const axis = roleAxis(role)!;
+        const primary = rolePrimaryStat(role)!;
+
+        it(`${role}: an identity-weight basis on its own primary stat (${primary}) reproduces the no-basis score exactly`, () => {
+            const identityBasis: RoleBasis = {
+                produces: axis,
+                terms: [{ stat: primary, weight: 1 }],
+            };
+            expect(calculateRoleScore(role, stats, undefined, identityBasis)).toBe(
+                calculateRoleScore(role, stats)
+            );
+        });
+
+        it(`${role}: a non-identity weight on its own primary stat (${primary}) changes the score`, () => {
+            const scaledBasis: RoleBasis = {
+                produces: axis,
+                terms: [{ stat: primary, weight: 2 }],
+            };
+            expect(calculateRoleScore(role, stats, undefined, scaledBasis)).not.toBe(
+                calculateRoleScore(role, stats)
+            );
+        });
+    }
 });
 
 describe('calculateRoleScore — basis terms are validated through the same predicate as a custom-formula row', () => {
@@ -378,10 +442,13 @@ describe('calculatePriorityScore — the losslessness fixture, through the path 
     // is what every autogear strategy calls per candidate (`scoring.ts`'s `calculateTotalScore`).
     // Pinning the losslessness ratios only through the first path would leave the second
     // unproven — the two are separate functions with separate switches over the same roles.
+    // defence is nonzero (unlike the fixture's own stat block) so the basis below sums two
+    // real terms — a basis that is a scalar on hp alone cannot tell a broken multi-term
+    // summation from a correct one.
     const base: BaseStats = {
         hp: 50000,
         attack: 0,
-        defence: 0,
+        defence: 3000,
         speed: 0,
         crit: 40,
         critDamage: 120,
@@ -393,7 +460,17 @@ describe('calculatePriorityScore — the losslessness fixture, through the path 
         hpRegen: 0,
         shield: 0,
     };
-    const basis: RoleBasis = { produces: 'repair', terms: [{ stat: 'hp', weight: 0.6 }] };
+    // The measured mixed-stat basis from `.superpowers/sdd/task-1-fixtures.md`: a foreign stat
+    // (defence), not a scalar on hp, the role's own primary stat — a scalar-only basis is
+    // linear in hp and so preserves every non-primary ratio automatically, discriminating
+    // nothing.
+    const basis: RoleBasis = {
+        produces: 'repair',
+        terms: [
+            { stat: 'hp', weight: 0.057 },
+            { stat: 'defence', weight: 1.067 },
+        ],
+    };
 
     function scoreSupporter(stats: BaseStats, roleBasis?: RoleBasis): number {
         return calculatePriorityScore(
@@ -416,16 +493,15 @@ describe('calculatePriorityScore — the losslessness fixture, through the path 
 
     it('the basis actually changes calculatePriorityScore too', () => {
         expect(baseScoreNoBasis).toBe(13320);
-        expect(baseScoreWithBasis).toBeCloseTo(13320 * 0.6, 6);
+        expect(baseScoreWithBasis).not.toBe(baseScoreNoBasis);
     });
 
     function ratio(delta: Partial<BaseStats>): number {
         return scoreSupporter({ ...base, ...delta }, basis) / baseScoreWithBasis;
     }
 
-    it('+10,000 HP reads x1.2000', () => {
-        expect(ratio({ hp: 60000 })).toBeCloseTo(1.2, 4);
-    });
+    // No HP-ratio assertion here: hp is the primary quantity this basis replaces, and once
+    // defence enters the basis too, +10,000 HP no longer scales the score by a fixed x1.2.
 
     it("+30 crit reads the real formula's x1.2432", () => {
         expect(ratio({ crit: 70 })).toBeCloseTo(1.2432, 4);

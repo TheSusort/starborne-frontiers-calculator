@@ -454,8 +454,7 @@ export function calculateRoleScore(
     roleBasis?: RoleBasis
 ): number {
     // Same gating and validation as `calculatePriorityScore`'s switch — see that function's
-    // comment. `role` is already a typed `ShipTypeName` here (not the community-build string),
-    // so `roleHostsBasis` is called directly with no defensive arm.
+    // comment.
     const basisTerms: BasisTerm[] | undefined =
         roleBasis && roleHostsBasis(role, roleBasis.produces)
             ? usableBasisTerms(roleBasis.terms)
