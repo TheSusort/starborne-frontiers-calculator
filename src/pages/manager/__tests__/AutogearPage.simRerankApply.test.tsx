@@ -218,6 +218,10 @@ vi.mock('../../../hooks/useSimRerank', async () => {
                 H.runMock(args);
                 setDone(true);
             };
+            // Stable across renders, matching the real hook's own `useCallback` — the section's
+            // context-invalidation effect depends on this identity, and a fresh function every
+            // render would fire that effect (and wipe `done`) on every unrelated re-render.
+            const reset = React.useCallback(() => setDone(false), []);
             return {
                 state: done
                     ? {
@@ -240,7 +244,7 @@ vi.mock('../../../hooks/useSimRerank', async () => {
                       },
                 run,
                 cancel: vi.fn(),
-                reset: () => setDone(false),
+                reset,
             };
         },
     };

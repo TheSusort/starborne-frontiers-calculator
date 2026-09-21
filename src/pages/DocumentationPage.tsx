@@ -1565,6 +1565,55 @@ const DocumentationPage: React.FC = () => {
                                 </div>
 
                                 <div className="card">
+                                    <h4 className="font-semibold">Off-Formula Notice</h4>
+                                    <p className="text-theme-text">
+                                        A role&apos;s formula only scores certain stats. When a
+                                        ship&apos;s active or charged skill deals damage, repairs,
+                                        or shields off a stat its role formula never looks at —
+                                        Defence on a Debuffer, say — a notice appears under the role
+                                        selector. It names the stat and says whether the formula
+                                        ignores it outright or only credits it as part of a total
+                                        the optimizer can trade away for something else. For a few
+                                        ships nothing in their kit is driven by a gear stat at all;
+                                        the notice says so plainly, and there is nothing to offer an
+                                        equation or button for.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Under the notice sits a scoring equation built from that
+                                        ship&apos;s own skill numbers — not a generic estimate, and
+                                        not the same for every ship sharing the role. It reads as a
+                                        weighted list of stats (something like &quot;Attack x1.240 +
+                                        Defence x0.615&quot;), the real mix the skill rewards,
+                                        worked out from how often the ship&apos;s kit casts its
+                                        active skill versus its charged one. Click{' '}
+                                        <strong>Use this equation</strong> to write that list into a
+                                        Multiplied row of a Custom formula for you — this moves the
+                                        ship into Custom mode, since the equation now defines its
+                                        scoring instead of the built-in role. The row it writes
+                                        stays fully editable afterwards.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A passive skill&apos;s contribution is never in that
+                                        equation. How often a passive fires depends on how the fight
+                                        actually goes — how much the ship gets hit, how often a
+                                        debuff resists, whether an ally triggers it — not on a fixed
+                                        rhythm the way casting an active or charged skill is, so
+                                        there is no cast ratio to fold it into. When a passive is
+                                        left out, the notice names it directly: the skill&apos;s own
+                                        wording and percentage, so nothing about what got skipped,
+                                        or why, is hidden. Add it yourself by opening the row{' '}
+                                        <strong>Use this equation</strong> wrote and entering a
+                                        weighted stat with that same wording and percentage.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        Once applied, the formula is an ordinary Custom build —
+                                        share it with the community the same way as any other build
+                                        (see <strong>Sharing Your Build</strong> in the Community
+                                        Recommendations section below).
+                                    </p>
+                                </div>
+
+                                <div className="card">
                                     <h4 className="font-semibold">Buffs</h4>
                                     <p className="text-theme-text">
                                         Add external buffs as tweaks (e.g. Volk&apos;s +30% crit

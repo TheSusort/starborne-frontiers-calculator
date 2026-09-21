@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Autogear: apply a ship's derived scoring formula in one click.",
     'Autogear: custom formula rows can now weight a stat by other stats.',
     'Autogear: custom-mode builds can now be shared to the community.',
+    'Autogear: candidate results now clear when you change role, seed or gear.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

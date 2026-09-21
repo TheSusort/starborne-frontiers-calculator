@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '../../../test-utils/test-utils';
+import { useState } from 'react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { render, screen, fireEvent, act } from '../../../test-utils/test-utils';
 import { SimRerankSection } from '../SimRerankSection';
 import type { Ship } from '../../../types/ship';
 import type { SimRerankRow, SimRerankState } from '../../../hooks/useSimRerank';
@@ -17,19 +18,40 @@ vi.mock('../../../hooks/useEncounterNotes', () => ({
     useEncounterNotes: () => ({ encounters: [], loading: false }),
 }));
 
-const hookState = vi.hoisted(() => {
-    const current: SimRerankState = {
-        status: 'idle',
-        progress: { completed: 0, total: 0 },
-        rows: [],
-        table: [],
-        excluded: [],
-        ownBestExcluded: false,
-        dropped: [],
-    };
-    return { current };
-});
+const IDLE_STATE: SimRerankState = {
+    status: 'idle',
+    progress: { completed: 0, total: 0 },
+    rows: [],
+    table: [],
+    excluded: [],
+    ownBestExcluded: false,
+    dropped: [],
+};
+
+// `current` seeds each test's mount (tests set it right before `render()`, matching every other
+// mocked-hook fixture in this file). `setState` is the mounted instance's own React setter,
+// captured on render, so `reset` — a no-op spy by default — can be given a real implementation
+// for the one test that needs a completed table to actually clear rather than just recording that
+// `reset` was called.
+const hookState = vi.hoisted(
+    (): {
+        current: SimRerankState;
+        setState: ((next: SimRerankState) => void) | undefined;
+    } => ({
+        current: {
+            status: 'idle',
+            progress: { completed: 0, total: 0 },
+            rows: [],
+            table: [],
+            excluded: [],
+            ownBestExcluded: false,
+            dropped: [],
+        },
+        setState: undefined,
+    })
+);
 const run = vi.hoisted(() => vi.fn());
+const reset = vi.hoisted(() => vi.fn());
 
 vi.mock('../../../hooks/useSimRerank', async () => {
     const actual = await vi.importActual<typeof import('../../../hooks/useSimRerank')>(
@@ -37,12 +59,11 @@ vi.mock('../../../hooks/useSimRerank', async () => {
     );
     return {
         ...actual,
-        useSimRerank: () => ({
-            state: hookState.current,
-            run,
-            cancel: vi.fn(),
-            reset: vi.fn(),
-        }),
+        useSimRerank: () => {
+            const [state, setState] = useState(hookState.current);
+            hookState.setState = setState;
+            return { state, run, cancel: vi.fn(), reset };
+        },
     };
 });
 
@@ -344,5 +365,113 @@ describe('SimRerankSection', () => {
         fireEvent.click(screen.getByRole('button', { name: /^apply$/i }));
 
         expect(onApply).toHaveBeenCalledWith(row);
+    });
+
+    // The context-invalidation hard requirement: a completed table must never survive a change
+    // of role, fight source, seed, run count or equipped gear while this panel stays mounted —
+    // `Apply` would otherwise forward a loadout computed for a different configuration.
+    describe('stale results', () => {
+        afterEach(() => {
+            reset.mockReset();
+        });
+
+        it('clears a completed table when the selected role changes', () => {
+            // Gives `reset` a real effect instead of just recording that it fired: the mounted
+            // instance's own setter clears its state to idle, so the table actually leaves the
+            // DOM — the failure this must catch is a stale ROW on screen, not a missed call.
+            reset.mockImplementation(() => hookState.setState?.(IDLE_STATE));
+
+            const { rerender } = render(<SimRerankSection {...props()} />);
+            open();
+            act(() => {
+                hookState.setState?.({
+                    ...IDLE_STATE,
+                    status: 'done',
+                    rows: [
+                        {
+                            id: 'DEFENDER:best',
+                            role: 'DEFENDER',
+                            rank: 'best',
+                            run: stubRun('DEFENDER:best'),
+                        },
+                    ] as SimRerankRow[],
+                    table: [
+                        {
+                            id: 'DEFENDER:best',
+                            cells: {
+                                winRate: cell('winRate', 0, false),
+                                rounds: cell('rounds', 0, false),
+                                focusDamageDealt: cell('focusDamageDealt', 0, false),
+                                focusDamageTaken: cell('focusDamageTaken', 0, false),
+                                focusHealingDone: cell('focusHealingDone', 0, false),
+                                teamDamageDealt: cell('teamDamageDealt', 0, false),
+                            },
+                        },
+                    ] as unknown as CandidateRow[],
+                });
+            });
+            expect(screen.getByRole('table')).toBeInTheDocument();
+
+            // The ship is still typed DEBUFFER, but its CONFIGURED role — the input the run
+            // actually reads — moves to ATTACKER while the modal stays open.
+            rerender(<SimRerankSection {...props({ configuredRole: 'ATTACKER' })} />);
+
+            expect(screen.queryByRole('table')).not.toBeInTheDocument();
+        });
+
+        it('resets when the fight source changes', () => {
+            render(<SimRerankSection {...props({ savedSetups: [setupWithShip] })} />);
+            open();
+            reset.mockClear(); // drop the mount-time call
+
+            fireEvent.click(screen.getByLabelText('Fight source'));
+            fireEvent.click(screen.getByText('My Setup'));
+
+            expect(reset).toHaveBeenCalled();
+        });
+
+        it('resets when the seed changes', () => {
+            render(<SimRerankSection {...props()} />);
+            open();
+            fireEvent.click(screen.getByText(/advanced/i));
+            reset.mockClear();
+
+            fireEvent.change(screen.getByLabelText(/seed/i), { target: { value: '42' } });
+
+            expect(reset).toHaveBeenCalled();
+        });
+
+        it('resets when the run count changes', () => {
+            render(<SimRerankSection {...props()} />);
+            open();
+            fireEvent.click(screen.getByText(/advanced/i));
+            reset.mockClear();
+
+            fireEvent.change(screen.getByLabelText(/runs/i), { target: { value: '5' } });
+
+            expect(reset).toHaveBeenCalled();
+        });
+
+        it('resets when the ship changes (equipped gear moved)', () => {
+            const { rerender } = render(<SimRerankSection {...props()} />);
+            open();
+            reset.mockClear();
+
+            rerender(
+                <SimRerankSection {...props({ ship: { ...ship, equipment: { M1: 'g1' } } })} />
+            );
+
+            expect(reset).toHaveBeenCalled();
+        });
+
+        it('does not reset on a re-render with the same context', () => {
+            const { rerender } = render(<SimRerankSection {...props()} />);
+            open();
+            reset.mockClear();
+
+            rerender(<SimRerankSection {...props()} />);
+
+            expect(reset).not.toHaveBeenCalled();
+        });
     });
 });

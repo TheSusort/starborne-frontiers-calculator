@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     Button,
     Checkbox,
@@ -146,8 +146,21 @@ export const SimRerankSection: React.FC<SimRerankSectionProps> = ({
         });
     };
 
-    const { state, run, cancel } = useSimRerank();
+    const { state, run, cancel, reset } = useSimRerank();
     const isRunning = state.status === 'gearing' || state.status === 'simulating';
+
+    // Hard requirement: a completed table must never survive a context change — Apply would
+    // otherwise forward a loadout computed for a different configuration. A dependency belongs
+    // here iff changing it makes an already-displayed row's loadout or numbers wrong: `ship`
+    // carries the equipped-gear baseline the comparison measures against, `ownRole` is the role,
+    // `sourceKey` is the fight source, and `seed`/`runCount` fix the seed set every row shares.
+    // `comparedRoles` is deliberately excluded — it only selects which roles a FUTURE run
+    // produces, so toggling it never changes what an already-computed row means. The injected
+    // lookups (`deps`, `getShipById`, `gearToShipMap`, `resolveShip`, `runAutogearFor`) are
+    // excluded for the same reason: their identity carries no configuration.
+    useEffect(() => {
+        reset();
+    }, [ship, ownRole, sourceKey, seed, runCount, reset]);
 
     const handleRun = () => {
         void run({
