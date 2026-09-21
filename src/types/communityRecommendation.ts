@@ -1,5 +1,5 @@
 import type { ShipTypeName } from '../constants/shipTypes';
-import { StatPriority, SetPriority, StatBonus, FleetBuff } from './autogear';
+import { StatPriority, SetPriority, StatBonus, FleetBuff, CustomFormula } from './autogear';
 
 export interface CommunityRecommendation {
     id: string;
@@ -45,17 +45,23 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
  * assumeCalibrated, useArenaModifiers) — those describe the sharer's own
  * inventory and preferences, not the build.
  *
- * `version` exists so a future shape change can be migrated on read.
+ * `version` exists so a future shape change can be migrated on read. A `version: 1` row
+ * has a non-null `shipRole` and no `customFormula` — that shape is unchanged and still
+ * validates. `version: 2` adds Custom mode: `shipRole: null` plus a `customFormula` whose
+ * core row carries a weighted `basis`, so the formula (not a stat limit) is what travels —
+ * it generalises across the recipient's own inventory.
  */
 export interface SharedAutogearBuild {
-    version: 1;
-    shipRole: ShipTypeName;
+    version: 1 | 2;
+    shipRole: ShipTypeName | null;
     statPriorities: StatPriority[];
     setPriorities: SharedSetPriority[];
     statBonuses: StatBonus[];
     fleetBuffs: FleetBuff[];
     excludedImplantTypes: string[];
     optimizeImplants: boolean;
+    /** Only ever present on a `version: 2` build, and only in Custom mode (`shipRole: null`). */
+    customFormula?: CustomFormula;
 }
 
 export interface CreateCommunityRecommendationInput {

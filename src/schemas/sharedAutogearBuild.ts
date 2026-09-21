@@ -3,7 +3,10 @@ import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { GEAR_SETS } from '../constants/gearSets';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
+import type { LimitableStat } from '../types/stats';
+import type { CustomFormula } from '../types/autogear';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
+import { isBasisStat, formulaHasUsableRow } from '../utils/autogear/customFormula';
 
 // `key in RECORD` is unsafe here: these are plain objects, so 'toString' and
 // friends would pass. Own-property only.
@@ -32,6 +35,8 @@ const implantKeySchema = z
     .string()
     .refine((v) => isKeyOf(IMPLANTS, v), { message: 'Unknown implant' });
 
+// Non-nullable on its own; `shipRole` and `customFormula.seededFrom` each wrap it in
+// `.nullable()`/`.optional()` at the point where null/absence is meaningful.
 const shipRoleSchema = z
     .string()
     .refine((v) => isKeyOf(SHIP_TYPES, v), { message: 'Unknown ship role' });
@@ -106,6 +111,59 @@ const fleetBuffSchema = z.object({
     percentage: boundedNumberSchema,
 });
 
+/** A basis term's stat: must be a real `BaseStats` key the scorer can read a value for.
+ *  `isBasisStat` is the scorer's own predicate (`usableBasis` in
+ *  utils/autogear/customFormula.ts) — reused rather than re-derived so this schema can
+ *  never accept a term the scorer would silently drop (a stat with no
+ *  `MULTIPLIER_NORMALIZERS` entry, or `directDamage`/`effectiveHp`, which have an entry
+ *  but are derived stats, not basis terms). */
+const basisStatSchema = z
+    .string()
+    .refine((v) => isBasisStat(v as LimitableStat), { message: 'Invalid basis stat' });
+
+// A handful of terms per row and rows per formula is already generous against real usage —
+// `CUSTOM_FORMULA_SEEDS`' largest entry has 4 rows, and a derived basis carries at most a
+// couple of factors — and keeps a maximal customFormula well under the payload's byte
+// ceiling below. Raising these needs re-measuring against that ceiling, same as
+// MAX_ARRAY_LENGTH.
+const MAX_FORMULA_ROWS = 8;
+const MAX_BASIS_TERMS = 5;
+const MAX_EXCLUDED_NOTES = 3;
+const MAX_EXCLUDED_NOTE_LENGTH = 120;
+
+// A basis weight must be non-negative in addition to `boundedNumberSchema`'s finiteness —
+// matching `usableBasis`'s own filter, so a term the scorer would silently drop (a negative
+// or non-finite weight) is rejected here instead, on the way in.
+const basisTermSchema = z.object({
+    stat: basisStatSchema,
+    weight: boundedNumberSchema.refine((v) => v >= 0, {
+        message: 'Basis weight must be non-negative',
+    }),
+});
+
+const coreImportanceSchema = z.union([z.literal(0.5), z.literal(1), z.literal(2)]);
+
+// A basis on a row that isn't `kind: 'core'`/`direction: 'max'` is inert (the scorer's
+// `usableBasis` only honours that combination) rather than corrupt, so it is not rejected
+// here — only the basis's own entries are validated.
+const customFormulaRowSchema = z.object({
+    stat: limitableStatSchema,
+    kind: z.enum(['core', 'bonus']),
+    direction: z.enum(['max', 'min']),
+    importance: coreImportanceSchema.optional(),
+    percentage: boundedNumberSchema.optional(),
+    basis: z.array(basisTermSchema).max(MAX_BASIS_TERMS).optional(),
+    excludedNote: z
+        .array(z.string().max(MAX_EXCLUDED_NOTE_LENGTH))
+        .max(MAX_EXCLUDED_NOTES)
+        .optional(),
+});
+
+const customFormulaSchema = z.object({
+    rows: z.array(customFormulaRowSchema).max(MAX_FORMULA_ROWS),
+    seededFrom: shipRoleSchema.optional(),
+});
+
 // Cardinality guard, not a business rule: this table's INSERT policy admits any
 // authenticated user and SELECT is public, so a hostile row can otherwise carry
 // an array of any length — every element here is individually valid, so shape
@@ -131,16 +189,57 @@ const MAX_ARRAY_LENGTH = 50;
 
 // Object schemas strip unknown keys by default (zod's .strip()), which is what
 // we want for a foreign payload: sanitise rather than reject on an extra field.
-export const sharedAutogearBuildSchema = z.object({
-    version: z.literal(1),
-    shipRole: shipRoleSchema,
+// Shared by both versions so the six build-shaping arrays never drift between them.
+const buildListFields = {
     statPriorities: z.array(statPrioritySchema).max(MAX_ARRAY_LENGTH),
     setPriorities: z.array(setPrioritySchema).max(MAX_ARRAY_LENGTH),
     statBonuses: z.array(statBonusSchema).max(MAX_ARRAY_LENGTH),
     fleetBuffs: z.array(fleetBuffSchema).max(MAX_ARRAY_LENGTH),
     excludedImplantTypes: z.array(implantKeySchema).max(MAX_ARRAY_LENGTH),
     optimizeImplants: z.boolean(),
+};
+
+// A row written before Custom mode existed: non-null role, no `customFormula` key. Kept
+// verbatim (not folded into the v2 arm) so a pre-migration row's contract stays pinned.
+const sharedAutogearBuildV1Schema = z.object({
+    version: z.literal(1),
+    shipRole: shipRoleSchema,
+    ...buildListFields,
 });
+
+// Custom mode: `shipRole: null` plus a `customFormula`. `shipRole` non-null is still legal
+// here too — Custom mode is what makes the difference, not the version number.
+const sharedAutogearBuildV2Schema = z.object({
+    version: z.literal(2),
+    shipRole: shipRoleSchema.nullable(),
+    ...buildListFields,
+    customFormula: customFormulaSchema.optional(),
+});
+
+const versionedSharedAutogearBuildSchema = z.discriminatedUnion('version', [
+    sharedAutogearBuildV1Schema,
+    sharedAutogearBuildV2Schema,
+]);
+
+// A build with neither a role nor a usable formula scores every candidate identically —
+// `partitionScoreableShips` would class the importing ship as unscoreable and the optimizer
+// would hand back arbitrary gear with no error. Only reachable on a v2 build: v1's `shipRole`
+// is never null. `formulaHasUsableRow` is the scorer's own gate (utils/autogear/customFormula.ts)
+// reused here so this check can never drift from what actually makes a formula scoreable.
+export const sharedAutogearBuildSchema = versionedSharedAutogearBuildSchema.superRefine(
+    (data, ctx) => {
+        if (
+            data.version === 2 &&
+            !data.shipRole &&
+            !formulaHasUsableRow(data.customFormula as CustomFormula | undefined)
+        ) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: 'A build needs either a ship role or a usable custom formula',
+            });
+        }
+    }
+);
 
 /**
  * Validate an untrusted shared build. Returns null rather than throwing —

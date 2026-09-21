@@ -32,7 +32,9 @@ const setLabel = (setName: string): string =>
  * build is always described the same way, wherever it is rendered.
  */
 export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: config }) => {
-    const roleInfo = SHIP_TYPES[config.shipRole];
+    // Custom mode (`shipRole: null`) has no role to look up — matches AutogearConfigList's
+    // own "Custom" fallback so a build reads the same way wherever it is shown.
+    const roleInfo = config.shipRole ? SHIP_TYPES[config.shipRole] : undefined;
     const hasImplantSettings = config.optimizeImplants || config.excludedImplantTypes.length > 0;
 
     return (
@@ -40,7 +42,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
             <Section title="Role">
                 <span className="inline-flex items-center gap-2">
                     {roleInfo?.iconUrl && <img src={roleInfo.iconUrl} alt="" className="w-4 h-4" />}
-                    {roleInfo?.name ?? config.shipRole}
+                    {roleInfo?.name ?? config.shipRole ?? 'Custom'}
                 </span>
             </Section>
 

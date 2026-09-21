@@ -84,4 +84,67 @@ describe('CommunityRecommendationService.createRecommendation', () => {
 
         expect(insert).not.toHaveBeenCalled();
     });
+
+    // `ship_role` is `NOT NULL` in the database, but a Custom-mode build's `shipRole` is
+    // null — the seeded-from role is what gets mirrored into that column instead.
+    it("mirrors a Custom-mode build's seededFrom role into the legacy ship_role column", async () => {
+        const customConfig: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        };
+
+        const single = vi.fn().mockResolvedValue({ data: { id: 'rec-1' }, error: null });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        await CommunityRecommendationService.createRecommendation(
+            { ...baseInput, sharedConfig: customConfig },
+            'profile-1'
+        );
+
+        const payload = insert.mock.calls[0][0];
+        expect(payload.ship_role).toBe('ATTACKER');
+        expect(payload.shared_config.shipRole).toBeNull();
+    });
+
+    // A hand-written Custom formula with no seededFrom has no role to mirror. Writing a
+    // placeholder would display as a role the author never chose, so this refuses instead.
+    it('throws InvalidSharedConfigError for a Custom-mode build with no seededFrom to mirror', async () => {
+        const unmirrorable: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        };
+
+        const insert = vi.fn();
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        await expect(
+            CommunityRecommendationService.createRecommendation(
+                { ...baseInput, sharedConfig: unmirrorable },
+                'profile-1'
+            )
+        ).rejects.toThrow(InvalidSharedConfigError);
+
+        expect(insert).not.toHaveBeenCalled();
+    });
 });

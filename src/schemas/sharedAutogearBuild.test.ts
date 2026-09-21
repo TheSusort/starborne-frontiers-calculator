@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
+import type { CustomFormula } from '../types/autogear';
 import { GEAR_SETS } from '../constants/gearSets';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { IMPLANTS } from '../constants/implants';
@@ -9,6 +10,12 @@ import { validateSharedAutogearBuild } from './sharedAutogearBuild';
 // Mirrors the schema's private MAX_ARRAY_LENGTH so the boundary tests move
 // with it rather than drifting from a hardcoded magic number.
 const MAX_ARRAY_LENGTH = 50;
+
+// Mirrors the schema's private custom-formula bounds, same reason as MAX_ARRAY_LENGTH above.
+const MAX_FORMULA_ROWS = 8;
+const MAX_BASIS_TERMS = 5;
+const MAX_EXCLUDED_NOTES = 3;
+const MAX_EXCLUDED_NOTE_LENGTH = 120;
 
 const validBuild: SharedAutogearBuild = {
     version: 1,
@@ -135,7 +142,7 @@ describe('validateSharedAutogearBuild', () => {
 
     it('rejects a future version', () => {
         expect(
-            validateSharedAutogearBuild({ ...structuredClone(validBuild), version: 2 })
+            validateSharedAutogearBuild({ ...structuredClone(validBuild), version: 3 })
         ).toBeNull();
     });
 
@@ -318,6 +325,45 @@ describe('validateSharedAutogearBuild', () => {
             const bytes = new TextEncoder().encode(JSON.stringify(maximalBuild())).length;
             expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
         });
+
+        // `maximalBuild` above predates `customFormula` and stays version 1, so it says
+        // nothing about the new field's contribution to the bound. A version-2 build with a
+        // full-size formula is the genuinely reachable maximum for THAT shape.
+        const maximalCustomFormulaBuild = () => {
+            const basisStat = 'critDamage'; // longest real basis-eligible stat key
+            return {
+                ...maximalBuild(),
+                version: 2 as const,
+                customFormula: {
+                    seededFrom: longest(SHIP_TYPES),
+                    rows: Array.from({ length: MAX_FORMULA_ROWS }, () => ({
+                        stat: longest({ ...STATS, ...DERIVED_STAT_LABELS }),
+                        kind: 'core' as const,
+                        direction: 'max' as const,
+                        importance: 2 as const,
+                        percentage: MAX_NUMBER,
+                        basis: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                            stat: basisStat,
+                            weight: MAX_NUMBER,
+                        })),
+                        excludedNote: Array.from({ length: MAX_EXCLUDED_NOTES }, () =>
+                            'x'.repeat(MAX_EXCLUDED_NOTE_LENGTH)
+                        ),
+                    })),
+                },
+            };
+        };
+
+        it('the maximal custom-formula payload is actually client-valid', () => {
+            expect(validateSharedAutogearBuild(maximalCustomFormulaBuild())).not.toBeNull();
+        });
+
+        it(`the maximal custom-formula payload stays under ${TEXT_BYTE_CEILING} bytes`, () => {
+            const bytes = new TextEncoder().encode(
+                JSON.stringify(maximalCustomFormulaBuild())
+            ).length;
+            expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
+        });
     });
 
     // Extreme-magnitude numbers are a payload amplifier, not just odd data:
@@ -389,6 +435,234 @@ describe('validateSharedAutogearBuild', () => {
                 };
                 expect(validateSharedAutogearBuild(build)).toBeNull();
             }
+        });
+    });
+});
+
+describe('validateSharedAutogearBuild — version 2, custom formula builds', () => {
+    const cobaltFormula: CustomFormula = {
+        rows: [
+            {
+                stat: 'directDamage',
+                kind: 'core',
+                direction: 'max',
+                importance: 1,
+                basis: [{ stat: 'attack', weight: 1.5 }],
+            },
+        ],
+        seededFrom: 'ATTACKER',
+    };
+
+    const v2Build = (overrides: Partial<SharedAutogearBuild> = {}): SharedAutogearBuild => ({
+        version: 2,
+        shipRole: null,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+        customFormula: cobaltFormula,
+        ...overrides,
+    });
+
+    it('round-trips a custom formula with a basis', () => {
+        const build = v2Build();
+        expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+    });
+
+    it('reads a version 1 row, which has no customFormula and a non-null role', () => {
+        const legacy = structuredClone({
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+        });
+        const result = validateSharedAutogearBuild(legacy);
+        expect(result).toMatchObject({ shipRole: 'ATTACKER' });
+        expect(result?.customFormula).toBeUndefined();
+    });
+
+    it('rejects a shared build with neither a role nor a usable formula', () => {
+        expect(
+            validateSharedAutogearBuild(v2Build({ shipRole: null, customFormula: { rows: [] } }))
+        ).toBeNull();
+    });
+
+    it('rejects a null role when every row is structurally valid but unusable', () => {
+        const build = v2Build({
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+            },
+        });
+        // Sanity: this row alone IS usable.
+        expect(validateSharedAutogearBuild(build)).not.toBeNull();
+
+        // `hpRegen` is a real STATS key (so the row schema accepts it) but has no
+        // MULTIPLIER_NORMALIZERS entry, so `isUsableRow` rejects it — a row can pass every
+        // field check and still not be usable.
+        const unusable = {
+            ...structuredClone(build),
+            customFormula: { rows: [{ stat: 'hpRegen', kind: 'core', direction: 'max' }] },
+        };
+        expect(validateSharedAutogearBuild(unusable)).toBeNull();
+    });
+
+    it('accepts a null role backed only by a bonus row (no core row required)', () => {
+        const build = v2Build({
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'hp', kind: 'bonus', direction: 'max' }] },
+        });
+        expect(validateSharedAutogearBuild(build)).not.toBeNull();
+    });
+
+    it('keeps a non-null role valid even with an empty/unusable formula', () => {
+        expect(
+            validateSharedAutogearBuild(
+                v2Build({ shipRole: 'ATTACKER', customFormula: { rows: [] } })
+            )
+        ).not.toBeNull();
+    });
+
+    it('rejects an unknown seededFrom role', () => {
+        const build = v2Build({
+            customFormula: { ...cobaltFormula, seededFrom: 'WIZARD' },
+        });
+        expect(validateSharedAutogearBuild(build)).toBeNull();
+    });
+
+    describe('basis validation on the way in, not only at score time', () => {
+        const buildWithBasis = (basis: Array<{ stat: string; weight: number }>): unknown =>
+            v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: [{ stat: 'hp', kind: 'core', direction: 'max', basis: basis as never }],
+                },
+            });
+
+        it('rejects a basis term naming an unrecognised stat', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'nonsense', weight: 1 }]))
+            ).toBeNull();
+        });
+
+        // directDamage/effectiveHp have a MULTIPLIER_NORMALIZERS entry but are derived
+        // stats, not basis terms — the wrong predicate would let them through silently.
+        it('rejects a basis term naming a derived stat (directDamage/effectiveHp)', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'directDamage', weight: 1 }]))
+            ).toBeNull();
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'effectiveHp', weight: 1 }]))
+            ).toBeNull();
+        });
+
+        it('rejects a negative basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: -1 }]))
+            ).toBeNull();
+        });
+
+        it('rejects a non-finite basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: Infinity }]))
+            ).toBeNull();
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: NaN }]))
+            ).toBeNull();
+        });
+
+        it('accepts a well-formed basis', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: 1.5 }]))
+            ).not.toBeNull();
+        });
+    });
+
+    describe('custom formula cardinality bounds', () => {
+        const rowWithBasis = (basisCount: number) => ({
+            stat: 'hp' as const,
+            kind: 'core' as const,
+            direction: 'max' as const,
+            basis: Array.from({ length: basisCount }, () => ({
+                stat: 'attack' as const,
+                weight: 1,
+            })),
+        });
+
+        it(`accepts exactly ${MAX_FORMULA_ROWS} formula rows`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: Array.from({ length: MAX_FORMULA_ROWS }, () => rowWithBasis(1)),
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_FORMULA_ROWS + 1} formula rows`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: Array.from({ length: MAX_FORMULA_ROWS + 1 }, () => rowWithBasis(1)),
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it(`accepts exactly ${MAX_BASIS_TERMS} basis terms on one row`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [rowWithBasis(MAX_BASIS_TERMS)] },
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_BASIS_TERMS + 1} basis terms on one row`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [rowWithBasis(MAX_BASIS_TERMS + 1)] },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it(`rejects ${MAX_EXCLUDED_NOTES + 1} excludedNote entries`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: [
+                        {
+                            stat: 'hp',
+                            kind: 'core',
+                            direction: 'max',
+                            excludedNote: Array.from({ length: MAX_EXCLUDED_NOTES + 1 }, () => 'x'),
+                        },
+                    ],
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it(`rejects an excludedNote string over ${MAX_EXCLUDED_NOTE_LENGTH} characters`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: [
+                        {
+                            stat: 'hp',
+                            kind: 'core',
+                            direction: 'max',
+                            excludedNote: ['x'.repeat(MAX_EXCLUDED_NOTE_LENGTH + 1)],
+                        },
+                    ],
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
         });
     });
 });

@@ -18,6 +18,10 @@ describe('communityBuildSummary', () => {
         expect(communityBuildSummary(base)).toContain('Attacker');
     });
 
+    it('leads with "Custom" for a Custom-mode build (shipRole: null)', () => {
+        expect(communityBuildSummary({ ...base, version: 2, shipRole: null })).toContain('Custom');
+    });
+
     it('includes set piece counts, so a 4-piece differs from a 2-piece', () => {
         const four = communityBuildSummary({
             ...base,

@@ -185,7 +185,7 @@ describe('AutogearQuickSettings community build wiring', () => {
             optimizeImplants: true,
         });
         expect(communityProps.current['1']?.currentBuild).toEqual({
-            version: 1,
+            version: 2,
             shipRole: 'ATTACKER',
             statPriorities: [],
             setPriorities: [],

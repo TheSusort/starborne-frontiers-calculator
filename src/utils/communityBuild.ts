@@ -1,11 +1,18 @@
 import { SHIP_TYPES, type ShipTypeName } from '../constants/shipTypes';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
-import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../types/autogear';
+import type {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+} from '../types/autogear';
 import type {
     CommunityRecommendation,
     SharedAutogearBuild,
 } from '../types/communityRecommendation';
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
+import { formulaHasUsableRow, isFormulaEmpty } from './autogear/customFormula';
 
 const SHIP_TYPE_KEYS = Object.keys(SHIP_TYPES);
 
@@ -177,6 +184,7 @@ export interface AutogearBuildFields {
     fleetBuffs?: FleetBuff[];
     excludedImplantTypes?: string[];
     optimizeImplants?: boolean;
+    customFormula?: CustomFormula;
 }
 
 /** A community recommendation resolved into something the UI can render. */
@@ -295,11 +303,31 @@ export const sortCommunityBuilds = (
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
-/** Build the shareable payload from the page's per-ship config. Null without a role. */
+/**
+ * The role a build's legacy `ship_role` column mirrors: the build's own role when it has
+ * one, or — in Custom mode (`shipRole: null`) — the role its formula was seeded from.
+ * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom`:
+ * there is then no role that describes the build, so the caller must refuse to share it
+ * rather than write a placeholder a legacy reader would treat as the author's real choice
+ * (`normalizeShipRole` synthesizes a legacy build straight from this column, and
+ * `SharedBuildFields`/`AutogearConfigList` render it as one).
+ */
+export const mirroredShipRole = (
+    build: Pick<AutogearBuildFields, 'shipRole' | 'customFormula'>
+): ShipTypeName | null => build.shipRole ?? build.customFormula?.seededFrom ?? null;
+
+/**
+ * Build the shareable payload from the page's per-ship config.
+ *
+ * Null when there is nothing scoreable to share (no role and no usable formula — the same
+ * test `partitionScoreableShips` uses), or when a Custom-mode formula has no role to mirror
+ * into the legacy `ship_role` column (see `mirroredShipRole`).
+ */
 export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogearBuild | null => {
-    if (!config.shipRole) return null;
+    if (!config.shipRole && !formulaHasUsableRow(config.customFormula)) return null;
+    if (!mirroredShipRole(config)) return null;
     return {
-        version: 1,
+        version: 2,
         shipRole: config.shipRole,
         statPriorities: config.statPriorities,
         setPriorities: config.setPriorities,
@@ -307,25 +335,27 @@ export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogear
         fleetBuffs: config.fleetBuffs ?? [],
         excludedImplantTypes: config.excludedImplantTypes ?? [],
         optimizeImplants: config.optimizeImplants ?? false,
+        ...(config.customFormula ? { customFormula: config.customFormula } : {}),
     };
 };
 
 /**
  * The exact update object for applying a community build to a ship's config.
- * Exactly these seven build-shaping fields — never the personal toggles
+ * Exactly these eight build-shaping fields — never the personal toggles
  * (algorithm, ignoreEquipped, ignoreUnleveled, useUpgradedStats,
  * tryToCompleteSets, includeCalibratedGear, assumeCalibrated, useArenaModifiers).
  * Those are absent from this object's keys, so a caller that spreads it over an
  * existing config cannot touch them.
  */
 export interface CommunityBuildConfigUpdate {
-    shipRole: ShipTypeName;
+    shipRole: ShipTypeName | null;
     statPriorities: StatPriority[];
     setPriorities: SetPriority[];
     statBonuses: StatBonus[];
     fleetBuffs: FleetBuff[];
     excludedImplantTypes: string[];
     optimizeImplants: boolean;
+    customFormula: CustomFormula | undefined;
 }
 
 /**
@@ -334,6 +364,10 @@ export interface CommunityBuildConfigUpdate {
  * priority, so a legacy build with no recorded count (SharedSetPriority)
  * is filled with LEGACY_DEFAULT_SET_COUNT here — the one place the shared
  * build's optional `count` becomes the engine's required one.
+ *
+ * `customFormula` is always a key on the result, present or not, so spreading this object
+ * over an existing config replaces a stale formula rather than leaving it behind under a
+ * role that never reads it.
  */
 export const communityBuildToConfigUpdate = (
     build: SharedAutogearBuild
@@ -348,12 +382,15 @@ export const communityBuildToConfigUpdate = (
     fleetBuffs: build.fleetBuffs,
     excludedImplantTypes: build.excludedImplantTypes,
     optimizeImplants: build.optimizeImplants,
+    customFormula: build.customFormula,
 });
 
 /**
  * Whether applying a build would overwrite something. shipRole is excluded on
- * purpose: it always defaults to the ship's own type, so it is never empty and
- * would make every config look non-empty.
+ * purpose: outside Custom mode it always defaults to the ship's own type, so it
+ * is never empty and would make every config look non-empty. A Custom-mode
+ * formula has no such default, so it counts here — an empty formula (or none)
+ * has nothing to overwrite.
  */
 export const hasExistingBuildConfig = (config: AutogearBuildFields): boolean =>
     config.statPriorities.length > 0 ||
@@ -361,4 +398,5 @@ export const hasExistingBuildConfig = (config: AutogearBuildFields): boolean =>
     config.statBonuses.length > 0 ||
     (config.fleetBuffs?.length ?? 0) > 0 ||
     (config.excludedImplantTypes?.length ?? 0) > 0 ||
-    config.optimizeImplants === true;
+    config.optimizeImplants === true ||
+    !isFormulaEmpty(config.customFormula);

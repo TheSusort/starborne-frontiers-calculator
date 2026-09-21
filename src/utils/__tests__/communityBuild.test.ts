@@ -173,12 +173,50 @@ describe('configToSharedBuild', () => {
         optimizeImplants: true,
     };
 
-    it('produces a version-1 build carrying all seven fields', () => {
-        expect(configToSharedBuild(config)).toEqual({ version: 1, ...config });
+    it('produces a version-2 build carrying all seven legacy fields', () => {
+        expect(configToSharedBuild(config)).toEqual({ version: 2, ...config });
     });
 
-    it('returns null without a ship role', () => {
+    it('returns null without a ship role or a usable custom formula', () => {
         expect(configToSharedBuild({ ...config, shipRole: null })).toBeNull();
+    });
+
+    it('shares a Custom-mode build when the formula is seeded from a role', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build).toEqual({
+            version: 2,
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+    });
+
+    it('refuses a Custom-mode build with a usable formula but no seededFrom — nothing to mirror', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        });
+        expect(build).toBeNull();
+    });
+
+    it('refuses a Custom-mode build whose formula has no usable row, even with seededFrom', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [], seededFrom: 'ATTACKER' },
+        });
+        expect(build).toBeNull();
     });
 
     it('defaults the optional arrays', () => {
@@ -189,7 +227,7 @@ describe('configToSharedBuild', () => {
             statBonuses: [],
         });
         expect(build).toEqual({
-            version: 1,
+            version: 2,
             shipRole: 'ATTACKER',
             statPriorities: [],
             setPriorities: [],
@@ -235,16 +273,35 @@ describe('hasExistingBuildConfig', () => {
     it('is true when optimizeImplants is on', () => {
         expect(hasExistingBuildConfig({ ...empty, optimizeImplants: true })).toBe(true);
     });
+
+    it('is true when a Custom-mode config carries a non-empty formula', () => {
+        expect(
+            hasExistingBuildConfig({
+                ...empty,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            })
+        ).toBe(true);
+    });
+
+    it('is false for a Custom-mode config with no formula, or an empty one', () => {
+        expect(hasExistingBuildConfig({ ...empty, shipRole: null })).toBe(false);
+        expect(
+            hasExistingBuildConfig({ ...empty, shipRole: null, customFormula: { rows: [] } })
+        ).toBe(false);
+    });
 });
 
 describe('communityBuildToConfigUpdate', () => {
     // Pins the feature's single most important guarantee: applying a community
-    // build writes exactly these seven build-shaping fields and never the
+    // build writes exactly these eight build-shaping fields and never the
     // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
     // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
-    // assumeCalibrated, useArenaModifiers). Adding an eighth key here — of
+    // assumeCalibrated, useArenaModifiers). Adding a ninth key here — of
     // either kind — must fail this test, not ship silently.
-    it('produces an update object with exactly the seven build-shaping keys', () => {
+    it('produces an update object with exactly the eight build-shaping keys', () => {
         const update = communityBuildToConfigUpdate(sharedConfig);
         expect(Object.keys(update).sort()).toEqual(
             [
@@ -255,11 +312,12 @@ describe('communityBuildToConfigUpdate', () => {
                 'fleetBuffs',
                 'excludedImplantTypes',
                 'optimizeImplants',
+                'customFormula',
             ].sort()
         );
     });
 
-    it('carries every field through unchanged', () => {
+    it('carries every field through unchanged, including an absent customFormula', () => {
         expect(communityBuildToConfigUpdate(sharedConfig)).toEqual({
             shipRole: sharedConfig.shipRole,
             statPriorities: sharedConfig.statPriorities,
@@ -268,7 +326,24 @@ describe('communityBuildToConfigUpdate', () => {
             fleetBuffs: sharedConfig.fleetBuffs,
             excludedImplantTypes: sharedConfig.excludedImplantTypes,
             optimizeImplants: sharedConfig.optimizeImplants,
+            customFormula: undefined,
         });
+    });
+
+    it("carries a Custom-mode build's formula through", () => {
+        const customFormula = {
+            rows: [
+                { stat: 'directDamage' as const, kind: 'core' as const, direction: 'max' as const },
+            ],
+            seededFrom: 'ATTACKER' as const,
+        };
+        const update = communityBuildToConfigUpdate({
+            ...sharedConfig,
+            shipRole: null,
+            customFormula,
+        });
+        expect(update.shipRole).toBeNull();
+        expect(update.customFormula).toEqual(customFormula);
     });
 
     // The page config's SetPriority.count is required (the autogear engine

@@ -4,6 +4,7 @@ import {
     CreateCommunityRecommendationInput,
 } from '../types/communityRecommendation';
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
+import { mirroredShipRole } from '../utils/communityBuild';
 
 /**
  * Thrown by createRecommendation when the shared config fails schema
@@ -57,6 +58,16 @@ export class CommunityRecommendationService {
             throw new InvalidSharedConfigError();
         }
 
+        // `ship_role` is `NOT NULL` in the database, but a Custom-mode build's `shipRole` is
+        // null. Mirror the role its formula was seeded from instead — the only case with
+        // neither is a hand-written formula, which `mirroredShipRole` reports as null and
+        // this refuses rather than write a role the author never chose.
+        const legacyShipRole = mirroredShipRole(sharedConfig);
+        if (!legacyShipRole) {
+            console.error('Refusing to share a build with no role to record');
+            throw new InvalidSharedConfigError();
+        }
+
         const { data, error } = await supabase
             .from('community_recommendations')
             .insert({
@@ -71,7 +82,7 @@ export class CommunityRecommendationService {
                 // a usable build. Derived from the same (sanitised) object so they
                 // cannot drift.
                 shared_config: JSON.parse(JSON.stringify(sharedConfig)),
-                ship_role: sharedConfig.shipRole,
+                ship_role: legacyShipRole,
                 stat_priorities: JSON.parse(JSON.stringify(sharedConfig.statPriorities)),
                 stat_bonuses: JSON.parse(JSON.stringify(sharedConfig.statBonuses)),
                 set_priorities: JSON.parse(JSON.stringify(sharedConfig.setPriorities)),
