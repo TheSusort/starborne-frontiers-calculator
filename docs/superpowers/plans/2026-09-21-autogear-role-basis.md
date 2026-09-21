@@ -176,8 +176,13 @@ predicate to honour "only where the role has one".
     not reach its failing case.
 - [ ] **Step 2 — run; expect failure**, specifically on Panon/DEFENDER. Paste it in the report.
 - [ ] **Step 3 — implement.** Choose the basis whose `produces` the role hosts, not
-  `findings[0].produces`. Withhold Apply otherwise. Carry only the matching `produces`'
-  `excludedNote`.
+  `findings[0].produces`. Withhold Apply otherwise.
+  **Nothing about the excluded carrier is persisted.** The row-level `excludedNote` exists only
+  because the ABANDONED Apply set `shipRole: null`, which unmounted the notice that named the
+  excluded passive. This Apply leaves `shipRole` set, so the notice stays mounted and renders the
+  excluded carrier from its own `deriveBasis` call, for the `produces` the role hosts. Do not add
+  `excludedNote` to `roleBasis` or to the config — the row-level plumbing is Task 6 retirement
+  material, not something to carry forward.
 - [ ] **Step 4 — drop the equation line for a non-hosting role.** The finding stays; the equation
   and the "add it by hand" advice go. For a Defender both are actively harmful: the equation names
   Attack, which a Defender never wants.
@@ -200,10 +205,21 @@ damage for free. `effectiveHp` treats HP and Defence as interchangeable, so noth
 preference inside it. `SavedAutogearConfig.statBonuses` already reaches every role scorer.
 
 - [ ] **Step 1 — ANSWERED 2026-09-21: a fixed modest nudge.** One Defence `StatBonus` magnitude
-  shared by all 7 tilt ships; not per-kit, not a player control. Pick the number by MEASUREMENT
-  against the real scorer, not by taste: it must reorder two builds of equal `effectiveHp` toward
-  Defence, and must NOT reorder a build that survives strictly fewer rounds above one that
-  survives more. Report the measured pair that pins each half. Do not re-ask the owner.
+  shared by all 7 tilt ships; not per-kit, not a player control. Do not re-ask the owner.
+  **Pick the number by MEASUREMENT, and note the obvious phrasing is unsatisfiable:** "never
+  reorder a build that survives fewer rounds above one that survives more" cannot hold for any
+  nonzero bonus, because for every magnitude there is a pair with a small enough survival gap and
+  a large enough Defence gap to flip. An implementer handed that sentence either picks 0 or fudges.
+  The satisfiable version is a MEASURED FLOOR:
+  - Measure the smallest survival delta a single realistic gear swap produces across the 7 tilt
+    ships (sweep the corpus stat ranges; say which pieces and which ships you swept).
+  - Require the tilt to LOSE to any survival gap at or above that floor, and to decide ties
+    strictly below it.
+  - Report both the floor and the chosen magnitude, with the measured pair that pins each side.
+  That is what "modest" has to mean here — a number with a measurement behind it rather than a
+  taste. If the floor turns out to be so small that no useful magnitude fits under it, STOP and
+  report that: it would mean the tilt cannot be expressed as a flat `StatBonus` at all, and the
+  owner needs to hear it rather than receive a fudged constant.
 - [ ] **Step 2 — write the failing tests.** The tilt control renders for a DEFENDER-family ship
   with a defence-scaled carrier; it does not render for a ship without one; accepting it appends a
   defence `StatBonus` and touches nothing else. The reach is MEASURED at exactly 7 ships (Cinya,
