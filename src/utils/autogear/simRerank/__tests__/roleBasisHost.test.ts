@@ -6,9 +6,10 @@ import type { OffFormulaStat } from '../offFormulaStats';
 
 /**
  * Expected role -> hosting axis/primary-stat table, typed as a total `Record<ShipTypeName, ...>`.
- * A `ShipTypeName` added later without a matching entry here fails TYPE CHECKING on this file
- * (a missing key in an object literal typed against a total Record), which vitest reports as a
- * failing test run rather than a silently-passing suite.
+ * `tsc` gates authoring: a `ShipTypeName` added without a matching entry here fails type
+ * checking. `vitest` does not type-check (esbuild strips types), so the 'key set equals the full
+ * ShipTypeName union' test below is a separate RUNTIME gate against the same gap — it fails a
+ * `vitest`-only run even when nobody has run `tsc`.
  */
 const EXPECTED: Record<
     ShipTypeName,

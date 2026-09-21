@@ -5,9 +5,9 @@ type BasisAxis = 'damage' | 'repair' | 'shield';
 
 interface RoleBasisHost {
     /** The `OffFormulaFinding.produces` axis a derived basis can replace this role's primary
-     *  quantity with. `null` when the role has no single scalable quantity to replace (a
-     *  defender-style survival score, or a role whose formula adds terms in a way a basis
-     *  cannot substitute into without double-counting — see the two rows below). */
+     *  quantity with. `null` when the role has no single scalable quantity to replace: a
+     *  defender-style survival score, or a formula that adds terms in a way a basis cannot
+     *  substitute into without double-counting a stat the formula already reads elsewhere. */
     axis: BasisAxis | null;
     /** The role's own primary stat that a derived basis stands in for. `null` iff `axis` is
      *  `null` — a role with no host axis has nothing for a basis to replace. */
@@ -31,17 +31,20 @@ const noHost: RoleBasisHost = { axis: null, primaryStat: null };
  * - DEFENDER and DEFENDER_SECURITY model survival rounds (`calculateDefenderScore`), not a
  *   single scalable quantity — a basis term inside its HP factor would double-count defence,
  *   which already drives the mitigation curve.
- * - DEBUFFER_DEFENSIVE, DEBUFFER_DEFENSIVE_SECURITY and DEBUFFER_CORROSION score hacking against
- *   effective HP, security or Decimation-set count — none of those is a basis's `attack`/`hp`
- *   substitution point.
+ * - DEBUFFER_DEFENSIVE and DEBUFFER_DEFENSIVE_SECURITY score hacking against effective HP, which
+ *   already folds defence into its mitigation curve — same double-counting reason as the
+ *   defenders, since effective HP is an hp/defence blend rather than hp alone.
+ * - DEBUFFER_CORROSION scores hacking against Decimation-set count, which has no `attack`/`hp`
+ *   substitution point at all.
  * - SUPPORTER_BUFFER adds speed and effective HP; ruled out for the same double-counting reason
  *   as the defenders.
- * - SUPPORTER_OFFENSIVE adds speed and `sqrt(attack)` (owner ruling, 2026-09-21): the square
- *   root compresses a basis in a way no other hosting role's formula does, and nothing measures
- *   what that compression would do to rankings.
+ * - SUPPORTER_OFFENSIVE adds speed and `sqrt(attack)` (owner ruling, #544): the square root
+ *   compresses a basis in a way no other hosting role's formula does, and nothing measures what
+ *   that compression would do to rankings.
  *
- * A `ShipTypeName` added later that is missing here fails to type-check against this total
- * `Record`, not silently defaulted to `noHost` — see `roleBasisHost.test.ts`'s totality tripwire.
+ * A `ShipTypeName` added later that is missing here fails to TYPE-CHECK against this total
+ * `Record` (`tsc`). `roleBasisHost.test.ts` carries an independent RUNTIME tripwire for the same
+ * gap, since `tsc` does not run under `vitest`.
  */
 const ROLE_BASIS_HOST: Record<ShipTypeName, RoleBasisHost> = {
     ATTACKER: { axis: 'damage', primaryStat: 'attack' },
