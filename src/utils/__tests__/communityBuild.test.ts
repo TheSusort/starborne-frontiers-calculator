@@ -7,6 +7,7 @@ import {
     hasExistingBuildConfig,
     communityBuildToConfigUpdate,
 } from '../communityBuild';
+import { validateSharedAutogearBuild } from '../../schemas/sharedAutogearBuild';
 import type {
     CommunityRecommendation,
     SharedAutogearBuild,
@@ -217,6 +218,32 @@ describe('configToSharedBuild', () => {
             customFormula: { rows: [], seededFrom: 'ATTACKER' },
         });
         expect(build).toBeNull();
+    });
+
+    it('round-trips a Custom-mode config through share and apply, basis intact', () => {
+        // The full app path: the page's config goes out through configToSharedBuild,
+        // across the wire as JSON (validateSharedAutogearBuild stands in for that hop),
+        // and back into an equivalent config update via communityBuildToConfigUpdate.
+        const customFormula = {
+            rows: [
+                {
+                    stat: 'directDamage' as const,
+                    kind: 'core' as const,
+                    direction: 'max' as const,
+                    basis: [{ stat: 'attack' as const, weight: 2.5 }],
+                },
+            ],
+            seededFrom: 'ATTACKER' as const,
+        };
+        const shared = configToSharedBuild({ ...config, shipRole: null, customFormula });
+        expect(shared).not.toBeNull();
+
+        const validated = validateSharedAutogearBuild(JSON.parse(JSON.stringify(shared)));
+        expect(validated).not.toBeNull();
+
+        const update = communityBuildToConfigUpdate(validated as SharedAutogearBuild);
+        expect(update.shipRole).toBeNull();
+        expect(update.customFormula).toEqual(customFormula);
     });
 
     it('defaults the optional arrays', () => {

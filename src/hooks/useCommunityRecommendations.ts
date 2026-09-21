@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
-import { ShipTypeName } from '../constants';
 import { SharedAutogearBuild } from '../types/communityRecommendation';
 import {
     CommunityRecommendationService,
@@ -17,10 +16,13 @@ import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 
 interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
-    /** The user's current build for this ship, or null when no role is set. */
+    /**
+     * The user's current build for this ship, or null when `configToSharedBuild` refused it
+     * (nothing scoreable, or a Custom-mode formula with no role to mirror into the legacy
+     * `ship_role` column — see `mirroredShipRole`). Its non-nullness IS the shareability
+     * verdict: `canShare` below trusts it rather than re-deriving the same predicates.
+     */
     currentBuild: SharedAutogearBuild | null;
-    /** The ship's selected role, or null in Custom mode — a roleless build cannot be shared. */
-    shipRole: ShipTypeName | null;
 }
 
 interface UseCommunityRecommendationsReturn {
@@ -47,12 +49,11 @@ interface UseCommunityRecommendationsReturn {
 export const useCommunityRecommendations = ({
     selectedShip,
     currentBuild,
-    shipRole,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
     const { activeProfileId } = useActiveProfile();
 
-    const canShare = !!selectedShip && !!currentBuild && !!shipRole;
+    const canShare = !!selectedShip && !!currentBuild;
 
     const [builds, setBuilds] = useState<CommunityBuild[]>([]);
     const [loading, setLoading] = useState(false);

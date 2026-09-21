@@ -6,6 +6,8 @@ import type {
     CommunityRecommendation,
     SharedAutogearBuild,
 } from '../../types/communityRecommendation';
+import { configToSharedBuild, type AutogearBuildFields } from '../../utils/communityBuild';
+import type { CustomFormula } from '../../types/autogear';
 
 vi.mock('../../contexts/InventoryProvider', () => ({
     useInventory: () => ({ getGearPiece: () => undefined }),
@@ -111,7 +113,6 @@ describe('useCommunityRecommendations — stale-ship fetch guard (Finding 1)', (
                 useCommunityRecommendations({
                     selectedShip: props.selectedShip,
                     currentBuild: null,
-                    shipRole: null,
                 }),
             { initialProps: { selectedShip: shipA } }
         );
@@ -158,7 +159,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -183,7 +183,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -209,7 +208,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -243,7 +241,7 @@ describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)',
         });
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: null, shipRole: null })
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: null })
         );
 
         await waitFor(() => expect(result.current.builds).toHaveLength(2));
@@ -266,5 +264,45 @@ describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)',
 
         expect(result.current.expandedId).toBe('build-b');
         expect(result.current.userVote).toBe('upvote');
+    });
+});
+
+describe('useCommunityRecommendations — canShare gate', () => {
+    const usableFormula: CustomFormula = {
+        rows: [{ stat: 'attack', kind: 'core', direction: 'max', importance: 1 }],
+    };
+
+    const customConfig = (customFormula: CustomFormula): AutogearBuildFields => ({
+        shipRole: null,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        customFormula,
+    });
+
+    it('opens the gate for a Custom-mode build seeded from a role', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(
+            customConfig({ ...usableFormula, seededFrom: 'ATTACKER' })
+        );
+        expect(build).not.toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(true);
+    });
+
+    it('keeps the gate closed for a hand-written Custom formula with no seededFrom', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig(usableFormula));
+        expect(build).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(false);
     });
 });
