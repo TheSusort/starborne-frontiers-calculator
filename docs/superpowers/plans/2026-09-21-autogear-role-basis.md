@@ -161,35 +161,60 @@ predicate to honour "only where the role has one".
 
 ---
 
-### Task 2b: The fast path reads the basis too
+### Task 2b: The basis reaches the optimizer, on every path
 
-**Files:** `src/utils/autogear/fastScoring/context.ts`, `src/utils/autogear/fastScoring/fastScore.ts`,
-`src/utils/autogear/strategies/GeneticStrategy.ts`; tests alongside.
+**Files:** `src/utils/autogear/AutogearStrategy.ts`, `src/utils/autogear/runShipOptimizer.ts`, all
+three of `strategies/GeneticStrategy.ts` / `TwoPassStrategy.ts` / `SetFirstStrategy.ts`,
+`fastScoring/context.ts`, `fastScoring/fastScore.ts`; tests alongside.
 
-**Why this exists and why it is before Task 3.** `USE_FAST_SCORING` is `true`, so `GeneticStrategy`
-— the default algorithm — scores through `fastScore`, not through the slow path Task 1 changed.
-`FastScoringContext` carries `shipRole`, `statBonuses` and `customFormula` but NOT `roleBasis`, and
-`fastScore` calls `calculatePriorityScore` without it. The moment Apply writes a basis, the default
-algorithm ignores it and nothing fails. `VERIFY_FAST_SCORING` is `false` by default, so the
-existing divergence check does not cover this either.
+**Why, and why it is one task rather than two.** Task 1 taught `calculatePriorityScore` and
+`calculateTotalScore` to honour a basis, but nothing hands them one. Measured:
+`findOptimalGearForShip` (`runShipOptimizer.ts:363`) forwards twelve arguments to
+`strategy.findOptimalGear` and stops at `config.customFormula`;
+`AutogearStrategy.findOptimalGear` (`AutogearStrategy.ts:44`) has no basis parameter, so no
+strategy can pass one on. `ShipOptimizerConfig.roleBasis` is a dead field.
 
-**This must land before the Stage A checkpoint.** The checkpoint asks the owner to test in a
-browser; against an unwired fast path they would see no change and conclude the feature is broken
-or, worse, that it works when it does not.
+So the fast path is NOT a separate gap — it is downstream of this one. Wiring
+`FastScoringContext` alone would add a field nothing populates.
 
-- [ ] **Step 1 — write the failing test.** For a hosting role with a real basis, `fastScore` and
-  the slow path must return the SAME fitness for the same gear. It must fail before the wiring —
-  paste the divergence.
-- [ ] **Step 2 — thread it.** `roleBasis` onto `FastScoringContext` and `buildFastScoringContext`,
-  through to the `calculatePriorityScore` call. **Also into `fastScore`'s own local `cacheKey`** —
-  it has one, and a key that ignores the basis serves a stale fitness exactly as `scoring.ts`'s did.
-- [ ] **Step 3 — the verify path.** `verifyAgainstSlowPath` must pass the basis to both sides, or
-  turning `VERIFY_FAST_SCORING` on would report a false divergence and send the next agent hunting
-  a bug that is not there.
-- [ ] **Step 4 — a tripwire, not a comment.** The equivalence test from Step 1 is the thing that
-  keeps the two paths honest as more scoring inputs are added. Make it walk every hosting role
-  rather than one, so a role added to the hosting set without fast-path wiring reddens.
-- [ ] **Step 5 — tests + `tsc` + eslint. Commit.** `feat(autogear): score a derived basis on the fast path too`
+**Every existing `roleBasis` test calls the scorers and the config builder DIRECTLY, never
+through `findOptimalGearForShip`.** That is exactly why a dead field survived a green suite and
+two reviews. This task's tripwire has to run through the real entry point.
+
+**Decisions already taken — do not re-litigate:**
+- **All three strategies honour the basis.** They are alternative algorithms for one scoring
+  objective; a basis that worked only under Genetic would make gear silently depend on the
+  algorithm dropdown.
+- **Add `roleBasis?: RoleBasis` as a thirteenth POSITIONAL parameter.** It is consistent with the
+  seven optional scoring inputs already there and it is the smallest diff. Grouping those
+  trailing inputs into an options object is the right eventual shape and is filed separately —
+  do not start it here.
+
+- [ ] **Step 1 — write the failing test, THROUGH `findOptimalGearForShip`.** For a hosting role,
+  a `ShipOptimizerConfig` carrying a `roleBasis` must return different gear than the same config
+  without one, given an inventory where the basis's stat and the role's plain primary favour
+  different pieces. Assert on the RETURNED GEAR, not on a score. Run it for each of the three
+  algorithms. It must fail before the wiring — paste the real failure.
+- [ ] **Step 2 — thread it.** Interface parameter, `findOptimalGearForShip`'s forward, and each
+  strategy's own `calculateTotalScore` call. `GeneticStrategy` has two (its main call and the one
+  inside `verifyAgainstSlowPath`) — both, or turning `VERIFY_FAST_SCORING` on reports a false
+  divergence and sends the next agent hunting a bug that is not there.
+- [ ] **Step 3 — the fast path.** `roleBasis` onto `FastScoringContext` and
+  `buildFastScoringContext`, through to `fastScore`'s `calculatePriorityScore` call, **and into
+  `fastScore`'s OWN local `cacheKey`** — it has one, and a key ignoring the basis serves a stale
+  fitness, the bug that already happened once on this branch in `scoring.ts`. Reuse
+  `scoring.ts`'s `roleBasisKeyPart`; do not write a second key encoder.
+- [ ] **Step 4 — fast-versus-slow equivalence.** For a hosting role with a real basis, `fastScore`
+  and the slow path must return the same fitness for the same gear. Walk EVERY hosting role,
+  derived from the hosting set (`Object.keys(SHIP_TYPES).filter(r => roleAxis(r) !== null)`, the
+  shape `roleBasis.test.ts` already uses) rather than hand-listed, so a role added later without
+  fast-path wiring reddens.
+- [ ] **Step 5 — mutation-probe all three tripwires** and report what reddens for each: drop the
+  basis from the strategy forward, from the `fastScore` call, and from the `fastScore` cache key.
+  A probe that reddens nothing means the test is not load-bearing — say so rather than move on.
+- [ ] **Step 6 — tests + `tsc` + eslint. Commit.** `feat(autogear): let every optimizer path score on a derived basis`
+
+**An absent `roleBasis` must leave every path byte-identical.** That is the regression pin.
 
 ---
 
@@ -224,9 +249,8 @@ or, worse, that it works when it does not.
     and the load direction does the same. `roleBasis` is in neither list, so today it is never
     persisted or restored. Add it to both, and add an assertion that a config round-trips a
     basis — a hand-enumerated layer silently drops any field added to the type.
-  - `ShipOptimizerConfig.roleBasis` currently has no consumer: `findOptimalGearForShip` never
-    reads it. Close config -> strategy -> `calculateTotalScore` so the value reaches the scorer,
-    and test that an Apply'd basis actually changes which gear a run returns.
+  (The optimizer half of this gap — config -> strategy -> scorer -> fast path — is Task 2b.
+  What remains here is only persistence: getting a basis INTO the config in the first place.)
 - [ ] **Step 5 — audit `UNRELEASED_CHANGES`.** Nothing has released since these entries were
   written, so they must describe the pivoted behaviour, not the pre-pivot one. Re-read all seven;
   at minimum "ships scoring off an ignored stat now show their real damage equation" is now false
