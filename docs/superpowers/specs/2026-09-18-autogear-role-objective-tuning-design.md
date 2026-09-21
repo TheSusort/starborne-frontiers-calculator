@@ -231,13 +231,17 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
 
 ## Open questions
 
-1. **The tilt's magnitude.** Nothing in the kit says how much to prefer Defence over HP — the
-   damage is incidental, so there is no number to transcribe. Options: a fixed modest nudge, a
-   value derived from the kit's defence coefficient, or a control the player sets. This is the one
-   number in the design with no measurement behind it.
-2. **`SUPPORTER_OFFENSIVE`.** Its primary is `speed + sqrt(attack)` — a sum, and the attack term is
-   under a square root. A basis on the attack half is expressible but non-linear in a way no other
-   role's is. Confirm before treating it as a damage host.
+1. **The tilt's magnitude — ANSWERED 2026-09-21: a fixed modest nudge.** One Defence `StatBonus`
+   magnitude shared by every tilt ship; not scaled per kit, not a player control. The binding
+   constraint is behavioural, not numeric: it must reorder two builds of equal `effectiveHp`
+   toward Defence, and must never lift a build that survives strictly fewer rounds above one that
+   survives more. Pick the number by measuring both halves against the real scorer.
+   Measured reach: 7 ships — Cinya, Isha, Kafa, Madax, Morao, Panon, Suku, all DEFENDER.
+2. **`SUPPORTER_OFFENSIVE` — ANSWERED 2026-09-21: it hosts NOTHING.** The sqrt compresses a basis
+   in a way no other role's does and no measurement backs what that does to rankings. No ship
+   defaults to the role, so nothing is lost; 26 flagged ships would produce damage if a player
+   chose it, and they get the finding with no Apply. It joins the survival roles in the no-host
+   set. Adding it later is a one-line table change.
 3. **Whether a hand-authored Custom formula stays shareable.** It is currently reachable and
    supported. Keeping it costs the nullable-role schema branch Apply no longer needs.
 4. **Whether the notice should fire for DEFENDER-family substitution findings** once the equation

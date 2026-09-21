@@ -6,8 +6,9 @@
 **Goal:** Move the derived scoring basis from a seeded custom formula onto the ship's REAL role
 formula, so applying it stops degrading everything the basis does not touch.
 
-**Architecture:** `SavedAutogearConfig` gains `roleBasis`. Each role scorer resolves its primary
-quantity through `resolveBasisValue` instead of reading one stat. Apply writes `roleBasis` and
+**Architecture:** `SavedAutogearConfig` gains `roleBasis: { produces, terms }`. Each role scorer
+resolves its primary quantity through `resolveBasisValue` instead of reading one stat, and honours
+the basis only when the role's axis matches `produces`. Apply writes `roleBasis` and
 leaves `shipRole` set. A DEFENDER-family ship is offered a Defence `StatBonus` tilt instead of an
 equation it should not gear toward.
 
@@ -21,9 +22,35 @@ equation it should not gear toward.
 - Ledger: `.superpowers/sdd/progress.md`, the `#544` section. It records four controller errors
   and one bug that recurred three times. Read it before trusting any invariant in this plan.
 
+## Owner rulings, 2026-09-21 — settled, do not re-ask
+
+- **The Defender tilt is a FIXED MODEST NUDGE** — one Defence `StatBonus` magnitude shared by
+  every tilt ship, not scaled from each kit's coefficient and not a player control. It must never
+  buy Defence at the cost of a round of survival. Measured reach: 7 ships (Cinya, Isha, Kafa,
+  Madax, Morao, Panon, Suku — all DEFENDER).
+- **`SUPPORTER_OFFENSIVE` hosts NOTHING.** Its primary is `speed + sqrt(attack)`; the sqrt
+  compresses a basis in a way no other role's does and no measurement backs it. No ship defaults
+  to that role, so nothing is lost today. It joins the survival roles in the no-host set.
+
+## Measured corpus shape (2026-09-21, `detectOffFormulaStats` at each ship's default role)
+
+47 flagged: ATTACKER 15, DEBUFFER 5, **DEFENDER 24**, SUPPORTER 3. So roughly half the corpus
+lands in the no-basis bucket, and only 7 of those 24 carry a defence scaler the tilt can reach.
+The remaining 17 Defenders get the finding and nothing else — that is the honest outcome of the
+Defender ruling, not a gap to close.
+
 ## Global Constraints
 
-- **Execution PAUSES at the Stage A checkpoint** for the repo owner to test in a browser.
+- **Execution PAUSES at the Stage A checkpoint** for the repo owner to test in a browser. It is
+  not waivable: the last checkpoint was waived on a summary and the owner then found the
+  pivot-forcing bug in the browser.
+- **The axis vocabulary is `deriveBasis`'s own: `'damage' | 'repair' | 'shield'`.** Not
+  `'healing'` — `basisDerivation.ts:314` and `OffFormulaFinding.produces` both say `repair`, and
+  a third spelling is how a router silently matches nothing.
+- **A `roleBasis` carries the `produces` it was derived for.** A bare `BasisTerm[]` cannot say
+  what it DESCRIBES, and "routed by which row CAN hold it rather than which row it DESCRIBES" is
+  the bug that recurred three times on this branch. The scorer applies a basis iff
+  `roleHostsBasis(role, roleBasis.produces)`.
 - An absent `roleBasis` must be byte-identical to current behaviour, for every role. This is the
   regression pin and every task preserves it.
 - Weights are in multiplier units divided by 100, rounded to 0.001 — the precision the editor
@@ -59,8 +86,12 @@ equation it should not gear toward.
 **Files:** `src/types/autogear.ts`, `src/utils/autogear/priorityScore.ts`,
 `src/utils/autogear/scoring.ts`; test `src/utils/autogear/__tests__/roleBasis.test.ts` (new).
 
-**Produces:** `SavedAutogearConfig.roleBasis?: BasisTerm[]`; every role scorer accepts an optional
-basis; `calculatePriorityScore` threads it.
+**Produces:** `SavedAutogearConfig.roleBasis?: { produces: 'damage'|'repair'|'shield'; terms: BasisTerm[] }`;
+every hosting role scorer accepts an optional basis; `calculatePriorityScore` threads it and
+applies it only when `roleHostsBasis(role, roleBasis.produces)` (Task 2's predicate — do not
+restate the rule, call it).
+
+**Runs AFTER Task 2.**
 
 - [ ] **Step 1 — write the failing tests.** Three groups:
   - **Regression pin:** for all 12 roles, `calculateRoleScore(role, stats)` with no basis equals
@@ -73,11 +104,28 @@ basis; `calculatePriorityScore` threads it.
     a +3,000 Defence piece above a +10,000 HP piece, and the reverse without it.
 - [ ] **Step 2 — run them; expect failure** (`roleBasis` does not exist).
 - [ ] **Step 3 — add `roleBasis` to `SavedAutogearConfig`**, documented as replacing the role's
-  primary quantity, honoured only where the role has one.
+  primary quantity, honoured only where the role's axis matches its `produces`.
+- [ ] **Step 3b — validate the terms through ONE predicate.** A blank weight zeroed every score
+  on this branch and the optimizer returned arbitrary gear; the fix guarded the formula-row path
+  only. Reuse `usableBasis`'s own term filter (`customFormula.ts`) — extract the term-level half
+  if it is welded to a row — so the scorer path cannot drift from it. A basis that validates to
+  nothing must fall back to the plain stat, never to 0.
 - [ ] **Step 4 — thread it.** Give each hosting scorer an optional basis and resolve its primary
-  through `resolveBasisValue(stats, basis, <primary>)`. The spec's table names the primary per
-  role. **Survival roles take no basis** — do not add a parameter you then ignore; leave those
-  signatures alone so the type says which roles host.
+  through `resolveBasisValue(stats, basis.terms, <primary>)`. `rolePrimaryStat` names the primary
+  per role — read it from Task 2, do not hardcode a second copy. **Non-hosting roles take no
+  basis** — do not add a parameter you then ignore; leave those signatures alone so the type says
+  which roles host.
+  Note `statResolution.ts` already threads a basis into `calculateDPS`, `calculateDirectDamage`
+  and `calculateEffectiveHP` for the formula-row path. Reuse those seams; do not add a parallel
+  one.
+- [ ] **Step 4b — `buildSimRerankShipConfig` (`runShipOptimizer.ts:150`).** It blanks
+  `statPriorities` / `statBonuses` / `customFormula` for a COMPARED role so the formula is the
+  only axis that differs (#498). A `roleBasis` is NOT one of those: it is a transcription of the
+  ship's kit, not a player preference, so it is carried to every row unblanked and the hosting
+  predicate decides where it lands — an ATTACKER's damage basis reaches a compared DEBUFFER row
+  (both damage) and is ignored by a compared SUPPORTER row (repair). Add it to that function with
+  a comment stating that contract, and a test asserting BOTH halves of it. Flag the behaviour in
+  the checkpoint report so the owner sees what a comparison row now scores.
 - [ ] **Step 5 — cache key.** `scoring.ts`'s key must include `roleBasis`, order-independently and
   from a copy, exactly as `basisKeyPart` already does for a formula row's basis. An absent basis
   keeps the old key byte-for-byte. Without this, changing a basis returns a stale score — that bug
@@ -91,13 +139,21 @@ basis; `calculatePriorityScore` threads it.
 
 **Files:** `src/utils/autogear/simRerank/roleBasisHost.ts` (new); test alongside.
 
-**Produces:** `roleAxis(role): 'damage' | 'healing' | 'shield' | null`,
+**Produces:** `roleAxis(role): 'damage' | 'repair' | 'shield' | null`,
 `rolePrimaryStat(role): OffFormulaStat | null`, `roleHostsBasis(role, produces): boolean`.
+
+**THIS TASK RUNS FIRST.** It is pure data, depends on nothing, and Task 1's scorer needs its
+predicate to honour "only where the role has one".
 
 - [ ] **Step 1 — write the failing test.** Pin the spec's table for all 12 roles. Then the
   invariant: `roleHostsBasis` is true exactly when `roleAxis(role)` matches the basis's `produces`.
   Assert explicitly that DEFENDER, DEFENDER_SECURITY, DEBUFFER_DEFENSIVE,
-  DEBUFFER_DEFENSIVE_SECURITY, DEBUFFER_CORROSION and SUPPORTER_BUFFER host **nothing**.
+  DEBUFFER_DEFENSIVE_SECURITY, DEBUFFER_CORROSION, SUPPORTER_BUFFER and **SUPPORTER_OFFENSIVE**
+  host **nothing** (the last by the 2026-09-21 owner ruling above). The hosting set is therefore
+  exactly ATTACKER, DEBUFFER, DEBUFFER_BOMBER (damage on attack), SUPPORTER (repair on hp) and
+  SUPPORTER_SHIELD (shield on hp).
+  Carry a **totality tripwire**: the table's key set must equal the full `ShipTypeName` union, so
+  a role added later fails this test rather than silently reading `undefined` as non-hosting.
 - [ ] **Step 2 — run; expect failure.**
 - [ ] **Step 3 — implement.** Derive from `CUSTOM_FORMULA_SEEDS` and the scorers, not a hardcoded
   ship list. A role added later must fail the build or the test rather than silently default.
@@ -125,7 +181,11 @@ basis; `calculatePriorityScore` threads it.
 - [ ] **Step 4 — drop the equation line for a non-hosting role.** The finding stays; the equation
   and the "add it by hand" advice go. For a Defender both are actively harmful: the equation names
   Attack, which a Defender never wants.
-- [ ] **Step 5 — tests, `tsc`, eslint. Commit.** `feat(autogear): apply a derived basis to the ship's role`
+- [ ] **Step 5 — audit `UNRELEASED_CHANGES`.** Nothing has released since these entries were
+  written, so they must describe the pivoted behaviour, not the pre-pivot one. Re-read all seven;
+  at minimum "ships scoring off an ignored stat now show their real damage equation" is now false
+  for the 24 Defenders. Rewrite or drop, 8-12 words per entry, one entry per user-visible change.
+- [ ] **Step 6 — tests, `tsc`, eslint. Commit.** `feat(autogear): apply a derived basis to the ship's role`
 
 ---
 
@@ -139,13 +199,16 @@ damage for free. `effectiveHp` treats HP and Defence as interchangeable, so noth
 **This is a `StatBonus`, not a basis.** A basis would redefine what survival is; a bonus is a
 preference inside it. `SavedAutogearConfig.statBonuses` already reaches every role scorer.
 
-- [ ] **Step 1 — ASK THE OWNER the tilt magnitude before writing code.** Nothing in the kit says
-  how much to prefer Defence — the damage is incidental, so there is no number to transcribe. Put
-  the question with options (a fixed nudge, a value from the kit's defence coefficient, a player
-  control) and wait. Do not pick one silently.
+- [ ] **Step 1 — ANSWERED 2026-09-21: a fixed modest nudge.** One Defence `StatBonus` magnitude
+  shared by all 7 tilt ships; not per-kit, not a player control. Pick the number by MEASUREMENT
+  against the real scorer, not by taste: it must reorder two builds of equal `effectiveHp` toward
+  Defence, and must NOT reorder a build that survives strictly fewer rounds above one that
+  survives more. Report the measured pair that pins each half. Do not re-ask the owner.
 - [ ] **Step 2 — write the failing tests.** The tilt control renders for a DEFENDER-family ship
   with a defence-scaled carrier; it does not render for a ship without one; accepting it appends a
-  defence `StatBonus` and touches nothing else.
+  defence `StatBonus` and touches nothing else. The reach is MEASURED at exactly 7 ships (Cinya,
+  Isha, Kafa, Madax, Morao, Panon, Suku) — pin that corpus count with a non-vacuity counter, and
+  assert one of the other 17 Defenders (e.g. Opal, damage off attack) is offered no tilt.
 - [ ] **Step 3 — run; expect failure. Step 4 — implement. Step 5 — tests, `tsc`, eslint.**
 - [ ] **Step 6 — changelog + commit.** `feat(autogear): offer a Defence tilt to defenders whose kit rewards it`
 
