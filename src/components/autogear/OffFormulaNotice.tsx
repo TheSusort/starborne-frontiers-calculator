@@ -14,8 +14,13 @@ import {
     type DerivedBasis,
     type ExcludedCarrier,
 } from '../../utils/autogear/simRerank/basisDerivation';
-import { roleAxis, rolePrimaryStat } from '../../utils/autogear/simRerank/roleBasisHost';
-import type { RoleBasis } from '../../types/autogear';
+import {
+    roleAxis,
+    rolePrimaryStat,
+    isDefenderFamilyRole,
+    DEFENDER_TILT_BONUS,
+} from '../../utils/autogear/simRerank/roleBasisHost';
+import type { RoleBasis, StatBonus } from '../../types/autogear';
 
 /** What Apply writes back to the ship's config: the derived basis, attached to whichever axis
  *  `configuredRole` hosts (`roleAxis`, `roleBasisHost.ts`). `shipRole` is unchanged — the
@@ -35,6 +40,17 @@ export interface OffFormulaNoticeProps {
      *  wired persistence (or a test only asserting the notice's copy) can omit it — the button
      *  it drives simply does not render. */
     onApply?: (update: OffFormulaApplyUpdate) => void;
+    /** Appends `DEFENDER_TILT_BONUS` to the ship's stat bonuses. Optional for the same reason as
+     *  `onApply` — a caller not ready to persist the write simply omits it, and the tilt button
+     *  does not render. */
+    onApplyTilt?: (bonus: StatBonus) => void;
+    /** The ship's current stat bonuses. The tilt button is wired to the same handler the manual
+     *  "Add stat bonus" form uses (`onAddStatBonus` in `AutogearSettings.tsx`), which REPLACES an
+     *  existing bonus on the same stat rather than adding a second one — so once any Defence
+     *  bonus already exists, the button withholds itself rather than risk silently overwriting a
+     *  value the player set on purpose. Defaults to empty, matching a caller with nothing saved
+     *  yet. */
+    statBonuses?: StatBonus[];
 }
 
 /** Two sentence shapes an `OffFormulaFinding.produces` needs: `scales` for the aggregate finding
@@ -123,6 +139,8 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     ship,
     configuredRole,
     onApply,
+    onApplyTilt,
+    statBonuses = [],
 }) => {
     // `buildShipAbilities(ship)` (inside both `detectOffFormulaStats` and `deriveBasis`) is a
     // regex-driven skill-text parser, and `OffFormulaNotice` sits beside sibling `useState`s in
@@ -172,6 +190,23 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
             shipRole: configuredRole,
             roleBasis: { produces: hostAxis, terms: hostedBasis.terms },
         });
+    };
+
+    // The Defender tilt (#544) gates on the AXIS a finding describes, not merely on a finding
+    // being present: only a finding whose `tunableStat` is `defence` — the ship's kit damage
+    // reading Defence, the lever a player could actually gear — under one of the two
+    // survival-rounds roles (`isDefenderFamilyRole`) offers it. A DEFENDER-family ship whose
+    // carrier reads a different stat (Opal: attack) gets no tilt; neither does a defence-lever
+    // finding under a role outside the family (no host axis does not imply "Defender-shaped").
+    // Withheld once a Defence bonus already exists — see `statBonuses`'s own doc for why.
+    const canTilt =
+        isDefenderFamilyRole(configuredRole) &&
+        findings.some((f) => f.tunableStat === 'defence') &&
+        !statBonuses.some((b) => b.stat === 'defence');
+
+    const handleTilt = () => {
+        if (!onApplyTilt) return;
+        onApplyTilt(DEFENDER_TILT_BONUS);
     };
 
     return (
@@ -231,6 +266,19 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                 <Button variant="secondary" size="sm" onClick={handleApply}>
                     Use this equation
                 </Button>
+            )}
+            {onApplyTilt && canTilt && (
+                <div className="space-y-1 border-t border-dark-border pt-2">
+                    <p className="text-xs text-theme-text-secondary">
+                        {ship.name} turns Defence into damage as a side effect of tanking, so
+                        gearing for Defence pays off twice. When two builds would otherwise survive
+                        equally well, this nudges the optimizer to prefer the one with more Defence
+                        — it never picks a build that survives fewer rounds.
+                    </p>
+                    <Button variant="secondary" size="sm" onClick={handleTilt}>
+                        Prefer Defence in ties
+                    </Button>
+                </div>
             )}
         </div>
     );

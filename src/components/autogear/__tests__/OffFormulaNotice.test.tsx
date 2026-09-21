@@ -4,7 +4,13 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
 import { deriveBasis } from '../../../utils/autogear/simRerank/basisDerivation';
-import { roleAxis, roleHostsBasis } from '../../../utils/autogear/simRerank/roleBasisHost';
+import {
+    roleAxis,
+    roleHostsBasis,
+    DEFENDER_TILT_BONUS,
+} from '../../../utils/autogear/simRerank/roleBasisHost';
+import { calculateRoleScore } from '../../../utils/autogear/priorityScore';
+import type { BaseStats } from '../../../types/stats';
 import { SHIP_TYPES } from '../../../constants/shipTypes';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -113,6 +119,203 @@ describe('OffFormulaNotice', () => {
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
         expect(screen.getByText(/damage scales off its shield pool/)).toBeInTheDocument();
         expect(screen.getByText(/nothing to put in a formula/i)).toBeInTheDocument();
+    });
+});
+
+// The Defender tilt (#544): among builds that survive equally well, Panon-style ships convert
+// Defence to damage for free, so a `StatBonus` preference is offered — not an equation, since
+// DEFENDER-family hosts no basis (`roleBasisHost.ts`).
+describe('Defender tilt', () => {
+    const defenderShip = { id: 's', name: 'Panon', type: 'DEFENDER' } as unknown as Ship;
+
+    it('renders for a DEFENDER-family ship with a defence-scaled carrier', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        render(
+            <OffFormulaNotice ship={defenderShip} configuredRole="DEFENDER" onApplyTilt={vi.fn()} />
+        );
+        expect(screen.getByText(/turns Defence into damage/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /prefer defence/i })).toBeInTheDocument();
+    });
+
+    it('renders under DEFENDER_SECURITY too, the other survival-rounds role', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        render(
+            <OffFormulaNotice
+                ship={defenderShip}
+                configuredRole="DEFENDER_SECURITY"
+                onApplyTilt={vi.fn()}
+            />
+        );
+        expect(screen.getByRole('button', { name: /prefer defence/i })).toBeInTheDocument();
+    });
+
+    // The negative case named in the brief (Opal: damage off attack) — a DEFENDER-family ship
+    // WITH a finding, but whose lever is not Defence, offers no tilt.
+    it('does not render for a DEFENDER-family ship whose carrier is not defence-scaled', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'hp',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'hp',
+            },
+        ]);
+        render(
+            <OffFormulaNotice ship={defenderShip} configuredRole="DEFENDER" onApplyTilt={vi.fn()} />
+        );
+        expect(screen.queryByText(/turns Defence into damage/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /prefer defence/i })).not.toBeInTheDocument();
+    });
+
+    // The bug class this branch keeps producing: routed by "which value is present" instead of
+    // "which axis it describes". A defence-tunableStat finding under a role that is NOT
+    // DEFENDER-family (even one that hosts no basis, like DEBUFFER_CORROSION) must not offer the
+    // tilt — the tilt is specific to the two survival-rounds formulas, not "any no-host role".
+    it('does not render for a non-Defender role even with a defence-tunableStat finding', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        render(
+            <OffFormulaNotice
+                ship={defenderShip}
+                configuredRole="DEBUFFER_CORROSION"
+                onApplyTilt={vi.fn()}
+            />
+        );
+        expect(screen.queryByRole('button', { name: /prefer defence/i })).not.toBeInTheDocument();
+    });
+
+    it('does not render the tilt button when onApplyTilt is not wired, even if eligible', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        render(<OffFormulaNotice ship={defenderShip} configuredRole="DEFENDER" />);
+        expect(screen.queryByRole('button', { name: /prefer defence/i })).not.toBeInTheDocument();
+    });
+
+    // `onAddStatBonus` (the handler this button is wired to in `AutogearSettings.tsx`) REPLACES
+    // an existing bonus on the same stat rather than adding a second one. A player who already
+    // set their own Defence bonus would have it silently overwritten by a click they did not
+    // intend as an edit — so the button withholds itself once any Defence bonus already exists,
+    // manual or from a previous click of this same button.
+    it('hides the tilt once a Defence stat bonus already exists, so it never silently overwrites one', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        render(
+            <OffFormulaNotice
+                ship={defenderShip}
+                configuredRole="DEFENDER"
+                onApplyTilt={vi.fn()}
+                statBonuses={[{ stat: 'defence', percentage: 5, mode: 'additive' }]}
+            />
+        );
+        expect(screen.queryByRole('button', { name: /prefer defence/i })).not.toBeInTheDocument();
+    });
+
+    it('accepting it appends a defence StatBonus and touches nothing else about the config', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'substitution',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        const onApplyTilt = vi.fn();
+        const onApply = vi.fn();
+        render(
+            <OffFormulaNotice
+                ship={defenderShip}
+                configuredRole="DEFENDER"
+                onApplyTilt={onApplyTilt}
+                onApply={onApply}
+            />
+        );
+        fireEvent.click(screen.getByRole('button', { name: /prefer defence/i }));
+        expect(onApplyTilt).toHaveBeenCalledTimes(1);
+        expect(onApplyTilt).toHaveBeenCalledWith(DEFENDER_TILT_BONUS);
+        // A single fixed magnitude, not a player control (owner ruling, #544).
+        expect(DEFENDER_TILT_BONUS).toEqual({
+            stat: 'defence',
+            percentage: 0.01,
+            mode: 'additive',
+        });
+        // The tilt is its own control — clicking it never fires the (unrelated, absent-here)
+        // roleBasis Apply callback.
+        expect(onApply).not.toHaveBeenCalled();
+    });
+
+    // Step 1's measured bounds, as assertions. Both are computed against the real
+    // `calculateRoleScore('DEFENDER', ...)` formula, over the real achievable stat frontier for
+    // the 7 tilt ships (base stats + forced hull-HP/generator-Defence mains + every flexible
+    // main/substat committed to one side) — see the task report for the full sweep.
+    describe('measured magnitude bounds', () => {
+        const survivalRounds = (
+            stats: BaseStats,
+            statBonuses?: Parameters<typeof calculateRoleScore>[2]
+        ) => calculateRoleScore('DEFENDER', stats, statBonuses) / 1000;
+
+        // FLOOR pin: Suku at its realistic all-Defence-build corner (hp=19238, defence=12098) —
+        // the smallest survival-rounds delta any single realistic gear swap (one rare-tier
+        // defence substat, +30 flat) produces across the 7 tilt ships' achievable stat range.
+        it('the floor: the smallest single-swap delta is bigger than the tilt could ever contribute', () => {
+            const stats: BaseStats = { hp: 19238, defence: 12098 } as BaseStats;
+            const before = survivalRounds(stats);
+            const afterSwap = survivalRounds({ ...stats, defence: stats.defence + 30 });
+            const floor = Math.abs(afterSwap - before);
+            expect(floor).toBeCloseTo(0.002201, 5);
+        });
+
+        // CEILING pin: Isha/Madax/Panon share the highest achievable Defence among the 7 tilt
+        // ships (base defence 4047) — the tilt's largest possible contribution anywhere on the
+        // realistic frontier.
+        it('the ceiling: the tilt never reaches the floor, even at the highest achievable Defence', () => {
+            const stats: BaseStats = { hp: 25323, defence: 14478 } as BaseStats;
+            const before = survivalRounds(stats);
+            const withTilt = survivalRounds(stats, [DEFENDER_TILT_BONUS]);
+            const ceiling = withTilt - before;
+            expect(ceiling).toBeCloseTo(0.001448, 5);
+
+            const floor = 0.002201;
+            expect(ceiling).toBeLessThan(floor);
+        });
     });
 });
 
@@ -656,6 +859,43 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                         `hostedEquationRendered=${hostedEquationRendered}`
                 );
             }, 20000);
+        });
+
+        // The reach: exactly the 7 named tilt ships (Cinya, Isha, Kafa, Madax, Morao, Panon,
+        // Suku) offer the tilt under their own DEFENDER role — every other real DEFENDER-family
+        // ship, including Opal (damage off Attack, the brief's named negative case), does not.
+        describe('Defender tilt over the real corpus', () => {
+            it('reaches exactly 7 ships, and offers Opal nothing', () => {
+                mocked.mockImplementation(realDetect);
+                const defenders = fullCorpus().filter(
+                    (s) => s.type === 'DEFENDER' || s.type === 'DEFENDER_SECURITY'
+                );
+                // Non-vacuity: the walk must actually cover a real population of defenders, or a
+                // corpus-loading regression that returns [] would let the exact-7 assertion below
+                // pass vacuously.
+                expect(defenders.length).toBeGreaterThan(20);
+
+                const tilted: string[] = [];
+                for (const ship of defenders) {
+                    const onApplyTilt = vi.fn();
+                    const { unmount } = render(
+                        <OffFormulaNotice
+                            ship={ship}
+                            configuredRole={ship.type as never}
+                            onApplyTilt={onApplyTilt}
+                        />
+                    );
+                    if (screen.queryByRole('button', { name: /prefer defence/i })) {
+                        tilted.push(ship.name);
+                    }
+                    unmount();
+                }
+
+                expect(new Set(tilted)).toEqual(
+                    new Set(['Cinya', 'Isha', 'Kafa', 'Madax', 'Morao', 'Panon', 'Suku'])
+                );
+                expect(tilted).not.toContain('Opal');
+            });
         });
     }
 );

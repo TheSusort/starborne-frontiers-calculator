@@ -1591,6 +1591,18 @@ const DocumentationPage: React.FC = () => {
                                         usually work against what the role is built for.
                                     </p>
                                     <p className="text-theme-text mt-2">
+                                        A Defender (or Defender(Security)) whose damage comes from
+                                        its own Defence is the one exception: since it tanks with
+                                        Defence anyway, more of it is never a bad trade, so a{' '}
+                                        <strong>Prefer Defence in ties</strong> button offers a
+                                        small, fixed nudge toward Defence over HP whenever two
+                                        builds would otherwise survive equally well. It never
+                                        favours a build that survives fewer rounds — only settles a
+                                        tie between two that already survive the same. It disappears
+                                        once you have any Defence bonus set, manual or from a
+                                        previous click, so it never overwrites one.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
                                         A passive skill&apos;s contribution is never in that
                                         equation. How often a passive fires depends on how the fight
                                         actually goes — how much the ship gets hit, how often a
