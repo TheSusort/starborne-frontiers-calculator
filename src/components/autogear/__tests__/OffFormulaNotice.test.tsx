@@ -215,11 +215,25 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             expect(
                 screen.getByText(/a passive's frequency depends on the fight/i)
             ).toBeInTheDocument();
-            // Rikra's lever IS HP, so `equationLine` does run for him — but his repair basis has
-            // no active/charged term at all (the only repair carrier is the passive one just
-            // asserted above), so the "unchanged" branch fires and appends this pointer sentence.
-            // This is the only test in the file asserting the pointer's PRESENCE; every other
-            // test that touches it (Howler, below) asserts its absence instead.
+            // Rikra's finding is `repair`-produces, and ATTACKER hosts `damage` — no equation
+            // line, and no pointer to one, attaches to a finding on an axis the role doesn't
+            // host (see the Zenith test below for the pointer's PRESENCE, on a finding the role
+            // genuinely hosts).
+            expect(
+                screen.queryByText(
+                    /The clause below is what a passive keeps the optimizer from counting/i
+                )
+            ).not.toBeInTheDocument();
+        });
+
+        // The pointer's counterpart to Rikra above: Zenith's `shield` finding IS what
+        // SUPPORTER_SHIELD hosts, and its whole shield carrier lives in a passive slot (no
+        // active/charged term at all), so `equationLine`'s "unchanged" branch legitimately fires
+        // and appends this pointer sentence.
+        it("points at Zenith's excluded shield clause when the finding is the axis SUPPORTER_SHIELD hosts", () => {
+            mocked.mockImplementation(realDetect);
+            const zenith = corpusShipNamed('Zenith');
+            render(<OffFormulaNotice ship={zenith} configuredRole="SUPPORTER_SHIELD" />);
             expect(
                 screen.getByText(
                     /The clause below is what a passive keeps the optimizer from counting/i
@@ -312,27 +326,52 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             ).not.toBeInTheDocument();
         });
 
-        // Graphite's shield is also 100% Attack under the same SUPPORTER core-on-HP baseline —
-        // a second ship pinning the same corrected sentence shape, not just Howler's numbers.
+        // Graphite's shield finding is what SUPPORTER_SHIELD hosts (not SUPPORTER, which hosts
+        // `repair`), and its shield is 100% Attack under that role's own HP-core baseline — a
+        // second ship pinning the same corrected sentence shape, not just Howler's numbers.
         it("states the same displacement for Graphite's shield basis", () => {
             mocked.mockImplementation(realDetect);
             const graphite = corpusShipNamed('Graphite');
-            render(<OffFormulaNotice ship={graphite} configuredRole="SUPPORTER" />);
+            render(<OffFormulaNotice ship={graphite} configuredRole="SUPPORTER_SHIELD" />);
             expect(
                 screen.getByText(/In its own numbers, this is Attack x1\.350, and nothing from HP/i)
             ).toBeInTheDocument();
         });
 
-        // The control case: APEX's real in-game role is DEBUFFER, but configured here as
-        // ATTACKER — a role whose own core row (directDamage) already scores Attack — and his
-        // derived damage basis is Attack-only, so the "unchanged" sentence is correct, unlike for
-        // Howler/Graphite above (SUPPORTER, whose core row scores HP instead).
+        // The control case: Vindicator's `damage` finding is what ATTACKER hosts, and his
+        // derived damage basis is Attack-only — matching ATTACKER's own core row exactly, so the
+        // "unchanged" sentence is correct, unlike for Howler/Graphite above (whose hosting role's
+        // core row scores HP instead).
         it('still states the scoring is unchanged for an Attack-scored role with an Attack-only basis', () => {
             mocked.mockImplementation(realDetect);
-            const apex = corpusShipNamed('APEX');
-            render(<OffFormulaNotice ship={apex} configuredRole="ATTACKER" />);
+            const vindicator = corpusShipNamed('Vindicator');
+            render(<OffFormulaNotice ship={vindicator} configuredRole="ATTACKER" />);
             expect(
                 screen.getByText(/No stat besides Attack feeds its active or charged basis/i)
+            ).toBeInTheDocument();
+        });
+
+        // The routing bug this task exists to close, on the DISPLAY path: `coreStat` is a
+        // role-level constant, non-null whenever the role hosts anything, but a per-finding
+        // equation line must gate on THIS finding's own `produces` matching the axis the role
+        // hosts — never merely on `coreStat` being truthy. Cinya carries both a `damage` finding
+        // and a `repair` finding; under ATTACKER (a damage-hosting role), the repair finding's
+        // basis has no active/charged term, so unguarded code prints a false "unchanged" claim
+        // computed against Attack, a stat the repair finding has nothing to do with.
+        it("attaches no equation line to a finding on an axis the role doesn't host", () => {
+            mocked.mockImplementation(realDetect);
+            const cinya = corpusShipNamed('Cinya');
+            render(<OffFormulaNotice ship={cinya} configuredRole="ATTACKER" />);
+            // The repair finding's own sentence still renders.
+            expect(screen.getByText(/Cinya's repairs scale off HP/)).toBeInTheDocument();
+            // But not the false "unchanged" claim — Attack has nothing to do with the repair
+            // finding, which the ATTACKER role doesn't host at all.
+            expect(
+                screen.queryByText(/No stat besides Attack feeds its active or charged basis/i)
+            ).not.toBeInTheDocument();
+            // The DAMAGE finding — the one ATTACKER DOES host — still gets its own equation line.
+            expect(
+                screen.getByText(/In its own numbers, this is Attack x0\.733 \+ Defence x0\.633/)
             ).toBeInTheDocument();
         });
 
@@ -532,6 +571,90 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 // Renders the whole real corpus (150+ ships) x every role — comfortably under
                 // 5s alone, but the default per-test timeout is tight under full-suite load
                 // (matches roleSlotCoverage.test.ts's precedent for this shape of test).
+            }, 20000);
+        });
+
+        // The DISPLAY-path counterpart to the Apply corpus walk above: for every real flagged
+        // (ship, role) pairing, a finding's equation line must render iff that finding's own
+        // `produces` is the axis the role hosts — never merely because the role hosts SOMETHING.
+        describe('Equation line only attaches to the finding whose axis the role hosts', () => {
+            it('renders no equation line for a finding on an axis the role does not host, and does not silence the one it does', () => {
+                mocked.mockImplementation(realDetect);
+                const roles = Object.keys(SHIP_TYPES);
+                // Non-vacuity for the negative assertion below: a ship carrying a finding whose
+                // `produces` differs from a hosting role's own axis (e.g. Cinya's `repair`
+                // finding under ATTACKER, which hosts `damage`). Zero would mean the walk never
+                // actually exercised the bug this test guards against.
+                let mixedProducesUnderHostingRole = 0;
+                // Non-vacuity for the positive assertion: a hosted, leverable finding that DOES
+                // get its equation line — proves the fix didn't just silence every line.
+                let hostedEquationRendered = 0;
+
+                for (const ship of fullCorpus()) {
+                    for (const role of roles) {
+                        const findings = realDetect(ship, role);
+                        if (findings.length === 0) continue;
+
+                        const hostAxis = roleAxis(role);
+                        const { container, unmount } = render(
+                            <OffFormulaNotice ship={ship} configuredRole={role} />
+                        );
+
+                        const card = container.querySelector('.card');
+                        expect(
+                            card,
+                            `${ship.name}/${role}: findings present but no notice rendered`
+                        ).toBeTruthy();
+                        // Each finding renders as its own direct-child `div`; the excluded-carrier
+                        // block (present only when passive carriers exist) is the lone direct
+                        // child with a `border-t` divider, so filtering it out leaves exactly one
+                        // div per finding, in the same order `findings` reports them.
+                        const findingDivs = Array.from(card!.children).filter(
+                            (el): el is Element =>
+                                el.tagName === 'DIV' && !el.className.includes('border-t')
+                        );
+                        expect(findingDivs.length, `${ship.name}/${role}`).toBe(findings.length);
+
+                        findings.forEach((finding, i) => {
+                            const hasEquationParagraph =
+                                findingDivs[i].querySelectorAll('p').length > 1;
+
+                            if (finding.produces !== hostAxis) {
+                                if (hostAxis) mixedProducesUnderHostingRole++;
+                                expect(
+                                    hasEquationParagraph,
+                                    `${ship.name}/${role}: finding produces '${finding.produces}' isn't the hosted axis ('${hostAxis}') but still rendered an equation line`
+                                ).toBe(false);
+                            } else if (finding.tunableStat) {
+                                // A hosted finding with a lever always has SOME basis to render
+                                // against — this is the counterpart to the negative check above,
+                                // over the same corpus walk rather than a single hand-picked ship.
+                                expect(
+                                    hasEquationParagraph,
+                                    `${ship.name}/${role}: hosted finding with a lever rendered no equation line`
+                                ).toBe(true);
+                                hostedEquationRendered++;
+                            }
+                        });
+
+                        unmount();
+                    }
+                }
+
+                expect(
+                    mixedProducesUnderHostingRole,
+                    'the walk must encounter a mixed-produces finding under a hosting role at least once'
+                ).toBeGreaterThan(0);
+                expect(
+                    hostedEquationRendered,
+                    'the walk must render at least one genuinely hosted equation line'
+                ).toBeGreaterThan(0);
+
+                // eslint-disable-next-line no-console
+                console.log(
+                    `Equation-line corpus walk: mixedProducesUnderHostingRole=${mixedProducesUnderHostingRole} ` +
+                        `hostedEquationRendered=${hostedEquationRendered}`
+                );
             }, 20000);
         });
     }

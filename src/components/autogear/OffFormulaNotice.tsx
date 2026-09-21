@@ -182,8 +182,16 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                 // A collapsed finding names the lever explicitly, because the sentence has
                 // already named a different stat as what the effect reads.
                 const scored = lever && lever !== finding.stat ? statLabel(lever) : 'it';
+                // An equation line states what `coreStat` (the role's own formula stat) gets
+                // displaced by — meaningless unless THIS finding's axis is the one `coreStat`
+                // belongs to. A finding on another axis (e.g. a `repair` finding on a
+                // damage-hosting role) gets the finding sentence only; the excluded-carrier block
+                // below still lists every passive clause regardless, same as a role that hosts
+                // nothing at all.
                 const basis =
-                    lever && coreStat ? (basisByProduces.get(finding.produces) ?? null) : null;
+                    lever && hostAxis && finding.produces === hostAxis
+                        ? (basisByProduces.get(finding.produces) ?? null)
+                        : null;
                 return (
                     <div key={key} className="space-y-1">
                         <p className="text-xs text-amber-400">
