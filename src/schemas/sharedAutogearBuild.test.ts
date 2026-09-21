@@ -1,10 +1,19 @@
+import { readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
 import type { CustomFormula } from '../types/autogear';
+import type { Ship } from '../types/ship';
 import { GEAR_SETS } from '../constants/gearSets';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
+import {
+    deriveBasis,
+    triggerProse,
+    type ExcludedCarrier,
+} from '../utils/autogear/simRerank/basisDerivation';
+import { csvAvailable, loadShipSkillRecords } from '../../scripts/lib/shipSkillCsv';
+import { shipDataAvailable } from '../../scripts/lib/shipDataSnapshot';
 import { validateSharedAutogearBuild } from './sharedAutogearBuild';
 
 // Mirrors the schema's private MAX_ARRAY_LENGTH so the boundary tests move
@@ -666,3 +675,124 @@ describe('validateSharedAutogearBuild — version 2, custom formula builds', () 
         });
     });
 });
+
+// Gitignored reference data (docs/ship-skills.csv, docs/ship-data.json) exists on dev machines
+// but not every checkout — skip rather than fail where it's absent, matching the other
+// real-corpus suites (e.g. offFormulaStats.test.ts).
+describe.skipIf(!csvAvailable() || !shipDataAvailable())(
+    'MAX_EXCLUDED_NOTES / MAX_EXCLUDED_NOTE_LENGTH against the real corpus',
+    () => {
+        interface Datum {
+            name: string;
+            role: string;
+            hp: number;
+            attack: number;
+            defense: number;
+            hacking: number;
+            security: number;
+            speed: number;
+            critRate: number;
+            critDamage: number;
+        }
+
+        const asShip = (rec: ReturnType<typeof loadShipSkillRecords>[number], d: Datum): Ship =>
+            ({
+                id: rec.name.toLowerCase(),
+                name: rec.name,
+                type: d.role,
+                baseStats: {
+                    attack: d.attack,
+                    crit: d.critRate,
+                    critDamage: d.critDamage,
+                    hacking: d.hacking,
+                    security: d.security,
+                    defence: d.defense,
+                    hp: d.hp,
+                    speed: d.speed,
+                },
+                equipment: {},
+                implants: {},
+                refits: [0, 1, 2, 3].map((i) => ({ id: `r${i}`, stats: [] })),
+                activeSkillText: rec.active,
+                chargeSkillText: rec.charge,
+                chargeSkillCharge: rec.chargeCharge,
+                firstPassiveSkillText: rec.passives[0],
+                secondPassiveSkillText: rec.passives[1],
+                thirdPassiveSkillText: rec.passives[2],
+                activeTarget: 'front',
+                activePattern: 'Pattern-Base',
+                chargedTarget: 'front',
+                chargedPattern: 'Pattern-Base',
+            }) as unknown as Ship;
+
+        const corpus = (): Ship[] => {
+            const data: Datum[] = JSON.parse(readFileSync('docs/ship-data.json', 'utf8'));
+            const byName = new Map(data.map((d) => [d.name.toLowerCase(), d]));
+            return loadShipSkillRecords()
+                .map((rec) => {
+                    const d = byName.get(rec.name.toLowerCase());
+                    return d ? asShip(rec, d) : null;
+                })
+                .filter((s): s is Ship => s !== null);
+        };
+
+        // Mirrors `OffFormulaNotice.tsx`'s private `excludedClauseText`/`PRODUCES_LABEL`/
+        // `percentBasisLabel` (not exported — exporting a plain function from a component file
+        // trips `react-refresh/only-export-components`), the same reason the bounds above mirror
+        // this schema's private caps. Only the LENGTH of the real copy matters for this tripwire,
+        // and this reproduces it exactly enough to measure that.
+        const CLAUSE_VERB: Record<ExcludedCarrier['produces'], string> = {
+            damage: 'deals damage equal to',
+            repair: 'repairs',
+            shield: 'shields for',
+        };
+        const percentBasisLabel = (stat: ExcludedCarrier['stat']): string =>
+            stat === 'hp' ? 'max HP' : stat === 'shield' ? 'its shield pool' : stat;
+        const excludedClauseText = (carrier: ExcludedCarrier): string =>
+            `${CLAUSE_VERB[carrier.produces]} ${carrier.pct}% of ${percentBasisLabel(
+                carrier.stat
+            )} ${triggerProse(carrier.trigger)}`;
+
+        // A ship's excluded-carrier set (`deriveBasis(...).excluded`) does not depend on the
+        // `produces` argument (see `basisDerivation.ts`'s doc on `excludedCarriers`), so one
+        // call per ship covers its whole passive-carrier set — the same set `handleApply` in
+        // `OffFormulaNotice.tsx` filters and writes into a row's `excludedNote`, which is what
+        // crosses into a shared build and hits this schema's caps.
+        it(`stays under MAX_EXCLUDED_NOTES (${MAX_EXCLUDED_NOTES}) and MAX_EXCLUDED_NOTE_LENGTH (${MAX_EXCLUDED_NOTE_LENGTH})`, () => {
+            let maxCount = 0;
+            let maxCountShip = '';
+            let maxLength = 0;
+            let maxLengthShip = '';
+
+            for (const ship of corpus()) {
+                const excluded = deriveBasis(ship, 'damage').excluded;
+                if (excluded.length > maxCount) {
+                    maxCount = excluded.length;
+                    maxCountShip = ship.name;
+                }
+                for (const carrier of excluded) {
+                    const length = excludedClauseText(carrier).length;
+                    if (length > maxLength) {
+                        maxLength = length;
+                        maxLengthShip = ship.name;
+                    }
+                }
+            }
+
+            // Non-vacuity: some ship must actually carry at least one excluded note, or a
+            // detector regression returning [] for every ship would pass this test too.
+            expect(maxCount).toBeGreaterThan(0);
+
+            // The tripwire itself: a data refresh adding a third passive carrier to one ship,
+            // or lengthening a trigger's prose, breaks Share with no other failing test unless
+            // this catches it first.
+            expect(maxCount, `${maxCountShip} carries the most excluded notes`).toBeLessThanOrEqual(
+                MAX_EXCLUDED_NOTES
+            );
+            expect(
+                maxLength,
+                `${maxLengthShip} carries the longest excluded note`
+            ).toBeLessThanOrEqual(MAX_EXCLUDED_NOTE_LENGTH);
+        });
+    }
+);

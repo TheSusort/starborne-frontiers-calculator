@@ -114,6 +114,45 @@ describe('CustomFormulaForm', () => {
         });
     });
 
+    it('rejects a blank basis weight instead of silently submitting a 0-weight term', async () => {
+        // `addBasisTerm` seeds a blank weight field. `Number('')` is 0, which is finite and
+        // >= 0 — the SAME check the bonus branch uses — so without a stricter guard this
+        // silently submits `basis:[{ stat:'attack', weight:0 }]`. A core/max row's term
+        // multiplies into the row's score, so that 0 doesn't just drop the term, it zeroes
+        // the whole row for every candidate.
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+    });
+
+    it('rejects an explicit 0 basis weight, not only a blank one', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '0');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+    });
+
+    it('accepts a positive basis weight', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '2.1');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).toHaveBeenCalledWith({
+            stat: 'attack',
+            kind: 'core',
+            direction: 'max',
+            importance: 1,
+            basis: [{ stat: 'attack', weight: 2.1 }],
+        });
+    });
+
     it('prefills from an edited row and saves it back', async () => {
         const onSave = vi.fn();
         render(

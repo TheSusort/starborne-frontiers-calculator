@@ -100,15 +100,20 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // A basis term the scorer would drop (bad stat, negative or non-finite weight) fails
-        // the whole submit rather than being silently stripped — the same contract as the
-        // bonus percentage check below.
+        // A basis term the scorer would drop (bad stat, non-finite, negative, or zero weight)
+        // fails the whole submit rather than being silently accepted. Zero is rejected here even
+        // though `usableBasis` (customFormula.ts) would keep it: a core/max row MULTIPLIES its
+        // term into the row's score, so a zero-weight term — typically an unfilled field, since
+        // `Number('')` is 0 — doesn't just drop out, it zeroes the whole row for every candidate
+        // and ties the search. The bonus percentage branch below has the matching guard for its
+        // own field: bonus terms ADD rather than multiply, so 0 there stays a legitimate "add
+        // nothing" and blank instead defaults to 100.
         let basis: BasisTerm[] | undefined;
         if (showsBasis && basisTerms.length > 0) {
             const parsed: BasisTerm[] = [];
             for (const term of basisTerms) {
                 const weight = Number(term.weight.trim());
-                if (!isBasisStat(term.stat) || !Number.isFinite(weight) || weight < 0) {
+                if (!isBasisStat(term.stat) || !Number.isFinite(weight) || weight <= 0) {
                     return;
                 }
                 parsed.push({ stat: term.stat, weight });

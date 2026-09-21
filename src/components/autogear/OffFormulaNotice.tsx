@@ -111,13 +111,39 @@ const VALID_BASIS_STATS: ReadonlySet<OffFormulaStat> = new Set([
 /**
  * The stat a core row's basis would compare against: `CORE_ROW_PRIMARY`'s entry for a derived
  * stat's primary factor, or the row's own stat otherwise — `null` when neither names a stat a
- * derived basis can carry a term on (e.g. `hacking`, `speed`). The single resolution both
- * `roleCoreStat` (which core row is the role's baseline) and Apply (which core row the derived
- * basis attaches to) read, so the two questions cannot drift into different answers.
+ * derived basis can carry a term on (e.g. `hacking`, `speed`). Feeds `roleCoreStat`, which picks
+ * the role's baseline stat for the notice's equation text. This answers "which row can
+ * syntactically hold a basis", NOT "which row a given basis describes" — that second question
+ * is `rowAxis`/`PRODUCES_AXIS` below, and Apply reads those, not this.
  */
 const rowCoreStat = (row: Pick<CustomFormulaRow, 'stat'>): OffFormulaStat | null => {
     const mapped = CORE_ROW_PRIMARY[row.stat] ?? (row.stat as OffFormulaStat);
     return VALID_BASIS_STATS.has(mapped) ? mapped : null;
+};
+
+/** The output channel a core row's basis would describe. `directDamage` and a plain `attack`
+ *  core row are damage proxies — attack is `calculateDirectDamage`'s own primary factor.
+ *  `effectiveHp` and a plain `hp` core row are survival/repair proxies — hp is
+ *  `calculateEffectiveHP`'s own primary factor, and a repair or shield channel's output is
+ *  scored through HP-based survival, not through damage. Every other core stat (`security`,
+ *  `hacking`, `speed`, `defence`, `shield`, `crit`, `critDamage`) is not an output proxy at
+ *  all — `null` — and can never host a basis of any `produces`. */
+type OutputAxis = 'damage' | 'survival';
+const ROW_AXIS: Partial<Record<string, OutputAxis>> = {
+    directDamage: 'damage',
+    attack: 'damage',
+    effectiveHp: 'survival',
+    hp: 'survival',
+};
+const rowAxis = (row: Pick<CustomFormulaRow, 'stat'>): OutputAxis | null =>
+    ROW_AXIS[row.stat] ?? null;
+
+/** Which row axis a derived basis's `produces` may attach to — a damage basis only on a
+ *  damage-proxy row, a repair or shield basis only on a survival/repair-proxy row. */
+const PRODUCES_AXIS: Record<OffFormulaFinding['produces'], OutputAxis> = {
+    damage: 'damage',
+    repair: 'survival',
+    shield: 'survival',
 };
 
 /**
@@ -204,18 +230,22 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
 
     const roleLabel = SHIP_TYPES[configuredRole]?.name;
     const coreStat = roleCoreStat(configuredRole);
-    const primaryBasis = basisByProduces.get(findings[0].produces) ?? null;
+    const primaryProduces = findings[0].produces;
+    const primaryBasis = basisByProduces.get(primaryProduces) ?? null;
     const excluded = primaryBasis?.excluded ?? [];
     // Something to write: either an active/charged basis term, or a passive clause worth
     // carrying onto the row as `excludedNote` even when the basis itself is empty (Rikra).
     const hasSomethingToApply =
         !!primaryBasis && (primaryBasis.terms.length > 0 || excluded.length > 0);
-    // The row Apply would attach the basis to: the seeded formula's own core row for `coreStat`,
-    // per `rowCoreStat`'s resolution. Some roles' entire core is a stat a basis cannot name
-    // (DEBUFFER_CORROSION's hacking, SUPPORTER_BUFFER/SUPPORTER_OFFENSIVE's speed) — there is no
-    // row to attach to, and Apply must not guess one by falling back to row 0.
+    // The row Apply would attach the basis to: the seeded formula's own core row whose AXIS
+    // matches `primaryBasis`'s `produces` (see `rowAxis`/`PRODUCES_AXIS`) — not merely a row
+    // that can syntactically hold a basis. A damage basis has no honest home on a survival-proxy
+    // row (DEFENDER's `effectiveHp`) and vice versa; some roles have no row on the matching axis
+    // at all (DEBUFFER_CORROSION's hacking, SUPPORTER_BUFFER/SUPPORTER_OFFENSIVE's speed). Apply
+    // must not guess a row by falling back to the first one that merely resolves to a stat.
+    const basisHostAxis = PRODUCES_AXIS[primaryProduces];
     const hasBasisHost = CUSTOM_FORMULA_SEEDS[configuredRole].rows.some(
-        (row) => row.kind === 'core' && rowCoreStat(row) === coreStat
+        (row) => row.kind === 'core' && rowAxis(row) === basisHostAxis
     );
     const canApply = hasSomethingToApply && hasBasisHost;
 
@@ -227,12 +257,17 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         if (!onApply || !primaryBasis) return;
         const formula = seedFormulaFromRole(configuredRole);
         const targetIndex = formula.rows.findIndex(
-            (row) => row.kind === 'core' && rowCoreStat(row) === coreStat
+            (row) => row.kind === 'core' && rowAxis(row) === basisHostAxis
         );
         // `canApply` already requires this row to exist; bail rather than guess a row if it's
         // ever reached without one.
         if (targetIndex === -1) return;
-        const excludedNote = excluded.map(excludedClauseText);
+        // Only the carriers this basis's OWN `produces` reads — `excluded` (above) is the
+        // ship's whole passive-carrier set, kept for the notice's display, but a row that now
+        // scores `primaryProduces` must not carry a note about a different channel's carrier.
+        const excludedNote = excluded
+            .filter((carrier) => carrier.produces === primaryProduces)
+            .map(excludedClauseText);
         formula.rows = formula.rows.map((row, i) =>
             i === targetIndex
                 ? {
