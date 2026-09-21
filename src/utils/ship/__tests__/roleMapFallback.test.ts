@@ -9,9 +9,9 @@ import type { SlotContribution } from '../statDistribution';
 import type { BaseStats } from '../../../types/stats';
 
 // `DESIRED_STATS` (gearSuggestions.ts) and `DESIRED_SETS` (upgradeAnalysis.ts) only carry
-// entries for 5 of the 12 `ShipTypeName` roles directly; the other 7 resolve through
-// `resolveRoleEntry`'s category fallback (`constants/shipTypes.ts`). This walks every role
-// through both real consumers with a geared ship to prove none of the 12 throws.
+// entries for some `ShipTypeName` roles directly; the rest resolve through `resolveRoleEntry`'s
+// category fallback (`constants/shipTypes.ts`). This walks every role in `SHIP_TYPES` through
+// both real consumers with a geared ship to prove none of them throws.
 const ALL_ROLES: ShipTypeName[] = Object.keys(SHIP_TYPES);
 
 const baseStats: BaseStats = {
@@ -63,10 +63,10 @@ function getGearPiece(id: string): GearPiece | undefined {
     return id === 'gear-1' ? makeGear() : undefined;
 }
 
-describe('role-map fallback: analyzeGearQuality never throws for any of the 12 roles', () => {
+describe('role-map fallback: analyzeGearQuality never throws for any SHIP_TYPES role', () => {
     // Non-vacuity: assert the walk actually covers both an exact-match role (ATTACKER, has
     // its own DESIRED_STATS/DESIRED_SETS entry) and a fallback role (has neither — resolves
-    // through its category). If either list were empty the "walks all 12 roles" claim below
+    // through its category). If either list were empty the "walks every role" claim below
     // would be untested.
     const exactMatchRoles = ALL_ROLES.filter((role) =>
         ['ATTACKER', 'DEFENDER', 'SUPPORTER', 'SUPPORTER_BUFFER', 'DEBUFFER'].includes(role)
@@ -91,7 +91,7 @@ describe('role-map fallback: analyzeGearQuality never throws for any of the 12 r
     }
 });
 
-describe('role-map fallback: analyzeUpgrades (the DESIRED_SETS consumer) never throws for any of the 12 roles', () => {
+describe('role-map fallback: analyzeUpgrades (the DESIRED_SETS consumer) never throws for any SHIP_TYPES role', () => {
     for (const role of ALL_ROLES) {
         it(`${role} does not throw`, () => {
             const ship = makeShip(role);
