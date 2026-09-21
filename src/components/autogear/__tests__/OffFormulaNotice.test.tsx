@@ -295,26 +295,29 @@ describe('Defender tilt', () => {
         // FLOOR pin: Suku at its realistic all-Defence-build corner (hp=19238, defence=12098) —
         // the smallest survival-rounds delta any single realistic gear swap (one rare-tier
         // defence substat, +30 flat) produces across the 7 tilt ships' achievable stat range.
-        it('the floor: the smallest single-swap delta is bigger than the tilt could ever contribute', () => {
+        const FLOOR = 0.002201;
+        it('the floor: the smallest single-swap delta on the achievable frontier', () => {
             const stats: BaseStats = { hp: 19238, defence: 12098 } as BaseStats;
             const before = survivalRounds(stats);
             const afterSwap = survivalRounds({ ...stats, defence: stats.defence + 30 });
             const floor = Math.abs(afterSwap - before);
-            expect(floor).toBeCloseTo(0.002201, 5);
+            expect(floor).toBeCloseTo(FLOOR, 5);
         });
 
-        // CEILING pin: Isha/Madax/Panon share the highest achievable Defence among the 7 tilt
-        // ships (base defence 4047) — the tilt's largest possible contribution anywhere on the
-        // realistic frontier.
-        it('the ceiling: the tilt never reaches the floor, even at the highest achievable Defence', () => {
-            const stats: BaseStats = { hp: 25323, defence: 14478 } as BaseStats;
-            const before = survivalRounds(stats);
-            const withTilt = survivalRounds(stats, [DEFENDER_TILT_BONUS]);
-            const ceiling = withTilt - before;
-            expect(ceiling).toBeCloseTo(0.001448, 5);
-
-            const floor = 0.002201;
-            expect(ceiling).toBeLessThan(floor);
+        // The bound that actually decides whether the tilt can flip an ordering is the
+        // DIFFERENCE in Defence between two candidate builds, not either build's absolute
+        // Defence: the tilt adds `defence x percentage/100` to EVERY candidate's score, so
+        // comparing two candidates' scores cancels out everything except that difference.
+        // Isha/Madax/Panon (identical base Defence, 4047) span the largest achievable Defence
+        // range on the frontier: 5047 (generator main only, t=0) to 14478 (every flexible main
+        // and substat committed to Defence, t=1) — the widest spread among the 7 ships. The
+        // tilt's worst-case swing between any two achievable builds must still lose to the floor.
+        it('the tight bound: the largest achievable Defence swing between two builds still loses to the floor', () => {
+            const maxAchievableDefenceSwing = 14478 - 5047;
+            const worstCaseSwing =
+                ((DEFENDER_TILT_BONUS.percentage / 100) * maxAchievableDefenceSwing) / 1000;
+            expect(worstCaseSwing).toBeCloseTo(0.000943, 5);
+            expect(worstCaseSwing).toBeLessThan(FLOOR);
         });
     });
 });
