@@ -42,7 +42,8 @@ const findOptimalGear = vi.fn(
         _tryToCompleteSets?: boolean,
         _arenaModifiers?: Record<string, number> | null,
         _fleetBuffs?: FleetBuff[],
-        _customFormula?: CustomFormula
+        _customFormula?: CustomFormula,
+        _roleBasis?: RoleBasis
     ) => ({
         suggestions: [],
         hardRequirementsMet: true,
@@ -345,6 +346,17 @@ describe('findOptimalGearForShip', () => {
         );
         const passedInventory = findOptimalGear.mock.calls[0][2];
         expect(passedInventory).toHaveLength(30);
+    });
+
+    it('forwards config.roleBasis to the strategy as the 13th positional argument', async () => {
+        const roleBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] };
+        await findOptimalGearForShip(ship, { ...baseConfig, roleBasis }, baseDeps);
+        expect(findOptimalGear.mock.calls[0][12]).toBe(roleBasis);
+    });
+
+    it('forwards undefined when config carries no roleBasis', async () => {
+        await findOptimalGearForShip(ship, baseConfig, baseDeps);
+        expect(findOptimalGear.mock.calls[0][12]).toBeUndefined();
     });
 });
 

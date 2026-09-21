@@ -372,7 +372,8 @@ export async function findOptimalGearForShip(
             config.tryToCompleteSets,
             config.arenaModifiers,
             config.fleetBuffs,
-            config.customFormula
+            config.customFormula,
+            config.roleBasis
         )
     );
 

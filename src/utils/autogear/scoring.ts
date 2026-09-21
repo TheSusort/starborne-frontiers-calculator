@@ -168,8 +168,11 @@ function basisKeyPart(basis: BasisTerm[] | undefined): string {
  * part of the key too — two bases with identical terms but different `produces` apply to
  * different roles (`roleHostsBasis`) and must not collide. An absent basis contributes '', so a
  * roleBasis-free call keeps the pre-existing key byte-for-byte.
+ *
+ * Exported so `fastScore`'s own local cache key can encode a `roleBasis` the same way, rather
+ * than a second encoder drifting from this one.
  */
-function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
+export function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
     if (!roleBasis || roleBasis.terms.length === 0) return '';
     return (
         ';' +

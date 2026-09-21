@@ -3,6 +3,7 @@ import type { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../../t
 import { applyArenaModifiers } from '../arenaModifiers';
 import { applyFleetBuffs } from '../fleetBuffs';
 import { calculatePriorityScore } from '../priorityScore';
+import { roleBasisKeyPart } from '../scoring';
 import { buildFastCacheKey } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats } from '../../fastScoring/statVector';
 import { fastCalculateStats } from './fastCalculateStats';
@@ -45,9 +46,13 @@ export function fastScore(
 
     // Cache key: concat gear ids, separator, implant ids.
     // Omit implants from the key when they're constant (fixedImplantIds) — saves work.
-    const cacheKey = optimizingImplants
-        ? buildFastCacheKey(gearIds) + '|' + buildFastCacheKey(effectiveImplantIds)
-        : buildFastCacheKey(gearIds);
+    // `roleBasisKeyPart` is appended directly (no separator), same convention as
+    // `calculateTotalScore`'s cache key in `scoring.ts` — an absent `roleBasis` contributes ''
+    // and leaves the key byte-for-byte unchanged.
+    const cacheKey =
+        (optimizingImplants
+            ? buildFastCacheKey(gearIds) + '|' + buildFastCacheKey(effectiveImplantIds)
+            : buildFastCacheKey(gearIds)) + roleBasisKeyPart(context.roleBasis);
 
     const cached = cache.get(cacheKey);
     if (cached !== undefined && !hasHardRequirements) {
@@ -127,7 +132,8 @@ export function fastScore(
         context.tryToCompleteSets,
         arcaneSiegeMultiplier,
         implantSetCount,
-        context.customFormula
+        context.customFormula,
+        context.roleBasis
     );
 
     if (!hasHardRequirements) {

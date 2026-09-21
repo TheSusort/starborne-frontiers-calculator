@@ -7,6 +7,7 @@ import type {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
 import { FastCache } from '../../fastScoring/fastCache';
@@ -25,6 +26,7 @@ export interface FastScoringContext {
     readonly tryToCompleteSets: boolean | undefined;
     readonly arenaModifiers: Record<string, number> | null | undefined;
     readonly fleetBuffs: readonly FleetBuff[] | undefined;
+    readonly roleBasis: RoleBasis | undefined;
 
     readonly gearRegistry: GearRegistry;
     readonly implantRegistry: GearRegistry;
@@ -61,6 +63,7 @@ export interface BuildContextInput {
     tryToCompleteSets?: boolean;
     arenaModifiers?: Record<string, number> | null;
     fleetBuffs?: FleetBuff[];
+    roleBasis?: RoleBasis;
     engineeringStats: EngineeringStat | undefined;
     /**
      * Used only when the GA is NOT optimizing implants — so the context can
@@ -132,6 +135,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         tryToCompleteSets: input.tryToCompleteSets,
         arenaModifiers: input.arenaModifiers,
         fleetBuffs: input.fleetBuffs,
+        roleBasis: input.roleBasis,
         gearRegistry,
         implantRegistry,
         shipPrefix,
