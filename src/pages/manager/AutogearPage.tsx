@@ -19,6 +19,7 @@ import { applySuggestionsToShip } from '../../utils/autogear/simRerank/candidate
 import {
     findOptimalGearForShip,
     useAutogearShipConfigs,
+    toSavedAutogearConfig,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import type { SimRerankRow } from '../../hooks/useSimRerank';
@@ -360,9 +361,10 @@ export const AutogearPage: React.FC = () => {
         });
     };
 
-    /** Writes the notice's derived formula into the open ship's config — the update itself
-     *  (the seeded formula, the basis, which row it lands on) is `OffFormulaNotice`'s job; this
-     *  only supplies the ship this settings panel has open. */
+    /** Writes the notice's derived `roleBasis` into the open ship's config — deriving the basis
+     *  and deciding which axis the role hosts is `OffFormulaNotice`'s job; this only supplies the
+     *  ship this settings panel has open. `shipRole` is unchanged by this update, so it saves and
+     *  reruns exactly like any other config edit. */
     const handleApplyOffFormula = (update: OffFormulaApplyUpdate) => {
         if (!shipSettings) return;
         updateShipConfig(shipSettings.id, update);
@@ -671,25 +673,7 @@ export const AutogearPage: React.FC = () => {
 
             // Save current configuration before running optimization
             performanceTracker.startTimer('SaveConfig');
-            const config = {
-                shipId: ship.id,
-                shipRole: shipConfig.shipRole,
-                statPriorities: shipConfig.statPriorities,
-                setPriorities: shipConfig.setPriorities,
-                statBonuses: shipConfig.statBonuses,
-                ignoreEquipped: shipConfig.ignoreEquipped,
-                ignoreUnleveled: shipConfig.ignoreUnleveled,
-                useUpgradedStats: shipConfig.useUpgradedStats,
-                algorithm: shipConfig.selectedAlgorithm,
-                tryToCompleteSets: shipConfig.tryToCompleteSets,
-                optimizeImplants: shipConfig.optimizeImplants,
-                includeCalibratedGear: shipConfig.includeCalibratedGear,
-                assumeCalibrated: shipConfig.assumeCalibrated,
-                useArenaModifiers: shipConfig.useArenaModifiers,
-                fleetBuffs: shipConfig.fleetBuffs,
-                excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
-                customFormula: shipConfig.customFormula,
-            };
+            const config = toSavedAutogearConfig(ship.id, shipConfig);
             void saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
 
@@ -719,6 +703,7 @@ export const AutogearPage: React.FC = () => {
                         fleetBuffs: shipConfig.fleetBuffs,
                         customFormula: shipConfig.customFormula,
                         arenaModifiers,
+                        roleBasis: shipConfig.roleBasis,
                     },
                     {
                         inventory,

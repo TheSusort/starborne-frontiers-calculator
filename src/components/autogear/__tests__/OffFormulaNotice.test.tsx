@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
-import type { CustomFormulaRow } from '../../../types/autogear';
-import { CUSTOM_FORMULA_SEEDS } from '../../../utils/autogear/customFormulaSeeds';
+import { deriveBasis } from '../../../utils/autogear/simRerank/basisDerivation';
+import { roleAxis, roleHostsBasis } from '../../../utils/autogear/simRerank/roleBasisHost';
+import { SHIP_TYPES } from '../../../constants/shipTypes';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 
@@ -336,7 +337,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         });
 
         describe('Apply', () => {
-            it('applies a formula seeded from the role, with the basis on its core row', () => {
+            it('writes shipRole unchanged plus a damage roleBasis for Cobalt/ATTACKER', () => {
                 mocked.mockImplementation(realDetect);
                 const cobalt = corpusShipNamed('Cobalt');
                 const onApply = vi.fn();
@@ -345,48 +346,25 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 );
                 fireEvent.click(screen.getByRole('button', { name: /use this/i }));
                 expect(onApply).toHaveBeenCalledWith({
-                    shipRole: null,
-                    customFormula: {
-                        seededFrom: 'ATTACKER',
-                        rows: [
-                            expect.objectContaining({
-                                stat: 'directDamage',
-                                kind: 'core',
-                                basis: [
-                                    { stat: 'attack', weight: closeTo(2.1) },
-                                    { stat: 'hp', weight: closeTo(0.267) },
-                                ],
-                            }),
+                    shipRole: 'ATTACKER',
+                    roleBasis: {
+                        produces: 'damage',
+                        terms: [
+                            { stat: 'attack', weight: closeTo(2.1) },
+                            { stat: 'hp', weight: closeTo(0.267) },
                         ],
                     },
                 });
-            });
-
-            it('keeps naming the excluded carrier after the notice has gone', () => {
-                mocked.mockImplementation(realDetect);
-                const rikra = corpusShipNamed('Rikra');
-                const onApply = vi.fn();
-                // DEFENDER, not ATTACKER: Rikra's finding is a `repair` basis, which only has a
-                // host on a survival/repair-proxy row (`effectiveHp`/`hp`) — ATTACKER's only
-                // core row is `directDamage`, a damage proxy, so Apply is correctly withheld
-                // there (see the axis-pairing describe block below).
-                render(
-                    <OffFormulaNotice ship={rikra} configuredRole="DEFENDER" onApply={onApply} />
-                );
-                fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+                // The abandoned design nulled `shipRole` into Custom mode and wrote a seeded
+                // `customFormula` — this update carries neither.
                 const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
-                const row = update.customFormula.rows[0];
-                expect(row.excludedNote).toContain(
-                    'repairs 60% of max HP when an enemy is destroyed'
-                );
+                expect('customFormula' in update).toBe(false);
             });
 
-            // SUPPORTER's seed has no `directDamage` row at all — attaching Makoli's repair
-            // basis to "the first core row" rather than the row `roleCoreStat` actually names
-            // (`hp`) would either attach it to the wrong row or throw. Makoli's own repair basis
-            // is Defence-dominant (~19:1 over HP), so this also pins that the basis on the `hp`
-            // row keeps its real ratio rather than collapsing to a single term.
-            it('lands the basis on the hp core row, not a directDamage row SUPPORTER has none of', () => {
+            // SUPPORTER's own core stat is HP, not Attack — Makoli's repair basis is
+            // Defence-dominant (~19:1 over HP), so this pins that the written basis keeps its
+            // real ratio rather than collapsing to a single term.
+            it('writes a repair roleBasis for Makoli/SUPPORTER', () => {
                 mocked.mockImplementation(realDetect);
                 const makoli = corpusShipNamed('Makoli');
                 const onApply = vi.fn();
@@ -395,36 +373,68 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 );
                 fireEvent.click(screen.getByRole('button', { name: /use this/i }));
                 const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
-                const rows = update.customFormula.rows;
+                expect(update.shipRole).toBe('SUPPORTER');
+                expect(update.roleBasis.produces).toBe('repair');
 
-                expect(rows.some((r: CustomFormulaRow) => r.stat === 'directDamage')).toBe(false);
-                const hpRow = rows.find((r: CustomFormulaRow) => r.stat === 'hp');
-                expect(hpRow?.basis).toBeDefined();
-
-                const hpWeight = hpRow!.basis!.find((t) => t.stat === 'hp')!.weight;
-                const defWeight = hpRow!.basis!.find((t) => t.stat === 'defence')!.weight;
+                const hpWeight = update.roleBasis.terms.find((t) => t.stat === 'hp')!.weight;
+                const defWeight = update.roleBasis.terms.find((t) => t.stat === 'defence')!.weight;
                 expect(defWeight / hpWeight).toBeCloseTo(18.72, 1);
             });
-        });
 
-        // A formula core row has an AXIS, not merely a stat a basis can syntactically sit on:
-        // `directDamage`/a plain `attack` row is a damage proxy, `effectiveHp`/a plain `hp` row
-        // is a survival/repair proxy, and `security`/`hacking`/`speed` are not output proxies at
-        // all. The row Apply targets must match the basis's OWN `produces` axis — a damage
-        // basis never lands on a survival-proxy row and vice versa. `ROW_AXIS`/`PRODUCES_AXIS`
-        // mirror `OffFormulaNotice`'s own (module-private) tables, the same way
-        // `sharedAutogearBuild.test.ts` mirrors that schema's private caps.
-        const ROW_AXIS: Record<string, 'damage' | 'survival'> = {
-            directDamage: 'damage',
-            attack: 'damage',
-            effectiveHp: 'survival',
-            hp: 'survival',
-        };
-        const PRODUCES_AXIS: Record<'damage' | 'repair' | 'shield', 'damage' | 'survival'> = {
-            damage: 'damage',
-            repair: 'survival',
-            shield: 'survival',
-        };
+            it("offers no Apply and no equation line for Panon's damage basis under DEFENDER, his own default role", () => {
+                mocked.mockImplementation(realDetect);
+                const panon = corpusShipNamed('Panon');
+                const onApply = vi.fn();
+                render(
+                    <OffFormulaNotice ship={panon} configuredRole="DEFENDER" onApply={onApply} />
+                );
+                expect(screen.queryByRole('button', { name: /use this/i })).not.toBeInTheDocument();
+                // Panon's real damage basis is Attack x2.275 + Defence x1.775 (asserted directly
+                // against `deriveBasis` in the corpus walk below) — this is what must NOT render.
+                expect(screen.queryByText(/In its own numbers/)).not.toBeInTheDocument();
+                expect(screen.queryByText(/add it by hand/i)).not.toBeInTheDocument();
+                // The finding itself is the only thing DEFENDER keeps.
+                expect(
+                    screen.getByText(
+                        /The Defender formula scores it only as part of a total it can trade away for another stat/
+                    )
+                ).toBeInTheDocument();
+            });
+
+            // The routing bug this task exists to close: Apply must select the finding whose
+            // `produces` the ROLE hosts, never whichever finding sits first in the detector's
+            // array. `detectOffFormulaStats` is mocked here (not Cobalt's real findings) so the
+            // array order is controlled directly: a `shield` finding sits before the `damage`
+            // one, and ATTACKER hosts only `damage`. `findings[0].produces`-routing would read
+            // `shield`, find ATTACKER doesn't host it, and withhold Apply; correct routing reads
+            // `roleAxis('ATTACKER')` and reaches the `damage` finding regardless of position.
+            it("picks the produces the role hosts, not the first finding in the detector's array", () => {
+                const cobalt = corpusShipNamed('Cobalt');
+                mocked.mockReturnValue([
+                    {
+                        stat: 'shield',
+                        produces: 'shield',
+                        severity: 'severe',
+                        trigger: 'on-cast',
+                        tunableStat: 'shield',
+                    },
+                    {
+                        stat: 'attack',
+                        produces: 'damage',
+                        severity: 'severe',
+                        trigger: 'on-cast',
+                        tunableStat: 'attack',
+                    },
+                ]);
+                const onApply = vi.fn();
+                render(
+                    <OffFormulaNotice ship={cobalt} configuredRole="ATTACKER" onApply={onApply} />
+                );
+                fireEvent.click(screen.getByRole('button', { name: /use this/i }));
+                const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
+                expect(update.roleBasis.produces).toBe('damage');
+            });
+        });
 
         const fullCorpus = (): Ship[] => {
             const data: Datum[] = JSON.parse(readFileSync('docs/ship-data.json', 'utf8'));
@@ -437,79 +447,70 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 .filter((s): s is Ship => s !== null);
         };
 
-        // The specific reproduction from the review: Panon's own default role is DEFENDER,
-        // whose only core row is `effectiveHp` (survival proxy). His finding is a `damage`
-        // basis (Attack x2.275 + Defence x1.775) — there is no damage-proxy row on DEFENDER to
-        // host it, so Apply must be withheld rather than write it onto `effectiveHp` anyway.
-        it("withholds Apply for Panon's damage basis under DEFENDER, his own default role", () => {
-            mocked.mockImplementation(realDetect);
-            const panon = corpusShipNamed('Panon');
-            const onApply = vi.fn();
-            render(<OffFormulaNotice ship={panon} configuredRole="DEFENDER" onApply={onApply} />);
-            expect(screen.queryByRole('button', { name: /use this/i })).not.toBeInTheDocument();
-        });
-
-        // The general invariant, over the real flagged corpus (real `detectOffFormulaStats`,
-        // not a hand-written finding) x every role: whenever Apply is offered, the row it wrote
-        // to sits on the SAME axis as the basis's own `produces` — never merely a row that could
-        // syntactically hold some basis. Apply being absent is always an acceptable outcome; a
-        // present button writing the wrong axis is not.
-        describe('Apply — every real flagged (ship, role) pairing hosts a matching-axis basis, or is not offered', () => {
-            it('never writes a basis onto a row whose axis disagrees with its own produces', () => {
+        // The general invariant, over the real flagged corpus (real `detectOffFormulaStats`, not
+        // a hand-written finding) x every role: Apply is offered iff `configuredRole` hosts the
+        // axis of the basis it would write (`roleHostsBasis`), and when offered, the written
+        // basis's terms are exactly `deriveBasis(ship, produces).terms` for that hosted axis —
+        // never a different finding's basis, regardless of where that finding sits in the
+        // detector's array. Apply being absent is always an acceptable outcome; a present button
+        // writing an axis the role doesn't host, or the wrong finding's terms, is not.
+        describe('Apply — every real flagged (ship, role) pairing applies only the axis the role hosts', () => {
+            it('withholds Apply where the role hosts nothing, and writes only the hosted axis where it does', () => {
                 mocked.mockImplementation(realDetect);
-                const roles = Object.keys(CUSTOM_FORMULA_SEEDS);
-                let shown = 0;
-                let withheld = 0;
+                const roles = Object.keys(SHIP_TYPES);
+                let offered = 0;
+                let withheldNoHost = 0;
+                let withheldEmptyBasis = 0;
+                // The reachability check the parent review flagged: a walk where every offered
+                // case already agrees with `findings[0].produces` cannot tell the old buggy
+                // routing (`findings[0].produces`) apart from the correct one (`roleAxis(role)`)
+                // — see the mocked unit test above for the case that DOES distinguish them.
+                let orderDisagreements = 0;
 
                 for (const ship of fullCorpus()) {
                     for (const role of roles) {
                         const findings = realDetect(ship, role);
                         if (findings.length === 0) continue;
 
-                        const expectedAxis = PRODUCES_AXIS[findings[0].produces];
-                        const seedHasHost = CUSTOM_FORMULA_SEEDS[role].rows.some(
-                            (row) => row.kind === 'core' && ROW_AXIS[row.stat] === expectedAxis
-                        );
-
+                        const hostAxis = roleAxis(role);
                         const onApply = vi.fn();
                         const { unmount } = render(
                             <OffFormulaNotice ship={ship} configuredRole={role} onApply={onApply} />
                         );
                         const button = screen.queryByRole('button', { name: /use this/i });
 
-                        if (!seedHasHost) {
+                        if (!hostAxis) {
                             expect(
                                 button,
-                                `${ship.name}/${role}: no ${expectedAxis}-axis row exists, Apply must be absent`
+                                `${ship.name}/${role}: role hosts nothing, Apply must be absent`
                             ).not.toBeInTheDocument();
-                            withheld++;
+                            withheldNoHost++;
                             unmount();
                             continue;
                         }
 
                         if (!button) {
-                            // A matching-axis row exists but Apply is still absent for an
-                            // unrelated reason (`hasSomethingToApply` — no basis term and no
-                            // excluded carrier). Not this invariant's concern.
-                            withheld++;
+                            // A hosting role, but no finding on that axis (or an empty basis) —
+                            // nothing of substance to write. Not this invariant's concern.
+                            withheldEmptyBasis++;
                             unmount();
                             continue;
                         }
 
                         fireEvent.click(button);
                         const update = onApply.mock.calls[0][0] as OffFormulaApplyUpdate;
-                        const appliedRow = update.customFormula.rows.find(
-                            (r: CustomFormulaRow) => r.basis !== undefined
-                        );
+                        expect(update.shipRole, `${ship.name}/${role}`).toBe(role);
                         expect(
-                            appliedRow,
-                            `${ship.name}/${role}: Apply wrote no row`
-                        ).toBeDefined();
+                            roleHostsBasis(role, update.roleBasis.produces),
+                            `${ship.name}/${role}: wrote produces '${update.roleBasis.produces}', which the role does not host`
+                        ).toBe(true);
                         expect(
-                            ROW_AXIS[appliedRow!.stat],
-                            `${ship.name}/${role}: applied to ${appliedRow!.stat}, expected the ${expectedAxis} axis`
-                        ).toBe(expectedAxis);
-                        shown++;
+                            update.roleBasis.terms,
+                            `${ship.name}/${role}: wrote terms that don't match deriveBasis for its own produces`
+                        ).toEqual(deriveBasis(ship, update.roleBasis.produces).terms);
+
+                        if (findings[0].produces !== hostAxis) orderDisagreements++;
+                        offered++;
                         unmount();
                     }
                 }
@@ -517,8 +518,17 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 // Non-vacuity: the sweep must actually exercise both outcomes, or a detector
                 // regression that always returns [] (Apply forever absent) or always finds a
                 // host (Apply forever shown) would pass this test for the wrong reason.
-                expect(shown).toBeGreaterThan(0);
-                expect(withheld).toBeGreaterThan(0);
+                expect(offered, 'the walk must offer Apply at least once').toBeGreaterThan(0);
+                expect(
+                    withheldNoHost + withheldEmptyBasis,
+                    'the walk must withhold Apply at least once'
+                ).toBeGreaterThan(0);
+
+                // eslint-disable-next-line no-console
+                console.log(
+                    `Apply corpus walk: offered=${offered} withheldNoHost=${withheldNoHost} ` +
+                        `withheldEmptyBasis=${withheldEmptyBasis} orderDisagreements=${orderDisagreements}`
+                );
                 // Renders the whole real corpus (150+ ships) x every role — comfortably under
                 // 5s alone, but the default per-test timeout is tight under full-suite load
                 // (matches roleSlotCoverage.test.ts's precedent for this shape of test).

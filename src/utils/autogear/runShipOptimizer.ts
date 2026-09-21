@@ -8,6 +8,7 @@ import type {
     FleetBuff,
     CustomFormula,
     RoleBasis,
+    SavedAutogearConfig,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat, LimitableStat } from '../../types/stats';
@@ -180,6 +181,40 @@ export function buildSimRerankShipConfig(
         excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
         fleetBuffs: shipConfig.fleetBuffs,
         arenaModifiers,
+        roleBasis: shipConfig.roleBasis,
+    };
+}
+
+/**
+ * The persisted shape of one ship's autogear config (`AutogearConfigContext.saveConfig`), built
+ * from the same live `AutogearShipConfig` the settings UI edits. A hand-enumerated object
+ * literal at the call site silently drops any field added to either type — `roleBasis` was
+ * exactly such a field (#544): present on both types and read end-to-end by the scorer, but
+ * never reaching storage because the call site that built the saved config named every field
+ * except this one. `runShipOptimizer.test.ts`'s round-trip test is the tripwire.
+ */
+export function toSavedAutogearConfig(
+    shipId: string,
+    shipConfig: AutogearShipConfig
+): SavedAutogearConfig {
+    return {
+        shipId,
+        shipRole: shipConfig.shipRole,
+        statPriorities: shipConfig.statPriorities,
+        setPriorities: shipConfig.setPriorities,
+        statBonuses: shipConfig.statBonuses,
+        ignoreEquipped: shipConfig.ignoreEquipped,
+        ignoreUnleveled: shipConfig.ignoreUnleveled,
+        useUpgradedStats: shipConfig.useUpgradedStats,
+        algorithm: shipConfig.selectedAlgorithm,
+        tryToCompleteSets: shipConfig.tryToCompleteSets,
+        optimizeImplants: shipConfig.optimizeImplants,
+        includeCalibratedGear: shipConfig.includeCalibratedGear,
+        assumeCalibrated: shipConfig.assumeCalibrated,
+        useArenaModifiers: shipConfig.useArenaModifiers,
+        fleetBuffs: shipConfig.fleetBuffs,
+        excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
+        customFormula: shipConfig.customFormula,
         roleBasis: shipConfig.roleBasis,
     };
 }

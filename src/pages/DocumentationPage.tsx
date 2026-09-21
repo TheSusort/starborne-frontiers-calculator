@@ -1549,19 +1549,6 @@ const DocumentationPage: React.FC = () => {
                                         stat — an empty formula would score every combination the
                                         same.
                                     </p>
-                                    <p className="text-theme-text mt-2">
-                                        When a ship&apos;s kit deals damage, repairs, or shields off
-                                        a stat its role formula ignores, a notice under its
-                                        configuration shows the ship&apos;s own scoring equation and
-                                        a <strong>Use this equation</strong> button that writes it
-                                        into a Multiplied row as a weighted list of stats. That list
-                                        is editable afterwards: open the row to add, change, or
-                                        remove a weighted stat. This is also how you hand-add an
-                                        effect the notice explicitly calls out as skipped — a
-                                        passive whose firing frequency can&apos;t be derived
-                                        automatically — using the row&apos;s own note for the exact
-                                        wording and percentage to enter.
-                                    </p>
                                 </div>
 
                                 <div className="card">
@@ -1579,18 +1566,29 @@ const DocumentationPage: React.FC = () => {
                                         equation or button for.
                                     </p>
                                     <p className="text-theme-text mt-2">
-                                        Under the notice sits a scoring equation built from that
-                                        ship&apos;s own skill numbers — not a generic estimate, and
+                                        For a role built around a single scalable quantity —
+                                        Attacker, Debuffer and Debuffer(Bomber) score damage;
+                                        Supporter scores repairs; Supporter(Shield) scores shields —
+                                        the notice also shows a scoring equation built from that
+                                        ship&apos;s own skill numbers: not a generic estimate, and
                                         not the same for every ship sharing the role. It reads as a
                                         weighted list of stats (something like &quot;Attack x1.240 +
                                         Defence x0.615&quot;), the real mix the skill rewards,
                                         worked out from how often the ship&apos;s kit casts its
                                         active skill versus its charged one. Click{' '}
-                                        <strong>Use this equation</strong> to write that list into a
-                                        Multiplied row of a Custom formula for you — this moves the
-                                        ship into Custom mode, since the equation now defines its
-                                        scoring instead of the built-in role. The row it writes
-                                        stays fully editable afterwards.
+                                        <strong>Use this equation</strong> to substitute those
+                                        numbers into that same quantity in the role&apos;s own
+                                        formula — the ship keeps its configured role and every other
+                                        setting; only what feeds that one quantity changes.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A role without a single quantity to replace this way — a
+                                        Defender, say, whose formula is built around surviving
+                                        rounds rather than one scalable output — shows the finding
+                                        but no equation and no button: the kit fact is worth
+                                        knowing, but there is nowhere honest to put it in that
+                                        role&apos;s scoring, and gearing for the named stat would
+                                        usually work against what the role is built for.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         A passive skill&apos;s contribution is never in that
@@ -1601,15 +1599,7 @@ const DocumentationPage: React.FC = () => {
                                         there is no cast ratio to fold it into. When a passive is
                                         left out, the notice names it directly: the skill&apos;s own
                                         wording and percentage, so nothing about what got skipped,
-                                        or why, is hidden. Add it yourself by opening the row{' '}
-                                        <strong>Use this equation</strong> wrote and entering a
-                                        weighted stat with that same wording and percentage.
-                                    </p>
-                                    <p className="text-theme-text mt-2">
-                                        Once applied, the formula is an ordinary Custom build —
-                                        share it with the community the same way as any other build
-                                        (see <strong>Sharing Your Build</strong> in the Community
-                                        Recommendations section below).
+                                        or why, is hidden.
                                     </p>
                                 </div>
 

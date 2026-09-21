@@ -14,15 +14,16 @@ import {
     type DerivedBasis,
     type ExcludedCarrier,
 } from '../../utils/autogear/simRerank/basisDerivation';
-import { CUSTOM_FORMULA_SEEDS, seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
-import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import { roleAxis, rolePrimaryStat } from '../../utils/autogear/simRerank/roleBasisHost';
+import type { RoleBasis } from '../../types/autogear';
 
-/** What Apply writes back to the ship's config: the derived formula, seeded from the role and
- *  carrying the basis on its core row, plus `shipRole: null` to switch the ship into Custom
- *  mode — the formula is now an ordinary editable one, not a role's built-in objective. */
+/** What Apply writes back to the ship's config: the derived basis, attached to whichever axis
+ *  `configuredRole` hosts (`roleAxis`, `roleBasisHost.ts`). `shipRole` is unchanged — the
+ *  role's own formula keeps running, with `roleBasis` replacing only the one quantity that
+ *  formula hosts (`roleHostsBasis`); every other role's scorer ignores it entirely. */
 export interface OffFormulaApplyUpdate {
-    shipRole: null;
-    customFormula: CustomFormula;
+    shipRole: ShipTypeName;
+    roleBasis: RoleBasis;
 }
 
 export interface OffFormulaNoticeProps {
@@ -30,7 +31,7 @@ export interface OffFormulaNoticeProps {
     /** The CONFIGURED autogear role, which can differ from `ship.type`. Null means Custom mode,
      *  where the detector returns nothing. */
     configuredRole: ShipTypeName | null;
-    /** Writes the derived formula into the ship's config. Optional so a caller that has not
+    /** Writes the derived basis into the ship's config. Optional so a caller that has not
      *  wired persistence (or a test only asserting the notice's copy) can omit it — the button
      *  it drives simply does not render. */
     onApply?: (update: OffFormulaApplyUpdate) => void;
@@ -82,87 +83,6 @@ const excludedLine = (ship: Ship, carrier: ExcludedCarrier): string =>
         carrier.stat
     )} ${triggerProse(carrier.trigger)}; ${excludedReason(carrier.trigger)}.`;
 
-/**
- * The excluded carrier's own clause, in the ship's own numbers, without the ship's name or the
- * reason it was excluded — the fragment of `excludedLine` worth keeping once the notice itself
- * has unmounted. Carried onto the applied row's `excludedNote` (see `CustomFormulaRow`'s doc).
- */
-const excludedClauseText = (carrier: ExcludedCarrier): string =>
-    `${PRODUCES_LABEL[carrier.produces].clause} ${carrier.pct}% of ${percentBasisLabel(
-        carrier.stat
-    )} ${triggerProse(carrier.trigger)}`;
-
-/** Maps a derived-stat core row to the single stat that stands in for it in a basis comparison,
- *  per `BasisTerm`'s doc in types/autogear.ts: `directDamage`'s primary factor is Attack,
- *  `effectiveHp`'s is HP. A plain-stat core row (e.g. SUPPORTER's `core('hp')`) maps to itself. */
-const CORE_ROW_PRIMARY: Partial<Record<string, OffFormulaStat>> = {
-    directDamage: 'attack',
-    effectiveHp: 'hp',
-};
-
-const VALID_BASIS_STATS: ReadonlySet<OffFormulaStat> = new Set([
-    'attack',
-    'hp',
-    'defence',
-    'security',
-    'shield',
-]);
-
-/**
- * The stat a core row's basis would compare against: `CORE_ROW_PRIMARY`'s entry for a derived
- * stat's primary factor, or the row's own stat otherwise — `null` when neither names a stat a
- * derived basis can carry a term on (e.g. `hacking`, `speed`). Feeds `roleCoreStat`, which picks
- * the role's baseline stat for the notice's equation text. This answers "which row can
- * syntactically hold a basis", NOT "which row a given basis describes" — that second question
- * is `rowAxis`/`PRODUCES_AXIS` below, and Apply reads those, not this.
- */
-const rowCoreStat = (row: Pick<CustomFormulaRow, 'stat'>): OffFormulaStat | null => {
-    const mapped = CORE_ROW_PRIMARY[row.stat] ?? (row.stat as OffFormulaStat);
-    return VALID_BASIS_STATS.has(mapped) ? mapped : null;
-};
-
-/** The output channel a core row's basis would describe. `directDamage` and a plain `attack`
- *  core row are damage proxies — attack is `calculateDirectDamage`'s own primary factor.
- *  `effectiveHp` and a plain `hp` core row are survival/repair proxies — hp is
- *  `calculateEffectiveHP`'s own primary factor, and a repair or shield channel's output is
- *  scored through HP-based survival, not through damage. Every other core stat (`security`,
- *  `hacking`, `speed`, `defence`, `shield`, `crit`, `critDamage`) is not an output proxy at
- *  all — `null` — and can never host a basis of any `produces`. */
-type OutputAxis = 'damage' | 'survival';
-const ROW_AXIS: Partial<Record<string, OutputAxis>> = {
-    directDamage: 'damage',
-    attack: 'damage',
-    effectiveHp: 'survival',
-    hp: 'survival',
-};
-const rowAxis = (row: Pick<CustomFormulaRow, 'stat'>): OutputAxis | null =>
-    ROW_AXIS[row.stat] ?? null;
-
-/** Which row axis a derived basis's `produces` may attach to — a damage basis only on a
- *  damage-proxy row, a repair or shield basis only on a survival/repair-proxy row. */
-const PRODUCES_AXIS: Record<OffFormulaFinding['produces'], OutputAxis> = {
-    damage: 'damage',
-    repair: 'survival',
-    shield: 'survival',
-};
-
-/**
- * The stat `equationLine` treats as the role's baseline, read off `CUSTOM_FORMULA_SEEDS`: the
- * first core row (in the seed's own order) that resolves to a stat a derived basis can carry a
- * term on. Falls back to Attack when no core row resolves to one — every role whose real formula
- * scores Attack (ATTACKER, DEBUFFER, DEBUFFER_BOMBER) resolves its own `directDamage`/`attack`
- * core row first, so the fallback only fires for a role with no basis-comparable core stat at
- * all (e.g. SUPPORTER_BUFFER's core row is Speed).
- */
-const roleCoreStat = (role: ShipTypeName): OffFormulaStat => {
-    for (const row of CUSTOM_FORMULA_SEEDS[role].rows) {
-        if (row.kind !== 'core') continue;
-        const stat = rowCoreStat(row);
-        if (stat) return stat;
-    }
-    return 'attack';
-};
-
 /** The sentence pointing at the excluded-clause list below, agreeing in number with how many
  *  clauses are there. */
 const clausePointer = (excludedCount: number): string =>
@@ -172,7 +92,7 @@ const clausePointer = (excludedCount: number): string =>
 
 /**
  * Renders the weighted stat equation `deriveBasis` derived, in the ship's own numbers, against
- * `coreStat` — the stat the CONFIGURED role's own formula already scores (see `roleCoreStat`).
+ * `coreStat` — the stat the CONFIGURED role's own formula already scores (`rolePrimaryStat`).
  * When no stat besides `coreStat` feeds the active/charged basis, the derived scoring is exactly
  * what the role formula already assumes — there is nothing new to report from this ship's own
  * active or charged skills, so the caller only points at a passive clause when one is actually
@@ -229,55 +149,29 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     if (findings.length === 0 || !configuredRole) return null;
 
     const roleLabel = SHIP_TYPES[configuredRole]?.name;
-    const coreStat = roleCoreStat(configuredRole);
-    const primaryProduces = findings[0].produces;
-    const primaryBasis = basisByProduces.get(primaryProduces) ?? null;
-    const excluded = primaryBasis?.excluded ?? [];
-    // Something to write: either an active/charged basis term, or a passive clause worth
-    // carrying onto the row as `excludedNote` even when the basis itself is empty (Rikra).
-    const hasSomethingToApply =
-        !!primaryBasis && (primaryBasis.terms.length > 0 || excluded.length > 0);
-    // The row Apply would attach the basis to: the seeded formula's own core row whose AXIS
-    // matches `primaryBasis`'s `produces` (see `rowAxis`/`PRODUCES_AXIS`) — not merely a row
-    // that can syntactically hold a basis. A damage basis has no honest home on a survival-proxy
-    // row (DEFENDER's `effectiveHp`) and vice versa; some roles have no row on the matching axis
-    // at all (DEBUFFER_CORROSION's hacking, SUPPORTER_BUFFER/SUPPORTER_OFFENSIVE's speed). Apply
-    // must not guess a row by falling back to the first one that merely resolves to a stat.
-    const basisHostAxis = PRODUCES_AXIS[primaryProduces];
-    const hasBasisHost = CUSTOM_FORMULA_SEEDS[configuredRole].rows.some(
-        (row) => row.kind === 'core' && rowAxis(row) === basisHostAxis
-    );
-    const canApply = hasSomethingToApply && hasBasisHost;
+    // `excludedCarriers` doesn't vary with `produces` (see the comment on `basisByProduces`), so
+    // reading it off the first finding is safe here — unlike `hostedBasis` below, which must
+    // read the axis the ROLE hosts, never merely the first finding's.
+    const excluded = basisByProduces.get(findings[0].produces)?.excluded ?? [];
 
-    // Applying sets shipRole to null (Custom mode), and detectOffFormulaStats returns [] when
-    // configuredRole is null — so the notice clears through that existing short-circuit rather
-    // than by re-reading the basis. That is deliberate: Custom mode means the player wrote the
-    // scoring function, so there is no declared role left to diverge from.
+    // The axis a derived basis can replace in `configuredRole`'s own formula (`roleAxis`,
+    // `roleBasisHost.ts`) — null for a role with no single scalable quantity to replace
+    // (DEFENDER-family and four others; see `roleBasisHost.ts`'s doc for the full list and why).
+    // Apply, the equation line, and the "add it by hand" advice all gate on this: printing an
+    // equation the role's formula can never use invites gearing for a stat that formula does not
+    // want (owner ruling, #544 — Panon is gearing for Defence because he tanks, not because his
+    // kit happens to deal damage too).
+    const hostAxis = roleAxis(configuredRole);
+    const coreStat = hostAxis ? rolePrimaryStat(configuredRole) : null;
+    const hostedBasis = hostAxis ? (basisByProduces.get(hostAxis) ?? null) : null;
+    const canApply = !!hostedBasis && hostedBasis.terms.length > 0;
+
     const handleApply = () => {
-        if (!onApply || !primaryBasis) return;
-        const formula = seedFormulaFromRole(configuredRole);
-        const targetIndex = formula.rows.findIndex(
-            (row) => row.kind === 'core' && rowAxis(row) === basisHostAxis
-        );
-        // `canApply` already requires this row to exist; bail rather than guess a row if it's
-        // ever reached without one.
-        if (targetIndex === -1) return;
-        // Only the carriers this basis's OWN `produces` reads — `excluded` (above) is the
-        // ship's whole passive-carrier set, kept for the notice's display, but a row that now
-        // scores `primaryProduces` must not carry a note about a different channel's carrier.
-        const excludedNote = excluded
-            .filter((carrier) => carrier.produces === primaryProduces)
-            .map(excludedClauseText);
-        formula.rows = formula.rows.map((row, i) =>
-            i === targetIndex
-                ? {
-                      ...row,
-                      basis: primaryBasis.terms,
-                      ...(excludedNote.length > 0 ? { excludedNote } : {}),
-                  }
-                : row
-        );
-        onApply({ shipRole: null, customFormula: formula });
+        if (!onApply || !hostAxis || !hostedBasis || hostedBasis.terms.length === 0) return;
+        onApply({
+            shipRole: configuredRole,
+            roleBasis: { produces: hostAxis, terms: hostedBasis.terms },
+        });
     };
 
     return (
@@ -288,7 +182,8 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                 // A collapsed finding names the lever explicitly, because the sentence has
                 // already named a different stat as what the effect reads.
                 const scored = lever && lever !== finding.stat ? statLabel(lever) : 'it';
-                const basis = lever ? (basisByProduces.get(finding.produces) ?? null) : null;
+                const basis =
+                    lever && coreStat ? (basisByProduces.get(finding.produces) ?? null) : null;
                 return (
                     <div key={key} className="space-y-1">
                         <p className="text-xs text-amber-400">
@@ -304,7 +199,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                             {!lever &&
                                 ' No gear stat drives it, so there is nothing to put in a formula.'}
                         </p>
-                        {basis && (
+                        {basis && coreStat && (
                             <p className="text-xs text-theme-text-secondary">
                                 {equationLine(basis, coreStat, excluded.length)}
                             </p>
@@ -323,12 +218,6 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                         </p>
                     ))}
                 </div>
-            )}
-            {onApply && hasSomethingToApply && !hasBasisHost && (
-                <p className="text-xs text-theme-text-secondary">
-                    {roleLabel}&apos;s formula has no row this equation can attach to. Add it to
-                    your custom formula by hand instead.
-                </p>
             )}
             {onApply && canApply && (
                 <Button variant="secondary" size="sm" onClick={handleApply}>

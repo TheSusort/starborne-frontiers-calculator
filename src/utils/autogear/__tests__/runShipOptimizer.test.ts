@@ -5,6 +5,7 @@ import {
     runOffFormulaTuningPass,
     buildSimRerankShipConfig,
     defaultAutogearShipConfig,
+    toSavedAutogearConfig,
     type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
@@ -513,5 +514,56 @@ describe('runOffFormulaTuningPass', () => {
         });
         expect(result.landed).toBeCloseTo(resolveLimitStatValue(expectedFinal, 'hp'), 5);
         expect(result.suggestions).toEqual([]);
+    });
+});
+
+// `AutogearPage.tsx` built `SavedAutogearConfig` by hand-enumerating `AutogearShipConfig`'s
+// fields at the `saveConfig` call site — a layer that silently drops any field added to either
+// type. `roleBasis` was exactly such a field (#544): present on both types, read by the scorer,
+// never actually reaching storage. `toSavedAutogearConfig` is the single place that mapping now
+// lives, so a future field only needs adding here once, and this test is the tripwire that a
+// field was wired into BOTH `AutogearShipConfig` and `toSavedAutogearConfig`.
+describe('toSavedAutogearConfig', () => {
+    const roleBasis: RoleBasis = {
+        produces: 'repair',
+        terms: [{ stat: 'hp', weight: 1 }],
+    };
+
+    const fullShipConfig: AutogearShipConfig = {
+        shipRole: 'SUPPORTER',
+        statPriorities: [{ stat: 'hp' }],
+        setPriorities: [{ setName: 'Vanguard', count: 2 }],
+        statBonuses: [{ stat: 'hp', percentage: 10 }],
+        ignoreEquipped: true,
+        ignoreUnleveled: false,
+        useUpgradedStats: true,
+        tryToCompleteSets: true,
+        selectedAlgorithm: AutogearAlgorithm.TwoPass,
+        showSecondaryRequirements: true,
+        optimizeImplants: true,
+        includeCalibratedGear: true,
+        assumeCalibrated: true,
+        useArenaModifiers: true,
+        excludedImplantTypes: ['implant-1'],
+        fleetBuffs: [{ stat: 'attack', percentage: 20 }],
+        customFormula: { rows: [{ stat: 'hp', kind: 'core', direction: 'max' }] },
+        roleBasis,
+    };
+
+    it('round-trips roleBasis (and every other field) into the persisted shape', () => {
+        const saved = toSavedAutogearConfig('ship-1', fullShipConfig);
+        expect(saved.shipId).toBe('ship-1');
+        expect(saved.shipRole).toBe('SUPPORTER');
+        expect(saved.roleBasis).toBe(roleBasis);
+        expect(saved.algorithm).toBe(AutogearAlgorithm.TwoPass);
+        expect(saved.customFormula).toBe(fullShipConfig.customFormula);
+        expect(saved.statPriorities).toBe(fullShipConfig.statPriorities);
+        expect(saved.statBonuses).toBe(fullShipConfig.statBonuses);
+        expect(saved.fleetBuffs).toBe(fullShipConfig.fleetBuffs);
+    });
+
+    it('omits roleBasis when the ship config carries none', () => {
+        const saved = toSavedAutogearConfig('ship-1', defaultAutogearShipConfig('ATTACKER'));
+        expect(saved.roleBasis).toBeUndefined();
     });
 });
