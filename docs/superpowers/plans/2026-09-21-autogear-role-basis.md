@@ -161,6 +161,38 @@ predicate to honour "only where the role has one".
 
 ---
 
+### Task 2b: The fast path reads the basis too
+
+**Files:** `src/utils/autogear/fastScoring/context.ts`, `src/utils/autogear/fastScoring/fastScore.ts`,
+`src/utils/autogear/strategies/GeneticStrategy.ts`; tests alongside.
+
+**Why this exists and why it is before Task 3.** `USE_FAST_SCORING` is `true`, so `GeneticStrategy`
+— the default algorithm — scores through `fastScore`, not through the slow path Task 1 changed.
+`FastScoringContext` carries `shipRole`, `statBonuses` and `customFormula` but NOT `roleBasis`, and
+`fastScore` calls `calculatePriorityScore` without it. The moment Apply writes a basis, the default
+algorithm ignores it and nothing fails. `VERIFY_FAST_SCORING` is `false` by default, so the
+existing divergence check does not cover this either.
+
+**This must land before the Stage A checkpoint.** The checkpoint asks the owner to test in a
+browser; against an unwired fast path they would see no change and conclude the feature is broken
+or, worse, that it works when it does not.
+
+- [ ] **Step 1 — write the failing test.** For a hosting role with a real basis, `fastScore` and
+  the slow path must return the SAME fitness for the same gear. It must fail before the wiring —
+  paste the divergence.
+- [ ] **Step 2 — thread it.** `roleBasis` onto `FastScoringContext` and `buildFastScoringContext`,
+  through to the `calculatePriorityScore` call. **Also into `fastScore`'s own local `cacheKey`** —
+  it has one, and a key that ignores the basis serves a stale fitness exactly as `scoring.ts`'s did.
+- [ ] **Step 3 — the verify path.** `verifyAgainstSlowPath` must pass the basis to both sides, or
+  turning `VERIFY_FAST_SCORING` on would report a false divergence and send the next agent hunting
+  a bug that is not there.
+- [ ] **Step 4 — a tripwire, not a comment.** The equivalence test from Step 1 is the thing that
+  keeps the two paths honest as more scoring inputs are added. Make it walk every hosting role
+  rather than one, so a role added to the hosting set without fast-path wiring reddens.
+- [ ] **Step 5 — tests + `tsc` + eslint. Commit.** `feat(autogear): score a derived basis on the fast path too`
+
+---
+
 ### Task 3: Apply writes a role basis
 
 **Files:** `src/components/autogear/OffFormulaNotice.tsx`; tests alongside.
@@ -186,6 +218,15 @@ predicate to honour "only where the role has one".
 - [ ] **Step 4 — drop the equation line for a non-hosting role.** The finding stays; the equation
   and the "add it by hand" advice go. For a Defender both are actively harmful: the equation names
   Attack, which a Defender never wants.
+- [ ] **Step 4b — close the two write-path gaps a review measured.** Neither is optional; without
+  them `roleBasis` is a field nothing reads.
+  - `AutogearPage.tsx` (~:674-692) builds `SavedAutogearConfig` by HAND-ENUMERATING its fields,
+    and the load direction does the same. `roleBasis` is in neither list, so today it is never
+    persisted or restored. Add it to both, and add an assertion that a config round-trips a
+    basis — a hand-enumerated layer silently drops any field added to the type.
+  - `ShipOptimizerConfig.roleBasis` currently has no consumer: `findOptimalGearForShip` never
+    reads it. Close config -> strategy -> `calculateTotalScore` so the value reaches the scorer,
+    and test that an Apply'd basis actually changes which gear a run returns.
 - [ ] **Step 5 — audit `UNRELEASED_CHANGES`.** Nothing has released since these entries were
   written, so they must describe the pivoted behaviour, not the pre-pivot one. Re-read all seven;
   at minimum "ships scoring off an ignored stat now show their real damage equation" is now false
@@ -235,6 +276,21 @@ preference inside it. `SavedAutogearConfig.statBonuses` already reaches every ro
 Report: the basis Apply writes for Cobalt, Prophet and Makoli; the before/after marginal value of
 crit and heal modifier for Makoli (the losslessness table); that Panon shows a finding, no
 equation, and a tilt; and the dev server URL.
+
+Also put these three in front of the owner — all behaviour, none a bug, and each a decision they
+may want to revisit once they see it:
+
+1. **A comparison row carries the ship's derived basis unblanked.** `buildSimRerankShipConfig`
+   blanks a player's priorities and custom formula for a compared role, but a `roleBasis` is a
+   transcription of the KIT, so it is carried and the hosting predicate decides where it lands:
+   an ATTACKER's damage basis reaches a compared DEBUFFER row and is ignored by a compared
+   SUPPORTER row. This was a controller ruling, not the plan's.
+2. **Apply is withheld for every DEFENDER-family ship**, Panon and Madax included. The honest
+   consequence of the Defender ruling, but that bucket ends at a notice plus the tilt.
+3. **Dual-axis ships store one basis.** Cinya, Isha, Madax and Morao carry BOTH a damage and a
+   repair equation; `roleBasis` holds one `produces`, so a compared row on the other axis scores
+   basis-less even though the kit has an equation for it. Asymmetric and correct as far as it
+   goes. Closing it would mean deriving on the fly — do not build that without the owner asking.
 
 **Do not start Stage B until the owner has tested and replied.**
 
