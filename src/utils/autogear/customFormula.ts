@@ -38,13 +38,30 @@ const DERIVED_STATS: Record<DerivedStatName, true> = {
 export const isBasisStat = (stat: LimitableStat): boolean =>
     MULTIPLIER_NORMALIZERS[stat] !== undefined && !(stat in DERIVED_STATS);
 
-export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
-    if (row.kind !== 'core' || row.direction !== 'max') return undefined;
-    if (!Array.isArray(row.basis)) return undefined;
-    const kept = row.basis.filter(
+/**
+ * A basis's terms, filtered to entries a scorer can honour. Shared by every basis-bearing path
+ * (a formula row's `basis` here, a role's `roleBasis` in `priorityScore.ts`) so neither can drift
+ * from the other's validation.
+ *
+ * An all-zero surviving set is rejected too, not only an empty one: `resolveBasisValue` sums
+ * `stat * weight` over the terms, so a basis where every term weighs 0 resolves to 0 for every
+ * candidate regardless of the candidate's own stats — the exact "scores 0 for everything and ties
+ * the search" failure this validator exists to prevent, just reached through a weight of 0
+ * instead of an absent term. A zero-weight term alongside a positive one is harmless (it
+ * contributes nothing, the way an absent term would) and stays.
+ */
+export function usableBasisTerms(basis: BasisTerm[] | undefined): BasisTerm[] | undefined {
+    if (!Array.isArray(basis)) return undefined;
+    const kept = basis.filter(
         (t) => t && isBasisStat(t.stat) && Number.isFinite(t.weight) && t.weight >= 0
     );
-    return kept.length > 0 ? kept : undefined;
+    if (kept.length === 0) return undefined;
+    return kept.some((t) => t.weight > 0) ? kept : undefined;
+}
+
+export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
+    if (row.kind !== 'core' || row.direction !== 'max') return undefined;
+    return usableBasisTerms(row.basis);
 }
 
 /** Whether a basis on this row's own stat is a tilt rather than a transcription. `effectiveHp`

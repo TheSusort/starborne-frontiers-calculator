@@ -178,4 +178,45 @@ describe('usableBasis rejects what the scorer cannot honour', () => {
         });
         expect(withBad).toBe(plain);
     });
+
+    it('rejects an ALL-ZERO basis rather than scoring 0 for every candidate', () => {
+        // Every individual term passes `weight >= 0` and survives the filter, but a basis
+        // where every surviving weight is 0 resolves to 0 regardless of the candidate's own
+        // stats — the row must fall back to its plain stat instead of tying the search.
+        expect(usableBasis(core([{ stat: 'attack', weight: 0 }]))).toBeUndefined();
+        expect(
+            usableBasis(
+                core([
+                    { stat: 'attack', weight: 0 },
+                    { stat: 'hp', weight: 0 },
+                ])
+            )
+        ).toBeUndefined();
+
+        const withAllZero = formulaRowTerm(stats, core([{ stat: 'attack', weight: 0 }]));
+        const plain = formulaRowTerm(stats, {
+            stat: 'directDamage',
+            kind: 'core',
+            direction: 'max',
+        });
+        expect(withAllZero).toBe(plain);
+        expect(withAllZero).not.toBe(0);
+    });
+
+    it('keeps a zero-weight term that sits alongside a positive one', () => {
+        // A zero term contributes nothing on its own (like an absent term), so it is harmless
+        // once at least one other term actually moves the value — only an ALL-zero basis must
+        // be rejected.
+        expect(
+            usableBasis(
+                core([
+                    { stat: 'attack', weight: 0 },
+                    { stat: 'hp', weight: 2 },
+                ])
+            )
+        ).toEqual([
+            { stat: 'attack', weight: 0 },
+            { stat: 'hp', weight: 2 },
+        ]);
+    });
 });

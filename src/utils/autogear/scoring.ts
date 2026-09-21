@@ -1,6 +1,6 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import type { BasisTerm, FleetBuff, CustomFormula } from '../../types/autogear';
+import type { BasisTerm, FleetBuff, CustomFormula, RoleBasis } from '../../types/autogear';
 import { GearSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -162,6 +162,26 @@ function basisKeyPart(basis: BasisTerm[] | undefined): string {
     );
 }
 
+/**
+ * A `roleBasis` as a cache-key fragment, order-independent in its terms and read from a copy
+ * (`.map` before `.sort`) exactly as `basisKeyPart` is for a formula row's `basis`. `produces` is
+ * part of the key too — two bases with identical terms but different `produces` apply to
+ * different roles (`roleHostsBasis`) and must not collide. An absent basis contributes '', so a
+ * roleBasis-free call keeps the pre-existing key byte-for-byte.
+ */
+function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
+    if (!roleBasis || roleBasis.terms.length === 0) return '';
+    return (
+        ';' +
+        roleBasis.produces +
+        ':' +
+        roleBasis.terms
+            .map((t) => `${t.stat}:${t.weight}`)
+            .sort()
+            .join(',')
+    );
+}
+
 // Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
@@ -175,7 +195,8 @@ export function calculateTotalScore(
     tryToCompleteSets?: boolean,
     arenaModifiers?: Record<string, number> | null,
     fleetBuffs?: FleetBuff[],
-    customFormula?: CustomFormula
+    customFormula?: CustomFormula,
+    roleBasis?: RoleBasis
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -236,7 +257,9 @@ export function calculateTotalScore(
               )
               .join(',')
         : 'none';
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}`;
+    // Appended directly (no `|` separator) so an absent `roleBasis` — which contributes '' —
+    // leaves the key byte-for-byte identical to before this parameter existed.
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}${roleBasisKeyPart(roleBasis)}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -310,7 +333,8 @@ export function calculateTotalScore(
         tryToCompleteSets,
         arcaneSiegeMultiplier,
         implantSetCount,
-        customFormula
+        customFormula,
+        roleBasis
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 

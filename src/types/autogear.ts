@@ -78,6 +78,16 @@ export interface CustomFormula {
     seededFrom?: ShipTypeName;
 }
 
+/** A transcription of a ship's kit (`deriveBasis`, `basisDerivation.ts`), replacing the role
+ *  formula's primary quantity rather than the player's own preference — unlike `customFormula`,
+ *  it is carried to every scored role unblanked (`buildSimRerankShipConfig`). `produces` names
+ *  the axis the basis measures; a role scorer applies `terms` only when `roleHostsBasis(role,
+ *  produces)` is true (`roleBasisHost.ts`) — every other role ignores it entirely. */
+export interface RoleBasis {
+    produces: 'damage' | 'repair' | 'shield';
+    terms: BasisTerm[];
+}
+
 export interface SavedAutogearConfig {
     shipId: string;
     shipRole: ShipTypeName | null;
@@ -97,4 +107,5 @@ export interface SavedAutogearConfig {
     excludedImplantTypes?: string[];
     fleetBuffs?: FleetBuff[];
     customFormula?: CustomFormula;
+    roleBasis?: RoleBasis;
 }

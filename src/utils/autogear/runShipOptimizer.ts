@@ -7,6 +7,7 @@ import type {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat, LimitableStat } from '../../types/stats';
@@ -43,6 +44,10 @@ export interface ShipOptimizerConfig {
     fleetBuffs: FleetBuff[];
     customFormula: CustomFormula | undefined;
     arenaModifiers: Record<string, number> | null;
+    /** A transcription of the ship's own kit, carried to every scored role regardless of whose
+     *  row this is — see `buildSimRerankShipConfig`'s doc comment for why it is not blanked the
+     *  way `statPriorities`/`customFormula` are. */
+    roleBasis?: RoleBasis;
 }
 
 export interface ShipOptimizerDeps {
@@ -94,6 +99,9 @@ export interface AutogearShipConfig {
     excludedImplantTypes: string[];
     fleetBuffs: FleetBuff[];
     customFormula: CustomFormula | undefined;
+    /** A transcription of the ship's own kit (`deriveBasis`), not a player preference — see
+     *  `buildSimRerankShipConfig`'s doc comment for how this differs from every other field here. */
+    roleBasis?: RoleBasis;
 }
 
 export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearShipConfig {
@@ -115,6 +123,7 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
         excludedImplantTypes: [],
         fleetBuffs: [],
         customFormula: undefined,
+        roleBasis: undefined,
     };
 }
 
@@ -133,6 +142,13 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
  * ignoreEquipped/ignoreUnleveled, upgraded-stats, calibration handling, fleet buffs, arena
  * modifiers) still match the ship's own configuration, so the formula is the only axis that
  * differs between rows.
+ *
+ * `roleBasis` is carried to EVERY row unblanked, own or compared: it transcribes what the
+ * ship's kit actually does (`deriveBasis`), not a player preference the way `statPriorities` or
+ * `customFormula` is, so there is no "this role's own choice" to withhold from a compared role.
+ * The scorer itself decides where it lands — `roleHostsBasis` applies it only when the compared
+ * role's axis matches `roleBasis.produces`, so an ATTACKER's damage basis reaches a compared
+ * DEBUFFER row (both damage) and is silently ignored by a compared SUPPORTER row (repair).
  */
 export function buildSimRerankShipConfig(
     ship: Ship,
@@ -164,6 +180,7 @@ export function buildSimRerankShipConfig(
         excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
         fleetBuffs: shipConfig.fleetBuffs,
         arenaModifiers,
+        roleBasis: shipConfig.roleBasis,
     };
 }
 

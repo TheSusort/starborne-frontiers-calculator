@@ -3,12 +3,14 @@ import {
     findOptimalGearForShip,
     buildOffFormulaTuningConfig,
     runOffFormulaTuningPass,
+    buildSimRerankShipConfig,
     defaultAutogearShipConfig,
+    type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
 import { bandPriorities } from '../simRerank/statBands';
 import { shipFinalStats } from '../../ship/combatStats';
-import { resolveLimitStatValue } from '../priorityScore';
+import { resolveLimitStatValue, calculateRoleScore } from '../priorityScore';
 import { AutogearAlgorithm } from '../AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
@@ -18,9 +20,10 @@ import type {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../../types/autogear';
+import type { BaseStats, EngineeringStat } from '../../../types/stats';
 import type { ShipTypeName } from '../../../constants/shipTypes';
-import type { EngineeringStat } from '../../../types/stats';
 
 // Typed with explicit parameters (rather than inferred from a zero-arg arrow) so
 // `mock.calls[n]` is a tuple indexable at every argument position `findOptimalGear` takes —
@@ -342,6 +345,87 @@ describe('findOptimalGearForShip', () => {
         );
         const passedInventory = findOptimalGear.mock.calls[0][2];
         expect(passedInventory).toHaveLength(30);
+    });
+});
+
+describe('buildSimRerankShipConfig — roleBasis is carried unblanked, unlike statPriorities/customFormula', () => {
+    const roleBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] };
+    const debufferShip = {
+        id: 'focus',
+        name: 'Focus',
+        type: 'DEBUFFER',
+        implants: {},
+    } as unknown as Ship;
+
+    function shipConfig(): AutogearShipConfig {
+        return {
+            ...defaultAutogearShipConfig('DEBUFFER'),
+            roleBasis,
+            statPriorities: [{ stat: 'attack', weight: 1 }],
+            customFormula: { rows: [{ stat: 'attack', kind: 'core', direction: 'max' }] },
+        };
+    }
+
+    // (a) The config-shape contract on its own, independent of what any scorer later does with
+    // the value — proven separately from the axis test below so a config builder that blanked
+    // roleBasis could not hide behind a scorer that happens to ignore it anyway.
+    it('the OWN row carries roleBasis', () => {
+        const config = buildSimRerankShipConfig(debufferShip, 'DEBUFFER', shipConfig(), null);
+        expect(config.roleBasis).toBe(roleBasis);
+    });
+
+    it('a COMPARED row still carries roleBasis, even though statPriorities/customFormula are blanked', () => {
+        const config = buildSimRerankShipConfig(debufferShip, 'ATTACKER', shipConfig(), null);
+        expect(config.statPriorities).toEqual([]);
+        expect(config.customFormula).toBeUndefined();
+        expect(config.roleBasis).toBe(roleBasis);
+    });
+});
+
+describe('a compared row applies a carried roleBasis only when its own axis hosts it', () => {
+    // (b) The scorer's own axis gate — Task 2's `roleHostsBasis` — decided independently of (a)
+    // above: a config builder that carries roleBasis correctly still needs the scorer to apply
+    // it only where the axis matches.
+    const damageBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 5 }] };
+    const attackerShip = {
+        id: 'focus',
+        name: 'Focus',
+        type: 'ATTACKER',
+        implants: {},
+    } as unknown as Ship;
+
+    function shipConfig(): AutogearShipConfig {
+        return { ...defaultAutogearShipConfig('ATTACKER'), roleBasis: damageBasis };
+    }
+
+    const stats: BaseStats = {
+        hp: 50000,
+        attack: 4000,
+        defence: 3000,
+        speed: 120,
+        crit: 40,
+        critDamage: 120,
+        hacking: 2500,
+        security: 2000,
+        healModifier: 20,
+        damageReduction: 0,
+        defensePenetration: 0,
+        hpRegen: 0,
+        shield: 0,
+    };
+
+    it('a compared DEBUFFER row (also damage) applies the basis', () => {
+        const config = buildSimRerankShipConfig(attackerShip, 'DEBUFFER', shipConfig(), null);
+        const withBasis = calculateRoleScore('DEBUFFER', stats, undefined, config.roleBasis);
+        const withoutBasis = calculateRoleScore('DEBUFFER', stats);
+        expect(withBasis).not.toBe(withoutBasis);
+    });
+
+    it('a compared SUPPORTER row (repair, not damage) ignores the same basis', () => {
+        const config = buildSimRerankShipConfig(attackerShip, 'SUPPORTER', shipConfig(), null);
+        const withBasis = calculateRoleScore('SUPPORTER', stats, undefined, config.roleBasis);
+        const withoutBasis = calculateRoleScore('SUPPORTER', stats);
+        expect(withBasis).toBe(withoutBasis);
     });
 });
 

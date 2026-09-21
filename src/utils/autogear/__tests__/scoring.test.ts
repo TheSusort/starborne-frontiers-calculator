@@ -8,7 +8,7 @@ import {
     clearScoreCache,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
-import { CustomFormula, StatBonus, StatPriority } from '../../../types/autogear';
+import { CustomFormula, RoleBasis, StatBonus, StatPriority } from '../../../types/autogear';
 import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
 import { GearPiece } from '../../../types/gear';
 
@@ -360,6 +360,67 @@ describe('calculateTotalScore cache key basis sensitivity', () => {
         // No clearScoreCache() here on purpose: both calls must go through the same cache,
         // since the cache key is exactly what is under test.
         const withBasis = score(basisFormula);
+
+        expect(withBasis).not.toBe(withoutBasis);
+    });
+});
+
+describe('calculateTotalScore cache key roleBasis sensitivity', () => {
+    // Same ship, same equipment IDs, same everything except `roleBasis` — the cache key must
+    // still tell the two calls apart, or the second one returns the first's stale score
+    // (the bug this branch already hit once for the formula-row basis).
+    function makeWeapon(): GearPiece {
+        return {
+            id: 'w-role-basis',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'attack', value: 5000, type: 'flat' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const ship = makeTestShip({ id: 'role-basis-cache-ship' });
+    const equipment = { weapon: 'w-role-basis' } as const;
+    const priorities: StatPriority[] = [];
+    const noEngineering = () => undefined;
+
+    // SUPPORTER hosts a `repair` basis on its `hp` primary — mixing in `defence` (which the
+    // plain formula never reads) makes the two calls diverge by more than float noise.
+    const basis: RoleBasis = {
+        produces: 'repair',
+        terms: [
+            { stat: 'hp', weight: 1 },
+            { stat: 'defence', weight: 18.8 },
+        ],
+    };
+
+    function score(roleBasis: RoleBasis | undefined): number {
+        return calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            makeWeapon,
+            noEngineering,
+            'SUPPORTER',
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            roleBasis
+        );
+    }
+
+    it('scores a roleBasis differently from an otherwise-identical roleBasis-free config', () => {
+        clearScoreCache();
+        const withoutBasis = score(undefined);
+        // No clearScoreCache() here on purpose: both calls must go through the same cache,
+        // since the cache key is exactly what is under test.
+        const withBasis = score(basis);
 
         expect(withBasis).not.toBe(withoutBasis);
     });

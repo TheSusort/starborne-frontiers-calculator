@@ -1,15 +1,24 @@
 import { BaseStats } from '../../types/stats';
-import { CustomFormula, StatPriority, SetPriority, StatBonus } from '../../types/autogear';
+import {
+    BasisTerm,
+    CustomFormula,
+    RoleBasis,
+    StatPriority,
+    SetPriority,
+    StatBonus,
+} from '../../types/autogear';
 import { ShipTypeName, GEAR_SETS } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import {
     calculateEffectiveHP,
     calculateCritMultiplier,
     calculateDPS,
+    resolveBasisValue,
     resolveLimitStatValue,
     MULTIPLIER_NORMALIZERS,
 } from './statResolution';
-import { customFormulaScore } from './customFormula';
+import { customFormulaScore, usableBasisTerms } from './customFormula';
+import { roleHostsBasis } from './simRerank/roleBasisHost';
 
 export {
     calculateDamageReduction,
@@ -52,9 +61,10 @@ export function calculateMultiplierFactor(stats: BaseStats, statBonuses?: StatBo
 function calculateAttackerScore(
     stats: BaseStats,
     statBonuses?: StatBonus[],
-    arcaneSiegeMultiplier: number = 0
+    arcaneSiegeMultiplier: number = 0,
+    basis?: BasisTerm[]
 ): number {
-    const baseDPS = calculateDPS(stats, arcaneSiegeMultiplier);
+    const baseDPS = calculateDPS(stats, arcaneSiegeMultiplier, basis);
 
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
@@ -104,10 +114,11 @@ function calculateDefenderSecurityScore(stats: BaseStats, statBonuses?: StatBonu
 function calculateDebufferScore(
     stats: BaseStats,
     statBonuses?: StatBonus[],
-    arcaneSiegeMultiplier: number = 0
+    arcaneSiegeMultiplier: number = 0,
+    basis?: BasisTerm[]
 ): number {
     const hacking = stats.hacking || 0;
-    const dps = calculateDPS(stats, arcaneSiegeMultiplier);
+    const dps = calculateDPS(stats, arcaneSiegeMultiplier, basis);
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
@@ -145,11 +156,12 @@ function calculateDefensiveSecurityDebufferScore(
 function calculateBomberDebufferScore(
     stats: BaseStats,
     statBonuses?: StatBonus[],
-    arcaneSiegeMultiplier: number = 0
+    arcaneSiegeMultiplier: number = 0,
+    basis?: BasisTerm[]
 ): number {
     const hacking = stats.hacking || 0;
     // For bomber debuffers, Arcane Siege affects attack-based damage
-    const attack = stats.attack || 0;
+    const attack = resolveBasisValue(stats, basis, 'attack');
     const attackWithMultiplier =
         arcaneSiegeMultiplier > 0 ? attack * (1 + arcaneSiegeMultiplier / 100) : attack;
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
@@ -177,8 +189,12 @@ function calculateCorrosionDebufferScore(
     return (totalDamage + additiveBonus) * (1 + multiplierFactor);
 }
 
-function calculateHealerScore(stats: BaseStats, statBonuses?: StatBonus[]): number {
-    const baseHealing = (stats.hp || 0) * BASE_HEAL_PERCENT; // 15% of HP
+function calculateHealerScore(
+    stats: BaseStats,
+    statBonuses?: StatBonus[],
+    basis?: BasisTerm[]
+): number {
+    const baseHealing = resolveBasisValue(stats, basis, 'hp') * BASE_HEAL_PERCENT; // 15% of HP
 
     // Use same crit calculation as DPS
     const critMultiplier = calculateCritMultiplier(stats);
@@ -243,9 +259,10 @@ function calculateOffensiveSupporterScore(
 function calculateShieldSupporterScore(
     stats: BaseStats,
     setCount?: Record<string, number>,
-    statBonuses?: StatBonus[]
+    statBonuses?: StatBonus[],
+    basis?: BasisTerm[]
 ): number {
-    const hp = stats.hp || 0;
+    const hp = resolveBasisValue(stats, basis, 'hp');
     const additiveBonus = applyAdditiveBonuses(stats, statBonuses);
     const multiplierFactor = calculateMultiplierFactor(stats, statBonuses);
 
@@ -287,7 +304,8 @@ export function calculatePriorityScore(
     tryToCompleteSets?: boolean,
     arcaneSiegeMultiplier: number = 0,
     implantSetCount?: Record<string, number>,
-    customFormula?: CustomFormula
+    customFormula?: CustomFormula,
+    roleBasis?: RoleBasis
 ): number {
     let penalties = 0;
 
@@ -346,9 +364,23 @@ export function calculatePriorityScore(
     // Get base score from role-specific calculation
     let baseScore = 0;
     if (shipRole) {
+        // Honoured only where the role's axis matches `roleBasis.produces` (`roleHostsBasis`,
+        // `roleBasisHost.ts`) — every other role scores exactly as it did with no basis at all.
+        // Terms are re-validated through `usableBasisTerms`, the same predicate a custom-formula
+        // row's `basis` goes through, so an unusable term (or an all-zero basis) falls back to
+        // the plain primary stat rather than silently scoring 0.
+        const basisTerms: BasisTerm[] | undefined =
+            roleBasis && roleHostsBasis(shipRole, roleBasis.produces)
+                ? usableBasisTerms(roleBasis.terms)
+                : undefined;
         switch (shipRole) {
             case 'ATTACKER':
-                baseScore = calculateAttackerScore(stats, statBonuses, arcaneSiegeMultiplier);
+                baseScore = calculateAttackerScore(
+                    stats,
+                    statBonuses,
+                    arcaneSiegeMultiplier,
+                    basisTerms
+                );
                 break;
             case 'DEFENDER':
                 baseScore = calculateDefenderScore(stats, statBonuses);
@@ -357,7 +389,12 @@ export function calculatePriorityScore(
                 baseScore = calculateDefenderSecurityScore(stats, statBonuses);
                 break;
             case 'DEBUFFER':
-                baseScore = calculateDebufferScore(stats, statBonuses, arcaneSiegeMultiplier);
+                baseScore = calculateDebufferScore(
+                    stats,
+                    statBonuses,
+                    arcaneSiegeMultiplier,
+                    basisTerms
+                );
                 break;
             case 'DEBUFFER_DEFENSIVE':
                 baseScore = calculateDefensiveDebufferScore(stats, statBonuses);
@@ -366,13 +403,18 @@ export function calculatePriorityScore(
                 baseScore = calculateDefensiveSecurityDebufferScore(stats, statBonuses);
                 break;
             case 'DEBUFFER_BOMBER':
-                baseScore = calculateBomberDebufferScore(stats, statBonuses, arcaneSiegeMultiplier);
+                baseScore = calculateBomberDebufferScore(
+                    stats,
+                    statBonuses,
+                    arcaneSiegeMultiplier,
+                    basisTerms
+                );
                 break;
             case 'DEBUFFER_CORROSION':
                 baseScore = calculateCorrosionDebufferScore(stats, setCount, statBonuses);
                 break;
             case 'SUPPORTER':
-                baseScore = calculateHealerScore(stats, statBonuses);
+                baseScore = calculateHealerScore(stats, statBonuses, basisTerms);
                 break;
             case 'SUPPORTER_BUFFER':
                 baseScore = calculateBufferScore(stats, setCount, statBonuses);
@@ -381,7 +423,7 @@ export function calculatePriorityScore(
                 baseScore = calculateOffensiveSupporterScore(stats, setCount, statBonuses);
                 break;
             case 'SUPPORTER_SHIELD':
-                baseScore = calculateShieldSupporterScore(stats, setCount, statBonuses);
+                baseScore = calculateShieldSupporterScore(stats, setCount, statBonuses, basisTerms);
                 break;
         }
     } else {
@@ -408,33 +450,41 @@ export function calculatePriorityScore(
 export function calculateRoleScore(
     role: ShipTypeName,
     stats: BaseStats,
-    statBonuses?: StatBonus[]
+    statBonuses?: StatBonus[],
+    roleBasis?: RoleBasis
 ): number {
+    // Same gating and validation as `calculatePriorityScore`'s switch — see that function's
+    // comment. `role` is already a typed `ShipTypeName` here (not the community-build string),
+    // so `roleHostsBasis` is called directly with no defensive arm.
+    const basisTerms: BasisTerm[] | undefined =
+        roleBasis && roleHostsBasis(role, roleBasis.produces)
+            ? usableBasisTerms(roleBasis.terms)
+            : undefined;
     switch (role) {
         case 'ATTACKER':
-            return calculateAttackerScore(stats, statBonuses);
+            return calculateAttackerScore(stats, statBonuses, 0, basisTerms);
         case 'DEFENDER':
             return calculateDefenderScore(stats, statBonuses);
         case 'DEFENDER_SECURITY':
             return calculateDefenderSecurityScore(stats, statBonuses);
         case 'DEBUFFER':
-            return calculateDebufferScore(stats, statBonuses);
+            return calculateDebufferScore(stats, statBonuses, 0, basisTerms);
         case 'DEBUFFER_DEFENSIVE':
             return calculateDefensiveDebufferScore(stats, statBonuses);
         case 'DEBUFFER_DEFENSIVE_SECURITY':
             return calculateDefensiveSecurityDebufferScore(stats, statBonuses);
         case 'DEBUFFER_BOMBER':
-            return calculateBomberDebufferScore(stats, statBonuses);
+            return calculateBomberDebufferScore(stats, statBonuses, 0, basisTerms);
         case 'DEBUFFER_CORROSION':
             return calculateCorrosionDebufferScore(stats, undefined, statBonuses);
         case 'SUPPORTER':
-            return calculateHealerScore(stats, statBonuses);
+            return calculateHealerScore(stats, statBonuses, basisTerms);
         case 'SUPPORTER_BUFFER':
             return calculateBufferScore(stats, undefined, statBonuses);
         case 'SUPPORTER_OFFENSIVE':
             return calculateOffensiveSupporterScore(stats, undefined, statBonuses);
         case 'SUPPORTER_SHIELD':
-            return calculateShieldSupporterScore(stats, undefined, statBonuses);
+            return calculateShieldSupporterScore(stats, undefined, statBonuses, basisTerms);
         default:
             return 0;
     }
