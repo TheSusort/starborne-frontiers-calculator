@@ -324,6 +324,34 @@ may want to revisit once they see it:
 
 # STAGE B — sharing, and cleanup
 
+### Task 4b: Let the player edit an applied equation
+
+**Owner request, 2026-09-23:** "a user should be able to edit the formula in case of personal
+preference or accommodating passives." The derivation deliberately excludes passives (their firing
+frequency depends on the fight) and names them in the notice — editing is how a player adds one.
+
+**Files:** `src/components/autogear/OffFormulaNotice.tsx`, the basis-editing controls in
+`CustomFormulaForm.tsx` / `CustomFormulaRow.tsx` (reuse, do not rebuild); tests alongside.
+
+- [ ] **Step 1 — failing tests.** With an equation applied, the notice offers an edit control;
+  editing a weight, adding a term and removing a term each write `roleBasis.terms` through the
+  existing update path and keep `produces` and `shipRole` unchanged; the edited terms are what the
+  applied state then shows. A term that validates to nothing (blank, zero, negative, a derived
+  stat) is refused at save — the SAME predicate as the scorer, `usableBasisTerms`, never a second
+  copy. An all-zero equation cannot be saved.
+- [ ] **Step 2 — implement.** Reuse the basis-term controls from the custom-formula editor rather
+  than writing new inputs; extract a shared piece if they are welded to a formula row. The term
+  picker offers only `isBasisStat` stats. Keep the excluded-carrier sentence visible beside the
+  editor — it is the reason most players will open it.
+- [ ] **Step 3 — "Restore the derived equation."** Once edited, offer a way back to the derived
+  terms. Distinguish edited-from-derived visibly, so a player can tell whether autogear is scoring
+  the kit's equation or their own version of it.
+- [ ] **Step 4 — docs + changelog + commit.** One DocumentationPage sentence on editing and
+  restoring. One changelog entry, area prefix + 8-12 words.
+  `feat(autogear): let a player edit an applied equation`
+
+---
+
 ### Task 5: Share a role basis
 
 **Files:** `src/schemas/sharedAutogearBuild.ts`, `src/types/communityRecommendation.ts`,
