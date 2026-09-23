@@ -327,3 +327,93 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         });
     }
 );
+
+describe.skipIf(!csvAvailable() || !shipDataAvailable())(
+    'Writing an equation for a passive-only carrier (#544 gap)',
+    () => {
+        // Zenith's whole shield carrier lives in a passive slot (Attack x50% at the start of the
+        // round), so `deriveBasis(Zenith, 'shield').terms` is empty and "Use this equation" never
+        // renders — this is the exact case the editor exists for (owner's stated reason: "editing
+        // is how a player adds one"), yet the applied state (and therefore the editor) was
+        // unreachable before this fix.
+        it('offers Write an equation, not Apply, for Zenith under SUPPORTER_SHIELD', () => {
+            const zenith = corpusShipNamed('Zenith');
+            render(<Harness ship={zenith} role="SUPPORTER_SHIELD" />);
+            expect(screen.getByRole('button', { name: /write an equation/i })).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /use this equation/i })
+            ).not.toBeInTheDocument();
+        });
+
+        it('opens the editor empty, with the excluded clause visible beside it', () => {
+            const zenith = corpusShipNamed('Zenith');
+            render(<Harness ship={zenith} role="SUPPORTER_SHIELD" />);
+            fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
+
+            // Empty, not pre-filled with the passive's own stat/percentage — pre-filling would
+            // count the passive as firing every turn, the assumption the derivation refuses to
+            // make (owner ruling, brief).
+            expect(screen.queryAllByLabelText(/basis weight/i)).toHaveLength(0);
+            expect(screen.getByRole('button', { name: /^add stat$/i })).toBeInTheDocument();
+            expect(
+                screen.getByText(/Zenith shields for 50% of Attack at the start of the round/i)
+            ).toBeInTheDocument();
+        });
+
+        it('refuses to save an empty equation', () => {
+            const zenith = corpusShipNamed('Zenith');
+            render(<Harness ship={zenith} role="SUPPORTER_SHIELD" />);
+            fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.queryByText(/will score/i)).not.toBeInTheDocument();
+        });
+
+        it('saving a positive term applies it, shown honestly, with no Restore offered', () => {
+            const captured: OffFormulaApplyUpdate[] = [];
+            const zenith = corpusShipNamed('Zenith');
+            render(
+                <Harness
+                    ship={zenith}
+                    role="SUPPORTER_SHIELD"
+                    onUpdateCaptured={(u) => u && captured.push(u)}
+                />
+            );
+            fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '0.5' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(
+                screen.getByText(/Autogear will score Zenith with this equation on its next run\./i)
+            ).toBeInTheDocument();
+            expect(screen.getByText(/^Attack x0\.500$/)).toBeInTheDocument();
+            // Restoring would write back an empty, unsaveable basis — there is nothing derived
+            // to restore to, so the control must not appear at all.
+            expect(
+                screen.queryByRole('button', { name: /restore the derived equation/i })
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /write an equation/i })
+            ).not.toBeInTheDocument();
+
+            const last = captured[captured.length - 1];
+            expect(last.shipRole).toBe('SUPPORTER_SHIELD');
+            expect(last.roleBasis.produces).toBe('shield');
+        });
+
+        // The control case: a ship whose derivation isn't empty still gets the ordinary Apply
+        // control, never the write-from-scratch one.
+        it('offers Apply, not Write an equation, for Cobalt/ATTACKER', () => {
+            const cobalt = corpusShipNamed('Cobalt');
+            render(<Harness ship={cobalt} role="ATTACKER" />);
+            expect(screen.getByRole('button', { name: /use this equation/i })).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /write an equation/i })
+            ).not.toBeInTheDocument();
+        });
+    }
+);

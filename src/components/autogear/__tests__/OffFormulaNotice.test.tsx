@@ -676,6 +676,99 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             }, 20000);
         });
 
+        // The gap this task closes: a ship whose only carrier on the hosted axis lives in a
+        // passive derives an EMPTY basis, so Apply never appears — but the notice still owes it
+        // an entry point into the editor, since editing is how the owner wants a passive folded
+        // in by hand. Over every real (ship, hosting role) pairing with an on-axis finding,
+        // exactly one of Apply / Write an equation renders, decided by whether the derived basis
+        // has terms — never both, and never neither when there's something to act on.
+        describe('Write an equation — the empty-derivation entry point', () => {
+            it('offers Apply for a nonempty derived basis, Write an equation for an empty one with an excluded clause, and neither otherwise', () => {
+                mocked.mockImplementation(realDetect);
+                const roles = Object.keys(SHIP_TYPES);
+                let applyOffered = 0;
+                let writeOffered = 0;
+                let neither = 0;
+
+                for (const ship of fullCorpus()) {
+                    for (const role of roles) {
+                        const findings = realDetect(ship, role);
+                        if (findings.length === 0) continue;
+
+                        const hostAxis = roleAxis(role);
+                        if (!hostAxis) continue;
+                        if (!findings.some((f) => f.produces === hostAxis)) continue;
+
+                        const basis = deriveBasis(ship, hostAxis);
+                        const onApply = vi.fn();
+                        const { unmount } = render(
+                            <OffFormulaNotice ship={ship} configuredRole={role} onApply={onApply} />
+                        );
+                        const applyButton = screen.queryByRole('button', {
+                            name: /use this equation/i,
+                        });
+                        const writeButton = screen.queryByRole('button', {
+                            name: /write an equation/i,
+                        });
+
+                        expect(
+                            !(applyButton && writeButton),
+                            `${ship.name}/${role}: both Apply and Write an equation rendered`
+                        ).toBe(true);
+
+                        if (basis.terms.length > 0) {
+                            expect(
+                                applyButton,
+                                `${ship.name}/${role}: nonempty derived basis but no Apply`
+                            ).toBeTruthy();
+                            expect(
+                                writeButton,
+                                `${ship.name}/${role}: nonempty derived basis rendered Write an equation`
+                            ).toBeFalsy();
+                            applyOffered++;
+                        } else if (basis.excluded.length > 0) {
+                            expect(
+                                writeButton,
+                                `${ship.name}/${role}: empty basis with an excluded clause but no Write an equation`
+                            ).toBeTruthy();
+                            expect(
+                                applyButton,
+                                `${ship.name}/${role}: empty basis rendered Apply`
+                            ).toBeFalsy();
+                            writeOffered++;
+                        } else {
+                            expect(
+                                applyButton,
+                                `${ship.name}/${role}: neither derived terms nor an excluded clause, but Apply rendered`
+                            ).toBeFalsy();
+                            expect(
+                                writeButton,
+                                `${ship.name}/${role}: neither derived terms nor an excluded clause, but Write an equation rendered`
+                            ).toBeFalsy();
+                            neither++;
+                        }
+
+                        unmount();
+                    }
+                }
+
+                // Non-vacuity: Paracelsus/damage and Zenith/shield guarantee at least one
+                // write-an-equation case in the real corpus. Zero here would mean the walk never
+                // exercised the branch this task exists to add.
+                expect(
+                    writeOffered,
+                    'the walk must offer Write an equation at least once (Paracelsus/Zenith)'
+                ).toBeGreaterThan(0);
+                expect(applyOffered, 'the walk must offer Apply at least once').toBeGreaterThan(0);
+
+                // eslint-disable-next-line no-console
+                console.log(
+                    `Write-an-equation corpus walk: applyOffered=${applyOffered} ` +
+                        `writeOffered=${writeOffered} neither=${neither}`
+                );
+            }, 20000);
+        });
+
         // No DEFENDER-family ship in the real corpus renders a Defence-preference control — a
         // player who wants to favour Defence on a Defender sets it with the generic stat-bonus
         // control instead.

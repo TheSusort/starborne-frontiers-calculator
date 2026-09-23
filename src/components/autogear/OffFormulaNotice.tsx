@@ -219,6 +219,12 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     const coreStat = hostAxis ? rolePrimaryStat(configuredRole) : null;
     const hostedBasis = hostAxis ? (basisByProduces.get(hostAxis) ?? null) : null;
     const canApply = !!hostedBasis && hostedBasis.terms.length > 0;
+    // `hostedBasis` is only set when a finding on `hostAxis` exists (`basisByProduces` is keyed
+    // off `findings`), so this already implies an on-axis finding — a ship whose only carrier on
+    // the hosted axis is a passive derives no terms here, but the notice still owes it an entry
+    // point: the excluded clause is what the player needs in hand to write the term themselves.
+    const canWriteEquation =
+        !!hostedBasis && hostedBasis.terms.length === 0 && hostedBasis.excluded.length > 0;
 
     const handleApply = () => {
         if (!onApply || !hostAxis || !hostedBasis || hostedBasis.terms.length === 0) return;
@@ -238,9 +244,27 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         applied && derivedForApplied
             ? !basisTermsMatch(appliedTerms, derivedForApplied.terms)
             : false;
+    // A ship reaching applied state through Write an equation has no derived equation at all
+    // (`derivedForApplied.terms` is empty) — distinct from an ordinary edit, which starts from a
+    // real derivation and diverges from it.
+    const writtenFromScratch = applied && derivedForApplied?.terms.length === 0;
+    // Restoring writes `derivedForApplied.terms` straight back through `onApply` (`handleRestore`
+    // below) — offering it when that array is empty would hand the player an equation
+    // `usableBasisTerms` immediately refuses, undoing the equation they just wrote for no reason
+    // they asked for.
+    const canRestore = editedFromDerived && (derivedForApplied?.terms.length ?? 0) > 0;
 
     const startEditing = () => {
         setDraftTerms(draftFromBasis(appliedTerms));
+        setSaveError(null);
+        setIsEditing(true);
+    };
+
+    // The Write-an-equation entry point: same editor, same save path (`handleSaveEdit` writes
+    // whatever draft validates, regardless of how the editor was opened), starting from nothing
+    // rather than a derivation that doesn't exist for this ship.
+    const startWriting = () => {
+        setDraftTerms([]);
         setSaveError(null);
         setIsEditing(true);
     };
@@ -354,6 +378,11 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                     Use this equation
                 </Button>
             )}
+            {onApply && canWriteEquation && !applied && !isEditing && (
+                <Button variant="secondary" size="sm" onClick={startWriting}>
+                    Write an equation
+                </Button>
+            )}
             {applied && (
                 <div className="space-y-2">
                     <p className="text-xs text-theme-text-secondary">
@@ -367,9 +396,11 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                         </p>
                     )}
                     <p className="text-xs text-theme-text-secondary">
-                        {editedFromDerived
-                            ? 'This is your own version of the equation.'
-                            : "This is the kit's own equation."}
+                        {writtenFromScratch
+                            ? 'This equation was written by hand; the kit has nothing to derive here.'
+                            : editedFromDerived
+                              ? 'This is your own version of the equation.'
+                              : "This is the kit's own equation."}
                     </p>
                     <div className="flex gap-2 flex-wrap">
                         {onApply && !isEditing && (
@@ -377,7 +408,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                                 Edit this equation
                             </Button>
                         )}
-                        {onApply && editedFromDerived && (
+                        {onApply && canRestore && (
                             <Button variant="secondary" size="sm" onClick={handleRestore}>
                                 Restore the derived equation
                             </Button>
@@ -388,29 +419,29 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                             </Button>
                         )}
                     </div>
-                    {isEditing && (
-                        <div className="space-y-2 border-t border-dark-border pt-2">
-                            <BasisTermsEditor
-                                terms={draftTerms}
-                                onUpdate={updateDraftTerm}
-                                onRemove={removeDraftTerm}
-                                onAdd={addDraftTerm}
-                            />
-                            {saveError && (
-                                <p className="text-xs text-red-400" role="alert">
-                                    {saveError}
-                                </p>
-                            )}
-                            <div className="flex justify-end gap-2">
-                                <Button variant="secondary" size="sm" onClick={cancelEditing}>
-                                    Cancel
-                                </Button>
-                                <Button variant="primary" size="sm" onClick={handleSaveEdit}>
-                                    Save equation
-                                </Button>
-                            </div>
-                        </div>
+                </div>
+            )}
+            {isEditing && (
+                <div className="space-y-2 border-t border-dark-border pt-2">
+                    <BasisTermsEditor
+                        terms={draftTerms}
+                        onUpdate={updateDraftTerm}
+                        onRemove={removeDraftTerm}
+                        onAdd={addDraftTerm}
+                    />
+                    {saveError && (
+                        <p className="text-xs text-red-400" role="alert">
+                            {saveError}
+                        </p>
                     )}
+                    <div className="flex justify-end gap-2">
+                        <Button variant="secondary" size="sm" onClick={cancelEditing}>
+                            Cancel
+                        </Button>
+                        <Button variant="primary" size="sm" onClick={handleSaveEdit}>
+                            Save equation
+                        </Button>
+                    </div>
                 </div>
             )}
         </div>
