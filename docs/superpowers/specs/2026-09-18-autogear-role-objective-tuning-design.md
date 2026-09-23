@@ -1,8 +1,15 @@
 # Autogear off-formula scaling stats (#544)
 
+> **Post-split note (2026-09-23).** #498 (sim-rerank / "Simulate candidates") and the band-search
+> tooling (`statBands`, `statBounds`, `OffFormulaTuningPanel`, `useOffFormulaTuning`,
+> `sparringOpponents`, `roleObjectives`, `objectiveMetrics`, `runCandidates`) were removed before
+> #544 merged. They survive only on branch `feat/autogear-sim-rerank` (`dbd85f63`). The three #544
+> modules live in `src/utils/autogear/offFormula/`. References below to `simRerank/`,
+> `SimRerankSection`, `buildSimRerankShipConfig`, or "retained band modules" describe code that is
+> not on main.
+
 **Status:** revised 2026-09-21. Supersedes the 2026-09-20 revision (custom-formula Apply), which
-superseded the 2026-09-18 original (banded measurement). Branch `feat/autogear-sim-rerank`
-(PR #541, draft). #541 does not merge on its own.
+superseded the 2026-09-18 original (banded measurement). #544 merges on its own.
 
 **Implemented and keeping:** detection, the notice, the derivation, the basis editor.
 **Changing:** what Apply writes, and what the notice says for a role that cannot use the equation.
@@ -168,8 +175,8 @@ and the payload caps with their corpus tripwire.
   product, passive exclusion, `TRIGGER_PROSE`, 0.001 rounding.
 - **The notice**, minus the equation line for non-hosting roles.
 - **The basis editor** in `CustomFormulaForm` / `CustomFormulaRow`, for hand-authored formulas.
-- **The retained band modules**, unmounted, for the two gated ships.
-- **The #541 stale-results fix.**
+- **The band modules**, for the two gated ships — removed with #498. Only on
+  `feat/autogear-sim-rerank`.
 
 ## Measured evidence (carried forward, still binding)
 
@@ -228,8 +235,8 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
 ## Out of scope, unchanged
 
 - **Quixilver** — no stat basis anywhere in his kit. Notice, no lever.
-- **Xcellence and Vindicator** — gated, per the sweep above. The retained band modules are the
-  owner-side tool for locating those thresholds.
+- **Xcellence and Vindicator** — gated, per the sweep above. No in-tree tool locates those
+  thresholds; the last version of the band modules that did lives on `feat/autogear-sim-rerank`.
 
 ## Testing
 
@@ -241,7 +248,7 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
   role's axis matches the basis's `produces`. Must fail on Panon/DEFENDER if the rule regresses.
   Carry a non-vacuity counter — the equivalent test previously passed over a walk that could not
   reach the failing case.
-- **No damage equation renders for a DEFENDER-family role**, and the tilt control does.
+- **No damage equation renders for a DEFENDER-family role.**
 - **Derived weights stay step-aligned and non-zero** (shipped, keep).
 - **The 47-ship detector table test** (shipped, keep).
 
@@ -255,8 +262,8 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
    defaults to the role, so nothing is lost; 26 flagged ships would produce damage if a player
    chose it, and they get the finding with no Apply. It joins the survival roles in the no-host
    set. Adding it later is a one-line table change.
-3. **Whether a hand-authored Custom formula stays shareable.** It is currently reachable and
-   supported. Keeping it costs the nullable-role schema branch Apply no longer needs.
+3. **Whether a hand-authored Custom formula stays shareable — ANSWERED, owner ruling 2026-09-23:
+   yes.** The nullable-role v2 schema stays.
 4. **Whether the notice should fire for DEFENDER-family substitution findings** once the equation
    line is gone. What remains is the finding plus the tilt offer, which is useful — but it is 24 of
    the 47 ships, and the owner has already ruled once that all 47 keep their notice.

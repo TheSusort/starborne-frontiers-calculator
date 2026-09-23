@@ -1,5 +1,13 @@
 # Autogear Role Basis Implementation Plan (#544, pivot 2)
 
+> **Post-split note (2026-09-23).** #498 (sim-rerank / "Simulate candidates") and the band-search
+> tooling (`statBands`, `statBounds`, `OffFormulaTuningPanel`, `useOffFormulaTuning`,
+> `sparringOpponents`, `roleObjectives`, `objectiveMetrics`, `runCandidates`) were removed before
+> #544 merged. They survive only on branch `feat/autogear-sim-rerank` (`dbd85f63`). The three #544
+> modules live in `src/utils/autogear/offFormula/`. References below to `simRerank/`,
+> `SimRerankSection`, `buildSimRerankShipConfig`, or "retained band modules" describe code that is
+> not on main.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -12,8 +20,7 @@ the basis only when the role's axis matches `produces`. Apply writes `roleBasis`
 leaves `shipRole` set. A DEFENDER-family ship is offered a Defence `StatBonus` tilt instead of an
 equation it should not gear toward.
 
-**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Vitest. Branch `feat/autogear-sim-rerank`
-(PR #541, draft) — this work builds on it and the combined branch merges together.
+**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Vitest. This work merges on its own.
 
 ## Read before Task 1
 
@@ -74,7 +81,7 @@ Defender ruling, not a gap to close.
 | `src/utils/autogear/priorityScore.ts` | Each role scorer resolves its primary quantity through the basis. |
 | `src/utils/autogear/scoring.ts` | `roleBasis` in the score cache key. |
 | `src/components/autogear/OffFormulaNotice.tsx` | Apply writes `roleBasis`; no equation for a non-hosting role; the Defender tilt. |
-| `src/utils/autogear/simRerank/roleBasisHost.ts` | **New.** Role to axis and primary stat; the hosting predicate. |
+| `src/utils/autogear/offFormula/roleBasisHost.ts` | **New.** Role to axis and primary stat; the hosting predicate. |
 | `src/schemas/sharedAutogearBuild.ts` | Carry `roleBasis`; retire the nullable-role branch. |
 
 ---
@@ -118,14 +125,8 @@ restate the rule, call it).
   Note `statResolution.ts` already threads a basis into `calculateDPS`, `calculateDirectDamage`
   and `calculateEffectiveHP` for the formula-row path. Reuse those seams; do not add a parallel
   one.
-- [ ] **Step 4b — `buildSimRerankShipConfig` (`runShipOptimizer.ts:150`).** It blanks
-  `statPriorities` / `statBonuses` / `customFormula` for a COMPARED role so the formula is the
-  only axis that differs (#498). A `roleBasis` is NOT one of those: it is a transcription of the
-  ship's kit, not a player preference, so it is carried to every row unblanked and the hosting
-  predicate decides where it lands — an ATTACKER's damage basis reaches a compared DEBUFFER row
-  (both damage) and is ignored by a compared SUPPORTER row (repair). Add it to that function with
-  a comment stating that contract, and a test asserting BOTH halves of it. Flag the behaviour in
-  the checkpoint report so the owner sees what a comparison row now scores.
+- [ ] **Step 4b — `buildSimRerankShipConfig` — removed in the split.** This step targeted
+  sim-rerank's compared-role config builder, which does not exist on this branch (#498, removed).
 - [ ] **Step 5 — cache key.** `scoring.ts`'s key must include `roleBasis`, order-independently and
   from a copy, exactly as `basisKeyPart` already does for a formula row's basis. An absent basis
   keeps the old key byte-for-byte. Without this, changing a basis returns a stale score — that bug
@@ -137,7 +138,7 @@ restate the rule, call it).
 
 ### Task 2: The hosting rule
 
-**Files:** `src/utils/autogear/simRerank/roleBasisHost.ts` (new); test alongside.
+**Files:** `src/utils/autogear/offFormula/roleBasisHost.ts` (new); test alongside.
 
 **Produces:** `roleAxis(role): 'damage' | 'repair' | 'shield' | null`,
 `rolePrimaryStat(role): OffFormulaStat | null`, `roleHostsBasis(role, produces): boolean`.
@@ -308,17 +309,14 @@ equation, and a tilt; and the dev server URL.
 Also put these three in front of the owner — all behaviour, none a bug, and each a decision they
 may want to revisit once they see it:
 
-1. **A comparison row carries the ship's derived basis unblanked.** `buildSimRerankShipConfig`
-   blanks a player's priorities and custom formula for a compared role, but a `roleBasis` is a
-   transcription of the KIT, so it is carried and the hosting predicate decides where it lands:
-   an ATTACKER's damage basis reaches a compared DEBUFFER row and is ignored by a compared
-   SUPPORTER row. This was a controller ruling, not the plan's.
+1. **A comparison row carries the ship's derived basis unblanked — moot.** There are no
+   comparison rows on this branch (#498, removed).
 2. **Apply is withheld for every DEFENDER-family ship**, Panon and Madax included. The honest
    consequence of the Defender ruling, but that bucket ends at a notice plus the tilt.
 3. **Dual-axis ships store one basis.** Cinya, Isha, Madax and Morao carry BOTH a damage and a
-   repair equation; `roleBasis` holds one `produces`, so a compared row on the other axis scores
-   basis-less even though the kit has an equation for it. Asymmetric and correct as far as it
-   goes. Closing it would mean deriving on the fly — do not build that without the owner asking.
+   repair equation; `roleBasis` holds one `produces`. The compared-row consequence is moot (no
+   comparison rows on this branch); closing the underlying fact would mean deriving on the fly —
+   do not build that without the owner asking.
 
 **Do not start Stage B until the owner has tested and replied.**
 
@@ -342,8 +340,8 @@ may want to revisit once they see it:
 
 - [ ] **Step 1** — find what is now unreferenced, by measurement (grep + `tsc`), not by memory.
   Candidates: `mirroredShipRole`'s `seededFrom` fallback, the Custom-mode Apply path,
-  `hasBasisHost`'s formula-row variant. **Do not delete the retained band modules** — they are
-  deliberately unmounted for the two gated ships.
+  `hasBasisHost`'s formula-row variant. The band modules this step once protected were removed
+  with #498 (split, 2026-09-23); they survive only on `feat/autogear-sim-rerank`.
 - [ ] **Step 2** — update `DocumentationPage.tsx`: what the notice means, that passive skills are
   not counted and why, the Defender tilt, and how to edit a basis. No symbol names — players read
   this.
@@ -356,4 +354,4 @@ may want to revisit once they see it:
 - **Out of scope:** Quixilver (no stat basis anywhere). Xcellence and Vindicator (gated — the
   channel switches at a threshold a linear basis cannot express).
 - **The basis editor stays** for hand-authored formulas; it is no longer Apply's target.
-- **PR #541 remains a draft and does not merge on its own.** This work merges with it.
+- **This work merges on its own.**

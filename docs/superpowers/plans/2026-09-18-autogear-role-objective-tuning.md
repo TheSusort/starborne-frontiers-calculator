@@ -1,5 +1,13 @@
 # Autogear Off-Formula Scaling Stats Implementation Plan (#544)
 
+> **Post-split note (2026-09-23).** #498 (sim-rerank / "Simulate candidates") and the band-search
+> tooling (`statBands`, `statBounds`, `OffFormulaTuningPanel`, `useOffFormulaTuning`,
+> `sparringOpponents`, `roleObjectives`, `objectiveMetrics`, `runCandidates`) were removed before
+> #544 merged. They survive only on branch `feat/autogear-sim-rerank` (`dbd85f63`). The three #544
+> modules live in `src/utils/autogear/offFormula/`. References below to `simRerank/`,
+> `SimRerankSection`, `buildSimRerankShipConfig`, or "retained band modules" describe code that is
+> not on main.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to
 > implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -13,8 +21,7 @@ reads that basis off `buildShipAbilities`, weighting the active and charged slot
 frequency. The existing detection notice gains the derived basis and an Apply control; the existing
 custom-formula editor gains basis editing. No simulation runs at scoring time.
 
-**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Vitest. Branch `feat/autogear-sim-rerank`
-(PR #541, draft) — this work builds on top of it and the combined branch merges together.
+**Tech Stack:** React 18, TypeScript, Vite, TailwindCSS, Vitest. This work merges on its own.
 
 ## Global Constraints
 
@@ -47,8 +54,8 @@ custom-formula editor gains basis editing. No simulation runs at scoring time.
 | `src/types/autogear.ts` | `CustomFormulaRow.basis` — the shape. |
 | `src/utils/autogear/statResolution.ts` | `calculateDirectDamage` / `calculateEffectiveHP` accept an optional basis for their primary factor. |
 | `src/utils/autogear/customFormula.ts` | Passes a row's basis to the resolver; validates a persisted basis. |
-| `src/utils/autogear/simRerank/basisDerivation.ts` | **New.** Charge period, slot weighting, shield chain, passive exclusion. Pure. |
-| `src/utils/autogear/simRerank/offFormulaStats.ts` | Detector. Gains the shield-chain coefficient alongside the lever stat. |
+| `src/utils/autogear/offFormula/basisDerivation.ts` | **New.** Charge period, slot weighting, shield chain, passive exclusion. Pure. |
+| `src/utils/autogear/offFormula/offFormulaStats.ts` | Detector. Gains the shield-chain coefficient alongside the lever stat. |
 | `src/components/autogear/OffFormulaNotice.tsx` | Shows the derived basis, names excluded carriers, carries Apply. |
 | `src/components/autogear/CustomFormulaRow.tsx` | Renders a core row's basis terms. |
 | `src/components/autogear/CustomFormulaForm.tsx` | Edits basis terms. |
@@ -59,7 +66,7 @@ custom-formula editor gains basis editing. No simulation runs at scoring time.
 # STAGE 1 — Detection only — SHIPPED
 
 `offFormulaStats.ts` (detector, three carriers, aggregate-term rule) and `OffFormulaNotice.tsx`
-(mounted in `AutogearSettings` above `SimRerankSection`) are on the branch and were verified in a
+(mounted in `AutogearSettings`) are on the branch and were verified in a
 browser by the repo owner. **Do not re-implement them.** Task 5 modifies the notice; Task 4
 extends the detector's shield chain. Everything else in Stage 1 stands.
 
@@ -401,10 +408,10 @@ git commit -m "feat(autogear): let a core formula row carry a stat basis"
 ### Task 4: Derive a ship's basis from its parsed kit
 
 **Files:**
-- Create: `src/utils/autogear/simRerank/basisDerivation.ts`
-- Modify: `src/utils/autogear/simRerank/offFormulaStats.ts` (shield-chain coefficient)
-- Test: `src/utils/autogear/simRerank/__tests__/basisDerivation.test.ts` (new)
-- Test: `src/utils/autogear/simRerank/__tests__/chargeCadence.integration.test.ts` (new)
+- Create: `src/utils/autogear/offFormula/basisDerivation.ts`
+- Modify: `src/utils/autogear/offFormula/offFormulaStats.ts` (shield-chain coefficient)
+- Test: `src/utils/autogear/offFormula/__tests__/basisDerivation.test.ts` (new)
+- Test: `src/utils/autogear/offFormula/__tests__/chargeCadence.integration.test.ts` (new)
 
 **Interfaces:**
 - Consumes: `BasisTerm` from Task 3.
@@ -429,7 +436,7 @@ git commit -m "feat(autogear): let a core formula row carry a stat basis"
 
 - [ ] **Step 1: Write the failing derivation tests**
 
-`src/utils/autogear/simRerank/__tests__/basisDerivation.test.ts` — build ships from the real
+`src/utils/autogear/offFormula/__tests__/basisDerivation.test.ts` — build ships from the real
 corpus exactly as `offFormulaStats.test.ts` already does (4 refits, so the highest-unlocked passive
 resolves), then:
 
@@ -559,12 +566,12 @@ where neither side can kill, the same construction `practiceBoard.ts` already pr
 
 - [ ] **Step 3: Run both to verify they fail**
 
-Run: `npx vitest run src/utils/autogear/simRerank/__tests__/basisDerivation.test.ts src/utils/autogear/simRerank/__tests__/chargeCadence.integration.test.ts`
+Run: `npx vitest run src/utils/autogear/offFormula/__tests__/basisDerivation.test.ts src/utils/autogear/offFormula/__tests__/chargeCadence.integration.test.ts`
 Expected: FAIL — `basisDerivation` does not exist.
 
 - [ ] **Step 4: Implement the derivation**
 
-`src/utils/autogear/simRerank/basisDerivation.ts`. The rules, each of which a test above pins:
+`src/utils/autogear/offFormula/basisDerivation.ts`. The rules, each of which a test above pins:
 
 ```ts
 /** Charge abilities targeted at somebody else do not bank toward this ship's charged skill. */
@@ -662,7 +669,7 @@ derivation read one number rather than each recomputing it:
 
 - [ ] **Step 6: Run the tests**
 
-Run: `npx vitest run src/utils/autogear/simRerank/__tests__/`
+Run: `npx vitest run src/utils/autogear/offFormula/__tests__/`
 Expected: PASS. The 47-ship detector table test must still pass unchanged.
 
 - [ ] **Step 7: Run the guard**
@@ -673,10 +680,10 @@ Expected: clean.
 - [ ] **Step 8: Commit**
 
 ```bash
-git add src/utils/autogear/simRerank/basisDerivation.ts \
-        src/utils/autogear/simRerank/offFormulaStats.ts \
-        src/utils/autogear/simRerank/__tests__/basisDerivation.test.ts \
-        src/utils/autogear/simRerank/__tests__/chargeCadence.integration.test.ts
+git add src/utils/autogear/offFormula/basisDerivation.ts \
+        src/utils/autogear/offFormula/offFormulaStats.ts \
+        src/utils/autogear/offFormula/__tests__/basisDerivation.test.ts \
+        src/utils/autogear/offFormula/__tests__/chargeCadence.integration.test.ts
 git commit -m "feat(autogear): derive a ship's scoring basis from its parsed kit"
 ```
 
@@ -819,17 +826,9 @@ it('keeps naming the excluded carrier after the notice has gone', () => {
 });
 ```
 
-- [ ] **Step 4: Unmount the band machinery**
-
-Remove `OffFormulaTuningPanel` from `AutogearSettings` and the `runOptimizer` / `statBounds` /
-`deps` wiring from `AutogearPage`. **Delete nothing under `simRerank/`.** Add to
-`simRerank/statBands.ts`:
-
-```ts
-// Not mounted in the UI. Retained as the owner-side tool for locating the threshold on the two
-// GATED ships (Xcellence, Vindicator), whose off-stat channel switches on at a boundary against
-// the opponent's security/hacking and so cannot be expressed as a weighted basis. #544.
-```
+- [ ] **Step 4 — superseded by the split (2026-09-23).** This step unmounted the band machinery
+  while keeping the modules in `simRerank/`. #498 and the band tooling were later removed
+  entirely; they survive only on `feat/autogear-sim-rerank`.
 
 - [ ] **Step 5: Changelog**
 
@@ -843,7 +842,7 @@ In `UNRELEASED_CHANGES`, one entry per user-visible change:
 - [ ] **Step 6: Run the tests and the guard**
 
 Run: `npx vitest run src/components/autogear src/pages/manager && npx tsc --noEmit`
-Expected: PASS and clean. `AutogearPage.simRerankApply.test.tsx` may need its mock updated.
+Expected: PASS and clean. (`AutogearPage.simRerankApply.test.tsx` is gone — removed with #498.)
 
 - [ ] **Step 7: Commit**
 
@@ -851,11 +850,12 @@ Expected: PASS and clean. `AutogearPage.simRerankApply.test.tsx` may need its mo
 git add src/components/autogear/OffFormulaNotice.tsx \
         src/components/autogear/AutogearSettings.tsx \
         src/pages/manager/AutogearPage.tsx \
-        src/utils/autogear/simRerank/statBands.ts \
         src/constants/changelog.ts \
         src/components/autogear/__tests__/OffFormulaNotice.test.tsx
 git commit -m "feat(autogear): apply a derived scoring formula from the notice"
 ```
+
+(`simRerank/statBands.ts` is gone — removed with #498.)
 
 ---
 
@@ -1028,10 +1028,11 @@ git commit -m "feat(autogear): share a custom formula in a community build"
 
 ### Task 9: Documentation, and the #541 debts
 
+**Steps 1-3 (the `SimRerankSection` stale-results fix) are moot — `SimRerankSection` was removed
+with #498 in the split (2026-09-23).**
+
 **Files:**
 - Modify: `src/pages/DocumentationPage.tsx`
-- Modify: `src/components/autogear/SimRerankSection.tsx` (the stale-results fix — after Task 6
-  unmounts `OffFormulaTuningPanel`, this is the panel that survives)
 - Modify: `src/constants/changelog.ts`
 
 - [ ] **Step 1: Fix #541's stale-results defect**
@@ -1093,8 +1094,8 @@ git commit -m "docs(autogear): document derived scoring formulas, fix stale resu
 - **Out of scope, deliberately:** Quixilver has no stat basis anywhere in his kit — he keeps a
   notice with no lever. Xcellence and Vindicator are GATED: their off-stat channel switches on at a
   threshold against the opponent's security or hacking, so a linear basis cannot express it, and
-  tougher enemies let the ship afford *more* hacking. The retained band modules are the tool for
-  locating those thresholds, owner-side, in later work.
+  tougher enemies let the ship afford *more* hacking. No in-tree tool locates those thresholds; the
+  last version of the band modules that did lives on `feat/autogear-sim-rerank`.
 - **Both severities keep their notice — all 47 ships.** Narrowing to `severe` would silence Panon
   and Vindicator, both owner-named known positives.
-- **PR #541 remains a draft and does not merge on its own.** This work merges with it.
+- **This work merges on its own.**
