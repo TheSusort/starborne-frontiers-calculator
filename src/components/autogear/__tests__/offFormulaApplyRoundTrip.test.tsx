@@ -238,7 +238,9 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             });
             fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
 
-            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
+            );
             expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
             expect(screen.getByText(/the kit's own equation/i)).toBeInTheDocument();
         });
@@ -313,6 +315,26 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             ).not.toBeInTheDocument();
         });
 
+        it('closes the editor when Stop is clicked mid-edit, with no equation left applied', () => {
+            applyAndOpenEditor();
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '9.999' },
+            });
+
+            fireEvent.click(screen.getByRole('button', { name: /stop using this equation/i }));
+
+            // The applied state is gone entirely — Stop ended it, not merely hid the editor over
+            // it — so the ordinary offer to apply again is what's left.
+            expect(screen.queryByText(/will score/i)).not.toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /use this equation/i })).toBeInTheDocument();
+
+            // No save control survives that could re-apply the abandoned draft.
+            expect(
+                screen.queryByRole('button', { name: /save equation/i })
+            ).not.toBeInTheDocument();
+            expect(screen.queryAllByLabelText(/basis weight/i)).toHaveLength(0);
+        });
+
         it('keeps the excluded-carrier sentence visible while editing', () => {
             const xcellence = corpusShipNamed('Xcellence');
             render(<Harness ship={xcellence} role="ATTACKER" />);
@@ -366,7 +388,11 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
             fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
 
-            expect(screen.getByRole('alert')).toBeInTheDocument();
+            // No stat is on screen to "remove" — the refusal copy for a from-scratch draft with
+            // no terms added at all must not presume one is there.
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Add at least one stat with a weight above zero.'
+            );
             expect(screen.queryByText(/will score/i)).not.toBeInTheDocument();
         });
 

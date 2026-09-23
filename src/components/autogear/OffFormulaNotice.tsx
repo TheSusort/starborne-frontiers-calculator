@@ -300,8 +300,13 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         // without it, so a player never sees a save that quietly dropped what they typed.
         const kept = usableBasisTerms(candidate);
         if (!kept || kept.length !== candidate.length) {
+            // A from-scratch draft with no terms at all (Write an equation, saved empty) has no
+            // stat on screen to "remove" — that refusal only fits a draft with terms already in
+            // it, so the two cases get different copy.
             setSaveError(
-                'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
+                draftTerms.length === 0
+                    ? 'Add at least one stat with a weight above zero.'
+                    : 'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
             );
             return;
         }
@@ -317,6 +322,16 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
             roleBasis: { produces: hostAxis, terms: derivedForApplied.terms },
         });
         setIsEditing(false);
+        setSaveError(null);
+    };
+
+    // Stop ends the applied state the same way Restore replaces it: closing any open editor and
+    // dropping its draft/error. Leaving the editor open here would let a later Save re-apply a
+    // basis and silently undo the Stop the player just clicked.
+    const handleStop = () => {
+        onClear?.();
+        setIsEditing(false);
+        setDraftTerms([]);
         setSaveError(null);
     };
 
@@ -414,7 +429,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                             </Button>
                         )}
                         {onClear && (
-                            <Button variant="secondary" size="sm" onClick={onClear}>
+                            <Button variant="secondary" size="sm" onClick={handleStop}>
                                 Stop using this equation
                             </Button>
                         )}
