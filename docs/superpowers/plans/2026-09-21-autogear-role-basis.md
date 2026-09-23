@@ -352,17 +352,44 @@ frequency depends on the fight) and names them in the notice — editing is how 
 
 ---
 
-### Task 5: Share a role basis
+### Task 5: Share a role basis, and a from-scratch Custom formula
+
+**Owner rulings, 2026-09-23 — settled, do not re-ask:**
+- Custom formulas STAY and stay SHAREABLE. Ships that fit no role (Prophet, Xcellence) become
+  buildable as Custom formulas once #550's crit compound stat exists, and those builds should be
+  shareable.
+- **A Custom formula built entirely from scratch — no "start from" role — must be shareable too.**
+  Today it cannot: `community_recommendations.ship_role` is `text NOT NULL`
+  (`supabase/current-schema.sql:237`), so `mirroredShipRole` returns null for it and the write path
+  refuses. The owner chose a nullable column over keeping the restriction.
 
 **Files:** `src/schemas/sharedAutogearBuild.ts`, `src/types/communityRecommendation.ts`,
-`src/utils/communityBuild.ts`; tests alongside.
+`src/utils/communityBuild.ts`, `src/services/communityRecommendations.ts`,
+`src/components/autogear/SharedBuildFields.tsx`, `src/components/autogear/AutogearConfigList.tsx`,
+a new `supabase/migrations/YYYYMMDD[seq]_…sql`; tests alongside.
 
-- [ ] **Step 1 — write the failing tests.** A role build with a `roleBasis` round-trips; a
-  `version: 1` row still reads; a corrupt basis is rejected at import, not filtered at score time.
-- [ ] **Step 2 — run; expect failure. Step 3 — implement.** Carry `roleBasis`. Return
-  `shipRole` to non-nullable **only if** open question 3 is resolved against hand-authored Custom
-  sharing — otherwise leave the union alone and just add the field. Ask rather than assume.
-- [ ] **Step 4 — tests, `tsc`. Commit.**
+- [ ] **Step 1 — the migration.** Make `ship_role` nullable. Load `supabase-postgres-best-practices`
+  before writing it. Find every view, function, index, trigger, RLS policy and CHECK that references
+  `ship_role` and state in the report what each does with NULL (a policy or index that assumes a
+  value is the trap). **The user applies migrations — never run the Supabase CLI, in any form.**
+  Never edit `current-schema.sql` by hand and never edit an applied migration.
+- [ ] **Step 2 — failing tests.** A role build carrying a `roleBasis` round-trips; a `version: 1`
+  row still reads; a corrupt basis is rejected at import rather than filtered at score time; a
+  from-scratch Custom formula (no `seededFrom`) now shares and reads back with a null role; a
+  build with neither a role nor a usable formula row is still refused.
+- [ ] **Step 3 — implement.** Carry `roleBasis` in the shared build. Write a null `ship_role` for a
+  role-less Custom build instead of refusing it. Keep the `version` union, the v1 migration, the
+  basis-term validation at import and the payload caps. `mirroredShipRole` stops being a gate on
+  sharing — decide by measurement whether it still earns its place or becomes Task 6 material.
+- [ ] **Step 4 — every reader of a null role.** `SharedBuildFields`, `AutogearConfigList`,
+  `normalizeShipRole`, and anything else that renders or filters by the column must show a null
+  role as "Custom" and never crash, mislabel, or drop the row. Grep every reader; do not trust
+  this list.
+- [ ] **Step 5 — the docs sentence.** `DocumentationPage.tsx` currently says a Custom formula built
+  entirely by hand with no starting role cannot be shared. Make it true for the new behaviour.
+- [ ] **Step 6 — tests, `tsc`, eslint. Commit.** Changelog: one entry if a player would notice
+  (they would — a from-scratch build is now shareable). Tell the owner the migration file exists
+  and must be applied BEFORE this ships, or every role-less share fails at insert.
 
 ### Task 6: Retire what the pivot orphaned
 
