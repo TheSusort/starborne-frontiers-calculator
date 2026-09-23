@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { roleAxis, rolePrimaryStat, roleHostsBasis, isDefenderFamilyRole } from '../roleBasisHost';
+import { roleAxis, rolePrimaryStat, roleHostsBasis } from '../roleBasisHost';
 import { SHIP_TYPES } from '../../../../constants';
 import type { ShipTypeName } from '../../../../constants/shipTypes';
 import type { OffFormulaStat } from '../offFormulaStats';
@@ -85,12 +85,5 @@ describe('roleHostsBasis is true exactly when produces matches roleAxis', () => 
 describe('totality tripwire', () => {
     it("EXPECTED's key set equals the full ShipTypeName union", () => {
         expect(new Set(Object.keys(EXPECTED))).toEqual(new Set(ALL_ROLES));
-    });
-});
-
-describe('isDefenderFamilyRole', () => {
-    it('is true for exactly DEFENDER and DEFENDER_SECURITY, over the full role union', () => {
-        const family = ALL_ROLES.filter((role) => isDefenderFamilyRole(role));
-        expect(new Set(family)).toEqual(new Set(['DEFENDER', 'DEFENDER_SECURITY']));
     });
 });

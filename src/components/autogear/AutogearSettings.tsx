@@ -431,8 +431,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     ship={selectedShip}
                     configuredRole={selectedShipRole}
                     onApply={onApplyOffFormula}
-                    onApplyTilt={onAddStatBonus}
-                    statBonuses={statBonuses}
                 />
             )}
             {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}

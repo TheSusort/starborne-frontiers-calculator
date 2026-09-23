@@ -1,5 +1,4 @@
 import type { ShipTypeName } from '../../../constants/shipTypes';
-import type { StatBonus } from '../../../types/autogear';
 import type { OffFormulaStat } from './offFormulaStats';
 
 type BasisAxis = 'damage' | 'repair' | 'shield';
@@ -80,25 +79,3 @@ export function rolePrimaryStat(role: ShipTypeName): OffFormulaStat | null {
 export function roleHostsBasis(role: ShipTypeName, produces: BasisAxis): boolean {
     return roleAxis(role) === produces;
 }
-
-/** The two survival-rounds roles (`calculateDefenderScore`) — `DEFENDER` and
- *  `DEFENDER_SECURITY`, the latter multiplying the former by security. Neither hosts a basis
- *  (see `ROLE_BASIS_HOST` above), but both read the Defence tilt (`OffFormulaNotice.tsx`'s
- *  `DEFENDER_TILT_BONUS`, #544) — a `StatBonus` preference between builds that survive equally
- *  well, not a basis substitution. */
-export function isDefenderFamilyRole(role: ShipTypeName): boolean {
-    return role === 'DEFENDER' || role === 'DEFENDER_SECURITY';
-}
-
-/** The Defender tilt (#544): a single, fixed `StatBonus` magnitude shared by every tilt ship —
- *  not per-kit, not a player-set slider. Measured so its equivalent survival-rounds contribution
- *  stays below the smallest survival delta a single realistic gear swap produces, across the
- *  achievable HP/Defence range of the 7 tilt ships (Cinya, Isha, Kafa, Madax, Morao, Panon,
- *  Suku) — see the #544 task report for the swept floor and the pinned pair on each side. Below
- *  that floor the tilt is free to decide the tie in Defence's favour, including a build that
- *  survives fractionally fewer rounds; at or above it, the real survival gap always wins. */
-export const DEFENDER_TILT_BONUS: StatBonus = {
-    stat: 'defence',
-    percentage: 0.01,
-    mode: 'additive',
-};

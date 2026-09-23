@@ -119,19 +119,35 @@ So for a DEFENDER-family ship the notice must NOT print a damage equation. Today
 mistake performed manually. Two of its three lines are actively harmful; only the finding earns
 its place.
 
-### The Defender tilt
+### The Defender tilt — BUILT, MEASURED INERT, DROPPED 2026-09-21
 
-What is true for Panon is a **tiebreak**: among builds of equal survival, prefer the one with more
-Defence, because he converts it to damage for free. `effectiveHp` treats HP and Defence as
-interchangeable through the mitigation curve, so nothing today expresses that preference.
+Recorded in full because it is a plausible idea that measurement killed, and a future reader will
+otherwise re-propose it.
 
-**This is a `StatBonus`, not a basis.** `SavedAutogearConfig.statBonuses` already exists, already
-reaches every role scorer through `calculatePriorityScore`, and already means "nudge this stat
-within the role's own scoring". A basis would redefine what survival *is*; a bonus expresses a
-preference inside it. The tilt is the honest shape and needs no new concept.
+The reasoning was sound: among builds of equal survival, Panon should prefer the one with more
+Defence, because he converts it to damage for free, and `effectiveHp` treats HP and Defence as
+interchangeable through the mitigation curve so nothing expresses that preference. It was built as
+a `StatBonus` rather than a basis — a basis redefines what survival *is*, a bonus is a preference
+inside it — on existing plumbing, with no new concept.
 
-The notice offers it as its own control, separate from Apply, with copy saying what it does:
-prefer Defence over HP where the optimizer could trade them.
+**It never changed a single gearing decision.** Swept over 7,031 realistic HP-piece-versus-
+Defence-piece comparisons on a Defender: zero winner changes. The tilt's effect on a build is
+1.78e-2% while the closest pair's survival gap is 1.05e-3%, leaving it roughly 2.3x too weak to
+overturn any real comparison.
+
+**And that was forced by the sizing rule, not by a bad constant.** The rule said the tilt must
+lose to any survival gap at or above the smallest gap a realistic gear swap produces. Every real
+comparison sits at or above that floor by definition, so the rule guarantees inertness. "Among
+builds of *equal* survival" has no realistic referent: with discrete gear, builds are near-equal,
+never equal, and a nudge that only breaks exact ties breaks nothing.
+
+**Owner decision: dropped.** Players can express the preference themselves with the existing
+generic stat-bonus control, choosing their own magnitude. DEFENDER-family ships keep the finding,
+and still get no equation and no Apply.
+
+**If this is ever revisited**, the floor has to come from what the owner considers a *meaningful*
+survival difference, not from the smallest representable one — or the mechanism has to be a real
+comparator tiebreak rather than a score nudge.
 
 ## What Stage 3 drops
 
@@ -231,12 +247,9 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
 
 ## Open questions
 
-1. **The tilt's magnitude — ANSWERED 2026-09-21: a fixed modest nudge.** One Defence `StatBonus`
-   magnitude shared by every tilt ship; not scaled per kit, not a player control. The binding
-   constraint is behavioural, not numeric: it must reorder two builds of equal `effectiveHp`
-   toward Defence, and must never lift a build that survives strictly fewer rounds above one that
-   survives more. Pick the number by measuring both halves against the real scorer.
-   Measured reach: 7 ships — Cinya, Isha, Kafa, Madax, Morao, Panon, Suku, all DEFENDER.
+1. **The tilt's magnitude — CLOSED 2026-09-21: the tilt itself was dropped.** Built, measured
+   inert (zero winner changes over 7,031 realistic comparisons), and removed on the owner's
+   decision. See "The Defender tilt" above for why the sizing rule guaranteed that outcome.
 2. **`SUPPORTER_OFFENSIVE` — ANSWERED 2026-09-21: it hosts NOTHING.** The sqrt compresses a basis
    in a way no other role's does and no measurement backs what that does to rankings. No ship
    defaults to the role, so nothing is lost; 26 flagged ships would produce damage if a player
