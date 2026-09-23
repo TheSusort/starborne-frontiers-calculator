@@ -6,6 +6,7 @@ import type {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../types/autogear';
 import type {
     CommunityRecommendation,
@@ -47,8 +48,12 @@ const isShipTypeKey = (key: string): boolean =>
  *    use the first prefix that is a valid key (so a future
  *    'DEBUFFER_SOMETHINGNEW' degrades to 'DEBUFFER').
  * 5. Otherwise null — the caller drops the row, as it does today.
+ *
+ * `raw` is `null` for a Custom-mode build with no role to mirror (a from-scratch formula) —
+ * this returns null immediately rather than reading a property of it.
  */
-export const normalizeShipRole = (raw: string): ShipTypeName | null => {
+export const normalizeShipRole = (raw: string | null): ShipTypeName | null => {
+    if (raw === null) return null;
     const normalised = raw
         .toUpperCase()
         .replace(/[^A-Z0-9]+/g, '_')
@@ -185,6 +190,7 @@ export interface AutogearBuildFields {
     excludedImplantTypes?: string[];
     optimizeImplants?: boolean;
     customFormula?: CustomFormula;
+    roleBasis?: RoleBasis;
 }
 
 /** A community recommendation resolved into something the UI can render. */
@@ -236,7 +242,9 @@ export const toCommunityBuild = (row: CommunityRecommendation): CommunityBuild |
     }
 
     const normalizedShipRole = normalizeShipRole(row.ship_role);
-    if (!normalizedShipRole) {
+    // A null `ship_role` is an intentional value (a role-less Custom build), not a
+    // normalisation failure — only warn when there was a string to fail on.
+    if (row.ship_role !== null && !normalizedShipRole) {
         console.warn(
             `Could not normalise ship_role "${row.ship_role}" for community recommendation ${row.id}`
         );
@@ -306,11 +314,10 @@ export const sortCommunityBuilds = (
 /**
  * The role a build's legacy `ship_role` column mirrors: the build's own role when it has
  * one, or — in Custom mode (`shipRole: null`) — the role its formula was seeded from.
- * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom`:
- * there is then no role that describes the build, so the caller must refuse to share it
- * rather than write a placeholder a legacy reader would treat as the author's real choice
- * (`normalizeShipRole` synthesizes a legacy build straight from this column, and
- * `SharedBuildFields`/`AutogearConfigList` render it as one).
+ * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom` — the
+ * legacy column is then written as `NULL` too (see `CommunityRecommendationService
+ * .createRecommendation`), which `normalizeShipRole` and every legacy-column reader treat as
+ * "no role" rather than synthesizing one.
  */
 export const mirroredShipRole = (
     build: Pick<AutogearBuildFields, 'shipRole' | 'customFormula'>
@@ -319,13 +326,12 @@ export const mirroredShipRole = (
 /**
  * Build the shareable payload from the page's per-ship config.
  *
- * Null when there is nothing scoreable to share (no role and no usable formula — the same
- * test `partitionScoreableShips` uses), or when a Custom-mode formula has no role to mirror
- * into the legacy `ship_role` column (see `mirroredShipRole`).
+ * Null when there is nothing scoreable to share: no role and no usable formula — the same
+ * test `partitionScoreableShips` uses. A role-less Custom formula (no `seededFrom` for
+ * `mirroredShipRole` to mirror) is still shared; the caller writes a null `ship_role`.
  */
 export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogearBuild | null => {
     if (!config.shipRole && !formulaHasUsableRow(config.customFormula)) return null;
-    if (!mirroredShipRole(config)) return null;
     return {
         version: 2,
         shipRole: config.shipRole,
@@ -336,12 +342,13 @@ export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogear
         excludedImplantTypes: config.excludedImplantTypes ?? [],
         optimizeImplants: config.optimizeImplants ?? false,
         ...(config.customFormula ? { customFormula: config.customFormula } : {}),
+        ...(config.roleBasis ? { roleBasis: config.roleBasis } : {}),
     };
 };
 
 /**
  * The exact update object for applying a community build to a ship's config.
- * Exactly these eight build-shaping fields — never the personal toggles
+ * Exactly these nine build-shaping fields — never the personal toggles
  * (algorithm, ignoreEquipped, ignoreUnleveled, useUpgradedStats,
  * tryToCompleteSets, includeCalibratedGear, assumeCalibrated, useArenaModifiers).
  * Those are absent from this object's keys, so a caller that spreads it over an
@@ -356,6 +363,7 @@ export interface CommunityBuildConfigUpdate {
     excludedImplantTypes: string[];
     optimizeImplants: boolean;
     customFormula: CustomFormula | undefined;
+    roleBasis: RoleBasis | undefined;
 }
 
 /**
@@ -365,9 +373,9 @@ export interface CommunityBuildConfigUpdate {
  * is filled with LEGACY_DEFAULT_SET_COUNT here — the one place the shared
  * build's optional `count` becomes the engine's required one.
  *
- * `customFormula` is always a key on the result, present or not, so spreading this object
- * over an existing config replaces a stale formula rather than leaving it behind under a
- * role that never reads it.
+ * `customFormula` and `roleBasis` are always keys on the result, present or not, so
+ * spreading this object over an existing config replaces a stale formula or equation rather
+ * than leaving it behind under a role or formula that never reads it.
  */
 export const communityBuildToConfigUpdate = (
     build: SharedAutogearBuild
@@ -383,6 +391,7 @@ export const communityBuildToConfigUpdate = (
     excludedImplantTypes: build.excludedImplantTypes,
     optimizeImplants: build.optimizeImplants,
     customFormula: build.customFormula,
+    roleBasis: build.roleBasis,
 });
 
 /**
@@ -390,7 +399,8 @@ export const communityBuildToConfigUpdate = (
  * purpose: outside Custom mode it always defaults to the ship's own type, so it
  * is never empty and would make every config look non-empty. A Custom-mode
  * formula has no such default, so it counts here — an empty formula (or none)
- * has nothing to overwrite.
+ * has nothing to overwrite. An applied `roleBasis` counts too: it has no default
+ * either, and applying a different build over it would silently discard it.
  */
 export const hasExistingBuildConfig = (config: AutogearBuildFields): boolean =>
     config.statPriorities.length > 0 ||
@@ -399,4 +409,5 @@ export const hasExistingBuildConfig = (config: AutogearBuildFields): boolean =>
     (config.fleetBuffs?.length ?? 0) > 0 ||
     (config.excludedImplantTypes?.length ?? 0) > 0 ||
     config.optimizeImplants === true ||
-    !isFormulaEmpty(config.customFormula);
+    !isFormulaEmpty(config.customFormula) ||
+    !!config.roleBasis;

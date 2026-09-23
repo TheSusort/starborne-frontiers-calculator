@@ -22,18 +22,24 @@ const createRecommendationMock = vi.fn();
 const voteOnRecommendationMock = vi.fn();
 const removeVoteMock = vi.fn();
 
-// Mirrors the real class from '../../services/communityRecommendations' so the
-// hook's `instanceof InvalidSharedConfigError` check has a real class to match
-// against, even though that module is otherwise fully mocked below. Declared
-// via vi.hoisted so it exists before vi.mock's hoisted factory runs.
-const { InvalidSharedConfigError } = vi.hoisted(() => {
+// Mirrors the real classes from '../../services/communityRecommendations' so the hook's
+// `instanceof` checks have real classes to match against, even though that module is
+// otherwise fully mocked below. Declared via vi.hoisted so they exist before vi.mock's
+// hoisted factory runs.
+const { InvalidSharedConfigError, ShipRoleColumnNotNullableError } = vi.hoisted(() => {
     class InvalidSharedConfigError extends Error {
         constructor() {
             super('Invalid shared autogear build');
             this.name = 'InvalidSharedConfigError';
         }
     }
-    return { InvalidSharedConfigError };
+    class ShipRoleColumnNotNullableError extends Error {
+        constructor() {
+            super('Sharing a build with no role requires a pending database migration');
+            this.name = 'ShipRoleColumnNotNullableError';
+        }
+    }
+    return { InvalidSharedConfigError, ShipRoleColumnNotNullableError };
 });
 
 vi.mock('../../services/communityRecommendations', () => ({
@@ -45,6 +51,7 @@ vi.mock('../../services/communityRecommendations', () => ({
         removeVote: (...args: unknown[]) => removeVoteMock(...args),
     },
     InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
 }));
 
 const makeShip = (id: string, name: string): Ship => ({ id, name }) as Ship;
@@ -222,6 +229,31 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         expect(result.current.error).toBe('This build could not be validated and was not shared.');
         expect(result.current.error).not.toContain('signed in');
     });
+
+    it('reports a migration-pending message when the DB still rejects a null ship_role', async () => {
+        const ship = makeShip('1', 'Ares');
+        listForShipMock.mockResolvedValueOnce([]); // initial mount fetch
+        createRecommendationMock.mockRejectedValueOnce(new ShipRoleColumnNotNullableError());
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+            })
+        );
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let shareResult: boolean | undefined;
+        await act(async () => {
+            shareResult = await result.current.handleShare('Title', 'Description', false);
+        });
+
+        expect(shareResult).toBe(false);
+        expect(result.current.error).toBe(
+            'Sharing a build with no role is not available yet — try again later.'
+        );
+    });
 });
 
 describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)', () => {
@@ -294,9 +326,22 @@ describe('useCommunityRecommendations — canShare gate', () => {
         expect(result.current.canShare).toBe(true);
     });
 
-    it('keeps the gate closed for a hand-written Custom formula with no seededFrom', () => {
+    it('opens the gate for a hand-written Custom formula with no seededFrom too', () => {
         const ship = makeShip('1', 'Ares');
         const build = configToSharedBuild(customConfig(usableFormula));
+        expect(build).not.toBeNull();
+        expect(build?.shipRole).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(true);
+    });
+
+    it('keeps the gate closed with neither a role nor a usable formula', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig({ rows: [] }));
         expect(build).toBeNull();
 
         const { result } = renderHook(() =>

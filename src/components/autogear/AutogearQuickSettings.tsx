@@ -10,6 +10,7 @@ import {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
@@ -47,6 +48,7 @@ interface AutogearQuickSettingsProps {
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
         customFormula?: CustomFormula;
+        roleBasis?: RoleBasis;
     };
     children?: React.ReactNode;
 }
@@ -195,8 +197,6 @@ export const AutogearQuickSettings: React.FC<AutogearQuickSettingsProps> = ({
                             <CommunityRecommendations
                                 selectedShip={ship}
                                 currentBuild={configToSharedBuild(getShipConfig(ship.id))}
-                                shipRole={getShipConfig(ship.id).shipRole}
-                                customFormula={getShipConfig(ship.id).customFormula}
                                 hasExistingConfig={hasExistingBuildConfig(getShipConfig(ship.id))}
                                 onApplyBuild={(build) => onApplyBuild(ship.id, build)}
                             />

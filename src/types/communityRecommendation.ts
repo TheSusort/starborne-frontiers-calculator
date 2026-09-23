@@ -1,5 +1,12 @@
 import type { ShipTypeName } from '../constants/shipTypes';
-import { StatPriority, SetPriority, StatBonus, FleetBuff, CustomFormula } from './autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+    RoleBasis,
+} from './autogear';
 
 export interface CommunityRecommendation {
     id: string;
@@ -9,7 +16,10 @@ export interface CommunityRecommendation {
     description?: string;
     is_implant_specific: boolean;
     ultimate_implant?: string;
-    ship_role: string;
+    /** Null for a Custom-mode build with no role to mirror (a from-scratch formula, i.e. no
+     *  seededFrom) — see `mirroredShipRole` in `src/utils/communityBuild.ts`. NULL only once
+     *  the migration making this column nullable has been applied. */
+    ship_role: string | null;
     stat_priorities: StatPriority[];
     stat_bonuses: StatBonus[];
     set_priorities: SetPriority[];
@@ -49,7 +59,9 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
  * has a non-null `shipRole` and no `customFormula` — that shape is unchanged and still
  * validates. `version: 2` adds Custom mode: `shipRole: null` plus a `customFormula` whose
  * core row carries a weighted `basis`, so the formula (not a stat limit) is what travels —
- * it generalises across the recipient's own inventory.
+ * it generalises across the recipient's own inventory. `version: 2` also carries an optional
+ * `roleBasis`, a transcription of the sharer's own kit that replaces a role's primary scoring
+ * quantity (see `RoleBasis` in `types/autogear.ts`).
  */
 export interface SharedAutogearBuild {
     version: 1 | 2;
@@ -62,6 +74,9 @@ export interface SharedAutogearBuild {
     optimizeImplants: boolean;
     /** Only ever present on a `version: 2` build, and only in Custom mode (`shipRole: null`). */
     customFormula?: CustomFormula;
+    /** Only ever present on a `version: 2` build. Applies only where the shared `shipRole`
+     *  hosts this basis's `produces` axis (`roleHostsBasis`, `offFormula/roleBasisHost.ts`). */
+    roleBasis?: RoleBasis;
 }
 
 export interface CreateCommunityRecommendationInput {

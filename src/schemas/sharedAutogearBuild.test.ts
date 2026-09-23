@@ -373,6 +373,33 @@ describe('validateSharedAutogearBuild', () => {
             ).length;
             expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
         });
+
+        // `roleBasis` is a new top-level field (#544 Task 5), additive to every shape above —
+        // this combines it with the already-maximal custom-formula build to measure its own
+        // worst-case contribution, even though a real build pairs roleBasis with a role, not
+        // a customFormula.
+        const maximalRoleBasisBuild = () => ({
+            ...maximalCustomFormulaBuild(),
+            roleBasis: {
+                produces: 'repair' as const,
+                terms: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                    stat: 'critDamage' as const, // longest real basis-eligible stat key
+                    weight: MAX_NUMBER,
+                })),
+            },
+        });
+
+        it('the maximal roleBasis payload is actually client-valid', () => {
+            expect(validateSharedAutogearBuild(maximalRoleBasisBuild())).not.toBeNull();
+        });
+
+        // Measured on postgres:16 — the payload below is 23,360 bytes of JSON, still well
+        // inside the bound. If this assertion ever fails, raise the DB bound; do not shave
+        // the margin.
+        it(`the maximal roleBasis payload stays under ${TEXT_BYTE_CEILING} bytes`, () => {
+            const bytes = new TextEncoder().encode(JSON.stringify(maximalRoleBasisBuild())).length;
+            expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
+        });
     });
 
     // Extreme-magnitude numbers are a payload amplifier, not just odd data:
@@ -670,6 +697,121 @@ describe('validateSharedAutogearBuild — version 2, custom formula builds', () 
                         },
                     ],
                 },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+    });
+
+    describe('roleBasis', () => {
+        const withRoleBasis = (roleBasis: unknown) =>
+            v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: undefined,
+                roleBasis: roleBasis as never,
+            });
+
+        it('round-trips a role build carrying a roleBasis', () => {
+            const build = withRoleBasis({
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: 1.5 }],
+            });
+            expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+        });
+
+        it('reads a version 1 row unaffected by roleBasis existing', () => {
+            const legacy = structuredClone({
+                version: 1 as const,
+                shipRole: 'ATTACKER' as const,
+                statPriorities: [],
+                setPriorities: [],
+                statBonuses: [],
+                fleetBuffs: [],
+                excludedImplantTypes: [],
+                optimizeImplants: false,
+            });
+            const result = validateSharedAutogearBuild(legacy);
+            expect(result).toMatchObject({ shipRole: 'ATTACKER' });
+            expect(result?.roleBasis).toBeUndefined();
+        });
+
+        it('rejects an unrecognised produces axis', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'poison', terms: [{ stat: 'attack', weight: 1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a basis term naming an unrecognised stat', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'nonsense', weight: 1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a basis term naming a derived stat (directDamage/effectiveHp)', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({
+                        produces: 'damage',
+                        terms: [{ stat: 'directDamage', weight: 1 }],
+                    })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a negative basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'attack', weight: -1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a non-finite basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({
+                        produces: 'damage',
+                        terms: [{ stat: 'attack', weight: Infinity }],
+                    })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects an empty terms array', () => {
+            expect(
+                validateSharedAutogearBuild(withRoleBasis({ produces: 'damage', terms: [] }))
+            ).toBeNull();
+        });
+
+        it('rejects a roleBasis whose only term weighs 0 — usableBasisTerms would drop it at score time', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'attack', weight: 0 }] })
+                )
+            ).toBeNull();
+        });
+
+        it(`accepts exactly ${MAX_BASIS_TERMS} roleBasis terms`, () => {
+            const build = withRoleBasis({
+                produces: 'repair',
+                terms: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                    stat: 'hp' as const,
+                    weight: 1,
+                })),
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_BASIS_TERMS + 1} roleBasis terms`, () => {
+            const build = withRoleBasis({
+                produces: 'repair',
+                terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                    stat: 'hp' as const,
+                    weight: 1,
+                })),
             });
             expect(validateSharedAutogearBuild(build)).toBeNull();
         });

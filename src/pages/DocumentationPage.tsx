@@ -1946,10 +1946,9 @@ const DocumentationPage: React.FC = () => {
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
                                         Configure your autogear settings (role, stat priorities,
-                                        gear sets, stat bonuses, fleet buffs, implant settings) — a
-                                        Custom-mode formula started from a role can be shared too;
-                                        one built entirely by hand, with no starting role,
-                                        can&apos;t
+                                        gear sets, stat bonuses, fleet buffs, implant settings, an
+                                        applied equation) — a Custom-mode formula can be shared too,
+                                        whether it was started from a role or built entirely by hand
                                     </li>
                                     <li>
                                         Click &quot;Share your build&quot; to open the share form —
@@ -1993,7 +1992,7 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         It replaces role, stat priorities, gear sets, stat bonuses,
-                                        fleet buffs and implant settings
+                                        fleet buffs, implant settings and an applied equation
                                     </li>
                                     <li>
                                         Your own preferences are never changed: algorithm, ignore

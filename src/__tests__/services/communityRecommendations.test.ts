@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import {
     CommunityRecommendationService,
     InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
 } from '../../services/communityRecommendations';
 import { supabase } from '../../config/supabase';
 import type {
@@ -119,9 +120,11 @@ describe('CommunityRecommendationService.createRecommendation', () => {
     });
 
     // A hand-written Custom formula with no seededFrom has no role to mirror. Writing a
-    // placeholder would display as a role the author never chose, so this refuses instead.
-    it('throws InvalidSharedConfigError for a Custom-mode build with no seededFrom to mirror', async () => {
-        const unmirrorable: SharedAutogearBuild = {
+    // placeholder would display as a role the author never chose, so this writes NULL
+    // instead of refusing — `ship_role` is nullable
+    // (20260923000001_nullable_community_recommendation_ship_role.sql).
+    it('writes a null ship_role for a from-scratch Custom-mode build with no seededFrom to mirror', async () => {
+        const fromScratch: SharedAutogearBuild = {
             version: 2,
             shipRole: null,
             statPriorities: [],
@@ -135,16 +138,76 @@ describe('CommunityRecommendationService.createRecommendation', () => {
             },
         };
 
-        const insert = vi.fn();
+        const single = vi.fn().mockResolvedValue({ data: { id: 'rec-1' }, error: null });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        const result = await CommunityRecommendationService.createRecommendation(
+            { ...baseInput, sharedConfig: fromScratch },
+            'profile-1'
+        );
+
+        expect(result).toEqual({ id: 'rec-1' });
+        const payload = insert.mock.calls[0][0];
+        expect(payload.ship_role).toBeNull();
+        expect(payload.shared_config.shipRole).toBeNull();
+    });
+
+    // Until the migration making `ship_role` nullable is applied, the database itself still
+    // rejects a NULL write with a not_null_violation — that failure must surface as a named
+    // error the UI can explain, not an opaque `null` return or a crash.
+    it('throws ShipRoleColumnNotNullableError when the DB still enforces NOT NULL on a null ship_role', async () => {
+        const fromScratch: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        };
+
+        const single = vi.fn().mockResolvedValue({
+            data: null,
+            error: {
+                code: '23502',
+                message: 'null value in column "ship_role" violates not-null constraint',
+            },
+        });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
         (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
 
         await expect(
             CommunityRecommendationService.createRecommendation(
-                { ...baseInput, sharedConfig: unmirrorable },
+                { ...baseInput, sharedConfig: fromScratch },
                 'profile-1'
             )
-        ).rejects.toThrow(InvalidSharedConfigError);
+        ).rejects.toThrow(ShipRoleColumnNotNullableError);
+    });
 
-        expect(insert).not.toHaveBeenCalled();
+    // A NOT NULL violation on a build that DOES have a role to mirror is not the
+    // pending-migration case — it must fall through to the generic null-return path rather
+    // than claiming a migration is the cause of an unrelated failure.
+    it('does not throw ShipRoleColumnNotNullableError for a build that has a role to mirror', async () => {
+        const single = vi.fn().mockResolvedValue({
+            data: null,
+            error: { code: '23502', message: 'some other not-null violation' },
+        });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        const result = await CommunityRecommendationService.createRecommendation(
+            baseInput,
+            'profile-1'
+        );
+
+        expect(result).toBeNull();
     });
 });

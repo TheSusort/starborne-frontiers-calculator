@@ -4,6 +4,7 @@ import { SharedAutogearBuild } from '../types/communityRecommendation';
 import {
     CommunityRecommendationService,
     InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
 } from '../services/communityRecommendations';
 import {
     toCommunityBuild,
@@ -18,9 +19,9 @@ interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
     /**
      * The user's current build for this ship, or null when `configToSharedBuild` refused it
-     * (nothing scoreable, or a Custom-mode formula with no role to mirror into the legacy
-     * `ship_role` column — see `mirroredShipRole`). Its non-nullness IS the shareability
-     * verdict: `canShare` below trusts it rather than re-deriving the same predicates.
+     * because there is nothing scoreable (no role and no usable custom formula). Its
+     * non-nullness IS the shareability verdict: `canShare` below trusts it rather than
+     * re-deriving the same predicate.
      */
     currentBuild: SharedAutogearBuild | null;
 }
@@ -209,6 +210,10 @@ export const useCommunityRecommendations = ({
                 console.error('Error sharing recommendation:', err);
                 if (err instanceof InvalidSharedConfigError) {
                     setError('This build could not be validated and was not shared.');
+                } else if (err instanceof ShipRoleColumnNotNullableError) {
+                    setError(
+                        'Sharing a build with no role is not available yet — try again later.'
+                    );
                 } else {
                     setError('Failed to share recommendation');
                 }

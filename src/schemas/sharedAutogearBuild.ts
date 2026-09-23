@@ -4,9 +4,13 @@ import { GEAR_SETS } from '../constants/gearSets';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import type { LimitableStat } from '../types/stats';
-import type { CustomFormula } from '../types/autogear';
+import type { BasisTerm, CustomFormula } from '../types/autogear';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
-import { isBasisStat, formulaHasUsableRow } from '../utils/autogear/customFormula';
+import {
+    isBasisStat,
+    formulaHasUsableRow,
+    usableBasisTerms,
+} from '../utils/autogear/customFormula';
 
 // `key in RECORD` is unsafe here: these are plain objects, so 'toString' and
 // friends would pass. Own-property only.
@@ -141,6 +145,22 @@ const basisTermSchema = z.object({
     }),
 });
 
+// The axis a `roleBasis` measures — mirrors `RoleBasis['produces']` in types/autogear.ts.
+const basisProducesSchema = z.enum(['damage', 'repair', 'shield']);
+
+// Reuses `usableBasisTerms`, the scorer's own gate (`priorityScore.ts` calls it on
+// `roleBasis.terms` at score time), so a `roleBasis` this schema admits can never be one the
+// scorer would silently treat as absent (an empty array, or every term weighing 0 — every
+// individual term's stat/weight is already checked by `basisTermSchema` above).
+const roleBasisSchema = z
+    .object({
+        produces: basisProducesSchema,
+        terms: z.array(basisTermSchema).max(MAX_BASIS_TERMS),
+    })
+    .refine((data) => usableBasisTerms(data.terms as BasisTerm[]) !== undefined, {
+        message: 'Role basis has no usable term',
+    });
+
 const coreImportanceSchema = z.union([z.literal(0.5), z.literal(1), z.literal(2)]);
 
 // A basis on a row that isn't `kind: 'core'`/`direction: 'max'` is inert (the scorer's
@@ -214,6 +234,7 @@ const sharedAutogearBuildV2Schema = z.object({
     shipRole: shipRoleSchema.nullable(),
     ...buildListFields,
     customFormula: customFormulaSchema.optional(),
+    roleBasis: roleBasisSchema.optional(),
 });
 
 const versionedSharedAutogearBuildSchema = z.discriminatedUnion('version', [

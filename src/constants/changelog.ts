@@ -13,7 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: shows when an equation is applied, with an undo control.',
     'Autogear: an applied equation can now be edited and restored.',
     'Autogear: custom formula rows can now weight a stat by other stats.',
-    'Autogear: custom-mode builds can now be shared to the community.',
+    'Autogear: even a Custom formula built from scratch can now be shared.',
     'Ship Details: no longer crashes opening a geared ship with a sub-role.',
 ];
 

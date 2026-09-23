@@ -8,6 +8,7 @@ import {
     communityBuildToConfigUpdate,
 } from '../communityBuild';
 import { validateSharedAutogearBuild } from '../../schemas/sharedAutogearBuild';
+import { defaultAutogearShipConfig } from '../autogear/runShipOptimizer';
 import type {
     CommunityRecommendation,
     SharedAutogearBuild,
@@ -52,6 +53,18 @@ describe('toCommunityBuild', () => {
         expect(build?.build.excludedImplantTypes).toEqual(['MARTYRDOM']);
     });
 
+    it('reads a role-less Custom build with a null ship_role via shared_config', () => {
+        const roleLessBuild: SharedAutogearBuild = {
+            ...sharedConfig,
+            version: 2,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        };
+        const build = toCommunityBuild(makeRow({ shared_config: roleLessBuild, ship_role: null }));
+        expect(build?.isLegacy).toBe(false);
+        expect(build?.build.shipRole).toBeNull();
+    });
+
     it('synthesises from the legacy columns when shared_config is absent', () => {
         const build = toCommunityBuild(makeRow());
         expect(build?.isLegacy).toBe(true);
@@ -74,6 +87,13 @@ describe('toCommunityBuild', () => {
 
     it('drops a row whose legacy columns are unusable too', () => {
         expect(toCommunityBuild(makeRow({ shared_config: null, ship_role: 'WIZARD' }))).toBeNull();
+    });
+
+    it('drops a row with a null ship_role and no usable shared_config, without crashing', () => {
+        expect(() =>
+            toCommunityBuild(makeRow({ shared_config: null, ship_role: null }))
+        ).not.toThrow();
+        expect(toCommunityBuild(makeRow({ shared_config: null, ship_role: null }))).toBeNull();
     });
 
     it('carries the row metadata onto the read model', () => {
@@ -202,13 +222,18 @@ describe('configToSharedBuild', () => {
         });
     });
 
-    it('refuses a Custom-mode build with a usable formula but no seededFrom — nothing to mirror', () => {
+    it('shares a from-scratch Custom-mode build with a usable formula but no seededFrom, writing a null role', () => {
         const build = configToSharedBuild({
             ...config,
             shipRole: null,
             customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
         });
-        expect(build).toBeNull();
+        expect(build).toEqual({
+            version: 2,
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        });
     });
 
     it('refuses a Custom-mode build whose formula has no usable row, even with seededFrom', () => {
@@ -244,6 +269,28 @@ describe('configToSharedBuild', () => {
         const update = communityBuildToConfigUpdate(validated as SharedAutogearBuild);
         expect(update.shipRole).toBeNull();
         expect(update.customFormula).toEqual(customFormula);
+    });
+
+    it('round-trips a role build carrying a roleBasis through share and apply', () => {
+        // Built from the real live shape (`defaultAutogearShipConfig`), not a hand-written
+        // literal, so this proves roleBasis flows through the actual config type end to end
+        // rather than through a type the config never has.
+        const roleBasis = {
+            produces: 'damage' as const,
+            terms: [{ stat: 'attack' as const, weight: 1.5 }],
+        };
+        const shipConfig = { ...defaultAutogearShipConfig('ATTACKER'), roleBasis };
+
+        const shared = configToSharedBuild(shipConfig);
+        expect(shared).not.toBeNull();
+        expect(shared?.roleBasis).toEqual(roleBasis);
+
+        const validated = validateSharedAutogearBuild(JSON.parse(JSON.stringify(shared)));
+        expect(validated).not.toBeNull();
+        expect(validated?.roleBasis).toEqual(roleBasis);
+
+        const update = communityBuildToConfigUpdate(validated as SharedAutogearBuild);
+        expect(update.roleBasis).toEqual(roleBasis);
     });
 
     it('defaults the optional arrays', () => {
@@ -301,6 +348,15 @@ describe('hasExistingBuildConfig', () => {
         expect(hasExistingBuildConfig({ ...empty, optimizeImplants: true })).toBe(true);
     });
 
+    it('is true when a role config carries an applied roleBasis', () => {
+        expect(
+            hasExistingBuildConfig({
+                ...empty,
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1.5 }] },
+            })
+        ).toBe(true);
+    });
+
     it('is true when a Custom-mode config carries a non-empty formula', () => {
         expect(
             hasExistingBuildConfig({
@@ -323,12 +379,12 @@ describe('hasExistingBuildConfig', () => {
 
 describe('communityBuildToConfigUpdate', () => {
     // Pins the feature's single most important guarantee: applying a community
-    // build writes exactly these eight build-shaping fields and never the
+    // build writes exactly these nine build-shaping fields and never the
     // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
     // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
-    // assumeCalibrated, useArenaModifiers). Adding a ninth key here — of
+    // assumeCalibrated, useArenaModifiers). Adding a tenth key here — of
     // either kind — must fail this test, not ship silently.
-    it('produces an update object with exactly the eight build-shaping keys', () => {
+    it('produces an update object with exactly the nine build-shaping keys', () => {
         const update = communityBuildToConfigUpdate(sharedConfig);
         expect(Object.keys(update).sort()).toEqual(
             [
@@ -340,11 +396,12 @@ describe('communityBuildToConfigUpdate', () => {
                 'excludedImplantTypes',
                 'optimizeImplants',
                 'customFormula',
+                'roleBasis',
             ].sort()
         );
     });
 
-    it('carries every field through unchanged, including an absent customFormula', () => {
+    it('carries every field through unchanged, including an absent customFormula/roleBasis', () => {
         expect(communityBuildToConfigUpdate(sharedConfig)).toEqual({
             shipRole: sharedConfig.shipRole,
             statPriorities: sharedConfig.statPriorities,
@@ -354,6 +411,7 @@ describe('communityBuildToConfigUpdate', () => {
             excludedImplantTypes: sharedConfig.excludedImplantTypes,
             optimizeImplants: sharedConfig.optimizeImplants,
             customFormula: undefined,
+            roleBasis: undefined,
         });
     });
 

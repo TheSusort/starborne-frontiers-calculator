@@ -18,6 +18,21 @@ export class InvalidSharedConfigError extends Error {
     }
 }
 
+/**
+ * Thrown by createRecommendation when the insert fails on a NOT NULL violation for
+ * `ship_role` (Postgres code 23502) while writing a role-less build. `community_recommendations
+ * .ship_role` is nullable from 20260923000001_nullable_community_recommendation_ship_role.sql
+ * onward; this error means that migration has not been applied to the database this client is
+ * talking to yet, so the write path's own null write is rejected at the DB rather than
+ * silently dropped or crashing.
+ */
+export class ShipRoleColumnNotNullableError extends Error {
+    constructor() {
+        super('Sharing a build with no role requires a pending database migration');
+        this.name = 'ShipRoleColumnNotNullableError';
+    }
+}
+
 export class CommunityRecommendationService {
     /**
      * Every community recommendation for a ship, best-scored first.
@@ -58,15 +73,10 @@ export class CommunityRecommendationService {
             throw new InvalidSharedConfigError();
         }
 
-        // `ship_role` is `NOT NULL` in the database, but a Custom-mode build's `shipRole` is
-        // null. Mirror the role its formula was seeded from instead — the only case with
-        // neither is a hand-written formula, which `mirroredShipRole` reports as null and
-        // this refuses rather than write a role the author never chose.
+        // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
+        // formula was seeded from. A hand-written formula with no `seededFrom` has neither,
+        // so this is null: a legitimate value for the nullable `ship_role` column.
         const legacyShipRole = mirroredShipRole(sharedConfig);
-        if (!legacyShipRole) {
-            console.error('Refusing to share a build with no role to record');
-            throw new InvalidSharedConfigError();
-        }
 
         const { data, error } = await supabase
             .from('community_recommendations')
@@ -94,6 +104,12 @@ export class CommunityRecommendationService {
 
         if (error) {
             console.error('Error creating recommendation:', error);
+            // 23502 is Postgres' not_null_violation. legacyShipRole is only ever null when
+            // this insert deliberately wrote NULL, so that combination identifies the
+            // pending-migration case rather than a generic insert failure.
+            if (legacyShipRole === null && error.code === '23502') {
+                throw new ShipRoleColumnNotNullableError();
+            }
             return null;
         }
 
