@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
-import { deriveBasis } from '../../../utils/autogear/simRerank/basisDerivation';
-import { roleAxis, roleHostsBasis } from '../../../utils/autogear/simRerank/roleBasisHost';
+import { deriveBasis } from '../../../utils/autogear/offFormula/basisDerivation';
+import { roleAxis, roleHostsBasis } from '../../../utils/autogear/offFormula/roleBasisHost';
 import { SHIP_TYPES } from '../../../constants/shipTypes';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
@@ -15,13 +15,13 @@ vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 // `basisDerivation.ts` (real, unmocked) imports `normalise` from this module, so only
 // `detectOffFormulaStats` is overridden — same pattern `OffFormulaTuningPanel.test.tsx` uses,
 // rather than a hand-copied `normalise` that can drift from the real one.
-vi.mock('../../../utils/autogear/simRerank/offFormulaStats', async () => {
+vi.mock('../../../utils/autogear/offFormula/offFormulaStats', async () => {
     const actual = await vi.importActual<
-        typeof import('../../../utils/autogear/simRerank/offFormulaStats')
-    >('../../../utils/autogear/simRerank/offFormulaStats');
+        typeof import('../../../utils/autogear/offFormula/offFormulaStats')
+    >('../../../utils/autogear/offFormula/offFormulaStats');
     return { ...actual, detectOffFormulaStats: vi.fn() };
 });
-import { detectOffFormulaStats } from '../../../utils/autogear/simRerank/offFormulaStats';
+import { detectOffFormulaStats } from '../../../utils/autogear/offFormula/offFormulaStats';
 
 const ship = { id: 's', name: 'Chakara', type: 'ATTACKER' } as unknown as Ship;
 const mocked = vi.mocked(detectOffFormulaStats);
@@ -202,8 +202,8 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
 
         beforeAll(async () => {
             const actual = await vi.importActual<
-                typeof import('../../../utils/autogear/simRerank/offFormulaStats')
-            >('../../../utils/autogear/simRerank/offFormulaStats');
+                typeof import('../../../utils/autogear/offFormula/offFormulaStats')
+            >('../../../utils/autogear/offFormula/offFormulaStats');
             realDetect = actual.detectOffFormulaStats;
         });
 

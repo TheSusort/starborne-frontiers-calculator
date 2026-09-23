@@ -3,7 +3,7 @@ import { calculateRoleScore, calculatePriorityScore } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
 import { RoleBasis } from '../../../types/autogear';
 import { SHIP_TYPES, ShipTypeName } from '../../../constants';
-import { roleAxis, rolePrimaryStat } from '../simRerank/roleBasisHost';
+import { roleAxis, rolePrimaryStat } from '../offFormula/roleBasisHost';
 
 // Fixtures captured at aa42f528 by calling the REAL calculateRoleScore, before any basis code
 // existed (.superpowers/sdd/task-1-fixtures.md). Pinned literally — do not round, do not

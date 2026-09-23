@@ -5,7 +5,7 @@ import { GEAR_SLOT_ORDER, SHIP_TYPES, type GearSlotName } from '../../../../cons
 import { calculateTotalScore } from '../../scoring';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
-import { roleAxis } from '../../simRerank/roleBasisHost';
+import { roleAxis } from '../../offFormula/roleBasisHost';
 import {
     generateTestInventory,
     makeTestShip,

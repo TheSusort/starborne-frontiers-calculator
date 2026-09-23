@@ -18,7 +18,7 @@ import {
     MULTIPLIER_NORMALIZERS,
 } from './statResolution';
 import { customFormulaScore, usableBasisTerms } from './customFormula';
-import { roleHostsBasis } from './simRerank/roleBasisHost';
+import { roleHostsBasis } from './offFormula/roleBasisHost';
 
 export {
     calculateDamageReduction,

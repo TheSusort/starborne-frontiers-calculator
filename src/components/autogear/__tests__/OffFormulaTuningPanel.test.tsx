@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import { OffFormulaTuningPanel } from '../OffFormulaTuningPanel';
 import type { Ship } from '../../../types/ship';
 import type { ShipTypeName } from '../../../constants/shipTypes';
-import type { TunableOffFormulaFinding } from '../../../utils/autogear/simRerank/offFormulaStats';
+import type { TunableOffFormulaFinding } from '../../../utils/autogear/offFormula/offFormulaStats';
 
 // The `ui` barrel transitively pulls ui/layout/Sidebar, which imports '/favicon.ico?url' —
 // unresolvable under Vitest. Same workaround as the other component tests in this project.

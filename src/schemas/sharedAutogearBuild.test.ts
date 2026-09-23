@@ -11,7 +11,7 @@ import {
     deriveBasis,
     triggerProse,
     type ExcludedCarrier,
-} from '../utils/autogear/simRerank/basisDerivation';
+} from '../utils/autogear/offFormula/basisDerivation';
 import { csvAvailable, loadShipSkillRecords } from '../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../scripts/lib/shipDataSnapshot';
 import { validateSharedAutogearBuild } from './sharedAutogearBuild';

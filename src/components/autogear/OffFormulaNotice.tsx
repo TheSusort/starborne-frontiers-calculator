@@ -6,15 +6,15 @@ import {
     detectOffFormulaStats,
     type OffFormulaFinding,
     type OffFormulaStat,
-} from '../../utils/autogear/simRerank/offFormulaStats';
+} from '../../utils/autogear/offFormula/offFormulaStats';
 import {
     deriveBasis,
     triggerProse,
     KNOWN_CADENCE_TRIGGERS,
     type DerivedBasis,
     type ExcludedCarrier,
-} from '../../utils/autogear/simRerank/basisDerivation';
-import { roleAxis, rolePrimaryStat } from '../../utils/autogear/simRerank/roleBasisHost';
+} from '../../utils/autogear/offFormula/basisDerivation';
+import { roleAxis, rolePrimaryStat } from '../../utils/autogear/offFormula/roleBasisHost';
 import type { RoleBasis } from '../../types/autogear';
 
 /** What Apply writes back to the ship's config: the derived basis, attached to whichever axis

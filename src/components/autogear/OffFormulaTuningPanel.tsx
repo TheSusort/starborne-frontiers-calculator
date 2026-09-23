@@ -9,7 +9,7 @@ import type { CombatStatsDeps } from '../../utils/ship/combatStats';
 import {
     gatingStatFor,
     type TunableOffFormulaFinding,
-} from '../../utils/autogear/simRerank/offFormulaStats';
+} from '../../utils/autogear/offFormula/offFormulaStats';
 import type { StatBounds } from '../../utils/autogear/simRerank/statBounds';
 import { randomSeed } from '../simulator/SeedRunControls';
 import { clampRunCount, clampSeed } from '../../utils/simulator/seedRunInputs';
