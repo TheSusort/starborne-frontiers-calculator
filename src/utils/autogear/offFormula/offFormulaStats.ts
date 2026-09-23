@@ -16,23 +16,17 @@ export interface OffFormulaFinding {
     /** Classified on `tunableStat` where there is one, because the lever is the gearing
      *  decision the player would act on. */
     severity: OffFormulaSeverity;
-    /** The ability trigger the effect rides. `gatingStatFor` turns this into the stat an
-     *  opponent must vary for the measurement to mean anything. */
+    /** The ability trigger the effect rides (rendered by `triggerProse`). */
     trigger: string;
-    /** The gearable stat a tuning run bands to move this effect: `stat` itself when gear rolls
-     *  it, otherwise the stat that PRODUCES `stat`. Absent when no gearable stat drives the
-     *  effect at all — the finding still reports what the kit does, but there is nothing to
-     *  measure and no lever to offer. */
+    /** The gearable stat that moves this effect: `stat` itself when gear rolls it, otherwise the
+     *  stat that PRODUCES `stat`. Absent when no gearable stat drives the effect. The notice then
+     *  reports the kit fact with no lever. */
     tunableStat?: OffFormulaStat;
     /** For a chained finding, the producing clause's percentage — the second factor of the
      *  coefficient product. FrontLine's damage is 75% of his shield and his shield is 25% of max
      *  HP, so the lever weight is 0.75 x 0.25. Absent when `stat` is its own lever. */
     leverPct?: number;
 }
-
-/** An {@link OffFormulaFinding} a tuning run can actually act on. The panel takes this, so a
- *  finding with no gearable lever cannot be measured by construction. */
-export type TunableOffFormulaFinding = OffFormulaFinding & { tunableStat: OffFormulaStat };
 
 /** The stats gear can move, read off the two tables that decide it: each slot's main-stat pool
  *  and the substat roll table. Taken as a union rather than assumed equal — widening either
@@ -56,7 +50,7 @@ type CarrierFinding = Omit<OffFormulaFinding, 'severity' | 'leverPct'> & { pct: 
 type ResolvedFinding = Omit<OffFormulaFinding, 'severity'>;
 
 /**
- * Point every finding at the gearable stat a tuning run can band.
+ * Point every finding at the gearable stat that moves it.
  *
  * A finding on a stat gear rolls is its own lever. A finding on a stat gear cannot roll is
  * actionable only when another finding PRODUCES that stat from a gearable one: the two collapse
@@ -120,17 +114,6 @@ const AGGREGATE_COMPONENTS: Record<string, readonly string[]> = {
  *  `basisDerivation.ts` shares one idiom rather than re-deriving it. */
 export const normalise = (stat: string): OffFormulaStat =>
     (stat === 'defense' ? 'defence' : stat) as OffFormulaStat;
-
-export function gatingStatFor(trigger: string): 'hacking' | 'security' | 'defence' {
-    // This unit RESISTING is gated by its own security against the enemy's hacking.
-    if (trigger === 'on-debuff-resisted') return 'hacking';
-    // An enemy resisting is gated by the enemy's security against this unit's hacking.
-    if (trigger === 'on-own-debuff-resisted' || trigger === 'on-enemy-debuff-resisted') {
-        return 'security';
-    }
-    // Ungated: no threshold to move, so an opponent can only vary mitigation.
-    return 'defence';
-}
 
 export function detectOffFormulaStats(
     ship: Ship,

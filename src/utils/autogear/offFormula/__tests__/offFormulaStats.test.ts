@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { describe, it, expect } from 'vitest';
-import { detectOffFormulaStats, gatingStatFor } from '../offFormulaStats';
+import { detectOffFormulaStats } from '../offFormulaStats';
 import { GEAR_SLOTS } from '../../../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../../../constants/statValues';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
@@ -248,14 +248,3 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         });
     }
 );
-
-describe('gatingStatFor', () => {
-    it.each([
-        ['on-debuff-resisted', 'hacking'],
-        ['on-own-debuff-resisted', 'security'],
-        ['on-enemy-debuff-resisted', 'security'],
-        ['on-cast', 'defence'],
-    ])('%s gates on the enemy varying %s', (trigger, expected) => {
-        expect(gatingStatFor(trigger)).toBe(expected);
-    });
-});

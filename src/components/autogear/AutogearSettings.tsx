@@ -33,7 +33,6 @@ import { SetPriorityRow } from './SetPriorityRow';
 import { StatBonusRow } from './StatBonusRow';
 import { FleetBuffForm } from './FleetBuffForm';
 import { FleetBuffRow } from './FleetBuffRow';
-import { SimRerankSection, type SimRerankSectionProps } from './SimRerankSection';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from './OffFormulaNotice';
 
 type TweakView =
@@ -119,13 +118,8 @@ interface AutogearSettingsProps {
     onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
     onRemoveFormulaRow: (index: number) => void;
     onSeedFormula: (role: ShipTypeName) => void;
-    /** Wires the "Simulate candidates" section. Optional and omitting `ship` (supplied from
-     *  `selectedShip` here) because the section needs data — inventory, saved setups, the
-     *  autogear runner — that this component does not own; a caller not ready to supply it
-     *  simply does not render the section. */
-    simRerank?: Omit<SimRerankSectionProps, 'ship'>;
-    /** Wires the Apply control on `OffFormulaNotice`. Optional for the same reason as
-     *  `simRerank`: a caller not ready to persist the write simply omits it. */
+    /** Optional: a caller not ready to persist the write simply omits it, and the Apply control
+     *  does not render. */
     onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
     /** The ship's currently-stored `roleBasis`, read back so `OffFormulaNotice` can show whether
      *  an equation is already in use. */
@@ -319,7 +313,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onUpdateFormulaRow,
     onRemoveFormulaRow,
     onSeedFormula,
-    simRerank,
     onApplyOffFormula,
     appliedRoleBasis,
     onClearOffFormula,
@@ -443,7 +436,6 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     onClear={onClearOffFormula}
                 />
             )}
-            {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}
 
             {(selectedShipRole || isCustom) && (
                 <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>

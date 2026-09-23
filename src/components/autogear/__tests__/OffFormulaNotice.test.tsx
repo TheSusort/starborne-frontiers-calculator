@@ -13,8 +13,8 @@ import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 // unresolvable under Vitest. Same workaround as the other component tests in this project.
 vi.mock('../../ui/layout/Sidebar', () => ({ Sidebar: () => null }));
 // `basisDerivation.ts` (real, unmocked) imports `normalise` from this module, so only
-// `detectOffFormulaStats` is overridden — same pattern `OffFormulaTuningPanel.test.tsx` uses,
-// rather than a hand-copied `normalise` that can drift from the real one.
+// `detectOffFormulaStats` is overridden, rather than a hand-copied `normalise` that can drift
+// from the real one.
 vi.mock('../../../utils/autogear/offFormula/offFormulaStats', async () => {
     const actual = await vi.importActual<
         typeof import('../../../utils/autogear/offFormula/offFormulaStats')

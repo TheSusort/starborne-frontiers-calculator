@@ -315,30 +315,6 @@ describe('runSeedSetAsync', () => {
     it('rejects on an invalid count, matching the synchronous validation', async () => {
         await expect(runSeedSetAsync(input(), 500, 0)).rejects.toThrow(/count/i);
     });
-
-    it("calls onResult once per completed seed with that seed's own BattleResult and seed number", async () => {
-        const seen: Array<{ seed: number; rounds: number }> = [];
-        await runSeedSetAsync(input(), 500, 3, {
-            onResult: (result, seed) => seen.push({ seed, rounds: result.rounds.length }),
-        });
-        expect(seen.map((s) => s.seed)).toEqual([500, 501, 502]);
-        // Non-vacuity: a real BattleResult was handed over, not a stub.
-        expect(seen.every((s) => s.rounds > 0)).toBe(true);
-    });
-
-    it('never calls onResult after the signal aborts', async () => {
-        const controller = new AbortController();
-        const onResult = vi.fn();
-        const result = await runSeedSetAsync(input(), 500, 20, {
-            signal: controller.signal,
-            onResult,
-            onProgress: (completed) => {
-                if (completed === 3) controller.abort();
-            },
-        });
-        expect(result).toBeNull();
-        expect(onResult).toHaveBeenCalledTimes(3);
-    });
 });
 
 describe('median', () => {

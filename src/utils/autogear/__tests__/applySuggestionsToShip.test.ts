@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { applySuggestionsToShip } from '../candidateShip';
-import type { Ship } from '../../../../types/ship';
-import type { GearSuggestion } from '../../../../types/autogear';
+import { applySuggestionsToShip } from '../applySuggestionsToShip';
+import type { Ship } from '../../../types/ship';
+import type { GearSuggestion } from '../../../types/autogear';
 
 const ship = (): Ship =>
     ({

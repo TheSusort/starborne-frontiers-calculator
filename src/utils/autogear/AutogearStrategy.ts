@@ -26,9 +26,6 @@ export interface AutogearResult {
     violations?: HardRequirementViolation[];
     /** 1..5 — how many GA passes were run. 1 for strategies without reruns. */
     attempts: number;
-    /** Distinct runner-up loadouts, best-first, excluding `suggestions`. Absent means the
-     *  strategy exposes no ranked pool — only Genetic keeps one. */
-    candidates?: GearSuggestion[][];
 }
 
 export interface AutogearProgress {

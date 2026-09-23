@@ -8,7 +8,6 @@ import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
 import { BaseStats } from '../../types/stats';
 import { AutogearSettings } from './AutogearSettings';
-import type { SimRerankSectionProps } from './SimRerankSection';
 import type { OffFormulaApplyUpdate } from './OffFormulaNotice';
 
 interface AutogearSettingsModalProps {
@@ -67,10 +66,7 @@ interface AutogearSettingsModalProps {
     onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
     onRemoveFormulaRow: (index: number) => void;
     onSeedFormula: (role: ShipTypeName) => void;
-    /** Wires the "Simulate candidates" section. Optional for the same reason as on
-     *  `AutogearSettings` — a caller not ready to supply its inputs simply omits it. */
-    simRerank?: Omit<SimRerankSectionProps, 'ship'>;
-    /** Wires the Apply control on `OffFormulaNotice`, for the same reason as `simRerank`. */
+    /** Wires the Apply control on `OffFormulaNotice`; optional, as on `AutogearSettings`. */
     onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
     /** The ship's currently-stored `roleBasis`, for `OffFormulaNotice`'s applied state. */
     appliedRoleBasis?: RoleBasis;

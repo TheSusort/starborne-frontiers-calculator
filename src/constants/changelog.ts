@@ -7,14 +7,12 @@ export const CURRENT_VERSION = '1.68.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: compare candidate gear builds through the combat simulator.',
     'Autogear: flags ships that score off a stat their role ignores.',
     'Autogear: flagged ships show their real equation where their role can use it.',
     "Autogear: apply a ship's derived equation to its role in one click.",
     'Autogear: shows when an equation is applied, with an undo control.',
     'Autogear: custom formula rows can now weight a stat by other stats.',
     'Autogear: custom-mode builds can now be shared to the community.',
-    'Autogear: candidate results now clear when you change role, seed or gear.',
     'Ship Details: no longer crashes opening a geared ship with a sub-role.',
 ];
 
