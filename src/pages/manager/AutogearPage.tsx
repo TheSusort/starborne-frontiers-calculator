@@ -1697,6 +1697,7 @@ export const AutogearPage: React.FC = () => {
                             } else {
                                 updateShipConfig(shipSettings.id, {
                                     shipRole: 'ATTACKER',
+                                    roleBasis: undefined,
                                     statPriorities: [],
                                     setPriorities: [],
                                     statBonuses: [],
