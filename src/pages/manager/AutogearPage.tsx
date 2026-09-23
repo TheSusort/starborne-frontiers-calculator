@@ -370,6 +370,13 @@ export const AutogearPage: React.FC = () => {
         updateShipConfig(shipSettings.id, update);
     };
 
+    /** Stops scoring the open ship with a previously-applied `roleBasis` — the equation-line
+     *  counterpart of `handleApplyOffFormula`. */
+    const handleClearOffFormula = () => {
+        if (!shipSettings) return;
+        updateShipConfig(shipSettings.id, { roleBasis: undefined });
+    };
+
     const availableImplantTypes = useMemo(() => {
         const seen = new Set<string>();
         const result: { key: string; name: string; label: string }[] = [];
@@ -1796,6 +1803,10 @@ export const AutogearPage: React.FC = () => {
                         onApply: handleApplySimRerankRow,
                     }}
                     onApplyOffFormula={handleApplyOffFormula}
+                    appliedRoleBasis={
+                        shipSettings ? getShipConfig(shipSettings.id).roleBasis : undefined
+                    }
+                    onClearOffFormula={handleClearOffFormula}
                 />
 
                 <MilestoneModal

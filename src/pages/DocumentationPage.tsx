@@ -1579,7 +1579,11 @@ const DocumentationPage: React.FC = () => {
                                         <strong>Use this equation</strong> to substitute those
                                         numbers into that same quantity in the role&apos;s own
                                         formula — the ship keeps its configured role and every other
-                                        setting; only what feeds that one quantity changes.
+                                        setting; only what feeds that one quantity changes. Once
+                                        applied, the notice says so and offers{' '}
+                                        <strong>Stop using this equation</strong> to go back to the
+                                        role&apos;s own numbers; nothing re-scores until the next{' '}
+                                        <strong>Find optimal gear</strong> run.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         A role without a single quantity to replace this way — a

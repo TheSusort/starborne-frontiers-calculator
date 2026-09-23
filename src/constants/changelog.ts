@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: flags ships that score off a stat their role ignores.',
     'Autogear: flagged ships show their real equation where their role can use it.',
     "Autogear: apply a ship's derived equation to its role in one click.",
+    'Autogear: shows when an equation is applied, with an undo control.',
     'Autogear: custom formula rows can now weight a stat by other stats.',
     'Autogear: custom-mode builds can now be shared to the community.',
     'Autogear: candidate results now clear when you change role, seed or gear.',

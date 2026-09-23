@@ -16,7 +16,7 @@ import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
-import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
 import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
@@ -127,6 +127,12 @@ interface AutogearSettingsProps {
     /** Wires the Apply control on `OffFormulaNotice`. Optional for the same reason as
      *  `simRerank`: a caller not ready to persist the write simply omits it. */
     onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
+    /** The ship's currently-stored `roleBasis`, read back so `OffFormulaNotice` can show whether
+     *  an equation is already in use. */
+    appliedRoleBasis?: RoleBasis;
+    /** Wires the "Stop using this equation" control on `OffFormulaNotice`. Optional for the same
+     *  reason as `onApplyOffFormula`. */
+    onClearOffFormula?: () => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -315,6 +321,8 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onSeedFormula,
     simRerank,
     onApplyOffFormula,
+    appliedRoleBasis,
+    onClearOffFormula,
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -430,7 +438,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                 <OffFormulaNotice
                     ship={selectedShip}
                     configuredRole={selectedShipRole}
+                    appliedRoleBasis={appliedRoleBasis}
                     onApply={onApplyOffFormula}
+                    onClear={onClearOffFormula}
                 />
             )}
             {selectedShip && simRerank && <SimRerankSection ship={selectedShip} {...simRerank} />}

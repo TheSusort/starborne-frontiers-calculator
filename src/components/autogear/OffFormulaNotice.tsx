@@ -31,10 +31,18 @@ export interface OffFormulaNoticeProps {
     /** The CONFIGURED autogear role, which can differ from `ship.type`. Null means Custom mode,
      *  where the detector returns nothing. */
     configuredRole: ShipTypeName | null;
+    /** The ship's currently-stored `roleBasis` (`AutogearShipConfig.roleBasis`), read back so the
+     *  notice can render whether an equation is already in use — the write survives past the
+     *  click (it lives in the page's own config state, not this component), but nothing painted
+     *  that fact until this prop existed (#544). Undefined means no equation has been applied. */
+    appliedRoleBasis?: RoleBasis;
     /** Writes the derived basis into the ship's config. Optional so a caller that has not
      *  wired persistence (or a test only asserting the notice's copy) can omit it — the button
      *  it drives simply does not render. */
     onApply?: (update: OffFormulaApplyUpdate) => void;
+    /** Clears `appliedRoleBasis` (writes `roleBasis: undefined`). Optional for the same reason as
+     *  `onApply` — the "Stop using this equation" control simply does not render without it. */
+    onClear?: () => void;
 }
 
 /** Two sentence shapes an `OffFormulaFinding.produces` needs: `scales` for the aggregate finding
@@ -122,7 +130,9 @@ const equationLine = (
 export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     ship,
     configuredRole,
+    appliedRoleBasis,
     onApply,
+    onClear,
 }) => {
     // `buildShipAbilities(ship)` (inside both `detectOffFormulaStats` and `deriveBasis`) is a
     // regex-driven skill-text parser, and `OffFormulaNotice` sits beside sibling `useState`s in
@@ -146,14 +156,6 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         return map;
     }, [ship, findings]);
 
-    if (findings.length === 0 || !configuredRole) return null;
-
-    const roleLabel = SHIP_TYPES[configuredRole]?.name;
-    // `excludedCarriers` doesn't vary with `produces` (see the comment on `basisByProduces`), so
-    // reading it off the first finding is safe here — unlike `hostedBasis` below, which must
-    // read the axis the ROLE hosts, never merely the first finding's.
-    const excluded = basisByProduces.get(findings[0].produces)?.excluded ?? [];
-
     // The axis a derived basis can replace in `configuredRole`'s own formula (`roleAxis`,
     // `roleBasisHost.ts`) — null for a role with no single scalable quantity to replace
     // (DEFENDER-family and four others; see `roleBasisHost.ts`'s doc for the full list and why).
@@ -161,7 +163,25 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     // equation the role's formula can never use invites gearing for a stat that formula does not
     // want (owner ruling, #544 — Panon is gearing for Defence because he tanks, not because his
     // kit happens to deal damage too).
-    const hostAxis = roleAxis(configuredRole);
+    const hostAxis = configuredRole ? roleAxis(configuredRole) : null;
+    // An applied basis only reads as "in use" when its `produces` is the axis THIS role hosts —
+    // the scorer applies it under that same condition (`roleHostsBasis`), so a basis stored under
+    // a role the player has since changed away from is correctly ignored by both. Rendering it as
+    // applied anyway would claim a scoring effect the ship no longer has.
+    const applied = !!appliedRoleBasis && !!hostAxis && appliedRoleBasis.produces === hostAxis;
+
+    // An applied basis stays visible (and removable) even on a re-render where the detector no
+    // longer flags anything new — the scorer keeps using it regardless of what the detector says
+    // today, so hiding the card here would leave it in use with no way to stop.
+    if (!configuredRole || (findings.length === 0 && !applied)) return null;
+
+    const roleLabel = SHIP_TYPES[configuredRole]?.name;
+    // `excludedCarriers` doesn't vary with `produces` (see the comment on `basisByProduces`), so
+    // reading it off the first finding is safe here — unlike `hostedBasis` below, which must
+    // read the axis the ROLE hosts, never merely the first finding's.
+    const excluded =
+        findings.length > 0 ? (basisByProduces.get(findings[0].produces)?.excluded ?? []) : [];
+
     const coreStat = hostAxis ? rolePrimaryStat(configuredRole) : null;
     const hostedBasis = hostAxis ? (basisByProduces.get(hostAxis) ?? null) : null;
     const canApply = !!hostedBasis && hostedBasis.terms.length > 0;
@@ -227,10 +247,22 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                     ))}
                 </div>
             )}
-            {onApply && canApply && (
+            {onApply && canApply && !applied && (
                 <Button variant="secondary" size="sm" onClick={handleApply}>
                     Use this equation
                 </Button>
+            )}
+            {applied && (
+                <div className="space-y-1">
+                    <p className="text-xs text-theme-text-secondary">
+                        Autogear will score {ship.name} with this equation on its next run.
+                    </p>
+                    {onClear && (
+                        <Button variant="secondary" size="sm" onClick={onClear}>
+                            Stop using this equation
+                        </Button>
+                    )}
+                </div>
             )}
         </div>
     );

@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal } from '../ui/layout/Modal';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
-import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
@@ -72,6 +72,10 @@ interface AutogearSettingsModalProps {
     simRerank?: Omit<SimRerankSectionProps, 'ship'>;
     /** Wires the Apply control on `OffFormulaNotice`, for the same reason as `simRerank`. */
     onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
+    /** The ship's currently-stored `roleBasis`, for `OffFormulaNotice`'s applied state. */
+    appliedRoleBasis?: RoleBasis;
+    /** Wires the "Stop using this equation" control on `OffFormulaNotice`. */
+    onClearOffFormula?: () => void;
 }
 
 export const AutogearSettingsModal: React.FC<AutogearSettingsModalProps> = ({
