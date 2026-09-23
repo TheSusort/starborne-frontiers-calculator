@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui';
 import type { Ship } from '../../types/ship';
 import { type ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
@@ -15,7 +15,10 @@ import {
     type ExcludedCarrier,
 } from '../../utils/autogear/offFormula/basisDerivation';
 import { roleAxis, rolePrimaryStat } from '../../utils/autogear/offFormula/roleBasisHost';
-import type { RoleBasis } from '../../types/autogear';
+import { usableBasisTerms } from '../../utils/autogear/customFormula';
+import type { BasisTerm, RoleBasis } from '../../types/autogear';
+import { BasisTermsEditor } from './BasisTermsEditor';
+import { draftFromBasis, nextBasisStat, type DraftBasisTerm } from './basisTermDraft';
 
 /** What Apply writes back to the ship's config: the derived basis, attached to whichever axis
  *  `configuredRole` hosts (`roleAxis`, `roleBasisHost.ts`). `shipRole` is unchanged — the
@@ -127,6 +130,17 @@ const equationLine = (
     }.`;
 };
 
+/** Whether two basis term sets score identically: the same stat/weight pairs, in either order.
+ *  Decides whether an applied basis is still the kit's own derived equation or a player's edited
+ *  version of it — never a diff of insertion order, which carries no scoring meaning. */
+const basisTermsMatch = (a: BasisTerm[], b: BasisTerm[]): boolean => {
+    if (a.length !== b.length) return false;
+    const key = (t: BasisTerm) => `${t.stat}:${t.weight}`;
+    const sortedA = a.map(key).sort();
+    const sortedB = b.map(key).sort();
+    return sortedA.every((v, i) => v === sortedB[i]);
+};
+
 export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     ship,
     configuredRole,
@@ -170,6 +184,26 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     // applied anyway would claim a scoring effect the ship no longer has.
     const applied = !!appliedRoleBasis && !!hostAxis && appliedRoleBasis.produces === hostAxis;
 
+    // The derived equation for the axis THIS role hosts, computed independent of whether the
+    // detector currently reports a finding on it — an applied basis stays "in use" even on a
+    // render where `findings` comes back empty (see the comment below), and Restore/the
+    // edited-vs-derived label must still have something to compare against in that state.
+    const derivedForApplied = useMemo(
+        () => (applied && hostAxis ? deriveBasis(ship, hostAxis) : null),
+        [ship, hostAxis, applied]
+    );
+
+    const [isEditing, setIsEditing] = useState(false);
+    const [draftTerms, setDraftTerms] = useState<DraftBasisTerm[]>([]);
+    const [saveError, setSaveError] = useState<string | null>(null);
+
+    // Switching the open ship or role must not leave a stale editor (or a stale error) open
+    // against a DIFFERENT ship's equation.
+    useEffect(() => {
+        setIsEditing(false);
+        setSaveError(null);
+    }, [ship.id, configuredRole]);
+
     // An applied basis stays visible (and removable) even on a re-render where the detector no
     // longer flags anything new — the scorer keeps using it regardless of what the detector says
     // today, so hiding the card here would leave it in use with no way to stop.
@@ -192,6 +226,74 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
             shipRole: configuredRole,
             roleBasis: { produces: hostAxis, terms: hostedBasis.terms },
         });
+    };
+
+    // The terms actually in force right now — what the "in use" state and the editor's starting
+    // point both read, since a player's edit lives nowhere but `appliedRoleBasis` itself.
+    const appliedTerms = applied ? (appliedRoleBasis?.terms ?? []) : [];
+    // Whether the applied terms are still the kit's own derivation, or a player's edited version
+    // of it — `derivedForApplied` is null only when `applied` is false, in which case this value
+    // is never read.
+    const editedFromDerived =
+        applied && derivedForApplied
+            ? !basisTermsMatch(appliedTerms, derivedForApplied.terms)
+            : false;
+
+    const startEditing = () => {
+        setDraftTerms(draftFromBasis(appliedTerms));
+        setSaveError(null);
+        setIsEditing(true);
+    };
+
+    const cancelEditing = () => {
+        setIsEditing(false);
+        setSaveError(null);
+    };
+
+    const addDraftTerm = () => {
+        setDraftTerms((terms) => [...terms, { stat: nextBasisStat(terms), weight: '' }]);
+    };
+
+    const updateDraftTerm = (index: number, patch: Partial<DraftBasisTerm>) => {
+        setDraftTerms((terms) => terms.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+    };
+
+    const removeDraftTerm = (index: number) => {
+        setDraftTerms((terms) => terms.filter((_, i) => i !== index));
+    };
+
+    // Only changes `terms` — `produces` and `shipRole` stay exactly what they were, so an edit
+    // still has to match the role's own axis to count (owner ruling, #544).
+    const handleSaveEdit = () => {
+        if (!onApply || !hostAxis) return;
+        const candidate: BasisTerm[] = draftTerms.map((term) => ({
+            stat: term.stat,
+            weight: Number(term.weight.trim()),
+        }));
+        // `usableBasisTerms` is the scorer's own predicate (`priorityScore.ts` re-validates a
+        // stored `roleBasis` through the identical call) — a term it would drop (blank, zero,
+        // negative, or an unrecognised stat) refuses the WHOLE save rather than silently landing
+        // without it, so a player never sees a save that quietly dropped what they typed.
+        const kept = usableBasisTerms(candidate);
+        if (!kept || kept.length !== candidate.length) {
+            setSaveError(
+                'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
+            );
+            return;
+        }
+        onApply({ shipRole: configuredRole, roleBasis: { produces: hostAxis, terms: kept } });
+        setSaveError(null);
+        setIsEditing(false);
+    };
+
+    const handleRestore = () => {
+        if (!onApply || !hostAxis || !derivedForApplied) return;
+        onApply({
+            shipRole: configuredRole,
+            roleBasis: { produces: hostAxis, terms: derivedForApplied.terms },
+        });
+        setIsEditing(false);
+        setSaveError(null);
     };
 
     return (
@@ -253,14 +355,61 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                 </Button>
             )}
             {applied && (
-                <div className="space-y-1">
+                <div className="space-y-2">
                     <p className="text-xs text-theme-text-secondary">
                         Autogear will score {ship.name} with this equation on its next run.
                     </p>
-                    {onClear && (
-                        <Button variant="secondary" size="sm" onClick={onClear}>
-                            Stop using this equation
-                        </Button>
+                    {appliedTerms.length > 0 && (
+                        <p className="text-xs text-theme-text-secondary">
+                            {appliedTerms
+                                .map((term) => `${statLabel(term.stat)} x${term.weight.toFixed(3)}`)
+                                .join(' + ')}
+                        </p>
+                    )}
+                    <p className="text-xs text-theme-text-secondary">
+                        {editedFromDerived
+                            ? 'This is your own version of the equation.'
+                            : "This is the kit's own equation."}
+                    </p>
+                    <div className="flex gap-2 flex-wrap">
+                        {onApply && !isEditing && (
+                            <Button variant="secondary" size="sm" onClick={startEditing}>
+                                Edit this equation
+                            </Button>
+                        )}
+                        {onApply && editedFromDerived && (
+                            <Button variant="secondary" size="sm" onClick={handleRestore}>
+                                Restore the derived equation
+                            </Button>
+                        )}
+                        {onClear && (
+                            <Button variant="secondary" size="sm" onClick={onClear}>
+                                Stop using this equation
+                            </Button>
+                        )}
+                    </div>
+                    {isEditing && (
+                        <div className="space-y-2 border-t border-dark-border pt-2">
+                            <BasisTermsEditor
+                                terms={draftTerms}
+                                onUpdate={updateDraftTerm}
+                                onRemove={removeDraftTerm}
+                                onAdd={addDraftTerm}
+                            />
+                            {saveError && (
+                                <p className="text-xs text-red-400" role="alert">
+                                    {saveError}
+                                </p>
+                            )}
+                            <div className="flex justify-end gap-2">
+                                <Button variant="secondary" size="sm" onClick={cancelEditing}>
+                                    Cancel
+                                </Button>
+                                <Button variant="primary" size="sm" onClick={handleSaveEdit}>
+                                    Save equation
+                                </Button>
+                            </div>
+                        </div>
                     )}
                 </div>
             )}

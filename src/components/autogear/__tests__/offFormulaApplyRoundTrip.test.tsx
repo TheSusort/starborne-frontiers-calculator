@@ -2,11 +2,14 @@ import { readFileSync } from 'fs';
 import React, { useState } from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { render, screen } from '../../../test-utils/test-utils';
 import { AutogearSettings } from '../AutogearSettings';
 import type { OffFormulaApplyUpdate } from '../OffFormulaNotice';
+import { deriveBasis } from '../../../utils/autogear/offFormula/basisDerivation';
 import type { RoleBasis } from '../../../types/autogear';
 import type { Ship } from '../../../types/ship';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { makeSettingsProps } from './autogearSettingsProps';
@@ -77,15 +80,29 @@ const corpusShipNamed = (name: string): Ship => {
  *  and the handlers below round-trip through a plain `useState`, exactly like
  *  `AutogearPage`'s `shipConfigs` state does through `getShipConfig`/`updateShipConfig`. A spy
  *  on `onApply` alone (the shape the pre-existing tests use) proves the write fires but not that
- *  anything ever reads it back — that gap is exactly how this bug shipped looking green. */
-const Harness: React.FC<{ ship: Ship }> = ({ ship }) => {
+ *  anything ever reads it back — that gap is exactly how this bug shipped looking green.
+ *
+ *  `onUpdateCaptured` additionally hands the test the last `OffFormulaApplyUpdate` (not only its
+ *  `roleBasis`), so a test can assert `shipRole` and `produces` stayed put after an edit — the
+ *  UI's own re-render still runs off the `roleBasis` state above, never off this capture. */
+const Harness: React.FC<{
+    ship: Ship;
+    role?: ShipTypeName;
+    onUpdateCaptured?: (update: OffFormulaApplyUpdate | undefined) => void;
+}> = ({ ship, role = 'ATTACKER', onUpdateCaptured }) => {
     const [roleBasis, setRoleBasis] = useState<RoleBasis | undefined>(undefined);
     return (
         <AutogearSettings
-            {...makeSettingsProps({ selectedShip: ship, selectedShipRole: 'ATTACKER' })}
+            {...makeSettingsProps({ selectedShip: ship, selectedShipRole: role })}
             appliedRoleBasis={roleBasis}
-            onApplyOffFormula={(update: OffFormulaApplyUpdate) => setRoleBasis(update.roleBasis)}
-            onClearOffFormula={() => setRoleBasis(undefined)}
+            onApplyOffFormula={(update: OffFormulaApplyUpdate) => {
+                setRoleBasis(update.roleBasis);
+                onUpdateCaptured?.(update);
+            }}
+            onClearOffFormula={() => {
+                setRoleBasis(undefined);
+                onUpdateCaptured?.(undefined);
+            }}
         />
     );
 };
@@ -144,6 +161,169 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             // ATTACKER still hosts its own (damage) equation, so the ordinary offer remains —
             // the mismatch withholds the APPLIED claim, not the button entirely.
             expect(screen.getByRole('button', { name: /use this equation/i })).toBeInTheDocument();
+        });
+    }
+);
+
+describe.skipIf(!csvAvailable() || !shipDataAvailable())(
+    'Editing an applied equation (#544, Task 4b)',
+    () => {
+        /** Applies Cobalt's derived damage equation (Attack x2.100 + HP x0.267, pinned in
+         *  `basisDerivation.test.ts`) and opens the editor, against real config state. */
+        const applyAndOpenEditor = (
+            onUpdateCaptured?: (u: OffFormulaApplyUpdate | undefined) => void
+        ) => {
+            const cobalt = corpusShipNamed('Cobalt');
+            render(<Harness ship={cobalt} onUpdateCaptured={onUpdateCaptured} />);
+            fireEvent.click(screen.getByRole('button', { name: /use this equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /edit this equation/i }));
+        };
+
+        it('shows the kit equation as in use, not edited, right after Apply', () => {
+            applyAndOpenEditor();
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+        });
+
+        it('saving an edited weight updates the applied terms and flips the edited indicator', () => {
+            const captured: OffFormulaApplyUpdate[] = [];
+            applyAndOpenEditor((u) => u && captured.push(u));
+
+            const weightInputs = screen.getAllByLabelText(/basis weight/i);
+            fireEvent.change(weightInputs[1], { target: { value: '0.5' } });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            // The applied state visibly shows the EDITED terms — not a spy proving the
+            // callback fired, a real re-render off real config state.
+            expect(screen.getByText(/Attack x2\.100 \+ HP x0\.500/)).toBeInTheDocument();
+            expect(screen.getByText(/your own version of the equation/i)).toBeInTheDocument();
+            expect(screen.queryByText(/the kit's own equation/i)).not.toBeInTheDocument();
+
+            // produces and shipRole are untouched by the edit.
+            const last = captured[captured.length - 1];
+            expect(last.shipRole).toBe('ATTACKER');
+            expect(last.roleBasis.produces).toBe('damage');
+        });
+
+        it('adding a term saves it alongside the existing ones', () => {
+            applyAndOpenEditor();
+            fireEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+
+            const weightInputs = screen.getAllByLabelText(/basis weight/i);
+            fireEvent.change(weightInputs[weightInputs.length - 1], { target: { value: '1.5' } });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(
+                screen.getByText(/Attack x2\.100 \+ HP x0\.267 \+ Defence x1\.500/)
+            ).toBeInTheDocument();
+        });
+
+        it('removing a term saves the equation without it', () => {
+            applyAndOpenEditor();
+            const removeButtons = screen.getAllByRole('button', { name: /remove basis term/i });
+            fireEvent.click(removeButtons[1]); // the HP row
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            // The applied line names only the surviving term — the finding's own equation-line
+            // sentence above it still names HP (it always states the ship's real derivation,
+            // independent of what is applied), so the assertion is scoped to the exact applied
+            // line rather than "no HP anywhere on the card".
+            expect(screen.getByText(/^Attack x2\.100$/)).toBeInTheDocument();
+        });
+
+        it('refuses a blank weight and leaves the applied equation unchanged', () => {
+            applyAndOpenEditor();
+            fireEvent.click(screen.getAllByRole('button', { name: /remove basis term/i })[1]);
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+            expect(screen.getByText(/the kit's own equation/i)).toBeInTheDocument();
+        });
+
+        it('refuses a zero weight and leaves the applied equation unchanged', () => {
+            applyAndOpenEditor();
+            fireEvent.click(screen.getAllByRole('button', { name: /remove basis term/i })[1]);
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '0' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+        });
+
+        it('refuses a negative weight (dropping it silently is not enough) and leaves the equation unchanged', () => {
+            applyAndOpenEditor();
+            // Attack stays positive; HP goes negative. `usableBasisTerms` would drop only the
+            // HP term and keep Attack — that partial drop must still refuse the whole save
+            // rather than silently landing without the term the player typed.
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[1], {
+                target: { value: '-1' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+        });
+
+        it('refuses an all-zero equation and leaves the applied equation unchanged', () => {
+            applyAndOpenEditor();
+            const weightInputs = screen.getAllByLabelText(/basis weight/i);
+            fireEvent.change(weightInputs[0], { target: { value: '0' } });
+            fireEvent.change(weightInputs[1], { target: { value: '0' } });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+        });
+
+        it('offers no derived stat (Direct Damage, Effective HP) in the term picker', async () => {
+            applyAndOpenEditor();
+            await userEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+            const pickers = screen.getAllByLabelText(/basis stat/i);
+            await userEvent.click(pickers[pickers.length - 1]);
+
+            expect(screen.getByRole('option', { name: 'Attack' })).toBeInTheDocument();
+            expect(screen.queryByRole('option', { name: 'Direct Damage' })).not.toBeInTheDocument();
+            expect(screen.queryByRole('option', { name: 'Effective HP' })).not.toBeInTheDocument();
+        });
+
+        it("restores exactly deriveBasis's own terms and flips the edited indicator back", () => {
+            applyAndOpenEditor();
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[1], {
+                target: { value: '9.999' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+            expect(screen.getByText(/your own version of the equation/i)).toBeInTheDocument();
+
+            fireEvent.click(screen.getByRole('button', { name: /restore the derived equation/i }));
+
+            const cobalt = corpusShipNamed('Cobalt');
+            expect(deriveBasis(cobalt, 'damage').terms).toEqual([
+                { stat: 'attack', weight: expect.closeTo(2.1) },
+                { stat: 'hp', weight: expect.closeTo(0.267) },
+            ]);
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+            expect(screen.getByText(/the kit's own equation/i)).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /restore the derived equation/i })
+            ).not.toBeInTheDocument();
+        });
+
+        it('keeps the excluded-carrier sentence visible while editing', () => {
+            const xcellence = corpusShipNamed('Xcellence');
+            render(<Harness ship={xcellence} role="ATTACKER" />);
+            fireEvent.click(screen.getByRole('button', { name: /use this equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /edit this equation/i }));
+
+            expect(
+                screen.getByText(
+                    /Xcellence deals damage equal to 115% of its shield pool when an enemy resists a debuff/i
+                )
+            ).toBeInTheDocument();
         });
     }
 );

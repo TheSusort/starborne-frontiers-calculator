@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, CloseIcon, Input, Select } from '../ui';
+import { Button, Input, Select } from '../ui';
 import type { LimitableStat } from '../../types/stats';
 import type {
     BasisTerm,
@@ -15,29 +15,14 @@ import {
     isBasisStat,
     isBasisTilt,
 } from '../../utils/autogear/customFormula';
+import { BasisTermsEditor } from './BasisTermsEditor';
+import { draftFromBasis, nextBasisStat, type DraftBasisTerm } from './basisTermDraft';
 
 const IMPORTANCE_OPTIONS: { value: string; label: string }[] = [
     { value: '0.5', label: 'Slight' },
     { value: '1', label: 'Normal' },
     { value: '2', label: 'Heavy' },
 ];
-
-/** A term's stat picker offers only what `usableBasis` can honour — never `directDamage` or
- *  `effectiveHp`, which the scorer reads off the stat block as `undefined` and drops. */
-const BASIS_STAT_OPTIONS = FORMULA_STATS.filter(isBasisStat).map((s) => ({
-    value: s,
-    label: getLimitStatLabel(s),
-}));
-
-/** A term's weight kept as a string while being edited, the same way the bonus percentage is,
- *  so a field can sit empty or mid-edit without forcing a number. */
-interface DraftBasisTerm {
-    stat: LimitableStat;
-    weight: string;
-}
-
-const draftFromBasis = (basis?: BasisTerm[]): DraftBasisTerm[] =>
-    (basis ?? []).map((t) => ({ stat: t.stat, weight: String(t.weight) }));
 
 const basisHelpText = (stat: LimitableStat): string =>
     isBasisTilt(stat)
@@ -83,10 +68,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     const showsBasis = kind === 'core' && direction === 'max';
 
     const addBasisTerm = () => {
-        const used = new Set(basisTerms.map((t) => t.stat));
-        const nextOption = BASIS_STAT_OPTIONS.find((o) => !used.has(o.value));
-        const nextStat = nextOption?.value ?? BASIS_STAT_OPTIONS[0].value;
-        setBasisTerms([...basisTerms, { stat: nextStat, weight: '' }]);
+        setBasisTerms([...basisTerms, { stat: nextBasisStat(basisTerms), weight: '' }]);
     };
 
     const updateBasisTerm = (index: number, patch: Partial<DraftBasisTerm>) => {
@@ -227,50 +209,12 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                         </div>
                     )}
                     <p className="text-xs text-theme-text-secondary">{basisHelpText(stat)}</p>
-                    {basisTerms.map((term, index) => (
-                        <div key={index} className="flex gap-3 items-end flex-wrap">
-                            <Select
-                                label="Basis stat"
-                                className="flex-1 min-w-[8rem]"
-                                value={term.stat}
-                                onChange={(value) =>
-                                    updateBasisTerm(index, { stat: value as LimitableStat })
-                                }
-                                options={BASIS_STAT_OPTIONS}
-                            />
-                            <div className="w-32">
-                                <Input
-                                    label="Basis weight"
-                                    type="number"
-                                    min="0"
-                                    step="0.001"
-                                    value={term.weight}
-                                    onChange={(e) =>
-                                        updateBasisTerm(index, { weight: e.target.value })
-                                    }
-                                    placeholder="0"
-                                />
-                            </div>
-                            <Button
-                                aria-label="Remove basis term"
-                                type="button"
-                                variant="danger"
-                                size="sm"
-                                onClick={() => removeBasisTerm(index)}
-                            >
-                                <CloseIcon />
-                            </Button>
-                        </div>
-                    ))}
-                    <Button
-                        aria-label="Add stat"
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={addBasisTerm}
-                    >
-                        Add stat
-                    </Button>
+                    <BasisTermsEditor
+                        terms={basisTerms}
+                        onUpdate={updateBasisTerm}
+                        onRemove={removeBasisTerm}
+                        onAdd={addBasisTerm}
+                    />
                 </div>
             )}
             <div className="flex justify-end gap-2">

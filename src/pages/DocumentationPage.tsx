@@ -1525,6 +1525,14 @@ const DocumentationPage: React.FC = () => {
                                         for that reason.
                                     </p>
                                     <p className="text-theme-text mt-2">
+                                        A Multiplied, maximized row can also score a weighted sum of
+                                        other stats instead of its own raw value — add one or more
+                                        stats and a weight under that row&apos;s own controls
+                                        (something like Attack x2.100 for a skill that hits at
+                                        210%), matching how the ship&apos;s kit actually scales
+                                        rather than the plain stat.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
                                         A Multiplied stat you&apos;re maximizing that your ship
                                         currently has none of scores that term at zero — and one
                                         zero term zeroes the whole product, however good the rest of
@@ -1583,7 +1591,11 @@ const DocumentationPage: React.FC = () => {
                                         applied, the notice says so and offers{' '}
                                         <strong>Stop using this equation</strong> to go back to the
                                         role&apos;s own numbers; nothing re-scores until the next{' '}
-                                        <strong>Find optimal gear</strong> run.
+                                        <strong>Find optimal gear</strong> run. The applied equation
+                                        can also be edited — reweight a stat, add one to fold in a
+                                        passive the derivation left out, or remove one — and{' '}
+                                        <strong>Restore the derived equation</strong> returns to
+                                        exactly the kit&apos;s own numbers.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         A role without a single quantity to replace this way — a
