@@ -17,6 +17,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship Details: no longer crashes opening a geared ship with a sub-role.',
     'Autogear: new Crit Multiplier stat for priorities, bonuses and custom formulas.',
     'Autogear: results now show output from the formula the ship was scored on.',
+    'Autogear: Equip All now keeps suggested gear when implants are also suggested.',
+    "Autogear: Reset now restores the ship's own role instead of Attacker.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

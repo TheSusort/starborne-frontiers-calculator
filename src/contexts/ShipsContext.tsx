@@ -2,7 +2,12 @@ import React, { createContext, useContext, useCallback, useState, useEffect, use
 import { v4 as uuidv4 } from 'uuid';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { GearSlotName, ImplantSlotName, isGearSlotName } from '../constants/gearTypes';
+import {
+    GearSlotName,
+    ImplantSlotName,
+    isGearSlotName,
+    isImplantSlotName,
+} from '../constants/gearTypes';
 import { Ship, AffinityName } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
@@ -25,9 +30,13 @@ interface ShipsContextType {
     updateShip: (id: string, updates: Partial<Ship>) => Promise<void>;
     deleteShip: (id: string) => Promise<void>;
     equipGear: (shipId: string, slot: GearSlotName, gearId: string) => Promise<void>;
+    /** Equips gear and, optionally, implants onto one ship in a single ship write. Two writers
+     *  called in the same tick both map that render's `localShips`, so the second reverts the
+     *  first (#558). Every assigned piece is taken off whichever other ship wore it. */
     equipMultipleGear: (
         shipId: string,
-        gearAssignments: { slot: GearSlotName; gearId: string }[]
+        gearAssignments: { slot: GearSlotName; gearId: string }[],
+        implantAssignments?: { slot: ImplantSlotName; gearId: string }[]
     ) => Promise<void>;
     removeGear: (shipId: string, slot: GearSlotName) => Promise<void>;
     equipImplant: (shipId: string, slot: ImplantSlotName, gearId: string) => Promise<void>;
@@ -839,20 +848,37 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
 
     const equipMultipleGear = useCallback(
-        async (shipId: string, gearAssignments: { slot: GearSlotName; gearId: string }[]) => {
+        async (
+            shipId: string,
+            gearAssignments: { slot: GearSlotName; gearId: string }[],
+            implantAssignments: { slot: ImplantSlotName; gearId: string }[] = []
+        ) => {
+            const implantIds = implantAssignments.map(({ gearId }) => gearId);
+            let targetImplants: Partial<Record<ImplantSlotName, string>> = {};
+
             // Optimistic update
             const updatedShips = localShips.map((ship) => {
                 if (ship.id === shipId) {
-                    // For the target ship, set all the new gear assignments
+                    // For the target ship, set all the new gear assignments and merge the
+                    // assigned implants over the ones it already wears
+                    targetImplants = implantAssignments.reduce(
+                        (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                        { ...ship.implants }
+                    );
                     return {
                         ...ship,
-                        equipment: gearAssignments.reduce(
-                            (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
-                            {}
-                        ),
+                        // An implants-only write leaves the gear alone
+                        equipment:
+                            gearAssignments.length > 0
+                                ? gearAssignments.reduce(
+                                      (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                                      {}
+                                  )
+                                : ship.equipment,
+                        implants: targetImplants,
                     };
                 }
-                // For all other ships, remove any gear that's being equipped
+                // For all other ships, remove any gear or implant that's being equipped
                 const equipment = { ...ship.equipment };
                 gearAssignments.forEach(({ gearId }) => {
                     Object.entries(equipment).forEach(([key, value]) => {
@@ -861,9 +887,16 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         }
                     });
                 });
+                const implants = { ...ship.implants };
+                Object.entries(implants).forEach(([key, value]) => {
+                    if (value && implantIds.includes(value) && isImplantSlotName(key)) {
+                        delete implants[key];
+                    }
+                });
                 return {
                     ...ship,
                     equipment,
+                    implants,
                 };
             });
             setLocalShips(updatedShips);
@@ -873,6 +906,35 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             if (!isSupabaseSyncEnabled()) return;
 
             try {
+                if (implantIds.length > 0) {
+                    // `ship_implants.id` is the implant's own id, so a donor's row must go before
+                    // the target can insert it; the target's own rows are cleared too, or a
+                    // replaced implant stays in its slot.
+                    const { error: donorError } = await supabase
+                        .from('ship_implants')
+                        .delete()
+                        .in('id', implantIds);
+                    if (donorError) throw donorError;
+
+                    const { error: clearError } = await supabase
+                        .from('ship_implants')
+                        .delete()
+                        .eq('ship_id', shipId);
+                    if (clearError) throw clearError;
+
+                    const implantRows = Object.entries(targetImplants)
+                        .filter(([, gearId]) => gearId)
+                        .map(([slot, gearId]) => ({ ship_id: shipId, slot, id: gearId }));
+                    if (implantRows.length > 0) {
+                        const { error: insertError } = await supabase
+                            .from('ship_implants')
+                            .insert(implantRows);
+                        if (insertError) throw insertError;
+                    }
+                }
+
+                if (gearAssignments.length === 0) return;
+
                 // Delete existing equipment for all gear being equipped
                 const gearIds = gearAssignments.map(({ gearId }) => gearId);
                 const { error: deleteError } = await supabase
