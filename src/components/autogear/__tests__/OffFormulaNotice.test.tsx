@@ -75,6 +75,32 @@ describe('OffFormulaNotice', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
+    // A persisted config can carry a `configuredRole` string that no longer names a real
+    // `SHIP_TYPES` key (the same stale-role class `priorityScore.ts` guards with
+    // `Object.hasOwn(SHIP_TYPES, shipRole)`, commit 655986ae). `roleAxis` throws outside its
+    // table by design (`roleBasisHost.ts`'s totality check relies on that throw), so this
+    // component must guard its own calls rather than let an unrecognised role crash the panel.
+    it('renders without throwing for a configured role that no longer names a real ship type', () => {
+        mocked.mockReturnValue([
+            {
+                stat: 'defence',
+                produces: 'damage',
+                severity: 'severe',
+                trigger: 'on-cast',
+                tunableStat: 'defence',
+            },
+        ]);
+        expect(() =>
+            render(<OffFormulaNotice ship={ship} configuredRole="RETIRED_ROLE" />)
+        ).not.toThrow();
+        // A role with no entry hosts nothing, so it reads exactly like a real role that hosts
+        // nothing: the finding sentence renders, but no equation line and no applied state.
+        expect(screen.getByText(/damage scales off Defence/)).toBeInTheDocument();
+        expect(
+            screen.queryByRole('button', { name: /use this equation/i })
+        ).not.toBeInTheDocument();
+    });
+
     // A shared word ("trade" appearing in both copies, say) would let this pass regardless of
     // which severity actually renders, so each assertion below checks the OTHER severity's
     // phrase is absent, not just that its own phrase is present.

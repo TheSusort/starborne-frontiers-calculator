@@ -108,10 +108,14 @@ const clausePointer = (excludedCount: number): string =>
 
 /** Whether `terms` describe scoring different from the role's own baseline: at least one term
  *  on a stat other than `coreStat` (the role's own primary stat, `rolePrimaryStat`). A basis that
- *  reduces to `coreStat` alone — or to nothing at all — reproduces exactly what the role formula
- *  already assumes, so Apply would be a no-op button and Restore would return to that same no-op
- *  (#544 I2). Every caller that decides whether the derivation is worth acting on reads this one
- *  predicate rather than re-deriving it from `terms.length`. */
+ *  reduces to `coreStat` alone — or to nothing at all — does not change which gear the role
+ *  prefers in any way that matters: it is not score-IDENTICAL to the plain role formula (an
+ *  additive stat bonus makes the score `(baseDPS + additiveBonus) * (1 + mult)`, which a basis on
+ *  `coreStat` alone can still shift), but it cannot change the RANKING between two pieces of gear,
+ *  which is the only thing Apply exists to change. That is why Apply would be a no-op button and
+ *  Restore would return to that same no-op (#544 I2). Every caller that decides whether the
+ *  derivation is worth acting on reads this one predicate rather than re-deriving it from
+ *  `terms.length`. */
 const basisChangesScoring = (terms: BasisTerm[], coreStat: OffFormulaStat | null): boolean =>
     terms.some((term) => term.stat !== coreStat);
 
@@ -124,10 +128,10 @@ const PRODUCES_NOUN: Record<OffFormulaFinding['produces'], string> = {
 /**
  * Renders the weighted stat equation `deriveBasis` derived, in the ship's own numbers, against
  * `coreStat` — the stat the CONFIGURED role's own formula already scores (`rolePrimaryStat`).
- * When no stat besides `coreStat` feeds the active/charged basis, the derived scoring is exactly
- * what the role formula already assumes — there is nothing new to report from this ship's own
- * active or charged skills, so the caller only points at a passive clause when one is actually
- * there to point at.
+ * When no stat besides `coreStat` feeds the active/charged basis (`basisChangesScoring`, above —
+ * see its own doc for why "unchanged" here means the gear ranking, not necessarily the raw
+ * score), there is nothing new to report from this ship's own active or charged skills, so the
+ * caller only points at a passive clause when one is actually there to point at.
  */
 const equationLine = (
     basis: DerivedBasis,
@@ -204,7 +208,16 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     // equation the role's formula can never use invites gearing for a stat that formula does not
     // want (owner ruling, #544 — Panon is gearing for Defence because he tanks, not because his
     // kit happens to deal damage too).
-    const hostAxis = configuredRole ? roleAxis(configuredRole) : null;
+    //
+    // Also null for a `configuredRole` string that no longer names a real `SHIP_TYPES` key (a
+    // persisted config can go stale) — `roleAxis` throws outside its table by design
+    // (`roleBasisHost.ts`'s totality check relies on that throw), so an unrecognised role reads
+    // the same way as a role that hosts nothing, mirroring `priorityScore.ts`'s own
+    // `Object.hasOwn(SHIP_TYPES, shipRole)` guard.
+    const hostAxis =
+        configuredRole && Object.hasOwn(SHIP_TYPES, configuredRole)
+            ? roleAxis(configuredRole)
+            : null;
     // An applied basis only reads as "in use" when its `produces` is the axis THIS role hosts —
     // the scorer applies it under that same condition (`roleHostsBasis`), so a basis stored under
     // a role the player has since changed away from is correctly ignored by both. Rendering it as

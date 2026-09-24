@@ -45,6 +45,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     const [percentage, setPercentage] = useState<string>('100');
     const [basisTerms, setBasisTerms] = useState<DraftBasisTerm[]>([]);
     const [basisError, setBasisError] = useState<string | null>(null);
+    const [percentageError, setPercentageError] = useState<string | null>(null);
 
     useEffect(() => {
         if (editingValue) {
@@ -63,6 +64,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             setBasisTerms([]);
         }
         setBasisError(null);
+        setPercentageError(null);
     }, [editingValue]);
 
     // A basis is only ever honoured by the scorer on a `core`/`max` row — this mirrors
@@ -116,6 +118,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             const trimmed = percentage.trim();
             const parsedPercentage = trimmed === '' ? 100 : Number(trimmed);
             if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0) {
+                setPercentageError('Enter a weight of 0 or more.');
                 return;
             }
             row = { stat, kind, direction, percentage: parsedPercentage };
@@ -125,6 +128,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
         }
 
         setBasisError(null);
+        setPercentageError(null);
         if (editingValue && onSave) {
             onSave(row);
             return;
@@ -192,8 +196,12 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                             type="number"
                             min="0"
                             value={percentage}
-                            onChange={(e) => setPercentage(e.target.value)}
+                            onChange={(e) => {
+                                setPercentage(e.target.value);
+                                setPercentageError(null);
+                            }}
                             placeholder="100"
+                            error={percentageError ?? undefined}
                         />
                     </div>
                 )}

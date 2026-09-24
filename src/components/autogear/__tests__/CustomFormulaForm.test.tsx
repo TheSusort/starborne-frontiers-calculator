@@ -63,6 +63,23 @@ describe('CustomFormulaForm', () => {
         await userEvent.type(weightInput, '-5');
         await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
+    });
+
+    it('clears the negative-weight error once the player types a valid weight', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByLabelText(/how it counts/i));
+        await userEvent.click(screen.getByText(/added/i));
+        const weightInput = screen.getByLabelText(/weight %/i);
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '-5');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
+
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '50');
+        expect(screen.queryByText(/enter a weight of 0 or more/i)).not.toBeInTheDocument();
     });
 
     it('rejects a non-finite weight arriving from a stored row', async () => {
@@ -85,6 +102,7 @@ describe('CustomFormulaForm', () => {
         );
         await userEvent.click(screen.getByRole('button', { name: /save/i }));
         expect(onSave).not.toHaveBeenCalled();
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
     });
 
     it('normalizes a stored core importance the picker never offers', async () => {
