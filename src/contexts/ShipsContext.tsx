@@ -534,16 +534,20 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
     }, [localShips, commitShips]);
 
-    // Reads the ref (not the `localShips` render closure) so a lookup issued right after a
-    // writer, without waiting for a re-render, sees that writer's result.
+    // Reads the ref, so a lookup issued right after a writer (no re-render yet) sees that
+    // writer's result. `localShips` stays a dependency anyway: consumers memoize on these
+    // lookups' identity, and a lookup that never changes identity leaves them holding the
+    // result they computed against the list before ships loaded.
     const getShipName = useCallback(
         (id: string) => localShipsRef.current.find((ship) => ship.id === id)?.name,
-        []
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- identity must follow localShips
+        [localShips]
     );
 
     const getShipById = useCallback(
         (id: string) => localShipsRef.current.find((ship) => ship.id === id),
-        []
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- identity must follow localShips
+        [localShips]
     );
 
     const addShip = useCallback(

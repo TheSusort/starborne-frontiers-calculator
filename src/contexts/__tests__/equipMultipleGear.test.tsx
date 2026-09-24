@@ -230,3 +230,27 @@ describe('writers issued back-to-back in one tick (#560)', () => {
         }
     });
 });
+
+describe('ship lookups stay reactive', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        vi.clearAllMocks();
+    });
+
+    it('a consumer memoized on getShipById recomputes once ships load', async () => {
+        profile.id = null;
+        localStorage.setItem(StorageKey.SHIPS, JSON.stringify(fleet()));
+        const view = renderHook(
+            () => {
+                const { getShipById, getShipName } = useShips();
+                // Memoized on the lookup's identity, as GearPieceDisplay and CalibrationModal are.
+                const found = React.useMemo(() => getShipById('hayyan'), [getShipById]);
+                const name = React.useMemo(() => getShipName('paracelsus'), [getShipName]);
+                return { found, name };
+            },
+            { wrapper }
+        );
+        await waitFor(() => expect(view.result.current.found?.id).toBe('hayyan'));
+        expect(view.result.current.name).toBe('paracelsus');
+    });
+});
