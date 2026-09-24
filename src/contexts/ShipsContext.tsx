@@ -19,7 +19,7 @@ import {
 import { Ship, AffinityName } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
-import { isRarityName } from '../constants/rarities';
+import { toRarityName } from '../constants/rarities';
 import { FactionName } from '../constants/factions';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
@@ -105,8 +105,7 @@ interface RawShipBaseStats {
 interface RawShipData {
     id: string;
     name: string;
-    // Raw Supabase column — not yet validated against `RarityName`, see the guard in
-    // `transformShipData` below.
+    // Raw Supabase column; coerced by `toRarityName` on load.
     rarity: string;
     faction: FactionName;
     type: ShipTypeName;
@@ -209,14 +208,6 @@ const isValidShip = (ship: unknown): ship is Ship => {
 // Helper function to transform Supabase data into Ship format
 const transformShipData = (data: RawShipData): Ship | null => {
     try {
-        // `data.rarity` is a raw Supabase column (`string`) — a legacy or corrupted row whose
-        // value fell out of the `RarityName` union is dropped rather than carried into a `Ship`
-        // with a rarity the rest of the app can't classify.
-        if (!isRarityName(data.rarity)) {
-            console.warn(`Unrecognised ship rarity "${data.rarity}" — skipping ship ${data.id}`);
-            return null;
-        }
-
         const createStat = (stat: RawShipStat): Stat => {
             if (stat.type === 'percentage') {
                 return {
@@ -238,7 +229,8 @@ const transformShipData = (data: RawShipData): Ship | null => {
         const ship: Ship = {
             id: data.id,
             name: data.name,
-            rarity: data.rarity,
+            // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
+            rarity: toRarityName(data.rarity),
             faction: data.faction,
             type: data.type,
             affinity: data.affinity,

@@ -55,5 +55,13 @@ export const isRarityName = (name: string): name is RarityName => Object.hasOwn(
 /** Looks up a rarity by a loose string (e.g. from an import payload) without widening `RARITIES`'
  *  key type back to `string` — returns `undefined` for anything outside the real union instead of
  *  indexing blind. */
+/** Coerces a loose rarity string (any casing) to `RarityName`, falling back to `'common'` for a
+ *  value outside the union. For rows that must be kept even when their rarity is unreadable — a
+ *  user's own ships and gear — where dropping the row would lose it from the fleet. */
+export const toRarityName = (raw: string): RarityName => {
+    const lower = raw.toLowerCase();
+    return isRarityName(lower) ? lower : 'common';
+};
+
 export const getRarity = (name: string | null | undefined) =>
     name && isRarityName(name) ? RARITIES[name] : undefined;
