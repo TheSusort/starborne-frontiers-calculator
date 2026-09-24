@@ -267,3 +267,7 @@ Counter-intuitively, tougher enemies let a ship afford more hacking.
 4. **Whether the notice should fire for DEFENDER-family substitution findings** once the equation
    line is gone. What remains is the finding plus the tilt offer, which is useful — but it is 24 of
    the 47 ships, and the owner has already ruled once that all 47 keep their notice.
+   **SUPERSEDED (2026-09-24): "the tilt offer" no longer exists** — item 1 above records the tilt
+   itself was dropped 2026-09-21. What actually remains for a DEFENDER-family finding today is the
+   finding sentence alone (no equation, no tilt, no button), for all 47 flagged ships — pinned by
+   `OffFormulaNotice.test.tsx`'s "renders no Defence-preference control" tests.

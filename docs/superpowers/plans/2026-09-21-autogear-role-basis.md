@@ -82,7 +82,7 @@ Defender ruling, not a gap to close.
 | `src/utils/autogear/scoring.ts` | `roleBasis` in the score cache key. |
 | `src/components/autogear/OffFormulaNotice.tsx` | Apply writes `roleBasis`; no equation for a non-hosting role; the Defender tilt. |
 | `src/utils/autogear/offFormula/roleBasisHost.ts` | **New.** Role to axis and primary stat; the hosting predicate. |
-| `src/schemas/sharedAutogearBuild.ts` | Carry `roleBasis`; retire the nullable-role branch. |
+| `src/schemas/sharedAutogearBuild.ts` | Carry `roleBasis`; retire the nullable-role branch. **SUPERSEDED (2026-09-24):** the nullable-role (Custom, roleless) branch was KEPT, not retired — `sharedAutogearBuildV2Schema` still carries `shipRole: shipRoleSchema.nullable()`, gated by `ALLOW_ROLELESS_COMMUNITY_SHARE` per the #552 ruling (see Task 5's Step 6 note below). |
 
 ---
 
@@ -266,6 +266,14 @@ two reviews. This task's tripwire has to run through the real entry point.
 
 ### Task 4: The Defender tilt
 
+**DROPPED (2026-09-24, final #544 fix wave).** No Defence-tilt control was built.
+`roleBasisHost.ts` hosts nothing for DEFENDER/DEFENDER_SECURITY, and `OffFormulaNotice.tsx` has no
+tilt affordance — the shipped behaviour for a DEFENDER-family finding is the notice sentence
+alone, pinned by `OffFormulaNotice.test.tsx`'s "renders no Defence-preference control" tests. The
+checkboxes below were never worked; the Step 6 changelog line
+(`feat(autogear): offer a Defence tilt to defenders whose kit rewards it`) was never written. Left
+in place as the record of why a tilt was considered and abandoned, not as pending work.
+
 **Files:** `src/components/autogear/OffFormulaNotice.tsx`; tests alongside.
 
 **Why:** among builds of equal survival, Panon prefers more Defence, because he converts it to
@@ -390,6 +398,13 @@ a new `supabase/migrations/YYYYMMDD[seq]_…sql`; tests alongside.
 - [ ] **Step 6 — tests, `tsc`, eslint. Commit.** Changelog: one entry if a player would notice
   (they would — a from-scratch build is now shareable). Tell the owner the migration file exists
   and must be applied BEFORE this ships, or every role-less share fails at insert.
+  **SUPERSEDED (2026-09-24, #552).** Both claims in this step are wrong for the shipped
+  behaviour: a from-scratch (role-less) build is NOT shareable — `ALLOW_ROLELESS_COMMUNITY_SHARE`
+  keeps it off for one release, per the owner's #552 ruling — and the migration gate this step
+  describes is not what ships that state. `RolelessShareNotAllowedError` /
+  `ShipRoleColumnNotNullableError` (services/communityRecommendations.ts) are what a caller sees
+  instead. Do not implement "share a from-scratch build" from this step without re-confirming the
+  ruling still holds.
 
 ### Task 6: Retire what the pivot orphaned
 
