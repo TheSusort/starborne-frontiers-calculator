@@ -336,9 +336,17 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         });
 
         it('keeps the excluded-carrier sentence visible while editing', () => {
+            // Xcellence's damage basis reduces to Attack alone — the same stat ATTACKER already
+            // scores — so #544 I2 offers Write an equation here, never Apply (her real derivation
+            // is a no-op); she reaches applied state through that instead.
             const xcellence = corpusShipNamed('Xcellence');
             render(<Harness ship={xcellence} role="ATTACKER" />);
-            fireEvent.click(screen.getByRole('button', { name: /use this equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '0.5' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
             fireEvent.click(screen.getByRole('button', { name: /edit this equation/i }));
 
             expect(

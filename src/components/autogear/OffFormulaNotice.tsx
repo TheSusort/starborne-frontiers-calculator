@@ -101,6 +101,21 @@ const clausePointer = (excludedCount: number): string =>
         ? 'The clauses below are what a passive keeps the optimizer from counting.'
         : 'The clause below is what a passive keeps the optimizer from counting.';
 
+/** Whether `terms` describe scoring different from the role's own baseline: at least one term
+ *  on a stat other than `coreStat` (the role's own primary stat, `rolePrimaryStat`). A basis that
+ *  reduces to `coreStat` alone — or to nothing at all — reproduces exactly what the role formula
+ *  already assumes, so Apply would be a no-op button and Restore would return to that same no-op
+ *  (#544 I2). Every caller that decides whether the derivation is worth acting on reads this one
+ *  predicate rather than re-deriving it from `terms.length`. */
+const basisChangesScoring = (terms: BasisTerm[], coreStat: OffFormulaStat | null): boolean =>
+    terms.some((term) => term.stat !== coreStat);
+
+const PRODUCES_NOUN: Record<OffFormulaFinding['produces'], string> = {
+    damage: 'damage',
+    repair: 'repairs',
+    shield: 'shields',
+};
+
 /**
  * Renders the weighted stat equation `deriveBasis` derived, in the ship's own numbers, against
  * `coreStat` — the stat the CONFIGURED role's own formula already scores (`rolePrimaryStat`).
@@ -112,13 +127,20 @@ const clausePointer = (excludedCount: number): string =>
 const equationLine = (
     basis: DerivedBasis,
     coreStat: OffFormulaStat,
-    excludedCount: number
+    excludedCount: number,
+    produces: OffFormulaFinding['produces']
 ): string => {
-    const offCore = basis.terms.filter((term) => term.stat !== coreStat);
-    if (offCore.length === 0) {
-        const unchanged = `No stat besides ${statLabel(
-            coreStat
-        )} feeds its active or charged basis, so the derived scoring is unchanged.`;
+    if (!basisChangesScoring(basis.terms, coreStat)) {
+        // An empty basis has no active/charged carrier at all — saying "no stat besides
+        // `coreStat` feeds it" would wrongly imply `coreStat` itself is one of the carriers.
+        // A nonempty basis that still reduces to `coreStat` (Vindicator, FrontLine) really is
+        // fed by that stat, so the "unchanged" claim can name it.
+        const unchanged =
+            basis.terms.length === 0
+                ? `Nothing in its active or charged skills produces ${PRODUCES_NOUN[produces]}, so the derived scoring is unchanged.`
+                : `No stat besides ${statLabel(
+                      coreStat
+                  )} feeds its active or charged basis, so the derived scoring is unchanged.`;
         return excludedCount > 0 ? `${unchanged} ${clausePointer(excludedCount)}` : unchanged;
     }
     const formatted = basis.terms
@@ -210,15 +232,9 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     if (!configuredRole || (findings.length === 0 && !applied)) return null;
 
     const roleLabel = SHIP_TYPES[configuredRole]?.name;
-    // `excludedCarriers` doesn't vary with `produces` (see the comment on `basisByProduces`), so
-    // reading it off the first finding is safe here — unlike `hostedBasis` below, which must
-    // read the axis the ROLE hosts, never merely the first finding's.
-    const excluded =
-        findings.length > 0 ? (basisByProduces.get(findings[0].produces)?.excluded ?? []) : [];
 
     const coreStat = hostAxis ? rolePrimaryStat(configuredRole) : null;
     const hostedBasis = hostAxis ? (basisByProduces.get(hostAxis) ?? null) : null;
-    const canApply = !!hostedBasis && hostedBasis.terms.length > 0;
     // `hostedBasis.excluded` is ship-wide (`excludedCarriers` ignores its `produces` argument —
     // see `basisByProduces`'s comment above), so a carrier on a DIFFERENT axis from `hostAxis`
     // would otherwise still count here. Restricted to carriers this axis actually produces, or a
@@ -227,12 +243,28 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     const hostAxisExcluded = hostedBasis
         ? hostedBasis.excluded.filter((carrier) => carrier.produces === hostAxis)
         : [];
+    // `excludedCarriers` doesn't vary with `produces` (see the comment on `basisByProduces`), so
+    // reading it off the first finding is safe here — the ship-wide fallback below for a role
+    // with no equation to point from.
+    const shipWideExcluded =
+        findings.length > 0 ? (basisByProduces.get(findings[0].produces)?.excluded ?? []) : [];
+    // The list rendered below must agree with the clause-pointer sentence embedded in the
+    // equation line, which only ever names carriers on the axis THIS role hosts
+    // (`hostAxisExcluded`) — #544 I3, pinned by `OffFormulaNotice.test.tsx`. A role that hosts
+    // nothing (the DEFENDER family) never renders that pointer at all, since `equationLine` only
+    // runs for a finding whose `produces` matches a real `hostAxis` — so there is no pointer for
+    // a filtered list to disagree with, and the ship-wide set stays purely informational instead.
+    const excluded = hostAxis ? hostAxisExcluded : shipWideExcluded;
+
     // `hostedBasis` is only set when a finding on `hostAxis` exists (`basisByProduces` is keyed
     // off `findings`), so this already implies an on-axis finding — a ship whose only carrier on
     // the hosted axis is a passive derives no terms here, but the notice still owes it an entry
     // point: the excluded clause is what the player needs in hand to write the term themselves.
+    const hostedBasisChangesScoring =
+        !!hostedBasis && basisChangesScoring(hostedBasis.terms, coreStat);
+    const canApply = hostedBasisChangesScoring;
     const canWriteEquation =
-        !!hostedBasis && hostedBasis.terms.length === 0 && hostAxisExcluded.length > 0;
+        !!hostedBasis && !hostedBasisChangesScoring && hostAxisExcluded.length > 0;
 
     const handleApply = () => {
         if (!onApply || !hostAxis || !hostedBasis || hostedBasis.terms.length === 0) return;
@@ -252,15 +284,20 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         applied && derivedForApplied
             ? !basisTermsMatch(appliedTerms, derivedForApplied.terms)
             : false;
-    // A ship reaching applied state through Write an equation has no derived equation at all
-    // (`derivedForApplied.terms` is empty) — distinct from an ordinary edit, which starts from a
-    // real derivation and diverges from it.
-    const writtenFromScratch = applied && derivedForApplied?.terms.length === 0;
+    // A ship reaching applied state through Write an equation has no derivation worth pointing
+    // to — either genuinely nothing (`derivedForApplied.terms` empty) or a derivation that
+    // reduces to the role's own stat and so changes nothing (#544 I2, e.g. Xcellence) — distinct
+    // from an ordinary edit, which starts from a derivation that actually changes the scoring
+    // and diverges from it. Read off `derivedForApplied` itself (the live recompute), not off
+    // how this ship happened to reach applied state, so the label stays correct across edits.
+    const derivationChangesScoring =
+        !!derivedForApplied && basisChangesScoring(derivedForApplied.terms, coreStat);
+    const writtenFromScratch = applied && !derivationChangesScoring;
     // Restoring writes `derivedForApplied.terms` straight back through `onApply` (`handleRestore`
-    // below) — offering it when that array is empty would hand the player an equation
-    // `usableBasisTerms` immediately refuses, undoing the equation they just wrote for no reason
-    // they asked for.
-    const canRestore = editedFromDerived && (derivedForApplied?.terms.length ?? 0) > 0;
+    // below) — offering it when the derivation doesn't change scoring would hand the player back
+    // the exact no-op equation Apply itself refuses to offer (#544 I2), undoing the equation they
+    // wrote for no reason they asked for.
+    const canRestore = editedFromDerived && derivationChangesScoring;
 
     const startEditing = () => {
         setDraftTerms(draftFromBasis(appliedTerms));
@@ -378,7 +415,12 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                         </p>
                         {basis && coreStat && (
                             <p className="text-xs text-theme-text-secondary">
-                                {equationLine(basis, coreStat, hostAxisExcluded.length)}
+                                {equationLine(
+                                    basis,
+                                    coreStat,
+                                    hostAxisExcluded.length,
+                                    finding.produces
+                                )}
                             </p>
                         )}
                     </div>
