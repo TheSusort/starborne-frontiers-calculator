@@ -9,6 +9,7 @@ import {
     ALLOW_ROLELESS_COMMUNITY_SHARE,
 } from '../communityBuild';
 import { validateSharedAutogearBuild } from '../../schemas/sharedAutogearBuild';
+import { validateProductionSharedAutogearBuild } from '../../schemas/__fixtures__/productionSharedAutogearBuild';
 import { defaultAutogearShipConfig } from '../autogear/runShipOptimizer';
 import type {
     CommunityRecommendation,
@@ -199,7 +200,11 @@ describe('configToSharedBuild', () => {
         expect(configToSharedBuild(config)).toEqual({ version: 1, ...config });
     });
 
-    it('keeps a role build at version 2 once it carries a customFormula, even with a role set', () => {
+    it('writes a role build at version 1, dropping the inactive customFormula, even when one is still set from a Custom-mode detour', () => {
+        // `calculateRoleScore` (priorityScore.ts) only ever reads `customFormula` when
+        // `shipRole` is null — a role build's formula is dead weight, not a live scorer input,
+        // so it must never force the build onto the version production's live bundle (1.68.0)
+        // cannot read at all.
         const build = configToSharedBuild({
             ...config,
             customFormula: {
@@ -207,7 +212,58 @@ describe('configToSharedBuild', () => {
                 seededFrom: 'ATTACKER',
             },
         });
-        expect(build?.version).toBe(2);
+        expect(build?.version).toBe(1);
+        expect(build).not.toHaveProperty('customFormula');
+    });
+
+    it("a role build carrying a stale formula parses under production's own (1.68.0) schema", () => {
+        const build = configToSharedBuild({
+            ...config,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build?.version).toBe(1);
+        expect(validateProductionSharedAutogearBuild(structuredClone(build))).not.toBeNull();
+    });
+
+    it('writes a roleBasis only when the configured role actually hosts its axis', () => {
+        // DEFENDER hosts nothing (roleBasisHost.ts) — a `damage`-axis basis left over from a
+        // different role must not ride along on a share, since the scorer would ignore it too.
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: 'DEFENDER',
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).not.toHaveProperty('roleBasis');
+    });
+
+    it('writes a roleBasis the configured role hosts', () => {
+        const build = configToSharedBuild({
+            ...config,
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).toHaveProperty('roleBasis', {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: 2.1 }],
+        });
+    });
+
+    it('does not throw and drops the roleBasis for a shipRole string that no longer names a real role', () => {
+        expect(() =>
+            configToSharedBuild({
+                ...config,
+                shipRole: 'RETIRED_ROLE',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+            })
+        ).not.toThrow();
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: 'RETIRED_ROLE',
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).not.toHaveProperty('roleBasis');
     });
 
     it('returns null without a ship role or a usable custom formula', () => {

@@ -1,10 +1,21 @@
 /**
- * A verbatim copy of `sharedAutogearBuildSchema` as it exists on `origin/production` at
+ * The same zod chain as `sharedAutogearBuildSchema` on `origin/production` at
  * `bd22289af845dd3736fa263aa77213e7cbf4912d` (1.68.0, `git show
  * origin/production:src/schemas/sharedAutogearBuild.ts`) — the schema the currently-deployed
- * bundle actually validates a `shared_config` row against. Only the four relative import paths
- * are re-pathed one level deeper (this file lives in `schemas/__fixtures__/`, the original in
- * `schemas/`); every other line, including comments, is unchanged.
+ * bundle actually validates a `shared_config` row against. The LOGIC is unchanged: every
+ * `z.object`/`z.union`, refine, and numeric bound here matches production line for line. Two
+ * things do not match production verbatim:
+ *
+ * - Every explanatory comment was stripped, and both exports were renamed
+ *   (`sharedAutogearBuildSchema` -> `productionSharedAutogearBuildSchema`,
+ *   `validateSharedAutogearBuild` -> `validateProductionSharedAutogearBuild`) so this file can
+ *   live alongside this repo's own current schema without a naming collision. Production's
+ *   version has no `superRefine` step — this fixture doesn't either, so that part IS verbatim.
+ * - The four imports (`STATS`, `GEAR_SETS`, `IMPLANTS`, `SHIP_TYPES`) resolve to THIS repo's
+ *   CURRENT constants, not the ones frozen into production's own bundle at that commit. A stat,
+ *   gear set or ship type added since 1.68.0 shipped is accepted here even though the real
+ *   deployed bundle (built against the older constants) would reject it — this fixture pins
+ *   production's VALIDATION LOGIC, not its exact accepted-key universe.
  *
  * This exists so `sharedAutogearBuild.test.ts` can assert against the REAL deployed reader
  * rather than a description of it — a gitignored scratch copy of the same content would pass

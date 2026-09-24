@@ -14,6 +14,7 @@ import type {
 } from '../types/communityRecommendation';
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
 import { formulaHasUsableRow, isFormulaEmpty } from './autogear/customFormula';
+import { roleHostsBasis } from './autogear/offFormula/roleBasisHost';
 
 const SHIP_TYPE_KEYS = Object.keys(SHIP_TYPES);
 
@@ -357,17 +358,35 @@ export const configToSharedBuild = (
         optimizeImplants: config.optimizeImplants ?? false,
     };
 
-    // A role build with no customFormula stays version 1 — production's live bundle (1.68.0)
-    // only has a version-1 reader, and that reader's schema is a plain non-strict `z.object`
-    // (strips unknown keys), so it reads this in full, including a `roleBasis` it has no use
-    // for but can safely ignore. A null role, or any customFormula, forces version 2, which
-    // that bundle cannot read at all and falls back to the legacy columns for instead (#552).
-    if (config.shipRole && !config.customFormula) {
+    // A `roleBasis` only ever means something on the axis its own role hosts (`roleHostsBasis`,
+    // `roleBasisHost.ts`) — `calculateRoleScore` (`priorityScore.ts`) ignores it otherwise, so
+    // sharing one the configured role can't use would just be dead weight nobody reads. Guarded
+    // with `isShipTypeKey` the same way `priorityScore.ts` guards its own call
+    // (`Object.hasOwn(SHIP_TYPES, shipRole)`): a persisted config can carry a `shipRole` string
+    // that no longer names a real role, and `roleHostsBasis` throws outside its table
+    // (`roleBasisHost.ts`'s totality check relies on that throw).
+    const hostedRoleBasis =
+        config.roleBasis &&
+        config.shipRole &&
+        isShipTypeKey(config.shipRole) &&
+        roleHostsBasis(config.shipRole, config.roleBasis.produces)
+            ? config.roleBasis
+            : undefined;
+
+    // A role build stays version 1 regardless of whether it carries a leftover `customFormula`
+    // from a Custom-mode detour — `calculateRoleScore` only reads `customFormula` when
+    // `shipRole` is null, so an inactive formula must never force a role build onto the version
+    // production's live bundle (1.68.0) cannot read at all. That reader's schema is a plain
+    // non-strict `z.object` (strips unknown keys), so it reads this in full, including a
+    // `roleBasis` it has no use for but can safely ignore. Only a null role forces version 2,
+    // which that bundle cannot read at all and falls back to the legacy columns for instead
+    // (#552).
+    if (config.shipRole) {
         return {
             version: 1,
             shipRole: config.shipRole,
             ...buildFields,
-            ...(config.roleBasis ? { roleBasis: config.roleBasis } : {}),
+            ...(hostedRoleBasis ? { roleBasis: hostedRoleBasis } : {}),
         };
     }
 
@@ -376,7 +395,7 @@ export const configToSharedBuild = (
         shipRole: config.shipRole,
         ...buildFields,
         ...(config.customFormula ? { customFormula: config.customFormula } : {}),
-        ...(config.roleBasis ? { roleBasis: config.roleBasis } : {}),
+        ...(hostedRoleBasis ? { roleBasis: hostedRoleBasis } : {}),
     };
 };
 

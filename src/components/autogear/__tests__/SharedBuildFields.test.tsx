@@ -83,4 +83,74 @@ describe('SharedBuildFields', () => {
         render(<SharedBuildFields build={baseBuild} />);
         expect(screen.queryByTestId('community-build-equation')).not.toBeInTheDocument();
     });
+
+    it('renders no Equation section when the configured role does not host the roleBasis axis', () => {
+        // DEFENDER hosts nothing (roleBasisHost.ts) — the scorer ignores this roleBasis
+        // entirely, so an old row carrying one from before this rule shipped must not display
+        // "Scores damage as..." copy the role never reads.
+        render(
+            <SharedBuildFields
+                build={{
+                    ...baseBuild,
+                    shipRole: 'DEFENDER',
+                    roleBasis: {
+                        produces: 'damage',
+                        terms: [{ stat: 'attack', weight: 2.1 }],
+                    },
+                }}
+            />
+        );
+        expect(screen.queryByTestId('community-build-equation')).not.toBeInTheDocument();
+    });
+
+    it('renders without throwing, and with no Equation section, for a shipRole that no longer names a real role', () => {
+        expect(() =>
+            render(
+                <SharedBuildFields
+                    build={{
+                        ...baseBuild,
+                        shipRole: 'RETIRED_ROLE',
+                        roleBasis: {
+                            produces: 'damage',
+                            terms: [{ stat: 'attack', weight: 2.1 }],
+                        },
+                    }}
+                />
+            )
+        ).not.toThrow();
+        expect(screen.queryByTestId('community-build-equation')).not.toBeInTheDocument();
+    });
+
+    it("shows a Formula bonus row's percentage rather than hiding it", () => {
+        render(
+            <SharedBuildFields
+                build={{
+                    ...baseBuild,
+                    customFormula: {
+                        rows: [{ stat: 'hp', kind: 'bonus', direction: 'max', percentage: 42 }],
+                    },
+                }}
+            />
+        );
+        expect(screen.getByTestId('community-build-formula-row')).toHaveTextContent('42%');
+    });
+
+    it('never renders a nonzero equation weight as x0.000', () => {
+        render(
+            <SharedBuildFields
+                build={{
+                    ...baseBuild,
+                    shipRole: 'ATTACKER',
+                    roleBasis: {
+                        produces: 'damage',
+                        // The schema's own MIN_NUMBER_MAGNITUDE floor (1e-6) — small enough to
+                        // round to "0.000" under toFixed(3), but still a real authored weight.
+                        terms: [{ stat: 'attack', weight: 0.000001 }],
+                    },
+                }}
+            />
+        );
+        const equation = screen.getByTestId('community-build-equation');
+        expect(equation).not.toHaveTextContent('x0.000');
+    });
 });
