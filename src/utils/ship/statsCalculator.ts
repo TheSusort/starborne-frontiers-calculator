@@ -7,7 +7,7 @@ import {
 } from '../../types/stats';
 import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 import { EquipmentSlotName, ImplantSlotName } from '../../constants/gearTypes';
 import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationUtils';
 
@@ -144,21 +144,20 @@ export const calculateTotalStats = (
         const setCounts = countSetPieces();
 
         Object.entries(setCounts).forEach(([setType, count]) => {
-            const bonusCount = Math.floor(count / (GEAR_SETS[setType]?.minPieces || 2));
+            const bonusCount = Math.floor(count / (getGearSet(setType)?.minPieces || 2));
             if (bonusCount === 0) return;
 
             const gearWithBonus = Object.values(equipment)
                 .map((id) => id && getGearPiece(id))
                 .find((gear) => gear && gear.setBonus && gear.setBonus === setType);
-            if (
-                !gearWithBonus ||
-                !gearWithBonus.setBonus ||
-                !GEAR_SETS[gearWithBonus.setBonus].stats
-            )
-                return;
+            const setDef =
+                gearWithBonus && gearWithBonus.setBonus
+                    ? getGearSet(gearWithBonus.setBonus)
+                    : undefined;
+            if (!setDef?.stats) return;
 
             for (let i = 0; i < bonusCount; i++) {
-                GEAR_SETS[gearWithBonus.setBonus].stats.forEach((stat) =>
+                setDef.stats.forEach((stat) =>
                     addStatModifier(stat, breakdown.afterSets, breakdown.afterEngineering)
                 );
             }

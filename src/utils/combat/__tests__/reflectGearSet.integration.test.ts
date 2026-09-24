@@ -24,7 +24,7 @@ import { GearPiece } from '../../../types/gear';
 import { reflectedDamageForHit } from '../damageReflection';
 import { computeAffinityModifiers } from '../../calculators/affinityUtils';
 import { calculateDamageReduction } from '../../autogear/priorityScore';
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { getGearSet } from '../../../constants/gearSets';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
 
@@ -49,7 +49,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 /** REFLECT pieces equipping the wearer with `minPieces` of the set across distinct slots. */
 const REFLECT_SLOTS = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
 function reflectPieces(): GearPiece[] {
-    const minPieces = GEAR_SETS['REFLECT']?.minPieces ?? 2;
+    const minPieces = getGearSet('REFLECT')?.minPieces ?? 2;
     const out: GearPiece[] = [];
     for (let i = 0; i < minPieces; i++) {
         out.push(
@@ -218,7 +218,7 @@ describe('REFLECT gear set — thorns damage at the victim seam', () => {
     // (f) Magnitude sanity — reflected value matches the pure helper exactly
     // -----------------------------------------------------------------------
     it('(f) magnitude: reflected value matches reflectedDamageForHit for defence 3001 + affinity disadvantage', () => {
-        const reflectPct = (GEAR_SETS['REFLECT']?.minPieces ?? 2) > 0 ? 10 : 0; // registry pct = 10
+        const reflectPct = (getGearSet('REFLECT')?.minPieces ?? 2) > 0 ? 10 : 0; // registry pct = 10
         const netHpDamage = 4000;
         // Wearer thermal vs attacker chemical → wearer has ADVANTAGE → +25 on the reflected hit.
         // Use a disadvantage matchup for the wearer as the prompt specifies: wearer chemical,

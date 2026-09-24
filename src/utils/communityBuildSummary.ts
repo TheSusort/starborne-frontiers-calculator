@@ -1,13 +1,13 @@
 import { SHIP_TYPES } from '../constants/shipTypes';
-import { GEAR_SETS } from '../constants/gearSets';
-import { IMPLANTS } from '../constants/implants';
+import { getGearSet } from '../constants/gearSets';
+import { getImplantData } from '../constants/implants';
 import { getLimitStatLabel } from '../constants/stats';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
 
 // Every lookup below is keyed by community-authored data, so every one falls
 // back to the raw key rather than indexing a Record and trusting the result.
 const setLabel = (setName: string): string =>
-    GEAR_SETS[setName]?.name ?? IMPLANTS[setName]?.name ?? setName;
+    getGearSet(setName)?.name ?? getImplantData(setName)?.name ?? setName;
 
 /**
  * One-line config summary for a collapsed community build row, in the same

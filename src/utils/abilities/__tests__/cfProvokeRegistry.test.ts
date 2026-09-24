@@ -9,6 +9,7 @@ import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
 import { GearPiece } from '../../../types/gear';
 import { Ship } from '../../../types/ship';
 import { Ability } from '../../../types/abilities';
+import { GearSetName } from '../../../constants/gearSets';
 
 // ---------------------------------------------------------------------------
 // Minimal fixture helpers (copied from equipmentCoverage.test.ts)
@@ -47,7 +48,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
  * Build a ship with the given implant at the given rarity and return the single
  * produced ability (throws if not exactly one ability).
  */
-function buildImplant(implantKey: string, rarity: GearPiece['rarity']): Ability {
+function buildImplant(implantKey: GearSetName, rarity: GearPiece['rarity']): Ability {
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
         [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),

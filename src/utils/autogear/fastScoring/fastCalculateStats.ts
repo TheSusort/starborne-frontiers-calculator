@@ -1,4 +1,4 @@
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { getGearSet } from '../../../constants/gearSets';
 import type { GearPiece } from '../../../types/gear';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
@@ -107,7 +107,7 @@ function applySetBonuses(
         const count = setCount[setId];
         if (count === 0) continue;
         const setName = registry.setIdToName[setId];
-        const setDef = GEAR_SETS[setName];
+        const setDef = getGearSet(setName);
         if (!setDef?.stats) continue;
         const minPieces = setDef.minPieces || 2;
         const bonusCount = Math.floor(count / minPieces);

@@ -28,8 +28,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
-import { GEAR_SETS } from '../../../constants/gearSets';
-import { IMPLANTS } from '../../../constants/implants';
+import { GEAR_SETS, getGearSet, GearSetName } from '../../../constants/gearSets';
+import { IMPLANTS, ImplantVariant } from '../../../constants/implants';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 
@@ -70,8 +70,8 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
  * Build a minimal ship equipping enough pieces of a gear set (≥ its minPieces)
  * and return the ability count produced by buildEquipmentAbilities.
  */
-function gearSetAbilityCount(setKey: string): number {
-    const setDef = GEAR_SETS[setKey];
+function gearSetAbilityCount(setKey: GearSetName): number {
+    const setDef = getGearSet(setKey);
     const minPieces = setDef?.minPieces ?? 2;
 
     // Gear slot names used in the test — just need enough distinct slots.
@@ -94,7 +94,7 @@ function gearSetAbilityCount(setKey: string): number {
  * Build a minimal ship equipping one implant piece (at the given rarity) and
  * return the ability count produced by buildEquipmentAbilities.
  */
-function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): number {
+function implantAbilityCount(implantKey: GearSetName, rarity: GearPiece['rarity']): number {
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
         [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
@@ -107,7 +107,7 @@ function implantAbilityCount(implantKey: string, rarity: GearPiece['rarity']): n
  * Build a minimal ship equipping one implant piece (at the given rarity) and
  * return the built abilities produced by buildEquipmentAbilities (for shape assertions).
  */
-function implantAbilities(implantKey: string, rarity: string) {
+function implantAbilities(implantKey: GearSetName, rarity: string) {
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
         [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
@@ -124,7 +124,7 @@ function implantAbilities(implantKey: string, rarity: string) {
 describe('equipmentCoverage — implemented effects registry', () => {
     it('exactly { BOOST + BURNER + DECIMATION + LEECH + REFLECT + CLOAKING + HARDENED + REVENGE + SHIELD (gear sets), MARTYRDOM + ARCANE_SIEGE + CHRONO_REAVER + HYPERION_GAZE + INTRUSION + LIFELINE + NEBULA_NULLIFIER + NOURISHMENT + SMOKESCREEN + SYNAPTIC_RESONANCE + VOIDFIRE_CATALYST + VOIDSHADE + VORTEX_VEIL + WARPSTRIKE + ALACRITY + AMBUSH + BATTLECRY + BLOODTHIRST + BULWARK + DOOMSAYER + EXUBERANCE + FIREWALL + FONT_OF_POWER + FORTIFYING_SHROUD + GIANT_SLAYER + INSIDIOUSNESS + IRONCLAD + LAST_STAND + LAST_WISH + LOCKDOWN + MENACE + REACTIVE_WARD + SECOND_WIND + SHADOWGUARD + SPEARHEAD + TENACITY + VIVACIOUS_REPAIR (implants) } are currently implemented', () => {
         // Gear sets with an ability builder
-        const implementedSets = Object.keys(GEAR_SETS).filter(
+        const implementedSets = (Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]).filter(
             (key) => gearSetAbilityCount(key) > 0
         );
         expect(implementedSets).toEqual([
@@ -140,11 +140,17 @@ describe('equipmentCoverage — implemented effects registry', () => {
         ]);
 
         // Implants with an ability builder (check each implant with a rarity that exists)
-        const implementedImplants = Object.keys(IMPLANTS).filter((key) => {
-            const variants = IMPLANTS[key].variants;
-            // Try the first available rarity for each implant.
-            return variants.some((v) => implantAbilityCount(key, v.rarity) > 0);
-        });
+        const implementedImplants = (Object.keys(IMPLANTS) as (keyof typeof IMPLANTS)[]).filter(
+            (key) => {
+                // Each implant keeps its own narrow `satisfies`-checked literal type, so indexing
+                // by the whole `keyof typeof IMPLANTS` union yields a union of differently-shaped
+                // `variants` arrays; widen to the shared shape (our own fixture data, not
+                // unvalidated input) so `.some()` resolves to one overload.
+                const variants = IMPLANTS[key].variants as ImplantVariant[];
+                // Try the first available rarity for each implant.
+                return variants.some((v) => implantAbilityCount(key, v.rarity) > 0);
+            }
+        );
         expect(implementedImplants).toEqual([
             'MARTYRDOM',
             'ABUNDANT_RENEWAL',
@@ -232,7 +238,7 @@ describe('equipmentCoverage — gear sets', () => {
     });
 
     it('REFLECT produces an ability with id equip-set-REFLECT, config.type damage-reflection, config.pct 10', () => {
-        const minPieces = GEAR_SETS['REFLECT']?.minPieces ?? 2;
+        const minPieces = getGearSet('REFLECT')?.minPieces ?? 2;
         const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
@@ -260,7 +266,7 @@ describe('equipmentCoverage — gear sets', () => {
     });
 
     it('CLOAKING produces a once-per-combat 2-turn Stealth self-buff on start-of-round', () => {
-        const minPieces = GEAR_SETS['CLOAKING']?.minPieces ?? 2;
+        const minPieces = getGearSet('CLOAKING')?.minPieces ?? 2;
         const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
@@ -291,7 +297,7 @@ describe('equipmentCoverage — gear sets', () => {
     });
 
     it('SHIELD produces a start-of-turn self shield of 4% caster max HP', () => {
-        const minPieces = GEAR_SETS['SHIELD']?.minPieces ?? 2;
+        const minPieces = getGearSet('SHIELD')?.minPieces ?? 2;
         const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
@@ -314,7 +320,9 @@ describe('equipmentCoverage — gear sets', () => {
         expect(sh!.config.basis).toBe('hp');
     });
 
-    const unimplementedSets = Object.keys(GEAR_SETS).filter((k) => !IMPLEMENTED_SETS.has(k));
+    const unimplementedSets = (Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]).filter(
+        (k) => !IMPLEMENTED_SETS.has(k)
+    );
     for (const setKey of unimplementedSets) {
         it(`${setKey} produces 0 abilities (not yet implemented)`, () => {
             expect(gearSetAbilityCount(setKey)).toBe(0);
@@ -831,7 +839,9 @@ describe('equipmentCoverage — implants', () => {
         expect(implantAbilityCount('VOIDFIRE_CATALYST', 'legendary')).toBe(1);
     });
 
-    const unimplementedImplants = Object.keys(IMPLANTS).filter((k) => !implementedImplants.has(k));
+    const unimplementedImplants = (Object.keys(IMPLANTS) as (keyof typeof IMPLANTS)[]).filter(
+        (k) => !implementedImplants.has(k)
+    );
     for (const implantKey of unimplementedImplants) {
         it(`${implantKey} produces 0 abilities (not yet implemented)`, () => {
             const variants = IMPLANTS[implantKey].variants;

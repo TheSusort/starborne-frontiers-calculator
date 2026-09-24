@@ -4,7 +4,7 @@ import type { BaseStats, Stat, StatName } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import { statVectorToBaseStats, STAT_INDEX } from '../../fastScoring/statVector';
 import { calculatePriorityScore } from '../../autogear/scoring';
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { getGearSet } from '../../../constants/gearSets';
 import { isCalibrationEligible, getCalibratedMainStat } from '../calibrationCalculator';
 import type { PotentialContext } from './potentialContext';
 
@@ -106,7 +106,7 @@ export function scorePieceApplied(
     // 5. Set bonus handling — diverges by mode.
     if (piece.setBonus) {
         const setId = ctx.setNameToId.get(piece.setBonus);
-        const setDef = GEAR_SETS[piece.setBonus];
+        const setDef = getGearSet(piece.setBonus);
 
         if (ctx.withShip) {
             // Deltaful: only apply when adding this piece crosses a threshold.

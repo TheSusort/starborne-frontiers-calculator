@@ -13,7 +13,7 @@ import { ShipTypeName, SHIP_TYPES, isShipTypeName } from '../../constants/shipTy
 import { TrophyIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
 import { Select } from '../../components/ui/Select';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 import { tryDecodeGearStats } from '../../utils/gear/statsCodec';
 
 interface LeaderboardEntry {
@@ -423,18 +423,21 @@ export const LeaderboardPage: React.FC = () => {
                                                 const gear = entry.ship._gearMap?.get(
                                                     gearId as string
                                                 );
-                                                if (
-                                                    !gear ||
-                                                    !gear.setBonus ||
-                                                    !GEAR_SETS[gear.setBonus]
-                                                )
+                                                // `_gearMap` is deliberately untyped (`any`) —
+                                                // narrow at this one read site rather than typing
+                                                // the whole map.
+                                                const setBonus = gear?.setBonus as
+                                                    string | null | undefined;
+                                                const gearSet = setBonus
+                                                    ? getGearSet(setBonus)
+                                                    : undefined;
+                                                if (!gearSet)
                                                     return (
                                                         <div
                                                             key={`${slot}-empty`}
                                                             className="w-5 h-5 sm:w-6 sm:h-6 bg-dark-lighter"
                                                         />
                                                     );
-                                                const gearSet = GEAR_SETS[gear.setBonus];
                                                 return (
                                                     <img
                                                         key={`${gearSet.name}-${slot}`}

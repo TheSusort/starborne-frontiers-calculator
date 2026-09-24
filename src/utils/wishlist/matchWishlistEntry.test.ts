@@ -8,7 +8,7 @@ const baseGear: GearPiece = {
     slot: 'weapon',
     stars: 5,
     rarity: 'epic',
-    setBonus: 'Fortitude',
+    setBonus: 'FORTITUDE',
     mainStat: { name: 'attack', value: 100, type: 'flat' },
     subStats: [
         { name: 'crit', value: 10, type: 'percentage' },
@@ -104,7 +104,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Fortitude'] },
+            filters: { setBonus: ['FORTITUDE'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
@@ -113,7 +113,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Fortitude', 'Oblivion'] },
+            filters: { setBonus: ['FORTITUDE', 'ATTACK'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(true);
     });
@@ -122,7 +122,7 @@ describe('matchesWishlistEntry', () => {
         const entry: WishlistEntry = {
             id: '1',
             name: 'test',
-            filters: { setBonus: ['Oblivion'] },
+            filters: { setBonus: ['ATTACK'] },
         };
         expect(matchesWishlistEntry(baseGear, entry)).toBe(false);
     });

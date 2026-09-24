@@ -6,8 +6,8 @@ import {
     FleetBuff,
     CustomFormula,
 } from '../../types/autogear';
-import { GEAR_SETS, ShipTypeName } from '../../constants';
-import { IMPLANTS } from '../../constants/implants';
+import { getGearSet, ShipTypeName } from '../../constants';
+import { getImplantData } from '../../constants/implants';
 import { SHIP_TYPES } from '../../constants/shipTypes';
 import { STATS, getLimitStatLabel } from '../../constants/stats';
 
@@ -97,10 +97,10 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
                             {setPriorities.map((setPriority, index) => (
                                 <span key={index}>
                                     {setPriority.kind === 'implant'
-                                        ? (GEAR_SETS[setPriority.setName]?.name ??
-                                          IMPLANTS[setPriority.setName]?.name ??
+                                        ? (getGearSet(setPriority.setName)?.name ??
+                                          getImplantData(setPriority.setName)?.name ??
                                           setPriority.setName)
-                                        : `${setPriority.count} x ${GEAR_SETS[setPriority.setName]?.name ?? setPriority.setName}`}
+                                        : `${setPriority.count} x ${getGearSet(setPriority.setName)?.name ?? setPriority.setName}`}
                                 </span>
                             ))}
                         </>
@@ -132,7 +132,7 @@ export const AutogearConfigList: React.FC<AutogearConfigListProps> = ({
 
                     {/* Excluded Implant Types */}
                     {excludedImplantTypes.map((key) => (
-                        <span key={key}>Excl. {IMPLANTS[key]?.name ?? key}</span>
+                        <span key={key}>Excl. {getImplantData(key)?.name ?? key}</span>
                     ))}
 
                     {/* Custom Formula */}

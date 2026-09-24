@@ -1108,7 +1108,10 @@ describe('the ideal is a true ceiling', () => {
      * substat combos exhaustively, so this ceiling check does not need to
      * repeat that in full to catch a regression in it.
      */
-    const SET_CYCLE: (GearSetName | null)[] = [null, ...Object.keys(GEAR_SETS)];
+    const SET_CYCLE: (GearSetName | null)[] = [
+        null,
+        ...(Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]),
+    ];
 
     /**
      * Every realistic legal level-16, 6-star legendary piece `slot` can

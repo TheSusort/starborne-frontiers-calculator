@@ -34,7 +34,7 @@ import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { GearPiece } from '../../types/gear';
 import { TrophyIcon } from '../ui/icons/TrophyIcon';
 import { Image } from '../ui/Image';
-import IMPLANTS from '../../constants/implants';
+import { getImplantData } from '../../constants/implants';
 import { ImageIcon } from '../ui/icons/ImageIcon';
 import { StatBreakdown as StatsBreakdownType } from '../../utils/ship/statsCalculator';
 import { StatList } from '../stats/StatList';
@@ -539,7 +539,7 @@ export const ImplantsDisplay: React.FC<ImplantsDisplayProps> = ({ ship, getGearP
                         if (!implantId) return null;
                         const gear = getGearPiece(implantId);
                         if (!gear?.setBonus) return null;
-                        const implant = IMPLANTS[gear.setBonus];
+                        const implant = getImplantData(gear.setBonus);
                         if (!implant?.imageKey) return null;
                         const rarity = gear.rarity || 'common';
                         return (

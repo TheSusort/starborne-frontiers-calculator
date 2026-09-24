@@ -10,12 +10,12 @@ function isExcludedByImplantType(
     return isImplant && excludedImplantTypes.includes(gear.setBonus ?? '');
 }
 
-const makeImplant = (setBonus: string | null): Pick<GearPiece, 'slot' | 'setBonus'> => ({
+const makeImplant = (setBonus: GearPiece['setBonus']): Pick<GearPiece, 'slot' | 'setBonus'> => ({
     slot: 'implant_major',
     setBonus,
 });
 
-const makeGear = (setBonus: string | null): Pick<GearPiece, 'slot' | 'setBonus'> => ({
+const makeGear = (setBonus: GearPiece['setBonus']): Pick<GearPiece, 'slot' | 'setBonus'> => ({
     slot: 'weapon',
     setBonus,
 });
@@ -26,7 +26,7 @@ describe('isExcludedByImplantType', () => {
     });
 
     it('does not exclude an implant whose type is not in the list', () => {
-        expect(isExcludedByImplantType(makeImplant('STASIS'), ['BULWARK'])).toBe(false);
+        expect(isExcludedByImplantType(makeImplant('ALACRITY'), ['BULWARK'])).toBe(false);
     });
 
     it('does not exclude a non-implant even if its setBonus matches', () => {

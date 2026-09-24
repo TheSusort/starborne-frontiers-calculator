@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { GearSetName, GEAR_SETS, STATS } from '../../constants';
+import { GearSetName, getGearSet, isGearSetName, STATS } from '../../constants';
 import {
     getEquipmentSlotLabel,
     isGearSlotName,
@@ -111,7 +111,7 @@ function buildRarityStackedData(
 }
 
 // Label helpers
-const getSetLabel = (key: string) => GEAR_SETS[key]?.name || key;
+const getSetLabel = (key: string) => getGearSet(key)?.name || key;
 // Callers here pass computed/aggregated strings, not always a literal EquipmentSlotName
 // (grouping keys, a defensive '|| UNKNOWN' fallback) — narrow before delegating rather than
 // widening `getEquipmentSlotLabel`'s own signature to tolerate arbitrary strings.
@@ -293,7 +293,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
 
     // Get unique set bonuses for filter
     const setOptions = useMemo(() => {
-        const options = new Set<string>();
+        const options = new Set<GearSetName>();
         gearOnly.forEach((piece) => {
             if (piece.setBonus) {
                 options.add(piece.setBonus);
@@ -314,7 +314,11 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                         </label>
                         <Select
                             value={setFilter}
-                            onChange={(value) => setSetFilter(value)}
+                            onChange={(value) => {
+                                if (value === 'all' || value === 'none' || isGearSetName(value)) {
+                                    setSetFilter(value);
+                                }
+                            }}
                             options={[
                                 { value: 'all', label: 'All Sets' },
                                 { value: 'none', label: 'No Set' },

@@ -1,9 +1,9 @@
 import { memo, useRef } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GearSetName, RARITIES, STATS } from '../../constants';
+import { getGearSet, RARITIES, STATS } from '../../constants';
 import type { EquipmentSlotName } from '../../constants/gearTypes';
 import { Button, Tooltip, CloseIcon } from '../ui';
-import { ImplantName, IMPLANTS } from '../../constants/implants';
+import { getImplantData } from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
@@ -50,7 +50,7 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                         <div className="absolute top-1 left-1">
                             {!isImplant && (
                                 <img
-                                    src={GEAR_SETS[gear.setBonus as GearSetName]?.iconUrl}
+                                    src={getGearSet(gear.setBonus)?.iconUrl}
                                     alt={gear.setBonus as string}
                                     className="w-5"
                                 />
@@ -61,8 +61,8 @@ export const GearSlot: React.FC<GearSlotProps> = memo(
                         {isImplant && (
                             <div className="h-full w-full flex items-center justify-center">
                                 <Image
-                                    src={IMPLANTS[gear.setBonus as ImplantName].imageKey as string}
-                                    alt={IMPLANTS[gear.setBonus as ImplantName].name}
+                                    src={getImplantData(gear.setBonus)?.imageKey as string}
+                                    alt={getImplantData(gear.setBonus)?.name}
                                     className="w-7"
                                 />
                             </div>

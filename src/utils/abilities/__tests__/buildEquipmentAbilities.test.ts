@@ -3,7 +3,7 @@ import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { Ability } from '../../../types/abilities';
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { getGearSet, GearSetName } from '../../../constants/gearSets';
 import { BUFFS } from '../../../constants/buffs';
 import { parseBuffEffects } from '../../calculators/buffParser';
 
@@ -164,7 +164,8 @@ describe('buildEquipmentAbilities — unknown implant key', () => {
             id: 'fake-implant',
             slot: 'implant_major',
             rarity: 'legendary',
-            setBonus: 'FAKE_NONEXISTENT_IMPLANT',
+            // Deliberately not a real GearSetName — the point of the test.
+            setBonus: 'FAKE_NONEXISTENT_IMPLANT' as GearSetName,
         });
         const ship = makeShip({
             implants: { implant_major: 'fake-implant' },
@@ -181,7 +182,7 @@ describe('buildEquipmentAbilities — unknown implant key', () => {
 // ---------------------------------------------------------------------------
 
 /** Build a ship with a single implant piece in implant_major and call buildEquipmentAbilities. */
-function buildForImplant(name: string, rarity: GearPiece['rarity']): Ability[] {
+function buildForImplant(name: GearSetName, rarity: GearPiece['rarity']): Ability[] {
     const implantKey = name;
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
@@ -194,8 +195,8 @@ function buildForImplant(name: string, rarity: GearPiece['rarity']): Ability[] {
 }
 
 /** Build a ship with enough pieces of a gear set (≥ its minPieces) and return the abilities. */
-function buildForGearSet(setKey: string): Ability[] {
-    const minPieces = GEAR_SETS[setKey]?.minPieces ?? 2;
+function buildForGearSet(setKey: GearSetName): Ability[] {
+    const minPieces = getGearSet(setKey)?.minPieces ?? 2;
     const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
     const equipment: Record<string, string> = {};
     const pieceMap: Record<string, GearPiece> = {};

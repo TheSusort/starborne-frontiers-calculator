@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
+import { getGearSet, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
 import { isGearSlotName } from '../../constants/gearTypes';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
@@ -196,7 +196,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                                 {activeSets.map((setName, index) => (
                                     <img
                                         key={`${setName}-${index}`}
-                                        src={GEAR_SETS[setName].iconUrl}
+                                        src={getGearSet(setName)?.iconUrl}
                                         alt={setName}
                                         className="w-5"
                                     />
@@ -285,7 +285,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                                 {activeSets.map((setName, index) => (
                                     <img
                                         key={`${setName}-${index}`}
-                                        src={GEAR_SETS[setName].iconUrl}
+                                        src={getGearSet(setName)?.iconUrl}
                                         alt={setName}
                                         className="w-5"
                                     />

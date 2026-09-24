@@ -18,7 +18,7 @@ import { describe, it, expect } from 'vitest';
 import { buildEquipmentAbilities } from '../../abilities/buildEquipmentAbilities';
 import { modifierTotalsFromAbilities } from '../../abilities/applyAbilities';
 import { makeConditionContext } from '../../abilities/__tests__/conditionContextFixture';
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { getGearSet } from '../../../constants/gearSets';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 
@@ -57,7 +57,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 
 /** Build abilities for a ship wearing `minPieces` of the REVENGE gear set. */
 function buildRevengeAbilities() {
-    const setDef = GEAR_SETS['REVENGE'];
+    const setDef = getGearSet('REVENGE');
     const minPieces = setDef?.minPieces ?? 2;
     const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
     const equipment: Record<string, string> = {};

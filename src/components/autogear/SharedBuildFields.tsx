@@ -1,7 +1,7 @@
 import React from 'react';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { GEAR_SETS } from '../../constants/gearSets';
-import { IMPLANTS } from '../../constants/implants';
+import { getGearSet } from '../../constants/gearSets';
+import { getImplantData } from '../../constants/implants';
 import { STATS, getLimitStatLabel } from '../../constants/stats';
 import type { SharedAutogearBuild } from '../../types/communityRecommendation';
 import type { BasisTerm, CustomFormulaRow, RoleBasis } from '../../types/autogear';
@@ -21,11 +21,12 @@ const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title
     </div>
 );
 
-// Every constant lookup below is keyed by community-authored data. STATS,
-// GEAR_SETS, SHIP_TYPES and IMPLANTS are Record<string, …> — they gate authoring,
-// not input — so a foreign key yields undefined and must fall back, never index.
+// Every constant lookup below is keyed by community-authored data, so every one falls back to
+// the raw key: STATS/SHIP_TYPES via a plain index (their own key type still gates authoring, not
+// input), GEAR_SETS/IMPLANTS via `getGearSet`/`getImplantData` (no index signature — an unrecognised
+// name must resolve to `undefined`, not a type error).
 const setLabel = (setName: string): string =>
-    GEAR_SETS[setName]?.name ?? IMPLANTS[setName]?.name ?? setName;
+    getGearSet(setName)?.name ?? getImplantData(setName)?.name ?? setName;
 
 /** A derived/authored weight is never smaller than the share schema's own MIN_NUMBER_MAGNITUDE
  *  floor (1e-6, `sharedAutogearBuild.ts`) — well below `toFixed(3)`'s 0.0005 rounding floor, so a
@@ -191,7 +192,7 @@ export const SharedBuildFields: React.FC<SharedBuildFieldsProps> = ({ build: con
                 <Section title="Implants">
                     {config.optimizeImplants && <div>Optimize implants</div>}
                     {config.excludedImplantTypes.map((key) => (
-                        <div key={key}>Excluded: {IMPLANTS[key]?.name ?? key}</div>
+                        <div key={key}>Excluded: {getImplantData(key)?.name ?? key}</div>
                     ))}
                 </Section>
             )}

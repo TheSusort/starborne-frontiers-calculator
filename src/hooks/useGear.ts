@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
-import { GEAR_SETS } from '../constants/gearSets';
+import { getGearSet, GearSetName } from '../constants/gearSets';
 
 // Helper type for the gear lookup
 export type GearLookup = Record<string, GearPiece | undefined>;
@@ -33,7 +33,7 @@ export const useGearLookup = (
 export const useGearSets = (
     equipment: Partial<Record<string, string>>,
     gearLookup: GearLookup
-): string[] => {
+): GearSetName[] => {
     return useMemo(() => {
         if (!equipment) return [];
         const setCount = Object.values(equipment).reduce(
@@ -45,13 +45,13 @@ export const useGearSets = (
                 acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
                 return acc;
             },
-            {} as Record<string, number>
+            {} as Partial<Record<GearSetName, number>>
         );
 
         // For each set, add the set name multiple times based on complete sets
-        return Object.entries(setCount).flatMap(([setName, count]) => {
-            const completeSets = Math.floor(count / (GEAR_SETS[setName]?.minPieces || 2));
-            return Array(completeSets).fill(setName);
+        return (Object.entries(setCount) as [GearSetName, number][]).flatMap(([setName, count]) => {
+            const completeSets = Math.floor(count / (getGearSet(setName)?.minPieces || 2));
+            return Array(completeSets).fill(setName) as GearSetName[];
         });
     }, [equipment, gearLookup]);
 };

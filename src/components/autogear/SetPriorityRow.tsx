@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, CloseIcon, EditIcon, InlineNumberEdit } from '../ui';
 import { SetPriority } from '../../types/autogear';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 
 interface SetPriorityRowProps {
     priority: SetPriority;
@@ -23,7 +23,7 @@ export const SetPriorityRow: React.FC<SetPriorityRowProps> = ({
     modeLabel,
 }) => {
     const label =
-        GEAR_SETS[priority.setName]?.name ??
+        getGearSet(priority.setName)?.name ??
         availableImplantTypes?.find((t) => t.key === priority.setName)?.label ??
         priority.setName;
 

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { buildShipAbilities } from '../buildShipAbilities';
 import { buildEquipmentAbilities } from '../buildEquipmentAbilities';
-import { GEAR_SETS } from '../../../constants/gearSets';
+import { GEAR_SETS, getGearSet, GearSetName } from '../../../constants/gearSets';
 import { IMPLANTS } from '../../../constants/implants';
 import { CHARGE_TARGET_OPTIONS } from '../../../components/skills/simCoverage';
 import type { Ship } from '../../../types/ship';
@@ -152,8 +152,8 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 const RARITIES: RarityName[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 const EQUIPMENT_SLOTS = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
 
-function gearSetCharges(setKey: string): ChargeRow[] {
-    const setDef = GEAR_SETS[setKey];
+function gearSetCharges(setKey: GearSetName): ChargeRow[] {
+    const setDef = getGearSet(setKey);
     const minPieces = setDef?.minPieces ?? 2;
     const equipment: Record<string, string> = {};
     const pieceMap: Record<string, GearPiece> = {};
@@ -169,7 +169,7 @@ function gearSetCharges(setKey: string): ChargeRow[] {
         .map((a) => ({ source: `gearSet/${setKey}`, target: a.target }));
 }
 
-function implantCharges(implantKey: string, rarity: RarityName): ChargeRow[] {
+function implantCharges(implantKey: GearSetName, rarity: RarityName): ChargeRow[] {
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
         [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),
@@ -182,10 +182,10 @@ function implantCharges(implantKey: string, rarity: RarityName): ChargeRow[] {
 
 function sweepEquipmentCharges(): ChargeRow[] {
     const rows: ChargeRow[] = [];
-    for (const setKey of Object.keys(GEAR_SETS)) {
+    for (const setKey of Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]) {
         rows.push(...gearSetCharges(setKey));
     }
-    for (const implantKey of Object.keys(IMPLANTS)) {
+    for (const implantKey of Object.keys(IMPLANTS) as (keyof typeof IMPLANTS)[]) {
         for (const rarity of RARITIES) {
             rows.push(...implantCharges(implantKey, rarity));
         }

@@ -1,6 +1,7 @@
 import { supabase } from '../config/supabase';
 import { isGearSlotName } from '../constants/gearTypes';
 import type { GearSlotName } from '../constants/gearTypes';
+import { isGearSetName } from '../constants/gearSets';
 import type { ShipTypeName } from '../constants/shipTypes';
 import { isShipTypeName } from '../constants/shipTypes';
 import type { AffinityName, Ship } from '../types/ship';
@@ -620,7 +621,11 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                         level: internalGear.level,
                         stars: internalGear.stars,
                         rarity: internalGear.rarity,
-                        setBonus: internalGear.setBonus,
+                        // `internalGear.setBonus` is read straight off the inventory row (`string`) —
+                        // guard rather than cast, same trust boundary as `slot` above.
+                        setBonus: isGearSetName(internalGear.setBonus)
+                            ? internalGear.setBonus
+                            : null,
                         mainStat: internalGear.mainStat
                             ? internalGear.mainStat.type === 'percentage'
                                 ? {

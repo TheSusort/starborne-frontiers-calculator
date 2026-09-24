@@ -4,6 +4,8 @@ import { StatName, StatType, Stat } from '../../types/stats';
 import {
     GearSetName,
     GEAR_SETS,
+    getGearSet,
+    isGearSetName,
     RARITIES,
     RarityName,
     GEAR_SLOTS,
@@ -212,15 +214,15 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     >
                         <div>
                             <div className="flex items-center gap-2">
-                                {GEAR_SETS[setBonus]?.iconUrl && (
+                                {getGearSet(setBonus)?.iconUrl && (
                                     <img
-                                        src={GEAR_SETS[setBonus].iconUrl}
-                                        alt={GEAR_SETS[setBonus].name}
+                                        src={getGearSet(setBonus)?.iconUrl}
+                                        alt={getGearSet(setBonus)?.name}
                                         className="w-5"
                                     />
                                 )}
                                 <span className="font-secondary text-sm">
-                                    {GEAR_SETS[setBonus]?.name} {GEAR_SLOTS[slot].label}
+                                    {getGearSet(setBonus)?.name} {GEAR_SLOTS[slot].label}
                                 </span>
                             </div>
                             <div className="flex items-center gap-3 text-sm mt-1.5">
@@ -274,7 +276,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Select
                         label="Set Bonus"
                         value={setBonus}
-                        onChange={(value) => setSetBonus(value)}
+                        onChange={(value) => {
+                            if (isGearSetName(value)) setSetBonus(value);
+                        }}
                         options={setOptions}
                     />
 

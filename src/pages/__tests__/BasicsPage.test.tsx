@@ -5,7 +5,7 @@ import BasicsPage from '../BasicsPage';
 import { ROLE_GUIDE } from '../../components/basics/roleGuideData';
 import { STATS } from '../../constants/stats';
 import { TARGETING_RULES, PATTERN_SHAPES } from '../../constants/targetingRules';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { GEAR_SET_LIST } from '../../constants/gearSets';
 
 // Seo renders into document.head via a portal in some setups; stub it so the test asserts
 // page content only.
@@ -94,7 +94,7 @@ describe('BasicsPage', () => {
             expect(shape.label, shape.id).not.toMatch(/\blanes?\b/i);
             expect(shape.label, shape.id).not.toMatch(/\bcolumns?\b/i);
         }
-        for (const set of Object.values(GEAR_SETS)) {
+        for (const set of GEAR_SET_LIST) {
             if (typeof set.description !== 'string') continue;
             expect(set.description, set.name).not.toMatch(/\blanes?\b/i);
             expect(set.description, set.name).not.toMatch(/\bcolumns?\b/i);

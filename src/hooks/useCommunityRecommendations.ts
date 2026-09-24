@@ -12,7 +12,7 @@ import {
     type CommunityBuild,
     type CommunityBuildSort,
 } from '../utils/communityBuild';
-import { IMPLANTS } from '../constants/implants';
+import { getImplantData } from '../constants/implants';
 import { useInventory } from '../contexts/InventoryProvider';
 import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 
@@ -87,7 +87,7 @@ export const useCommunityRecommendations = ({
             return null;
         }
 
-        const implantData = IMPLANTS[implantPiece.setBonus];
+        const implantData = getImplantData(implantPiece.setBonus);
         return implantData && implantData.type === 'ultimate' ? implantData.name : null;
     }, [selectedShip, getGearPiece]);
 

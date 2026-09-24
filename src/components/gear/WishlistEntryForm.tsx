@@ -3,7 +3,7 @@ import { WishlistEntry } from '../../types/wishlist';
 import { Input, Button } from '../ui';
 import { GEAR_SLOT_ORDER, type GearSlotName } from '../../constants/gearTypes';
 import { RARITIES, type RarityName } from '../../constants/rarities';
-import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
+import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import IMPLANTS from '../../constants/implants';
 import { StatName, StatType } from '../../types/stats';
@@ -18,7 +18,12 @@ const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
 const ALL_RARITIES = Object.keys(RARITIES);
 
 const implantKeys = new Set(Object.keys(IMPLANTS));
-const GEAR_SET_ENTRIES = Object.entries(GEAR_SETS)
+const GEAR_SET_ENTRIES = (
+    Object.entries(GEAR_SETS) as [
+        keyof typeof GEAR_SETS,
+        (typeof GEAR_SETS)[keyof typeof GEAR_SETS],
+    ][]
+)
     .filter(([key]) => !implantKeys.has(key))
     .sort(([, a], [, b]) => a.name.localeCompare(b.name));
 
@@ -165,7 +170,7 @@ export const WishlistEntryForm: React.FC<Props> = ({ initial, onSubmit, onCancel
             <ChipPicker
                 label="Gear Set (any of)"
                 allOptions={GEAR_SET_ENTRIES.map(([key]) => key)}
-                getLabel={(key) => GEAR_SETS[key]?.name ?? key}
+                getLabel={(key) => getGearSet(key)?.name ?? key}
                 selected={setBonuses}
                 onToggle={(s) => setSetBonuses((prev) => toggle(prev, s))}
             />

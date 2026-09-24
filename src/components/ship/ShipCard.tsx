@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import {
-    GEAR_SETS,
+    getGearSet,
     GEAR_SLOTS,
     GearSlotName,
     IMPLANT_SLOTS,
@@ -263,7 +263,7 @@ export const ShipCard: React.FC<Props> = ({
                                     {activeSets.map((setName, index) => (
                                         <img
                                             key={`${setName}-${index}`}
-                                            src={GEAR_SETS[setName].iconUrl}
+                                            src={getGearSet(setName)?.iconUrl}
                                             alt={setName}
                                             className="w-5"
                                         />
@@ -274,42 +274,45 @@ export const ShipCard: React.FC<Props> = ({
                                     className="flex flex-col gap-2 bg-dark border border-dark-lighter p-2 w-48"
                                     targetElement={gearSetsTooltipRef.current}
                                 >
-                                    {activeSets.map((setName, index) => (
-                                        <div key={`${setName}-${index}`}>
-                                            <span className="text-sm flex items-center gap-2">
-                                                <img
-                                                    key={`${setName}-${index}`}
-                                                    src={GEAR_SETS[setName].iconUrl}
-                                                    alt={setName}
-                                                    className="w-5"
-                                                />
-                                                {GEAR_SETS[setName].name}
-                                            </span>
-                                            <ul
-                                                className={`text-xs ${
-                                                    index === activeSets.length - 1
-                                                        ? ''
-                                                        : 'border-b border-dark-border pb-2'
-                                                }`}
-                                            >
-                                                {GEAR_SETS[setName].description && (
-                                                    <li className="bg-dark-lighter p-2">
-                                                        {GEAR_SETS[setName].description as string}
-                                                    </li>
-                                                )}
-                                                {GEAR_SETS[setName].stats.map((stat) => (
-                                                    <li key={stat.name} className="mb-1">
-                                                        <StatDisplay
-                                                            key={index}
-                                                            stats={[stat]}
-                                                            className="p-0 bg-dark-lighter"
-                                                            compact
-                                                        />
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ))}
+                                    {activeSets.map((setName, index) => {
+                                        const set = getGearSet(setName);
+                                        return (
+                                            <div key={`${setName}-${index}`}>
+                                                <span className="text-sm flex items-center gap-2">
+                                                    <img
+                                                        key={`${setName}-${index}`}
+                                                        src={set?.iconUrl}
+                                                        alt={setName}
+                                                        className="w-5"
+                                                    />
+                                                    {set?.name}
+                                                </span>
+                                                <ul
+                                                    className={`text-xs ${
+                                                        index === activeSets.length - 1
+                                                            ? ''
+                                                            : 'border-b border-dark-border pb-2'
+                                                    }`}
+                                                >
+                                                    {set?.description && (
+                                                        <li className="bg-dark-lighter p-2">
+                                                            {set.description as string}
+                                                        </li>
+                                                    )}
+                                                    {set?.stats.map((stat) => (
+                                                        <li key={stat.name} className="mb-1">
+                                                            <StatDisplay
+                                                                key={index}
+                                                                stats={[stat]}
+                                                                className="p-0 bg-dark-lighter"
+                                                                compact
+                                                            />
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </div>
+                                        );
+                                    })}
                                 </Tooltip>
                             </div>
                         )}

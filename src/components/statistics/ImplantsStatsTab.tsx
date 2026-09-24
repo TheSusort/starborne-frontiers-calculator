@@ -14,8 +14,8 @@ import {
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { RarityName, RARITY_ORDER } from '../../constants/rarities';
-import { IMPLANTS } from '../../constants/implants';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getImplantData } from '../../constants/implants';
+import { getGearSet } from '../../constants/gearSets';
 import { Select, StatCard } from '../ui';
 import { calculateImplantStatistics, filterImplants } from '../../utils/statistics/implantsStats';
 import { BaseChart, ChartTooltip } from '../ui/charts';
@@ -100,7 +100,7 @@ function buildImplantRarityStackedData(
     return { data, rarities };
 }
 
-const getSetLabel = (key: string) => IMPLANTS[key]?.name || GEAR_SETS[key]?.name || key;
+const getSetLabel = (key: string) => getImplantData(key)?.name || getGearSet(key)?.name || key;
 
 export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
     gear,

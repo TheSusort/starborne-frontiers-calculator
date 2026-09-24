@@ -7,7 +7,8 @@ import {
     GEAR_SLOTS,
     GearSlotName,
     STATS,
-    GEAR_SETS,
+    getGearSet,
+    GearSetName,
 } from '../../constants';
 import { analyzePotentialUpgrades } from '../../utils/gear/potentialCalculator';
 import { Button, Input, ProgressBar, Select, CheckboxGroup } from '../ui';
@@ -397,12 +398,12 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         const sets = new Set(
             inventory
                 .map((piece) =>
-                    piece.setBonus && GEAR_SETS[piece.setBonus] ? piece.setBonus : null
+                    piece.setBonus && getGearSet(piece.setBonus) ? piece.setBonus : null
                 )
-                .filter((set): set is string => set !== null)
+                .filter((set): set is GearSetName => set !== null)
         );
         return Array.from(sets).sort(
-            (a, b) => GEAR_SETS[a]?.name.localeCompare(GEAR_SETS[b]?.name || '') || 0
+            (a, b) => getGearSet(a)?.name.localeCompare(getGearSet(b)?.name || '') || 0
         );
     }, [inventory]);
 
@@ -549,7 +550,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                             {selectedGearSets.map((setName) => (
                                 <Button
                                     key={setName}
-                                    aria-label={`Remove ${GEAR_SETS[setName]?.name} filter`}
+                                    aria-label={`Remove ${getGearSet(setName)?.name} filter`}
                                     className="relative flex items-center"
                                     variant="secondary"
                                     onClick={() =>
@@ -562,7 +563,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                         <div className="flex flex-col items-start mr-3">
                                             <span className="text-xxs">Set</span>
                                             <span className="text-xs">
-                                                {GEAR_SETS[setName]?.name || setName}
+                                                {getGearSet(setName)?.name || setName}
                                             </span>
                                         </div>
                                         <CloseIcon />
@@ -722,7 +723,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                                     onChange={setSelectedGearSets}
                                     options={uniqueGearSets.map((setName) => ({
                                         value: setName,
-                                        label: GEAR_SETS[setName]?.name || setName,
+                                        label: getGearSet(setName)?.name || setName,
                                     }))}
                                 />
                             </div>

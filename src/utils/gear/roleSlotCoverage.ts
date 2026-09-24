@@ -19,7 +19,7 @@ import {
 } from '../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats, getScoringBaselineStats } from '../../constants/roleBaseStats';
-import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
+import { GEAR_SETS, getGearSet, type GearSetName } from '../../constants/gearSets';
 import { calculateRoleScore } from '../autogear/priorityScore';
 import { calculateMainStatValue } from './mainStatValueFetcher';
 import { UPGRADE_LEVELS } from './potentialCalculator';
@@ -100,7 +100,7 @@ function addSetBonusShare(
 ): void {
     if (!setBonus) return;
     if (!(slot in GEAR_SLOTS)) return;
-    const set = GEAR_SETS[setBonus];
+    const set = getGearSet(setBonus);
     if (!set?.stats?.length) return;
 
     const minPieces = set.minPieces || 2;
@@ -307,7 +307,7 @@ function distributeRolls(total: number, slots: number): number[][] {
  * regardless of what carries it.
  */
 function isSetLiveForRole(role: ShipTypeName, setName: GearSetName): boolean {
-    const set = GEAR_SETS[setName];
+    const set = getGearSet(setName);
     if (!set?.stats.length) return false;
     const baseline = getBaseRoleStats(role);
     const withSet: BaseStats = { ...baseline };
@@ -329,7 +329,9 @@ function idealSetCandidatesFor(role: ShipTypeName): (GearSetName | null)[] {
     const cached = idealSetCandidatesByRole.get(role);
     if (cached) return cached;
 
-    const liveNames = Object.keys(GEAR_SETS).filter((name) => isSetLiveForRole(role, name));
+    const liveNames = (Object.keys(GEAR_SETS) as (keyof typeof GEAR_SETS)[]).filter((name) =>
+        isSetLiveForRole(role, name)
+    );
     const candidates: (GearSetName | null)[] = [null, ...liveNames];
     idealSetCandidatesByRole.set(role, candidates);
     return candidates;
