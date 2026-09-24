@@ -15,7 +15,7 @@ export interface ImplantVariant {
     description?: string;
 }
 
-export const IMPLANTS: Record<string, ImplantData> = {
+export const IMPLANTS = {
     MARTYRDOM: {
         name: 'Martyrdom',
         type: 'ultimate',
@@ -3419,11 +3419,21 @@ export const IMPLANTS: Record<string, ImplantData> = {
         ],
         imageKey: 'guardian-Photoroom',
     },
-};
+} satisfies Record<string, ImplantData>;
 
 export default IMPLANTS;
 
 export type ImplantName = keyof typeof IMPLANTS;
+
+/** Type guard for an implant name crossing a trust boundary (import data, persisted autogear
+ *  exclusions, community builds) — narrow with this rather than a blind cast. */
+export const isImplantName = (name: string): name is ImplantName => Object.hasOwn(IMPLANTS, name);
+
+/** `gear.setBonus` / any other loosely-typed key indexing `IMPLANTS` needs this guard now that
+ *  `IMPLANTS` has no index signature — returns `undefined` for a non-implant name instead of
+ *  widening `IMPLANTS`' key type back to `string`. */
+export const getImplantData = (name: string | null | undefined): ImplantData | undefined =>
+    name && isImplantName(name) ? IMPLANTS[name] : undefined;
 
 export const IMPLANT_SLOTS = {
     implant_major: {

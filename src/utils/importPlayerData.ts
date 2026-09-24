@@ -354,7 +354,9 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
 
 /** HELPER FUNCTIONS */
 
-const getSetBonus = (set: GearSetName): GearSetName | null => {
+// `set` is the game export's own raw set identifier ("HullPoints", "Attack", …), not a
+// `GearSetName` — this function's job is mapping that untrusted string onto a real one.
+const getSetBonus = (set: string): GearSetName | null => {
     switch (set) {
         case 'HullPoints':
             return 'FORTITUDE';

@@ -13,7 +13,7 @@ import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { calculateTotalStats, StatBreakdown } from '../ship/statsCalculator';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet, GearSetName } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 import { getScoringBaselineStats } from '../../constants/roleBaseStats';
 import { Ship } from '../../types/ship';
@@ -293,7 +293,7 @@ function calculateGearStats(
             Object.assign(incrementalBreakdown.afterSets, incrementalBreakdown.afterGear);
 
             // Recalculate set bonuses - need to check if adding this piece changes set counts
-            const setCountsBefore: Record<string, number> = {};
+            const setCountsBefore: Partial<Record<GearSetName, number>> = {};
             Object.values(equipmentWithoutSlot).forEach((gearId) => {
                 if (!gearId) return;
                 const gear = getGearPiece(gearId);
@@ -301,28 +301,25 @@ function calculateGearStats(
                 setCountsBefore[gear.setBonus] = (setCountsBefore[gear.setBonus] || 0) + 1;
             });
 
-            const setCountsAfter: Record<string, number> = { ...setCountsBefore };
+            const setCountsAfter: Partial<Record<GearSetName, number>> = { ...setCountsBefore };
             if (piece.setBonus) {
                 setCountsAfter[piece.setBonus] = (setCountsAfter[piece.setBonus] || 0) + 1;
             }
 
             // Apply set bonus changes
-            Object.keys(setCountsAfter).forEach((setType) => {
+            (Object.keys(setCountsAfter) as GearSetName[]).forEach((setType) => {
+                const setDef = getGearSet(setType);
                 const countBefore = setCountsBefore[setType] || 0;
                 const countAfter = setCountsAfter[setType] || 0;
-                const bonusCountBefore = Math.floor(
-                    countBefore / (GEAR_SETS[setType]?.minPieces || 2)
-                );
-                const bonusCountAfter = Math.floor(
-                    countAfter / (GEAR_SETS[setType]?.minPieces || 2)
-                );
+                const bonusCountBefore = Math.floor(countBefore / (setDef?.minPieces || 2));
+                const bonusCountAfter = Math.floor(countAfter / (setDef?.minPieces || 2));
 
-                if (bonusCountAfter > bonusCountBefore && GEAR_SETS[setType]?.stats) {
+                if (bonusCountAfter > bonusCountBefore && setDef?.stats) {
                     // Halve the set bonus contribution for 4-piece sets since they're harder to complete
-                    const setScaleFactor = (GEAR_SETS[setType]?.minPieces || 2) >= 4 ? 0.5 : 1;
+                    const setScaleFactor = (setDef.minPieces || 2) >= 4 ? 0.5 : 1;
                     // New set bonus activated - apply it
                     for (let i = 0; i < bonusCountAfter - bonusCountBefore; i++) {
-                        GEAR_SETS[setType].stats.forEach((stat) =>
+                        setDef.stats.forEach((stat) =>
                             addStatModifier(
                                 { ...stat, value: stat.value * setScaleFactor },
                                 incrementalBreakdown.afterSets,
@@ -373,8 +370,8 @@ function calculateGearStats(
     // Add set bonus stats if the piece has a set
     // Note: We apply set bonus optimistically (assuming set will be complete)
     // This is for ranking purposes - in reality, set bonus only applies with minPieces
-    if (piece.setBonus && GEAR_SETS[piece.setBonus]) {
-        const setBonus = GEAR_SETS[piece.setBonus];
+    const setBonus = getGearSet(piece.setBonus);
+    if (setBonus) {
         // Halve the set bonus contribution for 4-piece sets since they're harder to complete
         const setScaleFactor = (setBonus.minPieces || 2) >= 4 ? 0.5 : 1;
         if (setBonus.stats) {

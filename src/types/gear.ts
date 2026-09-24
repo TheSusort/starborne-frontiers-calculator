@@ -24,7 +24,9 @@ export interface GearPiece {
 }
 
 export interface GearSetBonus {
-    name: GearSetName;
+    /** The human-readable label shown in the UI ('Fortitude', 'Attack', …) — NOT a
+     *  `GearSetName`; the set's own identity is the key it sits under in `GEAR_SETS`. */
+    name: string;
     stats: Stat[];
     iconUrl?: string;
     minPieces?: number;

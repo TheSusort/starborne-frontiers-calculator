@@ -31,6 +31,7 @@ import { GearPiece } from '../../../types/gear';
 import { simulateBattle, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Position } from '../../../types/encounters';
 import { flattenCombatLog } from '../log/__testutils__/flattenCombatLog';
+import type { GearSetName } from '../../../constants/gearSets';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -406,7 +407,7 @@ describe('D-PR9 team-agnostic mirror — enemy-side Spearhead + Font of Power', 
     });
 
     /** Minimal legendary implant_major GearPiece stub for the given set bonus. */
-    const makeImplant = (id: string, setBonus: string): GearPiece => ({
+    const makeImplant = (id: string, setBonus: GearSetName): GearPiece => ({
         id,
         slot: 'implant_major',
         level: 16,

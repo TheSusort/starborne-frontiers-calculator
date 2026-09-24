@@ -5,8 +5,8 @@ import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { RARITIES } from '../../constants/rarities';
 import { getEquipmentSlotLabel } from '../../constants/gearTypes';
-import { GEAR_SETS } from '../../constants/gearSets';
-import { IMPLANTS } from '../../constants/implants';
+import { getGearSet } from '../../constants/gearSets';
+import { getImplantData } from '../../constants/implants';
 import { STATS } from '../../constants/stats';
 import { hasChanges } from '../../utils/import/computeImportDiff';
 
@@ -34,8 +34,8 @@ function ShipName({ ship }: { ship: Ship }) {
 
 function GearLine({ gear }: { gear: GearPiece }) {
     const slotLabel = getEquipmentSlotLabel(gear.slot);
-    const setIcon = gear.setBonus ? GEAR_SETS[gear.setBonus]?.iconUrl : null;
-    const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
+    const setIcon = getGearSet(gear.setBonus)?.iconUrl ?? null;
+    const setName = getGearSet(gear.setBonus)?.name ?? null;
     const mainStatLabel = gear.mainStat
         ? (STATS[gear.mainStat.name]?.shortLabel ?? gear.mainStat.name) +
           (gear.mainStat.type === 'percentage' ? '%' : '')
@@ -55,7 +55,7 @@ function GearLine({ gear }: { gear: GearPiece }) {
 }
 
 function ImplantLine({ implant }: { implant: GearPiece }) {
-    const implantName = IMPLANTS[implant.setBonus ?? '']?.name ?? implant.setBonus ?? implant.slot;
+    const implantName = getImplantData(implant.setBonus)?.name ?? implant.setBonus ?? implant.slot;
     const slotLabel = getEquipmentSlotLabel(implant.slot);
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">

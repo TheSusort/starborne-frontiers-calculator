@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 import { STATS } from '../../constants/stats';
 import { StatName, StatType } from '../../types/stats';
 import { useGearWishlistContext } from '../../contexts/GearWishlistProvider';
@@ -157,7 +157,7 @@ function FilterChips({ entry }: { entry: WishlistEntry }) {
     if (filters.stars?.length) chips.push(...filters.stars.map((n) => `${n}★`));
     if (filters.rarity?.length) chips.push(...filters.rarity);
     if (filters.setBonus?.length)
-        chips.push(...filters.setBonus.map((s) => GEAR_SETS[s]?.name ?? s));
+        chips.push(...filters.setBonus.map((s) => getGearSet(s)?.name ?? s));
     if (filters.mainStat?.length) chips.push(...filters.mainStat.map((s) => statLabel(s)));
     if (filters.subStats?.length) {
         const names = filters.subStats.map((s) => statLabel(s)).join(' + ');

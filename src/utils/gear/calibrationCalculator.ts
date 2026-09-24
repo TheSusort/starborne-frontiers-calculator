@@ -9,7 +9,7 @@ import {
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { calculatePriorityScore } from '../autogear/priorityScore';
 import { calculateTotalStats } from '../ship/statsCalculator';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 import { Ship } from '../../types/ship';
 import {
     isCalibrationEligible,
@@ -129,8 +129,8 @@ function calculateGearStats(piece: GearPiece, withCalibration: boolean): BaseSta
     // Add set bonus stats if the piece has a set
     // Note: We apply set bonus optimistically (assuming set will be complete)
     // This is for ranking purposes - in reality, set bonus only applies with minPieces
-    if (gearToUse.setBonus && GEAR_SETS[gearToUse.setBonus]) {
-        const setBonus = GEAR_SETS[gearToUse.setBonus];
+    const setBonus = getGearSet(gearToUse.setBonus);
+    if (setBonus) {
         if (setBonus.stats) {
             // Use the base stats (afterEngineering) for percentage calculations
             // This matches how addStatModifier works in calculateTotalStats

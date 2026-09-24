@@ -1,12 +1,12 @@
 import React, { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
-import { GEAR_SETS, RARITIES } from '../../constants';
+import { getGearSet, RARITIES } from '../../constants';
 import { getEquipmentSlotLabel } from '../../constants/gearTypes';
 import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon, UnlockedLockIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
-import IMPLANTS, { ImplantName } from '../../constants/implants';
+import { getImplantData } from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { Tooltip } from '../ui/layout/Tooltip';
 import { useGearUpgrades } from '../../hooks/useGearUpgrades';
@@ -91,13 +91,10 @@ export const GearPieceDisplay = memo(
         const isMaxLevel = gear.level >= 16;
 
         // Memoize computed values
-        const slotInfo = useMemo(() => GEAR_SETS[gear.setBonus || '']?.iconUrl, [gear.setBonus]);
+        const slotInfo = useMemo(() => getGearSet(gear.setBonus)?.iconUrl, [gear.setBonus]);
         const rarityInfo = useMemo(() => RARITIES[gear.rarity], [gear.rarity]);
-        const implantInfo = useMemo(() => IMPLANTS[gear.setBonus as ImplantName], [gear.setBonus]);
-        const gearSetInfo = useMemo(
-            () => (gear.setBonus ? GEAR_SETS[gear.setBonus] : null),
-            [gear.setBonus]
-        );
+        const implantInfo = useMemo(() => getImplantData(gear.setBonus), [gear.setBonus]);
+        const gearSetInfo = useMemo(() => getGearSet(gear.setBonus), [gear.setBonus]);
 
         // Calibration-related computed values
         const isCalibrated = !!gear.calibration?.shipId;
@@ -189,7 +186,7 @@ export const GearPieceDisplay = memo(
                             {isImplant && implantInfo && implantInfo.imageKey && (
                                 <Image
                                     src={implantInfo.imageKey}
-                                    alt={IMPLANTS[gear.setBonus as ImplantName]?.name}
+                                    alt={getImplantData(gear.setBonus)?.name}
                                     className={`h-auto ${small ? 'min-w-4 w-4' : 'min-w-6 w-6 translate-y-1'}`}
                                 />
                             )}
@@ -198,7 +195,7 @@ export const GearPieceDisplay = memo(
                                     <img
                                         ref={setTooltipRef}
                                         src={slotInfo}
-                                        alt={GEAR_SETS[gear.setBonus || '']?.name}
+                                        alt={getGearSet(gear.setBonus)?.name}
                                         className={`h-auto ${small ? 'w-5' : 'w-6'} cursor-help`}
                                         onMouseEnter={() => setShowSetTooltip(true)}
                                         onMouseLeave={() => setShowSetTooltip(false)}
@@ -234,9 +231,9 @@ export const GearPieceDisplay = memo(
                             )}
                             <span className={`font-secondary`}>
                                 {isImplant
-                                    ? IMPLANTS[gear.setBonus as ImplantName]?.name
+                                    ? getImplantData(gear.setBonus)?.name
                                     : showSetName
-                                      ? GEAR_SETS[gear.setBonus || '']?.name +
+                                      ? getGearSet(gear.setBonus)?.name +
                                         ' ' +
                                         getEquipmentSlotLabel(gear.slot)
                                       : getEquipmentSlotLabel(gear.slot)}

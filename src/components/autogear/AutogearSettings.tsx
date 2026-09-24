@@ -18,7 +18,7 @@ import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/aut
 import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
 import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { IMPLANTS } from '../../constants/implants';
+import { getImplantData } from '../../constants/implants';
 import { ArenaSeason } from '../../types/arena';
 import { BaseStats } from '../../types/stats';
 import { previewStatBonus } from '../../utils/autogear/scoring';
@@ -652,7 +652,7 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                                                                 availableImplantTypes.find(
                                                                     (t) => t.key === key
                                                                 )?.label ??
-                                                                IMPLANTS[key]?.name ??
+                                                                getImplantData(key)?.name ??
                                                                 key;
                                                             return (
                                                                 <div

@@ -31,8 +31,8 @@ import {
 } from '../../utils/autogear/runShipOptimizer';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, SHIP_TYPES, getLimitStatLabel } from '../../constants';
-import { IMPLANTS } from '../../constants/implants';
+import { getGearSet, SHIP_TYPES, getLimitStatLabel } from '../../constants';
+import { getImplantData } from '../../constants/implants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
 import { AutogearTeamsModal } from '../../components/autogear/AutogearTeamsModal';
@@ -302,7 +302,7 @@ export const AutogearPage: React.FC = () => {
             const key = gear.setBonus;
             if (seen.has(key)) continue;
             seen.add(key);
-            const implant = IMPLANTS[key];
+            const implant = getImplantData(key);
             const name = implant?.name ?? key;
             const typeLabel = implant?.type ? formatImplantType(implant.type) : '';
             const label = typeLabel ? `${name} (${typeLabel})` : name;
@@ -711,7 +711,7 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.shipRole,
                     Object.entries(currentSets).flatMap(([setName, count]) => {
                         const completeSets = Math.floor(
-                            count / (GEAR_SETS[setName]?.minPieces || 2)
+                            count / (getGearSet(setName)?.minPieces || 2)
                         );
                         return Array(completeSets).fill(setName);
                     }),
@@ -722,7 +722,7 @@ export const AutogearPage: React.FC = () => {
                     shipConfig.shipRole,
                     Object.entries(suggestedSets).flatMap(([setName, count]) => {
                         const completeSets = Math.floor(
-                            count / (GEAR_SETS[setName]?.minPieces || 2)
+                            count / (getGearSet(setName)?.minPieces || 2)
                         );
                         return Array(completeSets).fill(setName);
                     }),
@@ -737,7 +737,7 @@ export const AutogearPage: React.FC = () => {
                               shipConfig.shipRole,
                               Object.entries(suggestedSets).flatMap(([setName, count]) => {
                                   const completeSets = Math.floor(
-                                      count / (GEAR_SETS[setName]?.minPieces || 2)
+                                      count / (getGearSet(setName)?.minPieces || 2)
                                   );
                                   return Array(completeSets).fill(setName);
                               }),

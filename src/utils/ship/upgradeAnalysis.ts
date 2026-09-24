@@ -3,7 +3,7 @@ import { GearSlotName, GEAR_SLOTS } from '../../constants/gearTypes';
 import { UpgradeSuggestion } from '../../types/analysis';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { getGearSet } from '../../constants/gearSets';
 import { ShipTypeName, resolveRoleEntry } from '../../constants/shipTypes';
 import { analyzeGearQuality } from './gearSuggestions';
 import { SlotContribution } from './statDistribution';
@@ -117,7 +117,7 @@ export function analyzeUpgrades(
                 if (existingSuggestion) {
                     existingSuggestion.reasons.push({
                         title: 'Not optimal set bonus',
-                        reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus || '']?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                        reason: `Switching to a ${getGearSet(mostRelevantSetPiece.setBonus)?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
                     });
                 } else {
                     suggestions.push({
@@ -126,7 +126,7 @@ export function analyzeUpgrades(
                         reasons: [
                             {
                                 title: 'Not optimal set bonus',
-                                reason: `Switching to a ${GEAR_SETS[mostRelevantSetPiece.setBonus || '']?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
+                                reason: `Switching to a ${getGearSet(mostRelevantSetPiece.setBonus)?.name} ${GEAR_SLOTS[contribution.slotName].label} could improve your score, as it will provide an extra set bonus`,
                             },
                         ],
                     });

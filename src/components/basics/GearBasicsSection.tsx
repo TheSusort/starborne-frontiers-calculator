@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { SLOT_MAIN_STATS, STATS } from '../../constants/stats';
-import { GEAR_SETS } from '../../constants/gearSets';
+import { GEAR_SETS, GEAR_SET_LIST } from '../../constants/gearSets';
 import { GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 // Imported per-module, not from the `../ui` barrel: the barrel re-exports Sidebar, whose
 // `/favicon.ico?url` import vitest refuses to resolve unless the test stubs Sidebar out.
@@ -129,7 +129,7 @@ const GearBasicsSection: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {Object.values(GEAR_SETS).map((set) => (
+                                {GEAR_SET_LIST.map((set) => (
                                     <tr
                                         key={set.name}
                                         id={`set-${slugify(set.name)}`}

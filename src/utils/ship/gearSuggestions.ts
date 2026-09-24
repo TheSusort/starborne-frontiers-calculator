@@ -67,7 +67,7 @@ export function analyzeGearQuality(
 
     // Role-specific checks
     const boostPieces = Object.values(ship.equipment).filter(
-        (id) => id && getGearPiece(id)?.setBonus === 'boost'
+        (id) => id && getGearPiece(id)?.setBonus === 'BOOST'
     ).length;
 
     const critCheck = checkCritRate(gear, totalStats);
@@ -75,7 +75,7 @@ export function analyzeGearQuality(
     switch (ship.type) {
         // @ts-expect-error supporters want repair set, and crit check
         case 'SUPPORTER':
-            if (gear.setBonus !== 'repair') {
+            if (gear.setBonus !== 'REPAIR') {
                 qualityCheck.reasons.push({
                     title: 'Not a repair piece',
                     reason: `Consider finding a new ${gear.slot} with the repair set`,
@@ -92,7 +92,7 @@ export function analyzeGearQuality(
         case 'SUPPORTER_BUFFER':
             if (
                 boostPieces < 4 &&
-                gear.setBonus !== 'boost' &&
+                gear.setBonus !== 'BOOST' &&
                 slotContribution.relativeScore <
                     GEAR_SLOTS[slotContribution.slotName].expectedContribution
             ) {

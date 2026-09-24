@@ -21,8 +21,8 @@
  * doesn't roll its own heal-crit; flagged as a modeling choice for reviewer confirmation.
  */
 
-import { GEAR_SETS } from '../../constants/gearSets';
-import { IMPLANTS } from '../../constants/implants';
+import { getGearSet, GearSetName } from '../../constants/gearSets';
+import { getImplantData } from '../../constants/implants';
 import { BUFFS } from '../../constants/buffs';
 import { parseBuffEffects, isStackable } from '../calculators/buffParser';
 import { GearPiece } from '../../types/gear';
@@ -78,7 +78,7 @@ const GEAR_SET_ABILITIES: Partial<
     // Standing passive → modeled as a dotDamage modifier that folds into dotMult via
     // effectiveDamageStatsOf.selfDotDamageModifier (engine + DPS calc both honor it).
     DECIMATION: (count) => {
-        const minPieces = GEAR_SETS.DECIMATION?.minPieces ?? 2;
+        const minPieces = getGearSet('DECIMATION')?.minPieces ?? 2;
         const sets = Math.floor(count / minPieces); // 1/2/3 at 2/4/6 pieces
         return {
             type: 'modifier',
@@ -1170,8 +1170,7 @@ export function buildEquipmentAbilities(
     // ------------------------------------------------------------------
     // 1. Active gear sets
     // ------------------------------------------------------------------
-    // GEAR_SETS is a static constant — no runtime throws expected, so no per-set guard.
-    const setCounts: Record<string, number> = {};
+    const setCounts: Partial<Record<GearSetName, number>> = {};
     for (const gearId of Object.values(ship.equipment ?? {})) {
         if (!gearId) continue;
         const piece = getGearPiece(gearId);
@@ -1180,7 +1179,7 @@ export function buildEquipmentAbilities(
     }
 
     for (const [setName, count] of Object.entries(setCounts)) {
-        const minPieces = GEAR_SETS[setName]?.minPieces ?? 2;
+        const minPieces = getGearSet(setName)?.minPieces ?? 2;
         if (count < minPieces) continue;
 
         const builder = GEAR_SET_ABILITIES[setName];
@@ -1202,7 +1201,7 @@ export function buildEquipmentAbilities(
             if (!piece?.setBonus) continue;
 
             const implantName = piece.setBonus;
-            const implantData = IMPLANTS[implantName];
+            const implantData = getImplantData(implantName);
             if (!implantData) continue;
 
             const variant = implantData.variants.find((v) => v.rarity === piece.rarity);

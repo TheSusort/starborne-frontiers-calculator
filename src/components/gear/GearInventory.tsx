@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, RARITIES, RARITY_ORDER } from '../../constants';
+import { getGearSet, RARITIES, RARITY_ORDER } from '../../constants';
 import { getEquipmentSlotLabel } from '../../constants/gearTypes';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
@@ -130,8 +130,8 @@ export const GearInventory: React.FC<Props> = ({
                 getEquipmentSlotLabel(piece.slot)
                     .toLowerCase()
                     .includes(searchQuery.toLowerCase()) ||
-                GEAR_SETS[piece.setBonus || '']?.name
-                    .toLowerCase()
+                getGearSet(piece.setBonus)
+                    ?.name.toLowerCase()
                     .includes(searchQuery.toLowerCase()) ||
                 RARITIES[piece.rarity].label.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 piece.mainStat?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -207,11 +207,11 @@ export const GearInventory: React.FC<Props> = ({
     const uniqueSets = useMemo(() => {
         const sets = new Set(
             inventory.map((piece) =>
-                piece.setBonus && GEAR_SETS[piece.setBonus] ? piece.setBonus : null
+                piece.setBonus && getGearSet(piece.setBonus) ? piece.setBonus : null
             )
         );
         return Array.from(sets).sort((a, b) =>
-            GEAR_SETS[a || '']?.name.localeCompare(GEAR_SETS[b || '']?.name)
+            (getGearSet(a)?.name ?? '').localeCompare(getGearSet(b)?.name ?? '')
         );
     }, [inventory]);
 
@@ -307,7 +307,7 @@ export const GearInventory: React.FC<Props> = ({
                 .filter((set) => set)
                 .map((set) => ({
                     value: set || '',
-                    label: GEAR_SETS[set || '']?.name || '',
+                    label: getGearSet(set)?.name || '',
                 })),
         },
         {

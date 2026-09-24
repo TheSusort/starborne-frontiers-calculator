@@ -1,7 +1,7 @@
 import type { GearSetBonus } from '../types/gear';
-import { ImplantName } from './implants';
+import { IMPLANTS, ImplantName } from './implants';
 
-export const GEAR_SETS: Record<string, GearSetBonus> = {
+export const GEAR_SETS = {
     FORTITUDE: {
         name: 'Fortitude',
         stats: [{ name: 'hp', value: 15, type: 'percentage' }],
@@ -217,5 +217,23 @@ export const GEAR_SETS: Record<string, GearSetBonus> = {
     },
 } satisfies Record<string, GearSetBonus>;
 
-// eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents -- ImplantName intentionally kept for clarity even though currently subsumed
+/** A `GearPiece.setBonus` value: either a real multi-piece set (`GEAR_SETS`' own keys) or an
+ *  implant's name — a single equipped implant is its own one-piece "set" for scoring purposes. */
 export type GearSetName = keyof typeof GEAR_SETS | ImplantName;
+
+/** `GEAR_SETS`' own values, widened to the shared `GearSetBonus` shape — each entry's `satisfies`
+ *  literal type omits an optional field (`minPieces`, `description`, …) it doesn't set, so reading
+ *  one of those fields across `Object.values(GEAR_SETS)` needs this rather than the raw values. */
+export const GEAR_SET_LIST: GearSetBonus[] = Object.values(GEAR_SETS);
+
+/** Type guard for a set name crossing a trust boundary (import data, persisted autogear
+ *  priorities, URL params, community builds) — narrow with this rather than a blind cast. */
+export const isGearSetName = (name: string): name is GearSetName =>
+    Object.hasOwn(GEAR_SETS, name) || Object.hasOwn(IMPLANTS, name);
+
+/** A `GearSetName` may name an implant rather than one of `GEAR_SETS`' own multi-piece sets (a
+ *  single equipped implant is its own one-piece "set"), so indexing `GEAR_SETS` directly needs a
+ *  guard — this is that guard, returning `undefined` for the implant case instead of widening
+ *  `GEAR_SETS`' key type back to `string`. */
+export const getGearSet = (name: string | null | undefined): GearSetBonus | undefined =>
+    name && Object.hasOwn(GEAR_SETS, name) ? GEAR_SETS[name as keyof typeof GEAR_SETS] : undefined;

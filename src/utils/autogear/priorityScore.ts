@@ -7,7 +7,7 @@ import {
     SetPriority,
     StatBonus,
 } from '../../types/autogear';
-import { ShipTypeName, GEAR_SETS } from '../../constants';
+import { ShipTypeName, getGearSet } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import {
     calculateEffectiveHP,
@@ -355,7 +355,7 @@ export function calculatePriorityScore(
     if (tryToCompleteSets && setCount) {
         let orphans = 0;
         for (const [setName, count] of Object.entries(setCount)) {
-            const minPieces = GEAR_SETS[setName]?.minPieces || 2;
+            const minPieces = getGearSet(setName)?.minPieces || 2;
             orphans += count % minPieces;
         }
         penalties += orphans * 10;
