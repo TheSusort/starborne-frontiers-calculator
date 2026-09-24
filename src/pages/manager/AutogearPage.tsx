@@ -705,6 +705,12 @@ export const AutogearPage: React.FC = () => {
             );
 
             if (currentStats && suggestedStats) {
+                // Results must read from the same formula the ship was scored on, not the
+                // role's generic one (#551).
+                const simulationOptions = {
+                    roleBasis: shipConfig.roleBasis,
+                    customFormula: shipConfig.customFormula,
+                };
                 const currentSimulation = runSimulation(
                     currentStats.final,
                     shipConfig.shipRole,
@@ -713,7 +719,8 @@ export const AutogearPage: React.FC = () => {
                             count / (GEAR_SETS[setName]?.minPieces || 2)
                         );
                         return Array(completeSets).fill(setName);
-                    })
+                    }),
+                    simulationOptions
                 );
                 const suggestedSimulation = runSimulation(
                     suggestedStats.final,
@@ -723,7 +730,8 @@ export const AutogearPage: React.FC = () => {
                             count / (GEAR_SETS[setName]?.minPieces || 2)
                         );
                         return Array(completeSets).fill(setName);
-                    })
+                    }),
+                    simulationOptions
                 );
 
                 // Run arena-modified simulation if modifiers are active
@@ -737,7 +745,8 @@ export const AutogearPage: React.FC = () => {
                                       count / (GEAR_SETS[setName]?.minPieces || 2)
                                   );
                                   return Array(completeSets).fill(setName);
-                              })
+                              }),
+                              simulationOptions
                           )
                         : null;
 

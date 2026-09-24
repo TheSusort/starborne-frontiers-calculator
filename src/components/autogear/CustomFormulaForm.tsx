@@ -69,8 +69,10 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
 
     // A basis is only ever honoured by the scorer on a `core`/`max` row — this mirrors
     // `usableBasis`'s own gate, so the picker never offers a control the scorer would ignore
-    // and never withholds one it would honour.
-    const showsBasis = kind === 'core' && direction === 'max';
+    // and never withholds one it would honour. `critMultiplier` is the one core/max stat
+    // `formulaRowTerm` never blends a basis into (it has no primary factor to replace), so it
+    // is excluded here too.
+    const showsBasis = kind === 'core' && direction === 'max' && stat !== 'critMultiplier';
 
     const addBasisTerm = () => {
         setBasisTerms([...basisTerms, { stat: nextBasisStat(basisTerms), weight: '' }]);

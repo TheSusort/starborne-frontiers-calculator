@@ -14,6 +14,7 @@ import { SupporterStats } from './SupporterStats';
 import { SupporterBufferStats } from './SupporterBufferStats';
 import { SupporterOffensiveStats } from './SupporterOffensiveStats';
 import { SupporterShieldStats } from './SupporterShieldStats';
+import { CustomStats } from './CustomStats';
 
 interface SimulationResultsProps {
     currentSimulation: SimulationSummary;
@@ -54,6 +55,20 @@ const renderStats = (
     suggestions?: GearSuggestion[],
     getGearPiece?: (id: string) => GearPiece | undefined
 ) => {
+    // A Custom-mode ship (no role) is keyed on the field `runSimulation`'s formula branch
+    // actually set, not on `role === null` — a role build never carries `formulaScore`, so this
+    // can never misfire for a role ship whose `role` happens to be unnormalisable.
+    if (simulation.formulaScore !== undefined) {
+        return (
+            <CustomStats
+                simulation={simulation}
+                currentSimulation={currentSimulation}
+                suggestedSimulation={suggestedSimulation}
+                showComparison={showComparison}
+            />
+        );
+    }
+
     const normalizedRole = normalizeRole(role);
     const commonProps = {
         simulation,

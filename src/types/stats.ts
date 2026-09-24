@@ -23,7 +23,7 @@ export type StatName = PercentageOnlyStats | FlexibleStats;
 // Derived (computed) stats that can be used as autogear *limits* and *bonuses* but are
 // not real gear/base stats. Kept out of StatName so gear rolls, imports, and stat
 // display are unaffected.
-export type DerivedStatName = 'effectiveHp' | 'directDamage';
+export type DerivedStatName = 'effectiveHp' | 'directDamage' | 'critMultiplier';
 
 // Stat identifiers usable as autogear limit targets: every base StatName plus
 // derived stats resolved on the fly (see resolveLimitStatValue).

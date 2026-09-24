@@ -7,7 +7,7 @@ import {
     SetPriority,
     StatBonus,
 } from '../../types/autogear';
-import { ShipTypeName, GEAR_SETS, SHIP_TYPES } from '../../constants';
+import { ShipTypeName, GEAR_SETS } from '../../constants';
 import { ENEMY_ATTACK, ENEMY_COUNT, BASE_HEAL_PERCENT } from '../../constants/simulation';
 import {
     calculateEffectiveHP,
@@ -17,8 +17,8 @@ import {
     resolveLimitStatValue,
     MULTIPLIER_NORMALIZERS,
 } from './statResolution';
-import { customFormulaScore, usableBasisTerms } from './customFormula';
-import { roleHostsBasis } from './offFormula/roleBasisHost';
+import { customFormulaScore } from './customFormula';
+import { hostedBasisTerms } from './offFormula/roleBasisHost';
 
 export {
     calculateDamageReduction,
@@ -364,22 +364,8 @@ export function calculatePriorityScore(
     // Get base score from role-specific calculation
     let baseScore = 0;
     if (shipRole) {
-        // Honoured only where the role's axis matches `roleBasis.produces` (`roleHostsBasis`,
-        // `roleBasisHost.ts`) — every other role scores exactly as it did with no basis at all.
-        // Terms are re-validated through `usableBasisTerms`, the same predicate a custom-formula
-        // row's `basis` goes through, so an unusable term (or an all-zero basis) falls back to
-        // the plain primary stat rather than silently scoring 0.
-        //
-        // `Object.hasOwn(SHIP_TYPES, shipRole)` guards `roleHostsBasis`, which throws for a role
-        // outside its table (`roleBasisHost.ts`'s totality check relies on that throw). A
-        // persisted config can carry a `shipRole` that no longer names a real role — that must
-        // score like a basis-less run, not crash it.
-        const basisTerms: BasisTerm[] | undefined =
-            roleBasis &&
-            Object.hasOwn(SHIP_TYPES, shipRole) &&
-            roleHostsBasis(shipRole, roleBasis.produces)
-                ? usableBasisTerms(roleBasis.terms)
-                : undefined;
+        // See `hostedBasisTerms`' doc (`roleBasisHost.ts`) for the hosting rule.
+        const basisTerms: BasisTerm[] | undefined = hostedBasisTerms(shipRole, roleBasis);
         switch (shipRole) {
             case 'ATTACKER':
                 baseScore = calculateAttackerScore(
@@ -460,12 +446,8 @@ export function calculateRoleScore(
     statBonuses?: StatBonus[],
     roleBasis?: RoleBasis
 ): number {
-    // Same gating and validation as `calculatePriorityScore`'s switch — see that function's
-    // comment.
-    const basisTerms: BasisTerm[] | undefined =
-        roleBasis && Object.hasOwn(SHIP_TYPES, role) && roleHostsBasis(role, roleBasis.produces)
-            ? usableBasisTerms(roleBasis.terms)
-            : undefined;
+    // See `hostedBasisTerms`' doc (`roleBasisHost.ts`) for the hosting rule.
+    const basisTerms: BasisTerm[] | undefined = hostedBasisTerms(role, roleBasis);
     switch (role) {
         case 'ATTACKER':
             return calculateAttackerScore(stats, statBonuses, 0, basisTerms);

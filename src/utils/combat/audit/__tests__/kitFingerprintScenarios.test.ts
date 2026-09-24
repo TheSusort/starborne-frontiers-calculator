@@ -602,17 +602,25 @@ describe('statusRich scenario', () => {
      *  unraisable. Fuying: a filler footprint wide enough for an `all-enemies` debuff to reach an
      *  ALLY, without which every self-EXCLUDING cleanse was silently blind.
      */
-    it('pins the four ships whose clause is still silent, each for a known reason', () => {
-        const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra'];
-        const silent = statusRichNames()
-            .filter((name) => {
-                const tokens = tokensFor(name, 'statusRich');
-                return !tokens.some((t) => ['steal', 'purge', 'cleanse'].includes(t.split(':')[0]));
-            })
-            .sort();
+    // Simulates every status-rich ship: ~4s alone, so the 5s default times out under the full
+    // parallel suite.
+    it(
+        'pins the four ships whose clause is still silent, each for a known reason',
+        { timeout: 20_000 },
+        () => {
+            const STILL_SILENT = ['Amartya', 'Faust', 'Meatshield', 'Nayra'];
+            const silent = statusRichNames()
+                .filter((name) => {
+                    const tokens = tokensFor(name, 'statusRich');
+                    return !tokens.some((t) =>
+                        ['steal', 'purge', 'cleanse'].includes(t.split(':')[0])
+                    );
+                })
+                .sort();
 
-        expect(silent).toEqual(STILL_SILENT);
-    });
+            expect(silent).toEqual(STILL_SILENT);
+        }
+    );
 
     it('presses the focus without killing it — the arm cannot truncate a fingerprint', () => {
         // statusRich presses HARDER than plain (fillers gain Attack Up, the focus carries Defense

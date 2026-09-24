@@ -11,7 +11,9 @@ import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import {
+    ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE,
     LEGACY_DEFAULT_SET_COUNT,
+    buildReferencesCritMultiplier,
     mirroredShipRole,
     type CommunityBuild,
 } from '../../utils/communityBuild';
@@ -74,6 +76,15 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
     if (!selectedShip) {
         return null;
     }
+
+    // Withheld proactively rather than left to the service layer's refusal
+    // (`CritMultiplierShareNotAllowedError`), matching how a role-less formula's own message
+    // is decided below — the deployed reader has no `critMultiplier` entry
+    // (`ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`).
+    const critMultiplierBlocked =
+        !ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE &&
+        !!currentBuild &&
+        buildReferencesCritMultiplier(currentBuild);
 
     const applyBuild = (build: CommunityBuild) => {
         onApplyBuild?.(build.build);
@@ -143,6 +154,10 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                                 <span className="text-sm text-theme-text-secondary">
                                     Sign in to share your build
                                 </span>
+                            ) : critMultiplierBlocked ? (
+                                <p className="text-sm text-theme-text-secondary">
+                                    This build uses Crit Multiplier, which isn&apos;t shareable yet.
+                                </p>
                             ) : canShare ? (
                                 <Button
                                     size="sm"
@@ -166,7 +181,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                         </div>
                     )}
 
-                    {showShareForm && currentBuild && (
+                    {showShareForm && currentBuild && !critMultiplierBlocked && (
                         <div className="pt-2 border-t border-dark-border">
                             <h4 className="text-sm font-semibold text-theme-text mb-3">
                                 Share Your Build

@@ -150,6 +150,24 @@ describe('CustomFormulaForm — basis controls follow usableBasis', () => {
         expect(screen.getByRole('button', { name: /^add formula stat$/i })).toBeInTheDocument();
     });
 
+    it('hides basis controls on a critMultiplier core/max row, which has no primary factor for a basis to blend', () => {
+        // Unlike directDamage/effectiveHp, formulaRowTerm ignores any basis on this row — the
+        // picker must not offer a control the scorer would silently drop.
+        render(
+            <CustomFormulaForm
+                onAdd={vi.fn()}
+                onSave={vi.fn()}
+                editingValue={{
+                    stat: 'critMultiplier',
+                    kind: 'core',
+                    direction: 'max',
+                    importance: 1,
+                }}
+            />
+        );
+        expect(screen.queryByRole('button', { name: /add stat/i })).not.toBeInTheDocument();
+    });
+
     it('offers only stats usableBasis can honour in the basis-stat picker', async () => {
         render(<CustomFormulaForm onAdd={vi.fn()} onSave={vi.fn()} editingValue={rikraRow} />);
         await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
