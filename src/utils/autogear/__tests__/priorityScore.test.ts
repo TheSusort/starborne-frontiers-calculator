@@ -1,13 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import {
     calculatePriorityScore,
+    calculateRoleScore,
     resolveLimitStatValue,
     calculateHardViolation,
     calculateEffectiveHP,
 } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
 import { STAT_NORMALIZERS, STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
-import { CustomFormula, SetPriority, StatPriority } from '../../../types/autogear';
+import { CustomFormula, RoleBasis, SetPriority, StatPriority } from '../../../types/autogear';
 
 const stats: BaseStats = {
     hp: 50000,
@@ -310,5 +311,68 @@ describe('stat-priority order is inert', () => {
         const forward = calculateHardViolation(stats, [hardA, hardB]);
         expect(forward).toBeCloseTo(calculateHardViolation(stats, [hardB, hardA]), 10);
         expect(forward).toBeGreaterThan(0);
+    });
+});
+
+// A persisted config can carry a `shipRole` string that no longer names a `SHIP_TYPES` entry
+// (a role renamed or removed after the config was saved). `roleHostsBasis` throws for such a
+// role (`roleBasisHost.ts`'s `ROLE_BASIS_HOST[role]` is `undefined`) — that throw is deliberate
+// for `roleBasisHost.test.ts`'s totality check, but only a caller that ALWAYS passes a known
+// role should ever reach it. `calculatePriorityScore`/`calculateRoleScore` must guard an unknown
+// role before asking whether it hosts a basis, so an unrecognised role scores exactly as it does
+// with no basis at all rather than crashing the run.
+describe('calculatePriorityScore / calculateRoleScore — an unknown role with a basis', () => {
+    const unknownRole = 'RETIRED_ROLE_NAME';
+    const basis: RoleBasis = { produces: 'damage', terms: [{ stat: 'hacking', weight: 1 }] };
+
+    it('calculatePriorityScore does not throw for an unknown role with a basis', () => {
+        expect(() =>
+            calculatePriorityScore(
+                stats,
+                [],
+                unknownRole,
+                {},
+                [],
+                [],
+                false,
+                0,
+                undefined,
+                undefined,
+                basis
+            )
+        ).not.toThrow();
+    });
+
+    it('calculatePriorityScore scores an unknown role the same with or without a basis (both 0)', () => {
+        const withBasis = calculatePriorityScore(
+            stats,
+            [],
+            unknownRole,
+            {},
+            [],
+            [],
+            false,
+            0,
+            undefined,
+            undefined,
+            basis
+        );
+        const withoutBasis = calculatePriorityScore(stats, [], unknownRole, {}, [], [], false, 0);
+        expect(withBasis).toBe(0);
+        expect(withBasis).toBe(withoutBasis);
+    });
+
+    it('calculateRoleScore does not throw for an unknown role with a basis, and returns 0', () => {
+        expect(() => calculateRoleScore(unknownRole, stats, [], basis)).not.toThrow();
+        expect(calculateRoleScore(unknownRole, stats, [], basis)).toBe(0);
+    });
+
+    // Anti-vacuity: a guard that always reports "no host" must still let a KNOWN hosting role's
+    // basis change the score — otherwise the guard could be `return false` unconditionally and
+    // this whole describe block would still pass.
+    it('a known hosting role still applies its basis (unlike the unknown role above)', () => {
+        const withoutBasis = calculateRoleScore('ATTACKER', stats, []);
+        const withBasis = calculateRoleScore('ATTACKER', stats, [], basis);
+        expect(withBasis).not.toBeCloseTo(withoutBasis, 5);
     });
 });

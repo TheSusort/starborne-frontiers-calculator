@@ -34,9 +34,21 @@ const DERIVED_STATS: Record<DerivedStatName, true> = {
 
 /** Whether `stat` is a term the scorer can read a value for. Exported so the formula editor can
  *  offer only these stats in its basis-term picker, rather than letting a term be authored on
- *  `directDamage`/`effectiveHp` and silently dropped here at score time. */
+ *  `directDamage`/`effectiveHp` and silently dropped here at score time.
+ *
+ * `shield` is excluded too: it is a pool the kit generates (`deriveBasis`'s `STAT_ORDER` never
+ * emits it), not a stat this scorer can read as a basis term — a `shield` term would score the
+ * raw `shield` stat instead of the pool it names.
+ *
+ * Both lookups are own-property checks. A basis is untyped JSON reaching the scorer from a
+ * shared or saved config (Security rule 5): `MULTIPLIER_NORMALIZERS['constructor']` and
+ * `'constructor' in DERIVED_STATS` both resolve through the prototype chain rather than
+ * `undefined`/`false`, so a `stat` named after an `Object.prototype` member must be rejected
+ * explicitly rather than by accident. */
 export const isBasisStat = (stat: LimitableStat): boolean =>
-    MULTIPLIER_NORMALIZERS[stat] !== undefined && !(stat in DERIVED_STATS);
+    Object.hasOwn(MULTIPLIER_NORMALIZERS, stat) &&
+    !Object.hasOwn(DERIVED_STATS, stat) &&
+    stat !== 'shield';
 
 /**
  * A basis's terms, filtered to entries a scorer can honour. Shared by every basis-bearing path

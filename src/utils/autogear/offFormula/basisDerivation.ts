@@ -92,6 +92,15 @@ interface CarrierConfig {
 const isCasterBasis = (basis: string | undefined): basis is 'hp' | 'attack' | 'defense' =>
     basis === 'hp' || basis === 'attack' || basis === 'defense';
 
+/** Whether a shield granted at `target` lands on the caster itself, so the shield pool it grows
+ *  is the SAME pool a "damage = % of own shield" clause on this ship reads. A single-ally target
+ *  (`'ally'`, `'lowest-hp-ally'`, `'adjacent-allies'`) grants someone else's shield — measured
+ *  2026-09-24: every active/charged caster-basis shield carrier in the real corpus targets
+ *  `'self'` or `'all-allies'`, so this filter changes no ship's derived basis, but a future kit
+ *  could add an ally-only shield-granter and must not have it silently feed its OWN damage
+ *  chain. */
+const reachesCaster = (target: string): boolean => target === 'self' || target === 'all-allies';
+
 /** Canonical output order for a derived basis's terms. `shield` never appears here — it is
  *  always resolved to the stat that produces the pool, or dropped. */
 const STAT_ORDER: readonly OffFormulaStat[] = ['attack', 'hp', 'defence', 'security'];
@@ -208,8 +217,14 @@ function collectCastRaw(
             }
 
             // Shield-chain producing half: whatever generates the shield pool itself, tracked
-            // independent of the requested `produces` (see doc comment above).
-            if (config.type === 'shield' && isCasterBasis(config.basis)) {
+            // independent of the requested `produces` (see doc comment above). Only a shield
+            // that reaches the CASTER counts — a chain reads this ship's own shield pool, not
+            // one granted to someone else (`reachesCaster`'s doc).
+            if (
+                config.type === 'shield' &&
+                isCasterBasis(config.basis) &&
+                reachesCaster(ability.target)
+            ) {
                 bump(producing[slot], normalise(config.basis), config.pct ?? 0);
             }
         }

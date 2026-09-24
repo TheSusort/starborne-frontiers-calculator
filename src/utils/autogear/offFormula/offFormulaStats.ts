@@ -77,7 +77,11 @@ function withGearableLevers(raw: CarrierFinding[]): ResolvedFinding[] {
         const chained: ResolvedFinding[] = [];
         raw.forEach((producer, producerIndex) => {
             if (producerIndex === index) return;
-            if (producer.produces !== finding.stat) return;
+            // A chain link exists only for the `shield` pool: `finding.stat` names a STAT this
+            // non-gearable finding reads, and `producer.produces` names the AXIS a producer
+            // generates — the two are different unions that happen to share the literal
+            // `'shield'`, which is the only pool a producer can chain into here.
+            if (finding.stat !== 'shield' || producer.produces !== 'shield') return;
             if (!isGearable(producer.stat)) return;
             absorbed.add(producerIndex);
             chained.push({

@@ -1,5 +1,5 @@
 import { readFileSync } from 'fs';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
     chargePeriod,
     deriveBasis,
@@ -8,9 +8,11 @@ import {
 } from '../basisDerivation';
 import { detectOffFormulaStats } from '../offFormulaStats';
 import { buildShipAbilities } from '../../../abilities/buildShipAbilities';
+import * as buildShipAbilitiesModule from '../../../abilities/buildShipAbilities';
 import { csvAvailable, loadShipSkillRecords } from '../../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../../scripts/lib/shipDataSnapshot';
 import type { Ship } from '../../../../types/ship';
+import type { ShipSkills, Ability, AbilityTarget } from '../../../../types/abilities';
 
 interface Datum {
     name: string;
@@ -363,3 +365,84 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         });
     }
 );
+
+// Pure — synthesizes the ability shapes directly rather than parsing skill text, so it isolates
+// the shield-chain producing half's TARGET rule from the parser. The real corpus's four
+// active/charged caster-basis shield carriers (AEGIS, Graphite, Malvex, Nyxen) all happen to
+// target 'self' or 'all-allies' (measured 2026-09-24), so a corpus-only test cannot tell a target
+// filter from no filter at all — this fixture can, because it puts the SAME chain shape under
+// two different shield targets.
+describe('deriveBasis — shield-chain producing half only counts a shield that reaches the caster', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    const chainShip: Ship = {
+        id: 'chain-ship',
+        name: 'Chain Ship',
+        type: 'ATTACKER',
+        baseStats: {
+            attack: 5000,
+            crit: 50,
+            critDamage: 150,
+            hacking: 100,
+            security: 100,
+            defence: 3000,
+            hp: 40000,
+            speed: 100,
+        },
+        equipment: {},
+        implants: {},
+        refits: [],
+    } as unknown as Ship;
+
+    // additional-damage(shield, 100%) makes the ship's damage 100% of its shield pool — the
+    // chain's DAMAGE half, present in every case. The shield-GRANTING half (hp -> shield) is
+    // the only thing that varies between cases.
+    const abilities = (shieldTarget: AbilityTarget): Ability[] => [
+        {
+            id: 'chain-damage',
+            type: 'additional-damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'additional-damage', stat: 'shield', pct: 100 },
+        },
+        {
+            id: 'chain-shield',
+            type: 'shield',
+            target: shieldTarget,
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'shield', pct: 25, basis: 'hp' },
+        },
+    ];
+
+    const mockSkills = (shieldTarget: AbilityTarget): ShipSkills => ({
+        slots: [{ slot: 'active', abilities: abilities(shieldTarget) }],
+    });
+
+    it('derives the hp chain term when the shield targets self', () => {
+        vi.spyOn(buildShipAbilitiesModule, 'buildShipAbilities').mockReturnValue(
+            mockSkills('self')
+        );
+        const terms = deriveBasis(chainShip, 'damage').terms;
+        expect(terms.find((t) => t.stat === 'hp')).toBeDefined();
+    });
+
+    it('derives the hp chain term when the shield targets all-allies (reaches the caster)', () => {
+        vi.spyOn(buildShipAbilitiesModule, 'buildShipAbilities').mockReturnValue(
+            mockSkills('all-allies')
+        );
+        const terms = deriveBasis(chainShip, 'damage').terms;
+        expect(terms.find((t) => t.stat === 'hp')).toBeDefined();
+    });
+
+    it('does NOT derive an hp chain term when the shield targets a single ally only', () => {
+        vi.spyOn(buildShipAbilitiesModule, 'buildShipAbilities').mockReturnValue(
+            mockSkills('ally')
+        );
+        const terms = deriveBasis(chainShip, 'damage').terms;
+        expect(terms.find((t) => t.stat === 'hp')).toBeUndefined();
+    });
+});
