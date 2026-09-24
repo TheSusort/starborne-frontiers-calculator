@@ -4,7 +4,7 @@ import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { GearSlotName } from '../constants/gearTypes';
-import { RarityName } from '../constants/rarities';
+import { isRarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey, inventoryCacheKey } from '../constants/storage';
@@ -36,7 +36,9 @@ interface RawGearData {
     slot: GearSlotName;
     level: number;
     stars: number;
-    rarity: RarityName;
+    // Raw Supabase column — not yet validated against `RarityName`, see the guard in
+    // `transformGearData` below.
+    rarity: string;
     set_bonus: GearSetName;
     calibration_ship_id?: string | null;
     stats: unknown;
@@ -78,6 +80,14 @@ const isValidGearPiece = (gear: unknown): gear is GearPiece => {
 // Helper function to transform Supabase data into GearPiece format
 const transformGearData = (data: RawGearData): GearPiece | null => {
     try {
+        // `data.rarity` is a raw Supabase column (`string`) — a legacy or corrupted row whose
+        // value fell out of the `RarityName` union is dropped rather than carried into a
+        // `GearPiece` with a rarity the rest of the app can't classify.
+        if (!isRarityName(data.rarity)) {
+            console.warn(`Unrecognised gear rarity "${data.rarity}" — skipping gear ${data.id}`);
+            return null;
+        }
+
         const { mainStat, subStats } = decodeGearStats(data.stats);
 
         const gear: GearPiece = {

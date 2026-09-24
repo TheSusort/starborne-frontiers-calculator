@@ -274,7 +274,7 @@ export const calculateShipProbability = (
     const rates = getBeaconRates(beaconType);
 
     // Get the base rate for the ship's rarity
-    const rarityRate = rates[ship.rarity as keyof BeaconRates];
+    const rarityRate = rates[ship.rarity];
 
     // If rarity rate is 0, ship cannot be obtained from this beacon
     if (rarityRate === 0) {

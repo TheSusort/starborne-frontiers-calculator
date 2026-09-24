@@ -20,7 +20,7 @@ import {
 import { submitTemplateProposal } from '../../services/shipTemplateProposalService';
 import { supabase } from '../../config/supabase';
 import { Ship, AffinityName } from '../../types/ship';
-import { RarityName } from '../../constants/rarities';
+import { isRarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { StorageKey } from '../../constants/storage';
@@ -74,21 +74,29 @@ export const ImportButton: React.FC<{
             if (error) throw error;
 
             return (
-                // `ship_templates` is a Supabase system table — a row whose `type` fell out of
-                // the `ShipTypeName` union (a retired/renamed role) is dropped rather than
-                // carried into a `Ship` with a role the rest of the app can't classify.
+                // `ship_templates` is a Supabase system table — a row whose `type` or `rarity`
+                // fell out of its union (a retired/renamed role, a mistyped rarity) is dropped
+                // rather than carried into a `Ship` the rest of the app can't classify.
                 data
                     ?.filter((template) => {
-                        if (isShipTypeName(template.type as string)) return true;
-                        console.warn(
-                            `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
-                        );
-                        return false;
+                        if (!isShipTypeName(template.type as string)) {
+                            console.warn(
+                                `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
+                            );
+                            return false;
+                        }
+                        if (!isRarityName((template.rarity as string).toLowerCase())) {
+                            console.warn(
+                                `Unrecognised ship rarity "${template.rarity}" — skipping template ${template.id}`
+                            );
+                            return false;
+                        }
+                        return true;
                     })
                     .map((template) => ({
                         id: template.id,
                         name: template.name,
-                        rarity: template.rarity.toLowerCase() as RarityName,
+                        rarity: template.rarity.toLowerCase(),
                         faction: template.faction as FactionName,
                         type: template.type as ShipTypeName,
                         baseStats: {

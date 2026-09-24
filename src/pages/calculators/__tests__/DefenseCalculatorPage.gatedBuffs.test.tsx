@@ -121,7 +121,7 @@ vi.mock('../../../utils/calculators/skillBuffAutoFill', async (importOriginal) =
 const mockShip: Ship = {
     id: 'mock-redeemer',
     name: 'Mock Redeemer',
-    rarity: 'LEGENDARY',
+    rarity: 'legendary',
     faction: 'ATLAS_SYNDICATE',
     type: 'SUPPORTER',
     baseStats: {

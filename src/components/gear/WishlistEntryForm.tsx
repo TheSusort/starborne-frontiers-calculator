@@ -15,7 +15,7 @@ interface Props {
 }
 
 const ALL_STARS = ['1', '2', '3', '4', '5', '6'];
-const ALL_RARITIES = Object.keys(RARITIES);
+const ALL_RARITIES = Object.keys(RARITIES) as RarityName[];
 
 const implantKeys = new Set(Object.keys(IMPLANTS));
 const GEAR_SET_ENTRIES = (

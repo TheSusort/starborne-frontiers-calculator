@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Ship } from '../../types/ship';
-import { RARITIES, RARITY_ORDER } from '../../constants';
+import { RARITY_ORDER, getRarity } from '../../constants';
 import { Input } from '../ui/Input';
 import { isEventOnlyShip } from '../../utils/recruitmentCalculator';
 
@@ -67,7 +67,8 @@ export const ShipSelectionGrid: React.FC<ShipSelectionGridProps> = ({
                     const ships = filteredShipsByRarity[rarity] || [];
                     if (ships.length === 0) return null;
 
-                    const rarityInfo = RARITIES[rarity];
+                    const rarityInfo = getRarity(rarity);
+                    if (!rarityInfo) return null;
                     return (
                         <div key={rarity} className="space-y-2">
                             <HeadingTag

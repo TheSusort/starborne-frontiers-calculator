@@ -7,6 +7,7 @@ import { isGearSlotName, isImplantSlotName } from '../constants/gearTypes';
 import { GearSetName } from '../constants/gearSets';
 import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
+import { RarityName, isRarityName } from '../constants/rarities';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
 import {
     createStat,
@@ -155,7 +156,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
         return {
             id: unit.Id,
             name: unit.Name,
-            rarity: unit.Rarity.toLowerCase(),
+            rarity: getRarityName(unit.Rarity),
             faction: getFaction(unit.Faction),
             type: getShipTypeName(unit.ShipType),
             affinity: getAffinity(unit.Affinity),
@@ -198,7 +199,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 slot,
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase(),
+                rarity: getRarityName(item.Rarity),
                 mainStat: createStat(mainStatName, mainStatValue, mainStatType),
                 subStats: item.SubStats.map((stat) =>
                     createStat(
@@ -243,7 +244,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 slot,
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase(),
+                rarity: getRarityName(item.Rarity),
                 mainStat: null,
                 subStats: [...item.MainStats, ...item.SubStats].map((stat) =>
                     createStat(
@@ -550,6 +551,14 @@ const getImplantSetBonus = (set: string): GearSetName | null => {
 const getShipTypeName = (shipType: string): ShipTypeName => {
     const upper = shipType.toUpperCase();
     return isShipTypeName(upper) ? upper : 'ATTACKER';
+};
+
+// The export names one of the 5 real rarities (game casing, e.g. "Legendary"). A value outside
+// `RarityName` crosses the file-upload trust boundary, so it defaults to the lowest rarity rather
+// than widening the field — the same fallback shape as `getShipTypeName`.
+const getRarityName = (rarity: string): RarityName => {
+    const lower = rarity.toLowerCase();
+    return isRarityName(lower) ? lower : 'common';
 };
 
 const getAffinity = (affinity: string): AffinityName => {

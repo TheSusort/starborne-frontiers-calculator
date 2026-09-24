@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
 import { ShipTypeName, SHIP_TYPES, isShipTypeName, FACTIONS } from '../../constants';
-import { RarityName, RARITY_ORDER } from '../../constants/rarities';
+import { RarityName, RARITY_ORDER, isRarityName } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
 import { BaseChart, ChartTooltip } from '../ui/charts';
@@ -153,7 +153,11 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value)}
+                            onChange={(value) => {
+                                if (value === 'all' || isRarityName(value)) {
+                                    setRarityFilter(value);
+                                }
+                            }}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

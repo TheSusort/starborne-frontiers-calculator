@@ -52,7 +52,7 @@ const baseConfig: DefenseShipConfig = {
 const minimalShip: Ship = {
     id: 'x',
     name: 'Test Ship',
-    rarity: 'LEGENDARY',
+    rarity: 'legendary',
     faction: 'ATLAS_SYNDICATE',
     type: 'ATTACKER',
     baseStats: {

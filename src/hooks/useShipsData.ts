@@ -3,6 +3,7 @@ import { supabase } from '../config/supabase';
 import { Ship, AffinityName } from '../types/ship';
 import { AscensionStat, parseAscensionStats } from '../utils/ship/referenceShip';
 import { isShipTypeName } from '../constants/shipTypes';
+import { isRarityName } from '../constants/rarities';
 
 interface ShipTemplate {
     id: string;
@@ -52,10 +53,18 @@ const transformShipTemplate = (template: ShipTemplate): Ship | null => {
         return null;
     }
 
+    const rarity = template.rarity.toLowerCase();
+    if (!isRarityName(rarity)) {
+        console.warn(
+            `Unrecognised ship rarity "${template.rarity}" — skipping template ${template.id}`
+        );
+        return null;
+    }
+
     return {
         id: template.id,
         name: template.name,
-        rarity: template.rarity.toLowerCase(),
+        rarity,
         faction: template.faction,
         type: template.type,
         baseStats: {

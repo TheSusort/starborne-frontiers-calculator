@@ -4,6 +4,7 @@ import type { GearSlotName } from '../constants/gearTypes';
 import { isGearSetName } from '../constants/gearSets';
 import type { ShipTypeName } from '../constants/shipTypes';
 import { isShipTypeName } from '../constants/shipTypes';
+import { isRarityName } from '../constants/rarities';
 import type { AffinityName, Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
@@ -475,6 +476,8 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         // the `ShipTypeName` union (a retired/renamed role) rather than reject the whole
         // ranking, matching the gear-piece skip below.
         if (!isShipTypeName(data.type)) return [];
+        // Same trust-boundary shape as `data.type` above, for `RarityName`.
+        if (!isRarityName(data.rarity)) return [];
 
         const shipGearMap = new Map<string, InternalGearPiece>();
         data.ship_equipment?.forEach((eq) => {
@@ -615,6 +618,9 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     // guard rather than cast, since this map is built once per leaderboard
                     // request from every user's stored gear.
                     if (!isGearSlotName(internalGear.slot)) return undefined;
+                    // `internalGear.rarity` is read straight off the inventory row (`string`) —
+                    // guard rather than cast, same trust boundary as `slot` above.
+                    if (!isRarityName(internalGear.rarity)) return undefined;
                     return {
                         id: internalGear.id,
                         slot: internalGear.slot,

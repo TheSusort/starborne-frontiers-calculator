@@ -8,6 +8,7 @@ import {
     isGearSetName,
     RARITIES,
     RarityName,
+    isRarityName,
     GEAR_SLOTS,
     GearSlotName,
     STATS,
@@ -315,7 +316,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Select
                         label="Rarity"
                         value={rarity}
-                        onChange={(value) => setRarity(value)}
+                        onChange={(value) => {
+                            if (isRarityName(value)) setRarity(value);
+                        }}
                         options={rarityOptions}
                     />
 
