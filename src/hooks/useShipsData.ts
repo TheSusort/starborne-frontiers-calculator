@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
-import { Ship, AffinityName } from '../types/ship';
+import { Ship } from '../types/ship';
 import { AscensionStat, parseAscensionStats } from '../utils/ship/referenceShip';
 import { isShipTypeName } from '../constants/shipTypes';
 import { isRarityName } from '../constants/rarities';
+import { toAffinityName } from '../constants/affinities';
 
 interface ShipTemplate {
     id: string;
@@ -11,7 +12,9 @@ interface ShipTemplate {
     rarity: string;
     faction: string;
     type: string;
-    affinity: string;
+    // `ship_templates.affinity` is nullable; coerced by `toAffinityName` below rather than
+    // trusted as `AffinityName` or blindly `.toLowerCase()`'d (a null value crashes that call).
+    affinity: string | null;
     image_key: string;
     active_skill_text?: string;
     charge_skill_text?: string;
@@ -85,7 +88,7 @@ const transformShipTemplate = (template: ShipTemplate): Ship | null => {
         equipment: {},
         refits: [],
         implants: {},
-        affinity: template.affinity.toLowerCase() as AffinityName,
+        affinity: toAffinityName(template.affinity),
         imageKey: template.image_key,
         activeSkillText: template.active_skill_text,
         chargeSkillText: template.charge_skill_text,

@@ -19,10 +19,11 @@ import {
 } from '../../utils/shipTemplateComparison';
 import { submitTemplateProposal } from '../../services/shipTemplateProposalService';
 import { supabase } from '../../config/supabase';
-import { Ship, AffinityName } from '../../types/ship';
+import { Ship } from '../../types/ship';
 import { isRarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
 import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
+import { toAffinityName } from '../../constants/affinities';
 import { StorageKey } from '../../constants/storage';
 import { ImportDiff } from '../../types/importDiff';
 import { computeImportDiff } from '../../utils/import/computeImportDiff';
@@ -117,7 +118,10 @@ export const ImportButton: React.FC<{
                         equipment: {},
                         refits: [],
                         implants: {},
-                        affinity: template.affinity.toLowerCase() as AffinityName,
+                        // `ship_templates.affinity` is nullable; `toAffinityName` handles both
+                        // that and a value outside the union — a blind `.toLowerCase()` crashed
+                        // on a null row.
+                        affinity: toAffinityName(template.affinity as string | null),
                         imageKey: template.image_key,
                         activeSkillText: template.active_skill_text,
                         chargeSkillText: template.charge_skill_text,

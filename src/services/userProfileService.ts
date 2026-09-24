@@ -5,7 +5,8 @@ import { isGearSetName } from '../constants/gearSets';
 import type { ShipTypeName } from '../constants/shipTypes';
 import { isShipTypeName } from '../constants/shipTypes';
 import { isRarityName } from '../constants/rarities';
-import type { AffinityName, Ship } from '../types/ship';
+import { toAffinityName } from '../constants/affinities';
+import type { Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
 import { tryDecodeGearStats } from '../utils/gear/statsCodec';
@@ -347,7 +348,9 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         rarity: string;
         faction: string;
         type: string;
-        affinity: string;
+        // `ships.affinity` is nullable; coerced by `toAffinityName` below rather than trusted
+        // as `AffinityName`.
+        affinity: string | null;
         rank: number;
         level: number;
         user_id: string;
@@ -530,7 +533,7 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 rarity: data.rarity,
                 faction: data.faction,
                 type: data.type,
-                affinity: data.affinity as AffinityName,
+                affinity: toAffinityName(data.affinity),
                 rank: data.rank,
                 level: data.level,
                 baseStats: {

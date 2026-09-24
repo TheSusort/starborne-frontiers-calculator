@@ -16,11 +16,11 @@ import {
     isGearSlotName,
     isImplantSlotName,
 } from '../constants/gearTypes';
-import { Ship, AffinityName } from '../types/ship';
+import { Ship } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
-import { ShipTypeName } from '../constants/shipTypes';
+import { isShipTypeName, toShipTypeName } from '../constants/shipTypes';
 import { toRarityName } from '../constants/rarities';
-import { FactionName } from '../constants/factions';
+import { toAffinityName } from '../constants/affinities';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -105,11 +105,17 @@ interface RawShipBaseStats {
 interface RawShipData {
     id: string;
     name: string;
-    // Raw Supabase column; coerced by `toRarityName` on load.
+    // Raw Supabase columns, narrowed by `transformShipData` below rather than trusted as their
+    // union types: `rarity` (-> `toRarityName`), `type` (-> `toShipTypeName`) and `affinity`
+    // (-> `toAffinityName`) are real unions with no runtime check on this row. `rarity`/`faction`/
+    // `type` are NOT NULL text columns; `affinity` is nullable. `faction` types as `string`
+    // because `FactionName` already is (`constants/factions.ts` — the loose `FACTIONS[str]` index
+    // sites depend on it staying that way); narrow through `asFactionKey` if a real union is ever
+    // needed from this field.
     rarity: string;
-    faction: FactionName;
-    type: ShipTypeName;
-    affinity: AffinityName;
+    faction: string;
+    type: string;
+    affinity: string | null;
     copies: number;
     rank: number;
     level: number;
@@ -226,14 +232,24 @@ const transformShipData = (data: RawShipData): Ship | null => {
             }
         };
 
+        // See `toShipTypeName` — this fallback changes autogear's scoring formula, so it is
+        // never silent.
+        if (!isShipTypeName(data.type.toUpperCase())) {
+            console.warn(
+                `Ship "${data.name}" (${data.id}) has an unrecognised type "${data.type}"; ` +
+                    `defaulting to ATTACKER. Its autogear scoring is wrong until the stored ` +
+                    `type is corrected.`
+            );
+        }
+
         const ship: Ship = {
             id: data.id,
             name: data.name,
             // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
             rarity: toRarityName(data.rarity),
             faction: data.faction,
-            type: data.type,
-            affinity: data.affinity,
+            type: toShipTypeName(data.type),
+            affinity: toAffinityName(data.affinity),
             copies: data.copies || 1,
             rank: data.rank,
             level: data.level,

@@ -310,9 +310,16 @@ export const ShipIndexPage: React.FC = () => {
                         ? SHIP_TYPES[a.type].name.localeCompare(SHIP_TYPES[b.type].name)
                         : SHIP_TYPES[b.type].name.localeCompare(SHIP_TYPES[a.type].name);
                 case 'faction':
+                    // `FACTIONS[ship.faction]` can be undefined for a faction the catalogue
+                    // doesn't recognise (`FactionName` is unvalidated `string`) — fall back to
+                    // the raw value rather than indexing `.name` on `undefined`.
                     return state.sort.direction === 'asc'
-                        ? FACTIONS[a.faction].name.localeCompare(FACTIONS[b.faction].name)
-                        : FACTIONS[b.faction].name.localeCompare(FACTIONS[a.faction].name);
+                        ? (FACTIONS[a.faction]?.name ?? a.faction).localeCompare(
+                              FACTIONS[b.faction]?.name ?? b.faction
+                          )
+                        : (FACTIONS[b.faction]?.name ?? b.faction).localeCompare(
+                              FACTIONS[a.faction]?.name ?? a.faction
+                          );
                 case 'rarity':
                     return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
