@@ -3,6 +3,8 @@ import {
     CommunityRecommendationService,
     InvalidSharedConfigError,
     ShipRoleColumnNotNullableError,
+    RolelessShareNotAllowedError,
+    SharedBuildExceedsBasisCapsError,
 } from '../../services/communityRecommendations';
 import { supabase } from '../../config/supabase';
 import type {
@@ -86,6 +88,39 @@ describe('CommunityRecommendationService.createRecommendation', () => {
         expect(insert).not.toHaveBeenCalled();
     });
 
+    // A build that fails validation specifically for exceeding the schema's basis caps (too
+    // many roleBasis terms, or a term's weight outside the allowed range) gets a named error
+    // naming what to shrink, rather than the generic InvalidSharedConfigError.
+    it('throws SharedBuildExceedsBasisCapsError and never calls insert for an oversized roleBasis', async () => {
+        const insert = vi.fn();
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        const oversizedInput = {
+            ...baseInput,
+            sharedConfig: {
+                ...baseSharedConfig,
+                roleBasis: {
+                    produces: 'damage',
+                    terms: Array.from({ length: 6 }, () => ({ stat: 'attack', weight: 1 })),
+                },
+            },
+        };
+
+        const call = CommunityRecommendationService.createRecommendation(
+            oversizedInput as never,
+            'profile-1'
+        );
+        await expect(call).rejects.toThrow(SharedBuildExceedsBasisCapsError);
+        // SharedBuildExceedsBasisCapsError extends InvalidSharedConfigError, so a caller
+        // written before this class existed — one that only checks `instanceof
+        // InvalidSharedConfigError` (the hook does, at the time of writing) — still catches
+        // it and shows its generic message rather than falling through to an unhandled/opaque
+        // failure branch.
+        await expect(call.catch((e) => e)).resolves.toBeInstanceOf(InvalidSharedConfigError);
+
+        expect(insert).not.toHaveBeenCalled();
+    });
+
     // `ship_role` is `NOT NULL` in the database, but a Custom-mode build's `shipRole` is
     // null — the seeded-from role is what gets mirrored into that column instead.
     it("mirrors a Custom-mode build's seededFrom role into the legacy ship_role column", async () => {
@@ -145,13 +180,46 @@ describe('CommunityRecommendationService.createRecommendation', () => {
 
         const result = await CommunityRecommendationService.createRecommendation(
             { ...baseInput, sharedConfig: fromScratch },
-            'profile-1'
+            'profile-1',
+            true
         );
 
         expect(result).toEqual({ id: 'rec-1' });
         const payload = insert.mock.calls[0][0];
         expect(payload.ship_role).toBeNull();
         expect(payload.shared_config.shipRole).toBeNull();
+    });
+
+    // Defence in depth: `configToSharedBuild` already refuses a role-less build for the app's
+    // own UI before it ever builds a `SharedAutogearBuild`, but any other caller that builds
+    // one directly and calls this service must be refused here too — a null `ship_role` must
+    // never be written while the switch is off, regardless of caller.
+    it('refuses to write a null ship_role by default, without calling insert', async () => {
+        const fromScratch: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        };
+
+        const insert = vi.fn();
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        await expect(
+            CommunityRecommendationService.createRecommendation(
+                { ...baseInput, sharedConfig: fromScratch },
+                'profile-1'
+            )
+        ).rejects.toThrow(RolelessShareNotAllowedError);
+
+        expect(insert).not.toHaveBeenCalled();
     });
 
     // Until the migration making `ship_role` nullable is applied, the database itself still
@@ -186,7 +254,8 @@ describe('CommunityRecommendationService.createRecommendation', () => {
         await expect(
             CommunityRecommendationService.createRecommendation(
                 { ...baseInput, sharedConfig: fromScratch },
-                'profile-1'
+                'profile-1',
+                true
             )
         ).rejects.toThrow(ShipRoleColumnNotNullableError);
     });
@@ -223,7 +292,8 @@ describe('CommunityRecommendationService.createRecommendation', () => {
 
         const result = await CommunityRecommendationService.createRecommendation(
             { ...baseInput, sharedConfig: fromScratch },
-            'profile-1'
+            'profile-1',
+            true
         );
 
         expect(result).toBeNull();

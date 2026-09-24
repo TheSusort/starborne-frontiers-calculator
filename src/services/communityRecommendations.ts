@@ -2,9 +2,13 @@ import { supabase } from '../config/supabase';
 import {
     CommunityRecommendation,
     CreateCommunityRecommendationInput,
+    SharedAutogearBuild,
 } from '../types/communityRecommendation';
-import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
-import { mirroredShipRole } from '../utils/communityBuild';
+import {
+    sharedAutogearBuildSchema,
+    isSharedBuildBasisCapIssue,
+} from '../schemas/sharedAutogearBuild';
+import { mirroredShipRole, ALLOW_ROLELESS_COMMUNITY_SHARE } from '../utils/communityBuild';
 
 /**
  * Thrown by createRecommendation when the shared config fails schema
@@ -15,6 +19,40 @@ export class InvalidSharedConfigError extends Error {
     constructor() {
         super('Invalid shared autogear build');
         this.name = 'InvalidSharedConfigError';
+    }
+}
+
+/**
+ * A more specific `InvalidSharedConfigError`, thrown by createRecommendation when the build is
+ * rejected specifically for exceeding the schema's basis caps (more than `MAX_BASIS_TERMS`
+ * terms in a `roleBasis`/`customFormula` row's `basis`, or a basis weight outside its allowed
+ * range) — `isSharedBuildBasisCapIssue` tells this apart from any other validation failure, so
+ * a caller that checks for it can name what to shrink rather than the generic "could not be
+ * validated". Extends `InvalidSharedConfigError` (rather than `Error`) so an
+ * `instanceof InvalidSharedConfigError` check written before this class existed still catches
+ * it — the specific message is additive, not a silent behaviour change for that caller.
+ */
+export class SharedBuildExceedsBasisCapsError extends InvalidSharedConfigError {
+    constructor() {
+        super();
+        this.message =
+            'This equation has too many stats, or a weight too large or too small, to be shared.';
+        this.name = 'SharedBuildExceedsBasisCapsError';
+    }
+}
+
+/**
+ * Thrown by createRecommendation when the shared build has no role to mirror into the legacy
+ * `ship_role` column and role-less sharing is switched off (`ALLOW_ROLELESS_COMMUNITY_SHARE`).
+ * `configToSharedBuild` already refuses this build for the app's own UI before it ever reaches
+ * here — this is the same refusal for any other caller that builds a `SharedAutogearBuild`
+ * directly and calls this service, so a null `ship_role` can never be written while the switch
+ * is off, regardless of caller.
+ */
+export class RolelessShareNotAllowedError extends Error {
+    constructor() {
+        super('Sharing a build with no role is not available yet');
+        this.name = 'RolelessShareNotAllowedError';
     }
 }
 
@@ -62,21 +100,38 @@ export class CommunityRecommendationService {
         input: CreateCommunityRecommendationInput,
         // Authorship uses the active profile so alt accounts can share recommendations
         // independently. RLS allows any profile the auth user owns (has_profile_access).
-        createdBy: string
+        createdBy: string,
+        // Mirrors `configToSharedBuild`'s own parameter: a default read from the switch, not a
+        // module-level read baked into the function body, so both call patterns are testable
+        // without mocking. `configToSharedBuild` already refuses a role-less build for the
+        // app's own UI before it reaches here — this is the same refusal for any other caller
+        // that builds a `SharedAutogearBuild` directly and calls this service (defence in
+        // depth, so a null `ship_role` can never be written while the switch is off).
+        allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE
     ): Promise<CommunityRecommendation | null> {
-        // Use the parsed result, not the raw input: object schemas strip unknown
-        // keys (zod's .strip()), so `sharedConfig` is the sanitised build and
+        // Parse directly (rather than through `validateSharedAutogearBuild`) so a failure's
+        // `ZodIssue`s are available to classify below — the schema's object types still strip
+        // unknown keys (zod's .strip()), so `sharedConfig` is the sanitised build and
         // `input.sharedConfig` may still carry caller-supplied extra keys.
-        const sharedConfig = validateSharedAutogearBuild(input.sharedConfig);
-        if (!sharedConfig) {
+        const parseResult = sharedAutogearBuildSchema.safeParse(input.sharedConfig);
+        if (!parseResult.success) {
+            if (parseResult.error.issues.some(isSharedBuildBasisCapIssue)) {
+                console.error('Refusing to share a build that exceeds the basis caps');
+                throw new SharedBuildExceedsBasisCapsError();
+            }
             console.error('Refusing to share an invalid autogear build');
             throw new InvalidSharedConfigError();
         }
+        const sharedConfig = parseResult.data as SharedAutogearBuild;
 
         // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
         // formula was seeded from. A hand-written formula with no `seededFrom` has neither,
         // so this is null: a legitimate value for the nullable `ship_role` column.
         const legacyShipRole = mirroredShipRole(sharedConfig);
+
+        if (!allowRoleless && legacyShipRole === null) {
+            throw new RolelessShareNotAllowedError();
+        }
 
         const { data, error } = await supabase
             .from('community_recommendations')

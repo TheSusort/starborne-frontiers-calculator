@@ -55,13 +55,14 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
  * assumeCalibrated, useArenaModifiers) — those describe the sharer's own
  * inventory and preferences, not the build.
  *
- * `version` exists so a future shape change can be migrated on read. A `version: 1` row
- * has a non-null `shipRole` and no `customFormula` — that shape is unchanged and still
- * validates. `version: 2` adds Custom mode: `shipRole: null` plus a `customFormula` whose
- * core row carries a weighted `basis`, so the formula (not a stat limit) is what travels —
- * it generalises across the recipient's own inventory. `version: 2` also carries an optional
- * `roleBasis`, a transcription of the sharer's own kit that replaces a role's primary scoring
- * quantity (see `RoleBasis` in `types/autogear.ts`).
+ * `version` exists so a future shape change can be migrated on read. A `version: 1` row has a
+ * non-null `shipRole` and no `customFormula` — a plain role build, still written for every such
+ * build so production's live bundle (a `version: 1`-only reader) keeps reading it in full.
+ * `version: 2` adds Custom mode: `shipRole: null` plus a `customFormula` whose core row carries
+ * a weighted `basis`, so the formula (not a stat limit) is what travels — it generalises across
+ * the recipient's own inventory. `roleBasis`, a transcription of the sharer's own kit that
+ * replaces a role's primary scoring quantity (see `RoleBasis` in `types/autogear.ts`), can ride
+ * on either version.
  */
 export interface SharedAutogearBuild {
     version: 1 | 2;
@@ -72,10 +73,11 @@ export interface SharedAutogearBuild {
     fleetBuffs: FleetBuff[];
     excludedImplantTypes: string[];
     optimizeImplants: boolean;
-    /** Only ever present on a `version: 2` build, and only in Custom mode (`shipRole: null`). */
+    /** Only ever present on a `version: 2` build (Custom mode, `shipRole: null` or a
+     *  role-seeded formula). */
     customFormula?: CustomFormula;
-    /** Only ever present on a `version: 2` build. Applies only where the shared `shipRole`
-     *  hosts this basis's `produces` axis (`roleHostsBasis`, `offFormula/roleBasisHost.ts`). */
+    /** Applies only where the shared `shipRole` hosts this basis's `produces` axis
+     *  (`roleHostsBasis`, `offFormula/roleBasisHost.ts`). Present on either version. */
     roleBasis?: RoleBasis;
 }
 

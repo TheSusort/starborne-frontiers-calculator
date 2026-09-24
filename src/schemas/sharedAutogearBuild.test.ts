@@ -5,7 +5,12 @@ import { GEAR_SETS } from '../constants/gearSets';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
-import { validateSharedAutogearBuild } from './sharedAutogearBuild';
+import {
+    validateSharedAutogearBuild,
+    isSharedBuildBasisCapIssue,
+    sharedAutogearBuildSchema,
+} from './sharedAutogearBuild';
+import { validateProductionSharedAutogearBuild } from './__fixtures__/productionSharedAutogearBuild';
 
 // Mirrors the schema's private MAX_ARRAY_LENGTH so the boundary tests move
 // with it rather than drifting from a hardcoded magic number.
@@ -786,5 +791,163 @@ describe('validateSharedAutogearBuild — version 2, custom formula builds', () 
             });
             expect(validateSharedAutogearBuild(structuredClone(build))).not.toBeNull();
         });
+    });
+});
+
+describe('validateSharedAutogearBuild — version 1 role builds carrying a roleBasis', () => {
+    // A plain role build now writes version 1 (`configToSharedBuild`), so `roleBasis` must
+    // validate identically whichever version carries it — this pins the v1 arm the same way
+    // the `roleBasis` describe block above pins the v2 arm.
+    const v1BuildWithBasis = (roleBasis: unknown): unknown => ({
+        version: 1,
+        shipRole: 'ATTACKER',
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+        roleBasis,
+    });
+
+    it('round-trips a version-1 role build carrying a roleBasis', () => {
+        const build = v1BuildWithBasis({
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: 2.1 }],
+        });
+        expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+    });
+
+    it('rejects more than MAX_BASIS_TERMS on a version-1 roleBasis, same as version 2', () => {
+        const build = v1BuildWithBasis({
+            produces: 'repair',
+            terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                stat: 'hp' as const,
+                weight: 1,
+            })),
+        });
+        expect(validateSharedAutogearBuild(build)).toBeNull();
+    });
+
+    it('a version-1 build with no roleBasis still validates (existing rows keep reading)', () => {
+        const build = {
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+        };
+        const result = validateSharedAutogearBuild(structuredClone(build));
+        expect(result).toEqual(build);
+        expect(result?.roleBasis).toBeUndefined();
+    });
+});
+
+describe("validateSharedAutogearBuild — matches production's own version-1 schema", () => {
+    // Production's `sharedAutogearBuildSchema` (origin/production, bd22289a, 1.68.0) is a
+    // single plain `z.object` with `version: z.literal(1)` and no `.strict()`/`.passthrough()`
+    // — see `productionSharedAutogearBuild.ts`'s header for how this fixture was taken. This
+    // is the reader every already-open tab actually runs a `version: 1` row through.
+    it('parses a version-1 role build carrying a roleBasis, silently dropping the equation', () => {
+        const build = {
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            roleBasis: { produces: 'damage' as const, terms: [{ stat: 'attack', weight: 2.1 }] },
+        };
+
+        // The negative control: this repo's OWN schema keeps the equation.
+        expect(validateSharedAutogearBuild(structuredClone(build))?.roleBasis).toEqual(
+            build.roleBasis
+        );
+
+        const result = validateProductionSharedAutogearBuild(structuredClone(build));
+        expect(result).not.toBeNull();
+        expect(result).not.toHaveProperty('roleBasis');
+        expect(result?.shipRole).toBe('ATTACKER');
+    });
+
+    it('cannot parse a version-2 build at all', () => {
+        const build = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        };
+        expect(validateProductionSharedAutogearBuild(build)).toBeNull();
+    });
+});
+
+describe('isSharedBuildBasisCapIssue', () => {
+    const baseBuild = {
+        version: 1 as const,
+        shipRole: 'ATTACKER' as const,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+    };
+
+    const issuesFor = (raw: unknown) => {
+        // validateSharedAutogearBuild only reports success/failure — parse through the schema
+        // directly (the same schema either way) to read the actual ZodIssues this classifier
+        // reads.
+        expect(validateSharedAutogearBuild(raw)).toBeNull();
+        const parsed = sharedAutogearBuildSchema.safeParse(raw);
+        expect(parsed.success).toBe(false);
+        return parsed.success ? [] : parsed.error.issues;
+    };
+
+    it('classifies exceeding MAX_BASIS_TERMS on a roleBasis as a basis-cap issue', () => {
+        const build = {
+            ...baseBuild,
+            roleBasis: {
+                produces: 'damage',
+                terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                    stat: 'attack',
+                    weight: 1,
+                })),
+            },
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(true);
+    });
+
+    it('classifies an out-of-range basis weight as a basis-cap issue', () => {
+        const build = {
+            ...baseBuild,
+            roleBasis: {
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: Number.MAX_VALUE }],
+            },
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(true);
+    });
+
+    it('does not classify an out-of-range stat priority weight (not a basis field)', () => {
+        const build = {
+            ...baseBuild,
+            statPriorities: [{ stat: 'crit', weight: Number.MAX_VALUE }],
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(false);
+    });
+
+    it('does not classify an unrelated failure (unknown ship role) as a basis-cap issue', () => {
+        const build = { ...baseBuild, shipRole: 'WIZARD' };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(false);
     });
 });

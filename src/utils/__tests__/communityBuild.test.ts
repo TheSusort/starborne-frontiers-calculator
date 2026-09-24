@@ -195,8 +195,19 @@ describe('configToSharedBuild', () => {
         optimizeImplants: true,
     };
 
-    it('produces a version-2 build carrying all seven legacy fields', () => {
-        expect(configToSharedBuild(config)).toEqual({ version: 2, ...config });
+    it('produces a version-1 build carrying all seven legacy fields — a role build with no customFormula stays readable by production (1.68.0)', () => {
+        expect(configToSharedBuild(config)).toEqual({ version: 1, ...config });
+    });
+
+    it('keeps a role build at version 2 once it carries a customFormula, even with a role set', () => {
+        const build = configToSharedBuild({
+            ...config,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build?.version).toBe(2);
     });
 
     it('returns null without a ship role or a usable custom formula', () => {
@@ -237,7 +248,7 @@ describe('configToSharedBuild', () => {
         expect(build).toBeNull();
     });
 
-    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — this pins the DEFAULT's wiring, not its value, so it survives #544's eventual flip", () => {
+    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — this pins the DEFAULT's wiring, not its value, so it survives #552's eventual flip", () => {
         const rolelessConfig = {
             ...config,
             shipRole: null,
@@ -325,6 +336,10 @@ describe('configToSharedBuild', () => {
 
         const shared = configToSharedBuild(shipConfig);
         expect(shared).not.toBeNull();
+        // A role build with no customFormula stays version 1 — production's live bundle
+        // (1.68.0) only has a version-1 reader, and its schema is a plain non-strict
+        // `z.object`, so it reads this in full, including a `roleBasis` it can't use.
+        expect(shared?.version).toBe(1);
         expect(shared?.roleBasis).toEqual(roleBasis);
 
         const validated = validateSharedAutogearBuild(JSON.parse(JSON.stringify(shared)));
@@ -343,7 +358,7 @@ describe('configToSharedBuild', () => {
             statBonuses: [],
         });
         expect(build).toEqual({
-            version: 2,
+            version: 1,
             shipRole: 'ATTACKER',
             statPriorities: [],
             setPriorities: [],

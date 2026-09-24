@@ -223,12 +223,17 @@ const buildListFields = {
     optimizeImplants: z.boolean(),
 };
 
-// A row written before Custom mode existed: non-null role, no `customFormula` key. Kept
-// verbatim (not folded into the v2 arm) so a pre-migration row's contract stays pinned.
+// A role build with no customFormula: non-null role, no `customFormula` key. This is the
+// version production's live bundle (1.68.0, a single non-discriminated `z.object` with
+// `version: z.literal(1)`) can read — that schema strips unknown keys by default, so an
+// optional `roleBasis` here is fully forward-compatible: an old bundle reads every other field
+// and silently drops the equation it has no reader for, rather than falling back to the legacy
+// columns (see `configToSharedBuild`'s version choice, communityBuild.ts).
 const sharedAutogearBuildV1Schema = z.object({
     version: z.literal(1),
     shipRole: shipRoleSchema,
     ...buildListFields,
+    roleBasis: roleBasisSchema.optional(),
 });
 
 // Custom mode: `shipRole: null` plus a `customFormula`. `shipRole` non-null is still legal
@@ -276,4 +281,25 @@ export const sharedAutogearBuildSchema = versionedSharedAutogearBuildSchema.supe
 export const validateSharedAutogearBuild = (raw: unknown): SharedAutogearBuild | null => {
     const result = sharedAutogearBuildSchema.safeParse(raw);
     return result.success ? (result.data as SharedAutogearBuild) : null;
+};
+
+/**
+ * True when a `ZodIssue` from `sharedAutogearBuildSchema` is specifically about a basis's own
+ * caps — more than `MAX_BASIS_TERMS` terms in a `roleBasis`/`customFormula` row's `basis`, or a
+ * basis term's weight outside `boundedNumberSchema`'s magnitude window or its non-negative
+ * requirement. Read by `code` and `path` only, never by `message`, so rewording a schema message
+ * can never silently stop this from firing (or start firing on an unrelated issue).
+ *
+ * A basis-owned `weight`/array path always has a `terms` (roleBasis) or `basis` (custom formula
+ * row) ancestor segment; every other bounded-number field on this schema (statPriority.weight,
+ * statBonus/fleetBuff.percentage, customFormulaRow.percentage) does not, so this only classifies
+ * an issue actually raised by a basis's own constraints.
+ */
+export const isSharedBuildBasisCapIssue = (issue: z.ZodIssue): boolean => {
+    const { path, code } = issue;
+    const last = path[path.length - 1];
+    const hasBasisAncestor = path.some((segment) => segment === 'terms' || segment === 'basis');
+    if (!hasBasisAncestor) return false;
+    if ((last === 'terms' || last === 'basis') && code === z.ZodIssueCode.too_big) return true;
+    return last === 'weight' && code === z.ZodIssueCode.custom;
 };

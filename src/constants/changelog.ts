@@ -10,10 +10,10 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: flags ships that score off a stat their role ignores.',
     'Autogear: flagged ships show their real equation where their role can use it.',
     "Autogear: apply a ship's derived equation to its role in one click.",
-    'Autogear: shows when an equation is applied, with an undo control.',
+    'Autogear: shows when an equation is applied, with a stop control.',
     'Autogear: an applied equation can now be edited and restored.',
     'Autogear: custom formula rows can now weight a stat by other stats.',
-    'Autogear: custom-mode builds can now be shared to the community.',
+    'Autogear: custom formulas started from a role can now be shared.',
     'Ship Details: no longer crashes opening a geared ship with a sub-role.',
 ];
 

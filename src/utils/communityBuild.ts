@@ -329,7 +329,7 @@ export const mirroredShipRole = (
  * 1.68.0 or earlier has no `version: 2` reader and falls back to
  * `normalizeShipRole(row.ship_role)`, whose legacy fallback had no null guard — a player on
  * one of those bundles who has not reloaded gets every recommendation list for that ship
- * failing to load. #544 tracks flipping this to true once tabs on those bundles have aged
+ * failing to load. #552 tracks flipping this to true once tabs on those bundles have aged
  * out and `20260923000001_nullable_community_recommendation_ship_role.sql` is applied.
  */
 export const ALLOW_ROLELESS_COMMUNITY_SHARE = false;
@@ -347,15 +347,34 @@ export const configToSharedBuild = (
 ): SharedAutogearBuild | null => {
     if (!config.shipRole && !formulaHasUsableRow(config.customFormula)) return null;
     if (!allowRoleless && !mirroredShipRole(config)) return null;
-    return {
-        version: 2,
-        shipRole: config.shipRole,
+
+    const buildFields = {
         statPriorities: config.statPriorities,
         setPriorities: config.setPriorities,
         statBonuses: config.statBonuses,
         fleetBuffs: config.fleetBuffs ?? [],
         excludedImplantTypes: config.excludedImplantTypes ?? [],
         optimizeImplants: config.optimizeImplants ?? false,
+    };
+
+    // A role build with no customFormula stays version 1 — production's live bundle (1.68.0)
+    // only has a version-1 reader, and that reader's schema is a plain non-strict `z.object`
+    // (strips unknown keys), so it reads this in full, including a `roleBasis` it has no use
+    // for but can safely ignore. A null role, or any customFormula, forces version 2, which
+    // that bundle cannot read at all and falls back to the legacy columns for instead (#552).
+    if (config.shipRole && !config.customFormula) {
+        return {
+            version: 1,
+            shipRole: config.shipRole,
+            ...buildFields,
+            ...(config.roleBasis ? { roleBasis: config.roleBasis } : {}),
+        };
+    }
+
+    return {
+        version: 2,
+        shipRole: config.shipRole,
+        ...buildFields,
         ...(config.customFormula ? { customFormula: config.customFormula } : {}),
         ...(config.roleBasis ? { roleBasis: config.roleBasis } : {}),
     };
