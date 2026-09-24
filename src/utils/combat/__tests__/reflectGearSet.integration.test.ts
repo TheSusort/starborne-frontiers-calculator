@@ -47,7 +47,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 }
 
 /** REFLECT pieces equipping the wearer with `minPieces` of the set across distinct slots. */
-const REFLECT_SLOTS = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+const REFLECT_SLOTS = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
 function reflectPieces(): GearPiece[] {
     const minPieces = GEAR_SETS['REFLECT']?.minPieces ?? 2;
     const out: GearPiece[] = [];

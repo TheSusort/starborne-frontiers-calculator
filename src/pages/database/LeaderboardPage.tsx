@@ -8,7 +8,7 @@ import { Loader } from '../../components/ui/Loader';
 import { supabase } from '../../config/supabase';
 import { Ship } from '../../types/ship';
 import { calculateTotalScore } from '../../utils/autogear/scoring';
-import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants/gearTypes';
+import { GEAR_SLOT_ORDER, GearSlotName, isGearSlotName } from '../../constants/gearTypes';
 import { ShipTypeName, SHIP_TYPES } from '../../constants/shipTypes';
 import { TrophyIcon } from '../../components/ui/icons';
 import Seo from '../../components/seo/Seo';
@@ -162,8 +162,9 @@ export const LeaderboardPage: React.FC = () => {
                             defensePenetration: data.ship_base_stats?.defense_penetration || 0,
                         },
                         equipment: data.ship_equipment.reduce(
-                            (acc: Record<GearSlotName, string>, eq: any) => {
-                                acc[eq.slot] = eq.gear_id;
+                            (acc: Partial<Record<GearSlotName, string>>, eq: any) => {
+                                const slot: string = eq.slot;
+                                if (isGearSlotName(slot)) acc[slot] = eq.gear_id;
                                 return acc;
                             },
                             {}

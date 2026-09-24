@@ -1,17 +1,18 @@
 import { memo, useRef } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GearSetName, GearSlotName, RARITIES, STATS } from '../../constants';
+import { GEAR_SETS, GearSetName, RARITIES, STATS } from '../../constants';
+import type { EquipmentSlotName } from '../../constants/gearTypes';
 import { Button, Tooltip, CloseIcon } from '../ui';
 import { ImplantName, IMPLANTS } from '../../constants/implants';
 import { Image } from '../ui/Image';
 import { GearPieceDisplay } from './GearPieceDisplay';
 
 interface GearSlotProps {
-    slotKey: GearSlotName;
+    slotKey: EquipmentSlotName;
     gear?: GearPiece;
     hoveredGear: GearPiece | null;
-    onSelect?: (slot: GearSlotName) => void;
-    onRemove?: (slot: GearSlotName) => void;
+    onSelect?: (slot: EquipmentSlotName) => void;
+    onRemove?: (slot: EquipmentSlotName) => void;
     onHover: (gear: GearPiece | null) => void;
     onLockShip?: (shipId: string) => void;
     excludeLockShipId?: string;

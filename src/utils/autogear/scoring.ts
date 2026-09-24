@@ -1,7 +1,7 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import type { BasisTerm, FleetBuff, CustomFormula, RoleBasis } from '../../types/autogear';
-import { GearSlotName, ShipTypeName } from '../../constants';
+import { EquipmentSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
@@ -194,7 +194,9 @@ export function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
 // Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
-    equipment: Partial<Record<GearSlotName, string>>,
+    // Widened past "real gear only": read only via Object.entries/Object.values, and
+    // `SetFirstStrategy` passes a not-yet-split gear+implant working set through this param.
+    equipment: Partial<Record<EquipmentSlotName, string>>,
     priorities: StatPriority[],
     getGearPiece: (id: string) => GearPiece | undefined,
     getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,

@@ -1,4 +1,5 @@
 import type { ShipTypeName } from '../constants/shipTypes';
+import type { EquipmentSlotName } from '../constants/gearTypes';
 import { StatName, LimitableStat } from './stats';
 
 export interface StatPriority {
@@ -16,7 +17,9 @@ export interface SetPriority {
 }
 
 export interface GearSuggestion {
-    slotName: string;
+    /** A gear slot for a regular suggestion, an implant slot when the optimizer also scored
+     *  implants (`AutogearShipConfig.optimizeImplants`) — see `EquipmentSlotName`'s doc. */
+    slotName: EquipmentSlotName;
     gearId: string;
     score: number;
 }

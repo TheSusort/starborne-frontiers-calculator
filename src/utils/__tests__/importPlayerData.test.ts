@@ -116,7 +116,7 @@ describe('importPlayerData', () => {
 
             expect(result.success).toBe(true);
             const ship = result.data!.ships[0];
-            expect(ship.implants.minor_alpha).toBe('implant-1');
+            expect(ship.implants.implant_minor_alpha).toBe('implant-1');
         });
 
         it('transforms engineering stats grouped by ship type', async () => {

@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { GearPiece } from '../../types/gear';
-import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES, RARITY_ORDER } from '../../constants';
+import { GEAR_SETS, RARITIES, RARITY_ORDER } from '../../constants';
+import { getEquipmentSlotLabel } from '../../constants/gearTypes';
 import { FilterPanel, FilterConfig } from '../filters/FilterPanel';
 import { sortRarities } from '../../constants/rarities';
 import { FilterState, usePersistedFilters, StatFilter } from '../../hooks/usePersistedFilters';
@@ -126,7 +127,9 @@ export const GearInventory: React.FC<Props> = ({
 
             const matchesSearch =
                 searchQuery === '' ||
-                GEAR_SLOTS[piece.slot]?.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                getEquipmentSlotLabel(piece.slot)
+                    .toLowerCase()
+                    .includes(searchQuery.toLowerCase()) ||
                 GEAR_SETS[piece.setBonus || '']?.name
                     .toLowerCase()
                     .includes(searchQuery.toLowerCase()) ||
@@ -143,9 +146,6 @@ export const GearInventory: React.FC<Props> = ({
                         .get(piece.id)
                         ?.toLowerCase()
                         .includes(searchQuery.toLowerCase())) ||
-                IMPLANT_SLOTS[piece.slot || '']?.label
-                    .toLowerCase()
-                    .includes(searchQuery.toLowerCase()) ||
                 piece.setBonus
                     ?.toLowerCase()
                     .replace(/_/g, ' ')
@@ -218,7 +218,7 @@ export const GearInventory: React.FC<Props> = ({
     const uniqueTypes = useMemo(() => {
         const types = new Set(inventory.map((piece) => piece.slot));
         return Array.from(types).sort((a, b) =>
-            GEAR_SLOTS[a || '']?.label.localeCompare(GEAR_SLOTS[b || '']?.label)
+            getEquipmentSlotLabel(a).localeCompare(getEquipmentSlotLabel(b))
         );
     }, [inventory]);
 
@@ -280,7 +280,7 @@ export const GearInventory: React.FC<Props> = ({
                 setState((prev: FilterState) => ({ ...prev, filters: { ...prev.filters, types } })),
             options: uniqueTypes.map((type) => ({
                 value: type,
-                label: GEAR_SLOTS[type || '']?.label || IMPLANT_SLOTS[type || '']?.label,
+                label: getEquipmentSlotLabel(type),
             })),
         },
         {

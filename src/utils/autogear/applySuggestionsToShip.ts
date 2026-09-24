@@ -1,7 +1,6 @@
 import type { Ship } from '../../types/ship';
 import type { GearSuggestion } from '../../types/autogear';
-
-const isImplantSlot = (slotName: string): boolean => slotName.startsWith('implant_');
+import { isGearSlotName, isImplantSlotName } from '../../constants/gearTypes';
 
 /**
  * The ship wearing a suggestion list: each suggestion overwrites its slot (implant slots into
@@ -13,9 +12,9 @@ export function applySuggestionsToShip(ship: Ship, suggestions: GearSuggestion[]
     const implants = { ...ship.implants };
 
     for (const suggestion of suggestions) {
-        if (isImplantSlot(suggestion.slotName)) {
+        if (isImplantSlotName(suggestion.slotName)) {
             implants[suggestion.slotName] = suggestion.gearId;
-        } else {
+        } else if (isGearSlotName(suggestion.slotName)) {
             equipment[suggestion.slotName] = suggestion.gearId;
         }
     }

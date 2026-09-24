@@ -85,7 +85,7 @@ const activeInferno: Ability = {
 // 2 DECIMATION pieces (2pc → 1 set → +10% DoT damage).
 const DECIMATION_2PC = [
     makePiece({ id: 'decim-1', slot: 'software', setBonus: 'DECIMATION' }),
-    makePiece({ id: 'decim-2', slot: 'thruster', setBonus: 'DECIMATION' }),
+    makePiece({ id: 'decim-2', slot: 'thrusters', setBonus: 'DECIMATION' }),
 ];
 
 /**

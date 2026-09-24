@@ -150,7 +150,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 }
 
 const RARITIES: RarityName[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
-const EQUIPMENT_SLOTS = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+const EQUIPMENT_SLOTS = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
 
 function gearSetCharges(setKey: string): ChargeRow[] {
     const setDef = GEAR_SETS[setKey];

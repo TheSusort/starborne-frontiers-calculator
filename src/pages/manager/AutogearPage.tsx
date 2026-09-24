@@ -13,6 +13,12 @@ import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalcul
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { AutogearAlgorithm, HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
+import {
+    isGearSlotName,
+    isImplantSlotName,
+    type GearSlotName,
+    type ImplantSlotName,
+} from '../../constants/gearTypes';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { clearScoreCache } from '../../utils/autogear/scoring';
 import { applySuggestionsToShip } from '../../utils/autogear/applySuggestionsToShip';
@@ -247,8 +253,13 @@ export const AutogearPage: React.FC = () => {
     /** Equips a list of gear/implant suggestions onto a ship — the one write path autogear's own
      *  "Equip" button goes through. */
     const equipSuggestions = async (shipId: string, suggestions: GearSuggestion[]) => {
-        const gearSuggestions = suggestions.filter((s) => !s.slotName.startsWith('implant_'));
-        const implantSuggestions = suggestions.filter((s) => s.slotName.startsWith('implant_'));
+        const gearSuggestions = suggestions.filter(
+            (s): s is GearSuggestion & { slotName: GearSlotName } => isGearSlotName(s.slotName)
+        );
+        const implantSuggestions = suggestions.filter(
+            (s): s is GearSuggestion & { slotName: ImplantSlotName } =>
+                isImplantSlotName(s.slotName)
+        );
 
         if (gearSuggestions.length > 0) {
             const gearAssignments = gearSuggestions.map((suggestion) => ({

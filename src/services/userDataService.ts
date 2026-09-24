@@ -471,7 +471,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
                 .map(([slot, gearId]) => ({
                     ship_id: ship.id,
                     slot,
-                    id: gearId as string,
+                    id: gearId,
                 }))
         );
 
@@ -499,7 +499,7 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
                 .map(([slot, gearId]) => ({
                     ship_id: ship.id,
                     slot,
-                    gear_id: gearId as string,
+                    gear_id: gearId,
                 }))
         );
 

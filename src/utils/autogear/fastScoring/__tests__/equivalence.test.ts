@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
 import { GEAR_SLOT_ORDER, SHIP_TYPES, type GearSlotName } from '../../../../constants';
+import type { EquipmentSlotName } from '../../../../constants/gearTypes';
 import { calculateTotalScore } from '../../scoring';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
@@ -133,7 +134,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
 
                 const lookup = (id: string) => specific.find((p) => p.id === id);
 
-                const equipment: Partial<Record<GearSlotName, string>> = {};
+                const equipment: Partial<Record<EquipmentSlotName, string>> = {};
                 for (const p of specific) equipment[p.slot] = p.id;
 
                 const ctx = buildFastScoringContext({

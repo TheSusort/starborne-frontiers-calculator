@@ -78,7 +78,7 @@ export const makeImplantItem = (
     Name: 'Minor Alpha Implant',
     Level: 1,
     Rank: 1,
-    Slot: 'minor_alpha',
+    Slot: 'implant_minor_alpha',
     Set: 'Implant_Minor_Alpha_Power_Perc',
     Rarity: 'Epic',
     Locked: false,

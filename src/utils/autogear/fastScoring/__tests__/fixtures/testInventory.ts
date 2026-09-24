@@ -74,7 +74,6 @@ export function generateTestInventory(seed = 1, count = 18): GearPiece[] {
     const pieces: GearPiece[] = [];
 
     for (let i = 0; i < count; i++) {
-        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
         const slot = slots[i % slots.length] as keyof typeof GEAR_SLOTS;
         const setBonus = TEST_SET_BONUSES[i % TEST_SET_BONUSES.length];
         const id = `gear-${i}`;

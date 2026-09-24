@@ -10,7 +10,7 @@ import { LoadoutCard } from './LoadoutCard';
 interface LoadoutListProps {
     loadouts: Loadout[];
     onEdit: (loadout: Loadout) => void;
-    onUpdate: (id: string, equipment: Record<GearSlotName, string>) => void;
+    onUpdate: (id: string, equipment: Partial<Record<GearSlotName, string>>) => void;
     onDelete: (id: string) => void;
     getGearPiece: (gearId: string) => GearPiece | undefined;
     availableGear: GearPiece[];

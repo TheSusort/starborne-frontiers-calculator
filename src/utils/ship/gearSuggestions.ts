@@ -93,7 +93,8 @@ export function analyzeGearQuality(
             if (
                 boostPieces < 4 &&
                 gear.setBonus !== 'boost' &&
-                slotContribution.relativeScore < GEAR_SLOTS[gear.slot].expectedContribution
+                slotContribution.relativeScore <
+                    GEAR_SLOTS[slotContribution.slotName].expectedContribution
             ) {
                 qualityCheck.reasons.push({
                     title: 'Boost set bonus not found',

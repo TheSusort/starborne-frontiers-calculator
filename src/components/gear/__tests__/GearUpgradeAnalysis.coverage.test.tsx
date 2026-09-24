@@ -98,7 +98,8 @@ function makeMatrix({
 }): CoverageMatrix {
     const cells = {} as CoverageMatrix['cells'];
     for (const role of roleOrder) {
-        cells[role] = {};
+        // Built to completeness by the forEach below over every GEAR_SLOT_NAMES entry.
+        cells[role] = {} as CoverageMatrix['cells'][typeof role];
         GEAR_SLOT_NAMES.forEach((slot, index) => {
             cells[role][slot] = {
                 role,

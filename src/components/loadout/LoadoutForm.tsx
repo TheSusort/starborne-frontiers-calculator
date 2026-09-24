@@ -8,7 +8,7 @@ interface LoadoutFormProps {
     onSubmit: (loadout: {
         name: string;
         shipId: string;
-        equipment: Record<GearSlotName, string>;
+        equipment: Partial<Record<GearSlotName, string>>;
     }) => void;
     existingNames: string[];
     initialValues?: {
@@ -47,7 +47,7 @@ export const LoadoutForm: React.FC<LoadoutFormProps> = ({
         onSubmit({
             name: trimmedName,
             shipId: selectedShip.id,
-            equipment: selectedShip.equipment as Record<GearSlotName, string>,
+            equipment: selectedShip.equipment,
         });
 
         setName('');

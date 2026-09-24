@@ -10,7 +10,13 @@ import type {
 import { PERCENTAGE_ONLY_STATS } from '../../types/stats';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { SHIP_TYPES } from '../../constants/shipTypes';
-import { GEAR_SLOT_ORDER, GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
+import {
+    GEAR_SLOT_ORDER,
+    GEAR_SLOTS,
+    isGearSlotName,
+    type GearSlotName,
+    type EquipmentSlotName,
+} from '../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats, getScoringBaselineStats } from '../../constants/roleBaseStats';
 import { GEAR_SETS, type GearSetName } from '../../constants/gearSets';
@@ -86,7 +92,9 @@ function getBaselineScore(role: ShipTypeName): number {
  */
 function addSetBonusShare(
     setBonus: GearSetName | null,
-    slot: GearSlotName,
+    // Accepts either slot space — the `slot in GEAR_SLOTS` check below is the real gate, and
+    // an implant's set bonus (if any) is credited by its own caller, not this one.
+    slot: EquipmentSlotName,
     target: BaseStats,
     reference: BaseStats
 ): void {
@@ -785,12 +793,16 @@ export function buildCoverageMatrix(
     for (const slot of GEAR_SLOT_ORDER) piecesBySlot.set(slot, []);
     for (const piece of inventory) {
         if (piece.level < COVERAGE_MIN_LEVEL) continue;
-        piecesBySlot.get(piece.slot)?.push(piece);
+        // Gear-only coverage matrix — an implant piece has no entry in `piecesBySlot`
+        // (seeded above from GEAR_SLOT_ORDER alone) and is silently excluded.
+        if (isGearSlotName(piece.slot)) piecesBySlot.get(piece.slot)?.push(piece);
     }
 
     const cells = {} as Record<ShipTypeName, Record<GearSlotName, CoverageCell>>;
     for (const role of roles) {
-        cells[role] = {};
+        // Built to completeness by the inner loop over every GEAR_SLOT_ORDER entry — the
+        // cast names that guarantee rather than claiming one TS can't itself verify.
+        cells[role] = {} as Record<GearSlotName, CoverageCell>;
         for (const slot of GEAR_SLOT_ORDER) {
             const pieces = piecesBySlot.get(slot) ?? [];
             const marginals = pieces.map((piece) => scorePieceForRole(piece, role));

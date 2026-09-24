@@ -196,7 +196,7 @@ function buildForImplant(name: string, rarity: GearPiece['rarity']): Ability[] {
 /** Build a ship with enough pieces of a gear set (≥ its minPieces) and return the abilities. */
 function buildForGearSet(setKey: string): Ability[] {
     const minPieces = GEAR_SETS[setKey]?.minPieces ?? 2;
-    const slots = ['weapon', 'hull', 'sensor', 'engine'] as const;
+    const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
     const equipment: Record<string, string> = {};
     const pieceMap: Record<string, GearPiece> = {};
     for (let i = 0; i < minPieces; i++) {
@@ -796,7 +796,7 @@ describe('Decimation gear set', () => {
     function shipWithDecimation(pieces: number) {
         const equipment: Record<string, string> = {};
         const map: Record<string, GearPiece> = {};
-        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'];
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         for (let i = 0; i < pieces; i++) {
             const id = `dec-${i}`;
             equipment[slots[i]] = id;
@@ -835,7 +835,7 @@ describe('Burner gear set', () => {
     it('emits an on-deal-damage inferno DoT (tier 15, 1 stack, 2 turns) at 4 pieces', () => {
         const equipment: Record<string, string> = {};
         const map: Record<string, GearPiece> = {};
-        const slots = ['weapon', 'hull', 'generator', 'sensor'];
+        const slots = ['weapon', 'hull', 'generator', 'sensor'] as const;
         slots.forEach((slot, i) => {
             const id = `burn-${i}`;
             equipment[slot] = id;
@@ -857,7 +857,7 @@ describe('Burner gear set', () => {
     it('emits nothing below minPieces (3 pieces, needs 4)', () => {
         const equipment: Record<string, string> = {};
         const map: Record<string, GearPiece> = {};
-        ['weapon', 'hull', 'generator'].forEach((slot, i) => {
+        (['weapon', 'hull', 'generator'] as const).forEach((slot, i) => {
             const id = `burn-${i}`;
             equipment[slot] = id;
             map[id] = makePiece({ id, slot: slot, setBonus: 'BURNER' });

@@ -48,7 +48,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 }
 
 /** BOOST pieces equipping the wearer with `minPieces` (4) of the set across distinct slots. */
-const BOOST_SLOTS = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+const BOOST_SLOTS = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
 function boostPieces(): GearPiece[] {
     const minPieces = GEAR_SETS['BOOST']?.minPieces ?? 4;
     const out: GearPiece[] = [];

@@ -4,6 +4,12 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
 import type { FleetBuff, CustomFormula, RoleBasis } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
+import {
+    type EquipmentSlotName,
+    type ImplantSlotName,
+    isGearSlotName,
+    isImplantSlotName,
+} from '../../../constants/gearTypes';
 import { EngineeringStat } from '../../../types/stats';
 import {
     calculateTotalScore,
@@ -22,15 +28,34 @@ import { USE_FAST_SCORING, VERIFY_FAST_SCORING } from '../fastScoring/featureFla
 import { fastScore } from '../fastScoring/fastScore';
 import type { BaseStats } from '../../../types/stats';
 
+/** One GA candidate's full slot assignment — gear AND implant slots together (the "genome"),
+ *  not the narrower `Ship.equipment` shape. Split with `splitEquipmentBySlotSpace` before
+ *  building a real `Ship`/scoring call, which want gear and implants apart. */
 interface Individual {
-    equipment: Partial<Record<GearSlotName, string>>;
+    equipment: Partial<Record<EquipmentSlotName, string>>;
     fitness: number;
     violation: number;
 }
 
-type InventoryBySlot = Map<GearSlotName, GearPiece[]>;
+type InventoryBySlot = Map<EquipmentSlotName, GearPiece[]>;
 
 const EMPTY_PIECES: readonly GearPiece[] = [];
+
+/** Splits a genome-wide slot assignment back into the two spaces a real `Ship` keeps apart
+ *  (`Ship.equipment`, gear-only; `Ship.implants`, implant-only) — every call site that scores
+ *  a candidate against `calculateTotalScore`/`calculateTotalStats` needs both halves. */
+function splitEquipmentBySlotSpace(equipment: Partial<Record<EquipmentSlotName, string>>): {
+    gearOnly: Partial<Record<GearSlotName, string>>;
+    implantsOnly: Partial<Record<ImplantSlotName, string>>;
+} {
+    const gearOnly: Partial<Record<GearSlotName, string>> = {};
+    const implantsOnly: Partial<Record<ImplantSlotName, string>> = {};
+    Object.entries(equipment).forEach(([slot, gearId]) => {
+        if (isImplantSlotName(slot)) implantsOnly[slot] = gearId;
+        else if (isGearSlotName(slot)) gearOnly[slot] = gearId;
+    });
+    return { gearOnly, implantsOnly };
+}
 
 /**
  * Genetic Strategy
@@ -79,10 +104,10 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
      * Determine which slots to optimize based on the available inventory.
      * If inventory contains implants, include them (except ultimate).
      */
-    private getSlotsToOptimize(inventory: GearPiece[]): GearSlotName[] {
+    private getSlotsToOptimize(inventory: GearPiece[]): EquipmentSlotName[] {
         const hasImplants = inventory.some((gear) => gear.slot.startsWith('implant_'));
 
-        const slots = [...Object.keys(GEAR_SLOTS)] as GearSlotName[];
+        const slots = [...Object.keys(GEAR_SLOTS)] as EquipmentSlotName[];
 
         if (hasImplants) {
             // Add implant slots except ultimate
@@ -204,7 +229,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const hardRequirementsMet = best.violation === 0;
         const result: AutogearResult = {
             suggestions: Object.entries(best.equipment)
-                .filter((entry): entry is [string, string] => entry[1] !== undefined)
+                .filter((entry): entry is [EquipmentSlotName, string] => entry[1] !== undefined)
                 .map(([slotName, gearId]) => ({
                     slotName,
                     gearId,
@@ -340,7 +365,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private computeViolations(
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
@@ -348,12 +373,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers: Record<string, number> | null | undefined,
         fleetBuffs?: FleetBuff[]
     ): HardRequirementViolation[] {
-        const gearOnly: Partial<Record<GearSlotName, string>> = {};
-        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
-        Object.entries(equipment).forEach(([slot, gearId]) => {
-            if (slot.startsWith('implant_')) implantsOnly[slot] = gearId;
-            else gearOnly[slot] = gearId;
-        });
+        const { gearOnly, implantsOnly } = splitEquipmentBySlotSpace(equipment);
         const hasImplantSlots = Object.keys(implantsOnly).length > 0;
         const shipForStats: Ship = hasImplantSlots ? { ...ship, implants: implantsOnly } : ship;
 
@@ -413,7 +433,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const slotsToOptimize = this.getSlotsToOptimize(inventory);
 
         for (let i = 0; i < populationSize; i++) {
-            const equipment: Partial<Record<GearSlotName, string>> = {};
+            const equipment: Partial<Record<EquipmentSlotName, string>> = {};
 
             slotsToOptimize.forEach((slot) => {
                 equipment[slot] = this.getPreferredGearForSlot(
@@ -476,7 +496,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private calculateFitness(
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
@@ -529,18 +549,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         // Slow path: scores through calculateTotalScore, resolving gear by string id
         // and running the full stats calculator, rather than the fast scoring context.
-
-        // Split equipment into gear and implants for proper scoring
-        const gearOnly: Partial<Record<GearSlotName, string>> = {};
-        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
-
-        Object.entries(equipment).forEach(([slot, gearId]) => {
-            if (slot.startsWith('implant_')) {
-                implantsOnly[slot] = gearId;
-            } else {
-                gearOnly[slot] = gearId;
-            }
-        });
+        const { gearOnly, implantsOnly } = splitEquipmentBySlotSpace(equipment);
 
         // Only override implants if we're optimizing them (i.e., if there are implant slots in equipment)
         // Otherwise, keep the ship's existing implants for scoring
@@ -606,13 +615,15 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private crossover(parent1: Individual, parent2: Individual): Individual {
-        const childEquipment: Partial<Record<GearSlotName, string>> = {};
+        const childEquipment: Partial<Record<EquipmentSlotName, string>> = {};
 
-        // Get all slots present in either parent
+        // Get all slots present in either parent. Object.keys always returns string[]
+        // regardless of the Record's key type, so the cast names the real key space rather
+        // than widening it — every member came from a Record<EquipmentSlotName, string>.
         const allSlots = new Set([
             ...Object.keys(parent1.equipment),
             ...Object.keys(parent2.equipment),
-        ]);
+        ]) as Set<EquipmentSlotName>;
 
         // Use comparator-based weighting: favor the better parent
         const parent1IsBetter = compareIndividuals(parent1, parent2) < 0;
@@ -650,9 +661,9 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private getPreferredGearForSlot(
-        slot: GearSlotName,
+        slot: EquipmentSlotName,
         inventoryBySlot: InventoryBySlot,
-        currentEquipment: Partial<Record<GearSlotName, string>>,
+        currentEquipment: Partial<Record<EquipmentSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): string | undefined {
@@ -718,7 +729,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private equipmentToIdArrays(
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         fastContext: FastScoringContext
     ): { gearIds: number[]; implantIds: number[] } {
         const gearIds: number[] = [];
@@ -735,7 +746,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
     }
 
     private verifyAgainstSlowPath(
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
@@ -752,12 +763,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         _fastViolation: number
     ): void {
         // Split equipment same way the slow path does
-        const gearOnly: Partial<Record<GearSlotName, string>> = {};
-        const implantsOnly: Partial<Record<GearSlotName, string>> = {};
-        Object.entries(equipment).forEach(([slot, gearId]) => {
-            if (slot.startsWith('implant_')) implantsOnly[slot] = gearId;
-            else gearOnly[slot] = gearId;
-        });
+        const { gearOnly, implantsOnly } = splitEquipmentBySlotSpace(equipment);
         const hasImplantSlots = Object.keys(implantsOnly).length > 0;
         const shipWithNewImplants: Ship = hasImplantSlots
             ? { ...ship, implants: implantsOnly }

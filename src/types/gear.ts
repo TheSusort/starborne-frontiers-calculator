@@ -1,11 +1,13 @@
 import type { GearSetName } from '../constants/gearSets';
-import type { GearSlotName } from '../constants/gearTypes';
+import type { EquipmentSlotName } from '../constants/gearTypes';
 import type { RarityName } from '../constants/rarities';
 import { Stat, StatName } from './stats';
 
 export interface GearPiece {
     id: string;
-    slot: GearSlotName;
+    /** A gear piece and an implant share this one type — `slot` is a `GearSlotName` for the
+     *  former, an `ImplantSlotName` for the latter (see `EquipmentSlotName`'s doc). */
+    slot: EquipmentSlotName;
     level: number;
     stars: number;
     rarity: RarityName;
@@ -40,7 +42,9 @@ export interface GearLoadout {
 }
 
 export type GearSlot = {
-    label: GearSlotName;
+    /** A display label ('Weapon', 'Sensors', ...), not a `GearSlotName` — `GEAR_SLOTS`' keys
+     *  are the lowercase slot identifiers; this is what the UI renders for them. */
+    label: string;
     availableMainStats: StatName[];
     expectedContribution: number;
 };

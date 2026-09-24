@@ -162,7 +162,7 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         // Iterate through all results and update any gear pieces that have changed
         Object.keys(updatedResults).forEach((role) => {
             const roleResults = updatedResults[role];
-            Object.keys(roleResults).forEach((slot) => {
+            (Object.keys(roleResults) as (GearSlotName | 'all')[]).forEach((slot) => {
                 const slotResults = roleResults[slot];
 
                 slotResults.forEach((result, index) => {
@@ -221,8 +221,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
         // Process each slot individually FIRST - this populates the baseline cache
         // When we process 'all' last, it can use the cached baselines for much faster execution
-        const slotResults: Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>> = {};
-        for (const [slotName, _] of slotEntries) {
+        // Built to completeness by the loop below, which walks every GEAR_SLOTS key — the
+        // cast names that guarantee rather than claiming one TS can't itself verify.
+        const slotResults = {} as Record<GearSlotName, ReturnType<typeof analyzePotentialUpgrades>>;
+        for (const [slotNameKey] of slotEntries) {
+            const slotName = slotNameKey as GearSlotName;
             await new Promise((resolve) => setTimeout(resolve, 0));
             slotResults[slotName] = analyzePotentialUpgrades(
                 filteredInventory,
@@ -886,7 +889,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                             <Tabs
                                 tabs={slotTabs}
                                 activeTab={selectedSlot}
-                                onChange={(tab) => handleSlotChange(role, tab)}
+                                onChange={(tab) =>
+                                    handleSlotChange(role, tab as GearSlotName | 'all')
+                                }
                             />
                             {currentResults.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

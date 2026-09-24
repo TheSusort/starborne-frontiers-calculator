@@ -66,7 +66,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         // Iterate through all results and update any gear pieces that have changed
         Object.keys(updatedResults).forEach((role) => {
             const roleResults = updatedResults[role];
-            Object.keys(roleResults).forEach((slot) => {
+            (Object.keys(roleResults) as (GearSlotName | 'all')[]).forEach((slot) => {
                 const slotResults = roleResults[slot];
 
                 slotResults.forEach((result, index) => {
@@ -114,9 +114,11 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             percentage: Math.round((completedSteps / totalSteps) * 100),
         });
 
-        // Process each slot individually with yields - show top 6 sorted by current score
-        const slotResults: Record<GearSlotName, CalibrationResult[]> = {};
-        for (const [slotName] of slotEntries) {
+        // Process each slot individually with yields - show top 6 sorted by current score.
+        // Built to completeness by the loop below, which walks every GEAR_SLOTS key.
+        const slotResults = {} as Record<GearSlotName, CalibrationResult[]>;
+        for (const [slotNameKey] of slotEntries) {
+            const slotName = slotNameKey as GearSlotName;
             await new Promise((resolve) => setTimeout(resolve, 0));
             const slotInventory = eligibleInventory.filter((p) => p.slot === slotName);
             slotResults[slotName] = analyzeCalibrationPotential(slotInventory, role, 6);
@@ -282,7 +284,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                                 <Tabs
                                     tabs={slotTabs}
                                     activeTab={selectedSlot}
-                                    onChange={(tab) => handleSlotChange(role, tab)}
+                                    onChange={(tab) =>
+                                        handleSlotChange(role, tab as GearSlotName | 'all')
+                                    }
                                 />
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {currentResults.map((result, index) => (

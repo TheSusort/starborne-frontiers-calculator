@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS, GEAR_SLOTS, GearSlotName, RARITIES } from '../../constants';
+import { isGearSlotName } from '../../constants/gearTypes';
 import { ShipDisplay } from '../ship/ShipDisplay';
 import { GearSlot } from '../gear/GearSlot';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
@@ -17,11 +18,11 @@ import { StatList } from '../stats/StatList';
 interface LoadoutCardProps {
     name?: string;
     ship: Ship;
-    equipment: Record<GearSlotName, string>;
+    equipment: Partial<Record<GearSlotName, string>>;
     availableGear: GearPiece[];
     getGearPiece: (id: string) => GearPiece | undefined;
     onEquip?: () => void;
-    onUpdate: (equipment: Record<GearSlotName, string>) => void;
+    onUpdate: (equipment: Partial<Record<GearSlotName, string>>) => void;
     onDelete?: () => void;
     onEdit?: () => void;
     showControls?: boolean;
@@ -91,7 +92,8 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
         if (!onEquip) return;
 
         const gearAssignments = Object.entries(equipment)
-            .filter(([, gearId]) => {
+            .filter(([slot, gearId]) => {
+                if (!isGearSlotName(slot)) return false;
                 const gear = getGearPiece(gearId);
                 if (!gear) {
                     addNotification('error', `Gear piece ${gearId} not found in inventory`);
@@ -99,7 +101,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                 }
                 return true;
             })
-            .map(([slot, gearId]) => ({ slot: slot, gearId }));
+            .map(([slot, gearId]) => ({ slot: slot as GearSlotName, gearId }));
 
         void equipMultipleGear(ship.id, gearAssignments);
 
@@ -175,13 +177,13 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         </div>
                     )}
                     <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
-                        {Object.entries(GEAR_SLOTS).map(([key, _]) => (
+                        {(Object.keys(GEAR_SLOTS) as GearSlotName[]).map((key) => (
                             <GearSlot
                                 key={key}
                                 slotKey={key}
                                 gear={gearLookup[equipment[key] || '']}
                                 hoveredGear={hoveredGear}
-                                onSelect={setSelectedSlot}
+                                onSelect={(slot) => isGearSlotName(slot) && setSelectedSlot(slot)}
                                 onHover={setHoveredGear}
                             />
                         ))}
@@ -266,7 +268,7 @@ export const LoadoutCard: React.FC<LoadoutCardProps> = ({
                         className={`p-4 mt-3 -mx-3 bg-dark border-t ${RARITIES[ship.rarity || 'common'].borderColor}`}
                     >
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                            {Object.entries(GEAR_SLOTS).map(([key, _]) => {
+                            {(Object.keys(GEAR_SLOTS) as GearSlotName[]).map((key) => {
                                 const gear = gearLookup[equipment[key] || ''];
                                 if (!gear) return null;
                                 return (

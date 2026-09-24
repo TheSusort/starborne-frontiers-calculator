@@ -207,9 +207,13 @@ function calculateGearStats(
             delete equipmentWithoutSlot[slot];
         }
 
-        // If the piece's slot is different from the analyzed slot, remove any existing gear there
-        if (piece.slot !== slot && equipmentWithoutSlot[piece.slot]) {
-            delete equipmentWithoutSlot[piece.slot];
+        // If the piece's slot is different from the analyzed slot, remove any existing gear
+        // there. Callers only ever reach this with a real gear piece (implants are filtered
+        // out upstream, e.g. the `!piece.slot.includes('implant')` guards below), so the cast
+        // just names that guarantee.
+        const pieceGearSlot = piece.slot as GearSlotName;
+        if (pieceGearSlot !== slot && equipmentWithoutSlot[pieceGearSlot]) {
+            delete equipmentWithoutSlot[pieceGearSlot];
         }
 
         // OPTIMIZATION: If we're including the piece, use cached baseline breakdown and incrementally add the piece
@@ -537,7 +541,7 @@ function slowAnalyzePotentialUpgrades(
         const slotsToCache = new Set<GearSlotName>();
         eligiblePieces.forEach((piece) => {
             if (piece.slot && !piece.slot.includes('implant')) {
-                slotsToCache.add(piece.slot);
+                slotsToCache.add(piece.slot as GearSlotName);
             }
         });
 

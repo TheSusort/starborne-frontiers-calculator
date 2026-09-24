@@ -41,7 +41,7 @@ export const SimulationPage: React.FC = () => {
     const { addNotification } = useNotification();
     const { equipMultipleGear } = useShips();
     const [temporaryImplants, setTemporaryImplants] = useState<
-        Partial<Record<GearSlotName, string>>
+        Partial<Record<ImplantSlotName, string>>
     >({});
 
     useEffect(() => {
@@ -115,7 +115,7 @@ export const SimulationPage: React.FC = () => {
         if (!selectedShip) return;
 
         const gearAssignments = Object.entries(temporaryGear).map(([slot, gearId]) => ({
-            slot: slot,
+            slot: slot as GearSlotName,
             gearId: gearId || '',
         }));
 

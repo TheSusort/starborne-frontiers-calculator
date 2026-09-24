@@ -46,9 +46,10 @@ function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
  */
 function makeMatrix(overrides: Record<string, Partial<CoverageCell>> = {}): CoverageMatrix {
     const roles: ShipTypeName[] = Object.keys(SHIP_TYPES);
-    const cells: Record<ShipTypeName, Record<GearSlotName, CoverageCell>> = {};
+    const cells = {} as Record<ShipTypeName, Record<GearSlotName, CoverageCell>>;
     for (const role of roles) {
-        cells[role] = {};
+        // Built to completeness by the inner loop over every GEAR_SLOT_ORDER entry.
+        cells[role] = {} as Record<GearSlotName, CoverageCell>;
         for (const slot of GEAR_SLOT_ORDER) {
             cells[role][slot] = {
                 role,

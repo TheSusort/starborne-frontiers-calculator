@@ -3,7 +3,7 @@ import { ExportedPlayData } from '../types/exportedPlayData';
 import { EngineeringStats, StatName, Stat } from '../types/stats';
 import { Ship, Refit, AffinityName } from '../types/ship';
 import { GearPiece } from '../types/gear';
-import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
+import { isGearSlotName, isImplantSlotName } from '../constants/gearTypes';
 import { GearSetName } from '../constants/gearSets';
 import { ShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
@@ -176,9 +176,8 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
 
     items.forEach((item) => {
         const slot = getSlotName(item.Slot.toLowerCase());
-        const isGear = Object.keys(GEAR_SLOTS).includes(slot);
 
-        if (isGear) {
+        if (isGearSlotName(slot)) {
             const mainStatName = getStatName(item.MainStats[0].Attribute.Attribute) as StatName;
             const mainStatType = getStatType(
                 item.MainStats[0].Attribute.Type,
@@ -234,10 +233,10 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
             }
 
             gear.push(gearPiece);
-        } else {
+        } else if (isImplantSlotName(slot)) {
             implants.push({
                 id: item.Id,
-                slot: item.Slot.toLowerCase(),
+                slot,
                 level: item.Level,
                 stars: item.Rank,
                 rarity: item.Rarity.toLowerCase(),
@@ -256,6 +255,11 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 shipId: item.EquippedOnUnit || undefined,
                 setBonus: getImplantSetBonus(item.Set),
             });
+        } else {
+            // Neither a known gear slot nor a known implant slot — a game update added a slot
+            // this importer doesn't know about yet, or the export is malformed. Drop the item
+            // rather than writing an unvalidated string into a GearPiece.slot.
+            console.warn(`Unrecognised equipment slot "${item.Slot}" — skipping item ${item.Id}`);
         }
     });
 
@@ -308,18 +312,21 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
             }
         }
 
-        // Update equipment references in ships using map lookups
+        // Update equipment references in ships using map lookups. `gearByShip`/`implantsByShip`
+        // are built solely from `gear`/`implants` above, so every `g.slot`/`imp.slot` here is
+        // already the right kind — the guards just prove it to the type checker rather than
+        // casting a `GearPiece.slot` (which spans both spaces) blindly into either one.
         for (const ship of ships) {
             const shipGear = gearByShip.get(ship.id);
             if (shipGear) {
                 for (const g of shipGear) {
-                    ship.equipment[g.slot] = g.id;
+                    if (isGearSlotName(g.slot)) ship.equipment[g.slot] = g.id;
                 }
             }
             const shipImplants = implantsByShip.get(ship.id);
             if (shipImplants) {
                 for (const imp of shipImplants) {
-                    ship.implants[imp.slot] = imp.id;
+                    if (isImplantSlotName(imp.slot)) ship.implants[imp.slot] = imp.id;
                 }
             }
         }
@@ -573,7 +580,10 @@ const getFaction = (faction: string): FactionName => {
     }
 };
 
-const getSlotName = (slot: string): GearSlotName => {
+// An alias mapper, not a validator: the export format spells the sensor slot "sensors"; every
+// other slot (including every implant slot) passes through unchanged. The caller narrows the
+// result with `isGearSlotName`/`isImplantSlotName` before trusting it as either union.
+const getSlotName = (slot: string): string => {
     if (slot === 'sensors') return 'sensor';
     return slot;
 };

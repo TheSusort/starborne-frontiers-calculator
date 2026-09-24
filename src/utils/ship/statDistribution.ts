@@ -46,8 +46,9 @@ export function analyzeStatDistribution(
     const contributions: SlotContribution[] = [];
     let totalAbsoluteScore = 0;
 
-    // First pass: calculate absolute scores
-    Object.entries(GEAR_SLOTS).forEach(([slot]) => {
+    // First pass: calculate absolute scores. GEAR_SLOTS' own keys are exactly GearSlotName —
+    // Object.entries just can't say so.
+    (Object.keys(GEAR_SLOTS) as GearSlotName[]).forEach((slot) => {
         const gearId = equipment[slot];
         if (!gearId) return;
 

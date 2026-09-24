@@ -72,7 +72,10 @@ export function fastAnalyzePotentialUpgrades(
 
     const results: PotentialResult[] = [];
     for (const piece of eligiblePieces) {
-        const targetSlot = slot ?? piece.slot;
+        // `eligiblePieces` above already excludes implants (`!piece.slot.includes('implant')`),
+        // so every `piece.slot` reaching here is a real GearSlotName — the filter just isn't a
+        // type predicate, so TS can't narrow the array element type from it.
+        const targetSlot = slot ?? (piece.slot as GearSlotName);
 
         const currentScore = ctx.withShip
             ? scoreCurrentWithShip(ctx, piece, targetSlot)

@@ -56,7 +56,7 @@ const transformLoadout = (data: RawLoadout): Loadout => {
                 acc[eq.slot] = eq.gear_id;
                 return acc;
             },
-            {} as Record<GearSlotName, string>
+            {} as Partial<Record<GearSlotName, string>>
         ),
         createdAt: new Date(data.created_at).getTime(),
     };
@@ -76,7 +76,7 @@ const transformTeamLoadout = (data: RawTeamLoadout): TeamLoadout => {
                         acc[eq.slot] = eq.gear_id;
                         return acc;
                     },
-                    {} as Record<GearSlotName, string>
+                    {} as Partial<Record<GearSlotName, string>>
                 ),
         })),
         createdAt: new Date(data.created_at).getTime(),
@@ -257,7 +257,7 @@ export const useLoadouts = () => {
     const updateLoadout = useCallback(
         async (
             id: string,
-            equipment: Record<GearSlotName, string>,
+            equipment: Partial<Record<GearSlotName, string>>,
             updates?: { name?: string; shipId?: string }
         ) => {
             // Create backup of current state for potential rollback
@@ -312,11 +312,13 @@ export const useLoadouts = () => {
                 if (deleteError) throw deleteError;
 
                 // Insert new equipment
-                const equipmentRecords = Object.entries(equipment).map(([slot, gearId]) => ({
-                    loadout_id: id,
-                    slot,
-                    gear_id: gearId,
-                }));
+                const equipmentRecords = Object.entries(equipment)
+                    .filter((entry): entry is [string, string] => entry[1] !== undefined)
+                    .map(([slot, gearId]) => ({
+                        loadout_id: id,
+                        slot,
+                        gear_id: gearId,
+                    }));
 
                 const { error: insertError } = await supabase
                     .from('loadout_equipment')

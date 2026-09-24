@@ -13,7 +13,12 @@ import {
 } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { GearSetName, GEAR_SETS, GEAR_SLOTS, STATS } from '../../constants';
+import { GearSetName, GEAR_SETS, STATS } from '../../constants';
+import {
+    getEquipmentSlotLabel,
+    isGearSlotName,
+    isImplantSlotName,
+} from '../../constants/gearTypes';
 import { RarityName, RARITY_ORDER } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
@@ -107,7 +112,11 @@ function buildRarityStackedData(
 
 // Label helpers
 const getSetLabel = (key: string) => GEAR_SETS[key]?.name || key;
-const getSlotLabel = (key: string) => GEAR_SLOTS[key]?.label || key;
+// Callers here pass computed/aggregated strings, not always a literal EquipmentSlotName
+// (grouping keys, a defensive '|| UNKNOWN' fallback) — narrow before delegating rather than
+// widening `getEquipmentSlotLabel`'s own signature to tolerate arbitrary strings.
+const getSlotLabel = (key: string): string =>
+    isGearSlotName(key) || isImplantSlotName(key) ? getEquipmentSlotLabel(key) : key;
 const getStatLabel = (key: string) => STATS[key as keyof typeof STATS]?.label || key;
 const formatMainStat = (statName: string, statType: string) =>
     statType === 'percentage' ? `${getStatLabel(statName)} %` : getStatLabel(statName);

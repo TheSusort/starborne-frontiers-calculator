@@ -986,13 +986,13 @@ describe('simulateBattle adapter — edge cases (Phase 5 PR 1, Task 4)', () => {
                 activeSkillText: 'This Unit repairs 30% of its Max HP.',
                 type: 'Support',
             }),
-            implants: { ultimate: 'ar-leg' },
+            implants: { implant_ultimate: 'ar-leg' },
         };
         const getGearPiece = (id: string): GearPiece | undefined =>
             id === 'ar-leg'
                 ? ({
                       id: 'ar-leg',
-                      slot: 'ultimate',
+                      slot: 'implant_ultimate',
                       setBonus: 'ABUNDANT_RENEWAL',
                       rarity: 'legendary',
                       stars: 6,

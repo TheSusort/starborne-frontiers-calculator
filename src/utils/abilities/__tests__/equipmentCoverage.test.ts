@@ -75,7 +75,7 @@ function gearSetAbilityCount(setKey: string): number {
     const minPieces = setDef?.minPieces ?? 2;
 
     // Gear slot names used in the test — just need enough distinct slots.
-    const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+    const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
     const equipment: Record<string, string> = {};
     const pieceMap: Record<string, GearPiece> = {};
 
@@ -233,7 +233,7 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('REFLECT produces an ability with id equip-set-REFLECT, config.type damage-reflection, config.pct 10', () => {
         const minPieces = GEAR_SETS['REFLECT']?.minPieces ?? 2;
-        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
         for (let i = 0; i < minPieces; i++) {
@@ -261,7 +261,7 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('CLOAKING produces a once-per-combat 2-turn Stealth self-buff on start-of-round', () => {
         const minPieces = GEAR_SETS['CLOAKING']?.minPieces ?? 2;
-        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
         for (let i = 0; i < minPieces; i++) {
@@ -292,7 +292,7 @@ describe('equipmentCoverage — gear sets', () => {
 
     it('SHIELD produces a start-of-turn self shield of 4% caster max HP', () => {
         const minPieces = GEAR_SETS['SHIELD']?.minPieces ?? 2;
-        const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+        const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
         const equipment: Record<string, string> = {};
         const pieceMap: Record<string, GearPiece> = {};
         for (let i = 0; i < minPieces; i++) {

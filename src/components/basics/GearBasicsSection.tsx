@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { SLOT_MAIN_STATS, STATS } from '../../constants/stats';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { GEAR_SLOTS } from '../../constants/gearTypes';
+import { GEAR_SLOTS, type GearSlotName } from '../../constants/gearTypes';
 // Imported per-module, not from the `../ui` barrel: the barrel re-exports Sidebar, whose
 // `/favicon.ico?url` import vitest refuses to resolve unless the test stubs Sidebar out.
 import { Button } from '../ui/Button';
@@ -33,12 +33,12 @@ const slugify = (name: string): string => name.toLowerCase().replace(/[^a-z0-9]+
 const isSetHash = (hash: string): boolean =>
     Object.values(GEAR_SETS).some((set) => hash === `#set-${slugify(set.name)}`);
 
-const SLOTS = Object.keys(SLOT_MAIN_STATS);
+const SLOTS = Object.keys(SLOT_MAIN_STATS) as GearSlotName[];
 /** A slot that rolls exactly one primary stat is a fixed slot — derived, so adding a stat to
  *  `SLOT_MAIN_STATS` moves the slot between the two groups instead of leaving a stale list. */
-const isFixed = (slot: string): boolean => SLOT_MAIN_STATS[slot].length === 1;
+const isFixed = (slot: GearSlotName): boolean => SLOT_MAIN_STATS[slot].length === 1;
 
-const SlotCard: React.FC<{ slot: string }> = ({ slot }) => (
+const SlotCard: React.FC<{ slot: GearSlotName }> = ({ slot }) => (
     <div data-testid={`slot-row-${slot}`} className="card space-y-2">
         <h4 className="text-sm font-semibold text-primary">{GEAR_SLOTS[slot].label}</h4>
         <div className="flex flex-wrap gap-1.5">

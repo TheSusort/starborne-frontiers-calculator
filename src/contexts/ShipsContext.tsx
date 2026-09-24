@@ -2,7 +2,7 @@ import React, { createContext, useContext, useCallback, useState, useEffect, use
 import { v4 as uuidv4 } from 'uuid';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
+import { GearSlotName, ImplantSlotName, isGearSlotName } from '../constants/gearTypes';
 import { Ship, AffinityName } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import { ShipTypeName } from '../constants/shipTypes';
@@ -62,7 +62,7 @@ interface RawShipRefit {
 
 interface RawShipImplant {
     id: string;
-    slot: GearSlotName;
+    slot: ImplantSlotName;
     description?: string;
 }
 
@@ -231,11 +231,11 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 damageReduction: data.name === 'Iridium' && data.ship_refits.length >= 2 ? 35 : 0,
             },
             equipment: data.ship_equipment.reduce(
-                (acc: Record<GearSlotName, string>, eq) => {
+                (acc: Partial<Record<GearSlotName, string>>, eq) => {
                     acc[eq.slot] = eq.gear_id;
                     return acc;
                 },
-                {} as Record<GearSlotName, string>
+                {} as Partial<Record<GearSlotName, string>>
             ),
             equipmentLocked: data.equipment_locked || false,
             starred: data.starred || false,
@@ -244,11 +244,11 @@ const transformShipData = (data: RawShipData): Ship | null => {
                 stats: refit.ship_refit_stats.map(createStat),
             })),
             implants: data.ship_implants.reduce(
-                (acc: Record<GearSlotName, string>, implant) => {
+                (acc: Partial<Record<ImplantSlotName, string>>, implant) => {
                     acc[implant.slot] = implant.description || implant.id;
                     return acc;
                 },
-                {} as Record<GearSlotName, string>
+                {} as Partial<Record<ImplantSlotName, string>>
             ),
             imageKey: data.ship_templates.image_key,
             activeSkillText: data.ship_templates.active_skill_text ?? undefined,
@@ -791,7 +791,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 // For all other ships, remove this gear if it's equipped
                 const equipment = { ...ship.equipment };
                 Object.entries(equipment).forEach(([key, value]) => {
-                    if (value === gearId) {
+                    if (value === gearId && isGearSlotName(key)) {
                         equipment[key] = undefined;
                     }
                 });
@@ -856,7 +856,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 const equipment = { ...ship.equipment };
                 gearAssignments.forEach(({ gearId }) => {
                     Object.entries(equipment).forEach(([key, value]) => {
-                        if (value === gearId) {
+                        if (value === gearId && isGearSlotName(key)) {
                             equipment[key] = undefined;
                         }
                     });
@@ -1090,7 +1090,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         // Second pass: validate and fix conflicts
         updatedShips.forEach((ship) => {
             Object.entries(ship.equipment).forEach(([slot, gearId]) => {
-                if (gearId) {
+                if (gearId && isGearSlotName(slot)) {
                     const assignedShipId = gearAssignments.get(gearId);
                     if (assignedShipId && assignedShipId !== ship.id) {
                         // Remove conflicting gear

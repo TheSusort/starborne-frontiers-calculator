@@ -498,19 +498,15 @@ describe('dummy mode: the geared crit/critDamage scoring reference (#475)', () =
         ];
 
         it.each(fixtures)('slow and fast agree on currentScore for piece $id', (piece) => {
-            const [slow] = analyzePotentialUpgrades(
-                [piece],
-                'ATTACKER',
-                1,
-                piece.slot,
-                'legendary',
-                1
-            );
+            // Every fixture above is a real gear piece (weapon/sensor/...), never an implant —
+            // this analyzer is gear-only.
+            const slot = piece.slot as GearSlotName;
+            const [slow] = analyzePotentialUpgrades([piece], 'ATTACKER', 1, slot, 'legendary', 1);
             const [fast] = fastAnalyzePotentialUpgrades(
                 [piece],
                 'ATTACKER',
                 1,
-                piece.slot,
+                slot,
                 'legendary',
                 1
             );

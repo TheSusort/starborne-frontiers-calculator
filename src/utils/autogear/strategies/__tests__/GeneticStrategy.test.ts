@@ -3,6 +3,7 @@ import { GeneticStrategy } from '../GeneticStrategy';
 import { Ship } from '../../../../types/ship';
 import { GearPiece } from '../../../../types/gear';
 import { StatPriority } from '../../../../types/autogear';
+import type { EquipmentSlotName } from '../../../../constants/gearTypes';
 import { clearScoreCache } from '../../scoring';
 import { BaseStats, EngineeringStat } from '../../../../types/stats';
 import { ShipTypeName } from '../../../../constants/shipTypes';
@@ -23,7 +24,12 @@ const BASE: BaseStats = {
     defensePenetration: 0,
 };
 
-function makeGear(id: string, slot: string, stat: keyof BaseStats, amount: number): GearPiece {
+function makeGear(
+    id: string,
+    slot: EquipmentSlotName,
+    stat: keyof BaseStats,
+    amount: number
+): GearPiece {
     return {
         id,
         slot: slot,

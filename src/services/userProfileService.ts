@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { isGearSlotName } from '../constants/gearTypes';
 import type { GearSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
 import type { AffinityName, Ship } from '../types/ship';
@@ -524,11 +525,14 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             },
             equipment:
                 data.ship_equipment?.reduce(
-                    (acc: Record<GearSlotName, string>, eq) => {
-                        acc[eq.slot] = eq.gear_id;
+                    (acc: Partial<Record<GearSlotName, string>>, eq) => {
+                        // `eq.slot` is a raw Supabase column (`string`), not yet validated —
+                        // skip a row whose slot the current gear-slot union doesn't recognise
+                        // rather than writing an unvalidated key into `Ship.equipment`.
+                        if (isGearSlotName(eq.slot)) acc[eq.slot] = eq.gear_id;
                         return acc;
                     },
-                    {} as Record<GearSlotName, string>
+                    {} as Partial<Record<GearSlotName, string>>
                 ) || {},
             refits:
                 data.ship_refits?.map((refit) => ({
@@ -582,6 +586,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 if (ship._gearMap && ship._gearMap.has(gearId)) {
                     const internalGear = ship._gearMap.get(gearId);
                     if (!internalGear) return undefined;
+                    // `internalGear.slot` is read straight off the inventory row (`string`) —
+                    // guard rather than cast, since this map is built once per leaderboard
+                    // request from every user's stored gear.
+                    if (!isGearSlotName(internalGear.slot)) return undefined;
                     return {
                         id: internalGear.id,
                         slot: internalGear.slot,

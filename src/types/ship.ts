@@ -1,5 +1,5 @@
 import type { FactionName } from '../constants/factions';
-import type { GearSlotName } from '../constants/gearTypes';
+import type { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
 import type { RarityName } from '../constants/rarities';
 import { Stat, BaseStats } from './stats';
@@ -14,7 +14,7 @@ export interface Ship {
     type: ShipTypeName;
     baseStats: BaseStats;
     equipment: Partial<Record<GearSlotName, string>>;
-    implants: Partial<Record<GearSlotName, string>>;
+    implants: Partial<Record<ImplantSlotName, string>>;
     equipmentLocked?: boolean;
     starred?: boolean;
     refits: Refit[];

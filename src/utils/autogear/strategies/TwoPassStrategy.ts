@@ -12,6 +12,7 @@ import {
 } from '../../../types/autogear';
 import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
+import type { EquipmentSlotName } from '../../../constants/gearTypes';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
@@ -88,7 +89,7 @@ export class TwoPassStrategy extends BaseStrategy {
 
         // Convert to suggestions
         const suggestions = Object.entries(finalEquipment)
-            .filter((entry): entry is [string, string] => entry[1] !== undefined)
+            .filter((entry): entry is [EquipmentSlotName, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
@@ -117,9 +118,11 @@ export class TwoPassStrategy extends BaseStrategy {
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
-        // Process each slot independently
+        // Process each slot independently. GEAR_SLOTS' own keys are exactly GearSlotName —
+        // Object.keys/entries just can't say so — so this cast names the definition site,
+        // not unvalidated input.
         Object.entries(GEAR_SLOTS).forEach(([slotKey, _]) => {
-            const slotName = slotKey;
+            const slotName = slotKey as GearSlotName;
             let bestScore = -Infinity;
             let bestGearId: string | undefined;
 
@@ -167,7 +170,7 @@ export class TwoPassStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         inventory: GearPiece[],
-        currentEquipment: Partial<Record<GearSlotName, string>>,
+        currentEquipment: Partial<Record<EquipmentSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
@@ -176,7 +179,7 @@ export class TwoPassStrategy extends BaseStrategy {
         _tryToCompleteSets?: boolean,
         customFormula?: CustomFormula,
         roleBasis?: RoleBasis
-    ): Promise<Partial<Record<GearSlotName, string>>> {
+    ): Promise<Partial<Record<EquipmentSlotName, string>>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(
             inventory,
@@ -235,7 +238,7 @@ export class TwoPassStrategy extends BaseStrategy {
     }
 
     private countSets(
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined
     ): Record<string, number> {
         const setCount: Record<string, number> = {};
@@ -250,7 +253,7 @@ export class TwoPassStrategy extends BaseStrategy {
 
     private findPotentialSets(
         inventory: GearPiece[],
-        currentEquipment: Partial<Record<GearSlotName, string>>,
+        currentEquipment: Partial<Record<EquipmentSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         setPriorities?: SetPriority[]
     ): Array<{ setName: string; pieces: GearPiece[]; priority?: SetPriority }> {
@@ -309,7 +312,7 @@ export class TwoPassStrategy extends BaseStrategy {
 
     private evaluateEquipment(
         ship: Ship,
-        equipment: Partial<Record<GearSlotName, string>>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
