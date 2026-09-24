@@ -62,6 +62,14 @@ const mountSignedOut = async () => {
     return view;
 };
 
+const mountSignedOutWith = async (ships: Ship[]) => {
+    profile.id = null;
+    localStorage.setItem(StorageKey.SHIPS, JSON.stringify(ships));
+    const view = renderHook(() => useShips(), { wrapper });
+    await waitFor(() => expect(view.result.current.ships).toHaveLength(ships.length));
+    return view;
+};
+
 const byId = (ships: Ship[], id: string) => ships.find((s) => s.id === id)!;
 const stored = (): Ship[] => JSON.parse(localStorage.getItem(StorageKey.SHIPS) ?? '[]');
 
@@ -155,5 +163,70 @@ describe('equipMultipleGear with implants (#558)', () => {
             { ship_id: 'hayyan', slot: 'weapon', gear_id: 'new-weapon' },
         ]);
         expect(notify).not.toHaveBeenCalledWith('error', expect.anything());
+    });
+});
+
+describe('writers issued back-to-back in one tick (#560)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        localStorage.clear();
+    });
+
+    it('a team-loadout-style equip on two different ships keeps both writes, not just the last', async () => {
+        const { result } = await mountSignedOut();
+        // Captured once, like TeamLoadoutCard.handleEquipTeam holds `equipMultipleGear` from its
+        // own render: both calls below go through this SAME closure, so a fix that only relies
+        // on re-rendering between calls would not be exercised.
+        const api = result.current;
+
+        await act(async () => {
+            await api.equipMultipleGear('hayyan', [{ slot: 'weapon', gearId: 'team-weapon-1' }]);
+            await api.equipMultipleGear('paracelsus', [
+                { slot: 'weapon', gearId: 'team-weapon-2' },
+            ]);
+        });
+
+        for (const ships of [result.current.ships, stored()]) {
+            expect(byId(ships, 'hayyan').equipment.weapon).toBe('team-weapon-1');
+            expect(byId(ships, 'paracelsus').equipment.weapon).toBe('team-weapon-2');
+        }
+    });
+
+    it('equipGear on one ship then lockEquipment on another in the same tick both survive', async () => {
+        const { result } = await mountSignedOut();
+        const api = result.current;
+
+        await act(async () => {
+            await api.equipGear('hayyan', 'weapon', 'fresh-weapon');
+            await api.lockEquipment('paracelsus', true);
+        });
+
+        for (const ships of [result.current.ships, stored()]) {
+            expect(byId(ships, 'hayyan').equipment.weapon).toBe('fresh-weapon');
+            expect(byId(ships, 'paracelsus').equipmentLocked).toBe(true);
+        }
+    });
+
+    it("a partial equipMultipleGear keeps the target ship's other equipped slots", async () => {
+        const twoSlotFleet = () => [
+            ship('hayyan', {
+                equipment: { weapon: 'old-weapon', hull: 'old-hull' },
+                implants: {},
+            }),
+            ship('paracelsus', { equipment: {}, implants: {} }),
+        ];
+        const { result } = await mountSignedOutWith(twoSlotFleet());
+
+        await act(async () => {
+            await result.current.equipMultipleGear('hayyan', [
+                { slot: 'weapon', gearId: 'new-weapon' },
+            ]);
+        });
+
+        for (const ships of [result.current.ships, stored()]) {
+            const hayyan = byId(ships, 'hayyan');
+            expect(hayyan.equipment.weapon).toBe('new-weapon');
+            expect(hayyan.equipment.hull).toBe('old-hull');
+        }
     });
 });

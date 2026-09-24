@@ -1,4 +1,12 @@
-import React, { createContext, useContext, useCallback, useState, useEffect, useMemo } from 'react';
+import React, {
+    createContext,
+    useContext,
+    useCallback,
+    useState,
+    useEffect,
+    useMemo,
+    useRef,
+} from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
@@ -30,9 +38,13 @@ interface ShipsContextType {
     updateShip: (id: string, updates: Partial<Ship>) => Promise<void>;
     deleteShip: (id: string) => Promise<void>;
     equipGear: (shipId: string, slot: GearSlotName, gearId: string) => Promise<void>;
-    /** Equips gear and, optionally, implants onto one ship in a single ship write. Two writers
-     *  called in the same tick both map that render's `localShips`, so the second reverts the
-     *  first (#558). Every assigned piece is taken off whichever other ship wore it. */
+    /** Equips gear and, optionally, implants onto one ship in a single ship write. The passed
+     *  gear slots are merged over the ship's existing equipment — a slot left out of
+     *  `gearAssignments` keeps whatever it already held, matching the DB path (which only
+     *  deletes/upserts the slots it's given). Every assigned piece is taken off whichever other
+     *  ship in the fleet wore it. Safe to call once per ship back-to-back without an intervening
+     *  render (e.g. a team loadout's one call per ship): every writer in this context reads and
+     *  writes through `localShipsRef`, so each call sees the previous call's result. */
     equipMultipleGear: (
         shipId: string,
         gearAssignments: { slot: GearSlotName; gearId: string }[],
@@ -288,12 +300,34 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const { activeProfileId, profilesLoading } = useActiveProfile();
     const [isMigrating, setIsMigrating] = useState(false);
     const [localShips, setLocalShips] = useState<Ship[]>([]);
+    // Every writer reads and writes the ships array through this ref instead of the `localShips`
+    // render closure. Two writers called back-to-back with no render in between (e.g. one
+    // `equipMultipleGear` call per ship in a team loadout) each hold the SAME closure, so a
+    // second writer built from `localShips` would overwrite the first writer's result rather
+    // than build on it (#560). The ref is updated synchronously by `setShips`, never in an
+    // effect, so it is never a render behind.
+    const localShipsRef = useRef<Ship[]>([]);
+
+    const setShips = useCallback((next: Ship[]) => {
+        localShipsRef.current = next;
+        setLocalShips(next);
+    }, []);
 
     // Use useStorage for ships
     const { data: storageShips, setData: setStorageShips } = useStorage<Ship[]>({
         key: StorageKey.SHIPS,
         defaultValue: [],
     });
+
+    // A writer's full commit: local state, ref and persisted storage together, so no call site
+    // can update one without the others.
+    const commitShips = useCallback(
+        (next: Ship[]) => {
+            setShips(next);
+            void setStorageShips(next);
+        },
+        [setShips, setStorageShips]
+    );
 
     // Memoized gear-to-ship mapping for O(1) lookups
     const gearToShipMap = useMemo(() => {
@@ -314,14 +348,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         // Authenticated path: loadShips() handles enrichment via the ship_templates join
         if (activeProfileId) {
-            setLocalShips(storageShips);
+            setShips(storageShips);
             return;
         }
 
         // Unauthenticated path: fetch skill text from ship_templates for ships that are missing it
         const shipsNeedingText = storageShips.filter((s) => !s.activeSkillText || !s.activeTarget);
         if (shipsNeedingText.length === 0) {
-            setLocalShips(storageShips);
+            setShips(storageShips);
             return;
         }
 
@@ -337,11 +371,11 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             .then(({ data }) => {
                 if (controller.signal.aborted) return;
                 if (!data) {
-                    setLocalShips(storageShips);
+                    setShips(storageShips);
                     return;
                 }
                 const templateMap = new Map(data.map((t) => [t.name, t]));
-                setLocalShips(
+                setShips(
                     storageShips.map((ship) => {
                         // Outer filter casts a wide net (missing text OR targeting);
                         // skip only ships that already have both.
@@ -371,7 +405,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return () => {
             controller.abort();
         };
-    }, [storageShips, activeProfileId]);
+    }, [storageShips, activeProfileId, setShips]);
 
     const loadShips = useCallback(async () => {
         // Skip loading if we're in the middle of migration
@@ -419,7 +453,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         equipment: ship.equipment || {},
                     }));
 
-                setLocalShips(transformedShips);
+                setShips(transformedShips);
                 // Update storage directly instead of using syncToStorage
                 await setStorageShips(transformedShips);
             }
@@ -430,7 +464,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } finally {
             setLoading(false);
         }
-    }, [activeProfileId, addNotification, setStorageShips, isMigrating]);
+    }, [activeProfileId, addNotification, setShips, setStorageShips, isMigrating]);
 
     // Initial load and reload on auth/profile changes
     useEffect(() => {
@@ -459,15 +493,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // The activeProfileId-keyed loadShips effect will refetch automatically.
     useEffect(() => {
         const onSwitch = () => {
-            setLocalShips([]);
             // Also clear storage so the storageShips→localShips sync effect doesn't
             // repopulate localShips with the previous profile's data before loadShips
             // fires for the new profile.
-            void setStorageShips([]);
+            commitShips([]);
         };
         window.addEventListener(PROFILE_SWITCH_EVENT, onSwitch);
         return () => window.removeEventListener(PROFILE_SWITCH_EVENT, onSwitch);
-    }, [setStorageShips]);
+    }, [commitShips]);
 
     // Listen for migration start/end events
     useEffect(() => {
@@ -496,20 +529,21 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 equipment: ship.equipment || {},
             }));
             if (JSON.stringify(updatedShips) !== JSON.stringify(localShips)) {
-                setLocalShips(updatedShips);
-                void setStorageShips(updatedShips);
+                commitShips(updatedShips);
             }
         }
-    }, [localShips, setStorageShips]);
+    }, [localShips, commitShips]);
 
+    // Reads the ref (not the `localShips` render closure) so a lookup issued right after a
+    // writer, without waiting for a re-render, sees that writer's result.
     const getShipName = useCallback(
-        (id: string) => localShips.find((ship) => ship.id === id)?.name,
-        [localShips]
+        (id: string) => localShipsRef.current.find((ship) => ship.id === id)?.name,
+        []
     );
 
     const getShipById = useCallback(
-        (id: string) => localShips.find((ship) => ship.id === id),
-        [localShips]
+        (id: string) => localShipsRef.current.find((ship) => ship.id === id),
+        []
     );
 
     const addShip = useCallback(
@@ -520,8 +554,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 ...newShip,
                 id: tempId,
             };
-            setLocalShips((prev) => [...prev, optimisticShip]);
-            void setStorageShips([...localShips, optimisticShip]);
+            commitShips([...localShipsRef.current, optimisticShip]);
 
             if (!activeProfileId) return getShipById(tempId) as Ship;
             if (!isSupabaseSyncEnabled()) return getShipById(tempId) as Ship;
@@ -612,24 +645,22 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 return getShipById(insertedShip.id as string) as Ship;
             } catch (error) {
                 // Revert optimistic update on error
-                setLocalShips((prev) => prev.filter((s) => s.id !== tempId));
-                void setStorageShips(localShips.filter((s) => s.id !== tempId));
+                commitShips(localShipsRef.current.filter((s) => s.id !== tempId));
                 console.error('Error adding ship:', error);
                 addNotification('error', 'Failed to add ship');
                 throw error;
             }
         },
-        [activeProfileId, getShipById, addNotification, localShips, setStorageShips]
+        [activeProfileId, getShipById, addNotification, commitShips]
     );
 
     const updateShip = useCallback(
         async (id: string, updates: Partial<Ship>) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
+            const updatedShips = localShipsRef.current.map((ship) =>
                 ship.id === id ? { ...ship, ...updates } : ship
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -751,15 +782,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const deleteShip = useCallback(
         async (id: string) => {
             // Optimistic update
-            const updatedShips = localShips.filter((ship) => ship.id !== id);
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            const updatedShips = localShipsRef.current.filter((ship) => ship.id !== id);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -781,13 +811,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const equipGear = useCallback(
         async (shipId: string, slot: GearSlotName, gearId: string) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) => {
+            const updatedShips = localShipsRef.current.map((ship) => {
                 if (ship.id === shipId) {
                     return {
                         ...ship,
@@ -809,8 +839,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     equipment,
                 };
             });
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -844,7 +873,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const equipMultipleGear = useCallback(
@@ -857,7 +886,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             let targetImplants: Partial<Record<ImplantSlotName, string>> = {};
 
             // Optimistic update
-            const updatedShips = localShips.map((ship) => {
+            const updatedShips = localShipsRef.current.map((ship) => {
                 if (ship.id === shipId) {
                     // For the target ship, set all the new gear assignments and merge the
                     // assigned implants over the ones it already wears
@@ -867,14 +896,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     );
                     return {
                         ...ship,
-                        // An implants-only write leaves the gear alone
-                        equipment:
-                            gearAssignments.length > 0
-                                ? gearAssignments.reduce(
-                                      (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
-                                      {}
-                                  )
-                                : ship.equipment,
+                        // Merged over the ship's existing equipment, so a slot left out of
+                        // gearAssignments (or an implants-only write, where it's empty) keeps
+                        // whatever it already held — matching the DB path below, which only
+                        // deletes/upserts the slots it's given.
+                        equipment: gearAssignments.reduce(
+                            (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
+                            { ...ship.equipment }
+                        ),
                         implants: targetImplants,
                     };
                 }
@@ -899,8 +928,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                     implants,
                 };
             });
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -965,13 +993,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const removeGear = useCallback(
         async (shipId: string, slot: GearSlotName) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
+            const updatedShips = localShipsRef.current.map((ship) =>
                 ship.id === shipId
                     ? {
                           ...ship,
@@ -982,8 +1010,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       }
                     : ship
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1005,13 +1032,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const equipImplant = useCallback(
         async (shipId: string, slot: ImplantSlotName, gearId: string) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
+            const updatedShips = localShipsRef.current.map((ship) =>
                 ship.id === shipId
                     ? {
                           ...ship,
@@ -1022,8 +1049,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       }
                     : ship
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1054,13 +1080,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const removeImplant = useCallback(
         async (shipId: string, slot: ImplantSlotName) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) => {
+            const updatedShips = localShipsRef.current.map((ship) => {
                 if (ship.id === shipId) {
                     const implants = { ...ship.implants };
                     delete implants[slot];
@@ -1071,8 +1097,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 }
                 return ship;
             });
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1094,13 +1119,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const lockEquipment = useCallback(
         async (shipId: string, locked: boolean) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
+            const updatedShips = localShipsRef.current.map((ship) =>
                 ship.id === shipId
                     ? {
                           ...ship,
@@ -1108,8 +1133,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       }
                     : ship
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1131,14 +1155,14 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const validateGearAssignments = useCallback(() => {
         // This function is used to validate gear assignments across ships
         // It's called when gear is moved between ships to ensure no conflicts
         const gearAssignments = new Map<string, string>(); // gearId -> shipId
-        const updatedShips = [...localShips];
+        const updatedShips = [...localShipsRef.current];
 
         // First pass: collect all gear assignments
         updatedShips.forEach((ship) => {
@@ -1162,14 +1186,13 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             });
         });
 
-        setLocalShips(updatedShips);
-        void setStorageShips(updatedShips);
-    }, [localShips, setStorageShips]);
+        commitShips(updatedShips);
+    }, [commitShips]);
 
     const unequipAllEquipment = useCallback(
         async (shipId: string) => {
             // Optimistic update
-            const updatedShips = localShips.map((ship) =>
+            const updatedShips = localShipsRef.current.map((ship) =>
                 ship.id === shipId
                     ? {
                           ...ship,
@@ -1177,8 +1200,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                       }
                     : ship
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1199,31 +1221,30 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const toggleEquipmentLock = useCallback(
         async (shipId: string) => {
-            const ship = localShips.find((s) => s.id === shipId);
+            const ship = localShipsRef.current.find((s) => s.id === shipId);
             if (!ship) throw new Error('Ship not found');
             await lockEquipment(shipId, !ship.equipmentLocked);
         },
-        [localShips, lockEquipment]
+        [lockEquipment]
     );
 
     const toggleStarred = useCallback(
         async (shipId: string) => {
-            const ship = localShips.find((s) => s.id === shipId);
+            const ship = localShipsRef.current.find((s) => s.id === shipId);
             if (!ship) throw new Error('Ship not found');
 
             const newStarred = !ship.starred;
 
             // Optimistic update
-            const updatedShips = localShips.map((s) =>
+            const updatedShips = localShipsRef.current.map((s) =>
                 s.id === shipId ? { ...s, starred: newStarred } : s
             );
-            setLocalShips(updatedShips);
-            void setStorageShips(updatedShips);
+            commitShips(updatedShips);
 
             if (!activeProfileId) return;
             if (!isSupabaseSyncEnabled()) return;
@@ -1243,15 +1264,15 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 throw error;
             }
         },
-        [activeProfileId, loadShips, addNotification, localShips, setStorageShips]
+        [activeProfileId, loadShips, addNotification, commitShips]
     );
 
     const getShipFromGearId = useCallback(
         (gearId: string) => {
             const shipId = gearToShipMap.get(gearId);
-            return shipId ? localShips.find((s) => s.id === shipId) : undefined;
+            return shipId ? localShipsRef.current.find((s) => s.id === shipId) : undefined;
         },
-        [localShips, gearToShipMap]
+        [gearToShipMap]
     );
 
     return (

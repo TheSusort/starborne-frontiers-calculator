@@ -9,6 +9,7 @@ export const CURRENT_VERSION = '1.69.0';
 export const UNRELEASED_CHANGES: string[] = [
     'Autogear: even a Custom formula built from scratch can now be shared.',
     'Autogear: builds using Crit Multiplier can now be shared with the community.',
+    'Loadouts: Equip Team now equips gear on every ship in the team.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
