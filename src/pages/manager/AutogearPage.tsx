@@ -625,7 +625,12 @@ export const AutogearPage: React.FC = () => {
                         ignoreUnleveled: shipConfig.ignoreUnleveled,
                         useUpgradedStats: shipConfig.useUpgradedStats,
                         tryToCompleteSets: shipConfig.tryToCompleteSets,
-                        selectedAlgorithm: shipConfig.selectedAlgorithm,
+                        // The UI no longer exposes an algorithm picker (#549) — every manual
+                        // run scores through Genetic. `ShipOptimizerConfig.selectedAlgorithm`
+                        // stays a real field because `findOptimalGearForShip` is also the
+                        // entry point `roleBasisWiring.test.ts` drives against TwoPass/SetFirst
+                        // directly.
+                        selectedAlgorithm: AutogearAlgorithm.Genetic,
                         optimizeImplants: shipConfig.optimizeImplants,
                         includeCalibratedGear: shipConfig.includeCalibratedGear,
                         assumeCalibrated: shipConfig.assumeCalibrated,
@@ -1358,11 +1363,6 @@ export const AutogearPage: React.FC = () => {
                     selectedShip={shipSettings}
                     selectedShipStats={selectedShipStats}
                     selectedShipRole={shipSettings ? getShipConfig(shipSettings.id).shipRole : null}
-                    selectedAlgorithm={
-                        shipSettings
-                            ? getShipConfig(shipSettings.id).selectedAlgorithm
-                            : AutogearAlgorithm.Genetic
-                    }
                     priorities={shipSettings ? getShipConfig(shipSettings.id).statPriorities : []}
                     ignoreEquipped={
                         shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : false
@@ -1400,11 +1400,6 @@ export const AutogearPage: React.FC = () => {
                     onRoleSelect={(role) => {
                         if (shipSettings) {
                             updateShipConfig(shipSettings.id, { shipRole: role });
-                        }
-                    }}
-                    onAlgorithmSelect={(algorithm) => {
-                        if (shipSettings) {
-                            updateShipConfig(shipSettings.id, { selectedAlgorithm: algorithm });
                         }
                     }}
                     onAddPriority={(priority) => {

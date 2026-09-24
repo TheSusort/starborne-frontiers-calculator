@@ -493,7 +493,7 @@ describe('hasExistingBuildConfig', () => {
 describe('communityBuildToConfigUpdate', () => {
     // Pins the feature's single most important guarantee: applying a community
     // build writes exactly these nine build-shaping fields and never the
-    // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
+    // seven personal ones (ignoreEquipped, ignoreUnleveled,
     // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
     // assumeCalibrated, useArenaModifiers). Adding a tenth key here — of
     // either kind — must fail this test, not ship silently.

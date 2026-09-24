@@ -1,5 +1,4 @@
 import type { ShipTypeName } from '../constants/shipTypes';
-import { AutogearAlgorithm } from '../utils/autogear/AutogearStrategy';
 import { StatName, LimitableStat } from './stats';
 
 export interface StatPriority {
@@ -91,7 +90,6 @@ export interface SavedAutogearConfig {
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
-    algorithm: AutogearAlgorithm;
     optimizeImplants?: boolean;
     includeCalibratedGear?: boolean;
     /** Score every calibration-eligible piece as if calibrated to this ship. */

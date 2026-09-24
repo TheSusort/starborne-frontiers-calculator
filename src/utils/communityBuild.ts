@@ -421,7 +421,7 @@ export const configToSharedBuild = (
 /**
  * The exact update object for applying a community build to a ship's config.
  * Exactly these nine build-shaping fields — never the personal toggles
- * (algorithm, ignoreEquipped, ignoreUnleveled, useUpgradedStats,
+ * (ignoreEquipped, ignoreUnleveled, useUpgradedStats,
  * tryToCompleteSets, includeCalibratedGear, assumeCalibrated, useArenaModifiers).
  * Those are absent from this object's keys, so a caller that spreads it over an
  * existing config cannot touch them.

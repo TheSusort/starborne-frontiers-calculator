@@ -51,7 +51,7 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
 /**
  * The portion of a SavedAutogearConfig that is shared with the community.
  *
- * Deliberately excludes the personal toggles (algorithm, ignoreEquipped,
+ * Deliberately excludes the personal toggles (ignoreEquipped,
  * ignoreUnleveled, useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
  * assumeCalibrated, useArenaModifiers) — those describe the sharer's own
  * inventory and preferences, not the build.

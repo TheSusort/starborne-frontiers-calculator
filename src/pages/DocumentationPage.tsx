@@ -1732,51 +1732,17 @@ const DocumentationPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <h3 className="text-xl font-semibold mt-6 mb-2">
-                                Available Algorithms
-                            </h3>
+                            <h3 className="text-xl font-semibold mt-6 mb-2">How It Optimizes</h3>
                             <div className="space-y-4">
                                 <div className="card">
                                     <h4 className="font-semibold text-primary">
-                                        Genetic Algorithm (Recommended)
+                                        Genetic Algorithm
                                     </h4>
                                     <p className="text-theme-text">
-                                        Easily the best algorithm, an evolution-inspired approach
-                                        that maintains a population of potential solutions and
-                                        evolves them over time. This algorithm is particularly good
-                                        at finding balanced gear combinations that satisfy multiple
-                                        requirements.
-                                    </p>
-                                </div>
-
-                                <div className="card">
-                                    <h4 className="font-semibold text-primary">
-                                        Two-Pass Algorithm
-                                    </h4>
-                                    <p className="text-theme-text">
-                                        A fast algorithm that first optimizes individual stats, then
-                                        looks for opportunities to complete gear sets. Good for
-                                        quick results when you have specific stat requirements.
-                                    </p>
-                                </div>
-
-                                <div className="card">
-                                    <h4 className="font-semibold text-primary">
-                                        Set-First Approach
-                                    </h4>
-                                    <p className="text-theme-text">
-                                        Prioritizes completing gear sets before optimizing
-                                        individual stats. Best used when set bonuses are crucial for
-                                        your build.
-                                    </p>
-                                </div>
-
-                                <div className="card">
-                                    <h4 className="font-semibold text-primary">Beam Search</h4>
-                                    <p className="text-theme-text">
-                                        A balanced approach that keeps multiple possible
-                                        configurations in consideration. Good for finding
-                                        near-optimal solutions when you have complex requirements.
+                                        Every run uses an evolution-inspired approach that maintains
+                                        a population of potential solutions and evolves them over
+                                        time. It&apos;s particularly good at finding balanced gear
+                                        combinations that satisfy multiple requirements.
                                     </p>
                                 </div>
                             </div>
@@ -2006,10 +1972,9 @@ const DocumentationPage: React.FC = () => {
                                         fleet buffs, implant settings and an applied equation
                                     </li>
                                     <li>
-                                        Your own preferences are never changed: algorithm, ignore
-                                        equipped, ignore unleveled, use upgraded stats, complete
-                                        sets, calibration and arena modifiers all stay as you set
-                                        them
+                                        Your own preferences are never changed: ignore equipped,
+                                        ignore unleveled, use upgraded stats, complete sets,
+                                        calibration and arena modifiers all stay as you set them
                                     </li>
                                     <li>
                                         You are asked to confirm whenever applying would overwrite

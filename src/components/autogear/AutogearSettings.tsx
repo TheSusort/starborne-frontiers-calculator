@@ -13,7 +13,6 @@ import {
     RoleSelector,
 } from '../ui';
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
-import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
@@ -68,7 +67,6 @@ interface AutogearSettingsProps {
     selectedShip: Ship | null;
     selectedShipStats: BaseStats | null;
     selectedShipRole: ShipTypeName | null;
-    selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
     ignoreEquipped: boolean;
     ignoreUnleveled: boolean;
@@ -82,7 +80,6 @@ interface AutogearSettingsProps {
     assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName | null) => void;
-    onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;
