@@ -1,8 +1,12 @@
-import { AutogearStrategy, AutogearResult, HardRequirementViolation } from '../AutogearStrategy';
+import {
+    AutogearStrategy,
+    AutogearResult,
+    HardRequirementViolation,
+    ScoringInputs,
+} from '../AutogearStrategy';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
-import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
-import type { FleetBuff, CustomFormula, RoleBasis } from '../../../types/autogear';
+import { StatPriority, SetPriority } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import {
     type EquipmentSlotName,
@@ -128,14 +132,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         availableInventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null,
-        fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis
+        scoringInputs: ScoringInputs
     ): Promise<AutogearResult> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
@@ -165,14 +162,14 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                   ship,
                   availableInventory,
                   priorities,
-                  setPriorities,
-                  statBonuses,
-                  shipRole,
-                  tryToCompleteSets,
-                  arenaModifiers,
-                  fleetBuffs,
-                  customFormula,
-                  roleBasis,
+                  setPriorities: scoringInputs.setPriorities,
+                  statBonuses: scoringInputs.statBonuses,
+                  shipRole: scoringInputs.shipRole,
+                  tryToCompleteSets: scoringInputs.tryToCompleteSets,
+                  arenaModifiers: scoringInputs.arenaModifiers,
+                  fleetBuffs: scoringInputs.fleetBuffs,
+                  customFormula: scoringInputs.customFormula,
+                  roleBasis: scoringInputs.roleBasis,
                   engineeringStats: getEngineeringStatsForShipType(ship.type),
                   resolveGearPiece: cachedGetGearPiece,
               })
@@ -202,14 +199,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 inventoryBySlot,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
-                shipRole,
-                setPriorities,
-                statBonuses,
-                tryToCompleteSets,
-                arenaModifiers,
-                fleetBuffs,
-                customFormula,
-                roleBasis,
+                scoringInputs,
                 populationSize,
                 generations,
                 eliteSize,
@@ -245,8 +235,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 priorities,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
-                arenaModifiers,
-                fleetBuffs
+                scoringInputs
             );
         }
         return result;
@@ -259,14 +248,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         inventoryBySlot: InventoryBySlot,
         cachedGetGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole: ShipTypeName | undefined,
-        setPriorities: SetPriority[] | undefined,
-        statBonuses: StatBonus[] | undefined,
-        tryToCompleteSets: boolean | undefined,
-        arenaModifiers: Record<string, number> | null | undefined,
-        fleetBuffs: FleetBuff[] | undefined,
-        customFormula: CustomFormula | undefined,
-        roleBasis: RoleBasis | undefined,
+        scoringInputs: ScoringInputs,
         populationSize: number,
         generations: number,
         eliteSize: number,
@@ -277,7 +259,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             availableInventory,
             inventoryBySlot,
             cachedGetGearPiece,
-            setPriorities,
+            scoringInputs.setPriorities,
             populationSize
         );
         performanceTracker.endTimer('InitializePopulation');
@@ -289,14 +271,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             priorities,
             cachedGetGearPiece,
             getEngineeringStatsForShipType,
-            shipRole,
-            setPriorities,
-            statBonuses,
-            tryToCompleteSets,
-            arenaModifiers,
-            fleetBuffs,
-            customFormula,
-            roleBasis,
+            scoringInputs,
             fastContext
         );
         performanceTracker.endTimer('InitialEvaluation');
@@ -320,7 +295,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     availableInventory,
                     inventoryBySlot,
                     cachedGetGearPiece,
-                    setPriorities
+                    scoringInputs.setPriorities
                 );
                 newPopulation.push(child);
                 this.incrementProgress();
@@ -334,14 +309,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 priorities,
                 cachedGetGearPiece,
                 getEngineeringStatsForShipType,
-                shipRole,
-                setPriorities,
-                statBonuses,
-                tryToCompleteSets,
-                arenaModifiers,
-                fleetBuffs,
-                customFormula,
-                roleBasis,
+                scoringInputs,
                 fastContext
             );
             performanceTracker.endTimer('Evaluation');
@@ -370,8 +338,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        arenaModifiers: Record<string, number> | null | undefined,
-        fleetBuffs?: FleetBuff[]
+        scoringInputs: ScoringInputs
     ): HardRequirementViolation[] {
         const { gearOnly, implantsOnly } = splitEquipmentBySlotSpace(equipment);
         const hasImplantSlots = Object.keys(implantsOnly).length > 0;
@@ -386,6 +353,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             getEngineeringStatsForShipType(shipForStats.type),
             shipForStats.id
         );
+        const { arenaModifiers, fleetBuffs } = scoringInputs;
         const statsAfterArena =
             arenaModifiers && Object.keys(arenaModifiers).length > 0
                 ? applyArenaModifiers(totalStats.final, arenaModifiers)
@@ -457,14 +425,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null,
-        fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis,
+        scoringInputs: ScoringInputs,
         fastContext?: FastScoringContext | null
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
@@ -477,14 +438,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     priorities,
                     getGearPiece,
                     getEngineeringStatsForShipType,
-                    shipRole,
-                    setPriorities,
-                    statBonuses,
-                    tryToCompleteSets,
-                    arenaModifiers,
-                    fleetBuffs,
-                    customFormula,
-                    roleBasis,
+                    scoringInputs,
                     fastContext
                 );
                 return { ...individual, fitness, violation };
@@ -501,14 +455,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null,
-        fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis,
+        scoringInputs: ScoringInputs,
         fastContext?: FastScoringContext | null
     ): { fitness: number; violation: number } {
         performanceTracker.startTimer('CalculateFitness');
@@ -530,14 +477,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     priorities,
                     getGearPiece,
                     getEngineeringStatsForShipType,
-                    shipRole,
-                    setPriorities,
-                    statBonuses,
-                    tryToCompleteSets,
-                    arenaModifiers,
-                    fleetBuffs,
-                    customFormula,
-                    roleBasis,
+                    scoringInputs,
                     fitness,
                     violation
                 );
@@ -557,6 +497,17 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         const shipWithNewImplants: Ship = hasImplantSlots
             ? { ...ship, implants: implantsOnly }
             : ship;
+
+        const {
+            shipRole,
+            setPriorities,
+            statBonuses,
+            tryToCompleteSets,
+            arenaModifiers,
+            fleetBuffs,
+            customFormula,
+            roleBasis,
+        } = scoringInputs;
 
         const fitness = calculateTotalScore(
             shipWithNewImplants,
@@ -751,17 +702,21 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole: ShipTypeName | undefined,
-        setPriorities: SetPriority[] | undefined,
-        statBonuses: StatBonus[] | undefined,
-        tryToCompleteSets: boolean | undefined,
-        arenaModifiers: Record<string, number> | null | undefined,
-        fleetBuffs: FleetBuff[] | undefined,
-        customFormula: CustomFormula | undefined,
-        roleBasis: RoleBasis | undefined,
+        scoringInputs: ScoringInputs,
         fastFitness: number,
         _fastViolation: number
     ): void {
+        const {
+            shipRole,
+            setPriorities,
+            statBonuses,
+            tryToCompleteSets,
+            arenaModifiers,
+            fleetBuffs,
+            customFormula,
+            roleBasis,
+        } = scoringInputs;
+
         // Split equipment same way the slow path does
         const { gearOnly, implantsOnly } = splitEquipmentBySlotSpace(equipment);
         const hasImplantSlots = Object.keys(implantsOnly).length > 0;

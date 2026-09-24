@@ -12,7 +12,12 @@ import type {
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import type { EngineeringStat } from '../../types/stats';
-import { AutogearAlgorithm, type AutogearProgress, type AutogearResult } from './AutogearStrategy';
+import {
+    AutogearAlgorithm,
+    type AutogearProgress,
+    type AutogearResult,
+    type ScoringInputs,
+} from './AutogearStrategy';
 import { getAutogearStrategy } from './getStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
 import { filterTopImplantsPerSlot } from './implantFilter';
@@ -309,9 +314,11 @@ function availableInventoryForShip(
  * list (see `gearScoringInputs.ts` for why both views must come from the same source), and calls
  * the strategy's `findOptimalGear`.
  *
- * Every caller gets the same inventory-eligibility rules applied in the same order and the same
- * argument order forwarded to the strategy — a caller cannot special-case either without going
- * through `config`.
+ * Every caller gets the same inventory-eligibility rules applied in the same order, and the same
+ * `ScoringInputs` object forwarded to the strategy — a caller cannot special-case either without
+ * going through `config`. `ScoringInputs` is built exactly once, here, from `config`'s own
+ * fields — never re-enumerated at a second site — so a field this function forgets to name is a
+ * `tsc` error (every `ScoringInputs` key is required) rather than a silently-dropped argument.
  */
 export async function findOptimalGearForShip(
     ship: Ship,
@@ -349,6 +356,17 @@ export async function findOptimalGearForShip(
     const strategy = getAutogearStrategy(config.selectedAlgorithm);
     strategy.setProgressCallback(onProgress ?? (() => {}));
 
+    const scoringInputs: ScoringInputs = {
+        shipRole: config.shipRole || undefined,
+        setPriorities: config.setPriorities,
+        statBonuses: config.statBonuses,
+        tryToCompleteSets: config.tryToCompleteSets,
+        arenaModifiers: config.arenaModifiers,
+        fleetBuffs: config.fleetBuffs,
+        customFormula: config.customFormula,
+        roleBasis: config.roleBasis,
+    };
+
     const result = await Promise.resolve(
         strategy.findOptimalGear(
             ship,
@@ -356,14 +374,7 @@ export async function findOptimalGearForShip(
             filteredInventory,
             getGearForShip,
             getEngineeringStatsForShipType,
-            config.shipRole || undefined,
-            config.setPriorities,
-            config.statBonuses,
-            config.tryToCompleteSets,
-            config.arenaModifiers,
-            config.fleetBuffs,
-            config.customFormula,
-            config.roleBasis
+            scoringInputs
         )
     );
 
