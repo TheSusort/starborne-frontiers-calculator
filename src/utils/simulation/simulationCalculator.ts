@@ -1,6 +1,14 @@
 import { BaseStats } from '../../types/stats';
 import { ShipTypeName } from '../../constants';
+import type { BasisTerm, CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
 import { calculateDamageReduction, calculateHealingPerHit } from '../autogear/scoring';
+import {
+    calculateDirectDamage,
+    calculateEffectiveHP,
+    resolveBasisValue,
+} from '../autogear/statResolution';
+import { customFormulaScore, isFormulaEmpty, usableBasis } from '../autogear/customFormula';
+import { hostedBasisTerms } from '../autogear/offFormula/roleBasisHost';
 import {
     ENEMY_ATTACK,
     ENEMY_COUNT,
@@ -40,6 +48,11 @@ export interface SimulationSummary {
 
     // Supporter(Offensive) specific
     attack?: number;
+
+    // Custom-formula ship (no role): the score `customFormulaScore` gave the build actually
+    // scored on. `SimulationResults.tsx` renders the Custom section keyed on this field being
+    // present, not on `role === null`.
+    formulaScore?: number;
 }
 
 export const SIMULATION_ITERATIONS = 1000;
@@ -47,8 +60,21 @@ export const SIMULATION_ITERATIONS = 1000;
 export function runSimulation(
     stats: BaseStats,
     role: ShipTypeName | null,
-    activeSets?: string[]
+    activeSets?: string[],
+    options?: { roleBasis?: RoleBasis; customFormula?: CustomFormula }
 ): SimulationSummary {
+    if (role === null) {
+        if (options?.customFormula && !isFormulaEmpty(options.customFormula)) {
+            return runCustomFormulaSimulation(stats, options.customFormula);
+        }
+        return runDamageSimulation(stats);
+    }
+
+    // See `hostedBasisTerms`' doc (`roleBasisHost.ts`) for the hosting rule. `undefined` for
+    // every non-hosting role, which makes every basis-aware branch below read exactly as it did
+    // with no basis at all.
+    const basisTerms = hostedBasisTerms(role, options?.roleBasis);
+
     switch (role) {
         case 'DEFENDER':
         case 'DEFENDER_SECURITY':
@@ -58,7 +84,7 @@ export function runSimulation(
             };
         case 'DEBUFFER':
         case 'DEBUFFER_BOMBER':
-            return runDebufferSimulation(stats);
+            return runDebufferSimulation(stats, basisTerms);
         case 'DEBUFFER_DEFENSIVE':
             return runDefensiveDebufferSimulation(stats);
         case 'DEBUFFER_DEFENSIVE_SECURITY':
@@ -66,7 +92,7 @@ export function runSimulation(
         case 'DEBUFFER_CORROSION':
             return runCorrosionDebufferSimulation(stats);
         case 'SUPPORTER':
-            return runHealingSimulation(stats);
+            return runHealingSimulation(stats, basisTerms);
         case 'SUPPORTER_BUFFER':
             return {
                 ...runDefenderSimulation(stats),
@@ -81,21 +107,70 @@ export function runSimulation(
             };
         case 'SUPPORTER_SHIELD':
             return {
-                hp: stats.hp,
+                hp: resolveBasisValue(stats, basisTerms, 'hp'),
             };
         default:
-            return runDamageSimulation(stats);
+            return runDamageSimulation(stats, basisTerms);
     }
 }
 
-export function runDamageSimulation(stats: BaseStats): SimulationSummary {
+/**
+ * A core row on `stat`, `kind: 'core'`, `direction: 'max'` — the shape `usableBasis` (and
+ * `formulaRowTerm`) honours a basis on. The first such row for `stat`, or undefined when the
+ * formula carries none.
+ */
+function findCoreMaxRow(
+    formula: CustomFormula,
+    stat: CustomFormulaRow['stat']
+): CustomFormulaRow | undefined {
+    return formula.rows.find(
+        (row) => row.stat === stat && row.kind === 'core' && row.direction === 'max'
+    );
+}
+
+/**
+ * Results for a role-less Custom ship: the score it was actually ranked on, plus damage/EHP
+ * read off the SAME basis a `directDamage`/`effectiveHp` core row scored — not the attack-based
+ * iteration `runDamageSimulation` runs for a role. A Custom ship's damage/EHP is an analytic
+ * expectation (mirrors `formulaRowTerm`), not a per-hit crit-roll simulation, because the
+ * formula itself never rolls one.
+ */
+function runCustomFormulaSimulation(stats: BaseStats, formula: CustomFormula): SimulationSummary {
+    const summary: SimulationSummary = {
+        formulaScore: customFormulaScore(stats, formula),
+    };
+
+    const directDamageRow = findCoreMaxRow(formula, 'directDamage');
+    if (directDamageRow) {
+        summary.averageDamage = Math.round(
+            calculateDirectDamage(stats, usableBasis(directDamageRow))
+        );
+    }
+
+    const effectiveHpRow = findCoreMaxRow(formula, 'effectiveHp');
+    if (effectiveHpRow) {
+        summary.effectiveHP = Math.round(
+            calculateEffectiveHP(
+                stats.hp,
+                stats.defence,
+                stats.damageReduction ?? 0,
+                usableBasis(effectiveHpRow),
+                stats
+            )
+        );
+    }
+
+    return summary;
+}
+
+export function runDamageSimulation(stats: BaseStats, basis?: BasisTerm[]): SimulationSummary {
     let totalDamage = 0;
     let highest = 0;
     let lowest = Infinity;
     let critCount = 0;
 
     for (let i = 0; i < SIMULATION_ITERATIONS; i++) {
-        const { damage, isCrit } = calculateDamage(stats);
+        const { damage, isCrit } = calculateDamage(stats, basis);
         totalDamage += damage;
         highest = Math.max(highest, damage);
         lowest = Math.min(lowest, damage);
@@ -153,7 +228,7 @@ function runDefenderSimulation(stats: BaseStats): SimulationSummary {
     };
 }
 
-function runDebufferSimulation(stats: BaseStats): SimulationSummary {
+function runDebufferSimulation(stats: BaseStats, basis?: BasisTerm[]): SimulationSummary {
     const hacking = stats.hacking || 0;
     const attack = stats.attack || 0;
 
@@ -161,7 +236,7 @@ function runDebufferSimulation(stats: BaseStats): SimulationSummary {
     const hackSuccessRate = Math.min(100, Math.max(0, hacking - ENEMY_SECURITY));
 
     // Also run damage simulation as secondary output
-    const damageSimulation = runDamageSimulation(stats);
+    const damageSimulation = runDamageSimulation(stats, basis);
 
     return {
         hackSuccessRate: Math.round(hackSuccessRate * 100) / 100,
@@ -264,13 +339,13 @@ function runCorrosionDebufferSimulation(stats: BaseStats): SimulationSummary {
     };
 }
 
-function runHealingSimulation(stats: BaseStats): SimulationSummary {
+function runHealingSimulation(stats: BaseStats, basis?: BasisTerm[]): SimulationSummary {
     let totalHealing = 0;
     let highest = 0;
     let lowest = Infinity;
     let critCount = 0;
 
-    const baseHealing = (stats.hp || 0) * BASE_HEAL_PERCENT;
+    const baseHealing = resolveBasisValue(stats, basis, 'hp') * BASE_HEAL_PERCENT;
     const healModifier = 1 + (stats.healModifier || 0) / 100;
 
     for (let i = 0; i < SIMULATION_ITERATIONS; i++) {
@@ -291,8 +366,11 @@ function runHealingSimulation(stats: BaseStats): SimulationSummary {
     };
 }
 
-function calculateDamage(stats: BaseStats): { damage: number; isCrit: boolean } {
-    const baseDamage = stats.attack || 0;
+function calculateDamage(
+    stats: BaseStats,
+    basis?: BasisTerm[]
+): { damage: number; isCrit: boolean } {
+    const baseDamage = resolveBasisValue(stats, basis, 'attack');
     const critRoll = Math.random() * 100;
     const isCrit = critRoll <= (stats.crit || 0);
 

@@ -14,7 +14,7 @@ import type {
 } from '../types/communityRecommendation';
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
 import { formulaHasUsableRow, isFormulaEmpty } from './autogear/customFormula';
-import { roleHostsBasis } from './autogear/offFormula/roleBasisHost';
+import { isRoleBasisHosted } from './autogear/offFormula/roleBasisHost';
 
 const SHIP_TYPE_KEYS = Object.keys(SHIP_TYPES);
 
@@ -383,18 +383,12 @@ export const configToSharedBuild = (
         optimizeImplants: config.optimizeImplants ?? false,
     };
 
-    // A `roleBasis` only ever means something on the axis its own role hosts (`roleHostsBasis`,
-    // `roleBasisHost.ts`) — `calculateRoleScore` (`priorityScore.ts`) ignores it otherwise, so
-    // sharing one the configured role can't use would just be dead weight nobody reads. Guarded
-    // with `isShipTypeKey` the same way `priorityScore.ts` guards its own call
-    // (`Object.hasOwn(SHIP_TYPES, shipRole)`): a persisted config can carry a `shipRole` string
-    // that no longer names a real role, and `roleHostsBasis` throws outside its table
-    // (`roleBasisHost.ts`'s totality check relies on that throw).
+    // A `roleBasis` only ever means something on the axis its own role hosts
+    // (`isRoleBasisHosted`, `roleBasisHost.ts`) — `calculateRoleScore` (`priorityScore.ts`)
+    // ignores it otherwise, so sharing one the configured role can't use would just be dead
+    // weight nobody reads.
     const hostedRoleBasis =
-        config.roleBasis &&
-        config.shipRole &&
-        isShipTypeKey(config.shipRole) &&
-        roleHostsBasis(config.shipRole, config.roleBasis.produces)
+        config.shipRole && isRoleBasisHosted(config.shipRole, config.roleBasis)
             ? config.roleBasis
             : undefined;
 

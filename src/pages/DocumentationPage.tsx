@@ -1852,7 +1852,13 @@ const DocumentationPage: React.FC = () => {
                             <p className="text-theme-text">
                                 The simulation results will show you a comparison of the gear
                                 suggestions, and the current gear on the ship, based on the
-                                different goals of the roles.
+                                different goals of the roles. If the ship&apos;s role has an applied
+                                equation or is scored with a Custom formula, the numbers shown are
+                                computed from that same formula — not the role&apos;s generic one —
+                                so the result matches what the gear was actually picked for. A
+                                Custom-scored ship shows its{' '}
+                                <span className="text-primary">Formula Score</span>, plus Average
+                                Damage and/or Effective HP when the formula includes a row for them.
                                 <br />
                                 <br />
                             </p>

@@ -16,6 +16,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: custom formulas started from a role can now be shared.',
     'Ship Details: no longer crashes opening a geared ship with a sub-role.',
     'Autogear: new Crit Multiplier stat for priorities, bonuses and custom formulas.',
+    'Autogear: results now show output from the formula the ship was scored on.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
