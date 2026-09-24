@@ -315,10 +315,11 @@ export const sortCommunityBuilds = (
 /**
  * The role a build's legacy `ship_role` column mirrors: the build's own role when it has
  * one, or — in Custom mode (`shipRole: null`) — the role its formula was seeded from.
- * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom` — the
- * legacy column is then written as `NULL` too (see `CommunityRecommendationService
- * .createRecommendation`), which `normalizeShipRole` and every legacy-column reader treat as
- * "no role" rather than synthesizing one.
+ * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom`. The
+ * column is NOT NULL today, so `CommunityRecommendationService.createRecommendation` only
+ * writes this `null` through when a caller opts in via `allowRoleless` — otherwise it throws
+ * `RolelessShareNotAllowedError` before the insert. Once written, `normalizeShipRole` and
+ * every legacy-column reader treat a `null` here as "no role" rather than synthesizing one.
  */
 export const mirroredShipRole = (
     build: Pick<AutogearBuildFields, 'shipRole' | 'customFormula'>

@@ -127,7 +127,9 @@ export class CommunityRecommendationService {
 
         // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
         // formula was seeded from. A hand-written formula with no `seededFrom` has neither,
-        // so this is null: a legitimate value for the nullable `ship_role` column.
+        // so this is null — a legitimate value for the SharedAutogearBuild the client
+        // computes, even though the database column itself is still NOT NULL (see
+        // `RolelessShareNotAllowedError` below, and `ShipRoleColumnNotNullableError` above).
         const legacyShipRole = mirroredShipRole(sharedConfig);
 
         if (!allowRoleless && legacyShipRole === null) {
