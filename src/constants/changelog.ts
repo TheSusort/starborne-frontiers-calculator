@@ -6,7 +6,10 @@ export const CURRENT_VERSION = '1.69.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Autogear: even a Custom formula built from scratch can now be shared.',
+    'Autogear: builds using Crit Multiplier can now be shared with the community.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

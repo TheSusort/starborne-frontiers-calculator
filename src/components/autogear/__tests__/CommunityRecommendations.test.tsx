@@ -2,8 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { CommunityRecommendations } from '../CommunityRecommendations';
 import type { Ship } from '../../../types/ship';
-import type { ShipTypeName } from '../../../constants';
-import type { CustomFormula } from '../../../types/autogear';
+import type { SharedAutogearBuild } from '../../../types/communityRecommendation';
 
 vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => {} }));
 vi.mock('../../../contexts/AuthProvider', () => ({ useAuth: () => ({ user: null }) }));
@@ -11,11 +10,9 @@ vi.mock('../../../contexts/ActiveProfileProvider', () => ({
     useActiveProfile: () => ({ activeProfileId: 'profile-1' }),
 }));
 
-// `canShare` (real hook, exercised in useCommunityRecommendations.test.ts) decides whether
-// the Share button shows. When it is false, this component still distinguishes "nothing
-// configured" from "a role-less but otherwise usable formula, withheld by
-// ALLOW_ROLELESS_COMMUNITY_SHARE" via its own shipRole/customFormula props — mocking the
-// hook isolates that message logic from fetching/voting, which this file is not about.
+// `canShare` (real hook, exercised in useCommunityRecommendations.test.ts) is the sole
+// decider of whether the Share button shows — mocking the hook isolates that from
+// fetching/voting, which this file is not about.
 const useCommunityRecommendationsMock = vi.fn();
 vi.mock('../../../hooks/useCommunityRecommendations', () => ({
     useCommunityRecommendations: (...args: unknown[]) => useCommunityRecommendationsMock(...args),
@@ -39,17 +36,23 @@ const baseHookReturn = {
 
 const makeShip = (): Ship => ({ id: '1', name: 'Ares' }) as Ship;
 
-const renderPanel = (
-    canShare: boolean,
-    fields: { shipRole?: ShipTypeName | null; customFormula?: CustomFormula } = {}
-) => {
+const critMultiplierBuild: SharedAutogearBuild = {
+    version: 1,
+    shipRole: 'ATTACKER',
+    statPriorities: [],
+    setPriorities: [],
+    statBonuses: [{ stat: 'critMultiplier', percentage: 100, mode: 'multiplier' }],
+    fleetBuffs: [],
+    excludedImplantTypes: [],
+    optimizeImplants: false,
+};
+
+const renderPanel = (canShare: boolean, currentBuild: SharedAutogearBuild | null = null) => {
     useCommunityRecommendationsMock.mockReturnValue({ ...baseHookReturn, canShare });
     render(
         <CommunityRecommendations
             selectedShip={makeShip()}
-            currentBuild={null}
-            shipRole={fields.shipRole ?? null}
-            customFormula={fields.customFormula}
+            currentBuild={currentBuild}
             onApplyBuild={null}
             hasExistingConfig={false}
         />
@@ -82,34 +85,13 @@ describe('CommunityRecommendations — share gate copy', () => {
         ).toBeInTheDocument();
     });
 
-    it('explains a role-less but usable formula cannot be shared yet, withheld by the gate', () => {
-        renderPanel(false, {
-            shipRole: null,
-            customFormula: {
-                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
-            },
-        });
+    // Tripwire against re-adding a client-side crit-multiplier gate: with both
+    // ALLOW_ROLELESS_COMMUNITY_SHARE and ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE on, the
+    // component no longer withholds the button/form for a build naming critMultiplier —
+    // `canShare` (the hook's own verdict) is the only gate this component reads.
+    it('shows the share button and form for a build referencing critMultiplier', () => {
+        renderPanel(true, critMultiplierBuild);
 
-        expect(
-            screen.getByText(/this formula has no role to file it under yet/i)
-        ).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Share your build' })).not.toBeInTheDocument();
-    });
-
-    it('does not show the role-less-formula message once the formula is seeded from a role', () => {
-        renderPanel(false, {
-            shipRole: null,
-            customFormula: {
-                seededFrom: 'ATTACKER',
-                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
-            },
-        });
-
-        expect(
-            screen.queryByText(/this formula has no role to file it under yet/i)
-        ).not.toBeInTheDocument();
-        expect(
-            screen.getByText('Configure autogear settings to share your build')
-        ).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Share your build' })).toBeInTheDocument();
     });
 });

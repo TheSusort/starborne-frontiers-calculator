@@ -305,7 +305,7 @@ describe('configToSharedBuild', () => {
         expect(build).toBeNull();
     });
 
-    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — this pins the DEFAULT's wiring, not its value, so it survives #552's eventual flip", () => {
+    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — pins the DEFAULT's wiring, not its value, so it holds regardless of which way the switch is set", () => {
         const rolelessConfig = {
             ...config,
             shipRole: null,
@@ -338,6 +338,24 @@ describe('configToSharedBuild', () => {
             },
             true
         );
+        expect(build).toEqual({
+            version: 2,
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        });
+    });
+
+    // No explicit second argument: this is what AutogearQuickSettings actually calls, so it
+    // must exercise ALLOW_ROLELESS_COMMUNITY_SHARE's real default, not a hand-picked value.
+    it('shares a from-scratch Custom-mode build by default, now that ALLOW_ROLELESS_COMMUNITY_SHARE is on', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        });
         expect(build).toEqual({
             version: 2,
             ...config,

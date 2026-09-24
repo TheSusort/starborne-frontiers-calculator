@@ -17,12 +17,10 @@ const baseBuild: SharedAutogearBuild = {
 };
 
 describe('ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE', () => {
-    // The deployed reader (origin/production sharedAutogearBuild.ts) only knows
-    // effectiveHp/directDamage — a shared build naming critMultiplier is dropped or
-    // mis-shown by an old tab, so the switch must default off. Mirrors
-    // ALLOW_ROLELESS_COMMUNITY_SHARE's own default.
-    it('defaults to false', () => {
-        expect(ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE).toBe(false);
+    // Every bundle in the field reads critMultiplier in limitableStatSchema (shipped with
+    // #550), so the switch is on. Mirrors ALLOW_ROLELESS_COMMUNITY_SHARE's own default.
+    it('defaults to true', () => {
+        expect(ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE).toBe(true);
     });
 });
 
