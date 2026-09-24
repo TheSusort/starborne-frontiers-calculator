@@ -45,7 +45,10 @@ const transformEngineeringStats = (data: ExportedPlayData['Engineering']): Engin
             acc: Partial<Record<ShipTypeName, { shipType: ShipTypeName; stats: Stat[] }>>,
             stat: ExportedPlayData['Engineering'][0]
         ) => {
-            const shipType = getShipTypeName(stat.Type);
+            // Skip, never default: an unknown role's engineering levels folded into ATTACKER
+            // would overwrite the player's real Attacker engineering stats.
+            const shipType = stat.Type.toUpperCase();
+            if (!isShipTypeName(shipType)) return acc;
             if (!acc[shipType]) {
                 acc[shipType] = {
                     shipType,

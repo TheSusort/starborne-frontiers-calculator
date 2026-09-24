@@ -147,6 +147,23 @@ describe('importPlayerData', () => {
             expect(defender!.stats).toHaveLength(1);
         });
 
+        it('skips engineering stats for an unknown ship type instead of folding them into another role', async () => {
+            const result = await importPlayerData(
+                makeExportData({
+                    Engineering: [
+                        makeEngineeringStat({ Type: 'Attacker', Attribute: 'Power', Level: 50 }),
+                        makeEngineeringStat({ Type: 'Wizard', Attribute: 'Defense', Level: 20 }),
+                    ],
+                })
+            );
+
+            expect(result.success).toBe(true);
+            const stats = result.data!.engineeringStats.stats;
+            expect(stats).toHaveLength(1);
+            expect(stats[0].shipType).toBe('ATTACKER');
+            expect(stats[0].stats).toHaveLength(1);
+        });
+
         it('sets valid calibration when CalibratedForUnitId matches an imported ship', async () => {
             const unit = makeUnit({ Id: 'ship-1' });
             const gear = makeGearItem({
