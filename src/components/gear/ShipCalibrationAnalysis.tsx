@@ -83,7 +83,7 @@ export const ShipCalibrationAnalysis: React.FC<Props> = ({
                     <div className="space-y-2">
                         <RoleSelector
                             value={selectedRole || ''}
-                            onChange={setSelectedRole}
+                            onChange={(role) => setSelectedRole(role || null)}
                             label="Select Role"
                         />
                         <p className="text-xs text-theme-text-secondary">

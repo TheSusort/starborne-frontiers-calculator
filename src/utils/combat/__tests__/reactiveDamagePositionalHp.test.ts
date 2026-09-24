@@ -26,7 +26,7 @@ export const ship = (id: string, over: Partial<Ship>): Ship => ({
     name: id,
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {} as Ship['baseStats'],
     equipment: {},
     implants: {},
@@ -80,7 +80,7 @@ const expectReactiveHitFired = (result: ReturnType<typeof simulateBattle>, actor
 
 const frontline = (id: string): Ship =>
     ship(id, {
-        type: 'Defender',
+        type: 'DEFENDER',
         activeTarget: 'allies',
         activeSkillText: 'This Unit repairs 1% of its Max HP.',
         secondPassiveSkillText: FRONTLINE_R2_TEXT,
@@ -141,7 +141,7 @@ const PARACELSUS_P1 =
 
 const vindicator = (id: string): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         activeSkillText:
             'This Unit deals <unit-damage>100% damage</unit-damage> and applies <unit-skill>Provoke</unit-skill> for 1 turn to all enemies adjacent to the target.',
         secondPassiveSkillText: VINDICATOR_P2,
@@ -189,7 +189,7 @@ describe('SP-M M1: Vindicator on-resist reactive HP retaliation reduces the infl
 // the enemy's HP through its own attack, in EITHER run (killable or unkillable).
 const paracelsus = (id: string): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
         firstPassiveSkillText: PARACELSUS_P1,
     });
@@ -241,7 +241,7 @@ const GRIF_P1 =
 
 const grif = (id: string): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         // 0%-damage active isolates the HP delta to the reactive proc — Grif's own attack never
         // itself changes the enemy's HP, in EITHER run (mirrors the Paracelsus 0%-damage idiom).
         activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
@@ -309,7 +309,7 @@ const RHODIUM_P2 =
 
 const rhodium = (id: string): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         // 0%-damage active isolates the HP delta to the reactive proc — Rhodium's own attack
         // never itself changes either enemy's HP, in EITHER run (mirrors the Paracelsus/Grif
         // 0%-damage idiom above).
@@ -460,7 +460,7 @@ const CHAKARA_P4 =
 // the Rhodium Task 5 "no proc anywhere" control idiom above.
 const chakara = (id: string, withPassive: boolean): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         // 0%-damage active isolates the HP delta to the reactive proc — Chakara's own attack
         // never itself changes either enemy's HP, in EITHER run (mirrors the Paracelsus/Grif/
         // Rhodium 0%-damage idiom above).
@@ -537,7 +537,7 @@ const JUDGE_PASSIVE =
 // omits it entirely so the proc no-ops for every enemy.
 const judge = (id: string, withPassive: boolean): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         // 0%-damage active isolates the HP delta to the reactive proc — Judge's own attack never
         // itself changes any enemy's HP, in EITHER run (mirrors the Paracelsus/Grif/Rhodium idiom).
         activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
@@ -631,7 +631,7 @@ const INCINERATOR_PASSIVE =
     'enemies with <unit-skill>Inferno</unit-skill>.';
 const incinerator = (id: string, withPassive: boolean): Ship =>
     ship(id, {
-        type: 'Attacker',
+        type: 'ATTACKER',
         activeSkillText:
             'This Unit deals <unit-damage>185% damage</unit-damage> and inflicts ' +
             '<unit-skill>Inferno III</unit-skill> for 3 turns.',
@@ -970,7 +970,7 @@ describe("SP-M M1 Task 8: Incinerator's end-of-round damage hits ONLY the Infern
 // otherwise inert (no shield/passive text) so it does not itself perturb any enemy's HP.
 const healer = (id: string): Ship =>
     ship(id, {
-        type: 'Defender',
+        type: 'DEFENDER',
         activeTarget: 'allies',
         activeSkillText: 'This Unit repairs 5% of its Max HP.',
     });

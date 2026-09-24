@@ -25,7 +25,7 @@ const makeShip = (id: string, name: string, over: Partial<Ship> = {}): Ship => (
     name,
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 0,
         attack: 0,

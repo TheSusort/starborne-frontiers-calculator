@@ -1,8 +1,13 @@
 import { Ship } from '../../types/ship';
-import { GEAR_SLOTS, IMPLANT_SLOTS } from '../../constants/gearTypes';
+import {
+    GEAR_SLOTS,
+    IMPLANT_SLOTS,
+    type GearSlotName,
+    type ImplantSlotName,
+} from '../../constants/gearTypes';
 
-const ALL_GEAR_SLOT_KEYS = Object.keys(GEAR_SLOTS);
-const ALL_IMPLANT_SLOT_KEYS = Object.keys(IMPLANT_SLOTS);
+const ALL_GEAR_SLOT_KEYS = Object.keys(GEAR_SLOTS) as GearSlotName[];
+const ALL_IMPLANT_SLOT_KEYS = Object.keys(IMPLANT_SLOTS) as ImplantSlotName[];
 
 export const getEmptySlotCount = (ship: Ship): number => {
     let empty = 0;

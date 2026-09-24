@@ -1,6 +1,5 @@
 import { vi } from 'vitest';
 import type { ComponentProps } from 'react';
-import { AutogearAlgorithm } from '../../../utils/autogear/AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { BaseStats } from '../../../types/stats';
 import type { AutogearSettings } from '../AutogearSettings';
@@ -48,7 +47,6 @@ export const makeSettingsProps = (overrides: Partial<SettingsProps> = {}): Setti
     selectedShip: testShip,
     selectedShipStats: testShipStats,
     selectedShipRole: null,
-    selectedAlgorithm: AutogearAlgorithm.Genetic,
     priorities: [],
     ignoreEquipped: false,
     ignoreUnleveled: true,
@@ -64,7 +62,6 @@ export const makeSettingsProps = (overrides: Partial<SettingsProps> = {}): Setti
     customFormula: undefined,
     onShipSelect: vi.fn(),
     onRoleSelect: vi.fn(),
-    onAlgorithmSelect: vi.fn(),
     onAddPriority: vi.fn(),
     onUpdatePriority: vi.fn(),
     onRemovePriority: vi.fn(),

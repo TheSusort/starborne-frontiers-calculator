@@ -38,7 +38,7 @@ const makeShip = (
     name,
     rarity: 'legendary',
     faction,
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 0,
         attack: 0,

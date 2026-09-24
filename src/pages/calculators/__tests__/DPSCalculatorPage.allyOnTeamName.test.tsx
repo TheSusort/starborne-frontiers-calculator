@@ -19,7 +19,7 @@ const NAYRA: Ship = {
     name: 'Nayra',
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Defender',
+    type: 'DEFENDER',
     baseStats: {} as Ship['baseStats'],
     equipment: {},
     implants: {},

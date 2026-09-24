@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../config/supabase';
 import { Ship, AffinityName } from '../types/ship';
 import { AscensionStat, parseAscensionStats } from '../utils/ship/referenceShip';
+import { isShipTypeName } from '../constants/shipTypes';
 
 interface ShipTemplate {
     id: string;
@@ -40,46 +41,58 @@ interface ShipTemplate {
     };
 }
 
-const transformShipTemplate = (template: ShipTemplate): Ship => ({
-    id: template.id,
-    name: template.name,
-    rarity: template.rarity.toLowerCase(),
-    faction: template.faction,
-    type: template.type,
-    baseStats: {
-        hp: template.base_stats.hp,
-        attack: template.base_stats.attack,
-        defence: template.base_stats.defence,
-        hacking: template.base_stats.hacking,
-        security: template.base_stats.security,
-        crit: template.base_stats.crit_rate,
-        critDamage: template.base_stats.crit_damage,
-        speed: template.base_stats.speed,
-        healModifier: 0,
-        hpRegen: 0,
-        shield: template.base_stats.shield,
-        shieldPenetration: template.base_stats.shield_penetration,
-        defensePenetration: template.base_stats.defense_penetration,
-    },
-    equipment: {},
-    refits: [],
-    implants: {},
-    affinity: template.affinity.toLowerCase() as AffinityName,
-    imageKey: template.image_key,
-    activeSkillText: template.active_skill_text,
-    chargeSkillText: template.charge_skill_text,
-    chargeSkillCharge: template.charge_skill_charge,
-    firstPassiveSkillText: template.first_passive_skill_text,
-    secondPassiveSkillText: template.second_passive_skill_text,
-    thirdPassiveSkillText: template.third_passive_skill_text,
-    activeTarget: template.active_target ?? undefined,
-    activePattern: template.active_pattern ?? undefined,
-    chargedTarget: template.charged_target ?? undefined,
-    chargedPattern: template.charged_pattern ?? undefined,
-    bio: template.bio,
-    quote: template.quote,
-    quoteAuthor: template.quote_author,
-});
+// `ship_templates` is a Supabase system table (`CLAUDE.md`) — a row's `type` crosses that trust
+// boundary, so a row whose value fell out of the `ShipTypeName` union is dropped rather than
+// carried into a `Ship` with a role the rest of the app can't classify.
+const transformShipTemplate = (template: ShipTemplate): Ship | null => {
+    if (!isShipTypeName(template.type)) {
+        console.warn(
+            `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
+        );
+        return null;
+    }
+
+    return {
+        id: template.id,
+        name: template.name,
+        rarity: template.rarity.toLowerCase(),
+        faction: template.faction,
+        type: template.type,
+        baseStats: {
+            hp: template.base_stats.hp,
+            attack: template.base_stats.attack,
+            defence: template.base_stats.defence,
+            hacking: template.base_stats.hacking,
+            security: template.base_stats.security,
+            crit: template.base_stats.crit_rate,
+            critDamage: template.base_stats.crit_damage,
+            speed: template.base_stats.speed,
+            healModifier: 0,
+            hpRegen: 0,
+            shield: template.base_stats.shield,
+            shieldPenetration: template.base_stats.shield_penetration,
+            defensePenetration: template.base_stats.defense_penetration,
+        },
+        equipment: {},
+        refits: [],
+        implants: {},
+        affinity: template.affinity.toLowerCase() as AffinityName,
+        imageKey: template.image_key,
+        activeSkillText: template.active_skill_text,
+        chargeSkillText: template.charge_skill_text,
+        chargeSkillCharge: template.charge_skill_charge,
+        firstPassiveSkillText: template.first_passive_skill_text,
+        secondPassiveSkillText: template.second_passive_skill_text,
+        thirdPassiveSkillText: template.third_passive_skill_text,
+        activeTarget: template.active_target ?? undefined,
+        activePattern: template.active_pattern ?? undefined,
+        chargedTarget: template.charged_target ?? undefined,
+        chargedPattern: template.charged_pattern ?? undefined,
+        bio: template.bio,
+        quote: template.quote,
+        quoteAuthor: template.quote_author,
+    };
+};
 
 // Module-level cache so every consumer of this hook shares a single
 // ship_templates fetch per session. Templates rarely change mid-session.
@@ -109,7 +122,9 @@ const fetchShipTemplates = async (): Promise<Ship[]> => {
                 if (stats) ascension.set(row.id, stats);
             }
             cachedAscensionStats = ascension;
-            cachedShips = rows.map(transformShipTemplate);
+            cachedShips = rows
+                .map(transformShipTemplate)
+                .filter((ship): ship is Ship => ship !== null);
             return cachedShips;
         })();
     }

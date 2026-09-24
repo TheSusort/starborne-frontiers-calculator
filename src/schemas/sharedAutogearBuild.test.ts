@@ -5,6 +5,7 @@ import { GEAR_SETS } from '../constants/gearSets';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
+import type { ShipTypeName } from '../constants/shipTypes';
 import {
     validateSharedAutogearBuild,
     isSharedBuildBasisCapIssue,
@@ -559,7 +560,7 @@ describe('validateSharedAutogearBuild — version 2, custom formula builds', () 
 
     it('rejects an unknown seededFrom role', () => {
         const build = v2Build({
-            customFormula: { ...cobaltFormula, seededFrom: 'WIZARD' },
+            customFormula: { ...cobaltFormula, seededFrom: 'WIZARD' as ShipTypeName },
         });
         expect(validateSharedAutogearBuild(build)).toBeNull();
     });

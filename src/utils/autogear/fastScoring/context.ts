@@ -10,6 +10,7 @@ import type {
     RoleBasis,
 } from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
+import type { ImplantSlotName } from '../../../constants/gearTypes';
 import { FastCache } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
 import { buildGearRegistry, type GearRegistry } from './gearRegistry';
@@ -38,7 +39,7 @@ export interface FastScoringContext {
     /** Ordered list of gear-only slots (no implants). */
     readonly gearSlotOrder: readonly GearSlotName[];
     /** Ordered list of implant-only slots. */
-    readonly implantSlotOrder: readonly GearSlotName[];
+    readonly implantSlotOrder: readonly ImplantSlotName[];
 
     /** True iff the GA is optimizing implants (inventory contains implant pieces). */
     readonly optimizingImplants: boolean;
@@ -122,8 +123,12 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
     const totalSets = Math.max(gearRegistry.setIdToName.length, implantRegistry.setIdToName.length);
     const workspace = createWorkspace(totalSets);
 
-    const gearSlotOrder = gearRegistry.slotIdToName;
-    const implantSlotOrder = implantRegistry.slotIdToName;
+    // `buildGearRegistry` is shared across both domains and so is typed generically over
+    // `EquipmentSlotName` — `gearRegistry` was built solely from `gearOnly` and
+    // `implantRegistry` solely from an implants-only array, so each really only ever holds
+    // its own domain's slot names.
+    const gearSlotOrder = gearRegistry.slotIdToName as readonly GearSlotName[];
+    const implantSlotOrder = implantRegistry.slotIdToName as readonly ImplantSlotName[];
 
     return {
         ship: input.ship,

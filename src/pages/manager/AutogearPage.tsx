@@ -13,6 +13,12 @@ import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalcul
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { AutogearAlgorithm, HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
+import {
+    isGearSlotName,
+    isImplantSlotName,
+    type GearSlotName,
+    type ImplantSlotName,
+} from '../../constants/gearTypes';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { clearScoreCache } from '../../utils/autogear/scoring';
 import { applySuggestionsToShip } from '../../utils/autogear/applySuggestionsToShip';
@@ -247,8 +253,13 @@ export const AutogearPage: React.FC = () => {
     /** Equips a list of gear/implant suggestions onto a ship — the one write path autogear's own
      *  "Equip" button goes through. */
     const equipSuggestions = async (shipId: string, suggestions: GearSuggestion[]) => {
-        const gearSuggestions = suggestions.filter((s) => !s.slotName.startsWith('implant_'));
-        const implantSuggestions = suggestions.filter((s) => s.slotName.startsWith('implant_'));
+        const gearSuggestions = suggestions.filter(
+            (s): s is GearSuggestion & { slotName: GearSlotName } => isGearSlotName(s.slotName)
+        );
+        const implantSuggestions = suggestions.filter(
+            (s): s is GearSuggestion & { slotName: ImplantSlotName } =>
+                isImplantSlotName(s.slotName)
+        );
 
         if (gearSuggestions.length > 0) {
             const gearAssignments = gearSuggestions.map((suggestion) => ({
@@ -625,7 +636,11 @@ export const AutogearPage: React.FC = () => {
                         ignoreUnleveled: shipConfig.ignoreUnleveled,
                         useUpgradedStats: shipConfig.useUpgradedStats,
                         tryToCompleteSets: shipConfig.tryToCompleteSets,
-                        selectedAlgorithm: shipConfig.selectedAlgorithm,
+                        // The app always runs Genetic (#549). `ShipOptimizerConfig.selectedAlgorithm`
+                        // is a real field because `findOptimalGearForShip` is also the
+                        // entry point `roleBasisWiring.test.ts` drives against TwoPass/SetFirst
+                        // directly.
+                        selectedAlgorithm: AutogearAlgorithm.Genetic,
                         optimizeImplants: shipConfig.optimizeImplants,
                         includeCalibratedGear: shipConfig.includeCalibratedGear,
                         assumeCalibrated: shipConfig.assumeCalibrated,
@@ -1245,11 +1260,10 @@ export const AutogearPage: React.FC = () => {
                                                     <div className="flex items-center justify-between mb-2">
                                                         <h4 className="text-lg font-semibold">
                                                             Simulation Results (
-                                                            {
-                                                                SHIP_TYPES[
-                                                                    shipConfig.shipRole || ''
-                                                                ]?.name
-                                                            }
+                                                            {(shipConfig.shipRole &&
+                                                                SHIP_TYPES[shipConfig.shipRole]
+                                                                    .name) ||
+                                                                ''}
                                                             )
                                                         </h4>
                                                         <Button
@@ -1358,11 +1372,6 @@ export const AutogearPage: React.FC = () => {
                     selectedShip={shipSettings}
                     selectedShipStats={selectedShipStats}
                     selectedShipRole={shipSettings ? getShipConfig(shipSettings.id).shipRole : null}
-                    selectedAlgorithm={
-                        shipSettings
-                            ? getShipConfig(shipSettings.id).selectedAlgorithm
-                            : AutogearAlgorithm.Genetic
-                    }
                     priorities={shipSettings ? getShipConfig(shipSettings.id).statPriorities : []}
                     ignoreEquipped={
                         shipSettings ? getShipConfig(shipSettings.id).ignoreEquipped : false
@@ -1400,11 +1409,6 @@ export const AutogearPage: React.FC = () => {
                     onRoleSelect={(role) => {
                         if (shipSettings) {
                             updateShipConfig(shipSettings.id, { shipRole: role });
-                        }
-                    }}
-                    onAlgorithmSelect={(algorithm) => {
-                        if (shipSettings) {
-                            updateShipConfig(shipSettings.id, { selectedAlgorithm: algorithm });
                         }
                     }}
                     onAddPriority={(priority) => {

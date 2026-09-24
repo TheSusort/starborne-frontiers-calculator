@@ -1,6 +1,6 @@
 import React from 'react';
 import { SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { ShipTypeName, SHIP_TYPES } from '../../constants';
+import { ShipTypeName, SHIP_TYPES, SHIP_TYPE_NAMES } from '../../constants';
 import { Ship } from '../../types/ship';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPiece } from '../../types/gear';
@@ -40,7 +40,7 @@ const normalizeRole = (role: ShipTypeName | null): ShipTypeName | null => {
     }
 
     // Otherwise, find the key by matching the display name
-    const foundKey = Object.keys(SHIP_TYPES).find((key) => SHIP_TYPES[key].name === role);
+    const foundKey = SHIP_TYPE_NAMES.find((key) => SHIP_TYPES[key].name === role);
 
     return foundKey || null;
 };

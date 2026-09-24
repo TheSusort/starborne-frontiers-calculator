@@ -1,12 +1,15 @@
 import { GearPiece } from '../../types/gear';
 import { GearSetName } from '../../constants/gearSets';
+import { isGearSlotName } from '../../constants/gearTypes';
 import { WishlistEntry } from '../../types/wishlist';
 
 export function matchesWishlistEntry(gear: GearPiece, entry: WishlistEntry): boolean {
     const { filters } = entry;
 
+    // `filters.slot` is gear-only (the wishlist form never offers an implant slot) — an
+    // implant piece can never match a slot filter, only fall through when none is set.
     if (filters.slot !== undefined && filters.slot.length > 0) {
-        if (!filters.slot.includes(gear.slot)) return false;
+        if (!isGearSlotName(gear.slot) || !filters.slot.includes(gear.slot)) return false;
     }
     if (filters.stars !== undefined && filters.stars.length > 0) {
         if (!filters.stars.includes(gear.stars)) return false;

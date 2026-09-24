@@ -3,9 +3,9 @@ import { ExportedPlayData } from '../types/exportedPlayData';
 import { EngineeringStats, StatName, Stat } from '../types/stats';
 import { Ship, Refit, AffinityName } from '../types/ship';
 import { GearPiece } from '../types/gear';
-import { GEAR_SLOTS, GearSlotName } from '../constants/gearTypes';
+import { isGearSlotName, isImplantSlotName } from '../constants/gearTypes';
 import { GearSetName } from '../constants/gearSets';
-import { ShipTypeName } from '../constants/shipTypes';
+import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
 import {
@@ -42,16 +42,20 @@ interface TransformInventoryResult {
 const transformEngineeringStats = (data: ExportedPlayData['Engineering']): EngineeringStats => {
     const statsByShipType = data.reduce(
         (
-            acc: Record<string, { shipType: ShipTypeName; stats: Stat[] }>,
+            acc: Partial<Record<ShipTypeName, { shipType: ShipTypeName; stats: Stat[] }>>,
             stat: ExportedPlayData['Engineering'][0]
         ) => {
-            if (!acc[stat.Type.toUpperCase()]) {
-                acc[stat.Type.toUpperCase()] = {
-                    shipType: stat.Type.toUpperCase(),
+            // Skip, never default: an unknown role's engineering levels folded into ATTACKER
+            // would overwrite the player's real Attacker engineering stats.
+            const shipType = stat.Type.toUpperCase();
+            if (!isShipTypeName(shipType)) return acc;
+            if (!acc[shipType]) {
+                acc[shipType] = {
+                    shipType,
                     stats: [],
                 };
             }
-            acc[stat.Type.toUpperCase()].stats.push({
+            acc[shipType].stats.push({
                 name: getStatName(stat.Attribute) as StatName,
                 value: getPercentageStatValue(stat.Level, stat.ModifierType, stat.Attribute),
                 type: getStatType(stat.ModifierType, stat.Attribute),
@@ -153,7 +157,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             name: unit.Name,
             rarity: unit.Rarity.toLowerCase(),
             faction: getFaction(unit.Faction),
-            type: unit.ShipType.toUpperCase(),
+            type: getShipTypeName(unit.ShipType),
             affinity: getAffinity(unit.Affinity),
             level: unit.Level,
             rank: unit.Rank,
@@ -176,9 +180,8 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
 
     items.forEach((item) => {
         const slot = getSlotName(item.Slot.toLowerCase());
-        const isGear = Object.keys(GEAR_SLOTS).includes(slot);
 
-        if (isGear) {
+        if (isGearSlotName(slot)) {
             const mainStatName = getStatName(item.MainStats[0].Attribute.Attribute) as StatName;
             const mainStatType = getStatType(
                 item.MainStats[0].Attribute.Type,
@@ -234,10 +237,10 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
             }
 
             gear.push(gearPiece);
-        } else {
+        } else if (isImplantSlotName(slot)) {
             implants.push({
                 id: item.Id,
-                slot: item.Slot.toLowerCase(),
+                slot,
                 level: item.Level,
                 stars: item.Rank,
                 rarity: item.Rarity.toLowerCase(),
@@ -256,6 +259,11 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 shipId: item.EquippedOnUnit || undefined,
                 setBonus: getImplantSetBonus(item.Set),
             });
+        } else {
+            // Neither a known gear slot nor a known implant slot — a game update added a slot
+            // this importer doesn't know about yet, or the export is malformed. Drop the item
+            // rather than writing an unvalidated string into a GearPiece.slot.
+            console.warn(`Unrecognised equipment slot "${item.Slot}" — skipping item ${item.Id}`);
         }
     });
 
@@ -308,18 +316,21 @@ export const importPlayerData = async (data: ExportedPlayData): Promise<ImportRe
             }
         }
 
-        // Update equipment references in ships using map lookups
+        // Update equipment references in ships using map lookups. `gearByShip`/`implantsByShip`
+        // are built solely from `gear`/`implants` above, so every `g.slot`/`imp.slot` here is
+        // already the right kind — the guards just prove it to the type checker rather than
+        // casting a `GearPiece.slot` (which spans both spaces) blindly into either one.
         for (const ship of ships) {
             const shipGear = gearByShip.get(ship.id);
             if (shipGear) {
                 for (const g of shipGear) {
-                    ship.equipment[g.slot] = g.id;
+                    if (isGearSlotName(g.slot)) ship.equipment[g.slot] = g.id;
                 }
             }
             const shipImplants = implantsByShip.get(ship.id);
             if (shipImplants) {
                 for (const imp of shipImplants) {
-                    ship.implants[imp.slot] = imp.id;
+                    if (isImplantSlotName(imp.slot)) ship.implants[imp.slot] = imp.id;
                 }
             }
         }
@@ -530,6 +541,15 @@ const getImplantSetBonus = (set: string): GearSetName | null => {
     }
 };
 
+// The export only ever names one of the 4 base roles (never a subtype like DEBUFFER_BOMBER —
+// those are assigned within this app, not by the game). A value outside `ShipTypeName` crosses
+// the file-upload trust boundary (a corrupted export, or a role the game adds later), so it
+// defaults to ATTACKER — the same fallback shape as `getFaction`/`getAffinity`.
+const getShipTypeName = (shipType: string): ShipTypeName => {
+    const upper = shipType.toUpperCase();
+    return isShipTypeName(upper) ? upper : 'ATTACKER';
+};
+
 const getAffinity = (affinity: string): AffinityName => {
     switch (affinity) {
         case 'Blue':
@@ -573,7 +593,10 @@ const getFaction = (faction: string): FactionName => {
     }
 };
 
-const getSlotName = (slot: string): GearSlotName => {
+// An alias mapper, not a validator: the export format spells the sensor slot "sensors"; every
+// other slot (including every implant slot) passes through unchanged. The caller narrows the
+// result with `isGearSlotName`/`isImplantSlotName` before trusting it as either union.
+const getSlotName = (slot: string): string => {
     if (slot === 'sensors') return 'sensor';
     return slot;
 };

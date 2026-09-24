@@ -37,7 +37,7 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         percentage: number;
     } | null>(null);
     const [results, setResults] = useState<
-        Record<ShipTypeName, Record<GearSlotName | 'all', CalibrationResult[]>>
+        Partial<Record<ShipTypeName, Record<GearSlotName | 'all', CalibrationResult[]>>>
     >({});
     const [selectedSlots, setSelectedSlots] = useState<Record<ShipTypeName, GearSlotName | 'all'>>(
         Object.fromEntries(shipRoles.map((role) => [role, 'all'])) as Record<
@@ -64,9 +64,10 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
         const updatedResults = { ...results };
 
         // Iterate through all results and update any gear pieces that have changed
-        Object.keys(updatedResults).forEach((role) => {
+        (Object.keys(updatedResults) as ShipTypeName[]).forEach((role) => {
             const roleResults = updatedResults[role];
-            Object.keys(roleResults).forEach((slot) => {
+            if (!roleResults) return;
+            (Object.keys(roleResults) as (GearSlotName | 'all')[]).forEach((slot) => {
                 const slotResults = roleResults[slot];
 
                 slotResults.forEach((result, index) => {
@@ -97,7 +98,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
     const processRole = async (
         role: ShipTypeName,
         roleIndex: number,
-        newResults: Record<ShipTypeName, Record<GearSlotName | 'all', CalibrationResult[]>>,
+        newResults: Partial<
+            Record<ShipTypeName, Record<GearSlotName | 'all', CalibrationResult[]>>
+        >,
         totalSteps: number,
         completedSteps: number
     ): Promise<number> => {
@@ -114,9 +117,11 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
             percentage: Math.round((completedSteps / totalSteps) * 100),
         });
 
-        // Process each slot individually with yields - show top 6 sorted by current score
-        const slotResults: Record<GearSlotName, CalibrationResult[]> = {};
-        for (const [slotName] of slotEntries) {
+        // Process each slot individually with yields - show top 6 sorted by current score.
+        // Built to completeness by the loop below, which walks every GEAR_SLOTS key.
+        const slotResults = {} as Record<GearSlotName, CalibrationResult[]>;
+        for (const [slotNameKey] of slotEntries) {
+            const slotName = slotNameKey as GearSlotName;
             await new Promise((resolve) => setTimeout(resolve, 0));
             const slotInventory = eligibleInventory.filter((p) => p.slot === slotName);
             slotResults[slotName] = analyzeCalibrationPotential(slotInventory, role, 6);
@@ -146,9 +151,8 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
 
         setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
 
-        const newResults: Record<
-            ShipTypeName,
-            Record<GearSlotName | 'all', CalibrationResult[]>
+        const newResults: Partial<
+            Record<ShipTypeName, Record<GearSlotName | 'all', CalibrationResult[]>>
         > = {};
 
         // Process each role sequentially with UI updates between each
@@ -257,7 +261,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                     )}
 
                     {shipRoles.map((role) => {
-                        const roleResults = results[role] || {};
+                        const roleResults: Partial<
+                            Record<GearSlotName | 'all', CalibrationResult[]>
+                        > = results[role] || {};
                         const selectedSlot = selectedSlots[role] || 'all';
                         const currentResults = roleResults[selectedSlot] || [];
 
@@ -282,7 +288,9 @@ export const GearCalibrationAnalysis: React.FC<Props> = ({
                                 <Tabs
                                     tabs={slotTabs}
                                     activeTab={selectedSlot}
-                                    onChange={(tab) => handleSlotChange(role, tab)}
+                                    onChange={(tab) =>
+                                        handleSlotChange(role, tab as GearSlotName | 'all')
+                                    }
                                 />
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                                     {currentResults.map((result, index) => (

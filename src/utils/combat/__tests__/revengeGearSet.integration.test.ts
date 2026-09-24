@@ -59,7 +59,7 @@ function makePiece(over: Partial<GearPiece>): GearPiece {
 function buildRevengeAbilities() {
     const setDef = GEAR_SETS['REVENGE'];
     const minPieces = setDef?.minPieces ?? 2;
-    const slots = ['weapon', 'hull', 'sensor', 'engine', 'shield', 'computer'] as const;
+    const slots = ['weapon', 'hull', 'generator', 'sensor', 'software', 'thrusters'] as const;
     const equipment: Record<string, string> = {};
     const pieceMap: Record<string, GearPiece> = {};
 

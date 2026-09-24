@@ -129,7 +129,11 @@ const gearPiece = (over: Partial<GearPiece>): GearPiece => ({
  *  ruling in the header. */
 const PIECES: Record<string, GearPiece> = {
     font: gearPiece({ id: 'font', slot: 'implant_major', setBonus: 'FONT_OF_POWER' }),
-    renewal: gearPiece({ id: 'renewal', slot: 'implant_minor', setBonus: 'ABUNDANT_RENEWAL' }),
+    renewal: gearPiece({
+        id: 'renewal',
+        slot: 'implant_minor_alpha',
+        setBonus: 'ABUNDANT_RENEWAL',
+    }),
 };
 
 interface ChimeiKit {

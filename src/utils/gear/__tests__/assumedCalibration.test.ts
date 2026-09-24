@@ -41,7 +41,9 @@ describe('assumedCalibrationEligible', () => {
 
     it('rejects implants in every slot', () => {
         expect(assumedCalibrationEligible(makeGear({ slot: 'implant_major' }), true)).toBe(false);
-        expect(assumedCalibrationEligible(makeGear({ slot: 'implant_minor_1' }), true)).toBe(false);
+        expect(assumedCalibrationEligible(makeGear({ slot: 'implant_minor_alpha' }), true)).toBe(
+            false
+        );
         expect(assumedCalibrationEligible(makeGear({ slot: 'implant_ultimate' }), true)).toBe(
             false
         );

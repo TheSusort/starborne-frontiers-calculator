@@ -10,7 +10,8 @@ import {
     roleHostsBasis,
     rolePrimaryStat,
 } from '../../../utils/autogear/offFormula/roleBasisHost';
-import { SHIP_TYPES } from '../../../constants/shipTypes';
+import { SHIP_TYPE_NAMES } from '../../../constants/shipTypes';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 // The `ui` barrel transitively pulls ui/layout/Sidebar, which imports '/favicon.ico?url' —
@@ -173,7 +174,7 @@ describe('OffFormulaNotice', () => {
             },
         ]);
         expect(() =>
-            render(<OffFormulaNotice ship={ship} configuredRole="RETIRED_ROLE" />)
+            render(<OffFormulaNotice ship={ship} configuredRole={'RETIRED_ROLE' as ShipTypeName} />)
         ).not.toThrow();
         // A role with no entry hosts nothing, so it reads exactly like a real role that hosts
         // nothing: the finding sentence renders, but no equation line and no applied state.
@@ -773,7 +774,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         describe('Apply — every real flagged (ship, role) pairing applies only the axis the role hosts', () => {
             it('withholds Apply where the role hosts nothing, and writes only the hosted axis where it does', () => {
                 mocked.mockImplementation(realDetect);
-                const roles = Object.keys(SHIP_TYPES);
+                const roles = SHIP_TYPE_NAMES;
                 let offered = 0;
                 let withheldNoHost = 0;
                 let withheldEmptyBasis = 0;
@@ -862,7 +863,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         describe('Equation line only attaches to the finding whose axis the role hosts', () => {
             it('renders no equation line for a finding on an axis the role does not host, and does not silence the one it does', () => {
                 mocked.mockImplementation(realDetect);
-                const roles = Object.keys(SHIP_TYPES);
+                const roles = SHIP_TYPE_NAMES;
                 // Non-vacuity for the negative assertion below: a ship carrying a finding whose
                 // `produces` differs from a hosting role's own axis (e.g. Cinya's `repair`
                 // finding under ATTACKER, which hosts `damage`). Zero would mean the walk never
@@ -952,7 +953,7 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
         describe('Write an equation — the empty-derivation entry point', () => {
             it('offers Apply only when the derivation changes the scoring, Write an equation when it does not but an on-axis clause exists, and neither otherwise', () => {
                 mocked.mockImplementation(realDetect);
-                const roles = Object.keys(SHIP_TYPES);
+                const roles = SHIP_TYPE_NAMES;
                 let applyOffered = 0;
                 let writeOffered = 0;
                 let neither = 0;

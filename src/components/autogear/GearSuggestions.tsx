@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { GearSlot } from '../gear/GearSlot';
 import { Button, LockIcon, UnlockedLockIcon } from '../ui';
-import { GEAR_SLOT_ORDER, GearSlotName } from '../../constants';
+import { GEAR_SLOT_ORDER } from '../../constants';
+import type { EquipmentSlotName } from '../../constants/gearTypes';
 import { GearPiece } from '../../types/gear';
 import { GearSuggestion } from '../../types/autogear';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
@@ -52,7 +53,7 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 }) => {
     const { getUpgrade } = useGearUpgrades();
     const [expanded, setExpanded] = useState(() => window.innerWidth >= 768);
-    const getSuggestionForSlot = (slotName: GearSlotName) => {
+    const getSuggestionForSlot = (slotName: EquipmentSlotName) => {
         return suggestions.find((s) => s.slotName === slotName);
     };
 
@@ -176,11 +177,13 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                     <div className="grid grid-cols-2 gap-2 w-fit mx-auto">
                                         {/* Left column: 3 Minors */}
                                         <div className="space-y-2">
-                                            {[
-                                                'implant_minor_alpha',
-                                                'implant_minor_gamma',
-                                                'implant_minor_sigma',
-                                            ].map((slot) => {
+                                            {(
+                                                [
+                                                    'implant_minor_alpha',
+                                                    'implant_minor_gamma',
+                                                    'implant_minor_sigma',
+                                                ] as const
+                                            ).map((slot) => {
                                                 const suggestion = getSuggestionForSlot(slot);
                                                 const gearId =
                                                     suggestion?.gearId ?? ship.implants?.[slot];
@@ -209,36 +212,38 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
 
                                         {/* Right column: Major + Ultimate */}
                                         <div className="space-y-2">
-                                            {['implant_major', 'implant_ultimate'].map((slot) => {
-                                                // For ultimate: show equipped only (no suggestion)
-                                                // For major: show suggestion if exists, otherwise show equipped
-                                                const suggestion =
-                                                    slot === 'implant_ultimate'
-                                                        ? null
-                                                        : getSuggestionForSlot(slot);
-                                                const gearId =
-                                                    suggestion?.gearId ?? ship.implants?.[slot];
-                                                const gear = gearId
-                                                    ? getGearPiece(gearId)
-                                                    : undefined;
-                                                return (
-                                                    <div
-                                                        key={slot}
-                                                        className="flex items-center justify-center"
-                                                    >
-                                                        {gear ? (
-                                                            <GearSlot
-                                                                slotKey={slot}
-                                                                gear={gear}
-                                                                hoveredGear={hoveredGear}
-                                                                onHover={onHover}
-                                                                onLockShip={onLockShip}
-                                                                excludeLockShipId={ship?.id}
-                                                            />
-                                                        ) : null}
-                                                    </div>
-                                                );
-                                            })}
+                                            {(['implant_major', 'implant_ultimate'] as const).map(
+                                                (slot) => {
+                                                    // For ultimate: show equipped only (no suggestion)
+                                                    // For major: show suggestion if exists, otherwise show equipped
+                                                    const suggestion =
+                                                        slot === 'implant_ultimate'
+                                                            ? null
+                                                            : getSuggestionForSlot(slot);
+                                                    const gearId =
+                                                        suggestion?.gearId ?? ship.implants?.[slot];
+                                                    const gear = gearId
+                                                        ? getGearPiece(gearId)
+                                                        : undefined;
+                                                    return (
+                                                        <div
+                                                            key={slot}
+                                                            className="flex items-center justify-center"
+                                                        >
+                                                            {gear ? (
+                                                                <GearSlot
+                                                                    slotKey={slot}
+                                                                    gear={gear}
+                                                                    hoveredGear={hoveredGear}
+                                                                    onHover={onHover}
+                                                                    onLockShip={onLockShip}
+                                                                    excludeLockShipId={ship?.id}
+                                                                />
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                }
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
@@ -248,11 +253,13 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             <div className="text-xs text-theme-text-secondary mb-2">
                                                 Minor Slots
                                             </div>
-                                            {[
-                                                'implant_minor_alpha',
-                                                'implant_minor_gamma',
-                                                'implant_minor_sigma',
-                                            ].map((slot) => {
+                                            {(
+                                                [
+                                                    'implant_minor_alpha',
+                                                    'implant_minor_gamma',
+                                                    'implant_minor_sigma',
+                                                ] as const
+                                            ).map((slot) => {
                                                 const suggestion = getSuggestionForSlot(slot);
                                                 const gearId =
                                                     suggestion?.gearId ?? ship.implants?.[slot];
@@ -278,28 +285,33 @@ export const GearSuggestions: React.FC<GearSuggestionsProps> = ({
                                             <div className="text-xs text-theme-text-secondary mb-2">
                                                 Major & Ultimate
                                             </div>
-                                            {['implant_major', 'implant_ultimate'].map((slot) => {
-                                                const suggestion =
-                                                    slot === 'implant_ultimate'
-                                                        ? null
-                                                        : getSuggestionForSlot(slot);
-                                                const gearId =
-                                                    suggestion?.gearId ?? ship.implants?.[slot];
-                                                const gear = gearId
-                                                    ? getGearPiece(gearId)
-                                                    : undefined;
-                                                if (!gear) return null;
-                                                return (
-                                                    <div key={slot} className="flex justify-center">
-                                                        <GearPieceDisplay
-                                                            gear={gear}
-                                                            small
-                                                            onLockShip={onLockShip}
-                                                            excludeLockShipId={ship?.id}
-                                                        />
-                                                    </div>
-                                                );
-                                            })}
+                                            {(['implant_major', 'implant_ultimate'] as const).map(
+                                                (slot) => {
+                                                    const suggestion =
+                                                        slot === 'implant_ultimate'
+                                                            ? null
+                                                            : getSuggestionForSlot(slot);
+                                                    const gearId =
+                                                        suggestion?.gearId ?? ship.implants?.[slot];
+                                                    const gear = gearId
+                                                        ? getGearPiece(gearId)
+                                                        : undefined;
+                                                    if (!gear) return null;
+                                                    return (
+                                                        <div
+                                                            key={slot}
+                                                            className="flex justify-center"
+                                                        >
+                                                            <GearPieceDisplay
+                                                                gear={gear}
+                                                                small
+                                                                onLockShip={onLockShip}
+                                                                excludeLockShipId={ship?.id}
+                                                            />
+                                                        </div>
+                                                    );
+                                                }
+                                            )}
                                         </div>
                                     </div>
                                 )}

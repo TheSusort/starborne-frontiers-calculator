@@ -8,6 +8,11 @@ import {
     IMPLANT_SLOTS,
     ImplantSlotName,
 } from '../../constants';
+import {
+    type EquipmentSlotName,
+    isGearSlotName,
+    isImplantSlotName,
+} from '../../constants/gearTypes';
 import { GearSlot } from '../gear/GearSlot';
 import { GearPieceDisplay } from '../gear/GearPieceDisplay';
 import { Modal } from '../ui/layout/Modal';
@@ -65,7 +70,7 @@ export const ShipCard: React.FC<Props> = ({
     isInComparison,
     onSaveAsLoadout,
 }) => {
-    const [selectedSlot, setSelectedSlot] = useState<GearSlotName | null>(null);
+    const [selectedSlot, setSelectedSlot] = useState<EquipmentSlotName | null>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingGear, setPendingGear] = useState<GearPiece | null>(null);
     const [expanded, setExpanded] = useState(false);
@@ -102,7 +107,7 @@ export const ShipCard: React.FC<Props> = ({
             setShowConfirmModal(true);
         } else if (selectedSlot) {
             // Check if this is an implant slot
-            if (selectedSlot.startsWith('implant_')) {
+            if (isImplantSlotName(selectedSlot)) {
                 if (onEquipImplant) {
                     onEquipImplant(ship.id, selectedSlot, gear.id);
                     setSelectedSlot(null);
@@ -122,7 +127,7 @@ export const ShipCard: React.FC<Props> = ({
     const handleConfirmEquip = () => {
         if (pendingGear && selectedSlot) {
             // Check if this is an implant slot
-            if (selectedSlot.startsWith('implant_')) {
+            if (isImplantSlotName(selectedSlot)) {
                 if (onEquipImplant) {
                     onEquipImplant(ship.id, selectedSlot, pendingGear.id);
                     setSelectedSlot(null);
@@ -160,31 +165,39 @@ export const ShipCard: React.FC<Props> = ({
                     {!expanded ? (
                         <div className="flex justify-between items-center gap-2">
                             <div className="grid grid-cols-3 gap-2 w-fit mx-auto">
-                                {Object.entries(GEAR_SLOTS).map(([key, _]) => (
+                                {/* GEAR_SLOTS' own keys are exactly GearSlotName — Object.keys just can't say so. */}
+                                {(Object.keys(GEAR_SLOTS) as GearSlotName[]).map((key) => (
                                     <GearSlot
                                         key={key}
                                         slotKey={key}
                                         gear={gearLookup[ship.equipment?.[key] || '']}
                                         hoveredGear={hoveredGear}
                                         onSelect={setSelectedSlot}
-                                        onRemove={(slot) => onRemoveGear(ship.id, slot)}
+                                        onRemove={(slot) => {
+                                            if (isGearSlotName(slot)) onRemoveGear(ship.id, slot);
+                                        }}
                                         onHover={onHoverGear}
                                     />
                                 ))}
                             </div>
                             {variant === 'extended' && onRemoveImplant && onEquipImplant && (
                                 <div className="flex flex-col flex-wrap gap-2 w-fit mx-auto justify-center items-center max-h-[200px]">
-                                    {Object.entries(IMPLANT_SLOTS).map(([implant, _]) => (
-                                        <GearSlot
-                                            key={implant}
-                                            slotKey={implant}
-                                            gear={getGearPiece(ship.implants?.[implant] || '')}
-                                            hoveredGear={hoveredGear}
-                                            onSelect={setSelectedSlot}
-                                            onRemove={(slot) => onRemoveImplant(ship.id, slot)}
-                                            onHover={onHoverGear}
-                                        />
-                                    ))}
+                                    {(Object.keys(IMPLANT_SLOTS) as ImplantSlotName[]).map(
+                                        (implant) => (
+                                            <GearSlot
+                                                key={implant}
+                                                slotKey={implant}
+                                                gear={getGearPiece(ship.implants?.[implant] || '')}
+                                                hoveredGear={hoveredGear}
+                                                onSelect={setSelectedSlot}
+                                                onRemove={(slot) => {
+                                                    if (isImplantSlotName(slot))
+                                                        onRemoveImplant(ship.id, slot);
+                                                }}
+                                                onHover={onHoverGear}
+                                            />
+                                        )
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -192,7 +205,7 @@ export const ShipCard: React.FC<Props> = ({
                         <div className="space-y-4">
                             {/* Expanded Gear View */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                {Object.entries(GEAR_SLOTS).map(([key, _]) => {
+                                {(Object.keys(GEAR_SLOTS) as GearSlotName[]).map((key) => {
                                     const gear = gearLookup[ship.equipment?.[key] || ''];
                                     if (!gear) return null;
                                     return (
@@ -209,21 +222,26 @@ export const ShipCard: React.FC<Props> = ({
                                         Implants
                                     </h4>
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                        {Object.entries(IMPLANT_SLOTS).map(([implant, _]) => {
-                                            const gear = getGearPiece(
-                                                ship.implants?.[implant] || ''
-                                            );
-                                            if (!gear) return null;
-                                            return (
-                                                <div key={implant} className="flex justify-center">
-                                                    <GearPieceDisplay
-                                                        gear={gear}
-                                                        mode="compact"
-                                                        small
-                                                    />
-                                                </div>
-                                            );
-                                        })}
+                                        {(Object.keys(IMPLANT_SLOTS) as ImplantSlotName[]).map(
+                                            (implant) => {
+                                                const gear = getGearPiece(
+                                                    ship.implants?.[implant] || ''
+                                                );
+                                                if (!gear) return null;
+                                                return (
+                                                    <div
+                                                        key={implant}
+                                                        className="flex justify-center"
+                                                    >
+                                                        <GearPieceDisplay
+                                                            gear={gear}
+                                                            mode="compact"
+                                                            small
+                                                        />
+                                                    </div>
+                                                );
+                                            }
+                                        )}
                                     </div>
                                 </div>
                             )}

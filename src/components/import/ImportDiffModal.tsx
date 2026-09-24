@@ -4,7 +4,7 @@ import { ImportDiff } from '../../types/importDiff';
 import { Ship } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { RARITIES } from '../../constants/rarities';
-import { GEAR_SLOTS, IMPLANT_SLOTS } from '../../constants/gearTypes';
+import { getEquipmentSlotLabel } from '../../constants/gearTypes';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
 import { STATS } from '../../constants/stats';
@@ -33,7 +33,7 @@ function ShipName({ ship }: { ship: Ship }) {
 }
 
 function GearLine({ gear }: { gear: GearPiece }) {
-    const slotLabel = GEAR_SLOTS[gear.slot]?.label ?? gear.slot;
+    const slotLabel = getEquipmentSlotLabel(gear.slot);
     const setIcon = gear.setBonus ? GEAR_SETS[gear.setBonus]?.iconUrl : null;
     const setName = gear.setBonus ? GEAR_SETS[gear.setBonus]?.name : null;
     const mainStatLabel = gear.mainStat
@@ -56,7 +56,7 @@ function GearLine({ gear }: { gear: GearPiece }) {
 
 function ImplantLine({ implant }: { implant: GearPiece }) {
     const implantName = IMPLANTS[implant.setBonus ?? '']?.name ?? implant.setBonus ?? implant.slot;
-    const slotLabel = IMPLANT_SLOTS[implant.slot]?.label ?? implant.slot;
+    const slotLabel = getEquipmentSlotLabel(implant.slot);
     return (
         <div className="flex items-center gap-2 text-sm py-0.5">
             <span className={`${RARITIES[implant.rarity]?.textColor}`}>{implantName}</span>

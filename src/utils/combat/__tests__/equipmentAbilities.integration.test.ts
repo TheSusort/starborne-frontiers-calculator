@@ -402,7 +402,7 @@ const intrusionPiece = makePiece({
 /** ARCANE_SIEGE epic: +15% outgoing damage while shielded (flat value 15). */
 const arcaneSiegePiece = makePiece({
     id: 'arcane-siege-epic',
-    slot: 'implant_minor',
+    slot: 'implant_minor_alpha',
     rarity: 'epic',
     setBonus: 'ARCANE_SIEGE',
 });
@@ -518,7 +518,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
      * condition returns selfShielded ? 1 : 0. With countComparator absent it gates on count > 0.
      */
     it('outgoingDamage === 15 when selfShielded:true (epic, +15% while shielded)', () => {
-        const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
+        const ship = makeShip({ implants: { implant_minor_alpha: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
         const arcaneSiege = abilities.find((a) => a.id.startsWith('equip-implant-ARCANE_SIEGE'));
@@ -532,7 +532,7 @@ describe('D-PR2 integration — ARCANE_SIEGE fold (modifier-level)', () => {
     });
 
     it('outgoingDamage === 0 when selfShielded:false (gate fails — dormant without shield)', () => {
-        const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
+        const ship = makeShip({ implants: { implant_minor_alpha: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const abilities = buildEquipmentAbilities(ship, getGearPiece);
         const arcaneSiege = abilities.find((a) => a.id.startsWith('equip-implant-ARCANE_SIEGE'));
@@ -3010,7 +3010,7 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
             name,
             rarity: 'legendary',
             faction: 'TERRAN_COMBINE',
-            type: repair === 'damage' ? 'Attacker' : 'Support',
+            type: repair === 'damage' ? 'ATTACKER' : 'SUPPORTER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -3355,7 +3355,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
             name,
             rarity: 'legendary',
             faction: 'TERRAN_COMBINE',
-            type: 'Attacker',
+            type: 'ATTACKER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -4779,7 +4779,7 @@ describe('H1 Task 10 integration — Arcane Siege activates with a live shield',
 
     /** Focus ship skills: damage active + Arcane Siege passive resolved through the REAL registry. */
     function buildArcaneSiegeShipSkills(): ShipSkills {
-        const ship = makeShip({ implants: { implant_minor: 'arcane-siege-epic' } });
+        const ship = makeShip({ implants: { implant_minor_alpha: 'arcane-siege-epic' } });
         const getGearPiece = makeGetGearPiece({ 'arcane-siege-epic': arcaneSiegePiece });
         const baseSkills = buildShipAbilitiesWithEquipment(ship, getGearPiece);
         const passive = baseSkills.slots.find((s) => s.slot === 'passive');
@@ -5613,17 +5613,17 @@ describe('H3.8 integration — Resonating Fury grants Crit Power Up III to shiel
     // an event that drives ANOTHER reactive ability, with the second intent enqueued mid-drain and
     // drained by the same multi-generation `while (queue.length > 0)` loop in drainQueue.
     it('reactive→reactive hop: Adaptive-Plating self-shield re-fires Resonating Fury onto the carrier', () => {
-        // Build both implants through the real registry; Adaptive Plating in implant_minor so both
+        // Build both implants through the real registry; Adaptive Plating in implant_minor_alpha so both
         // resolve. (The build path keys implants by slot; AP determinism comes from its own proc gate
         // — to make the AP shield reliably land we force AP's procChance to 1 too.)
         const adaptivePiece = makePiece({
             id: 'rf-ap-legendary',
-            slot: 'implant_minor',
+            slot: 'implant_minor_alpha',
             rarity: 'legendary',
             setBonus: 'ADAPTIVE_PLATING',
         });
         const ship = makeShip({
-            implants: { implant_major: 'rf-legendary', implant_minor: 'rf-ap-legendary' },
+            implants: { implant_major: 'rf-legendary', implant_minor_alpha: 'rf-ap-legendary' },
         });
         const getGearPiece = makeGetGearPiece({
             'rf-legendary': resonatingFuryPiece,
@@ -6202,7 +6202,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
         return makeShip({
             id: 'carrier',
             name: 'Carrier',
-            type: 'Debuffer',
+            type: 'DEBUFFER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -6233,7 +6233,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
         return makeShip({
             id,
             name: id,
-            type: 'Attacker',
+            type: 'ATTACKER',
             baseStats: {
                 hp: 0,
                 attack: 0,

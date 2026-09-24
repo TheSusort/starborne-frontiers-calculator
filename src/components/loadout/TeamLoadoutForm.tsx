@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { Button, Input } from '../ui';
 import { ShipSelector } from '../ship/ShipSelector';
-import { GearSlotName } from '../../constants';
 import { TeamLoadout } from '../../types/loadout';
 
 interface TeamLoadoutFormProps {
@@ -52,7 +51,7 @@ export const TeamLoadoutForm: React.FC<TeamLoadoutFormProps> = ({
         const shipLoadouts = selectedShips.map((ship, index) => ({
             position: index + 1,
             shipId: ship!.id,
-            equipment: ship!.equipment as Record<GearSlotName, string>,
+            equipment: ship!.equipment,
         }));
 
         onSubmit({

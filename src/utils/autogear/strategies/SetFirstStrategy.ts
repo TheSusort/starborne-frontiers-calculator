@@ -12,6 +12,7 @@ import {
 } from '../../../types/autogear';
 import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
+import type { EquipmentSlotName } from '../../../constants/gearTypes';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
@@ -78,8 +79,8 @@ export class SetFirstStrategy extends BaseStrategy {
         this.initializeProgress(totalOperations);
 
         // Group inventory by sets
-        const equipment: Partial<Record<GearSlotName, string>> = {};
-        const usedSlots = new Set<GearSlotName>();
+        const equipment: Partial<Record<EquipmentSlotName, string>> = {};
+        const usedSlots = new Set<EquipmentSlotName>();
 
         // First, try to fit complete sets
         for (const group of setGroups) {
@@ -125,7 +126,7 @@ export class SetFirstStrategy extends BaseStrategy {
         this.completeProgress();
 
         const suggestions = Object.entries(equipment)
-            .filter((entry): entry is [string, string] => entry[1] !== undefined)
+            .filter((entry): entry is [EquipmentSlotName, string] => entry[1] !== undefined)
             .map(([slotName, gearId]) => ({
                 slotName,
                 gearId,
@@ -191,7 +192,7 @@ export class SetFirstStrategy extends BaseStrategy {
     ): number {
         // Find best possible combination of pieces from this set
         const slots = new Set(pieces.map((p) => p.slot));
-        const testEquipment: Partial<Record<GearSlotName, string>> = {};
+        const testEquipment: Partial<Record<EquipmentSlotName, string>> = {};
 
         slots.forEach((slot) => {
             const bestPiece = pieces
@@ -248,10 +249,10 @@ export class SetFirstStrategy extends BaseStrategy {
 
     private async findBestSetCombination(
         pieces: GearPiece[],
-        usedSlots: Set<GearSlotName>,
+        usedSlots: Set<EquipmentSlotName>,
         ship: Ship,
         priorities: StatPriority[],
-        currentEquipment: Partial<Record<GearSlotName, string>>,
+        currentEquipment: Partial<Record<EquipmentSlotName, string>>,
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         shipRole?: ShipTypeName,
@@ -320,8 +321,8 @@ export class SetFirstStrategy extends BaseStrategy {
     }
 
     private async fillRemainingSlots(
-        equipment: Partial<Record<GearSlotName, string>>,
-        usedSlots: Set<GearSlotName>,
+        equipment: Partial<Record<EquipmentSlotName, string>>,
+        usedSlots: Set<EquipmentSlotName>,
         inventory: GearPiece[],
         ship: Ship,
         priorities: StatPriority[],
@@ -333,8 +334,7 @@ export class SetFirstStrategy extends BaseStrategy {
         customFormula?: CustomFormula,
         roleBasis?: RoleBasis
     ): Promise<void> {
-        for (const slotKey of Object.keys(GEAR_SLOTS)) {
-            const slot = slotKey;
+        for (const slot of Object.keys(GEAR_SLOTS) as GearSlotName[]) {
             if (usedSlots.has(slot)) {
                 this.incrementProgress();
                 continue;

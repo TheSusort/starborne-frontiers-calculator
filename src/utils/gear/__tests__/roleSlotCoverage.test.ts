@@ -16,7 +16,7 @@ import {
 import { GearPiece } from '../../../types/gear';
 import { calculateRoleScore } from '../../autogear/priorityScore';
 import { getScoringBaselineStats } from '../../../constants/roleBaseStats';
-import { SHIP_TYPES, ShipTypeName } from '../../../constants/shipTypes';
+import { SHIP_TYPE_NAMES, ShipTypeName } from '../../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, GearSlotName } from '../../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../../constants/statValues';
 import { calculateMainStatValue } from '../mainStatValueFetcher';
@@ -747,7 +747,7 @@ describe('buildCoverageMatrix', () => {
         // performance" below for the actual budget a genuinely cold run is
         // expected to stay under.
         const matrix = buildCoverageMatrix([]);
-        const roles = Object.keys(SHIP_TYPES);
+        const roles = SHIP_TYPE_NAMES;
         expect(matrix.roleOrder).toHaveLength(roles.length);
         expect(Object.keys(matrix.cells)).toHaveLength(roles.length);
         for (const role of roles) {
@@ -758,7 +758,7 @@ describe('buildCoverageMatrix', () => {
 
     it('reports an empty inventory in the static role order, priority 1 everywhere', () => {
         const matrix = buildCoverageMatrix([]);
-        expect(matrix.roleOrder).toEqual(Object.keys(SHIP_TYPES));
+        expect(matrix.roleOrder).toEqual(SHIP_TYPE_NAMES);
         expect(matrix.cells.ATTACKER.weapon.count).toBe(0);
         expect(matrix.cells.ATTACKER.weapon.priority).toBe(1);
     });
@@ -798,7 +798,7 @@ describe('buildCoverageMatrix', () => {
         // ranking would.
         const matrix = buildCoverageMatrix([]);
         for (const slot of GEAR_SLOT_ORDER) {
-            for (const role of Object.keys(SHIP_TYPES)) {
+            for (const role of SHIP_TYPE_NAMES) {
                 expect(matrix.cells[role][slot].rank).toBe(1);
             }
         }
@@ -873,7 +873,7 @@ describe('buildCoverageMatrix', () => {
         // the 6 slot columns is worse than an untouched role's (one column
         // at a high rank number, five at rank 1, versus rank 1 everywhere),
         // so DEBUFFER must sort behind an untouched role regardless of
-        // SHIP_TYPES's static index order.
+        // SHIP_TYPE_NAMES's static index order.
         const stack = Array.from({ length: 20 }, (_, i) => ({
             ...debufferIdealSoftwarePiece(),
             id: `sw-${i}`,
@@ -882,12 +882,12 @@ describe('buildCoverageMatrix', () => {
         const debufferIndex = matrix.roleOrder.indexOf('DEBUFFER');
         const defenderIndex = matrix.roleOrder.indexOf('DEFENDER');
         expect(defenderIndex).toBeLessThan(debufferIndex);
-        expect(matrix.roleOrder).not.toEqual(Object.keys(SHIP_TYPES));
+        expect(matrix.roleOrder).not.toEqual(SHIP_TYPE_NAMES);
     });
 
     it("falls back to GEAR_SLOT_ORDER when a role's slots all tie", () => {
         const matrix = buildCoverageMatrix([]);
-        for (const role of Object.keys(SHIP_TYPES)) {
+        for (const role of SHIP_TYPE_NAMES) {
             expect(matrix.slotOrderByRole[role]).toEqual(GEAR_SLOT_ORDER);
         }
     });
@@ -1179,7 +1179,7 @@ describe('the ideal is a true ceiling', () => {
         return pieces;
     }
 
-    const roles = Object.keys(SHIP_TYPES);
+    const roles = SHIP_TYPE_NAMES;
     const piecesBySlot = new Map(
         GEAR_SLOT_ORDER.map((slot) => [slot, realisticPiecesForSlot(slot)] as const)
     );
@@ -1293,7 +1293,7 @@ describe('describeIdealPiece', () => {
         // Pins the loop itself running all 72 iterations, not just passing
         // vacuously on an empty or short-circuited one.
         expect.assertions(72);
-        for (const role of Object.keys(SHIP_TYPES)) {
+        for (const role of SHIP_TYPE_NAMES) {
             for (const slot of GEAR_SLOT_ORDER) {
                 expect(describeIdealPiece(role, slot).score).toBe(getIdealMarginal(role, slot));
             }

@@ -186,7 +186,7 @@ describe('combat-log visibility — reactive cleanse', () => {
 });
 
 describe('combat-log visibility — start-of-turn shield grant placement', () => {
-    const SHIELD_SET_PIECES: GearPiece[] = ['Weapon', 'Hull', 'Generator', 'Sensor'].map(
+    const SHIELD_SET_PIECES: GearPiece[] = (['weapon', 'hull', 'generator', 'sensor'] as const).map(
         (slot, i) => ({
             id: `sh-${i}`,
             slot,
@@ -200,12 +200,12 @@ describe('combat-log visibility — start-of-turn shield grant placement', () =>
     );
     const getGearPiece = (id: string): GearPiece | undefined =>
         SHIELD_SET_PIECES.find((p) => p.id === id);
-    const equipment = {
-        Weapon: 'sh-0',
-        Hull: 'sh-1',
-        Generator: 'sh-2',
-        Sensor: 'sh-3',
-    } as Ship['equipment'];
+    const equipment: Ship['equipment'] = {
+        weapon: 'sh-0',
+        hull: 'sh-1',
+        generator: 'sh-2',
+        sensor: 'sh-3',
+    };
 
     it("files a start-of-turn shield grant under the granting actor's turn, not endOfRound", () => {
         const result = run(shieldBreakScenario({ equipment }), getGearPiece);

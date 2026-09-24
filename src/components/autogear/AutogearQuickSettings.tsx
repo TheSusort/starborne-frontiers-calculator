@@ -13,7 +13,6 @@ import {
     RoleBasis,
 } from '../../types/autogear';
 import { ShipTypeName } from '../../constants';
-import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { configToSharedBuild, hasExistingBuildConfig } from '../../utils/communityBuild';
 import type { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CommunityRecommendations } from './CommunityRecommendations';
@@ -44,7 +43,6 @@ interface AutogearQuickSettingsProps {
         ignoreUnleveled: boolean;
         useUpgradedStats: boolean;
         tryToCompleteSets: boolean;
-        selectedAlgorithm: AutogearAlgorithm;
         showSecondaryRequirements: boolean;
         optimizeImplants: boolean;
         customFormula?: CustomFormula;

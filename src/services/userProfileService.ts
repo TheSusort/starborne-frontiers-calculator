@@ -1,6 +1,8 @@
 import { supabase } from '../config/supabase';
+import { isGearSlotName } from '../constants/gearTypes';
 import type { GearSlotName } from '../constants/gearTypes';
 import type { ShipTypeName } from '../constants/shipTypes';
+import { isShipTypeName } from '../constants/shipTypes';
 import type { AffinityName, Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
@@ -245,18 +247,31 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         console.error('Error fetching engineering stats:', engError);
     }
 
+    // Row shape from the untyped Supabase client — `ship_type` crosses the trust boundary below.
+    interface RawEngineeringStatRow {
+        ship_type: string;
+        stat_name: StatName;
+        value: number;
+        type: StatType;
+    }
+
     // Transform engineering stats to match the format expected by calculateTotalScore
     const engineeringStatsMap = new Map<ShipTypeName, { shipType: ShipTypeName; stats: Stat[] }>();
-    engineeringData?.forEach((stat) => {
-        const shipType = stat.ship_type as ShipTypeName;
+    engineeringData?.forEach((stat: RawEngineeringStatRow) => {
+        // `ship_type` crosses the Supabase trust boundary — skip a row whose value fell out of
+        // the `ShipTypeName` union (a retired/renamed role) rather than crash the ranking.
+        if (!isShipTypeName(stat.ship_type)) return;
+        const shipType = stat.ship_type;
         if (!engineeringStatsMap.has(shipType)) {
             engineeringStatsMap.set(shipType, { shipType, stats: [] });
         }
-        engineeringStatsMap.get(shipType)!.stats.push({
-            name: stat.stat_name,
-            value: stat.value,
-            type: stat.type,
-        });
+        engineeringStatsMap
+            .get(shipType)!
+            .stats.push(
+                stat.type === 'percentage'
+                    ? { name: stat.stat_name, value: stat.value, type: 'percentage' }
+                    : { name: stat.stat_name as FlexibleStats, value: stat.value, type: 'flat' }
+            );
     });
 
     const getEngineeringStatsForShipType = (shipType: ShipTypeName) => {
@@ -454,7 +469,12 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         userId?: string;
     };
 
-    const allTransformedShips: TransformedShip[] = allShipsData.map((data: RawShipData) => {
+    const allTransformedShips: TransformedShip[] = allShipsData.flatMap((data: RawShipData) => {
+        // `data.type` is a raw Supabase column (`string`) — skip a ship whose role fell out of
+        // the `ShipTypeName` union (a retired/renamed role) rather than reject the whole
+        // ranking, matching the gear-piece skip below.
+        if (!isShipTypeName(data.type)) return [];
+
         const shipGearMap = new Map<string, InternalGearPiece>();
         data.ship_equipment?.forEach((eq) => {
             if (eq.inventory_items) {
@@ -499,57 +519,65 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             }
         });
 
-        return {
-            id: data.id,
-            name: data.name,
-            rarity: data.rarity,
-            faction: data.faction,
-            type: data.type,
-            affinity: data.affinity as AffinityName,
-            rank: data.rank,
-            level: data.level,
-            baseStats: {
-                hp: data.ship_base_stats?.hp || 0,
-                attack: data.ship_base_stats?.attack || 0,
-                defence: data.ship_base_stats?.defence || 0,
-                hacking: data.ship_base_stats?.hacking || 0,
-                security: data.ship_base_stats?.security || 0,
-                crit: data.ship_base_stats?.crit || 0,
-                critDamage: data.ship_base_stats?.crit_damage || 0,
-                speed: data.ship_base_stats?.speed || 0,
-                healModifier: data.ship_base_stats?.heal_modifier || 0,
-                hpRegen: data.ship_base_stats?.hp_regen || 0,
-                shield: data.ship_base_stats?.shield || 0,
-                defensePenetration: data.ship_base_stats?.defense_penetration || 0,
-            },
-            equipment:
-                data.ship_equipment?.reduce(
-                    (acc: Record<GearSlotName, string>, eq) => {
-                        acc[eq.slot] = eq.gear_id;
-                        return acc;
-                    },
-                    {} as Record<GearSlotName, string>
-                ) || {},
-            refits:
-                data.ship_refits?.map((refit) => ({
-                    id: refit.id,
-                    stats: refit.ship_refit_stats?.map(createStat) || [],
-                })) || [],
-            implants:
-                data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
-                    if (implant.inventory_items) {
-                        const statsData = tryDecodeGearStats(implant.inventory_items.stats);
-                        if (statsData && (statsData.mainStat || statsData.subStats.length > 0)) {
-                            // Store implant ID as string (matches Ship type)
-                            acc[implant.slot] = implant.inventory_items.id;
+        return [
+            {
+                id: data.id,
+                name: data.name,
+                rarity: data.rarity,
+                faction: data.faction,
+                type: data.type,
+                affinity: data.affinity as AffinityName,
+                rank: data.rank,
+                level: data.level,
+                baseStats: {
+                    hp: data.ship_base_stats?.hp || 0,
+                    attack: data.ship_base_stats?.attack || 0,
+                    defence: data.ship_base_stats?.defence || 0,
+                    hacking: data.ship_base_stats?.hacking || 0,
+                    security: data.ship_base_stats?.security || 0,
+                    crit: data.ship_base_stats?.crit || 0,
+                    critDamage: data.ship_base_stats?.crit_damage || 0,
+                    speed: data.ship_base_stats?.speed || 0,
+                    healModifier: data.ship_base_stats?.heal_modifier || 0,
+                    hpRegen: data.ship_base_stats?.hp_regen || 0,
+                    shield: data.ship_base_stats?.shield || 0,
+                    defensePenetration: data.ship_base_stats?.defense_penetration || 0,
+                },
+                equipment:
+                    data.ship_equipment?.reduce(
+                        (acc: Partial<Record<GearSlotName, string>>, eq) => {
+                            // `eq.slot` is a raw Supabase column (`string`), not yet validated —
+                            // skip a row whose slot the current gear-slot union doesn't recognise
+                            // rather than writing an unvalidated key into `Ship.equipment`.
+                            if (isGearSlotName(eq.slot)) acc[eq.slot] = eq.gear_id;
+                            return acc;
+                        },
+                        {} as Partial<Record<GearSlotName, string>>
+                    ) || {},
+                refits:
+                    data.ship_refits?.map((refit) => ({
+                        id: refit.id,
+                        stats: refit.ship_refit_stats?.map(createStat) || [],
+                    })) || [],
+                implants:
+                    data.ship_implants?.reduce((acc: Partial<Record<string, string>>, implant) => {
+                        if (implant.inventory_items) {
+                            const statsData = tryDecodeGearStats(implant.inventory_items.stats);
+                            if (
+                                statsData &&
+                                (statsData.mainStat || statsData.subStats.length > 0)
+                            ) {
+                                // Store implant ID as string (matches Ship type)
+                                acc[implant.slot] = implant.inventory_items.id;
+                            }
                         }
-                    }
-                    return acc;
-                }, {}) || {},
-            _gearMap: shipGearMap,
-            _implantMap: shipImplantMap,
-            userId: data.user_id,
-        };
+                        return acc;
+                    }, {}) || {},
+                _gearMap: shipGearMap,
+                _implantMap: shipImplantMap,
+                userId: data.user_id,
+            },
+        ];
     });
 
     // Group transformed ships by name for O(1) lookup inside the loop
@@ -582,6 +610,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                 if (ship._gearMap && ship._gearMap.has(gearId)) {
                     const internalGear = ship._gearMap.get(gearId);
                     if (!internalGear) return undefined;
+                    // `internalGear.slot` is read straight off the inventory row (`string`) —
+                    // guard rather than cast, since this map is built once per leaderboard
+                    // request from every user's stored gear.
+                    if (!isGearSlotName(internalGear.slot)) return undefined;
                     return {
                         id: internalGear.id,
                         slot: internalGear.slot,

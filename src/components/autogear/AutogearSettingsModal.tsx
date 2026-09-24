@@ -3,7 +3,6 @@ import { Modal } from '../ui/layout/Modal';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
 import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
-import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { ShipTypeName } from '../../constants';
 import { ArenaSeason } from '../../types/arena';
 import { BaseStats } from '../../types/stats';
@@ -16,7 +15,6 @@ interface AutogearSettingsModalProps {
     selectedShip: Ship | null;
     selectedShipStats: BaseStats | null;
     selectedShipRole: ShipTypeName | null;
-    selectedAlgorithm: AutogearAlgorithm;
     priorities: StatPriority[];
     ignoreEquipped: boolean;
     ignoreUnleveled: boolean;
@@ -30,7 +28,6 @@ interface AutogearSettingsModalProps {
     assumeCalibrated: boolean;
     onShipSelect: (ship: Ship) => void;
     onRoleSelect: (role: ShipTypeName | null) => void;
-    onAlgorithmSelect: (algorithm: AutogearAlgorithm) => void;
     onAddPriority: (priority: StatPriority) => void;
     onUpdatePriority: (index: number, priority: StatPriority) => void;
     onRemovePriority: (index: number) => void;

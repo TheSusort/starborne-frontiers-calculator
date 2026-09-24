@@ -3,7 +3,7 @@ import { calculateRoleScore, calculatePriorityScore } from '../priorityScore';
 import { roleHostsBasis } from '../offFormula/roleBasisHost';
 import { configToSharedBuild } from '../../communityBuild';
 import { runSimulation } from '../../simulation/simulationCalculator';
-import { SHIP_TYPES } from '../../../constants';
+import { SHIP_TYPE_NAMES } from '../../../constants';
 import type { BaseStats } from '../../../types/stats';
 import type { RoleBasis } from '../../../types/autogear';
 
@@ -17,7 +17,7 @@ import type { RoleBasis } from '../../../types/autogear';
  * `Math.random` is pinned so `runSimulation`'s crit roll can never coincidentally land and mask
  * a basis difference (or manufacture one).
  */
-const ALL_ROLES = Object.keys(SHIP_TYPES);
+const ALL_ROLES = SHIP_TYPE_NAMES;
 const ALL_PRODUCES: RoleBasis['produces'][] = ['damage', 'repair', 'shield'];
 
 // A basis on 'security' is foreign to every hosting role's own primary stat (attack or hp), and

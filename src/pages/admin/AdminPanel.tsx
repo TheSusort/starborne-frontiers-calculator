@@ -55,7 +55,7 @@ import {
 import { Loader } from '../../components/ui/Loader';
 import { useNotification } from '../../hooks/useNotification';
 import { FACTIONS } from '../../constants/factions';
-import { SHIP_TYPES } from '../../constants/shipTypes';
+import { isShipTypeName } from '../../constants/shipTypes';
 
 export const AdminPanel: React.FC = () => {
     const { user } = useAuth();
@@ -264,18 +264,13 @@ export const AdminPanel: React.FC = () => {
         const factionEntry = Object.values(FACTIONS).find(
             (f) => f.name.toUpperCase().replace(/\s+/g, '_') === template.faction
         );
-        const typeEntry = Object.values(SHIP_TYPES).find(
-            (t) =>
-                t.name.toUpperCase().replace(/\s+/g, '_').replace(/\(/g, '_').replace(/\)/g, '') ===
-                template.type
-        );
-
         return {
             name: template.name,
             affinity: (template.affinity || 'chemical') as ShipTemplateFormData['affinity'],
             rarity: template.rarity,
             faction: factionEntry?.name || template.faction,
-            type: typeEntry?.name || template.type,
+            // The select shows ATTACKER for an unrecognised stored type, so the admin sees it.
+            type: isShipTypeName(template.type) ? template.type : 'ATTACKER',
             hp: template.base_stats.hp,
             attack: template.base_stats.attack,
             defence: template.base_stats.defence,

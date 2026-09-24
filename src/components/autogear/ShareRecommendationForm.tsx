@@ -79,8 +79,8 @@ export const ShareRecommendationForm: React.FC<ShareRecommendationFormProps> = (
                     <SharedBuildFields build={build} />
                 </div>
                 <p className="text-theme-text-secondary">
-                    Your algorithm choice and your gear filters (ignore equipped, ignore unleveled,
-                    use upgraded stats, complete sets, calibration, arena modifiers) stay private.
+                    Your gear filters (ignore equipped, ignore unleveled, use upgraded stats,
+                    complete sets, calibration, arena modifiers) stay private.
                 </p>
             </div>
 

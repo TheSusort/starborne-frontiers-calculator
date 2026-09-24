@@ -121,7 +121,7 @@ describe('getScoringBaselineStats', () => {
         // yields a non-nullish prototype value whose crit is undefined, so a
         // nullish-coalescing fallback would accept it and emit NaN.
         for (const inherited of ['__proto__', 'constructor', 'toString']) {
-            const stats = getScoringBaselineStats(inherited);
+            const stats = getScoringBaselineStats(inherited as ShipTypeName);
             expect(stats.crit).not.toBeNaN();
             expect(stats.critDamage).not.toBeNaN();
             expect(stats).toEqual(getScoringBaselineStats('ATTACKER'));

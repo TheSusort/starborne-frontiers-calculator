@@ -15,6 +15,7 @@ import type {
     CommunityRecommendation,
     SharedAutogearBuild,
 } from '../../types/communityRecommendation';
+import type { ShipTypeName } from '../../constants/shipTypes';
 
 const sharedConfig: SharedAutogearBuild = {
     version: 1,
@@ -254,13 +255,13 @@ describe('configToSharedBuild', () => {
         expect(() =>
             configToSharedBuild({
                 ...config,
-                shipRole: 'RETIRED_ROLE',
+                shipRole: 'RETIRED_ROLE' as ShipTypeName,
                 roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
             })
         ).not.toThrow();
         const build = configToSharedBuild({
             ...config,
-            shipRole: 'RETIRED_ROLE',
+            shipRole: 'RETIRED_ROLE' as ShipTypeName,
             roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
         });
         expect(build).not.toHaveProperty('roleBasis');
@@ -493,7 +494,7 @@ describe('hasExistingBuildConfig', () => {
 describe('communityBuildToConfigUpdate', () => {
     // Pins the feature's single most important guarantee: applying a community
     // build writes exactly these nine build-shaping fields and never the
-    // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
+    // seven personal ones (ignoreEquipped, ignoreUnleveled,
     // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
     // assumeCalibrated, useArenaModifiers). Adding a tenth key here — of
     // either kind — must fail this test, not ship silently.

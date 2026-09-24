@@ -264,7 +264,7 @@ describe('#383 the cast-heal channel keeps reporting healing DONE on both sides'
             activeTarget: 'allies',
             activePattern: 'Pattern-Circle-Support-Range-1',
             activeSkillText: 'This Unit repairs 30% of its Max HP.',
-            type: 'Support',
+            type: 'SUPPORTER',
         });
 
     it('credits a PLAYER cast medic', () => {
@@ -326,7 +326,7 @@ describe('#383 a Repair Over Time tick books received but NOT done (R2)', () => 
             speed: 100,
             activeSkillText: FLAMEL_ACTIVE,
             activeTarget: 'self',
-            type: 'Support',
+            type: 'SUPPORTER',
         });
         const totalsFor = totals(
             {

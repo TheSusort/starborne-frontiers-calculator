@@ -38,7 +38,7 @@ const getGearPiece = (id: string): GearPiece | undefined =>
     id === LIFELINE_GEAR_ID
         ? ({
               id: LIFELINE_GEAR_ID,
-              slot: 'implant',
+              slot: 'implant_ultimate',
               level: 1,
               stars: 5,
               rarity: 'epic',
@@ -105,7 +105,7 @@ const carrier = (id: string): Ship => ({
         defence: 0,
         speed: 100,
     }),
-    implants: { implant: LIFELINE_GEAR_ID },
+    implants: { implant_ultimate: LIFELINE_GEAR_ID },
     activeSkillText: 'This Unit deals <unit-damage>10% damage</unit-damage>.',
     activeTarget: 'front',
     activePattern: 'Pattern-Base',

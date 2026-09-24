@@ -4,7 +4,7 @@ import type { GearSlot } from '../types/gear';
 const PERCENTAGE_SLOT_EXPECTED = 18.33; // Sensors, Software, Thrusters
 const FLAT_SLOT_EXPECTED = 15; // Weapon, Hull, Generator
 
-export const GEAR_SLOTS: Record<string, GearSlot> = {
+export const GEAR_SLOTS = {
     weapon: {
         label: 'Weapon',
         availableMainStats: ['attack'],
@@ -40,7 +40,7 @@ export const GEAR_SLOTS: Record<string, GearSlot> = {
     },
 } satisfies Record<string, GearSlot>;
 
-export const IMPLANT_SLOTS: Record<string, GearSlot> = {
+export const IMPLANT_SLOTS = {
     implant_minor_alpha: {
         label: 'Minor (Alpha)',
         availableMainStats: [],
@@ -66,15 +66,42 @@ export const IMPLANT_SLOTS: Record<string, GearSlot> = {
         availableMainStats: [],
         expectedContribution: PERCENTAGE_SLOT_EXPECTED,
     },
-};
+} satisfies Record<string, GearSlot>;
 
 export type GearSlotName = keyof typeof GEAR_SLOTS;
 export type ImplantSlotName = keyof typeof IMPLANT_SLOTS;
 
-export const GEAR_SLOT_ORDER: GearSlotName[] = Object.keys({
-    ...GEAR_SLOTS,
-});
+/** A slot id from either space — the shape a single `GearPiece.slot` (or a `GearSuggestion`)
+ *  actually holds, since gear and implants share one array/type and are told apart by which
+ *  of these two unions their slot id falls in (`isGearSlotName` / `isImplantSlotName`). */
+export type EquipmentSlotName = GearSlotName | ImplantSlotName;
 
-export const IMPLANT_SLOT_ORDER: ImplantSlotName[] = Object.keys({
+// The definition site for both unions — a cast here names the slot list itself, not
+// unvalidated input, so it is not the blind-cast-at-a-trust-boundary pattern the rest of this
+// file's callers must avoid.
+export const GEAR_SLOT_ORDER = Object.keys({
+    ...GEAR_SLOTS,
+}) as GearSlotName[];
+
+export const IMPLANT_SLOT_ORDER = Object.keys({
     ...IMPLANT_SLOTS,
-});
+}) as ImplantSlotName[];
+
+/** Type guards for a slot id crossing a trust boundary (import data, a mixed
+ *  `EquipmentSlotName` being routed back to its own space) — narrow with these rather than a
+ *  `startsWith('implant_')` string check or a blind cast. */
+export const isGearSlotName = (slot: string): slot is GearSlotName =>
+    Object.hasOwn(GEAR_SLOTS, slot);
+
+export const isImplantSlotName = (slot: string): slot is ImplantSlotName =>
+    Object.hasOwn(IMPLANT_SLOTS, slot);
+
+/** The display label for a slot from either space — several UI call sites read
+ *  `GEAR_SLOTS[slot]` and `IMPLANT_SLOTS[slot]` side by side on a `GearPiece.slot`
+ *  (`EquipmentSlotName`), which is not a key of either alone. Falls back to the raw slot id
+ *  for a value in neither (should not happen for a real `GearPiece`, but avoids `undefined`
+ *  leaking into rendered text). */
+export const getEquipmentSlotLabel = (slot: EquipmentSlotName): string =>
+    (isGearSlotName(slot) ? GEAR_SLOTS[slot].label : undefined) ??
+    (isImplantSlotName(slot) ? IMPLANT_SLOTS[slot].label : undefined) ??
+    slot;

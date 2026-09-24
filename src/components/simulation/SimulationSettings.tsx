@@ -27,7 +27,9 @@ export const SimulationSettings: React.FC<SimulationSettingsProps> = ({
                 <RoleSelector
                     label="Ship Role"
                     value={selectedRole}
-                    onChange={onRoleSelect}
+                    onChange={(role) => {
+                        if (role !== '') onRoleSelect(role);
+                    }}
                     noDefaultSelection={false}
                 />
             </div>

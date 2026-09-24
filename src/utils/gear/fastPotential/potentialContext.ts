@@ -111,7 +111,9 @@ export function buildPotentialContext(input: BuildPotentialContextInput): Potent
     // only the given slot is needed.
     const slotsNeeded = new Set<GearSlotName>();
     if (slot) slotsNeeded.add(slot);
-    else for (const p of inventory) if (!p.slot.includes('implant')) slotsNeeded.add(p.slot);
+    else
+        for (const p of inventory)
+            if (!p.slot.includes('implant')) slotsNeeded.add(p.slot as GearSlotName);
 
     // ---------- percentRef ----------
     let percentRef: BaseStats;

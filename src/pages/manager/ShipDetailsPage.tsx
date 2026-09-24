@@ -9,7 +9,6 @@ import { analyzeStatDistribution } from '../../utils/ship/statDistribution';
 import { useShips } from '../../contexts/ShipsContext';
 import { PageLayout } from '../../components/ui/layout/PageLayout';
 import { GearPiece } from '../../types/gear';
-import { GearSlotName } from '../../constants';
 import { CollapsibleForm } from '../../components/ui/layout/CollapsibleForm';
 import { ShipForm } from '../../components/ship/ShipForm';
 import { useNotification } from '../../hooks/useNotification';
@@ -263,7 +262,7 @@ export const ShipDetailsPage: React.FC = () => {
                         void addLoadout({
                             name: trimmed,
                             shipId: saveLoadoutShip.id,
-                            equipment: saveLoadoutShip.equipment as Record<GearSlotName, string>,
+                            equipment: saveLoadoutShip.equipment,
                         });
                         addNotification('success', `Loadout "${trimmed}" saved`);
                         setSaveLoadoutShip(null);

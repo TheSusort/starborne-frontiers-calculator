@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
-import { GEAR_SLOT_ORDER, SHIP_TYPES, type GearSlotName } from '../../../../constants';
+import { GEAR_SLOT_ORDER, SHIP_TYPE_NAMES, type GearSlotName } from '../../../../constants';
+import type { EquipmentSlotName } from '../../../../constants/gearTypes';
 import { calculateTotalScore } from '../../scoring';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
@@ -133,7 +134,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
 
                 const lookup = (id: string) => specific.find((p) => p.id === id);
 
-                const equipment: Partial<Record<GearSlotName, string>> = {};
+                const equipment: Partial<Record<EquipmentSlotName, string>> = {};
                 for (const p of specific) equipment[p.slot] = p.id;
 
                 const ctx = buildFastScoringContext({
@@ -394,7 +395,7 @@ describe('fastScore/calculateTotalScore equivalence — roleBasis, every hosting
 
     // Derived from the hosting predicate itself, not hand-listed — a role `roleBasisHost.ts`
     // adds later without a matching fast-path wire reddens this walk instead of being skipped.
-    const hostingRoles = Object.keys(SHIP_TYPES).filter((role) => roleAxis(role) !== null);
+    const hostingRoles = SHIP_TYPE_NAMES.filter((role) => roleAxis(role) !== null);
 
     it('covers a non-empty, known set of hosting roles', () => {
         expect(hostingRoles.sort()).toEqual(

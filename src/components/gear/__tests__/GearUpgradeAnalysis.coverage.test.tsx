@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act, fireEvent, within } from '@testing-library/react';
 import { GearUpgradeAnalysis } from '../GearUpgradeAnalysis';
-import { SHIP_TYPES } from '../../../constants/shipTypes';
+import { SHIP_TYPE_NAMES } from '../../../constants/shipTypes';
 import { buildCoverageMatrix } from '../../../utils/gear/roleSlotCoverage';
 import type { CoverageMatrix } from '../../../utils/gear/roleSlotCoverage';
 
@@ -98,7 +98,8 @@ function makeMatrix({
 }): CoverageMatrix {
     const cells = {} as CoverageMatrix['cells'];
     for (const role of roleOrder) {
-        cells[role] = {};
+        // Built to completeness by the forEach below over every GEAR_SLOT_NAMES entry.
+        cells[role] = {} as CoverageMatrix['cells'][typeof role];
         GEAR_SLOT_NAMES.forEach((slot, index) => {
             cells[role][slot] = {
                 role,
@@ -109,11 +110,15 @@ function makeMatrix({
             };
         });
     }
+    // The component only ever reads a role that appears in `roleOrder` (restricted above to
+    // ATTACKER/DEFENDER), so the real `CoverageMatrix` contract's totality over every
+    // `ShipTypeName` is never exercised by these two roles — the cast names that restriction
+    // rather than claiming a completeness this mock doesn't build.
     return {
         cells,
         roleOrder,
         slotOrderByRole,
-    };
+    } as CoverageMatrix;
 }
 
 const buildCoverageMatrixMock = vi.mocked(buildCoverageMatrix);
@@ -140,23 +145,13 @@ describe('GearUpgradeAnalysis coverage grid', () => {
     });
 
     it('shows the coverage grid before any analysis has run', () => {
-        render(
-            <GearUpgradeAnalysis
-                inventory={[]}
-                shipRoles={Object.keys(SHIP_TYPES)}
-                mode="analysis"
-            />
-        );
+        render(<GearUpgradeAnalysis inventory={[]} shipRoles={SHIP_TYPE_NAMES} mode="analysis" />);
         expect(screen.getByText('Coverage')).toBeInTheDocument();
     });
 
     it('does not show the coverage grid in simulation mode', () => {
         render(
-            <GearUpgradeAnalysis
-                inventory={[]}
-                shipRoles={Object.keys(SHIP_TYPES)}
-                mode="simulation"
-            />
+            <GearUpgradeAnalysis inventory={[]} shipRoles={SHIP_TYPE_NAMES} mode="simulation" />
         );
         expect(screen.queryByText('Coverage')).not.toBeInTheDocument();
     });

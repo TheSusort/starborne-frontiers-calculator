@@ -214,9 +214,8 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                             buffs, implant settings and applied equation for {selectedShip.name}.
                         </p>
                         <p className="text-theme-text-secondary">
-                            Your algorithm choice and gear filters (ignore equipped, ignore
-                            unleveled, use upgraded stats, complete sets, calibration, arena
-                            modifiers) are not changed.
+                            Your gear filters (ignore equipped, ignore unleveled, use upgraded
+                            stats, complete sets, calibration, arena modifiers) are not changed.
                         </p>
                         {pendingApply?.build.setPriorities.some(
                             (set) => set.count === undefined

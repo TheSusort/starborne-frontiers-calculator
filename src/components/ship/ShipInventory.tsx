@@ -104,7 +104,7 @@ export const ShipInventory: React.FC<Props> = ({
         void addLoadout({
             name: trimmed,
             shipId: saveLoadoutShip.id,
-            equipment: saveLoadoutShip.equipment as Record<GearSlotName, string>,
+            equipment: saveLoadoutShip.equipment,
         });
         addNotification('success', `Loadout "${trimmed}" saved`);
         setSaveLoadoutShip(null);

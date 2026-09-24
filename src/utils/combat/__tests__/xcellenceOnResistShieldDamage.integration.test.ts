@@ -66,7 +66,7 @@ function xcellenceShip(id: string): Ship {
         name: 'Xcellence',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
-        type: 'Attacker',
+        type: 'ATTACKER',
         baseStats: {
             hp: 0,
             attack: 0,
@@ -98,7 +98,7 @@ const makeTarget = (id: string): Ship => ({
     name: 'Target',
     rarity: 'legendary',
     faction: 'AURELIAN_SOVEREIGNTY',
-    type: 'Defender',
+    type: 'DEFENDER',
     baseStats: {
         hp: 0,
         attack: 0,
@@ -273,7 +273,7 @@ const debufferShip = (
     name: 'Debuffer',
     rarity: 'legendary',
     faction: 'AURELIAN_SOVEREIGNTY',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 0,
         attack: 0,

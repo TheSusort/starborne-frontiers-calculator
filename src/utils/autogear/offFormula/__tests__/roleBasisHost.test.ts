@@ -1,14 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { roleAxis, rolePrimaryStat, roleHostsBasis } from '../roleBasisHost';
-import { SHIP_TYPES } from '../../../../constants';
+import { SHIP_TYPE_NAMES } from '../../../../constants';
 import type { ShipTypeName } from '../../../../constants/shipTypes';
 import type { OffFormulaStat } from '../offFormulaStats';
 
 /**
  * Expected role -> hosting axis/primary-stat table, typed as a total `Record<ShipTypeName, ...>`.
- * `ShipTypeName` is `string` (#547), so `tsc` does not gate this table against a role added
- * without a matching entry. The 'key set equals the full ShipTypeName union' test below is the
- * only gate that does: it runs under `vitest` and fails on that gap at runtime.
+ * `ShipTypeName` is a real union (#547), so this total-`Record` annotation already gates the
+ * table against a role added without a matching entry (`tsc --noEmit` fails on the gap). The
+ * 'key set equals the full ShipTypeName union' test below is redundant with that compile-time
+ * gate, kept as a runtime tripwire in case the annotation is ever weakened.
  */
 const EXPECTED: Record<
     ShipTypeName,
@@ -28,7 +29,7 @@ const EXPECTED: Record<
     SUPPORTER_OFFENSIVE: { axis: null, primaryStat: null },
 };
 
-const ALL_ROLES = Object.keys(SHIP_TYPES);
+const ALL_ROLES = SHIP_TYPE_NAMES;
 const ALL_PRODUCES = ['damage', 'repair', 'shield'] as const;
 
 describe('roleAxis / rolePrimaryStat', () => {

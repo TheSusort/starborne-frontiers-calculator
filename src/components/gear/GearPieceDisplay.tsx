@@ -1,7 +1,8 @@
 import React, { memo, useMemo, useCallback, useState } from 'react';
 import { GearPiece } from '../../types/gear';
 import { Stat } from '../../types/stats';
-import { GEAR_SETS, GEAR_SLOTS, IMPLANT_SLOTS, RARITIES } from '../../constants';
+import { GEAR_SETS, RARITIES } from '../../constants';
+import { getEquipmentSlotLabel } from '../../constants/gearTypes';
 import { Button, CalibrationIcon, CheckIcon, CloseIcon, EditIcon, UnlockedLockIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { StatDisplay } from '../stats/StatDisplay';
@@ -237,8 +238,8 @@ export const GearPieceDisplay = memo(
                                     : showSetName
                                       ? GEAR_SETS[gear.setBonus || '']?.name +
                                         ' ' +
-                                        GEAR_SLOTS[gear.slot]?.label
-                                      : GEAR_SLOTS[gear.slot]?.label}
+                                        getEquipmentSlotLabel(gear.slot)
+                                      : getEquipmentSlotLabel(gear.slot)}
                             </span>
                         </div>
                         <div className="flex items-center text-xs">
@@ -258,7 +259,7 @@ export const GearPieceDisplay = memo(
                             )}
                             {isImplant && mode !== 'subcompact' && (
                                 <span className={`${small ? 'ps-6' : 'ps-8'} text-xs`}>
-                                    {IMPLANT_SLOTS[gear.slot]?.label}
+                                    {getEquipmentSlotLabel(gear.slot)}
                                 </span>
                             )}
                         </div>

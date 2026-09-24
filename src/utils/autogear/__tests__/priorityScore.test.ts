@@ -9,6 +9,7 @@ import {
 import { BaseStats } from '../../../types/stats';
 import { STAT_NORMALIZERS, STATS, DERIVED_STAT_LABELS } from '../../../constants/stats';
 import { CustomFormula, RoleBasis, SetPriority, StatPriority } from '../../../types/autogear';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 
 const stats: BaseStats = {
     hp: 50000,
@@ -322,7 +323,7 @@ describe('stat-priority order is inert', () => {
 // role before asking whether it hosts a basis, so an unrecognised role scores exactly as it does
 // with no basis at all rather than crashing the run.
 describe('calculatePriorityScore / calculateRoleScore — an unknown role with a basis', () => {
-    const unknownRole = 'RETIRED_ROLE_NAME';
+    const unknownRole = 'RETIRED_ROLE_NAME' as ShipTypeName;
     const basis: RoleBasis = { produces: 'damage', terms: [{ stat: 'hacking', weight: 1 }] };
 
     it('calculatePriorityScore does not throw for an unknown role with a basis', () => {

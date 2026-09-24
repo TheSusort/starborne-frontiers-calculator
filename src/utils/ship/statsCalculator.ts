@@ -8,7 +8,7 @@ import {
 import { Refit } from '../../types/ship';
 import { GearPiece } from '../../types/gear';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { GearSlotName } from '../../constants/gearTypes';
+import { EquipmentSlotName, ImplantSlotName } from '../../constants/gearTypes';
 import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationUtils';
 
 // Cache for gear piece stats to avoid recalculating
@@ -25,10 +25,13 @@ export interface StatBreakdown {
 
 export const calculateTotalStats = (
     baseStats: BaseStats,
-    equipment: Partial<Record<GearSlotName, string>>,
+    // Widened past the "real gear only" GearSlotName: this reads only via Object.values /
+    // Object.entries (never keyed access), and `SetFirstStrategy` passes a not-yet-split
+    // gear+implant working set through this same param rather than splitting first.
+    equipment: Partial<Record<EquipmentSlotName, string>>,
     getGearPiece: (id: string) => GearPiece | undefined,
     refits: Refit[] = [],
-    implants: Partial<Record<GearSlotName, string>> = {},
+    implants: Partial<Record<ImplantSlotName, string>> = {},
     engineeringStats: EngineeringStat | undefined,
     shipId?: string // Optional ship ID to check if calibrated gear should apply bonus
 ): StatBreakdown => {

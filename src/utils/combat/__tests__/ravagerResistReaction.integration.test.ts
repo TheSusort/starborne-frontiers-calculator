@@ -45,7 +45,7 @@ const makeRavager = (id: string): Ship => ({
     name: 'Ravager',
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 0,
         attack: 0,
@@ -76,7 +76,7 @@ const makeTarget = (id: string): Ship => ({
     name: 'Target',
     rarity: 'legendary',
     faction: 'AURELIAN_SOVEREIGNTY',
-    type: 'Defender',
+    type: 'DEFENDER',
     baseStats: {
         hp: 0,
         attack: 0,

@@ -1,6 +1,7 @@
 import type { GearPiece } from '../../../../types/gear';
 import type { Ship } from '../../../../types/ship';
 import type { GearSetName } from '../../../../constants/gearSets';
+import type { EquipmentSlotName } from '../../../../constants/gearTypes';
 
 /**
  * Shared test fixtures for fastPotential tests. Keep these as TYPE-STRICT
@@ -10,7 +11,7 @@ import type { GearSetName } from '../../../../constants/gearSets';
 
 export function makeMinimalPiece(
     id: string,
-    slot: string,
+    slot: EquipmentSlotName,
     setBonus: GearSetName | null = null
 ): GearPiece {
     return {

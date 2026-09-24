@@ -1,5 +1,5 @@
 import type { GearPiece } from '../../../types/gear';
-import type { GearSlotName } from '../../../constants';
+import type { EquipmentSlotName } from '../../../constants/gearTypes';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import { getCalibratedMainStat, isCalibrationEligible } from '../../gear/calibrationUtils';
@@ -26,9 +26,9 @@ export interface GearRegistry {
     /** integer set id -> set name */
     readonly setIdToName: readonly string[];
     /** slot name -> integer slot id */
-    readonly slotNameToId: Map<GearSlotName, number>;
+    readonly slotNameToId: Map<EquipmentSlotName, number>;
     /** integer slot id -> slot name */
-    readonly slotIdToName: readonly GearSlotName[];
+    readonly slotIdToName: readonly EquipmentSlotName[];
 }
 
 /**
@@ -59,8 +59,8 @@ export function buildGearRegistry(
 
     const setNameToId = new Map<string, number>();
     const setIdToName: string[] = ['']; // 0 = none
-    const slotNameToId = new Map<GearSlotName, number>();
-    const slotIdToName: GearSlotName[] = [];
+    const slotNameToId = new Map<EquipmentSlotName, number>();
+    const slotIdToName: EquipmentSlotName[] = [];
 
     const tmp = createStatVector();
 

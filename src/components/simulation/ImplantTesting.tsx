@@ -1,11 +1,12 @@
 import React from 'react';
 import { GearPiece } from '../../types/gear';
-import { GearSlotName, IMPLANT_SLOT_ORDER, ImplantSlotName } from '../../constants';
+import { IMPLANT_SLOT_ORDER, ImplantSlotName } from '../../constants';
+import { isImplantSlotName } from '../../constants/gearTypes';
 import { GearSlot } from '../gear/GearSlot';
 import { Button } from '../ui';
 
 interface ImplantTestingProps {
-    temporaryImplants: Partial<Record<GearSlotName, string>>;
+    temporaryImplants: Partial<Record<ImplantSlotName, string>>;
     getGearPiece: (id: string) => GearPiece | undefined;
     hoveredGear: GearPiece | null;
     onGearHover: (gear: GearPiece | null) => void;
@@ -42,8 +43,8 @@ export const ImplantTesting: React.FC<ImplantTestingProps> = ({
                                     : undefined
                             }
                             hoveredGear={hoveredGear}
-                            onSelect={onSelectSlot}
-                            onRemove={onRemoveImplant}
+                            onSelect={(slot) => isImplantSlotName(slot) && onSelectSlot(slot)}
+                            onRemove={(slot) => isImplantSlotName(slot) && onRemoveImplant(slot)}
                             onHover={onGearHover}
                         />
                     ))}

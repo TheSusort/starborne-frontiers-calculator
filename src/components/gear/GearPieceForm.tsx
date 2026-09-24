@@ -11,6 +11,7 @@ import {
     STATS,
     SLOT_MAIN_STATS,
 } from '../../constants';
+import { isGearSlotName } from '../../constants/gearTypes';
 import { Button, Input, Select } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { calculateMainStatValue } from '../../utils/gear/mainStatValueFetcher';
@@ -22,7 +23,12 @@ interface Props {
 }
 
 export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
-    const [slot, setSlot] = useState<GearSlotName>(editingPiece?.slot || 'weapon');
+    // This form's slot dropdown only ever offers real gear slots (`gearTypeOptions` below is
+    // built solely from GEAR_SLOTS) — it cannot represent an implant piece, so an
+    // implant `editingPiece` falls back to 'weapon' rather than widening the field.
+    const [slot, setSlot] = useState<GearSlotName>(
+        editingPiece && isGearSlotName(editingPiece.slot) ? editingPiece.slot : 'weapon'
+    );
     const [mainStat, setMainStat] = useState<Stat>(
         editingPiece?.mainStat || { name: 'attack', value: 0, type: 'flat' }
     );
@@ -36,7 +42,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     useEffect(() => {
         if (editingPiece) {
             setShowAllFields(false);
-            setSlot(editingPiece.slot);
+            if (isGearSlotName(editingPiece.slot)) setSlot(editingPiece.slot);
             setMainStat(editingPiece.mainStat || { name: 'attack', value: 0, type: 'flat' });
             setSubStats(editingPiece.subStats);
             setRarity(editingPiece.rarity);
@@ -275,7 +281,9 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Select
                         label="Slot"
                         value={slot}
-                        onChange={(value) => setSlot(value)}
+                        // `gearTypeOptions` is built solely from GEAR_SLOTS' own keys, so every
+                        // value this fires with is a real GearSlotName.
+                        onChange={(value) => setSlot(value as GearSlotName)}
                         options={gearTypeOptions}
                     />
 

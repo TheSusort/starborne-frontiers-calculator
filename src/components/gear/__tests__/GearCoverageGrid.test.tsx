@@ -7,7 +7,7 @@ import {
     CoverageCell,
     CoverageMatrix,
 } from '../../../utils/gear/roleSlotCoverage';
-import { SHIP_TYPES, ShipTypeName } from '../../../constants/shipTypes';
+import { SHIP_TYPES, SHIP_TYPE_NAMES, ShipTypeName } from '../../../constants/shipTypes';
 import { GEAR_SLOT_ORDER, GEAR_SLOTS, GearSlotName } from '../../../constants/gearTypes';
 import { GearPiece } from '../../../types/gear';
 
@@ -45,10 +45,11 @@ function makeGear(overrides: Partial<GearPiece> = {}): GearPiece {
  * `"ROLE:slot"` to control specific cells.
  */
 function makeMatrix(overrides: Record<string, Partial<CoverageCell>> = {}): CoverageMatrix {
-    const roles: ShipTypeName[] = Object.keys(SHIP_TYPES);
-    const cells: Record<ShipTypeName, Record<GearSlotName, CoverageCell>> = {};
+    const roles: ShipTypeName[] = SHIP_TYPE_NAMES;
+    const cells = {} as Record<ShipTypeName, Record<GearSlotName, CoverageCell>>;
     for (const role of roles) {
-        cells[role] = {};
+        // Built to completeness by the inner loop over every GEAR_SLOT_ORDER entry.
+        cells[role] = {} as Record<GearSlotName, CoverageCell>;
         for (const slot of GEAR_SLOT_ORDER) {
             cells[role][slot] = {
                 role,
@@ -60,7 +61,8 @@ function makeMatrix(overrides: Record<string, Partial<CoverageCell>> = {}): Cove
             };
         }
     }
-    const slotOrderByRole: Record<ShipTypeName, GearSlotName[]> = {};
+    // Built to completeness by the loop below, which walks every `roles` entry.
+    const slotOrderByRole = {} as Record<ShipTypeName, GearSlotName[]>;
     for (const role of roles) slotOrderByRole[role] = [...GEAR_SLOT_ORDER];
     return { cells, roleOrder: roles, slotOrderByRole };
 }
@@ -95,7 +97,7 @@ describe('GearCoverageGrid', () => {
                 onSampleSizeChange={() => {}}
             />
         );
-        for (const role of Object.keys(SHIP_TYPES)) {
+        for (const role of SHIP_TYPE_NAMES) {
             expect(screen.getByText(SHIP_TYPES[role].name)).toBeInTheDocument();
         }
     });
@@ -213,7 +215,7 @@ describe('GearCoverageGrid', () => {
         });
         // Every other cell defaults to priority 0.5 in `makeMatrix`, so pull
         // them into the same narrow band the two probes sit in.
-        for (const role of Object.keys(SHIP_TYPES)) {
+        for (const role of SHIP_TYPE_NAMES) {
             for (const slot of GEAR_SLOT_ORDER) {
                 if (role === 'ATTACKER' && slot === 'weapon') continue;
                 if (role === 'DEFENDER' && slot === 'hull') continue;
@@ -243,7 +245,7 @@ describe('GearCoverageGrid', () => {
         // scheme this replaced did exactly that by giving every tied cell
         // rank 1.
         const matrix = makeMatrix({});
-        for (const role of Object.keys(SHIP_TYPES)) {
+        for (const role of SHIP_TYPE_NAMES) {
             for (const slot of GEAR_SLOT_ORDER) {
                 matrix.cells[role][slot] = { ...matrix.cells[role][slot], priority: 0.37 };
             }

@@ -190,7 +190,7 @@ export const EngineeringPreviewTab: React.FC = () => {
                 ];
             }
 
-            const updatedEntry = { shipType: baseRole as ShipTypeName, stats: newStats };
+            const updatedEntry = { shipType: baseRole, stats: newStats };
 
             // Replace or add the entry in the full engineering stats
             const otherEntries = engineeringStats.stats.filter((s) => s.shipType !== baseRole);

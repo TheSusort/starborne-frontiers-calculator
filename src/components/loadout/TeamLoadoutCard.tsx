@@ -5,6 +5,7 @@ import { GearPiece } from '../../types/gear';
 import { Button, CloseIcon, EditIcon } from '../ui';
 import { useShips } from '../../contexts/ShipsContext';
 import { GearSlotName } from '../../constants';
+import { isGearSlotName } from '../../constants/gearTypes';
 import { useNotification } from '../../hooks/useNotification';
 import { LoadoutCard } from './LoadoutCard';
 
@@ -33,7 +34,8 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
     const handleEquipTeam = async () => {
         for (const shipLoadout of teamLoadout.shipLoadouts) {
             const gearAssignments = Object.entries(shipLoadout.equipment)
-                .filter(([, gearId]) => {
+                .filter(([slot, gearId]) => {
+                    if (!isGearSlotName(slot)) return false;
                     const gear = getGearPiece(gearId);
                     if (!gear) {
                         addNotification('error', `Gear piece ${gearId} not found in inventory`);
@@ -41,7 +43,7 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
                     }
                     return true;
                 })
-                .map(([slot, gearId]) => ({ slot: slot, gearId }));
+                .map(([slot, gearId]) => ({ slot: slot as GearSlotName, gearId }));
 
             await equipMultipleGear(shipLoadout.shipId, gearAssignments);
         }
@@ -49,7 +51,10 @@ export const TeamLoadoutCard: React.FC<TeamLoadoutCardProps> = ({
         addNotification('success', 'Team loadout equipped successfully');
     };
 
-    const handleUpdateShipLoadout = (position: number, equipment: Record<GearSlotName, string>) => {
+    const handleUpdateShipLoadout = (
+        position: number,
+        equipment: Partial<Record<GearSlotName, string>>
+    ) => {
         const newShipLoadouts = teamLoadout.shipLoadouts.map((loadout) =>
             loadout.position === position ? { ...loadout, equipment } : loadout
         );

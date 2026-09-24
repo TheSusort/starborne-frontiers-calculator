@@ -2,7 +2,7 @@ import { GearPiece } from '../../types/gear';
 import { StatPriority, StatBonus } from '../../types/autogear';
 import { Stat } from '../../types/stats';
 import { STAT_NORMALIZERS } from '../../constants';
-import { GearSlotName } from '../../constants/gearTypes';
+import { type ImplantSlotName, isImplantSlotName } from '../../constants/gearTypes';
 
 /**
  * Score an implant by how well its stats (mainStat + subStats) match the
@@ -72,10 +72,10 @@ export function filterTopImplantsPerSlot(
     statBonuses: StatBonus[] = []
 ): GearPiece[] {
     const gear: GearPiece[] = [];
-    const implantsBySlot: Map<GearSlotName, GearPiece[]> = new Map();
+    const implantsBySlot: Map<ImplantSlotName, GearPiece[]> = new Map();
 
     for (const item of inventory) {
-        if (item.slot.startsWith('implant_')) {
+        if (isImplantSlotName(item.slot)) {
             const list = implantsBySlot.get(item.slot) ?? [];
             list.push(item);
             implantsBySlot.set(item.slot, list);

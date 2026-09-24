@@ -379,7 +379,6 @@ describe('toSavedAutogearConfig', () => {
         ignoreUnleveled: false,
         useUpgradedStats: true,
         tryToCompleteSets: true,
-        selectedAlgorithm: AutogearAlgorithm.TwoPass,
         showSecondaryRequirements: true,
         optimizeImplants: true,
         includeCalibratedGear: true,
@@ -396,7 +395,6 @@ describe('toSavedAutogearConfig', () => {
         expect(saved.shipId).toBe('ship-1');
         expect(saved.shipRole).toBe('SUPPORTER');
         expect(saved.roleBasis).toBe(roleBasis);
-        expect(saved.algorithm).toBe(AutogearAlgorithm.TwoPass);
         expect(saved.customFormula).toBe(fullShipConfig.customFormula);
         expect(saved.statPriorities).toBe(fullShipConfig.statPriorities);
         expect(saved.statBonuses).toBe(fullShipConfig.statBonuses);

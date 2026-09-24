@@ -22,7 +22,7 @@ import { supabase } from '../../config/supabase';
 import { Ship, AffinityName } from '../../types/ship';
 import { RarityName } from '../../constants/rarities';
 import { FactionName } from '../../constants/factions';
-import { ShipTypeName } from '../../constants/shipTypes';
+import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { StorageKey } from '../../constants/storage';
 import { ImportDiff } from '../../types/importDiff';
 import { computeImportDiff } from '../../utils/import/computeImportDiff';
@@ -74,38 +74,49 @@ export const ImportButton: React.FC<{
             if (error) throw error;
 
             return (
-                data?.map((template) => ({
-                    id: template.id,
-                    name: template.name,
-                    rarity: template.rarity.toLowerCase() as RarityName,
-                    faction: template.faction as FactionName,
-                    type: template.type as ShipTypeName,
-                    baseStats: {
-                        hp: template.base_stats.hp,
-                        attack: template.base_stats.attack,
-                        defence: template.base_stats.defence,
-                        hacking: template.base_stats.hacking,
-                        security: template.base_stats.security,
-                        crit: template.base_stats.crit_rate,
-                        critDamage: template.base_stats.crit_damage,
-                        speed: template.base_stats.speed,
-                        healModifier: 0,
-                        hpRegen: 0,
-                        shield: template.base_stats.shield || 0,
-                        shieldPenetration: template.base_stats.shield_penetration || 0,
-                        defensePenetration: template.base_stats.defense_penetration || 0,
-                    },
-                    equipment: {},
-                    refits: [],
-                    implants: {},
-                    affinity: template.affinity.toLowerCase() as AffinityName,
-                    imageKey: template.image_key,
-                    activeSkillText: template.active_skill_text,
-                    chargeSkillText: template.charge_skill_text,
-                    firstPassiveSkillText: template.first_passive_skill_text,
-                    secondPassiveSkillText: template.second_passive_skill_text,
-                    thirdPassiveSkillText: template.third_passive_skill_text,
-                })) || []
+                // `ship_templates` is a Supabase system table — a row whose `type` fell out of
+                // the `ShipTypeName` union (a retired/renamed role) is dropped rather than
+                // carried into a `Ship` with a role the rest of the app can't classify.
+                data
+                    ?.filter((template) => {
+                        if (isShipTypeName(template.type as string)) return true;
+                        console.warn(
+                            `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
+                        );
+                        return false;
+                    })
+                    .map((template) => ({
+                        id: template.id,
+                        name: template.name,
+                        rarity: template.rarity.toLowerCase() as RarityName,
+                        faction: template.faction as FactionName,
+                        type: template.type as ShipTypeName,
+                        baseStats: {
+                            hp: template.base_stats.hp,
+                            attack: template.base_stats.attack,
+                            defence: template.base_stats.defence,
+                            hacking: template.base_stats.hacking,
+                            security: template.base_stats.security,
+                            crit: template.base_stats.crit_rate,
+                            critDamage: template.base_stats.crit_damage,
+                            speed: template.base_stats.speed,
+                            healModifier: 0,
+                            hpRegen: 0,
+                            shield: template.base_stats.shield || 0,
+                            shieldPenetration: template.base_stats.shield_penetration || 0,
+                            defensePenetration: template.base_stats.defense_penetration || 0,
+                        },
+                        equipment: {},
+                        refits: [],
+                        implants: {},
+                        affinity: template.affinity.toLowerCase() as AffinityName,
+                        imageKey: template.image_key,
+                        activeSkillText: template.active_skill_text,
+                        chargeSkillText: template.charge_skill_text,
+                        firstPassiveSkillText: template.first_passive_skill_text,
+                        secondPassiveSkillText: template.second_passive_skill_text,
+                        thirdPassiveSkillText: template.third_passive_skill_text,
+                    })) || []
             );
         } catch (error) {
             console.error('[Import] Error fetching template ships:', error);

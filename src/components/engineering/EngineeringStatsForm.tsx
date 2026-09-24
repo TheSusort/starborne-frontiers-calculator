@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { EngineeringStat, Stat, StatName } from '../../types/stats';
-import { ShipTypeName, SHIP_TYPES, STATS } from '../../constants';
+import { ShipTypeName, SHIP_TYPES, STATS, isShipTypeName } from '../../constants';
 import {
     BaseRoleName,
     ENGINEERING_STATS_BY_ROLE,
@@ -20,9 +20,7 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
     initialStats,
     onSubmit,
 }) => {
-    const [shipType, setShipType] = useState<ShipTypeName>(
-        (initialStats?.shipType as ShipTypeName) || 'ATTACKER'
-    );
+    const [shipType, setShipType] = useState<ShipTypeName>(initialStats?.shipType || 'ATTACKER');
     const [stats, setStats] = useState<Stat[]>(initialStats?.stats || []);
 
     const { engineeringStats } = useEngineeringStats();
@@ -95,7 +93,9 @@ export const EngineeringStatsForm: React.FC<EngineeringStatsFormProps> = ({
                 <Select
                     label="Ship Type"
                     value={shipType}
-                    onChange={(value) => setShipType(value)}
+                    onChange={(value) => {
+                        if (isShipTypeName(value)) setShipType(value);
+                    }}
                     options={shipTypeOptions}
                 />
             </div>

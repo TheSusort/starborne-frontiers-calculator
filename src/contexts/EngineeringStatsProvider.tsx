@@ -1,7 +1,7 @@
 import React, { useCallback, useState, useEffect, createContext, useContext } from 'react';
 import { EngineeringStats, EngineeringStat, StatName, StatType, Stat } from '../types/stats';
 import { STATS } from '../constants/stats';
-import { ShipTypeName } from '../constants/shipTypes';
+import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { useStorage } from '../hooks/useStorage';
@@ -39,20 +39,29 @@ interface RawEngineeringStat {
 const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats => {
     const statsByShipType = data.reduce(
         (acc, stat) => {
-            if (!acc[stat.ship_type]) {
-                acc[stat.ship_type] = {
-                    shipType: stat.ship_type, // Added type assertion
+            // A row's `ship_type` crosses the Supabase trust boundary — skip a row whose value
+            // fell out of the `ShipTypeName` union (a retired/renamed role) rather than crash.
+            if (!isShipTypeName(stat.ship_type)) {
+                console.warn(
+                    `Unrecognised ship type "${stat.ship_type}" — skipping engineering stat`
+                );
+                return acc;
+            }
+            const shipType = stat.ship_type;
+            if (!acc[shipType]) {
+                acc[shipType] = {
+                    shipType,
                     stats: [],
                 };
             }
-            acc[stat.ship_type].stats.push({
+            acc[shipType].stats.push({
                 name: stat.stat_name,
                 value: stat.value,
                 type: stat.type,
             } as Stat);
             return acc;
         },
-        {} as Record<string, EngineeringStat>
+        {} as Partial<Record<ShipTypeName, EngineeringStat>>
     );
 
     return {

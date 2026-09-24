@@ -2,6 +2,7 @@ import type { Ship } from '../../../../../types/ship';
 import type { GearPiece } from '../../../../../types/gear';
 import type { BaseStats } from '../../../../../types/stats';
 import { GEAR_SLOTS } from '../../../../../constants';
+import type { GearSlotName } from '../../../../../constants/gearTypes';
 
 /**
  * Tiny deterministic PRNG (mulberry32). Used to seed simulateUpgrade inside
@@ -58,7 +59,7 @@ export function makeTestShip(overrides: Partial<Ship> = {}): Ship {
  */
 export function generateEligibleInventory(seed = 1, count = 24): GearPiece[] {
     const rnd = seededRandom(seed);
-    const slots = Object.keys(GEAR_SLOTS);
+    const slots = Object.keys(GEAR_SLOTS) as GearSlotName[];
     const pieces: GearPiece[] = [];
     for (let i = 0; i < count; i++) {
         const slot = slots[i % slots.length];

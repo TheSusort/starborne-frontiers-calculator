@@ -3,12 +3,12 @@ import { render, screen } from '@testing-library/react';
 import GearBasicsSection from '../GearBasicsSection';
 import { SLOT_MAIN_STATS, STATS } from '../../../constants/stats';
 import { GEAR_SETS } from '../../../constants/gearSets';
-import { GEAR_SLOTS } from '../../../constants/gearTypes';
+import { GEAR_SLOTS, type GearSlotName } from '../../../constants/gearTypes';
 
 describe('GearBasicsSection', () => {
     it('lists every gear slot, labelled from GEAR_SLOTS', () => {
         render(<GearBasicsSection />);
-        for (const slot of Object.keys(SLOT_MAIN_STATS)) {
+        for (const slot of Object.keys(SLOT_MAIN_STATS) as GearSlotName[]) {
             expect(screen.getByTestId(`slot-row-${slot}`)).toHaveTextContent(
                 GEAR_SLOTS[slot].label
             );

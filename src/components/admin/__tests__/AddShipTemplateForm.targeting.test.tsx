@@ -7,7 +7,7 @@ const BLANK: ShipTemplateFormData = {
     affinity: 'chemical',
     rarity: 'rare',
     faction: 'Atlas Syndicate',
-    type: 'Attacker',
+    type: 'ATTACKER',
     hp: 1,
     attack: 1,
     defence: 1,

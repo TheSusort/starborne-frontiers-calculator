@@ -85,7 +85,6 @@ export interface AutogearShipConfig {
     ignoreUnleveled: boolean;
     useUpgradedStats: boolean;
     tryToCompleteSets: boolean;
-    selectedAlgorithm: AutogearAlgorithm;
     showSecondaryRequirements: boolean;
     optimizeImplants: boolean;
     includeCalibratedGear: boolean;
@@ -110,7 +109,6 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
         ignoreUnleveled: true,
         useUpgradedStats: false,
         tryToCompleteSets: false,
-        selectedAlgorithm: AutogearAlgorithm.Genetic,
         showSecondaryRequirements: false,
         optimizeImplants: false,
         includeCalibratedGear: false,
@@ -168,7 +166,6 @@ export function toSavedAutogearConfig(
         ignoreEquipped: shipConfig.ignoreEquipped,
         ignoreUnleveled: shipConfig.ignoreUnleveled,
         useUpgradedStats: shipConfig.useUpgradedStats,
-        algorithm: shipConfig.selectedAlgorithm,
         tryToCompleteSets: shipConfig.tryToCompleteSets,
         optimizeImplants: shipConfig.optimizeImplants,
         includeCalibratedGear: shipConfig.includeCalibratedGear,

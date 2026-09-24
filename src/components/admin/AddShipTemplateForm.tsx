@@ -5,7 +5,7 @@ import { Select } from '../ui/Select';
 import { Textarea } from '../ui/Textarea';
 import { FACTIONS } from '../../constants/factions';
 import { RARITIES } from '../../constants/rarities';
-import { SHIP_TYPES } from '../../constants/shipTypes';
+import { SHIP_TYPES, SHIP_TYPE_NAMES, type ShipTypeName } from '../../constants/shipTypes';
 import { AffinityName } from '../../types/ship';
 import { TARGET_VALUES, parsePattern } from '../../utils/targetingParser';
 
@@ -14,7 +14,7 @@ export interface ShipTemplateFormData {
     affinity: AffinityName;
     rarity: string;
     faction: string;
-    type: string;
+    type: ShipTypeName;
     hp: number;
     attack: number;
     defence: number;
@@ -92,7 +92,7 @@ const DEFAULT_FORM_DATA: ShipTemplateFormData = {
     affinity: 'chemical',
     rarity: 'common',
     faction: 'Atlas Syndicate',
-    type: 'Attacker',
+    type: 'ATTACKER',
     hp: 0,
     attack: 0,
     defence: 0,
@@ -159,9 +159,9 @@ export const AddShipTemplateForm: React.FC<AddShipTemplateFormProps> = ({
         label: r.label,
     }));
 
-    const typeOptions = Object.values(SHIP_TYPES).map((t) => ({
-        value: t.name,
-        label: t.name,
+    const typeOptions = SHIP_TYPE_NAMES.map((key) => ({
+        value: key,
+        label: SHIP_TYPES[key].name,
     }));
 
     const activePatternFeedback = describePattern(formData.activePattern);
