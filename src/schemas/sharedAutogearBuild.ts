@@ -59,8 +59,8 @@ const shipRoleSchema = z
 // and 1e-6 is far below any weight the UI can express, so nothing legitimate is
 // near either edge. `.finite()` additionally rejects Infinity, which plain
 // `z.number()` lets through (NaN it already rejects).
-const MAX_NUMBER_MAGNITUDE = 1e12;
-const MIN_NUMBER_MAGNITUDE = 1e-6;
+export const MAX_NUMBER_MAGNITUDE = 1e12;
+export const MIN_NUMBER_MAGNITUDE = 1e-6;
 
 const boundedNumberSchema = z
     .number()
@@ -129,9 +129,11 @@ const basisStatSchema = z
 // `CUSTOM_FORMULA_SEEDS`' largest entry has 4 rows, and a derived basis carries at most a
 // couple of factors — and keeps a maximal customFormula well under the payload's byte
 // ceiling below. Raising these needs re-measuring against that ceiling, same as
-// MAX_ARRAY_LENGTH.
+// MAX_ARRAY_LENGTH. Exported (with MAX/MIN_NUMBER_MAGNITUDE above) so `basisTermDraft.ts`'s
+// authoring validator enforces the SAME caps a saved equation will be checked against at share
+// time — a player should never be able to save an equation this schema then refuses to share.
 const MAX_FORMULA_ROWS = 8;
-const MAX_BASIS_TERMS = 5;
+export const MAX_BASIS_TERMS = 5;
 
 // A basis weight must be non-negative in addition to `boundedNumberSchema`'s finiteness —
 // matching `usableBasis`'s own filter, so a term the scorer would silently drop (a negative

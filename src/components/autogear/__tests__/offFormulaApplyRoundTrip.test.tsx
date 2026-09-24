@@ -282,6 +282,22 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
         });
 
+        // #544 I4: the exact gap the shared authoring validator closes. `usableBasisTerms` alone
+        // (weight >= 0) would keep BOTH terms here — Attack stays positive, and a blank/zero HP
+        // term survives as a harmless-looking x0.000 — so the old save silently landed a no-op
+        // term instead of refusing the whole edit the way a lone blank/zero term already did.
+        it('refuses a blank weight on a NEW term added next to an existing positive one, rather than saving it as x0.000', () => {
+            applyAndOpenEditor();
+            fireEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByRole('alert')).toHaveTextContent(
+                'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
+            );
+            // No x0.000 term landed — the applied equation is exactly what it was before the edit.
+            expect(screen.getByText(/^Attack x2\.100 \+ HP x0\.267$/)).toBeInTheDocument();
+        });
+
         it('offers no derived stat (Direct Damage, Effective HP) in the term picker', async () => {
             applyAndOpenEditor();
             await userEvent.click(screen.getByRole('button', { name: /^add stat$/i }));

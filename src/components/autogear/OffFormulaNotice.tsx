@@ -15,10 +15,15 @@ import {
     type ExcludedCarrier,
 } from '../../utils/autogear/offFormula/basisDerivation';
 import { roleAxis, rolePrimaryStat } from '../../utils/autogear/offFormula/roleBasisHost';
-import { usableBasisTerms } from '../../utils/autogear/customFormula';
 import type { BasisTerm, RoleBasis } from '../../types/autogear';
 import { BasisTermsEditor } from './BasisTermsEditor';
-import { draftFromBasis, nextBasisStat, type DraftBasisTerm } from './basisTermDraft';
+import {
+    basisAuthoringError,
+    draftFromBasis,
+    nextBasisStat,
+    parseAuthoredBasisTerms,
+    type DraftBasisTerm,
+} from './basisTermDraft';
 
 /** What Apply writes back to the ship's config: the derived basis, attached to whichever axis
  *  `configuredRole` hosts (`roleAxis`, `roleBasisHost.ts`). `shipRole` is unchanged — the
@@ -335,27 +340,24 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     // still has to match the role's own axis to count (owner ruling, #544).
     const handleSaveEdit = () => {
         if (!onApply || !hostAxis) return;
-        const candidate: BasisTerm[] = draftTerms.map((term) => ({
-            stat: term.stat,
-            weight: Number(term.weight.trim()),
-        }));
-        // `usableBasisTerms` is the scorer's own predicate (`priorityScore.ts` re-validates a
-        // stored `roleBasis` through the identical call) — a term it would drop (blank, zero,
-        // negative, or an unrecognised stat) refuses the WHOLE save rather than silently landing
-        // without it, so a player never sees a save that quietly dropped what they typed.
-        const kept = usableBasisTerms(candidate);
-        if (!kept || kept.length !== candidate.length) {
-            // A from-scratch draft with no terms at all (Write an equation, saved empty) has no
-            // stat on screen to "remove" — that refusal only fits a draft with terms already in
-            // it, so the two cases get different copy.
-            setSaveError(
-                draftTerms.length === 0
-                    ? 'Add at least one stat with a weight above zero.'
-                    : 'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
-            );
+        // A from-scratch draft with no terms at all (Write an equation, saved empty) has no stat
+        // on screen to "remove" — that refusal only fits a draft with terms already in it, so
+        // the two cases get different copy. Everything else routes through the shared authoring
+        // gate (`basisAuthoringError`, basisTermDraft.ts) — see its own doc for why authoring is
+        // stricter than the scorer's read-time gate.
+        if (draftTerms.length === 0) {
+            setSaveError('Add at least one stat with a weight above zero.');
             return;
         }
-        onApply({ shipRole: configuredRole, roleBasis: { produces: hostAxis, terms: kept } });
+        const authoringError = basisAuthoringError(draftTerms);
+        if (authoringError) {
+            setSaveError(authoringError);
+            return;
+        }
+        onApply({
+            shipRole: configuredRole,
+            roleBasis: { produces: hostAxis, terms: parseAuthoredBasisTerms(draftTerms) },
+        });
         setSaveError(null);
         setIsEditing(false);
     };

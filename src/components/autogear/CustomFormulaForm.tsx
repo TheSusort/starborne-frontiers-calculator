@@ -9,14 +9,15 @@ import type {
     FormulaRowKind,
 } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
-import {
-    FORMULA_STATS,
-    coreImportanceOf,
-    isBasisStat,
-    isBasisTilt,
-} from '../../utils/autogear/customFormula';
+import { FORMULA_STATS, coreImportanceOf, isBasisTilt } from '../../utils/autogear/customFormula';
 import { BasisTermsEditor } from './BasisTermsEditor';
-import { draftFromBasis, nextBasisStat, type DraftBasisTerm } from './basisTermDraft';
+import {
+    basisAuthoringError,
+    draftFromBasis,
+    nextBasisStat,
+    parseAuthoredBasisTerms,
+    type DraftBasisTerm,
+} from './basisTermDraft';
 
 const IMPORTANCE_OPTIONS: { value: string; label: string }[] = [
     { value: '0.5', label: 'Slight' },
@@ -43,6 +44,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     const [importance, setImportance] = useState<CoreImportance>(1);
     const [percentage, setPercentage] = useState<string>('100');
     const [basisTerms, setBasisTerms] = useState<DraftBasisTerm[]>([]);
+    const [basisError, setBasisError] = useState<string | null>(null);
 
     useEffect(() => {
         if (editingValue) {
@@ -60,6 +62,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             setPercentage('100');
             setBasisTerms([]);
         }
+        setBasisError(null);
     }, [editingValue]);
 
     // A basis is only ever honoured by the scorer on a `core`/`max` row — this mirrors
@@ -69,38 +72,41 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
 
     const addBasisTerm = () => {
         setBasisTerms([...basisTerms, { stat: nextBasisStat(basisTerms), weight: '' }]);
+        setBasisError(null);
     };
 
     const updateBasisTerm = (index: number, patch: Partial<DraftBasisTerm>) => {
         setBasisTerms(basisTerms.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+        setBasisError(null);
     };
 
     const removeBasisTerm = (index: number) => {
         setBasisTerms(basisTerms.filter((_, i) => i !== index));
+        setBasisError(null);
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
 
-        // A basis term the scorer would drop (bad stat, non-finite, negative, or zero weight)
-        // fails the whole submit rather than being silently accepted. Zero is rejected here even
-        // though `usableBasis` (customFormula.ts) would keep it: a core/max row MULTIPLIES its
-        // term into the row's score, so a zero-weight term — typically an unfilled field, since
-        // `Number('')` is 0 — doesn't just drop out, it zeroes the whole row for every candidate
-        // and ties the search. The bonus percentage branch below has the matching guard for its
-        // own field: bonus terms ADD rather than multiply, so 0 there stays a legitimate "add
-        // nothing" and blank instead defaults to 100.
+        // A basis term the shared authoring validator (`basisAuthoringError`, basisTermDraft.ts)
+        // would refuse — bad stat, non-finite, non-positive, too many terms, or a weight outside
+        // the share schema's magnitude window — fails the whole submit with a visible error
+        // rather than a silent no-op. Authoring is stricter than the scorer's own read-time gate
+        // (`usableBasis`, customFormula.ts): a stored zero-weight term is harmless there —
+        // `resolveBasisValue` SUMS the terms, so it just contributes nothing, the same as an
+        // absent term — but a term the player is actively typing almost always means an unfilled
+        // field, not a deliberate zero. See `basisAuthoringError`'s own doc for that split. The
+        // bonus percentage branch below has its own, separate guard for its own field: bonus
+        // terms ADD rather than multiply, so 0 there stays a legitimate "add nothing" and blank
+        // instead defaults to 100.
         let basis: BasisTerm[] | undefined;
         if (showsBasis && basisTerms.length > 0) {
-            const parsed: BasisTerm[] = [];
-            for (const term of basisTerms) {
-                const weight = Number(term.weight.trim());
-                if (!isBasisStat(term.stat) || !Number.isFinite(weight) || weight <= 0) {
-                    return;
-                }
-                parsed.push({ stat: term.stat, weight });
+            const authoringError = basisAuthoringError(basisTerms);
+            if (authoringError) {
+                setBasisError(authoringError);
+                return;
             }
-            basis = parsed;
+            basis = parseAuthoredBasisTerms(basisTerms);
         }
 
         let row: CustomFormulaRow;
@@ -118,6 +124,7 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             row.basis = basis;
         }
 
+        setBasisError(null);
         if (editingValue && onSave) {
             onSave(row);
             return;
@@ -132,7 +139,10 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-3" role="form">
+        // `noValidate`: every field here already has its own JS-driven inline error (a negative
+        // basis weight, say) — without it, the browser's native min="0" tooltip would silently
+        // block the submit event before that error ever ran, on some inputs but not others.
+        <form onSubmit={handleSubmit} className="space-y-3" role="form" noValidate>
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
                     label="Stat"
@@ -197,6 +207,11 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                         onRemove={removeBasisTerm}
                         onAdd={addBasisTerm}
                     />
+                    {basisError && (
+                        <p className="text-xs text-red-400" role="alert">
+                            {basisError}
+                        </p>
+                    )}
                 </div>
             )}
             <div className="flex justify-end gap-2">
