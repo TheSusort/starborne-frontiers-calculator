@@ -8,7 +8,12 @@ import {
     sharedAutogearBuildSchema,
     isSharedBuildBasisCapIssue,
 } from '../schemas/sharedAutogearBuild';
-import { mirroredShipRole, ALLOW_ROLELESS_COMMUNITY_SHARE } from '../utils/communityBuild';
+import {
+    mirroredShipRole,
+    ALLOW_ROLELESS_COMMUNITY_SHARE,
+    ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE,
+    buildReferencesCritMultiplier,
+} from '../utils/communityBuild';
 
 /**
  * Thrown by createRecommendation when the shared config fails schema
@@ -53,6 +58,21 @@ export class RolelessShareNotAllowedError extends Error {
     constructor() {
         super('Sharing a build with no role is not available yet');
         this.name = 'RolelessShareNotAllowedError';
+    }
+}
+
+/**
+ * Thrown by createRecommendation when the shared build names `critMultiplier` (a stat
+ * priority, a stat bonus, or a custom-formula row — `buildReferencesCritMultiplier`) and
+ * `ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE` is off. Mirrors `RolelessShareNotAllowedError`: the
+ * share UI (`CommunityRecommendations.tsx`) already withholds the Share button for such a
+ * build, so this is the same refusal for any other caller that builds a `SharedAutogearBuild`
+ * directly and calls this service.
+ */
+export class CritMultiplierShareNotAllowedError extends Error {
+    constructor() {
+        super('Sharing a build using Crit Multiplier is not available yet');
+        this.name = 'CritMultiplierShareNotAllowedError';
     }
 }
 
@@ -108,7 +128,12 @@ export class CommunityRecommendationService {
         // app's own UI before it reaches here — this is the same refusal for any other caller
         // that builds a `SharedAutogearBuild` directly and calls this service (defence in
         // depth, so a null `ship_role` can never be written while the switch is off).
-        allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE
+        allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE,
+        // Mirrors `allowRoleless` immediately above: a default read from the switch
+        // (`ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`), testable without mocking. The share UI
+        // (`CommunityRecommendations.tsx`) already withholds the Share button for a build
+        // naming `critMultiplier` — this is the same refusal for any other caller.
+        allowCritMultiplier: boolean = ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE
     ): Promise<CommunityRecommendation | null> {
         // Parse directly (rather than through `validateSharedAutogearBuild`) so a failure's
         // `ZodIssue`s are available to classify below — the schema's object types still strip
@@ -124,6 +149,11 @@ export class CommunityRecommendationService {
             throw new InvalidSharedConfigError();
         }
         const sharedConfig = parseResult.data as SharedAutogearBuild;
+
+        if (!allowCritMultiplier && buildReferencesCritMultiplier(sharedConfig)) {
+            console.error('Refusing to share a build using Crit Multiplier');
+            throw new CritMultiplierShareNotAllowedError();
+        }
 
         // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
         // formula was seeded from. A hand-written formula with no `seededFrom` has neither,

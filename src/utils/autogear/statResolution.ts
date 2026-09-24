@@ -60,6 +60,9 @@ export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): nu
     if (stat === 'directDamage') {
         return calculateDirectDamage(stats);
     }
+    if (stat === 'critMultiplier') {
+        return calculateCritMultiplier(stats);
+    }
     return stats[stat] || 0;
 }
 
@@ -147,6 +150,8 @@ export const MULTIPLIER_NORMALIZERS: Partial<Record<LimitableStat, number>> = {
     speed: 130,
     effectiveHp: 120000,
     directDamage: 6000,
+    // ~the geared value: 100 crit / 100 crit power -> 1 + 1.0 x 1.0 = 2.
+    critMultiplier: 2,
     // Neither stat rolls on a slot, so its geared value is what the sets grant. Heal
     // modifier: Repair's 20% plus Recovery's 10%. Shield regen: 4% per Shield set
     // activation, and a set activates per whole `minPieces`, so a four-piece build reaches

@@ -338,6 +338,29 @@ export const mirroredShipRole = (
 export const ALLOW_ROLELESS_COMMUNITY_SHARE = false;
 
 /**
+ * Whether a build referencing the `critMultiplier` derived stat (a stat priority, a stat
+ * bonus, or a custom-formula row — `buildReferencesCritMultiplier` below) may be shared. OFF:
+ * the deployed reader (origin/production `sharedAutogearBuild.ts`) only knows
+ * `effectiveHp`/`directDamage` in its `limitableStatSchema`, so a build naming `critMultiplier`
+ * is dropped or mis-shown by a tab still on that bundle. Mirrors
+ * `ALLOW_ROLELESS_COMMUNITY_SHARE`'s own reasoning and default.
+ */
+export const ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE = false;
+
+/**
+ * Whether `build` names `critMultiplier` anywhere `ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`
+ * needs to gate: a stat priority's limit, a stat bonus, or a custom-formula row's own stat.
+ * `roleBasis` terms are excluded on purpose — `isBasisStat` already keeps a derived stat out
+ * of a basis term, so no `roleBasis` this build carries can ever name one.
+ */
+export const buildReferencesCritMultiplier = (
+    build: Pick<SharedAutogearBuild, 'statPriorities' | 'statBonuses' | 'customFormula'>
+): boolean =>
+    build.statPriorities.some((p) => p.stat === 'critMultiplier') ||
+    build.statBonuses.some((b) => b.stat === 'critMultiplier') ||
+    (build.customFormula?.rows ?? []).some((r) => r.stat === 'critMultiplier');
+
+/**
  * Build the shareable payload from the page's per-ship config.
  *
  * Null when there is nothing scoreable to share (no role and no usable formula — the same

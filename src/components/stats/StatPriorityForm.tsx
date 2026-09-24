@@ -10,6 +10,7 @@ const AVAILABLE_STATS: LimitableStat[] = [
     'hp',
     'effectiveHp',
     'directDamage',
+    'critMultiplier',
     'speed',
     'crit',
     'critDamage',

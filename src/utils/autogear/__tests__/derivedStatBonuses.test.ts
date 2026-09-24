@@ -3,6 +3,7 @@ import {
     applyAdditiveBonuses,
     calculateMultiplierFactor,
     calculatePriorityScore,
+    calculateCritMultiplier,
     calculateDirectDamage,
     calculateEffectiveHP,
 } from '../priorityScore';
@@ -71,6 +72,35 @@ describe('derived stats as stat bonuses', () => {
         expect(score(highCrit)).toBe(score(lowCrit));
 
         const bonus: StatBonus[] = [{ stat: 'directDamage', percentage: 100, mode: 'multiplier' }];
+        expect(score(highCrit, bonus)).toBeGreaterThan(score(lowCrit, bonus));
+    });
+
+    it('additive mode resolves critMultiplier', () => {
+        const s = stats();
+        const bonus: StatBonus = { stat: 'critMultiplier', percentage: 50, mode: 'additive' };
+        expect(applyAdditiveBonuses(s, [bonus])).toBeCloseTo(calculateCritMultiplier(s) * 0.5, 6);
+    });
+
+    it('multiplier mode resolves critMultiplier', () => {
+        const s = stats();
+        expect(
+            calculateMultiplierFactor(s, [
+                { stat: 'critMultiplier', percentage: 100, mode: 'multiplier' },
+            ])
+        ).toBeCloseTo(calculateCritMultiplier(s) / 2, 6);
+    });
+
+    // Mirrors the directDamage non-vacuity witness above, for the sibling derived stat: a
+    // critMultiplier bonus is a second way to give a bomber build reason to gear crit.
+    it('lets crit move a DEBUFFER_BOMBER score via a critMultiplier bonus too', () => {
+        const lowCrit = stats({ crit: 10, critDamage: 20 });
+        const highCrit = stats({ crit: 100, critDamage: 200 });
+
+        expect(score(highCrit)).toBe(score(lowCrit));
+
+        const bonus: StatBonus[] = [
+            { stat: 'critMultiplier', percentage: 100, mode: 'multiplier' },
+        ];
         expect(score(highCrit, bonus)).toBeGreaterThan(score(lowCrit, bonus));
     });
 

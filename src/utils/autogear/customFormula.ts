@@ -9,6 +9,7 @@ import type {
 import type { ShipTypeName } from '../../constants/shipTypes';
 import {
     MULTIPLIER_NORMALIZERS,
+    calculateCritMultiplier,
     calculateDirectDamage,
     calculateEffectiveHP,
     resolveBasisValue,
@@ -27,10 +28,11 @@ import {
  * disappears. See `reference_total_record_is_compile_time_only`.
  */
 const DERIVED_STATS: Record<DerivedStatName, true> = {
-    // Total on purpose: a third derived stat must fail the build here rather than slip into a
+    // Total on purpose: a new derived stat must fail the build here rather than slip into a
     // basis and score as 0.
     effectiveHp: true,
     directDamage: true,
+    critMultiplier: true,
 };
 
 /** Whether `stat` is a term the scorer can read a value for. Exported so the formula editor can
@@ -138,6 +140,10 @@ export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number 
     // A basis is honoured on ANY max core row, not only a derived one. SUPPORTER's core is
     // `core('hp')` — a plain stat — and Howler's and Makoli's whole fix is a basis on that row,
     // so routing only the two derived stats would make Apply a silent no-op for them.
+    //
+    // `critMultiplier` is the exception: it has no primary factor for a basis to blend (it is
+    // `1 + min(crit,100)/100 x critDamage/100`, not a weighted sum of one dominant stat), so a
+    // basis on this row is ignored rather than given a made-up meaning.
     const raw =
         row.stat === 'directDamage'
             ? calculateDirectDamage(stats, basis)
@@ -149,7 +155,9 @@ export function formulaRowTerm(stats: BaseStats, row: CustomFormulaRow): number 
                     basis,
                     stats
                 )
-              : resolveBasisValue(stats, basis, row.stat);
+              : row.stat === 'critMultiplier'
+                ? calculateCritMultiplier(stats)
+                : resolveBasisValue(stats, basis, row.stat);
     const n = raw / normalizer;
     return row.direction === 'min' ? 1 / (1 + n) : n;
 }
@@ -171,6 +179,7 @@ export const FORMULA_STATS: readonly LimitableStat[] = [
     'hp',
     'effectiveHp',
     'directDamage',
+    'critMultiplier',
     'speed',
     'crit',
     'critDamage',

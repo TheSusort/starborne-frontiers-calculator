@@ -1405,12 +1405,14 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text">
                                         Define minimum and maximum values for specific stats. The
                                         algorithm will try to keep stats within these ranges while
-                                        optimizing the overall build. You can also limit two derived
-                                        stats: <strong>Effective HP</strong> — a survivability value
-                                        combining HP, Defense, and damage reduction — and{' '}
-                                        <strong>Direct Damage</strong> — an offensive value
-                                        combining attack, crit rate, crit power, and defense
-                                        penetration.
+                                        optimizing the overall build. You can also limit three
+                                        derived stats: <strong>Effective HP</strong> — a
+                                        survivability value combining HP, Defense, and damage
+                                        reduction — <strong>Direct Damage</strong> — an offensive
+                                        value combining attack, crit rate, crit power, and defense
+                                        penetration — and <strong>Crit Multiplier</strong> — how
+                                        much crit rate and crit power multiply your damage by, on
+                                        their own.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Each row has an <strong>Edit</strong> button (opens the form
@@ -1463,12 +1465,13 @@ const DocumentationPage: React.FC = () => {
                                     <p className="text-theme-text">
                                         Add bonus effects that contribute to the role score. For
                                         example, an attacker that gains extra damage equal to 10% of
-                                        HP. <strong>Effective HP</strong> and{' '}
-                                        <strong>Direct Damage</strong> can be used as bonus stats
-                                        too, not just as stat priorities. A Direct Damage bonus is
-                                        how you tell the optimizer that crit matters for a ship
-                                        whose role formula does not read crit — some bombers, for
-                                        instance.
+                                        HP. <strong>Effective HP</strong>,{' '}
+                                        <strong>Direct Damage</strong>, and{' '}
+                                        <strong>Crit Multiplier</strong> can all be used as bonus
+                                        stats too, not just as stat priorities. A Direct Damage or
+                                        Crit Multiplier bonus is how you tell the optimizer that
+                                        crit matters for a ship whose role formula does not read
+                                        crit — some bombers, for instance.
                                     </p>
                                     <p className="text-theme-text mt-2">
                                         Each row has an <strong>Edit</strong> button (opens the form
