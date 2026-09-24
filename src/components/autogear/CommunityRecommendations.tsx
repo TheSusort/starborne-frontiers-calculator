@@ -181,7 +181,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                         </div>
                     )}
 
-                    {showShareForm && currentBuild && (
+                    {showShareForm && currentBuild && !critMultiplierBlocked && (
                         <div className="pt-2 border-t border-dark-border">
                             <h4 className="text-sm font-semibold text-theme-text mb-3">
                                 Share Your Build

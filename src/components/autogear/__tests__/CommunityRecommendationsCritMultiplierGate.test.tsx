@@ -44,12 +44,16 @@ const critMultiplierBuild: SharedAutogearBuild = {
     optimizeImplants: false,
 };
 
-const renderPanel = (currentBuild: SharedAutogearBuild | null) => {
+const renderPanel = (currentBuild: SharedAutogearBuild | null, showShareForm = false) => {
     // The real hook would set canShare=false once ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE
     // blocks configToSharedBuild from an eventual roleless flip; here it's mocked to `true`
     // (currentBuild is non-null and has a role) so the ONLY thing that can be withholding the
     // button is this component's own crit-multiplier check on `currentBuild`.
-    useCommunityRecommendationsMock.mockReturnValue({ ...baseHookReturn, canShare: true });
+    useCommunityRecommendationsMock.mockReturnValue({
+        ...baseHookReturn,
+        canShare: true,
+        showShareForm,
+    });
     render(
         <CommunityRecommendations
             selectedShip={makeShip()}
@@ -77,5 +81,19 @@ describe('CommunityRecommendations — crit multiplier share gate', () => {
         renderPanel({ ...critMultiplierBuild, statBonuses: [] });
 
         expect(screen.getByRole('button', { name: 'Share your build' })).toBeInTheDocument();
+    });
+
+    it('hides an already-open Share form once the build references critMultiplier', () => {
+        // The hook keeps `showShareForm` open across a `currentBuild` change, so the form must
+        // be gated on the build itself, not only on the Share button that opened it.
+        renderPanel(critMultiplierBuild, true);
+
+        expect(screen.queryByText('Share Your Build')).not.toBeInTheDocument();
+    });
+
+    it('shows an open Share form for a build with no critMultiplier reference', () => {
+        renderPanel({ ...critMultiplierBuild, statBonuses: [] }, true);
+
+        expect(screen.getByText('Share Your Build')).toBeInTheDocument();
     });
 });
