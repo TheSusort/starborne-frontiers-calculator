@@ -1615,14 +1615,14 @@ const DocumentationPage: React.FC = () => {
                                         there is no cast ratio to fold it into. When a passive is
                                         left out, the notice names it directly: the skill&apos;s own
                                         wording and percentage, so nothing about what got skipped,
-                                        or why, is hidden. When a passive is the ship&apos;s only
-                                        way to reach that stat, or the active/charged equation adds
+                                        or why, is hidden. When the active/charged equation adds
                                         nothing the role wasn&apos;t already scoring, there is
-                                        nothing for <strong>Use this equation</strong> to change, so
-                                        the notice offers <strong>Write an equation</strong>{' '}
-                                        instead, opening the same editor empty next to that
-                                        passive&apos;s wording so its stat and percentage can be
-                                        added by hand.
+                                        nothing for <strong>Use this equation</strong> to change —
+                                        if a passive on that same stat was left out, the notice
+                                        offers <strong>Write an equation</strong> instead, opening
+                                        the same editor empty next to that passive&apos;s wording so
+                                        its stat and percentage can be added by hand; if there is no
+                                        such passive either, neither button appears.
                                     </p>
                                 </div>
 

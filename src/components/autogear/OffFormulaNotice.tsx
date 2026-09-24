@@ -394,8 +394,9 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                 // displaced by — meaningless unless THIS finding's axis is the one `coreStat`
                 // belongs to. A finding on another axis (e.g. a `repair` finding on a
                 // damage-hosting role) gets the finding sentence only; the excluded-carrier block
-                // below still lists every passive clause regardless, same as a role that hosts
-                // nothing at all.
+                // below is scoped to the axis THIS role hosts (`excluded`, #544 I3), so a
+                // hosting role never lists an off-axis clause here either — only a role that
+                // hosts nothing at all falls back to the ship-wide set.
                 const basis =
                     lever && hostAxis && finding.produces === hostAxis
                         ? (basisByProduces.get(finding.produces) ?? null)

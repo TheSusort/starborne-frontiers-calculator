@@ -465,5 +465,48 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 screen.queryByRole('button', { name: /write an equation/i })
             ).not.toBeInTheDocument();
         });
+
+        // #544 I2 follow-up: Xcellence's derived damage basis is NONEMPTY (Attack alone) but
+        // still a no-op (matches ATTACKER's own core stat) — unlike Zenith above, whose derived
+        // basis is EMPTY. A label/Restore decision keyed off `terms.length === 0` would treat her
+        // written-by-hand equation as an ordinary EDIT of a real derivation instead: "your own
+        // version of the equation" plus a Restore button that hands her back the exact no-op
+        // Apply itself refuses to offer. Both must read the derivation's own
+        // scoring-changes-or-not verdict, not merely whether it has terms.
+        it('labels a written-by-hand equation honestly for a ship whose derivation is nonempty but a no-op, and offers no Restore', () => {
+            const xcellence = corpusShipNamed('Xcellence');
+            // Her real derived damage basis is Attack-only (nonempty, but a no-op under
+            // ATTACKER) — a term at a DIFFERENT weight than that real value guarantees
+            // `basisTermsMatch` reads it as diverged, the same as any ordinary edit would.
+            const derivedWeight = deriveBasis(xcellence, 'damage').terms.find(
+                (t) => t.stat === 'attack'
+            )!.weight;
+            render(<Harness ship={xcellence} role="ATTACKER" />);
+            fireEvent.click(screen.getByRole('button', { name: /write an equation/i }));
+            fireEvent.click(screen.getByRole('button', { name: /^add stat$/i }));
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: String(derivedWeight + 1) },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByText(/written by hand/i)).toBeInTheDocument();
+            expect(screen.queryByText(/your own version of the equation/i)).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /restore the derived equation/i })
+            ).not.toBeInTheDocument();
+
+            // Still true after editing the written equation again — the label reads off the
+            // derivation itself, not off how applied state was first reached.
+            fireEvent.click(screen.getByRole('button', { name: /edit this equation/i }));
+            fireEvent.change(screen.getAllByLabelText(/basis weight/i)[0], {
+                target: { value: '1.5' },
+            });
+            fireEvent.click(screen.getByRole('button', { name: /save equation/i }));
+
+            expect(screen.getByText(/written by hand/i)).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /restore the derived equation/i })
+            ).not.toBeInTheDocument();
+        });
     }
 );
