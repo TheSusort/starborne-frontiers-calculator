@@ -1,27 +1,32 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.68.0';
+export const CURRENT_VERSION = '1.69.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: flags ships that score off a stat their role ignores.',
-    'Autogear: flagged ships show their real equation where their role can use it.',
-    "Autogear: apply a ship's derived equation to its role in one click.",
-    'Autogear: shows when an equation is applied, with a stop control.',
-    'Autogear: an applied equation can now be edited and restored.',
-    'Autogear: custom formula rows can now weight a stat by other stats.',
-    'Autogear: custom formulas started from a role can now be shared.',
-    'Ship Details: no longer crashes opening a geared ship with a sub-role.',
-    'Autogear: new Crit Multiplier stat for priorities, bonuses and custom formulas.',
-    'Autogear: results now show output from the formula the ship was scored on.',
-    'Autogear: Equip All now keeps suggested gear when implants are also suggested.',
-    "Autogear: Reset now restores the ship's own role instead of Attacker.",
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.69.0',
+        date: '2026-09-24',
+        changes: [
+            'Autogear: flags ships that score off a stat their role ignores.',
+            'Autogear: flagged ships show their real equation where their role can use it.',
+            "Autogear: apply a ship's derived equation to its role in one click.",
+            'Autogear: shows when an equation is applied, with a stop control.',
+            'Autogear: an applied equation can now be edited and restored.',
+            'Autogear: custom formula rows can now weight a stat by other stats.',
+            'Autogear: custom formulas started from a role can now be shared.',
+            'Ship Details: no longer crashes opening a geared ship with a sub-role.',
+            'Autogear: new Crit Multiplier stat for priorities, bonuses and custom formulas.',
+            'Autogear: results now show output from the formula the ship was scored on.',
+            'Autogear: Equip All now keeps suggested gear when implants are also suggested.',
+            "Autogear: Reset now restores the ship's own role instead of Attacker.",
+        ],
+    },
     {
         version: '1.68.0',
         date: '2026-09-16',
