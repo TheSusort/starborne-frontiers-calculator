@@ -17,8 +17,9 @@ export interface CommunityRecommendation {
     is_implant_specific: boolean;
     ultimate_implant?: string;
     /** Null for a Custom-mode build with no role to mirror (a from-scratch formula, i.e. no
-     *  seededFrom) — see `mirroredShipRole` in `src/utils/communityBuild.ts`. NULL only once
-     *  the migration making this column nullable has been applied. */
+     *  seededFrom) — see `mirroredShipRole` in `src/utils/communityBuild.ts`. The database
+     *  column itself is NOT NULL today; a null value here appears only once #552 relaxes it
+     *  to nullable in the same change that turns on `ALLOW_ROLELESS_COMMUNITY_SHARE`. */
     ship_role: string | null;
     stat_priorities: StatPriority[];
     stat_bonuses: StatBonus[];

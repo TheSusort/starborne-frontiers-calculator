@@ -58,11 +58,12 @@ export class RolelessShareNotAllowedError extends Error {
 
 /**
  * Thrown by createRecommendation when the insert fails on a NOT NULL violation for
- * `ship_role` (Postgres code 23502) while writing a role-less build. `community_recommendations
- * .ship_role` is nullable from 20260923000001_nullable_community_recommendation_ship_role.sql
- * onward; this error means that migration has not been applied to the database this client is
- * talking to yet, so the write path's own null write is rejected at the DB rather than
- * silently dropped or crashing.
+ * `ship_role` (Postgres code 23502) while writing a role-less build. This only fires when a
+ * caller passes `allowRoleless: true` explicitly — `ALLOW_ROLELESS_COMMUNITY_SHARE` is off by
+ * default, so `RolelessShareNotAllowedError` refuses a role-less build before insert is ever
+ * attempted. `community_recommendations.ship_role` is NOT NULL today; #552 relaxes it to
+ * nullable in the same change that turns that switch on. Until then, this error names a
+ * role-less write rejected at the DB rather than silently dropped or crashing.
  */
 export class ShipRoleColumnNotNullableError extends Error {
     constructor() {

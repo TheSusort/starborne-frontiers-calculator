@@ -330,8 +330,9 @@ export const mirroredShipRole = (
  * 1.68.0 or earlier has no `version: 2` reader and falls back to
  * `normalizeShipRole(row.ship_role)`, whose legacy fallback had no null guard — a player on
  * one of those bundles who has not reloaded gets every recommendation list for that ship
- * failing to load. #552 tracks flipping this to true once tabs on those bundles have aged
- * out and `20260923000001_nullable_community_recommendation_ship_role.sql` is applied.
+ * failing to load. `community_recommendations.ship_role` is NOT NULL today, and the client
+ * never writes it NULL while this switch is off. #552 flips the switch to true and relaxes
+ * the column to nullable in that same change, once tabs on those bundles have aged out.
  */
 export const ALLOW_ROLELESS_COMMUNITY_SHARE = false;
 

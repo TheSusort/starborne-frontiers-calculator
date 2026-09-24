@@ -155,9 +155,10 @@ describe('CommunityRecommendationService.createRecommendation', () => {
     });
 
     // A hand-written Custom formula with no seededFrom has no role to mirror. Writing a
-    // placeholder would display as a role the author never chose, so this writes NULL
-    // instead of refusing — `ship_role` is nullable
-    // (20260923000001_nullable_community_recommendation_ship_role.sql).
+    // placeholder would display as a role the author never chose, so — when a caller opts in
+    // via `allowRoleless` (the third argument here) — this writes NULL instead of refusing.
+    // `ship_role` is NOT NULL today; #552 relaxes it to nullable in the same change that turns
+    // `ALLOW_ROLELESS_COMMUNITY_SHARE` on.
     it('writes a null ship_role for a from-scratch Custom-mode build with no seededFrom to mirror', async () => {
         const fromScratch: SharedAutogearBuild = {
             version: 2,
