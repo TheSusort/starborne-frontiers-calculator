@@ -421,9 +421,15 @@ describe('resetShipConfigPatch', () => {
             statPriorities: [{ stat: 'hp' }],
             roleBasis,
         };
-        const patch = resetShipConfigPatch(config);
+        const patch = resetShipConfigPatch(config, 'SUPPORTER');
         expect(patch.roleBasis).toBeUndefined();
-        expect(patch).toEqual(defaultAutogearShipConfig('ATTACKER'));
+        expect(patch).toEqual(defaultAutogearShipConfig('SUPPORTER'));
+    });
+
+    it("resets a role config to the ship's own role, not the role it was switched to (#559)", () => {
+        const config: AutogearShipConfig = defaultAutogearShipConfig('ATTACKER');
+        const patch = resetShipConfigPatch(config, 'SUPPORTER');
+        expect(patch.shipRole).toBe('SUPPORTER');
     });
 
     it('clears roleBasis on a Custom-mode config too, without touching shipRole', () => {
@@ -433,7 +439,7 @@ describe('resetShipConfigPatch', () => {
             customFormula: { rows: [{ stat: 'hp', kind: 'core', direction: 'max' }] },
             roleBasis,
         };
-        const patch = resetShipConfigPatch(config);
+        const patch = resetShipConfigPatch(config, 'ATTACKER');
         expect(patch.roleBasis).toBeUndefined();
         expect(patch.shipRole).toBeUndefined();
     });
@@ -445,7 +451,7 @@ describe('resetShipConfigPatch', () => {
             customFormula: { rows: [], seededFrom: 'SUPPORTER' },
             roleBasis,
         };
-        const patch = resetShipConfigPatch(config);
+        const patch = resetShipConfigPatch(config, 'ATTACKER');
         expect(patch.customFormula?.rows.length).toBeGreaterThan(0);
     });
 });

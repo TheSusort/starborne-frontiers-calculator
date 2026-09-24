@@ -123,7 +123,8 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
 
 /**
  * The patch `AutogearPage`'s "Reset to role defaults" control writes. A role config resets to
- * `defaultAutogearShipConfig('ATTACKER')` wholesale — reusing that single canonical default
+ * `defaultAutogearShipConfig(shipType)` wholesale — the ship's own role, the same default
+ * `useAutogearShipConfigs` seeds a ship with (#559) — reusing that single canonical default
  * rather than a second, hand-enumerated object literal, since a hand-written field list is
  * exactly the class of bug `toSavedAutogearConfig`'s own doc names (#544 I6, the third field a
  * hand-written reset list has silently missed). A Custom-mode config keeps its role unset and
@@ -132,7 +133,8 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
  * reset either, or a later switch BACK to a hosting role shows it as applied again.
  */
 export function resetShipConfigPatch(
-    config: Pick<AutogearShipConfig, 'shipRole' | 'customFormula'>
+    config: Pick<AutogearShipConfig, 'shipRole' | 'customFormula'>,
+    shipType: ShipTypeName
 ): Partial<AutogearShipConfig> {
     if (config.shipRole === null) {
         return {
@@ -142,7 +144,7 @@ export function resetShipConfigPatch(
             roleBasis: undefined,
         };
     }
-    return defaultAutogearShipConfig('ATTACKER');
+    return defaultAutogearShipConfig(shipType);
 }
 
 /**

@@ -100,15 +100,8 @@ export const AutogearPage: React.FC = () => {
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece, upgrades, simulateUpgrades } = useGearUpgrades();
-    const {
-        getShipById,
-        equipMultipleGear,
-        lockEquipment,
-        gearToShipMap,
-        ships,
-        updateShip,
-        toggleStarred,
-    } = useShips();
+    const { getShipById, equipMultipleGear, lockEquipment, gearToShipMap, ships, toggleStarred } =
+        useShips();
     const { addNotification } = useNotification();
     const { getEngineeringStatsForShipType } = useEngineeringStats();
     const [searchParams] = useSearchParams();
@@ -261,24 +254,11 @@ export const AutogearPage: React.FC = () => {
                 isImplantSlotName(s.slotName)
         );
 
-        if (gearSuggestions.length > 0) {
-            const gearAssignments = gearSuggestions.map((suggestion) => ({
-                slot: suggestion.slotName,
-                gearId: suggestion.gearId,
-            }));
-            await equipMultipleGear(shipId, gearAssignments);
-        }
-
-        if (implantSuggestions.length > 0) {
-            const currentShip = getShipById(shipId);
-            if (currentShip) {
-                const newImplants = { ...currentShip.implants };
-                implantSuggestions.forEach((suggestion) => {
-                    newImplants[suggestion.slotName] = suggestion.gearId;
-                });
-                await updateShip(shipId, { implants: newImplants });
-            }
-        }
+        await equipMultipleGear(
+            shipId,
+            gearSuggestions.map(({ slotName, gearId }) => ({ slot: slotName, gearId })),
+            implantSuggestions.map(({ slotName, gearId }) => ({ slot: slotName, gearId }))
+        );
     };
 
     /** Ships currently holding a piece a suggestion list would move onto `equippedShipId` — using
@@ -1615,7 +1595,10 @@ export const AutogearPage: React.FC = () => {
                         if (shipSettings) {
                             void resetConfig(shipSettings.id);
                             const config = getShipConfig(shipSettings.id);
-                            updateShipConfig(shipSettings.id, resetShipConfigPatch(config));
+                            updateShipConfig(
+                                shipSettings.id,
+                                resetShipConfigPatch(config, shipSettings.type)
+                            );
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
