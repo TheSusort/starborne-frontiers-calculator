@@ -16,6 +16,7 @@ import { AutogearAlgorithm, type AutogearProgress, type AutogearResult } from '.
 import { getAutogearStrategy } from './getStrategy';
 import { buildGearScoringInputs } from './gearScoringInputs';
 import { filterTopImplantsPerSlot } from './implantFilter';
+import { seedFormulaFromRole } from './customFormulaSeeds';
 
 /** Every field a single ship's optimizer pass needs to decide WHAT gear counts and HOW it is
  *  scored. Deliberately excludes anything about other ships in a batch — `usedGearIds` on
@@ -120,6 +121,30 @@ export function defaultAutogearShipConfig(defaultRole: ShipTypeName): AutogearSh
         customFormula: undefined,
         roleBasis: undefined,
     };
+}
+
+/**
+ * The patch `AutogearPage`'s "Reset to role defaults" control writes. A role config resets to
+ * `defaultAutogearShipConfig('ATTACKER')` wholesale — reusing that single canonical default
+ * rather than a second, hand-enumerated object literal, since a hand-written field list is
+ * exactly the class of bug `toSavedAutogearConfig`'s own doc names (#544 I6, the third field a
+ * hand-written reset list has silently missed). A Custom-mode config keeps its role unset and
+ * only touches its formula (re-seeding it from `seededFrom` when it has one) and `roleBasis` —
+ * an equation applied under a role the player has since switched away from must not survive the
+ * reset either, or a later switch BACK to a hosting role shows it as applied again.
+ */
+export function resetShipConfigPatch(
+    config: Pick<AutogearShipConfig, 'shipRole' | 'customFormula'>
+): Partial<AutogearShipConfig> {
+    if (config.shipRole === null) {
+        return {
+            customFormula: config.customFormula?.seededFrom
+                ? seedFormulaFromRole(config.customFormula.seededFrom)
+                : undefined,
+            roleBasis: undefined,
+        };
+    }
+    return defaultAutogearShipConfig('ATTACKER');
 }
 
 /**

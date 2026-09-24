@@ -3,6 +3,7 @@ import {
     findOptimalGearForShip,
     defaultAutogearShipConfig,
     toSavedAutogearConfig,
+    resetShipConfigPatch,
     type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
@@ -403,5 +404,48 @@ describe('toSavedAutogearConfig', () => {
     it('omits roleBasis when the ship config carries none', () => {
         const saved = toSavedAutogearConfig('ship-1', defaultAutogearShipConfig('ATTACKER'));
         expect(saved.roleBasis).toBeUndefined();
+    });
+});
+
+// #544 I6: `AutogearPage`'s "Reset to role defaults" handler hand-enumerates the patch it writes
+// per branch (a role config vs. a Custom-mode config) — the third time such a hand-written list
+// has silently missed `roleBasis` (`toSavedAutogearConfig`'s own doc names the first two). Both
+// branches are exercised here so a field missing from either one fails this test directly,
+// instead of surfacing later as an equation that survives a reset.
+describe('resetShipConfigPatch', () => {
+    const roleBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 2 }] };
+
+    it('clears roleBasis on a role config, alongside every other field defaultAutogearShipConfig sets', () => {
+        const config: AutogearShipConfig = {
+            ...defaultAutogearShipConfig('SUPPORTER'),
+            statPriorities: [{ stat: 'hp' }],
+            roleBasis,
+        };
+        const patch = resetShipConfigPatch(config);
+        expect(patch.roleBasis).toBeUndefined();
+        expect(patch).toEqual(defaultAutogearShipConfig('ATTACKER'));
+    });
+
+    it('clears roleBasis on a Custom-mode config too, without touching shipRole', () => {
+        const config: AutogearShipConfig = {
+            ...defaultAutogearShipConfig('ATTACKER'),
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'hp', kind: 'core', direction: 'max' }] },
+            roleBasis,
+        };
+        const patch = resetShipConfigPatch(config);
+        expect(patch.roleBasis).toBeUndefined();
+        expect(patch.shipRole).toBeUndefined();
+    });
+
+    it('re-seeds a Custom-mode formula from its origin role', () => {
+        const config: AutogearShipConfig = {
+            ...defaultAutogearShipConfig('ATTACKER'),
+            shipRole: null,
+            customFormula: { rows: [], seededFrom: 'SUPPORTER' },
+            roleBasis,
+        };
+        const patch = resetShipConfigPatch(config);
+        expect(patch.customFormula?.rows.length).toBeGreaterThan(0);
     });
 });

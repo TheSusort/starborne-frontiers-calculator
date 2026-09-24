@@ -20,6 +20,7 @@ import {
     findOptimalGearForShip,
     useAutogearShipConfigs,
     toSavedAutogearConfig,
+    resetShipConfigPatch,
     type ShipOptimizerRun,
 } from '../../utils/autogear/runShipOptimizer';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
@@ -1596,35 +1597,7 @@ export const AutogearPage: React.FC = () => {
                         if (shipSettings) {
                             void resetConfig(shipSettings.id);
                             const config = getShipConfig(shipSettings.id);
-                            if (config.shipRole === null) {
-                                // Custom mode: the role stays unset; only the formula resets,
-                                // re-seeding from its origin role when it has one.
-                                updateShipConfig(shipSettings.id, {
-                                    customFormula: config.customFormula?.seededFrom
-                                        ? seedFormulaFromRole(config.customFormula.seededFrom)
-                                        : undefined,
-                                });
-                            } else {
-                                updateShipConfig(shipSettings.id, {
-                                    shipRole: 'ATTACKER',
-                                    roleBasis: undefined,
-                                    statPriorities: [],
-                                    setPriorities: [],
-                                    statBonuses: [],
-                                    ignoreEquipped: false,
-                                    ignoreUnleveled: true,
-                                    useUpgradedStats: false,
-                                    tryToCompleteSets: false,
-                                    selectedAlgorithm: AutogearAlgorithm.Genetic,
-                                    showSecondaryRequirements: false,
-                                    optimizeImplants: false,
-                                    includeCalibratedGear: false,
-                                    assumeCalibrated: false,
-                                    useArenaModifiers: false,
-                                    excludedImplantTypes: [],
-                                    fleetBuffs: [],
-                                });
-                            }
+                            updateShipConfig(shipSettings.id, resetShipConfigPatch(config));
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
