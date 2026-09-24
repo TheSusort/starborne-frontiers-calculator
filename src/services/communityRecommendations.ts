@@ -87,10 +87,10 @@ export class CommunityRecommendationService {
                 description: input.description,
                 is_implant_specific: input.isImplantSpecific,
                 ultimate_implant: input.ultimateImplant,
-                // Dual write: shared_config is the source of truth, but the legacy
-                // columns keep being populated so a stale cached bundle still reads
-                // a usable build. Derived from the same (sanitised) object so they
-                // cannot drift.
+                // Dual write: shared_config is the source of truth, but the legacy columns
+                // keep being populated so a bundle with no `shared_config` reader (pre-2026-08-29)
+                // still reads a usable build from them. Derived from the same (sanitised)
+                // object so they cannot drift.
                 shared_config: JSON.parse(JSON.stringify(sharedConfig)),
                 ship_role: legacyShipRole,
                 stat_priorities: JSON.parse(JSON.stringify(sharedConfig.statPriorities)),
@@ -104,10 +104,16 @@ export class CommunityRecommendationService {
 
         if (error) {
             console.error('Error creating recommendation:', error);
-            // 23502 is Postgres' not_null_violation. legacyShipRole is only ever null when
-            // this insert deliberately wrote NULL, so that combination identifies the
-            // pending-migration case rather than a generic insert failure.
-            if (legacyShipRole === null && error.code === '23502') {
+            // 23502 is Postgres' not_null_violation. `ship_name` and `title` are also NOT
+            // NULL on this table, so legacyShipRole === null alone does not identify which
+            // column rejected the write — the error must also name `ship_role` (Postgres
+            // reports the offending column in `message`/`details`) before this is reported
+            // as the pending-migration case rather than an unrelated insert failure.
+            if (
+                legacyShipRole === null &&
+                error.code === '23502' &&
+                (error.message?.includes('ship_role') || error.details?.includes('ship_role'))
+            ) {
                 throw new ShipRoleColumnNotNullableError();
             }
             return null;

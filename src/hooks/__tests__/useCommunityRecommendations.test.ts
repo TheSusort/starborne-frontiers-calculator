@@ -326,9 +326,21 @@ describe('useCommunityRecommendations — canShare gate', () => {
         expect(result.current.canShare).toBe(true);
     });
 
-    it('opens the gate for a hand-written Custom formula with no seededFrom too', () => {
+    it('keeps the gate closed for a hand-written Custom formula with no seededFrom when allowRoleless is false', () => {
         const ship = makeShip('1', 'Ares');
-        const build = configToSharedBuild(customConfig(usableFormula));
+        const build = configToSharedBuild(customConfig(usableFormula), false);
+        expect(build).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(false);
+    });
+
+    it('opens the gate for a hand-written Custom formula with no seededFrom when allowRoleless is true', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig(usableFormula), true);
         expect(build).not.toBeNull();
         expect(build?.shipRole).toBeNull();
 

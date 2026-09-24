@@ -393,9 +393,10 @@ describe('validateSharedAutogearBuild', () => {
             expect(validateSharedAutogearBuild(maximalRoleBasisBuild())).not.toBeNull();
         });
 
-        // Measured on postgres:16 — the payload below is 23,360 bytes of JSON, still well
-        // inside the bound. If this assertion ever fails, raise the DB bound; do not shave
-        // the margin.
+        // Measured in Node via JSON.stringify (not against postgres, unlike the v1 figure
+        // above) — the payload below is 23,360 bytes of JSON, still well inside the bound.
+        // `maximalCustomFormulaBuild()` alone (no roleBasis) is 23,091 of that. If this
+        // assertion ever fails, raise the DB bound; do not shave the margin.
         it(`the maximal roleBasis payload stays under ${TEXT_BYTE_CEILING} bytes`, () => {
             const bytes = new TextEncoder().encode(JSON.stringify(maximalRoleBasisBuild())).length;
             expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
@@ -814,6 +815,24 @@ describe('validateSharedAutogearBuild — version 2, custom formula builds', () 
                 })),
             });
             expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        // A Custom build can carry a leftover roleBasis (a player applies a role's equation,
+        // then switches the ship to Custom mode) — it is inert there (only a hosting role's
+        // scorer reads it) rather than corrupt, so it must not block an otherwise-valid
+        // role-less share. `v2Build`'s default `cobaltFormula` has a usable row
+        // (`directDamage`, kind core/direction max), unlike this suite's separate
+        // byte-ceiling fixture (`maximalCustomFormulaBuild`'s row stat is
+        // `defensePenetration`, the longest STATS/DERIVED_STAT_LABELS key for that
+        // measurement — it has no MULTIPLIER_NORMALIZERS entry and was never a usable row,
+        // so forcing shipRole: null onto THAT fixture fails on "no usable formula", not on
+        // roleBasis).
+        it('accepts a leftover roleBasis on an otherwise-valid role-less Custom build', () => {
+            const build = v2Build({
+                shipRole: null,
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1.5 }] },
+            });
+            expect(validateSharedAutogearBuild(structuredClone(build))).not.toBeNull();
         });
     });
 });

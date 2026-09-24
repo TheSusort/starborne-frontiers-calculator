@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { CommunityRecommendations } from '../CommunityRecommendations';
 import type { Ship } from '../../../types/ship';
+import type { ShipTypeName } from '../../../constants';
+import type { CustomFormula } from '../../../types/autogear';
 
 vi.mock('../../../hooks/useTutorialTrigger', () => ({ useTutorialTrigger: () => {} }));
 vi.mock('../../../contexts/AuthProvider', () => ({ useAuth: () => ({ user: null }) }));
@@ -9,9 +11,10 @@ vi.mock('../../../contexts/ActiveProfileProvider', () => ({
     useActiveProfile: () => ({ activeProfileId: 'profile-1' }),
 }));
 
-// The share/no-share copy is decided entirely by `canShare` (real hook, exercised in
-// useCommunityRecommendations.test.ts) now that a role-less usable formula shares too —
-// there is no longer a component-local "no role to file it under yet" case. Mocking the
+// `canShare` (real hook, exercised in useCommunityRecommendations.test.ts) decides whether
+// the Share button shows. When it is false, this component still distinguishes "nothing
+// configured" from "a role-less but otherwise usable formula, withheld by
+// ALLOW_ROLELESS_COMMUNITY_SHARE" via its own shipRole/customFormula props — mocking the
 // hook isolates that message logic from fetching/voting, which this file is not about.
 const useCommunityRecommendationsMock = vi.fn();
 vi.mock('../../../hooks/useCommunityRecommendations', () => ({
@@ -36,12 +39,17 @@ const baseHookReturn = {
 
 const makeShip = (): Ship => ({ id: '1', name: 'Ares' }) as Ship;
 
-const renderPanel = (canShare: boolean) => {
+const renderPanel = (
+    canShare: boolean,
+    fields: { shipRole?: ShipTypeName | null; customFormula?: CustomFormula } = {}
+) => {
     useCommunityRecommendationsMock.mockReturnValue({ ...baseHookReturn, canShare });
     render(
         <CommunityRecommendations
             selectedShip={makeShip()}
             currentBuild={null}
+            shipRole={fields.shipRole ?? null}
+            customFormula={fields.customFormula}
             onApplyBuild={null}
             hasExistingConfig={false}
         />
@@ -69,6 +77,37 @@ describe('CommunityRecommendations — share gate copy', () => {
     it('falls back to the generic message when nothing can be shared', () => {
         renderPanel(false);
 
+        expect(
+            screen.getByText('Configure autogear settings to share your build')
+        ).toBeInTheDocument();
+    });
+
+    it('explains a role-less but usable formula cannot be shared yet, withheld by the gate', () => {
+        renderPanel(false, {
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+            },
+        });
+
+        expect(
+            screen.getByText(/this formula has no role to file it under yet/i)
+        ).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Share your build' })).not.toBeInTheDocument();
+    });
+
+    it('does not show the role-less-formula message once the formula is seeded from a role', () => {
+        renderPanel(false, {
+            shipRole: null,
+            customFormula: {
+                seededFrom: 'ATTACKER',
+                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+            },
+        });
+
+        expect(
+            screen.queryByText(/this formula has no role to file it under yet/i)
+        ).not.toBeInTheDocument();
         expect(
             screen.getByText('Configure autogear settings to share your build')
         ).toBeInTheDocument();

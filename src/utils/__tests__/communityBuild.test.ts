@@ -6,6 +6,7 @@ import {
     configToSharedBuild,
     hasExistingBuildConfig,
     communityBuildToConfigUpdate,
+    ALLOW_ROLELESS_COMMUNITY_SHARE,
 } from '../communityBuild';
 import { validateSharedAutogearBuild } from '../../schemas/sharedAutogearBuild';
 import { defaultAutogearShipConfig } from '../autogear/runShipOptimizer';
@@ -222,12 +223,53 @@ describe('configToSharedBuild', () => {
         });
     });
 
-    it('shares a from-scratch Custom-mode build with a usable formula but no seededFrom, writing a null role', () => {
-        const build = configToSharedBuild({
+    it('refuses a from-scratch Custom-mode build when allowRoleless is false, even with a usable formula', () => {
+        const build = configToSharedBuild(
+            {
+                ...config,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            },
+            false
+        );
+        expect(build).toBeNull();
+    });
+
+    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — this pins the DEFAULT's wiring, not its value, so it survives #544's eventual flip", () => {
+        const rolelessConfig = {
             ...config,
             shipRole: null,
-            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
-        });
+            customFormula: {
+                rows: [
+                    {
+                        stat: 'directDamage' as const,
+                        kind: 'core' as const,
+                        direction: 'max' as const,
+                    },
+                ],
+            },
+        };
+        const withDefault = configToSharedBuild(rolelessConfig);
+        const withExplicitConstant = configToSharedBuild(
+            rolelessConfig,
+            ALLOW_ROLELESS_COMMUNITY_SHARE
+        );
+        expect(withDefault).toEqual(withExplicitConstant);
+    });
+
+    it('shares a from-scratch Custom-mode build with a usable formula but no seededFrom, writing a null role, when allowRoleless is true', () => {
+        const build = configToSharedBuild(
+            {
+                ...config,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            },
+            true
+        );
         expect(build).toEqual({
             version: 2,
             ...config,

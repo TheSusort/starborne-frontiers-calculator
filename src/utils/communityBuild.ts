@@ -324,14 +324,29 @@ export const mirroredShipRole = (
 ): ShipTypeName | null => build.shipRole ?? build.customFormula?.seededFrom ?? null;
 
 /**
+ * Whether a role-less Custom build (no `shipRole`, no `customFormula.seededFrom` for
+ * `mirroredShipRole` to mirror) may be shared with a NULL `ship_role`. OFF: a bundle at
+ * 1.68.0 or earlier has no `version: 2` reader and falls back to
+ * `normalizeShipRole(row.ship_role)`, whose legacy fallback had no null guard — a player on
+ * one of those bundles who has not reloaded gets every recommendation list for that ship
+ * failing to load. #544 tracks flipping this to true once tabs on those bundles have aged
+ * out and `20260923000001_nullable_community_recommendation_ship_role.sql` is applied.
+ */
+export const ALLOW_ROLELESS_COMMUNITY_SHARE = false;
+
+/**
  * Build the shareable payload from the page's per-ship config.
  *
- * Null when there is nothing scoreable to share: no role and no usable formula — the same
- * test `partitionScoreableShips` uses. A role-less Custom formula (no `seededFrom` for
- * `mirroredShipRole` to mirror) is still shared; the caller writes a null `ship_role`.
+ * Null when there is nothing scoreable to share (no role and no usable formula — the same
+ * test `partitionScoreableShips` uses), or when the config has no `mirroredShipRole` to
+ * write and `allowRoleless` is false (see `ALLOW_ROLELESS_COMMUNITY_SHARE`).
  */
-export const configToSharedBuild = (config: AutogearBuildFields): SharedAutogearBuild | null => {
+export const configToSharedBuild = (
+    config: AutogearBuildFields,
+    allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE
+): SharedAutogearBuild | null => {
     if (!config.shipRole && !formulaHasUsableRow(config.customFormula)) return null;
+    if (!allowRoleless && !mirroredShipRole(config)) return null;
     return {
         version: 2,
         shipRole: config.shipRole,

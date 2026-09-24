@@ -191,6 +191,44 @@ describe('CommunityRecommendationService.createRecommendation', () => {
         ).rejects.toThrow(ShipRoleColumnNotNullableError);
     });
 
+    // `ship_name` and `title` are NOT NULL on this table too. A from-scratch build legitimately
+    // writes a null `ship_role`, but if some OTHER column's insert value is what actually
+    // violated the constraint, that 23502 must not be misreported as the pending-migration
+    // case just because legacyShipRole happens to be null on this build.
+    it('does not throw ShipRoleColumnNotNullableError when the 23502 names a different column', async () => {
+        const fromScratch: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        };
+
+        const single = vi.fn().mockResolvedValue({
+            data: null,
+            error: {
+                code: '23502',
+                message: 'null value in column "title" violates not-null constraint',
+            },
+        });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        const result = await CommunityRecommendationService.createRecommendation(
+            { ...baseInput, sharedConfig: fromScratch },
+            'profile-1'
+        );
+
+        expect(result).toBeNull();
+    });
+
     // A NOT NULL violation on a build that DOES have a role to mirror is not the
     // pending-migration case — it must fall through to the generic null-return path rather
     // than claiming a migration is the cause of an unrelated failure.

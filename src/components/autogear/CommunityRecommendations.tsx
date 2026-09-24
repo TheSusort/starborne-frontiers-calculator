@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
+import { ShipTypeName } from '../../constants';
+import { CustomFormula } from '../../types/autogear';
 import { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
@@ -8,7 +10,12 @@ import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendat
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
-import { LEGACY_DEFAULT_SET_COUNT, type CommunityBuild } from '../../utils/communityBuild';
+import {
+    LEGACY_DEFAULT_SET_COUNT,
+    mirroredShipRole,
+    type CommunityBuild,
+} from '../../utils/communityBuild';
+import { formulaHasUsableRow } from '../../utils/autogear/customFormula';
 import { RecommendationHeader } from './RecommendationHeader';
 import { CommunityBuildList } from './CommunityBuildList';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
@@ -16,6 +23,11 @@ import { ShareRecommendationForm } from './ShareRecommendationForm';
 interface CommunityRecommendationsProps {
     selectedShip: Ship | null;
     currentBuild: SharedAutogearBuild | null;
+    /** The ship's selected role, or null in Custom mode. */
+    shipRole: ShipTypeName | null;
+    /** The ship's Custom-mode formula, if any — read only to explain why a role-less but
+     *  otherwise usable formula isn't shareable yet (`ALLOW_ROLELESS_COMMUNITY_SHARE`). */
+    customFormula?: CustomFormula;
     /** Null when the page cannot apply (no ship). */
     onApplyBuild: ((build: SharedAutogearBuild) => void) | null;
     /** Whether the ship already has build config that Apply would overwrite. */
@@ -25,6 +37,8 @@ interface CommunityRecommendationsProps {
 export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> = ({
     selectedShip,
     currentBuild,
+    shipRole,
+    customFormula,
     onApplyBuild,
     hasExistingConfig,
 }) => {
@@ -138,6 +152,12 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                                 >
                                     Share your build
                                 </Button>
+                            ) : formulaHasUsableRow(customFormula) &&
+                              !mirroredShipRole({ shipRole, customFormula }) ? (
+                                <p className="text-sm text-theme-text-secondary">
+                                    This formula has no role to file it under yet. Reset it and
+                                    start from a role to make it shareable.
+                                </p>
                             ) : (
                                 <span className="text-sm text-theme-text-secondary">
                                     Configure autogear settings to share your build

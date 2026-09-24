@@ -4,7 +4,7 @@ import { GEAR_SETS } from '../constants/gearSets';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
 import type { LimitableStat } from '../types/stats';
-import type { BasisTerm, CustomFormula } from '../types/autogear';
+import type { BasisTerm, CustomFormula, RoleBasis } from '../types/autogear';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
 import {
     isBasisStat,
@@ -147,6 +147,16 @@ const basisTermSchema = z.object({
 
 // The axis a `roleBasis` measures — mirrors `RoleBasis['produces']` in types/autogear.ts.
 const basisProducesSchema = z.enum(['damage', 'repair', 'shield']);
+
+// Ties this enum to `RoleBasis['produces']` at compile time: if that union gains or loses a
+// member without a matching edit here, this assignment fails `tsc --noEmit` instead of the
+// new axis silently failing to share (rejected as an unrecognised value, or — the other
+// direction — no longer validated at all).
+type AssertSameUnion<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+const _basisProducesTiedToRoleBasis: AssertSameUnion<
+    z.infer<typeof basisProducesSchema>,
+    RoleBasis['produces']
+> = true;
 
 // Reuses `usableBasisTerms`, the scorer's own gate (`priorityScore.ts` calls it on
 // `roleBasis.terms` at score time), so a `roleBasis` this schema admits can never be one the
