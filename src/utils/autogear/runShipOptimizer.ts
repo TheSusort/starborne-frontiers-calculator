@@ -195,13 +195,21 @@ export function useAutogearShipConfigs(getShipById: (id: string) => Ship | undef
     };
 
     const updateShipConfig = (shipId: string, updates: Partial<AutogearShipConfig>) => {
-        setShipConfigs((prev) => ({
-            ...prev,
-            [shipId]: {
-                ...getShipConfig(shipId),
-                ...updates,
-            },
-        }));
+        // Merges from `prev[shipId]` inside the functional updater, not from `getShipConfig`
+        // (which closes over the render's own `shipConfigs`) — two calls for the same ship
+        // in one event otherwise both read the same pre-update `shipConfigs`, so the second
+        // call's merge drops whatever the first call just wrote.
+        setShipConfigs((prev) => {
+            const ship = getShipById(shipId);
+            const defaultRole = ship?.type || 'ATTACKER';
+            return {
+                ...prev,
+                [shipId]: {
+                    ...(prev[shipId] || defaultAutogearShipConfig(defaultRole)),
+                    ...updates,
+                },
+            };
+        });
     };
 
     return { shipConfigs, getShipConfig, updateShipConfig };

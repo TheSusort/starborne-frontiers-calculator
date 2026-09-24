@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { renderHook, act } from '@testing-library/react';
 import {
     findOptimalGearForShip,
     defaultAutogearShipConfig,
     toSavedAutogearConfig,
     resetShipConfigPatch,
+    useAutogearShipConfigs,
     type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
@@ -447,5 +449,39 @@ describe('resetShipConfigPatch', () => {
         };
         const patch = resetShipConfigPatch(config);
         expect(patch.customFormula?.rows.length).toBeGreaterThan(0);
+    });
+});
+
+// `updateShipConfig` used to merge from `getShipConfig(shipId)`, which closes over the render's
+// own `shipConfigs` — inside a functional `setShipConfigs` updater. Two `updateShipConfig` calls
+// for the same ship in one event both read that same pre-update `shipConfigs`, so the second
+// call's merge silently dropped whatever the first call had just written. The fix merges from
+// `prev[shipId]` inside the updater itself.
+describe('useAutogearShipConfigs — updateShipConfig merges from the latest state', () => {
+    const ship: Ship = { id: 'ship-1', type: 'ATTACKER' } as unknown as Ship;
+    const getShipById = (id: string) => (id === ship.id ? ship : undefined);
+
+    it('keeps both calls’ fields when two updateShipConfig calls for one ship happen in the same act()', () => {
+        const { result } = renderHook(() => useAutogearShipConfigs(getShipById));
+
+        act(() => {
+            result.current.updateShipConfig(ship.id, { ignoreEquipped: true });
+            result.current.updateShipConfig(ship.id, { tryToCompleteSets: true });
+        });
+
+        const config = result.current.getShipConfig(ship.id);
+        expect(config.ignoreEquipped).toBe(true);
+        expect(config.tryToCompleteSets).toBe(true);
+    });
+
+    it('still falls back to defaultAutogearShipConfig(ship.type) for a ship with no prior config', () => {
+        const { result } = renderHook(() => useAutogearShipConfigs(getShipById));
+
+        act(() => {
+            result.current.updateShipConfig(ship.id, { ignoreEquipped: true });
+        });
+
+        const config = result.current.getShipConfig(ship.id);
+        expect(config).toEqual({ ...defaultAutogearShipConfig('ATTACKER'), ignoreEquipped: true });
     });
 });
