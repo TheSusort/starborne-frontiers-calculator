@@ -1040,8 +1040,7 @@ with #498 in the split (2026-09-23).**
 Results survive a change of role, fight source, seed, run count or equipped gear while the modal
 stays open, and `Apply` then forwards a stale loadout. `OffFormulaTuningPanel` already carries the
 correct pattern — a `useEffect` that resets on every input the run reads, with no omission to
-silence a lint warning. Apply the same shape to `SimRerankSection`. **This must land before
-merge**; it is a shipped defect on the draft PR, not new work.
+silence a lint warning. Apply the same shape to `SimRerankSection`.
 
 - [ ] **Step 2: Write the failing test**
 
