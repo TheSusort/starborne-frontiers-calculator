@@ -40,14 +40,13 @@ const cobaltRow: CustomFormulaRow = {
     ],
 };
 
-// Rikra's whole carrier lives in a passive: nothing survives into `basis`, so `excludedNote`
-// is the only content the notice had to give — and the only thing worth carrying onto the row.
+// A plain-stat core/max row with no basis of its own — SUPPORTER's own shape (its core row is
+// the plain stat `hp`), used below to prove the basis controls apply to a plain stat too.
 const rikraRow: CustomFormulaRow = {
     stat: 'hp',
     kind: 'core',
     direction: 'max',
     importance: 1,
-    excludedNote: ['repairs 60% of max HP when an enemy is destroyed'],
 };
 
 const renderRow = (row: CustomFormulaRow, shipStats: BaseStats | null = stats()) =>
@@ -90,11 +89,6 @@ describe('CustomFormulaRowView — basis display', () => {
             basis: cobaltRow.basis,
         });
         expect(screen.queryByText(/x\d/)).not.toBeInTheDocument();
-    });
-
-    it('shows the excluded-clause note even when there is no basis to show', () => {
-        renderRow(rikraRow);
-        expect(screen.getByText(/repairs 60% of max HP/)).toBeInTheDocument();
     });
 
     it("labels an effectiveHp basis as a tilt, not the ship's own equation", () => {
@@ -166,11 +160,11 @@ describe('CustomFormulaForm — basis controls follow usableBasis', () => {
     });
 });
 
-describe('CustomFormulaForm — basis and excludedNote survive an unrelated edit', () => {
+describe('CustomFormulaForm — basis survives an unrelated edit', () => {
     it('preserves basis when only importance changes', async () => {
         // handleSubmit used to rebuild the row from an explicit { stat, kind, direction,
-        // importance } field list, naming neither `basis` nor `excludedNote` — so editing any
-        // field on a basis-bearing row silently stripped both.
+        // importance } field list, naming neither `basis` — so editing any field on a
+        // basis-bearing row silently stripped it.
         const onSave = vi.fn();
         render(<CustomFormulaForm onAdd={vi.fn()} onSave={onSave} editingValue={cobaltRow} />);
         await userEvent.click(screen.getByLabelText(/^importance$/i));
@@ -183,19 +177,6 @@ describe('CustomFormulaForm — basis and excludedNote survive an unrelated edit
                 direction: 'max',
                 importance: 2,
                 basis: cobaltRow.basis,
-            })
-        );
-    });
-
-    it('preserves excludedNote when only importance changes', async () => {
-        const onSave = vi.fn();
-        render(<CustomFormulaForm onAdd={vi.fn()} onSave={onSave} editingValue={rikraRow} />);
-        await userEvent.click(screen.getByLabelText(/^importance$/i));
-        await userEvent.click(screen.getByText(/heavy/i));
-        await userEvent.click(screen.getByRole('button', { name: /save/i }));
-        expect(onSave).toHaveBeenCalledWith(
-            expect.objectContaining({
-                excludedNote: rikraRow.excludedNote,
             })
         );
     });
@@ -213,7 +194,6 @@ describe('CustomFormulaForm — adding and validating a basis term', () => {
         expect(onSave).toHaveBeenCalledWith(
             expect.objectContaining({
                 basis: [{ stat: 'hp', weight: 0.4 }],
-                excludedNote: rikraRow.excludedNote,
             })
         );
     });
@@ -254,21 +234,6 @@ describe('CustomFormulaForm — adding and validating a basis term', () => {
             expect.objectContaining({
                 basis: [{ stat: 'hp', weight: 0.267 }],
             })
-        );
-    });
-});
-
-describe('excludedNote travels with the basis', () => {
-    it('is dropped when the row is switched to one that cannot hold a basis', async () => {
-        // The note explains what a basis LEAVES OUT. On a bonus row, which the scorer never
-        // reads a basis from, it would describe scoring that is not happening.
-        const onSave = vi.fn();
-        render(<CustomFormulaForm onAdd={vi.fn()} onSave={onSave} editingValue={rikraRow} />);
-        await userEvent.click(screen.getByLabelText(/how it counts/i));
-        await userEvent.click(screen.getByText(/added/i));
-        await userEvent.click(screen.getByRole('button', { name: /save/i }));
-        expect(onSave).toHaveBeenCalledWith(
-            expect.not.objectContaining({ excludedNote: expect.anything() })
         );
     });
 });

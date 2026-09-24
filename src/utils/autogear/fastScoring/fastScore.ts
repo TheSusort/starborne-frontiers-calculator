@@ -46,9 +46,11 @@ export function fastScore(
 
     // Cache key: concat gear ids, separator, implant ids.
     // Omit implants from the key when they're constant (fixedImplantIds) — saves work.
-    // `roleBasisKeyPart` is appended directly (no separator), same convention as
-    // `calculateTotalScore`'s cache key in `scoring.ts` — an absent `roleBasis` contributes ''
-    // and leaves the key byte-for-byte unchanged.
+    // `context.cache` (`FastCache`) is built once per `findOptimalGear` call
+    // (`buildFastScoringContext`), so `context.roleBasis` is the same value for every entry this
+    // cache ever holds — appending `roleBasisKeyPart` here distinguishes nothing within this
+    // cache's lifetime. Kept only for byte-for-byte format parity with `calculateTotalScore`'s
+    // cache key in `scoring.ts`, whose cache IS shared across calls where `roleBasis` varies.
     const cacheKey =
         (optimizingImplants
             ? buildFastCacheKey(gearIds) + '|' + buildFastCacheKey(effectiveImplantIds)

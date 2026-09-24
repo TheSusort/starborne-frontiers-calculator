@@ -187,10 +187,10 @@ export function useAutogearShipConfigs(getShipById: (id: string) => Ship | undef
  * eligibility rule `config` expresses — implant handling, gear already claimed by an earlier
  * ship in the batch, excluded sets, calibration, equipped-elsewhere and unleveled gear.
  *
- * Exported for `findOptimalGearForShip` and its tests. A caller filtering the raw inventory
- * itself would bound the search over gear the run cannot use.
+ * `findOptimalGearForShip`'s own filtering step, factored out so the eligibility rules live in
+ * one place rather than inline in that function.
  */
-export function availableInventoryForShip(
+function availableInventoryForShip(
     ship: Ship,
     config: ShipOptimizerConfig,
     deps: Pick<ShipOptimizerDeps, 'inventory' | 'usedGearIds' | 'gearToShipMap' | 'getShipById'>

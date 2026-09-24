@@ -132,8 +132,6 @@ const basisStatSchema = z
 // MAX_ARRAY_LENGTH.
 const MAX_FORMULA_ROWS = 8;
 const MAX_BASIS_TERMS = 5;
-const MAX_EXCLUDED_NOTES = 3;
-const MAX_EXCLUDED_NOTE_LENGTH = 120;
 
 // A basis weight must be non-negative in addition to `boundedNumberSchema`'s finiteness —
 // matching `usableBasis`'s own filter, so a term the scorer would silently drop (a negative
@@ -183,10 +181,6 @@ const customFormulaRowSchema = z.object({
     importance: coreImportanceSchema.optional(),
     percentage: boundedNumberSchema.optional(),
     basis: z.array(basisTermSchema).max(MAX_BASIS_TERMS).optional(),
-    excludedNote: z
-        .array(z.string().max(MAX_EXCLUDED_NOTE_LENGTH))
-        .max(MAX_EXCLUDED_NOTES)
-        .optional(),
 });
 
 const customFormulaSchema = z.object({

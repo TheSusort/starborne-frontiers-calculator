@@ -58,9 +58,7 @@ export class SetFirstStrategy extends BaseStrategy {
             ship,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType,
-            customFormula,
-            roleBasis
+            getEngineeringStatsForShipType
         );
 
         // Sort set groups by priority
@@ -145,9 +143,7 @@ export class SetFirstStrategy extends BaseStrategy {
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
     ): SetGroup[] {
         const setGroups: Record<string, GearPiece[]> = {};
 
@@ -168,9 +164,7 @@ export class SetFirstStrategy extends BaseStrategy {
                     ship,
                     priorities,
                     getGearPiece,
-                    getEngineeringStatsForShipType,
-                    customFormula,
-                    roleBasis
+                    getEngineeringStatsForShipType
                 );
                 return { setName, pieces, score };
             })
@@ -178,14 +172,16 @@ export class SetFirstStrategy extends BaseStrategy {
             .sort((a, b) => b.score - a.score); // Sort by potential score
     }
 
+    // Ranks sets by raw stat priority alone, ahead of any per-slot assignment — the ranking
+    // this phase produces has no role or formula attached to it (`calculateStatScore` below is
+    // called with `shipRole: undefined`), only `priorities`. Role and formula scoring apply
+    // later, in `findBestSetCombination`/`fillRemainingSlots`'s real per-slot assignment.
     private evaluateSetPotential(
         pieces: GearPiece[],
         ship: Ship,
         priorities: StatPriority[],
         getGearPiece: (id: string) => GearPiece | undefined,
-        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis
+        getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined
     ): number {
         // Find best possible combination of pieces from this set
         const slots = new Set(pieces.map((p) => p.slot));
@@ -207,13 +203,7 @@ export class SetFirstStrategy extends BaseStrategy {
                         );
                         const currentScore = this.calculateStatScore(
                             currentStats.final,
-                            priorities,
-                            undefined,
-                            undefined,
-                            undefined,
-                            undefined,
-                            customFormula,
-                            roleBasis
+                            priorities
                         );
 
                         if (!best || currentScore > best.score) {
@@ -234,15 +224,7 @@ export class SetFirstStrategy extends BaseStrategy {
             testEquipment,
             priorities,
             getGearPiece,
-            getEngineeringStatsForShipType,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            customFormula,
-            roleBasis
+            getEngineeringStatsForShipType
         );
     }
 

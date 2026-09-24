@@ -47,7 +47,6 @@ export const CustomFormulaRowView: React.FC<Props> = ({
     // ties the whole search. The live score shows the symptom; this note gives the cause.
     const zeroesTheFormula = row.kind === 'core' && row.direction === 'max' && value === 0;
     const basisTerms = scoredBasis(row);
-    const excludedNote = row.excludedNote ?? [];
 
     return (
         <div className="space-y-1">
@@ -101,15 +100,6 @@ export const CustomFormulaRowView: React.FC<Props> = ({
                     <CloseIcon />
                 </Button>
             </div>
-            {excludedNote.length > 0 && (
-                <div className="pl-16 space-y-0.5">
-                    {excludedNote.map((note, index) => (
-                        <p key={index} className="text-xs text-amber-400">
-                            {note}
-                        </p>
-                    ))}
-                </div>
-            )}
             {basisTerms.length > 0 && (
                 <p className="pl-16 text-xs text-theme-text-secondary">
                     {basisIntro(row)}{' '}
