@@ -1,6 +1,6 @@
 import type { ShipType } from '../types/ship';
 
-export const SHIP_TYPES: Record<string, ShipType> = {
+export const SHIP_TYPES = {
     ATTACKER: {
         name: 'Attacker',
         description: 'Maximize damage output',
@@ -64,6 +64,16 @@ export const SHIP_TYPES: Record<string, ShipType> = {
 } satisfies Record<string, ShipType>;
 
 export type ShipTypeName = keyof typeof SHIP_TYPES;
+
+// The definition site for the union — a cast here names the role list itself, not
+// unvalidated input, so it is not the blind-cast-at-a-trust-boundary pattern the rest of this
+// file's callers must avoid.
+export const SHIP_TYPE_NAMES = Object.keys(SHIP_TYPES) as ShipTypeName[];
+
+/** Type guard for a role string crossing a trust boundary (import data, a Supabase row, a URL
+ *  param) — narrow with this rather than a blind cast to `ShipTypeName`. */
+export const isShipTypeName = (role: string): role is ShipTypeName =>
+    Object.hasOwn(SHIP_TYPES, role);
 
 /** Role CATEGORY for skill-text role filters ("an ally attacker or debuffer" — Graphite).
  *  A category matches its exact ShipTypeName AND every underscore-suffixed variant

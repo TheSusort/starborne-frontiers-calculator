@@ -9,7 +9,7 @@ import type {
 } from '../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../types/stats';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { SHIP_TYPES } from '../../constants/shipTypes';
+import { SHIP_TYPE_NAMES } from '../../constants/shipTypes';
 import {
     GEAR_SLOT_ORDER,
     GEAR_SLOTS,
@@ -787,7 +787,7 @@ export function buildCoverageMatrix(
     inventory: GearPiece[],
     sampleSize: number = COVERAGE_SAMPLE_SIZE
 ): CoverageMatrix {
-    const roles = Object.keys(SHIP_TYPES);
+    const roles = SHIP_TYPE_NAMES;
 
     const piecesBySlot = new Map<GearSlotName, GearPiece[]>();
     for (const slot of GEAR_SLOT_ORDER) piecesBySlot.set(slot, []);

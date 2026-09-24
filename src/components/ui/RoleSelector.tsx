@@ -1,5 +1,5 @@
 import React from 'react';
-import { SHIP_TYPES, ShipTypeName } from '../../constants';
+import { SHIP_TYPES, ShipTypeName, isShipTypeName } from '../../constants';
 import { Select } from './Select';
 
 interface RoleSelectorProps {
@@ -57,7 +57,9 @@ export const RoleSelector: React.FC<RoleSelectorProps> = ({
         <Select
             label={label}
             value={value}
-            onChange={(val) => onChange(val)}
+            onChange={(val) => {
+                if (val === '' || isShipTypeName(val)) onChange(val);
+            }}
             options={baseRolesOnly ? BASE_ROLE_OPTIONS : ROLE_OPTIONS}
             className={className}
             disabled={disabled}

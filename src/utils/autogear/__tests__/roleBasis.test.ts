@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { calculateRoleScore, calculatePriorityScore } from '../priorityScore';
 import { BaseStats } from '../../../types/stats';
 import { RoleBasis } from '../../../types/autogear';
-import { SHIP_TYPES, ShipTypeName } from '../../../constants';
+import { SHIP_TYPE_NAMES, ShipTypeName } from '../../../constants';
 import { roleAxis, rolePrimaryStat } from '../offFormula/roleBasisHost';
 
 // Fixtures captured at aa42f528 by calling the REAL calculateRoleScore, before any basis code
@@ -41,14 +41,14 @@ describe('calculateRoleScore — regression pin (absent basis changes nothing)',
         SUPPORTER_SHIELD: 50000,
     };
 
-    for (const role of Object.keys(pinned)) {
+    for (const role of Object.keys(pinned) as ShipTypeName[]) {
         it(`${role} matches its pre-basis score to full precision`, () => {
             expect(calculateRoleScore(role, stats)).toBe(pinned[role]);
         });
     }
 
     it('the pin table covers exactly the roles SHIP_TYPES defines — a 13th role cannot go unpinned silently', () => {
-        expect(new Set(Object.keys(pinned))).toEqual(new Set(Object.keys(SHIP_TYPES)));
+        expect(new Set(Object.keys(pinned))).toEqual(new Set(SHIP_TYPE_NAMES));
     });
 });
 
@@ -218,7 +218,7 @@ describe('calculateRoleScore — binds every hosting role to roleBasisHost.ts, n
     // Derived from `roleAxis`/`SHIP_TYPES`, not hand-listed: a role `roleBasisHost.ts` stops
     // hosting drops out of this loop instead of leaving a stale case behind, and a role it
     // starts hosting is picked up automatically.
-    const hostingRoles = Object.keys(SHIP_TYPES).filter((role) => roleAxis(role) !== null);
+    const hostingRoles = SHIP_TYPE_NAMES.filter((role) => roleAxis(role) !== null);
 
     it('the hosting set used by this loop is non-empty', () => {
         expect(hostingRoles.length).toBeGreaterThan(0);

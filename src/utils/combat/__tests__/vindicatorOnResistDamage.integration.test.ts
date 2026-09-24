@@ -321,7 +321,7 @@ function vindicatorShip(id: string): Ship {
         name: 'Vindicator',
         rarity: 'legendary',
         faction: 'ATLAS_SYNDICATE',
-        type: 'Defender',
+        type: 'DEFENDER',
         baseStats: {
             hp: 0,
             attack: 0,
@@ -353,7 +353,7 @@ const enemyDebuffer = (id: string, activeSkillText: string): Ship => ({
     name: 'Debuffer',
     rarity: 'legendary',
     faction: 'AURELIAN_SOVEREIGNTY',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 0,
         attack: 0,

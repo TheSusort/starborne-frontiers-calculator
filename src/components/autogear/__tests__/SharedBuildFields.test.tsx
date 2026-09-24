@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { SharedBuildFields } from '../SharedBuildFields';
 import type { SharedAutogearBuild } from '../../../types/communityRecommendation';
+import type { ShipTypeName } from '../../../constants/shipTypes';
 
 const baseBuild: SharedAutogearBuild = {
     version: 2,
@@ -109,7 +110,7 @@ describe('SharedBuildFields', () => {
                 <SharedBuildFields
                     build={{
                         ...baseBuild,
-                        shipRole: 'RETIRED_ROLE',
+                        shipRole: 'RETIRED_ROLE' as ShipTypeName,
                         roleBasis: {
                             produces: 'damage',
                             terms: [{ stat: 'attack', weight: 2.1 }],

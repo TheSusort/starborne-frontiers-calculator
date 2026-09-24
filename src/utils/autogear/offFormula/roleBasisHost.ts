@@ -45,13 +45,11 @@ const noHost: RoleBasisHost = { axis: null, primaryStat: null };
  *   compresses a basis in a way no other hosting role's formula does, and nothing measures what
  *   that compression would do to rankings.
  *
- * `ShipTypeName` is `string` (#547), so `tsc` does not catch a `ShipTypeName` added later that
- * is missing here — a `Record<ShipTypeName, RoleBasisHost>` type-checks with any subset of keys.
- * The gate against that gap is `roleBasisHost.test.ts`'s per-role walk: it calls `roleAxis`/
- * `rolePrimaryStat`/`roleHostsBasis` for every `SHIP_TYPES` key, and a role missing here makes
- * `roleAxis` throw (`ROLE_BASIS_HOST[role]` is `undefined`). `EXPECTED`'s own set-equality check
- * in the same file guards `EXPECTED` against the same gap, not this table — the two are separate
- * total maps and neither test reads the other's keys.
+ * `ShipTypeName` is a real union (#547), so `Record<ShipTypeName, RoleBasisHost>` itself gates a
+ * `ShipTypeName` added later that is missing here — `tsc --noEmit` fails on a missing or excess
+ * key. `roleBasisHost.test.ts`'s per-role walk (calling `roleAxis`/`rolePrimaryStat`/
+ * `roleHostsBasis` for every `SHIP_TYPES` key) is defense in depth on top of that compile-time
+ * gate, not the only thing enforcing it.
  */
 const ROLE_BASIS_HOST: Record<ShipTypeName, RoleBasisHost> = {
     ATTACKER: { axis: 'damage', primaryStat: 'attack' },

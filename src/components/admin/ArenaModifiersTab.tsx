@@ -16,7 +16,7 @@ import {
 } from '../../services/arenaModifierService';
 import { useNotification } from '../../hooks/useNotification';
 import { FACTIONS } from '../../constants/factions';
-import { SHIP_TYPES } from '../../constants/shipTypes';
+import { SHIP_TYPES, SHIP_TYPE_NAMES, isShipTypeName } from '../../constants/shipTypes';
 import { RARITIES } from '../../constants/rarities';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
@@ -58,7 +58,9 @@ function buildFilterSummary(rule: ArenaSeasonRule): string {
         parts.push(rule.rarities.map((r) => RARITIES[r]?.label ?? r).join('/'));
     }
     if (rule.ship_types && rule.ship_types.length > 0) {
-        parts.push(rule.ship_types.map((t) => SHIP_TYPES[t]?.name ?? t).join('/'));
+        parts.push(
+            rule.ship_types.map((t) => (isShipTypeName(t) ? SHIP_TYPES[t].name : t)).join('/')
+        );
     }
     if (rule.factions && rule.factions.length > 0) {
         parts.push(`from ${rule.factions.map((f) => FACTIONS[f]?.name ?? f).join('/')}`);
@@ -151,7 +153,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
         key,
         label: RARITIES[key].label,
     }));
-    const shipTypeOptions = Object.keys(SHIP_TYPES).map((key) => ({
+    const shipTypeOptions = SHIP_TYPE_NAMES.map((key) => ({
         key,
         label: SHIP_TYPES[key].name,
     }));

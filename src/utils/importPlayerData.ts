@@ -5,7 +5,7 @@ import { Ship, Refit, AffinityName } from '../types/ship';
 import { GearPiece } from '../types/gear';
 import { isGearSlotName, isImplantSlotName } from '../constants/gearTypes';
 import { GearSetName } from '../constants/gearSets';
-import { ShipTypeName } from '../constants/shipTypes';
+import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
 import {
@@ -42,16 +42,17 @@ interface TransformInventoryResult {
 const transformEngineeringStats = (data: ExportedPlayData['Engineering']): EngineeringStats => {
     const statsByShipType = data.reduce(
         (
-            acc: Record<string, { shipType: ShipTypeName; stats: Stat[] }>,
+            acc: Partial<Record<ShipTypeName, { shipType: ShipTypeName; stats: Stat[] }>>,
             stat: ExportedPlayData['Engineering'][0]
         ) => {
-            if (!acc[stat.Type.toUpperCase()]) {
-                acc[stat.Type.toUpperCase()] = {
-                    shipType: stat.Type.toUpperCase(),
+            const shipType = getShipTypeName(stat.Type);
+            if (!acc[shipType]) {
+                acc[shipType] = {
+                    shipType,
                     stats: [],
                 };
             }
-            acc[stat.Type.toUpperCase()].stats.push({
+            acc[shipType].stats.push({
                 name: getStatName(stat.Attribute) as StatName,
                 value: getPercentageStatValue(stat.Level, stat.ModifierType, stat.Attribute),
                 type: getStatType(stat.ModifierType, stat.Attribute),
@@ -153,7 +154,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
             name: unit.Name,
             rarity: unit.Rarity.toLowerCase(),
             faction: getFaction(unit.Faction),
-            type: unit.ShipType.toUpperCase(),
+            type: getShipTypeName(unit.ShipType),
             affinity: getAffinity(unit.Affinity),
             level: unit.Level,
             rank: unit.Rank,
@@ -535,6 +536,15 @@ const getImplantSetBonus = (set: string): GearSetName | null => {
         default:
             return null;
     }
+};
+
+// The export only ever names one of the 4 base roles (never a subtype like DEBUFFER_BOMBER —
+// those are assigned within this app, not by the game). A value outside `ShipTypeName` crosses
+// the file-upload trust boundary (a corrupted export, or a role the game adds later), so it
+// defaults to ATTACKER rather than crashing — the same fallback shape as `getFaction`/`getAffinity`.
+const getShipTypeName = (shipType: string): ShipTypeName => {
+    const upper = shipType.toUpperCase();
+    return isShipTypeName(upper) ? upper : 'ATTACKER';
 };
 
 const getAffinity = (affinity: string): AffinityName => {

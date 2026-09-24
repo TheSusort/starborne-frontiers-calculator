@@ -3010,7 +3010,7 @@ describe('Font of Power — on-own-repair-to-ally Power Infused Nanobots', () =>
             name,
             rarity: 'legendary',
             faction: 'TERRAN_COMBINE',
-            type: repair === 'damage' ? 'Attacker' : 'Support',
+            type: repair === 'damage' ? 'ATTACKER' : 'SUPPORTER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -3355,7 +3355,7 @@ describe('Spearhead — on-charged-cast all-allies Attack Up I', () => {
             name,
             rarity: 'legendary',
             faction: 'TERRAN_COMBINE',
-            type: 'Attacker',
+            type: 'ATTACKER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -6202,7 +6202,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
         return makeShip({
             id: 'carrier',
             name: 'Carrier',
-            type: 'Debuffer',
+            type: 'DEBUFFER',
             baseStats: {
                 hp: 0,
                 attack: 0,
@@ -6233,7 +6233,7 @@ describe('Insidiousness integration — per-attack roll, all debuffed enemies', 
         return makeShip({
             id,
             name: id,
-            type: 'Attacker',
+            type: 'ATTACKER',
             baseStats: {
                 hp: 0,
                 attack: 0,

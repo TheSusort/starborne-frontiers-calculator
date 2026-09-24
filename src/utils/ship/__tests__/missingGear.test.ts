@@ -7,7 +7,7 @@ const makeShip = (overrides: Partial<Ship> = {}): Ship => ({
     name: 'Test Ship',
     rarity: 'legendary',
     faction: 'terran',
-    type: 'attacker',
+    type: 'ATTACKER',
     baseStats: {
         hp: 100,
         attack: 50,

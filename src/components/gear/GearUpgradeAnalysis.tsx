@@ -3,6 +3,7 @@ import { GearPiece } from '../../types/gear';
 import {
     SHIP_TYPES,
     ShipTypeName,
+    isShipTypeName,
     GEAR_SLOTS,
     GearSlotName,
     STATS,
@@ -80,9 +81,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
     const hasAutoStarted = useRef(false);
     const [isConfigOpen, setIsConfigOpen] = useState(false);
     const [results, setResults] = useState<
-        Record<
-            ShipTypeName,
-            Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+        Partial<
+            Record<
+                ShipTypeName,
+                Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+            >
         >
     >({});
     const [selectedSlots, setSelectedSlots] = useState<Record<ShipTypeName, GearSlotName | 'all'>>(
@@ -160,8 +163,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
         const updatedResults = { ...results };
 
         // Iterate through all results and update any gear pieces that have changed
-        Object.keys(updatedResults).forEach((role) => {
+        (Object.keys(updatedResults) as ShipTypeName[]).forEach((role) => {
             const roleResults = updatedResults[role];
+            if (!roleResults) return;
             (Object.keys(roleResults) as (GearSlotName | 'all')[]).forEach((slot) => {
                 const slotResults = roleResults[slot];
 
@@ -195,9 +199,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
     const processRole = async (
         role: ShipTypeName,
         roleIndex: number,
-        newResults: Record<
-            ShipTypeName,
-            Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+        newResults: Partial<
+            Record<
+                ShipTypeName,
+                Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+            >
         >,
         totalSteps: number,
         completedSteps: number
@@ -350,9 +356,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
 
         setOptimizationProgress({ current: 0, total: totalSteps, percentage: 0 });
 
-        const newResults: Record<
-            ShipTypeName,
-            Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+        const newResults: Partial<
+            Record<
+                ShipTypeName,
+                Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+            >
         > = {};
 
         // Process each role sequentially with UI updates between each
@@ -650,7 +658,11 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                             <Select
                                 label="Role Filter"
                                 value={selectedRole}
-                                onChange={(value) => setSelectedRole(value)}
+                                onChange={(value) => {
+                                    if (value === 'all' || isShipTypeName(value)) {
+                                        setSelectedRole(value);
+                                    }
+                                }}
                                 options={[
                                     { value: 'all', label: 'All Roles' },
                                     ...shipRoles.map((role) => ({
@@ -853,7 +865,9 @@ export const GearUpgradeAnalysis: React.FC<Props> = ({
                     ? coverage.roleOrder.filter((role) => shipRoles.includes(role))
                     : [selectedRole]
                 ).map((role) => {
-                    const roleResults = results[role] || {};
+                    const roleResults: Partial<
+                        Record<GearSlotName | 'all', ReturnType<typeof analyzePotentialUpgrades>>
+                    > = results[role] || {};
                     const selectedSlot = selectedSlots[role] || 'all';
                     const currentResults = roleResults[selectedSlot] || [];
 

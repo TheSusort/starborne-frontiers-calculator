@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
-import { ShipTypeName, SHIP_TYPES, FACTIONS } from '../../constants';
+import { ShipTypeName, SHIP_TYPES, isShipTypeName, FACTIONS } from '../../constants';
 import { RarityName, RARITY_ORDER } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
@@ -70,7 +70,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
             percentage: r.percentage.toFixed(1),
         }));
 
-    const getRoleLabel = (role: string) => SHIP_TYPES[role]?.name || role;
+    const getRoleLabel = (role: string) => (isShipTypeName(role) ? SHIP_TYPES[role].name : role);
     const roleCurrentData = stats.byRole.map((r) => ({
         name: getRoleLabel(r.role),
         value: r.count,
@@ -133,7 +133,11 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                         </label>
                         <Select
                             value={roleFilter}
-                            onChange={(value) => setRoleFilter(value)}
+                            onChange={(value) => {
+                                if (value === 'all' || isShipTypeName(value)) {
+                                    setRoleFilter(value);
+                                }
+                            }}
                             options={[
                                 { value: 'all', label: 'All Roles' },
                                 { value: 'ATTACKER', label: 'Attacker' },

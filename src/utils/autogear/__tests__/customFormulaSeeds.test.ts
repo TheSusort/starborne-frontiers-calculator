@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { CUSTOM_FORMULA_SEEDS, EXACT_SEED_ROLES, seedFormulaFromRole } from '../customFormulaSeeds';
 import { customFormulaScore } from '../customFormula';
 import { calculateRoleScore, resolveLimitStatValue } from '../priorityScore';
-import { SHIP_TYPES } from '../../../constants';
+import { SHIP_TYPE_NAMES } from '../../../constants';
 import { getBaseRoleStats } from '../../../constants/roleBaseStats';
 import type { BaseStats } from '../../../types/stats';
 
-const ALL_ROLES = Object.keys(SHIP_TYPES);
+const ALL_ROLES = SHIP_TYPE_NAMES;
 
 // A spread of builds wide enough that a wrong seed reorders at least one pair.
 const builds: BaseStats[] = [

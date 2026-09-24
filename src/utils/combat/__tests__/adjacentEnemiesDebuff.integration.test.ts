@@ -42,7 +42,7 @@ const ship = (id: string, over: Partial<Ship>): Ship => ({
     name: id,
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {} as Ship['baseStats'],
     equipment: {},
     implants: {},

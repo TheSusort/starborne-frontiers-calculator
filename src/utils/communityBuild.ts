@@ -1,4 +1,4 @@
-import { SHIP_TYPES, type ShipTypeName } from '../constants/shipTypes';
+import { SHIP_TYPE_NAMES, isShipTypeName, type ShipTypeName } from '../constants/shipTypes';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import type {
     StatPriority,
@@ -15,17 +15,6 @@ import type {
 import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
 import { formulaHasUsableRow, isFormulaEmpty } from './autogear/customFormula';
 import { isRoleBasisHosted } from './autogear/offFormula/roleBasisHost';
-
-const SHIP_TYPE_KEYS = Object.keys(SHIP_TYPES);
-
-// Not a type predicate: `ShipTypeName` is `keyof typeof SHIP_TYPES`, and
-// SHIP_TYPES' explicit `Record<string, ShipType>` annotation makes that
-// `string | number` at the type level (satisfies doesn't narrow an already
-// -annotated type) — a `key is ShipTypeName` guard would make TS compute
-// `Exclude<string, ShipTypeName>` in the negative branch, which collapses to
-// `never`. Cast at each call site instead.
-const isShipTypeKey = (key: string): boolean =>
-    Object.prototype.hasOwnProperty.call(SHIP_TYPES, key);
 
 /**
  * Normalise a legacy `ship_role` display label (e.g. `'DEBUFFER (Corrosion)'`,
@@ -61,15 +50,15 @@ export const normalizeShipRole = (raw: string | null): ShipTypeName | null => {
         .replace(/^_+|_+$/g, '');
 
     if (!normalised) return null;
-    if (isShipTypeKey(normalised)) return normalised;
+    if (isShipTypeName(normalised)) return normalised;
 
-    const suffixMatches = SHIP_TYPE_KEYS.filter((key) => key.endsWith(`_${normalised}`));
+    const suffixMatches = SHIP_TYPE_NAMES.filter((key) => key.endsWith(`_${normalised}`));
     if (suffixMatches.length === 1) return suffixMatches[0];
 
     const segments = normalised.split('_');
     for (let keep = segments.length - 1; keep > 0; keep--) {
         const prefix = segments.slice(0, keep).join('_');
-        if (isShipTypeKey(prefix)) return prefix;
+        if (isShipTypeName(prefix)) return prefix;
     }
 
     return null;

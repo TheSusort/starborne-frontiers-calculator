@@ -48,7 +48,8 @@ export interface Faction {
 }
 
 export interface ShipType {
-    name: ShipTypeName;
+    /** Display label ('Attacker', 'Debuffer(Bomber)', …) — NOT a `ShipTypeName` role key. */
+    name: string;
     description: string;
     iconUrl: string;
 }

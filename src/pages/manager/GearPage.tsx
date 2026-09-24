@@ -10,8 +10,8 @@ import { GearWishlistTab } from '../../components/gear/GearWishlistTab';
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useNotification } from '../../hooks/useNotification';
-import { SHIP_TYPES, ALL_STAT_NAMES } from '../../constants';
-import { ShipTypeName } from '../../constants/shipTypes';
+import { SHIP_TYPE_NAMES, ALL_STAT_NAMES } from '../../constants';
+import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { StatName } from '../../types/stats';
 import { Tabs } from '../../components/ui/layout/Tabs';
 import { Loader } from '../../components/ui/Loader';
@@ -66,7 +66,7 @@ export const GearPage: React.FC = () => {
             setInitialShipId(shipId);
         }
 
-        if (role && Object.keys(SHIP_TYPES).includes(role)) {
+        if (role && isShipTypeName(role)) {
             setInitialRole(role);
         }
 
@@ -212,7 +212,7 @@ export const GearPage: React.FC = () => {
                 {activeTab === 'analysis' && (
                     <GearUpgradeAnalysis
                         inventory={inventory}
-                        shipRoles={Object.keys(SHIP_TYPES)}
+                        shipRoles={SHIP_TYPE_NAMES}
                         mode="analysis"
                         onEdit={handleEditPiece}
                         initialShipId={initialShipId ?? undefined}
@@ -223,7 +223,7 @@ export const GearPage: React.FC = () => {
                 {activeTab === 'calibration' && (
                     <GearCalibrationAnalysis
                         inventory={inventory}
-                        shipRoles={Object.keys(SHIP_TYPES)}
+                        shipRoles={SHIP_TYPE_NAMES}
                         onEdit={handleEditPiece}
                         onCalibrate={handleOpenCalibration}
                         initialShipId={initialShipId}
@@ -233,7 +233,7 @@ export const GearPage: React.FC = () => {
                 {activeTab === 'simulation' && (
                     <GearUpgradeAnalysis
                         inventory={inventory}
-                        shipRoles={Object.keys(SHIP_TYPES)}
+                        shipRoles={SHIP_TYPE_NAMES}
                         mode="simulation"
                         onEdit={handleEditPiece}
                     />

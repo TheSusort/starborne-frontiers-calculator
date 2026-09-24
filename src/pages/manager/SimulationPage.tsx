@@ -6,7 +6,13 @@ import { useInventory } from '../../contexts/InventoryProvider';
 import { Button, PageLayout } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
-import { SHIP_TYPES, ShipTypeName, GearSlotName, ImplantSlotName } from '../../constants';
+import {
+    SHIP_TYPES,
+    SHIP_TYPE_NAMES,
+    ShipTypeName,
+    GearSlotName,
+    ImplantSlotName,
+} from '../../constants';
 import { SimulationResults } from '../../components/simulation/SimulationResults';
 import { SimulationSettings } from '../../components/simulation/SimulationSettings';
 import { GearTesting } from '../../components/simulation/GearTesting';
@@ -62,7 +68,7 @@ export const SimulationPage: React.FC = () => {
             return role;
         }
         // Otherwise, find the key by matching the display name
-        const foundKey = Object.keys(SHIP_TYPES).find((key) => SHIP_TYPES[key].name === role);
+        const foundKey = SHIP_TYPE_NAMES.find((key) => SHIP_TYPES[key].name === role);
         return foundKey || 'ATTACKER';
     };
 

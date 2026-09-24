@@ -15,6 +15,7 @@ import type {
     CommunityRecommendation,
     SharedAutogearBuild,
 } from '../../types/communityRecommendation';
+import type { ShipTypeName } from '../../constants/shipTypes';
 
 const sharedConfig: SharedAutogearBuild = {
     version: 1,
@@ -254,13 +255,13 @@ describe('configToSharedBuild', () => {
         expect(() =>
             configToSharedBuild({
                 ...config,
-                shipRole: 'RETIRED_ROLE',
+                shipRole: 'RETIRED_ROLE' as ShipTypeName,
                 roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
             })
         ).not.toThrow();
         const build = configToSharedBuild({
             ...config,
-            shipRole: 'RETIRED_ROLE',
+            shipRole: 'RETIRED_ROLE' as ShipTypeName,
             roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
         });
         expect(build).not.toHaveProperty('roleBasis');

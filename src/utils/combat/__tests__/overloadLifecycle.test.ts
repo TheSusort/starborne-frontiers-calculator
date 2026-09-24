@@ -52,7 +52,7 @@ const ship = (id: string, over: Partial<Ship>): Ship => ({
     name: id,
     rarity: 'legendary',
     faction: 'TERRAN_COMBINE',
-    type: 'Attacker',
+    type: 'ATTACKER',
     baseStats: {} as Ship['baseStats'],
     equipment: {},
     implants: {},
@@ -160,7 +160,7 @@ const deathRounds = (r: ReturnType<typeof simulateBattle>): number[] =>
         .map((rd) => rd.round);
 
 // A trivial chip enemy / defender wall (real, destructible ships).
-const dummy = (id: string, type: Ship['type'] = 'Attacker'): Ship =>
+const dummy = (id: string, type: Ship['type'] = 'ATTACKER'): Ship =>
     ship(id, { activeSkillText: 'This Unit deals <unit-damage>1% damage</unit-damage>.', type });
 
 // ── Skill-text definitions (docs/ship-skills.csv, tagged) ───────────────────
@@ -209,7 +209,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             const killRun = simulateBattle({
                 playerTeam: [place(butcher, 'M4', 100, 1e12)],
                 enemyTeam: [
-                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('wall', 'DEFENDER'), 'M3', 1, 1e12),
                     place(dummy('chip'), 'M4', 1, 250),
                 ],
                 rounds: 8,
@@ -217,7 +217,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             const noKillRun = simulateBattle({
                 playerTeam: [place(butcher, 'M4', 100, 1e12)],
                 enemyTeam: [
-                    place(dummy('wall2', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('wall2', 'DEFENDER'), 'M3', 1, 1e12),
                     place(dummy('chip2'), 'M4', 1, 1e12),
                 ],
                 rounds: 8,
@@ -265,7 +265,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             const r = simulateBattle({
                 playerTeam: [place(mangler, 'M4', 100, 1e12)],
                 enemyTeam: [
-                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('wall', 'DEFENDER'), 'M3', 1, 1e12),
                     place(dummy('chip'), 'M4', 1, 250),
                 ],
                 rounds: 6,
@@ -286,7 +286,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             const r = simulateBattle({
                 playerTeam: [place(ravager, 'M4', 100, 1e12)],
                 enemyTeam: [
-                    place(dummy('wall', 'Defender'), 'M3', 1, 1e12),
+                    place(dummy('wall', 'DEFENDER'), 'M3', 1, 1e12),
                     place(dummy('chip'), 'M4', 1, 250),
                 ],
                 rounds: 6,
@@ -349,7 +349,7 @@ describe('Overload lifecycle — engine fixtures', () => {
         });
         const r = simulateBattle({
             playerTeam: [place(butcher, 'M4', 100, 1e12)],
-            enemyTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12)],
+            enemyTeam: [place(dummy('wall', 'DEFENDER'), 'M3', 1, 1e12)],
             rounds: 4,
         });
         const mr = buffActorRounds(r, 'Marauder Rage II');
@@ -369,7 +369,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             refits: [{}, {}] as Ship['refits'],
         });
         const r = simulateBattle({
-            playerTeam: [place(dummy('wall', 'Defender'), 'M3', 1, 1e12)],
+            playerTeam: [place(dummy('wall', 'DEFENDER'), 'M3', 1, 1e12)],
             enemyTeam: [place(enemyButcher, 'M4', 100, 1e12)],
             rounds: 4,
         });
@@ -396,7 +396,7 @@ describe('Overload lifecycle — engine fixtures', () => {
         const healer = ship('Healer', {
             activeSkillText: 'This Unit repairs all allies for 30% of their Max HP.',
             activeTarget: 'allies',
-            type: 'Support',
+            type: 'SUPPORTER',
         });
         const r = runCombat(
             dpsBase(skillsFor(ruiner), {
@@ -445,7 +445,7 @@ describe('Overload lifecycle — engine fixtures', () => {
         // cast) would light it up — failing this assertion.
         const noRepairEnemy = ship('Striker', {
             activeSkillText: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
-            type: 'Attacker',
+            type: 'ATTACKER',
         });
         const rNoRepair = runCombat(
             dpsBase(skillsFor(ruiner), {
@@ -515,7 +515,7 @@ describe('Overload lifecycle — engine fixtures', () => {
                 place(
                     ship('Anchor', {
                         activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
-                        type: 'Defender',
+                        type: 'DEFENDER',
                     }),
                     'M3',
                     1,
@@ -571,7 +571,7 @@ describe('Overload lifecycle — engine fixtures', () => {
             place(
                 ship('Anchor', {
                     activeSkillText: 'This Unit deals <unit-damage>0% damage</unit-damage>.',
-                    type: 'Defender',
+                    type: 'DEFENDER',
                 }),
                 'M3',
                 1,

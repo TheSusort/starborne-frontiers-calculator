@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calculateRoleScore, previewStatBonus } from '../priorityScore';
-import { SHIP_TYPES } from '../../../constants';
+import { SHIP_TYPE_NAMES } from '../../../constants';
 import type { ShipTypeName } from '../../../constants';
 import type { BaseStats } from '../../../types/stats';
 import type { StatBonus } from '../../../types/autogear';
@@ -22,7 +22,7 @@ const stats: BaseStats = {
     shieldPenetration: 0,
 };
 
-const roles: ShipTypeName[] = Object.keys(SHIP_TYPES);
+const roles: ShipTypeName[] = SHIP_TYPE_NAMES;
 
 describe('calculateRoleScore bonus passthrough', () => {
     // The widening must be additive: every existing two-argument caller keeps its number.

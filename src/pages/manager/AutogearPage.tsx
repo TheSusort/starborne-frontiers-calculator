@@ -1261,11 +1261,10 @@ export const AutogearPage: React.FC = () => {
                                                     <div className="flex items-center justify-between mb-2">
                                                         <h4 className="text-lg font-semibold">
                                                             Simulation Results (
-                                                            {
-                                                                SHIP_TYPES[
-                                                                    shipConfig.shipRole || ''
-                                                                ]?.name
-                                                            }
+                                                            {(shipConfig.shipRole &&
+                                                                SHIP_TYPES[shipConfig.shipRole]
+                                                                    .name) ||
+                                                                ''}
                                                             )
                                                         </h4>
                                                         <Button
