@@ -22,9 +22,29 @@ vi.mock('../../../utils/autogear/offFormula/offFormulaStats', async () => {
     return { ...actual, detectOffFormulaStats: vi.fn() };
 });
 import { detectOffFormulaStats } from '../../../utils/autogear/offFormula/offFormulaStats';
+// `basisDerivation.ts` reads a ship's parsed kit through this module. Defaulting to the real
+// parser keeps every other test (real skill text, real corpus) unaffected; only the
+// canWriteEquation fixture test below swaps in a hand-built kit shape the text parser cannot
+// produce on demand, then restores the real implementation.
+vi.mock('../../../utils/abilities/buildShipAbilities', async () => {
+    const actual = await vi.importActual<
+        typeof import('../../../utils/abilities/buildShipAbilities')
+    >('../../../utils/abilities/buildShipAbilities');
+    return { ...actual, buildShipAbilities: vi.fn(actual.buildShipAbilities) };
+});
+import { buildShipAbilities } from '../../../utils/abilities/buildShipAbilities';
 
 const ship = { id: 's', name: 'Chakara', type: 'ATTACKER' } as unknown as Ship;
 const mocked = vi.mocked(detectOffFormulaStats);
+const mockedAbilities = vi.mocked(buildShipAbilities);
+let realBuildShipAbilities: typeof buildShipAbilities;
+
+beforeAll(async () => {
+    const actual = await vi.importActual<
+        typeof import('../../../utils/abilities/buildShipAbilities')
+    >('../../../utils/abilities/buildShipAbilities');
+    realBuildShipAbilities = actual.buildShipAbilities;
+});
 
 describe('OffFormulaNotice', () => {
     it('names the stat and the role formula that ignores it', () => {
@@ -113,6 +133,61 @@ describe('OffFormulaNotice', () => {
         render(<OffFormulaNotice ship={ship} configuredRole="ATTACKER" />);
         expect(screen.getByText(/damage scales off its shield pool/)).toBeInTheDocument();
         expect(screen.getByText(/nothing to put in a formula/i)).toBeInTheDocument();
+    });
+
+    // A ship whose only excluded passive carrier sits on a DIFFERENT axis from the one this role
+    // hosts must not offer "Write an equation" — that clause has nothing to do with the axis
+    // being scored, so writing against it would invite a term for the wrong quantity. No real
+    // corpus ship reaches this shape today (deriveBasis's own `excluded` field is ship-wide,
+    // unfiltered by produces — see basisDerivation.ts's `excludedCarriers` doc), so the kit is
+    // hand-built here rather than picked off the real corpus.
+    it('offers no "Write an equation" when the ship\'s only excluded carrier is off the hosted axis', () => {
+        mockedAbilities.mockReturnValue({
+            slots: [
+                {
+                    slot: 'passive',
+                    abilities: [
+                        {
+                            trigger: 'on-cast',
+                            target: 'self',
+                            config: { type: 'additional-damage', stat: 'attack', pct: 30 },
+                        },
+                    ],
+                },
+            ],
+        } as unknown as ReturnType<typeof buildShipAbilities>);
+        try {
+            mocked.mockReturnValue([
+                {
+                    stat: 'hp',
+                    produces: 'repair',
+                    severity: 'severe',
+                    trigger: 'on-cast',
+                    tunableStat: 'hp',
+                },
+            ]);
+            const supporterShip = { id: 's', name: 'Fixture' } as unknown as Ship;
+            render(
+                <OffFormulaNotice
+                    ship={supporterShip}
+                    configuredRole="SUPPORTER"
+                    onApply={vi.fn()}
+                />
+            );
+            // The finding's own sentence still renders — only the equation entry point is gated.
+            expect(screen.getByText(/repairs scale off HP/)).toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /write an equation/i })
+            ).not.toBeInTheDocument();
+            expect(
+                screen.queryByRole('button', { name: /use this equation/i })
+            ).not.toBeInTheDocument();
+            // The excluded carrier is still reported — it names a real clause on the ship, just
+            // not one this SUPPORTER's repair equation can be written from.
+            expect(screen.getByText(/deals damage equal to 30% of Attack/i)).toBeInTheDocument();
+        } finally {
+            mockedAbilities.mockImplementation(realBuildShipAbilities);
+        }
     });
 
     // The stat-bonus control already lets a player prefer Defence on a Defender themselves; the
@@ -310,23 +385,48 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
             ).toBeInTheDocument();
         });
 
-        // Xcellence carries TWO excluded clauses (the shieldBasisPct damage clause above, plus an
-        // hp-to-shield clause), the only one of the ten passive-only ships with more than one —
-        // the pointer sentence must agree in number rather than read "the clause below" over two.
-        it("uses the plural pointer for Xcellence's two excluded clauses", () => {
+        // Xcellence carries TWO excluded clauses ship-wide (the shieldBasisPct damage clause
+        // above, plus an hp-to-shield clause) but ATTACKER only hosts `damage` — the pointer
+        // must count clauses on THAT axis only, so it reads singular even though the general
+        // excluded-clause list below still names both (a `shield` clause isn't why the damage
+        // equation is "unchanged").
+        it("counts only Xcellence's on-axis excluded clause in the pointer, not her off-axis shield clause", () => {
             mocked.mockImplementation(realDetect);
             const xcellence = corpusShipNamed('Xcellence');
             render(<OffFormulaNotice ship={xcellence} configuredRole="ATTACKER" />);
             expect(
                 screen.getByText(
-                    /The clauses below are what a passive keeps the optimizer from counting/i
+                    /The clause below is what a passive keeps the optimizer from counting/i
                 )
             ).toBeInTheDocument();
             expect(
                 screen.queryByText(
-                    /The clause below is what a passive keeps the optimizer from counting/i
+                    /The clauses below are what a passive keeps the optimizer from counting/i
                 )
             ).not.toBeInTheDocument();
+            // The general excluded-clause list is untouched by the filter — both clauses still
+            // name themselves verbatim, including the off-axis one the pointer no longer counts.
+            expect(
+                screen.getByText(/Xcellence deals damage equal to 115% of its shield pool/i)
+            ).toBeInTheDocument();
+            expect(screen.getByText(/Xcellence shields for 20% of max HP/i)).toBeInTheDocument();
+        });
+
+        // FrontLine's only excluded carrier shields off HP (pre-combat) — nothing to do with the
+        // `damage` axis ATTACKER hosts. The old ship-wide count pointed "the clause below" at it
+        // anyway; the fix withholds the pointer entirely rather than naming an irrelevant clause.
+        it("attaches no clause pointer to FrontLine's unchanged damage equation, since her only excluded clause is off-axis (shield)", () => {
+            mocked.mockImplementation(realDetect);
+            const frontLine = corpusShipNamed('FrontLine');
+            render(<OffFormulaNotice ship={frontLine} configuredRole="ATTACKER" />);
+            expect(
+                screen.getByText(/No stat besides Attack feeds its active or charged basis/i)
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByText(/is what a passive keeps the optimizer from counting/i)
+            ).not.toBeInTheDocument();
+            // The general excluded-clause list still names the off-axis clause verbatim.
+            expect(screen.getByText(/FrontLine shields for 25% of max HP/i)).toBeInTheDocument();
         });
 
         // Howler's repair is 100% Attack, and the SUPPORTER formula's core row scores HP — the
@@ -576,6 +676,10 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                 // regression that always returns [] (Apply forever absent) or always finds a
                 // host (Apply forever shown) would pass this test for the wrong reason.
                 expect(offered, 'the walk must offer Apply at least once').toBeGreaterThan(0);
+                // The reach itself, pinned: a regression that silently widens or narrows which
+                // (ship, role) pairs get an Apply button changes this number with no other test
+                // failing first.
+                expect(offered, 'Apply reach changed from its pinned count').toBe(78);
                 expect(
                     withheldNoHost + withheldEmptyBasis,
                     'the walk must withhold Apply at least once'
@@ -760,6 +864,12 @@ describe.skipIf(!csvAvailable() || !shipDataAvailable())(
                     'the walk must offer Write an equation at least once (Paracelsus/Zenith)'
                 ).toBeGreaterThan(0);
                 expect(applyOffered, 'the walk must offer Apply at least once').toBeGreaterThan(0);
+                // The reach itself, pinned: Paracelsus's 3 damage-hosting roles plus Zenith's
+                // shield role are the only write-an-equation cases in the real corpus today.
+                expect(writeOffered, 'Write-an-equation reach changed from its pinned count').toBe(
+                    4
+                );
+                expect(applyOffered, 'Apply reach changed from its pinned count').toBe(78);
 
                 // eslint-disable-next-line no-console
                 console.log(

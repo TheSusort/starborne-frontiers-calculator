@@ -219,12 +219,20 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
     const coreStat = hostAxis ? rolePrimaryStat(configuredRole) : null;
     const hostedBasis = hostAxis ? (basisByProduces.get(hostAxis) ?? null) : null;
     const canApply = !!hostedBasis && hostedBasis.terms.length > 0;
+    // `hostedBasis.excluded` is ship-wide (`excludedCarriers` ignores its `produces` argument —
+    // see `basisByProduces`'s comment above), so a carrier on a DIFFERENT axis from `hostAxis`
+    // would otherwise still count here. Restricted to carriers this axis actually produces, or a
+    // ship whose only exclusion is, say, a `shield` passive would offer to write a `repair`
+    // equation from a clause that has nothing to do with repairs.
+    const hostAxisExcluded = hostedBasis
+        ? hostedBasis.excluded.filter((carrier) => carrier.produces === hostAxis)
+        : [];
     // `hostedBasis` is only set when a finding on `hostAxis` exists (`basisByProduces` is keyed
     // off `findings`), so this already implies an on-axis finding — a ship whose only carrier on
     // the hosted axis is a passive derives no terms here, but the notice still owes it an entry
     // point: the excluded clause is what the player needs in hand to write the term themselves.
     const canWriteEquation =
-        !!hostedBasis && hostedBasis.terms.length === 0 && hostedBasis.excluded.length > 0;
+        !!hostedBasis && hostedBasis.terms.length === 0 && hostAxisExcluded.length > 0;
 
     const handleApply = () => {
         if (!onApply || !hostAxis || !hostedBasis || hostedBasis.terms.length === 0) return;
@@ -370,7 +378,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
                         </p>
                         {basis && coreStat && (
                             <p className="text-xs text-theme-text-secondary">
-                                {equationLine(basis, coreStat, excluded.length)}
+                                {equationLine(basis, coreStat, hostAxisExcluded.length)}
                             </p>
                         )}
                     </div>

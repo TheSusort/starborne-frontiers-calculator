@@ -81,7 +81,16 @@ export function matchesRoleCategory(
     return categories.some((c) => type === c || type.startsWith(`${c}_`));
 }
 
-const ROLE_CATEGORIES: ShipRoleCategory[] = ['ATTACKER', 'DEFENDER', 'DEBUFFER', 'SUPPORTER'];
+// A total record over `ShipRoleCategory`, not a hand-listed array: adding, renaming or removing
+// a member of that union without a matching edit here fails `tsc --noEmit` (a missing or excess
+// key against `Record<ShipRoleCategory, 0>`), rather than `resolveRoleEntry`'s fallback silently
+// skipping the new category.
+const ROLE_CATEGORIES = Object.keys({
+    ATTACKER: 0,
+    DEFENDER: 0,
+    DEBUFFER: 0,
+    SUPPORTER: 0,
+} satisfies Record<ShipRoleCategory, 0>) as ShipRoleCategory[];
 
 /** Looks up `type` in a role-keyed table, falling back to its role CATEGORY's entry
  *  (`matchesRoleCategory`) when `type` has no entry of its own — e.g. DEFENDER_SECURITY
