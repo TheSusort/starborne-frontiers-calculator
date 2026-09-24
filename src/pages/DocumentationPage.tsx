@@ -1525,6 +1525,14 @@ const DocumentationPage: React.FC = () => {
                                         for that reason.
                                     </p>
                                     <p className="text-theme-text mt-2">
+                                        A Multiplied, maximized row can also score a weighted sum of
+                                        other stats instead of its own raw value — add one or more
+                                        stats and a weight under that row&apos;s own controls
+                                        (something like Attack x2.100 for a skill that hits at
+                                        210%), matching how the ship&apos;s kit actually scales
+                                        rather than the plain stat.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
                                         A Multiplied stat you&apos;re maximizing that your ship
                                         currently has none of scores that term at zero — and one
                                         zero term zeroes the whole product, however good the rest of
@@ -1548,6 +1556,73 @@ const DocumentationPage: React.FC = () => {
                                         Autogear can&apos;t run until the formula has at least one
                                         stat — an empty formula would score every combination the
                                         same.
+                                    </p>
+                                </div>
+
+                                <div className="card">
+                                    <h4 className="font-semibold">Off-Formula Notice</h4>
+                                    <p className="text-theme-text">
+                                        A role&apos;s formula only scores certain stats. When a
+                                        ship&apos;s active or charged skill deals damage, repairs,
+                                        or shields off a stat its role formula never looks at —
+                                        Defence on a Debuffer, say — a notice appears under the role
+                                        selector. It names the stat and says whether the formula
+                                        ignores it outright or only credits it as part of a total
+                                        the optimizer can trade away for something else. For a few
+                                        ships nothing in their kit is driven by a gear stat at all;
+                                        the notice says so plainly, and there is nothing to offer an
+                                        equation or button for.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        For a role built around a single scalable quantity —
+                                        Attacker, Debuffer and Debuffer(Bomber) score damage;
+                                        Supporter scores repairs; Supporter(Shield) scores shields —
+                                        the notice also shows a scoring equation built from that
+                                        ship&apos;s own skill numbers: not a generic estimate, and
+                                        not the same for every ship sharing the role. It reads as a
+                                        weighted list of stats (something like &quot;Attack x1.240 +
+                                        Defence x0.615&quot;), the real mix the skill rewards,
+                                        worked out from how often the ship&apos;s kit casts its
+                                        active skill versus its charged one. Click{' '}
+                                        <strong>Use this equation</strong> to substitute those
+                                        numbers into that same quantity in the role&apos;s own
+                                        formula — the ship keeps its configured role and every other
+                                        setting; only what feeds that one quantity changes. Once
+                                        applied, the notice says so and offers{' '}
+                                        <strong>Stop using this equation</strong> to go back to the
+                                        role&apos;s own numbers; nothing re-scores until the next{' '}
+                                        <strong>Find optimal gear</strong> run. The applied equation
+                                        can also be edited — reweight a stat, add one to fold in a
+                                        passive the derivation left out, or remove one — and{' '}
+                                        <strong>Restore the derived equation</strong> returns to
+                                        exactly the kit&apos;s own numbers.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A role without a single quantity to replace this way — a
+                                        Defender, say, whose formula is built around surviving
+                                        rounds rather than one scalable output — shows the finding
+                                        but no equation and no button: the kit fact is worth
+                                        knowing, but there is nowhere honest to put it in that
+                                        role&apos;s scoring, and gearing for the named stat would
+                                        usually work against what the role is built for.
+                                    </p>
+                                    <p className="text-theme-text mt-2">
+                                        A passive skill&apos;s contribution is never in that
+                                        equation. How often a passive fires depends on how the fight
+                                        actually goes — how much the ship gets hit, how often a
+                                        debuff resists, whether an ally triggers it — not on a fixed
+                                        rhythm the way casting an active or charged skill is, so
+                                        there is no cast ratio to fold it into. When a passive is
+                                        left out, the notice names it directly: the skill&apos;s own
+                                        wording and percentage, so nothing about what got skipped,
+                                        or why, is hidden. When the active/charged equation adds
+                                        nothing the role wasn&apos;t already scoring, there is
+                                        nothing for <strong>Use this equation</strong> to change —
+                                        if a passive on that same stat was left out, the notice
+                                        offers <strong>Write an equation</strong> instead, opening
+                                        the same editor empty next to that passive&apos;s wording so
+                                        its stat and percentage can be added by hand; if there is no
+                                        such passive either, neither button appears.
                                     </p>
                                 </div>
 
@@ -1872,8 +1947,10 @@ const DocumentationPage: React.FC = () => {
                                 <ol className="text-theme-text list-decimal pl-4 space-y-1">
                                     <li>
                                         Configure your autogear settings (role, stat priorities,
-                                        gear sets, stat bonuses, fleet buffs, implant settings) — a
-                                        Custom build with no role can&apos;t be shared
+                                        gear sets, stat bonuses, fleet buffs, implant settings, an
+                                        applied equation) — a Custom-mode formula started from a
+                                        role can be shared too; one built entirely from scratch
+                                        cannot yet
                                     </li>
                                     <li>
                                         Click &quot;Share your build&quot; to open the share form —
@@ -1917,7 +1994,7 @@ const DocumentationPage: React.FC = () => {
                                     </li>
                                     <li>
                                         It replaces role, stat priorities, gear sets, stat bonuses,
-                                        fleet buffs and implant settings
+                                        fleet buffs, implant settings and an applied equation
                                     </li>
                                     <li>
                                         Your own preferences are never changed: algorithm, ignore

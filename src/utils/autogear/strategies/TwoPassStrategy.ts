@@ -8,6 +8,7 @@ import {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../../types/autogear';
 import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
@@ -42,7 +43,8 @@ export class TwoPassStrategy extends BaseStrategy {
         tryToCompleteSets?: boolean,
         _arenaModifiers?: Record<string, number> | null,
         _fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<AutogearResult> {
         // Initialize progress tracking (slots * gear + potential set combinations)
         const totalOperations =
@@ -61,7 +63,8 @@ export class TwoPassStrategy extends BaseStrategy {
             setPriorities,
             statBonuses,
             tryToCompleteSets,
-            customFormula
+            customFormula,
+            roleBasis
         );
 
         // Second pass: Look for set bonus opportunities
@@ -76,7 +79,8 @@ export class TwoPassStrategy extends BaseStrategy {
             setPriorities,
             statBonuses,
             tryToCompleteSets,
-            customFormula
+            customFormula,
+            roleBasis
         );
 
         // Ensure progress is complete
@@ -108,7 +112,8 @@ export class TwoPassStrategy extends BaseStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         _tryToCompleteSets?: boolean,
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const equipment: Partial<Record<GearSlotName, string>> = {};
 
@@ -140,7 +145,8 @@ export class TwoPassStrategy extends BaseStrategy {
                         undefined,
                         setPriorities,
                         statBonuses,
-                        customFormula
+                        customFormula,
+                        roleBasis
                     );
                     if (score > bestScore) {
                         bestScore = score;
@@ -168,7 +174,8 @@ export class TwoPassStrategy extends BaseStrategy {
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
         _tryToCompleteSets?: boolean,
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<Partial<Record<GearSlotName, string>>> {
         const setCount = this.countSets(currentEquipment, getGearPiece);
         const potentialSets = this.findPotentialSets(
@@ -193,7 +200,8 @@ export class TwoPassStrategy extends BaseStrategy {
                     shipRole,
                     setPriorities,
                     statBonuses,
-                    customFormula
+                    customFormula,
+                    roleBasis
                 );
 
                 // Try each possible piece that could complete the set
@@ -210,7 +218,8 @@ export class TwoPassStrategy extends BaseStrategy {
                         shipRole,
                         setPriorities,
                         statBonuses,
-                        customFormula
+                        customFormula,
+                        roleBasis
                     );
 
                     // If this improves our score, keep it
@@ -280,7 +289,8 @@ export class TwoPassStrategy extends BaseStrategy {
         setCount?: Record<string, number>,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): number {
         return calculatePriorityScore(
             stats,
@@ -292,7 +302,8 @@ export class TwoPassStrategy extends BaseStrategy {
             undefined,
             undefined,
             undefined,
-            customFormula
+            customFormula,
+            roleBasis
         );
     }
 
@@ -305,7 +316,8 @@ export class TwoPassStrategy extends BaseStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): number {
         return calculateTotalScore(
             ship,
@@ -319,7 +331,8 @@ export class TwoPassStrategy extends BaseStrategy {
             undefined,
             undefined,
             undefined,
-            customFormula
+            customFormula,
+            roleBasis
         );
     }
 }

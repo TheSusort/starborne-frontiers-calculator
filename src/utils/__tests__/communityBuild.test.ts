@@ -6,7 +6,11 @@ import {
     configToSharedBuild,
     hasExistingBuildConfig,
     communityBuildToConfigUpdate,
+    ALLOW_ROLELESS_COMMUNITY_SHARE,
 } from '../communityBuild';
+import { validateSharedAutogearBuild } from '../../schemas/sharedAutogearBuild';
+import { validateProductionSharedAutogearBuild } from '../../schemas/__fixtures__/productionSharedAutogearBuild';
+import { defaultAutogearShipConfig } from '../autogear/runShipOptimizer';
 import type {
     CommunityRecommendation,
     SharedAutogearBuild,
@@ -51,6 +55,18 @@ describe('toCommunityBuild', () => {
         expect(build?.build.excludedImplantTypes).toEqual(['MARTYRDOM']);
     });
 
+    it('reads a role-less Custom build with a null ship_role via shared_config', () => {
+        const roleLessBuild: SharedAutogearBuild = {
+            ...sharedConfig,
+            version: 2,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        };
+        const build = toCommunityBuild(makeRow({ shared_config: roleLessBuild, ship_role: null }));
+        expect(build?.isLegacy).toBe(false);
+        expect(build?.build.shipRole).toBeNull();
+    });
+
     it('synthesises from the legacy columns when shared_config is absent', () => {
         const build = toCommunityBuild(makeRow());
         expect(build?.isLegacy).toBe(true);
@@ -73,6 +89,13 @@ describe('toCommunityBuild', () => {
 
     it('drops a row whose legacy columns are unusable too', () => {
         expect(toCommunityBuild(makeRow({ shared_config: null, ship_role: 'WIZARD' }))).toBeNull();
+    });
+
+    it('drops a row with a null ship_role and no usable shared_config, without crashing', () => {
+        expect(() =>
+            toCommunityBuild(makeRow({ shared_config: null, ship_role: null }))
+        ).not.toThrow();
+        expect(toCommunityBuild(makeRow({ shared_config: null, ship_role: null }))).toBeNull();
     });
 
     it('carries the row metadata onto the read model', () => {
@@ -173,12 +196,214 @@ describe('configToSharedBuild', () => {
         optimizeImplants: true,
     };
 
-    it('produces a version-1 build carrying all seven fields', () => {
+    it('produces a version-1 build carrying all seven legacy fields — a role build with no customFormula stays readable by production (1.68.0)', () => {
         expect(configToSharedBuild(config)).toEqual({ version: 1, ...config });
     });
 
-    it('returns null without a ship role', () => {
+    it('writes a role build at version 1, dropping the inactive customFormula, even when one is still set from a Custom-mode detour', () => {
+        // `calculateRoleScore` (priorityScore.ts) only ever reads `customFormula` when
+        // `shipRole` is null — a role build's formula is dead weight, not a live scorer input,
+        // so it must never force the build onto the version production's live bundle (1.68.0)
+        // cannot read at all.
+        const build = configToSharedBuild({
+            ...config,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build?.version).toBe(1);
+        expect(build).not.toHaveProperty('customFormula');
+    });
+
+    it("a role build carrying a stale formula parses under production's own (1.68.0) schema", () => {
+        const build = configToSharedBuild({
+            ...config,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build?.version).toBe(1);
+        expect(validateProductionSharedAutogearBuild(structuredClone(build))).not.toBeNull();
+    });
+
+    it('writes a roleBasis only when the configured role actually hosts its axis', () => {
+        // DEFENDER hosts nothing (roleBasisHost.ts) — a `damage`-axis basis left over from a
+        // different role must not ride along on a share, since the scorer would ignore it too.
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: 'DEFENDER',
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).not.toHaveProperty('roleBasis');
+    });
+
+    it('writes a roleBasis the configured role hosts', () => {
+        const build = configToSharedBuild({
+            ...config,
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).toHaveProperty('roleBasis', {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: 2.1 }],
+        });
+    });
+
+    it('does not throw and drops the roleBasis for a shipRole string that no longer names a real role', () => {
+        expect(() =>
+            configToSharedBuild({
+                ...config,
+                shipRole: 'RETIRED_ROLE',
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+            })
+        ).not.toThrow();
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: 'RETIRED_ROLE',
+            roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 2.1 }] },
+        });
+        expect(build).not.toHaveProperty('roleBasis');
+    });
+
+    it('returns null without a ship role or a usable custom formula', () => {
         expect(configToSharedBuild({ ...config, shipRole: null })).toBeNull();
+    });
+
+    it('shares a Custom-mode build when the formula is seeded from a role', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+        expect(build).toEqual({
+            version: 2,
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                seededFrom: 'ATTACKER',
+            },
+        });
+    });
+
+    it('refuses a from-scratch Custom-mode build when allowRoleless is false, even with a usable formula', () => {
+        const build = configToSharedBuild(
+            {
+                ...config,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            },
+            false
+        );
+        expect(build).toBeNull();
+    });
+
+    it("defaults allowRoleless to ALLOW_ROLELESS_COMMUNITY_SHARE — this pins the DEFAULT's wiring, not its value, so it survives #552's eventual flip", () => {
+        const rolelessConfig = {
+            ...config,
+            shipRole: null,
+            customFormula: {
+                rows: [
+                    {
+                        stat: 'directDamage' as const,
+                        kind: 'core' as const,
+                        direction: 'max' as const,
+                    },
+                ],
+            },
+        };
+        const withDefault = configToSharedBuild(rolelessConfig);
+        const withExplicitConstant = configToSharedBuild(
+            rolelessConfig,
+            ALLOW_ROLELESS_COMMUNITY_SHARE
+        );
+        expect(withDefault).toEqual(withExplicitConstant);
+    });
+
+    it('shares a from-scratch Custom-mode build with a usable formula but no seededFrom, writing a null role, when allowRoleless is true', () => {
+        const build = configToSharedBuild(
+            {
+                ...config,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            },
+            true
+        );
+        expect(build).toEqual({
+            version: 2,
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        });
+    });
+
+    it('refuses a Custom-mode build whose formula has no usable row, even with seededFrom', () => {
+        const build = configToSharedBuild({
+            ...config,
+            shipRole: null,
+            customFormula: { rows: [], seededFrom: 'ATTACKER' },
+        });
+        expect(build).toBeNull();
+    });
+
+    it('round-trips a Custom-mode config through share and apply, basis intact', () => {
+        // The full app path: the page's config goes out through configToSharedBuild,
+        // across the wire as JSON (validateSharedAutogearBuild stands in for that hop),
+        // and back into an equivalent config update via communityBuildToConfigUpdate.
+        const customFormula = {
+            rows: [
+                {
+                    stat: 'directDamage' as const,
+                    kind: 'core' as const,
+                    direction: 'max' as const,
+                    basis: [{ stat: 'attack' as const, weight: 2.5 }],
+                },
+            ],
+            seededFrom: 'ATTACKER' as const,
+        };
+        const shared = configToSharedBuild({ ...config, shipRole: null, customFormula });
+        expect(shared).not.toBeNull();
+
+        const validated = validateSharedAutogearBuild(JSON.parse(JSON.stringify(shared)));
+        expect(validated).not.toBeNull();
+
+        const update = communityBuildToConfigUpdate(validated as SharedAutogearBuild);
+        expect(update.shipRole).toBeNull();
+        expect(update.customFormula).toEqual(customFormula);
+    });
+
+    it('round-trips a role build carrying a roleBasis through share and apply', () => {
+        // Built from the real live shape (`defaultAutogearShipConfig`), not a hand-written
+        // literal, so this proves roleBasis flows through the actual config type end to end
+        // rather than through a type the config never has.
+        const roleBasis = {
+            produces: 'damage' as const,
+            terms: [{ stat: 'attack' as const, weight: 1.5 }],
+        };
+        const shipConfig = { ...defaultAutogearShipConfig('ATTACKER'), roleBasis };
+
+        const shared = configToSharedBuild(shipConfig);
+        expect(shared).not.toBeNull();
+        // A role build with no customFormula stays version 1 — production's live bundle
+        // (1.68.0) only has a version-1 reader, and its schema is a plain non-strict
+        // `z.object`, so it reads this in full, including a `roleBasis` it can't use.
+        expect(shared?.version).toBe(1);
+        expect(shared?.roleBasis).toEqual(roleBasis);
+
+        const validated = validateSharedAutogearBuild(JSON.parse(JSON.stringify(shared)));
+        expect(validated).not.toBeNull();
+        expect(validated?.roleBasis).toEqual(roleBasis);
+
+        const update = communityBuildToConfigUpdate(validated as SharedAutogearBuild);
+        expect(update.roleBasis).toEqual(roleBasis);
     });
 
     it('defaults the optional arrays', () => {
@@ -235,16 +460,44 @@ describe('hasExistingBuildConfig', () => {
     it('is true when optimizeImplants is on', () => {
         expect(hasExistingBuildConfig({ ...empty, optimizeImplants: true })).toBe(true);
     });
+
+    it('is true when a role config carries an applied roleBasis', () => {
+        expect(
+            hasExistingBuildConfig({
+                ...empty,
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1.5 }] },
+            })
+        ).toBe(true);
+    });
+
+    it('is true when a Custom-mode config carries a non-empty formula', () => {
+        expect(
+            hasExistingBuildConfig({
+                ...empty,
+                shipRole: null,
+                customFormula: {
+                    rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+                },
+            })
+        ).toBe(true);
+    });
+
+    it('is false for a Custom-mode config with no formula, or an empty one', () => {
+        expect(hasExistingBuildConfig({ ...empty, shipRole: null })).toBe(false);
+        expect(
+            hasExistingBuildConfig({ ...empty, shipRole: null, customFormula: { rows: [] } })
+        ).toBe(false);
+    });
 });
 
 describe('communityBuildToConfigUpdate', () => {
     // Pins the feature's single most important guarantee: applying a community
-    // build writes exactly these seven build-shaping fields and never the
+    // build writes exactly these nine build-shaping fields and never the
     // eight personal ones (algorithm, ignoreEquipped, ignoreUnleveled,
     // useUpgradedStats, tryToCompleteSets, includeCalibratedGear,
-    // assumeCalibrated, useArenaModifiers). Adding an eighth key here — of
+    // assumeCalibrated, useArenaModifiers). Adding a tenth key here — of
     // either kind — must fail this test, not ship silently.
-    it('produces an update object with exactly the seven build-shaping keys', () => {
+    it('produces an update object with exactly the nine build-shaping keys', () => {
         const update = communityBuildToConfigUpdate(sharedConfig);
         expect(Object.keys(update).sort()).toEqual(
             [
@@ -255,11 +508,13 @@ describe('communityBuildToConfigUpdate', () => {
                 'fleetBuffs',
                 'excludedImplantTypes',
                 'optimizeImplants',
+                'customFormula',
+                'roleBasis',
             ].sort()
         );
     });
 
-    it('carries every field through unchanged', () => {
+    it('carries every field through unchanged, including an absent customFormula/roleBasis', () => {
         expect(communityBuildToConfigUpdate(sharedConfig)).toEqual({
             shipRole: sharedConfig.shipRole,
             statPriorities: sharedConfig.statPriorities,
@@ -268,7 +523,25 @@ describe('communityBuildToConfigUpdate', () => {
             fleetBuffs: sharedConfig.fleetBuffs,
             excludedImplantTypes: sharedConfig.excludedImplantTypes,
             optimizeImplants: sharedConfig.optimizeImplants,
+            customFormula: undefined,
+            roleBasis: undefined,
         });
+    });
+
+    it("carries a Custom-mode build's formula through", () => {
+        const customFormula = {
+            rows: [
+                { stat: 'directDamage' as const, kind: 'core' as const, direction: 'max' as const },
+            ],
+            seededFrom: 'ATTACKER' as const,
+        };
+        const update = communityBuildToConfigUpdate({
+            ...sharedConfig,
+            shipRole: null,
+            customFormula,
+        });
+        expect(update.shipRole).toBeNull();
+        expect(update.customFormula).toEqual(customFormula);
     });
 
     // The page config's SetPriority.count is required (the autogear engine

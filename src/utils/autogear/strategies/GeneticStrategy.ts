@@ -2,7 +2,7 @@ import { AutogearStrategy, AutogearResult, HardRequirementViolation } from '../A
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
 import { StatPriority, SetPriority, StatBonus } from '../../../types/autogear';
-import type { FleetBuff, CustomFormula } from '../../../types/autogear';
+import type { FleetBuff, CustomFormula, RoleBasis } from '../../../types/autogear';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { EngineeringStat } from '../../../types/stats';
 import {
@@ -109,7 +109,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         tryToCompleteSets?: boolean,
         arenaModifiers?: Record<string, number> | null,
         fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<AutogearResult> {
         performanceTracker.reset();
         performanceTracker.startTimer('GeneticAlgorithm');
@@ -146,6 +147,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                   arenaModifiers,
                   fleetBuffs,
                   customFormula,
+                  roleBasis,
                   engineeringStats: getEngineeringStatsForShipType(ship.type),
                   resolveGearPiece: cachedGetGearPiece,
               })
@@ -182,6 +184,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 arenaModifiers,
                 fleetBuffs,
                 customFormula,
+                roleBasis,
                 populationSize,
                 generations,
                 eliteSize,
@@ -238,6 +241,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers: Record<string, number> | null | undefined,
         fleetBuffs: FleetBuff[] | undefined,
         customFormula: CustomFormula | undefined,
+        roleBasis: RoleBasis | undefined,
         populationSize: number,
         generations: number,
         eliteSize: number,
@@ -267,6 +271,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             arenaModifiers,
             fleetBuffs,
             customFormula,
+            roleBasis,
             fastContext
         );
         performanceTracker.endTimer('InitialEvaluation');
@@ -311,6 +316,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                 arenaModifiers,
                 fleetBuffs,
                 customFormula,
+                roleBasis,
                 fastContext
             );
             performanceTracker.endTimer('Evaluation');
@@ -438,6 +444,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers?: Record<string, number> | null,
         fleetBuffs?: FleetBuff[],
         customFormula?: CustomFormula,
+        roleBasis?: RoleBasis,
         fastContext?: FastScoringContext | null
     ): Individual[] {
         performanceTracker.startTimer('EvaluatePopulation');
@@ -457,6 +464,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     arenaModifiers,
                     fleetBuffs,
                     customFormula,
+                    roleBasis,
                     fastContext
                 );
                 return { ...individual, fitness, violation };
@@ -480,6 +488,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers?: Record<string, number> | null,
         fleetBuffs?: FleetBuff[],
         customFormula?: CustomFormula,
+        roleBasis?: RoleBasis,
         fastContext?: FastScoringContext | null
     ): { fitness: number; violation: number } {
         performanceTracker.startTimer('CalculateFitness');
@@ -508,6 +517,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
                     arenaModifiers,
                     fleetBuffs,
                     customFormula,
+                    roleBasis,
                     fitness,
                     violation
                 );
@@ -551,7 +561,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             tryToCompleteSets,
             arenaModifiers,
             fleetBuffs,
-            customFormula
+            customFormula,
+            roleBasis
         );
 
         // Only compute violation when at least one priority is hard-flagged.
@@ -736,6 +747,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
         arenaModifiers: Record<string, number> | null | undefined,
         fleetBuffs: FleetBuff[] | undefined,
         customFormula: CustomFormula | undefined,
+        roleBasis: RoleBasis | undefined,
         fastFitness: number,
         _fastViolation: number
     ): void {
@@ -763,7 +775,8 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
             tryToCompleteSets,
             arenaModifiers,
             fleetBuffs,
-            customFormula
+            customFormula,
+            roleBasis
         );
 
         const relTol = 1e-6;

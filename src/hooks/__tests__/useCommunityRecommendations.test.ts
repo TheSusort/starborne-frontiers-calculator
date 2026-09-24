@@ -6,6 +6,8 @@ import type {
     CommunityRecommendation,
     SharedAutogearBuild,
 } from '../../types/communityRecommendation';
+import { configToSharedBuild, type AutogearBuildFields } from '../../utils/communityBuild';
+import type { CustomFormula } from '../../types/autogear';
 
 vi.mock('../../contexts/InventoryProvider', () => ({
     useInventory: () => ({ getGearPiece: () => undefined }),
@@ -20,18 +22,44 @@ const createRecommendationMock = vi.fn();
 const voteOnRecommendationMock = vi.fn();
 const removeVoteMock = vi.fn();
 
-// Mirrors the real class from '../../services/communityRecommendations' so the
-// hook's `instanceof InvalidSharedConfigError` check has a real class to match
-// against, even though that module is otherwise fully mocked below. Declared
-// via vi.hoisted so it exists before vi.mock's hoisted factory runs.
-const { InvalidSharedConfigError } = vi.hoisted(() => {
+// Mirrors the real classes from '../../services/communityRecommendations' so the hook's
+// `instanceof` checks have real classes to match against, even though that module is
+// otherwise fully mocked below. Declared via vi.hoisted so they exist before vi.mock's
+// hoisted factory runs.
+const {
+    InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
+    SharedBuildExceedsBasisCapsError,
+} = vi.hoisted(() => {
     class InvalidSharedConfigError extends Error {
         constructor() {
             super('Invalid shared autogear build');
             this.name = 'InvalidSharedConfigError';
         }
     }
-    return { InvalidSharedConfigError };
+    class ShipRoleColumnNotNullableError extends Error {
+        constructor() {
+            super('Sharing a build with no role requires a pending database migration');
+            this.name = 'ShipRoleColumnNotNullableError';
+        }
+    }
+    // Mirrors the real subclass relationship (SharedBuildExceedsBasisCapsError EXTENDS
+    // InvalidSharedConfigError, services/communityRecommendations.ts) — the hook's
+    // `instanceof` order must check this class before its parent, or the parent's generic
+    // branch would shadow it.
+    class SharedBuildExceedsBasisCapsError extends InvalidSharedConfigError {
+        constructor() {
+            super();
+            this.message =
+                'This equation has too many stats, or a weight too large or too small, to be shared.';
+            this.name = 'SharedBuildExceedsBasisCapsError';
+        }
+    }
+    return {
+        InvalidSharedConfigError,
+        ShipRoleColumnNotNullableError,
+        SharedBuildExceedsBasisCapsError,
+    };
 });
 
 vi.mock('../../services/communityRecommendations', () => ({
@@ -43,6 +71,8 @@ vi.mock('../../services/communityRecommendations', () => ({
         removeVote: (...args: unknown[]) => removeVoteMock(...args),
     },
     InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
+    SharedBuildExceedsBasisCapsError,
 }));
 
 const makeShip = (id: string, name: string): Ship => ({ id, name }) as Ship;
@@ -111,7 +141,6 @@ describe('useCommunityRecommendations — stale-ship fetch guard (Finding 1)', (
                 useCommunityRecommendations({
                     selectedShip: props.selectedShip,
                     currentBuild: null,
-                    shipRole: null,
                 }),
             { initialProps: { selectedShip: shipA } }
         );
@@ -158,7 +187,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -183,7 +211,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -209,7 +236,6 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
             useCommunityRecommendations({
                 selectedShip: ship,
                 currentBuild: sampleBuild,
-                shipRole: sampleBuild.shipRole,
             })
         );
 
@@ -223,6 +249,62 @@ describe('useCommunityRecommendations — handleShare success reporting (Finding
         expect(shareResult).toBe(false);
         expect(result.current.error).toBe('This build could not be validated and was not shared.');
         expect(result.current.error).not.toContain('signed in');
+    });
+
+    // #544: `SharedBuildExceedsBasisCapsError` extends `InvalidSharedConfigError`, so an
+    // `instanceof InvalidSharedConfigError` check alone catches it too — the hook must check the
+    // SUBCLASS first, or its specific copy never runs.
+    it('reports a basis-cap-specific message when the shared basis exceeds the schema caps, distinct from the generic validation message', async () => {
+        const ship = makeShip('1', 'Ares');
+        listForShipMock.mockResolvedValueOnce([]); // initial mount fetch
+        createRecommendationMock.mockRejectedValueOnce(new SharedBuildExceedsBasisCapsError());
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+            })
+        );
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let shareResult: boolean | undefined;
+        await act(async () => {
+            shareResult = await result.current.handleShare('Title', 'Description', false);
+        });
+
+        expect(shareResult).toBe(false);
+        expect(result.current.error).toBe(
+            'This equation has too many stats, or a weight too large or too small, to be shared.'
+        );
+        expect(result.current.error).not.toBe(
+            'This build could not be validated and was not shared.'
+        );
+    });
+
+    it('reports a migration-pending message when the DB still rejects a null ship_role', async () => {
+        const ship = makeShip('1', 'Ares');
+        listForShipMock.mockResolvedValueOnce([]); // initial mount fetch
+        createRecommendationMock.mockRejectedValueOnce(new ShipRoleColumnNotNullableError());
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({
+                selectedShip: ship,
+                currentBuild: sampleBuild,
+            })
+        );
+
+        await waitFor(() => expect(result.current.loading).toBe(false));
+
+        let shareResult: boolean | undefined;
+        await act(async () => {
+            shareResult = await result.current.handleShare('Title', 'Description', false);
+        });
+
+        expect(shareResult).toBe(false);
+        expect(result.current.error).toBe(
+            'Sharing a build with no role is not available yet — try again later.'
+        );
     });
 });
 
@@ -243,7 +325,7 @@ describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)',
         });
 
         const { result } = renderHook(() =>
-            useCommunityRecommendations({ selectedShip: ship, currentBuild: null, shipRole: null })
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: null })
         );
 
         await waitFor(() => expect(result.current.builds).toHaveLength(2));
@@ -266,5 +348,70 @@ describe('useCommunityRecommendations — toggleExpanded vote race (Finding 4)',
 
         expect(result.current.expandedId).toBe('build-b');
         expect(result.current.userVote).toBe('upvote');
+    });
+});
+
+describe('useCommunityRecommendations — canShare gate', () => {
+    const usableFormula: CustomFormula = {
+        rows: [{ stat: 'attack', kind: 'core', direction: 'max', importance: 1 }],
+    };
+
+    const customConfig = (customFormula: CustomFormula): AutogearBuildFields => ({
+        shipRole: null,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        customFormula,
+    });
+
+    it('opens the gate for a Custom-mode build seeded from a role', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(
+            customConfig({ ...usableFormula, seededFrom: 'ATTACKER' })
+        );
+        expect(build).not.toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(true);
+    });
+
+    it('keeps the gate closed for a hand-written Custom formula with no seededFrom when allowRoleless is false', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig(usableFormula), false);
+        expect(build).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(false);
+    });
+
+    it('opens the gate for a hand-written Custom formula with no seededFrom when allowRoleless is true', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig(usableFormula), true);
+        expect(build).not.toBeNull();
+        expect(build?.shipRole).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(true);
+    });
+
+    it('keeps the gate closed with neither a role nor a usable formula', () => {
+        const ship = makeShip('1', 'Ares');
+        const build = configToSharedBuild(customConfig({ rows: [] }));
+        expect(build).toBeNull();
+
+        const { result } = renderHook(() =>
+            useCommunityRecommendations({ selectedShip: ship, currentBuild: build })
+        );
+
+        expect(result.current.canShare).toBe(false);
     });
 });

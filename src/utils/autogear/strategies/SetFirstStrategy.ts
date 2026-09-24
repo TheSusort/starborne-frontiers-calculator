@@ -8,6 +8,7 @@ import {
     StatBonus,
     FleetBuff,
     CustomFormula,
+    RoleBasis,
 } from '../../../types/autogear';
 import { AutogearResult } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
@@ -49,7 +50,8 @@ export class SetFirstStrategy extends BaseStrategy {
         _tryToCompleteSets?: boolean,
         _arenaModifiers?: Record<string, number> | null,
         _fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<AutogearResult> {
         const setGroups = this.groupInventoryBySets(
             availableInventory,
@@ -92,7 +94,8 @@ export class SetFirstStrategy extends BaseStrategy {
                 shipRole,
                 setPriorities,
                 statBonuses,
-                customFormula
+                customFormula,
+                roleBasis
             );
 
             setPieces.forEach((piece) => {
@@ -114,7 +117,8 @@ export class SetFirstStrategy extends BaseStrategy {
             shipRole,
             setPriorities,
             statBonuses,
-            customFormula
+            customFormula,
+            roleBasis
         );
 
         // Ensure progress is complete
@@ -171,6 +175,12 @@ export class SetFirstStrategy extends BaseStrategy {
             .sort((a, b) => b.score - a.score); // Sort by potential score
     }
 
+    // Ranks sets ahead of any per-slot assignment, using `priorities` plus a Custom formula
+    // (`shipRole` is always `undefined` here, so `calculatePriorityScore` runs
+    // `customFormulaScore` when one is supplied). `roleBasis` is NOT threaded through: it only
+    // ever applies alongside a role (`roleHostsBasis`, priorityScore.ts), and this phase never
+    // has one. Role and formula scoring apply again later, in
+    // `findBestSetCombination`/`fillRemainingSlots`'s real per-slot assignment.
     private evaluateSetPotential(
         pieces: GearPiece[],
         ship: Ship,
@@ -247,7 +257,8 @@ export class SetFirstStrategy extends BaseStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<GearPiece[]> {
         const availableSlots = pieces.map((p) => p.slot).filter((slot) => !usedSlots.has(slot));
 
@@ -293,7 +304,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         undefined,
                         setPriorities,
                         statBonuses,
-                        customFormula
+                        customFormula,
+                        roleBasis
                     ) * priorityMultiplier;
 
                 if (score > bestScore) {
@@ -318,7 +330,8 @@ export class SetFirstStrategy extends BaseStrategy {
         shipRole?: ShipTypeName,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): Promise<void> {
         for (const slotKey of Object.keys(GEAR_SLOTS)) {
             const slot = slotKey;
@@ -351,7 +364,8 @@ export class SetFirstStrategy extends BaseStrategy {
                         undefined,
                         setPriorities,
                         statBonuses,
-                        customFormula
+                        customFormula,
+                        roleBasis
                     );
                     if (score > bestScore) {
                         bestScore = score;
@@ -374,7 +388,8 @@ export class SetFirstStrategy extends BaseStrategy {
         setCount?: Record<string, number>,
         setPriorities?: SetPriority[],
         statBonuses?: StatBonus[],
-        customFormula?: CustomFormula
+        customFormula?: CustomFormula,
+        roleBasis?: RoleBasis
     ): number {
         return calculatePriorityScore(
             stats,
@@ -386,7 +401,8 @@ export class SetFirstStrategy extends BaseStrategy {
             undefined,
             undefined,
             undefined,
-            customFormula
+            customFormula,
+            roleBasis
         );
     }
 }

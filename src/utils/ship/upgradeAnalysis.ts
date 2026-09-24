@@ -4,11 +4,11 @@ import { UpgradeSuggestion } from '../../types/analysis';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats } from '../ship/statsCalculator';
 import { GEAR_SETS } from '../../constants/gearSets';
-import { ShipTypeName } from '../../constants/shipTypes';
+import { ShipTypeName, resolveRoleEntry } from '../../constants/shipTypes';
 import { analyzeGearQuality } from './gearSuggestions';
 import { SlotContribution } from './statDistribution';
 
-const DESIRED_SETS: Record<ShipTypeName, string[]> = {
+const DESIRED_SETS: Partial<Record<ShipTypeName, string[]>> = {
     ATTACKER: ['ATTACK', 'CRITICAL', 'ABYSSAL_ASSULT', 'AMBUSH', 'PIERCER'],
     DEFENDER: ['DEFENSE', 'FORTITUDE', 'ABYSSAL_SAFEGUARD', 'ABYSSAL_WARD', 'PROTECTION'],
     SUPPORTER: ['REPAIR', 'FORTITUDE', 'CRITICAL', 'ABYSSAL_SAFEGUARD'],
@@ -25,6 +25,7 @@ export function analyzeUpgrades(
     orphanSetPieces: GearPiece[]
 ): UpgradeSuggestion[] {
     const suggestions: UpgradeSuggestion[] = [];
+    const desiredSets = resolveRoleEntry(DESIRED_SETS, ship.type) ?? [];
 
     slotContributions.forEach((contribution) => {
         const gearId = equipment[contribution.slotName];
@@ -33,7 +34,7 @@ export function analyzeUpgrades(
         const gear = getGearPiece(gearId);
         if (!gear) return;
 
-        const relevantSet = gear.setBonus && DESIRED_SETS[ship.type].includes(gear.setBonus);
+        const relevantSet = gear.setBonus && desiredSets.includes(gear.setBonus);
 
         // Add gear quality check.
         if (
@@ -108,7 +109,7 @@ export function analyzeUpgrades(
                 const mostRelevantSetPiece = orphanSetPiecesOtherThanThis.reduce(
                     (mostRelevant, piece) => {
                         const hasRelevantSet =
-                            piece.setBonus && DESIRED_SETS[ship.type].includes(piece.setBonus);
+                            piece.setBonus && desiredSets.includes(piece.setBonus);
                         return hasRelevantSet ? piece : mostRelevant;
                     },
                     orphanSetPiecesOtherThanThis[0]

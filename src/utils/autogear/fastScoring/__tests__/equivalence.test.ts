@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { StatPriority } from '../../../../types/autogear';
+import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
-import { GEAR_SLOT_ORDER, type GearSlotName } from '../../../../constants';
+import { GEAR_SLOT_ORDER, SHIP_TYPES, type GearSlotName } from '../../../../constants';
 import { calculateTotalScore } from '../../scoring';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
+import { roleAxis } from '../../offFormula/roleBasisHost';
 import {
     generateTestInventory,
     makeTestShip,
@@ -382,4 +383,71 @@ describe('fastScore equivalence with calculateTotalScore', () => {
         const fast = fastScore(ctx, gearIds, []);
         expect(scoresEqual(slow, fast.fitness)).toBe(true);
     });
+});
+
+describe('fastScore/calculateTotalScore equivalence — roleBasis, every hosting role', () => {
+    const ship = makeTestShip();
+    const engineering = makeTestEngineering();
+    const inventory = generateTestInventory(100, 30);
+    const getGearPiece = (id: string) => inventory.find((p) => p.id === id);
+    const getEng = (type: string) => (type === 'ATTACKER' ? engineering : undefined);
+
+    // Derived from the hosting predicate itself, not hand-listed — a role `roleBasisHost.ts`
+    // adds later without a matching fast-path wire reddens this walk instead of being skipped.
+    const hostingRoles = Object.keys(SHIP_TYPES).filter((role) => roleAxis(role) !== null);
+
+    it('covers a non-empty, known set of hosting roles', () => {
+        expect(hostingRoles.sort()).toEqual(
+            ['ATTACKER', 'DEBUFFER', 'DEBUFFER_BOMBER', 'SUPPORTER', 'SUPPORTER_SHIELD'].sort()
+        );
+    });
+
+    for (const role of hostingRoles) {
+        it(`${role}: fastScore matches calculateTotalScore under a roleBasis on a foreign stat`, () => {
+            const axis = roleAxis(role)!;
+            // A term on a stat the role's own primary formula never reads is required here: a
+            // basis of `[{ attack, 1 }]` reproduces the no-basis result exactly
+            // (`resolveBasisValue`), so a path that silently drops `roleBasis` would still match
+            // — see `roleBasis.test.ts`'s note on the same trap.
+            const foreignStat = axis === 'damage' ? 'hacking' : 'defence';
+            const roleBasis: RoleBasis = {
+                produces: axis,
+                terms: [{ stat: foreignStat, weight: 1 }],
+            };
+
+            const ctx = buildFastScoringContext({
+                ship,
+                availableInventory: inventory,
+                priorities: [{ stat: 'attack', weight: 1 }],
+                shipRole: role,
+                engineeringStats: engineering,
+                arenaModifiers: undefined,
+                roleBasis,
+                resolveGearPiece: getGearPiece,
+            });
+
+            const equipment: Partial<Record<GearSlotName, string>> = { weapon: inventory[0].id };
+            const gearIds = ctx.gearSlotOrder.map((slot) =>
+                slot === 'weapon' ? ctx.gearRegistry.idOf.get(inventory[0].id)! : -1
+            );
+
+            const slowScore = calculateTotalScore(
+                ship,
+                equipment,
+                [{ stat: 'attack', weight: 1 }],
+                getGearPiece,
+                getEng,
+                role,
+                undefined,
+                undefined,
+                false,
+                null,
+                undefined,
+                undefined,
+                roleBasis
+            );
+            const fastResult = fastScore(ctx, gearIds, []);
+            expect(scoresEqual(slowScore, fastResult.fitness)).toBe(true);
+        });
+    }
 });

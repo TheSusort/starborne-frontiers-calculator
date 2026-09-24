@@ -4,31 +4,28 @@ import { useShips } from '../../contexts/ShipsContext';
 import { useInventory } from '../../contexts/InventoryProvider';
 import { useAutogearConfig } from '../../contexts/AutogearConfigContext';
 import { arrayMove } from '../../utils/arrayMove';
-import {
-    GearSuggestion,
-    StatPriority,
-    SetPriority,
-    StatBonus,
-    FleetBuff,
-} from '../../types/autogear';
-import type { CustomFormula } from '../../types/autogear';
+import { GearSuggestion } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
-import { partitionScoreableShips } from '../../utils/autogear/customFormula';
+import type { OffFormulaApplyUpdate } from '../../components/autogear/OffFormulaNotice';
+import { partitionScoreableShips, sanitizeRoleBasis } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
 import { useEngineeringStats } from '../../hooks/useEngineeringStats';
-import {
-    AutogearAlgorithm,
-    AutogearResult,
-    HardRequirementViolation,
-} from '../../utils/autogear/AutogearStrategy';
-import { getAutogearStrategy } from '../../utils/autogear/getStrategy';
+import { AutogearAlgorithm, HardRequirementViolation } from '../../utils/autogear/AutogearStrategy';
 import { resolveLimitStatValue } from '../../utils/autogear/priorityScore';
 import { clearScoreCache } from '../../utils/autogear/scoring';
+import { applySuggestionsToShip } from '../../utils/autogear/applySuggestionsToShip';
+import {
+    findOptimalGearForShip,
+    useAutogearShipConfigs,
+    toSavedAutogearConfig,
+    resetShipConfigPatch,
+    type ShipOptimizerRun,
+} from '../../utils/autogear/runShipOptimizer';
 import { runSimulation, SimulationSummary } from '../../utils/simulation/simulationCalculator';
 import { StatList } from '../../components/stats/StatList';
-import { GEAR_SETS, SHIP_TYPES, ShipTypeName, getLimitStatLabel } from '../../constants';
+import { GEAR_SETS, SHIP_TYPES, getLimitStatLabel } from '../../constants';
 import { IMPLANTS } from '../../constants/implants';
 import { AutogearQuickSettings } from '../../components/autogear/AutogearQuickSettings';
 import { AutogearSettingsModal } from '../../components/autogear/AutogearSettingsModal';
@@ -55,8 +52,6 @@ import { useGearUpgrades } from '../../hooks/useGearUpgrades';
 import { performanceTracker } from '../../utils/autogear/performanceTimer';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
 import { trackAutogearRun } from '../../services/usageTracking';
-import { filterTopImplantsPerSlot } from '../../utils/autogear/implantFilter';
-import { buildGearScoringInputs } from '../../utils/autogear/gearScoringInputs';
 import { ArenaSeason } from '../../types/arena';
 import { getActiveSeason } from '../../services/arenaModifierService';
 import { getMatchingModifiers, applyArenaModifiers } from '../../utils/autogear/arenaModifiers';
@@ -96,29 +91,6 @@ function formatImplantType(type: string): string {
 }
 
 export const AutogearPage: React.FC = () => {
-    // Helper functions (before hooks)
-    const getSuggestedEquipment = (suggestions: GearSuggestion[], ship: Ship | null) => {
-        if (!ship) return {};
-        const equipment = { ...ship.equipment };
-        suggestions
-            .filter((s) => !s.slotName.startsWith('implant_')) // Only gear
-            .forEach((suggestion) => {
-                equipment[suggestion.slotName] = suggestion.gearId;
-            });
-        return equipment;
-    };
-
-    const getSuggestedImplants = (suggestions: GearSuggestion[], ship: Ship | null) => {
-        if (!ship) return {};
-        const implants = { ...ship.implants };
-        suggestions
-            .filter((s) => s.slotName.startsWith('implant_')) // Only implants
-            .forEach((suggestion) => {
-                implants[suggestion.slotName] = suggestion.gearId;
-            });
-        return implants;
-    };
-
     // All hooks
     const { getGearPiece, inventory } = useInventory();
     const { getUpgradedGearPiece, upgrades, simulateUpgrades } = useGearUpgrades();
@@ -150,30 +122,8 @@ export const AutogearPage: React.FC = () => {
 
     // useState hooks
     const [selectedShips, setSelectedShips] = useState<(Ship | null)[]>([null]);
-    const [shipConfigs, setShipConfigs] = useState<
-        Record<
-            string,
-            {
-                shipRole: ShipTypeName | null;
-                statPriorities: StatPriority[];
-                setPriorities: SetPriority[];
-                statBonuses: StatBonus[];
-                ignoreEquipped: boolean;
-                ignoreUnleveled: boolean;
-                useUpgradedStats: boolean;
-                tryToCompleteSets: boolean;
-                selectedAlgorithm: AutogearAlgorithm;
-                showSecondaryRequirements: boolean;
-                optimizeImplants: boolean;
-                includeCalibratedGear: boolean;
-                assumeCalibrated: boolean;
-                useArenaModifiers: boolean;
-                excludedImplantTypes: string[];
-                fleetBuffs: FleetBuff[];
-                customFormula: CustomFormula | undefined;
-            }
-        >
-    >({});
+    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
+    const { getShipConfig, updateShipConfig } = useAutogearShipConfigs(getShipById);
     const [shipResults, setShipResults] = useState<
         Record<
             string,
@@ -211,7 +161,6 @@ export const AutogearPage: React.FC = () => {
     const [isPrinting, setIsPrinting] = useState(false);
     const [showMilestoneModal, setShowMilestoneModal] = useState(false);
     const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
-    const [activeSeason, setActiveSeason] = useState<ArenaSeason | null>(null);
     const [donorContext, setDonorContext] = useState<{
         donorIds: Set<string>;
         equippedShipId: string;
@@ -295,6 +244,65 @@ export const AutogearPage: React.FC = () => {
         ).final;
     }, [shipSettings, getGearPiece, getEngineeringStatsForShipType]);
 
+    /** Equips a list of gear/implant suggestions onto a ship — the one write path autogear's own
+     *  "Equip" button goes through. */
+    const equipSuggestions = async (shipId: string, suggestions: GearSuggestion[]) => {
+        const gearSuggestions = suggestions.filter((s) => !s.slotName.startsWith('implant_'));
+        const implantSuggestions = suggestions.filter((s) => s.slotName.startsWith('implant_'));
+
+        if (gearSuggestions.length > 0) {
+            const gearAssignments = gearSuggestions.map((suggestion) => ({
+                slot: suggestion.slotName,
+                gearId: suggestion.gearId,
+            }));
+            await equipMultipleGear(shipId, gearAssignments);
+        }
+
+        if (implantSuggestions.length > 0) {
+            const currentShip = getShipById(shipId);
+            if (currentShip) {
+                const newImplants = { ...currentShip.implants };
+                implantSuggestions.forEach((suggestion) => {
+                    newImplants[suggestion.slotName] = suggestion.gearId;
+                });
+                await updateShip(shipId, { implants: newImplants });
+            }
+        }
+    };
+
+    /** Ships currently holding a piece a suggestion list would move onto `equippedShipId` — using
+     *  `gearToShipMap` (the reliable source for current gear ownership; `gear.shipId` is stale
+     *  from import). */
+    const donorIdsForSuggestions = (
+        suggestions: GearSuggestion[],
+        equippedShipId: string
+    ): Set<string> => {
+        const donorIds = new Set<string>();
+        suggestions.forEach((suggestion) => {
+            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
+            if (currentOwnerId && currentOwnerId !== equippedShipId) {
+                donorIds.add(currentOwnerId);
+            }
+        });
+        return donorIds;
+    };
+
+    /** Writes the notice's derived `roleBasis` into the open ship's config — deriving the basis
+     *  and deciding which axis the role hosts is `OffFormulaNotice`'s job; this only supplies the
+     *  ship this settings panel has open. `shipRole` is unchanged by this update, so it saves and
+     *  reruns exactly like any other config edit. */
+    const handleApplyOffFormula = (update: OffFormulaApplyUpdate) => {
+        if (!shipSettings) return;
+        updateShipConfig(shipSettings.id, update);
+    };
+
+    /** Stops scoring the open ship with a previously-applied `roleBasis` — the equation-line
+     *  counterpart of `handleApplyOffFormula`. */
+    const handleClearOffFormula = () => {
+        if (!shipSettings) return;
+        updateShipConfig(shipSettings.id, { roleBasis: undefined });
+    };
+
     const availableImplantTypes = useMemo(() => {
         const seen = new Set<string>();
         const result: { key: string; name: string; label: string }[] = [];
@@ -312,45 +320,6 @@ export const AutogearPage: React.FC = () => {
         return result.sort((a, b) => a.label.localeCompare(b.label));
     }, [inventory]);
 
-    // Helper function to get config for a specific ship
-    const getShipConfig = (shipId: string) => {
-        const ship = getShipById(shipId);
-        const defaultRole = ship?.type || 'ATTACKER';
-
-        return (
-            shipConfigs[shipId] || {
-                shipRole: defaultRole,
-                statPriorities: [],
-                setPriorities: [],
-                statBonuses: [],
-                ignoreEquipped: false,
-                ignoreUnleveled: true,
-                useUpgradedStats: false,
-                tryToCompleteSets: false,
-                selectedAlgorithm: AutogearAlgorithm.Genetic,
-                showSecondaryRequirements: false,
-                optimizeImplants: false,
-                includeCalibratedGear: false,
-                assumeCalibrated: false,
-                useArenaModifiers: false,
-                excludedImplantTypes: [],
-                fleetBuffs: [],
-                customFormula: undefined,
-            }
-        );
-    };
-
-    // Helper function to update config for a specific ship
-    const updateShipConfig = (shipId: string, updates: Partial<(typeof shipConfigs)[string]>) => {
-        setShipConfigs((prev) => ({
-            ...prev,
-            [shipId]: {
-                ...getShipConfig(shipId),
-                ...updates,
-            },
-        }));
-    };
-
     /**
      * Applies each ship's saved autogear config, if it has one.
      * `notify` reports a single "Loaded saved configuration" toast when at least
@@ -367,6 +336,11 @@ export const AutogearPage: React.FC = () => {
                 updateShipConfig(ship.id, {
                     ...savedConfig,
                     fleetBuffs: savedConfig.fleetBuffs ?? [],
+                    // A saved config is untyped JSON from localStorage or Supabase JSONB
+                    // (Security rule 5) — sanitised here, at the one place a saved `roleBasis`
+                    // enters live page state, so every downstream reader (the scorer, the
+                    // off-formula notice) only ever sees a shape it can trust.
+                    roleBasis: sanitizeRoleBasis(savedConfig.roleBasis),
                 });
             }
         }
@@ -629,25 +603,7 @@ export const AutogearPage: React.FC = () => {
 
             // Save current configuration before running optimization
             performanceTracker.startTimer('SaveConfig');
-            const config = {
-                shipId: ship.id,
-                shipRole: shipConfig.shipRole,
-                statPriorities: shipConfig.statPriorities,
-                setPriorities: shipConfig.setPriorities,
-                statBonuses: shipConfig.statBonuses,
-                ignoreEquipped: shipConfig.ignoreEquipped,
-                ignoreUnleveled: shipConfig.ignoreUnleveled,
-                useUpgradedStats: shipConfig.useUpgradedStats,
-                algorithm: shipConfig.selectedAlgorithm,
-                tryToCompleteSets: shipConfig.tryToCompleteSets,
-                optimizeImplants: shipConfig.optimizeImplants,
-                includeCalibratedGear: shipConfig.includeCalibratedGear,
-                assumeCalibrated: shipConfig.assumeCalibrated,
-                useArenaModifiers: shipConfig.useArenaModifiers,
-                fleetBuffs: shipConfig.fleetBuffs,
-                excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
-                customFormula: shipConfig.customFormula,
-            };
+            const config = toSavedAutogearConfig(ship.id, shipConfig);
             void saveConfig(config);
             performanceTracker.endTimer('SaveConfig');
 
@@ -656,143 +612,40 @@ export const AutogearPage: React.FC = () => {
                 `Starting optimization for ship ${i + 1}/${validShips.length}: ${ship.name}`
             );
 
-            const strategy = getAutogearStrategy(shipConfig.selectedAlgorithm);
-
-            // Set progress callback for this ship
-            strategy.setProgressCallback((progress) =>
-                teamProgressCallback(progress, ship.name, i)
-            );
-
-            // Filter inventory based on used gear and ship-specific settings
-            performanceTracker.startTimer('FilterInventory');
-            const availableInventory = inventory
-                .filter((gear) => {
-                    const isImplant = gear.slot.startsWith('implant_');
-
-                    // Always exclude ultimate implants from optimization
-                    if (gear.slot === 'implant_ultimate') {
-                        return false;
-                    }
-
-                    // If optimizeImplants is false, exclude all implants
-                    if (isImplant && !shipConfig.optimizeImplants) {
-                        return false;
-                    }
-
-                    // Exclude implant types the user has blacklisted for this ship
-                    if (
-                        isImplant &&
-                        shipConfig.excludedImplantTypes?.includes(gear.setBonus ?? '')
-                    ) {
-                        return false;
-                    }
-
-                    // Exclude already used gear
-                    if (usedGearIds.has(gear.id)) {
-                        return false;
-                    }
-
-                    // Exclude gear with set bonuses that have count set to 0
-                    const excludedBySetPriority = shipConfig.setPriorities.some(
-                        (priority) => priority.setName === gear.setBonus && priority.count === 0
-                    );
-                    if (excludedBySetPriority) {
-                        return false;
-                    }
-
-                    // Exclude calibrated gear for other ships (unless override enabled)
-                    if (gear.calibration?.shipId && gear.calibration.shipId !== ship.id) {
-                        if (!shipConfig.includeCalibratedGear) {
-                            return false;
-                        }
-                    }
-
-                    // If gear is equipped on a ship
-                    const shipId = gearToShipMap.get(gear.id);
-                    const equippedShip = shipId ? getShipById(shipId) : undefined;
-
-                    // IMPLANTS: Always exclude if equipped on another ship
-                    if (isImplant) {
-                        return !equippedShip || equippedShip.id === ship.id;
-                    }
-
-                    // GEAR: Follow ignoreEquipped setting
-                    // If ignoreEquipped is true, only include:
-                    // 1. Not equipped on any ship, OR
-                    // 2. Equipped on selected ship
-                    if (shipConfig.ignoreEquipped) {
-                        return !equippedShip || equippedShip.id === ship.id;
-                    }
-
-                    // Otherwise, include:
-                    // 1. Not equipped on any ship, OR
-                    // 2. Equipped on selected ship, OR
-                    // 3. Equipped on an unlocked ship
-                    return (
-                        !equippedShip ||
-                        equippedShip.id === ship.id ||
-                        !equippedShip.equipmentLocked
-                    );
-                })
-                .filter((gear) => {
-                    const isImplant = gear.slot.startsWith('implant_');
-                    // Don't apply ignoreUnleveled to implants (they don't have levels)
-                    if (isImplant) return true;
-                    // When useUpgradedStats is on, unleveled gear is evaluated via
-                    // its simulated level-16 stats, so the level filter would defeat
-                    // the purpose of the setting.
-                    if (shipConfig.useUpgradedStats) return true;
-                    // For gear, apply the ignoreUnleveled filter
-                    return !shipConfig.ignoreUnleveled || gear.level > 0;
-                });
-
-            // The array feeds the fast path's gear registry, the getter feeds
-            // the slow path, and both are built from one source so the two
-            // paths cannot score the same piece differently.
-            const { scoredInventory, getGearForShip } = buildGearScoringInputs({
-                availableInventory,
-                getGearPiece,
-                upgradedGearGetter,
-                useUpgradedStats: shipConfig.useUpgradedStats,
-                assumeCalibrated: shipConfig.assumeCalibrated,
-            });
-
-            // Pre-filter implants to keep only top candidates per slot
-            // This dramatically reduces the search space for the genetic algorithm
-            // Always include currently equipped implants so GA can decide to keep or swap
-            const equippedImplantIds = new Set(
-                Object.values(ship.implants || {}).filter((id): id is string => !!id)
-            );
-            const filteredInventory = shipConfig.optimizeImplants
-                ? filterTopImplantsPerSlot(
-                      scoredInventory,
-                      shipConfig.statPriorities,
-                      equippedImplantIds,
-                      shipConfig.statBonuses
-                  )
-                : scoredInventory;
-            performanceTracker.endTimer('FilterInventory');
-
-            // eslint-disable-next-line no-console
-            console.log(`Available inventory size for ${ship.name}: ${filteredInventory.length}`);
-
             performanceTracker.startTimer('FindOptimalGear');
-            const strategyResult: AutogearResult = await Promise.resolve(
-                strategy.findOptimalGear(
+            const { result: strategyResult, getGearForShip }: ShipOptimizerRun =
+                await findOptimalGearForShip(
                     ship,
-                    shipConfig.statPriorities,
-                    filteredInventory,
-                    getGearForShip,
-                    getEngineeringStatsForShipType,
-                    shipConfig.shipRole || undefined,
-                    shipConfig.setPriorities,
-                    shipConfig.statBonuses,
-                    shipConfig.tryToCompleteSets,
-                    arenaModifiers,
-                    shipConfig.fleetBuffs,
-                    shipConfig.customFormula
-                )
-            );
+                    {
+                        shipRole: shipConfig.shipRole,
+                        statPriorities: shipConfig.statPriorities,
+                        setPriorities: shipConfig.setPriorities,
+                        statBonuses: shipConfig.statBonuses,
+                        ignoreEquipped: shipConfig.ignoreEquipped,
+                        ignoreUnleveled: shipConfig.ignoreUnleveled,
+                        useUpgradedStats: shipConfig.useUpgradedStats,
+                        tryToCompleteSets: shipConfig.tryToCompleteSets,
+                        selectedAlgorithm: shipConfig.selectedAlgorithm,
+                        optimizeImplants: shipConfig.optimizeImplants,
+                        includeCalibratedGear: shipConfig.includeCalibratedGear,
+                        assumeCalibrated: shipConfig.assumeCalibrated,
+                        excludedImplantTypes: shipConfig.excludedImplantTypes ?? [],
+                        fleetBuffs: shipConfig.fleetBuffs,
+                        customFormula: shipConfig.customFormula,
+                        arenaModifiers,
+                        roleBasis: shipConfig.roleBasis,
+                    },
+                    {
+                        inventory,
+                        usedGearIds,
+                        getGearPiece,
+                        upgradedGearGetter,
+                        getEngineeringStatsForShipType,
+                        gearToShipMap,
+                        getShipById,
+                        onProgress: (progress) => teamProgressCallback(progress, ship.name, i),
+                    }
+                );
             const newSuggestions = strategyResult.suggestions;
             performanceTracker.endTimer('FindOptimalGear');
 
@@ -804,8 +657,8 @@ export const AutogearPage: React.FC = () => {
             // Calculate stats and run simulations for this ship
             performanceTracker.startTimer('PostProcessing');
             const currentEquipment = ship.equipment;
-            const suggestedEquipment = getSuggestedEquipment(newSuggestions, ship);
-            const suggestedImplants = getSuggestedImplants(newSuggestions, ship);
+            const { equipment: suggestedEquipment, implants: suggestedImplants } =
+                applySuggestionsToShip(ship, newSuggestions);
 
             // Get active sets
             const currentSets = Object.values(currentEquipment).reduce(
@@ -929,24 +782,15 @@ export const AutogearPage: React.FC = () => {
     };
 
     const handleEquipSuggestionsForShip = (shipId: string) => {
-        const ship = selectedShips.find((s) => s?.id === shipId);
-        if (!ship) return;
-
         const currentShipResults = shipResults[shipId];
         if (!currentShipResults) return;
 
-        // Capture donor ship IDs before equipping, using gearToShipMap (the reliable
-        // source for current gear ownership — gear.shipId is stale from import).
-        const donorIds = new Set<string>();
-        currentShipResults.suggestions.forEach((suggestion) => {
-            const currentOwnerId = gearToShipMap.get(suggestion.gearId);
-            if (currentOwnerId && currentOwnerId !== shipId) {
-                donorIds.add(currentOwnerId);
-            }
-        });
+        const donorIds = donorIdsForSuggestions(currentShipResults.suggestions, shipId);
         void applyGearSuggestionsForShip(shipId, donorIds);
     };
 
+    /** Equips a suggestion list onto a ship — the one path a batch autogear run's "Equip" button
+     *  goes through, so donor ships are captured and surfaced consistently. */
     const applyGearSuggestionsForShip = async (
         shipId: string,
         donorIds: Set<string> = new Set()
@@ -954,37 +798,10 @@ export const AutogearPage: React.FC = () => {
         const ship = selectedShips.find((s) => s?.id === shipId);
         if (!ship) return;
 
-        const currentShipResults = shipResults[shipId];
-        if (!currentShipResults) return;
+        const suggestions = shipResults[shipId]?.suggestions;
+        if (!suggestions) return;
 
-        // Separate gear and implant suggestions
-        const gearSuggestions = currentShipResults.suggestions.filter(
-            (s) => !s.slotName.startsWith('implant_')
-        );
-        const implantSuggestions = currentShipResults.suggestions.filter((s) =>
-            s.slotName.startsWith('implant_')
-        );
-
-        // Apply gear updates using equipMultipleGear (handles moving gear from other ships)
-        if (gearSuggestions.length > 0) {
-            const gearAssignments = gearSuggestions.map((suggestion) => ({
-                slot: suggestion.slotName,
-                gearId: suggestion.gearId,
-            }));
-            await equipMultipleGear(shipId, gearAssignments);
-        }
-
-        // Apply implant updates using updateShip (implants don't move between ships)
-        if (implantSuggestions.length > 0) {
-            const currentShip = getShipById(shipId);
-            if (currentShip) {
-                const newImplants = { ...currentShip.implants };
-                implantSuggestions.forEach((suggestion) => {
-                    newImplants[suggestion.slotName] = suggestion.gearId;
-                });
-                await updateShip(shipId, { implants: newImplants });
-            }
-        }
+        await equipSuggestions(shipId, suggestions);
 
         addNotification('success', `Suggested gear equipped successfully for ${ship.name}`);
 
@@ -1785,34 +1602,7 @@ export const AutogearPage: React.FC = () => {
                         if (shipSettings) {
                             void resetConfig(shipSettings.id);
                             const config = getShipConfig(shipSettings.id);
-                            if (config.shipRole === null) {
-                                // Custom mode: the role stays unset; only the formula resets,
-                                // re-seeding from its origin role when it has one.
-                                updateShipConfig(shipSettings.id, {
-                                    customFormula: config.customFormula?.seededFrom
-                                        ? seedFormulaFromRole(config.customFormula.seededFrom)
-                                        : undefined,
-                                });
-                            } else {
-                                updateShipConfig(shipSettings.id, {
-                                    shipRole: 'ATTACKER',
-                                    statPriorities: [],
-                                    setPriorities: [],
-                                    statBonuses: [],
-                                    ignoreEquipped: false,
-                                    ignoreUnleveled: true,
-                                    useUpgradedStats: false,
-                                    tryToCompleteSets: false,
-                                    selectedAlgorithm: AutogearAlgorithm.Genetic,
-                                    showSecondaryRequirements: false,
-                                    optimizeImplants: false,
-                                    includeCalibratedGear: false,
-                                    assumeCalibrated: false,
-                                    useArenaModifiers: false,
-                                    excludedImplantTypes: [],
-                                    fleetBuffs: [],
-                                });
-                            }
+                            updateShipConfig(shipSettings.id, resetShipConfigPatch(config));
                             addNotification('success', 'Reset configuration to defaults');
                         }
                     }}
@@ -1889,6 +1679,11 @@ export const AutogearPage: React.FC = () => {
                             customFormula: seedFormulaFromRole(role),
                         });
                     }}
+                    onApplyOffFormula={handleApplyOffFormula}
+                    appliedRoleBasis={
+                        shipSettings ? getShipConfig(shipSettings.id).roleBasis : undefined
+                    }
+                    onClearOffFormula={handleClearOffFormula}
                 />
 
                 <MilestoneModal

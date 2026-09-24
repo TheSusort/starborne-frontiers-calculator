@@ -1,4 +1,5 @@
 import { BaseStats, LimitableStat } from '../../types/stats';
+import type { BasisTerm } from '../../types/autogear';
 
 // Defense reduction curve approximation based on the graph
 export function calculateDamageReduction(defense: number): number {
@@ -12,19 +13,45 @@ export function calculateDamageReduction(defense: number): number {
 export function calculateEffectiveHP(
     hp: number,
     defense: number,
-    damageReductionPercent: number = 0
+    damageReductionPercent: number = 0,
+    basis?: BasisTerm[],
+    stats?: BaseStats
 ): number {
+    // A basis blends the HP FACTOR only. `defense` still drives the mitigation curve on its own
+    // real value, so a defence term here is a deliberate tilt toward defence, NOT a transcription
+    // of a skill equation the way a directDamage basis is.
+    const primary = basis && stats ? resolveBasisValue(stats, basis, 'hp') : hp;
     const defenseReduction = calculateDamageReduction(defense);
     // Calculate effective HP from HP and defence-based damage reduction
-    const effectiveHpFromDefense = hp * (100 / (100 - defenseReduction));
+    const effectiveHpFromDefense = primary * (100 / (100 - defenseReduction));
     // Apply damageReduction stat (from gear/refits) as a separate multiplier
     return effectiveHpFromDefense * (1 + damageReductionPercent / 100);
+}
+
+/**
+ * The primary factor a derived stat is built on: the weighted sum of `basis`, or the raw value
+ * of `fallbackStat` when no basis is given. A basis of `[{ attack, 1 }]` therefore reproduces
+ * the no-basis result exactly.
+ */
+export function resolveBasisValue(
+    stats: BaseStats,
+    basis: BasisTerm[] | undefined,
+    fallbackStat: keyof BaseStats
+): number {
+    if (!basis || basis.length === 0) return stats[fallbackStat] || 0;
+    return basis.reduce(
+        (sum, term) => sum + (stats[term.stat as keyof BaseStats] || 0) * term.weight,
+        0
+    );
 }
 
 /**
  * Resolve a `LimitableStat` for a build, for use as a priority limit or a stat bonus.
  * Base stats pass through; derived stats (effectiveHp, directDamage) are computed from the
  * build's stats on the fly.
+ *
+ * A row's basis never reaches here. This resolves a stat for a StatPriority limit or a
+ * StatBonus, where there is no row — `directDamage` as a LIMIT stays attack-only.
  */
 export function resolveLimitStatValue(stats: BaseStats, stat: LimitableStat): number {
     if (stat === 'effectiveHp') {
@@ -51,8 +78,12 @@ const DEFENSE_PENETRATION_LOOKUP: Record<number, number> = {
 // Default defense value for calculations
 const DEFAULT_DEFENSE = 15000;
 
-export function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0): number {
-    const attack = stats.attack || 0;
+export function calculateDPS(
+    stats: BaseStats,
+    arcaneSiegeMultiplier: number = 0,
+    basis?: BasisTerm[]
+): number {
+    const attack = resolveBasisValue(stats, basis, 'attack');
     const critMultiplier = calculateCritMultiplier(stats);
     const defensePenetration = stats.defensePenetration || 0;
 
@@ -85,8 +116,8 @@ export function calculateDPS(stats: BaseStats, arcaneSiegeMultiplier: number = 0
  * stat is resolved from a stat block alone — the same reason `calculateRoleScore` takes no
  * set params.
  */
-export function calculateDirectDamage(stats: BaseStats): number {
-    return calculateDPS(stats);
+export function calculateDirectDamage(stats: BaseStats, basis?: BasisTerm[]): number {
+    return calculateDPS(stats, 0, basis);
 }
 
 export function calculateCritMultiplier(stats: BaseStats): number {

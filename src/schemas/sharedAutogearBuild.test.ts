@@ -1,14 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import type { SharedAutogearBuild } from '../types/communityRecommendation';
+import type { CustomFormula } from '../types/autogear';
 import { GEAR_SETS } from '../constants/gearSets';
 import { STATS, DERIVED_STAT_LABELS } from '../constants/stats';
 import { IMPLANTS } from '../constants/implants';
 import { SHIP_TYPES } from '../constants/shipTypes';
-import { validateSharedAutogearBuild } from './sharedAutogearBuild';
+import {
+    validateSharedAutogearBuild,
+    isSharedBuildBasisCapIssue,
+    sharedAutogearBuildSchema,
+} from './sharedAutogearBuild';
+import { validateProductionSharedAutogearBuild } from './__fixtures__/productionSharedAutogearBuild';
 
 // Mirrors the schema's private MAX_ARRAY_LENGTH so the boundary tests move
 // with it rather than drifting from a hardcoded magic number.
 const MAX_ARRAY_LENGTH = 50;
+
+// Mirrors the schema's private custom-formula bounds, same reason as MAX_ARRAY_LENGTH above.
+const MAX_FORMULA_ROWS = 8;
+const MAX_BASIS_TERMS = 5;
 
 const validBuild: SharedAutogearBuild = {
     version: 1,
@@ -135,7 +145,7 @@ describe('validateSharedAutogearBuild', () => {
 
     it('rejects a future version', () => {
         expect(
-            validateSharedAutogearBuild({ ...structuredClone(validBuild), version: 2 })
+            validateSharedAutogearBuild({ ...structuredClone(validBuild), version: 3 })
         ).toBeNull();
     });
 
@@ -318,6 +328,70 @@ describe('validateSharedAutogearBuild', () => {
             const bytes = new TextEncoder().encode(JSON.stringify(maximalBuild())).length;
             expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
         });
+
+        // `maximalBuild` above predates `customFormula` and stays version 1, so it says
+        // nothing about the new field's contribution to the bound. A version-2 build with a
+        // full-size formula is the genuinely reachable maximum for THAT shape.
+        const maximalCustomFormulaBuild = () => {
+            const basisStat = 'critDamage'; // longest real basis-eligible stat key
+            return {
+                ...maximalBuild(),
+                version: 2 as const,
+                customFormula: {
+                    seededFrom: longest(SHIP_TYPES),
+                    rows: Array.from({ length: MAX_FORMULA_ROWS }, () => ({
+                        stat: longest({ ...STATS, ...DERIVED_STAT_LABELS }),
+                        kind: 'core' as const,
+                        direction: 'max' as const,
+                        importance: 2 as const,
+                        percentage: MAX_NUMBER,
+                        basis: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                            stat: basisStat,
+                            weight: MAX_NUMBER,
+                        })),
+                    })),
+                },
+            };
+        };
+
+        it('the maximal custom-formula payload is actually client-valid', () => {
+            expect(validateSharedAutogearBuild(maximalCustomFormulaBuild())).not.toBeNull();
+        });
+
+        it(`the maximal custom-formula payload stays under ${TEXT_BYTE_CEILING} bytes`, () => {
+            const bytes = new TextEncoder().encode(
+                JSON.stringify(maximalCustomFormulaBuild())
+            ).length;
+            expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
+        });
+
+        // `roleBasis` is a new top-level field (#544 Task 5), additive to every shape above —
+        // this combines it with the already-maximal custom-formula build to measure its own
+        // worst-case contribution, even though a real build pairs roleBasis with a role, not
+        // a customFormula.
+        const maximalRoleBasisBuild = () => ({
+            ...maximalCustomFormulaBuild(),
+            roleBasis: {
+                produces: 'repair' as const,
+                terms: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                    stat: 'critDamage' as const, // longest real basis-eligible stat key
+                    weight: MAX_NUMBER,
+                })),
+            },
+        });
+
+        it('the maximal roleBasis payload is actually client-valid', () => {
+            expect(validateSharedAutogearBuild(maximalRoleBasisBuild())).not.toBeNull();
+        });
+
+        // Measured in Node via JSON.stringify (not against postgres, unlike the v1 figure
+        // above) — the payload below is 23,360 bytes of JSON, still well inside the bound.
+        // `maximalCustomFormulaBuild()` alone (no roleBasis) is 23,091 of that. If this
+        // assertion ever fails, raise the DB bound; do not shave the margin.
+        it(`the maximal roleBasis payload stays under ${TEXT_BYTE_CEILING} bytes`, () => {
+            const bytes = new TextEncoder().encode(JSON.stringify(maximalRoleBasisBuild())).length;
+            expect(bytes).toBeLessThan(TEXT_BYTE_CEILING);
+        });
     });
 
     // Extreme-magnitude numbers are a payload amplifier, not just odd data:
@@ -390,5 +464,490 @@ describe('validateSharedAutogearBuild', () => {
                 expect(validateSharedAutogearBuild(build)).toBeNull();
             }
         });
+    });
+});
+
+describe('validateSharedAutogearBuild — version 2, custom formula builds', () => {
+    const cobaltFormula: CustomFormula = {
+        rows: [
+            {
+                stat: 'directDamage',
+                kind: 'core',
+                direction: 'max',
+                importance: 1,
+                basis: [{ stat: 'attack', weight: 1.5 }],
+            },
+        ],
+        seededFrom: 'ATTACKER',
+    };
+
+    const v2Build = (overrides: Partial<SharedAutogearBuild> = {}): SharedAutogearBuild => ({
+        version: 2,
+        shipRole: null,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+        customFormula: cobaltFormula,
+        ...overrides,
+    });
+
+    it('round-trips a custom formula with a basis', () => {
+        const build = v2Build();
+        expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+    });
+
+    it('reads a version 1 row, which has no customFormula and a non-null role', () => {
+        const legacy = structuredClone({
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+        });
+        const result = validateSharedAutogearBuild(legacy);
+        expect(result).toMatchObject({ shipRole: 'ATTACKER' });
+        expect(result?.customFormula).toBeUndefined();
+    });
+
+    it('rejects a shared build with neither a role nor a usable formula', () => {
+        expect(
+            validateSharedAutogearBuild(v2Build({ shipRole: null, customFormula: { rows: [] } }))
+        ).toBeNull();
+    });
+
+    it('rejects a null role when every row is structurally valid but unusable', () => {
+        const build = v2Build({
+            shipRole: null,
+            customFormula: {
+                rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+            },
+        });
+        // Sanity: this row alone IS usable.
+        expect(validateSharedAutogearBuild(build)).not.toBeNull();
+
+        // `hpRegen` is a real STATS key (so the row schema accepts it) but has no
+        // MULTIPLIER_NORMALIZERS entry, so `isUsableRow` rejects it — a row can pass every
+        // field check and still not be usable.
+        const unusable = {
+            ...structuredClone(build),
+            customFormula: { rows: [{ stat: 'hpRegen', kind: 'core', direction: 'max' }] },
+        };
+        expect(validateSharedAutogearBuild(unusable)).toBeNull();
+    });
+
+    it('accepts a null role backed only by a bonus row (no core row required)', () => {
+        const build = v2Build({
+            shipRole: null,
+            customFormula: { rows: [{ stat: 'hp', kind: 'bonus', direction: 'max' }] },
+        });
+        expect(validateSharedAutogearBuild(build)).not.toBeNull();
+    });
+
+    it('keeps a non-null role valid even with an empty/unusable formula', () => {
+        expect(
+            validateSharedAutogearBuild(
+                v2Build({ shipRole: 'ATTACKER', customFormula: { rows: [] } })
+            )
+        ).not.toBeNull();
+    });
+
+    it('rejects an unknown seededFrom role', () => {
+        const build = v2Build({
+            customFormula: { ...cobaltFormula, seededFrom: 'WIZARD' },
+        });
+        expect(validateSharedAutogearBuild(build)).toBeNull();
+    });
+
+    describe('basis validation on the way in, not only at score time', () => {
+        const buildWithBasis = (basis: Array<{ stat: string; weight: number }>): unknown =>
+            v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: [{ stat: 'hp', kind: 'core', direction: 'max', basis: basis as never }],
+                },
+            });
+
+        it('rejects a basis term naming an unrecognised stat', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'nonsense', weight: 1 }]))
+            ).toBeNull();
+        });
+
+        // directDamage/effectiveHp have a MULTIPLIER_NORMALIZERS entry but are derived
+        // stats, not basis terms — the wrong predicate would let them through silently.
+        it('rejects a basis term naming a derived stat (directDamage/effectiveHp)', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'directDamage', weight: 1 }]))
+            ).toBeNull();
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'effectiveHp', weight: 1 }]))
+            ).toBeNull();
+        });
+
+        it('rejects a negative basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: -1 }]))
+            ).toBeNull();
+        });
+
+        it('rejects a non-finite basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: Infinity }]))
+            ).toBeNull();
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: NaN }]))
+            ).toBeNull();
+        });
+
+        it('accepts a well-formed basis', () => {
+            expect(
+                validateSharedAutogearBuild(buildWithBasis([{ stat: 'attack', weight: 1.5 }]))
+            ).not.toBeNull();
+        });
+    });
+
+    describe('custom formula cardinality bounds', () => {
+        const rowWithBasis = (basisCount: number) => ({
+            stat: 'hp' as const,
+            kind: 'core' as const,
+            direction: 'max' as const,
+            basis: Array.from({ length: basisCount }, () => ({
+                stat: 'attack' as const,
+                weight: 1,
+            })),
+        });
+
+        it(`accepts exactly ${MAX_FORMULA_ROWS} formula rows`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: Array.from({ length: MAX_FORMULA_ROWS }, () => rowWithBasis(1)),
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_FORMULA_ROWS + 1} formula rows`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: {
+                    rows: Array.from({ length: MAX_FORMULA_ROWS + 1 }, () => rowWithBasis(1)),
+                },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        it(`accepts exactly ${MAX_BASIS_TERMS} basis terms on one row`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [rowWithBasis(MAX_BASIS_TERMS)] },
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_BASIS_TERMS + 1} basis terms on one row`, () => {
+            const build = v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: { rows: [rowWithBasis(MAX_BASIS_TERMS + 1)] },
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+    });
+
+    describe('roleBasis', () => {
+        const withRoleBasis = (roleBasis: unknown) =>
+            v2Build({
+                shipRole: 'ATTACKER',
+                customFormula: undefined,
+                roleBasis: roleBasis as never,
+            });
+
+        it('round-trips a role build carrying a roleBasis', () => {
+            const build = withRoleBasis({
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: 1.5 }],
+            });
+            expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+        });
+
+        it('reads a version 1 row unaffected by roleBasis existing', () => {
+            const legacy = structuredClone({
+                version: 1 as const,
+                shipRole: 'ATTACKER' as const,
+                statPriorities: [],
+                setPriorities: [],
+                statBonuses: [],
+                fleetBuffs: [],
+                excludedImplantTypes: [],
+                optimizeImplants: false,
+            });
+            const result = validateSharedAutogearBuild(legacy);
+            expect(result).toMatchObject({ shipRole: 'ATTACKER' });
+            expect(result?.roleBasis).toBeUndefined();
+        });
+
+        it('rejects an unrecognised produces axis', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'poison', terms: [{ stat: 'attack', weight: 1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a basis term naming an unrecognised stat', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'nonsense', weight: 1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a basis term naming a derived stat (directDamage/effectiveHp)', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({
+                        produces: 'damage',
+                        terms: [{ stat: 'directDamage', weight: 1 }],
+                    })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a negative basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'attack', weight: -1 }] })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects a non-finite basis weight', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({
+                        produces: 'damage',
+                        terms: [{ stat: 'attack', weight: Infinity }],
+                    })
+                )
+            ).toBeNull();
+        });
+
+        it('rejects an empty terms array', () => {
+            expect(
+                validateSharedAutogearBuild(withRoleBasis({ produces: 'damage', terms: [] }))
+            ).toBeNull();
+        });
+
+        it('rejects a roleBasis whose only term weighs 0 — usableBasisTerms would drop it at score time', () => {
+            expect(
+                validateSharedAutogearBuild(
+                    withRoleBasis({ produces: 'damage', terms: [{ stat: 'attack', weight: 0 }] })
+                )
+            ).toBeNull();
+        });
+
+        it(`accepts exactly ${MAX_BASIS_TERMS} roleBasis terms`, () => {
+            const build = withRoleBasis({
+                produces: 'repair',
+                terms: Array.from({ length: MAX_BASIS_TERMS }, () => ({
+                    stat: 'hp' as const,
+                    weight: 1,
+                })),
+            });
+            expect(validateSharedAutogearBuild(build)).not.toBeNull();
+        });
+
+        it(`rejects ${MAX_BASIS_TERMS + 1} roleBasis terms`, () => {
+            const build = withRoleBasis({
+                produces: 'repair',
+                terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                    stat: 'hp' as const,
+                    weight: 1,
+                })),
+            });
+            expect(validateSharedAutogearBuild(build)).toBeNull();
+        });
+
+        // A Custom build can carry a leftover roleBasis (a player applies a role's equation,
+        // then switches the ship to Custom mode) — it is inert there (only a hosting role's
+        // scorer reads it) rather than corrupt, so it must not block an otherwise-valid
+        // role-less share. `v2Build`'s default `cobaltFormula` has a usable row
+        // (`directDamage`, kind core/direction max), unlike this suite's separate
+        // byte-ceiling fixture (`maximalCustomFormulaBuild`'s row stat is
+        // `defensePenetration`, the longest STATS/DERIVED_STAT_LABELS key for that
+        // measurement — it has no MULTIPLIER_NORMALIZERS entry and was never a usable row,
+        // so forcing shipRole: null onto THAT fixture fails on "no usable formula", not on
+        // roleBasis).
+        it('accepts a leftover roleBasis on an otherwise-valid role-less Custom build', () => {
+            const build = v2Build({
+                shipRole: null,
+                roleBasis: { produces: 'damage', terms: [{ stat: 'attack', weight: 1.5 }] },
+            });
+            expect(validateSharedAutogearBuild(structuredClone(build))).not.toBeNull();
+        });
+    });
+});
+
+describe('validateSharedAutogearBuild — version 1 role builds carrying a roleBasis', () => {
+    // A plain role build now writes version 1 (`configToSharedBuild`), so `roleBasis` must
+    // validate identically whichever version carries it — this pins the v1 arm the same way
+    // the `roleBasis` describe block above pins the v2 arm.
+    const v1BuildWithBasis = (roleBasis: unknown): unknown => ({
+        version: 1,
+        shipRole: 'ATTACKER',
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+        roleBasis,
+    });
+
+    it('round-trips a version-1 role build carrying a roleBasis', () => {
+        const build = v1BuildWithBasis({
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: 2.1 }],
+        });
+        expect(validateSharedAutogearBuild(structuredClone(build))).toEqual(build);
+    });
+
+    it('rejects more than MAX_BASIS_TERMS on a version-1 roleBasis, same as version 2', () => {
+        const build = v1BuildWithBasis({
+            produces: 'repair',
+            terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                stat: 'hp' as const,
+                weight: 1,
+            })),
+        });
+        expect(validateSharedAutogearBuild(build)).toBeNull();
+    });
+
+    it('a version-1 build with no roleBasis still validates (existing rows keep reading)', () => {
+        const build = {
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+        };
+        const result = validateSharedAutogearBuild(structuredClone(build));
+        expect(result).toEqual(build);
+        expect(result?.roleBasis).toBeUndefined();
+    });
+});
+
+describe("validateSharedAutogearBuild — matches production's own version-1 schema", () => {
+    // Production's `sharedAutogearBuildSchema` (origin/production, bd22289a, 1.68.0) is a
+    // single plain `z.object` with `version: z.literal(1)` and no `.strict()`/`.passthrough()`
+    // — see `productionSharedAutogearBuild.ts`'s header for how this fixture was taken. This
+    // is the reader every already-open tab actually runs a `version: 1` row through.
+    it('parses a version-1 role build carrying a roleBasis, silently dropping the equation', () => {
+        const build = {
+            version: 1 as const,
+            shipRole: 'ATTACKER' as const,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            roleBasis: { produces: 'damage' as const, terms: [{ stat: 'attack', weight: 2.1 }] },
+        };
+
+        // The negative control: this repo's OWN schema keeps the equation.
+        expect(validateSharedAutogearBuild(structuredClone(build))?.roleBasis).toEqual(
+            build.roleBasis
+        );
+
+        const result = validateProductionSharedAutogearBuild(structuredClone(build));
+        expect(result).not.toBeNull();
+        expect(result).not.toHaveProperty('roleBasis');
+        expect(result?.shipRole).toBe('ATTACKER');
+    });
+
+    it('cannot parse a version-2 build at all', () => {
+        const build = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: { rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }] },
+        };
+        expect(validateProductionSharedAutogearBuild(build)).toBeNull();
+    });
+});
+
+describe('isSharedBuildBasisCapIssue', () => {
+    const baseBuild = {
+        version: 1 as const,
+        shipRole: 'ATTACKER' as const,
+        statPriorities: [],
+        setPriorities: [],
+        statBonuses: [],
+        fleetBuffs: [],
+        excludedImplantTypes: [],
+        optimizeImplants: false,
+    };
+
+    const issuesFor = (raw: unknown) => {
+        // validateSharedAutogearBuild only reports success/failure — parse through the schema
+        // directly (the same schema either way) to read the actual ZodIssues this classifier
+        // reads.
+        expect(validateSharedAutogearBuild(raw)).toBeNull();
+        const parsed = sharedAutogearBuildSchema.safeParse(raw);
+        expect(parsed.success).toBe(false);
+        return parsed.success ? [] : parsed.error.issues;
+    };
+
+    it('classifies exceeding MAX_BASIS_TERMS on a roleBasis as a basis-cap issue', () => {
+        const build = {
+            ...baseBuild,
+            roleBasis: {
+                produces: 'damage',
+                terms: Array.from({ length: MAX_BASIS_TERMS + 1 }, () => ({
+                    stat: 'attack',
+                    weight: 1,
+                })),
+            },
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(true);
+    });
+
+    it('classifies an out-of-range basis weight as a basis-cap issue', () => {
+        const build = {
+            ...baseBuild,
+            roleBasis: {
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: Number.MAX_VALUE }],
+            },
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(true);
+    });
+
+    it('does not classify an out-of-range stat priority weight (not a basis field)', () => {
+        const build = {
+            ...baseBuild,
+            statPriorities: [{ stat: 'crit', weight: Number.MAX_VALUE }],
+        };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(false);
+    });
+
+    it('does not classify an unrelated failure (unknown ship role) as a basis-cap issue', () => {
+        const build = { ...baseBuild, shipRole: 'WIZARD' };
+        expect(issuesFor(build).some(isSharedBuildBasisCapIssue)).toBe(false);
     });
 });

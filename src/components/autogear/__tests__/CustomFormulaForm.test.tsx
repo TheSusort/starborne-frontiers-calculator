@@ -13,7 +13,7 @@ describe('CustomFormulaForm', () => {
     it('adds a core maximized row with Normal importance by default', async () => {
         const onAdd = vi.fn();
         render(<CustomFormulaForm onAdd={onAdd} />);
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'core',
@@ -27,7 +27,7 @@ describe('CustomFormulaForm', () => {
         render(<CustomFormulaForm onAdd={onAdd} />);
         await userEvent.click(screen.getByLabelText(/how it counts/i));
         await userEvent.click(screen.getByText(/added/i));
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'bonus',
@@ -44,7 +44,7 @@ describe('CustomFormulaForm', () => {
         const weightInput = screen.getByLabelText(/weight %/i);
         await userEvent.clear(weightInput);
         await userEvent.type(weightInput, '0');
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).toHaveBeenCalledWith({
             stat: 'attack',
             kind: 'bonus',
@@ -61,8 +61,25 @@ describe('CustomFormulaForm', () => {
         const weightInput = screen.getByLabelText(/weight %/i);
         await userEvent.clear(weightInput);
         await userEvent.type(weightInput, '-5');
-        await userEvent.click(screen.getByRole('button', { name: /add/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
         expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
+    });
+
+    it('clears the negative-weight error once the player types a valid weight', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByLabelText(/how it counts/i));
+        await userEvent.click(screen.getByText(/added/i));
+        const weightInput = screen.getByLabelText(/weight %/i);
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '-5');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
+
+        await userEvent.clear(weightInput);
+        await userEvent.type(weightInput, '50');
+        expect(screen.queryByText(/enter a weight of 0 or more/i)).not.toBeInTheDocument();
     });
 
     it('rejects a non-finite weight arriving from a stored row', async () => {
@@ -85,6 +102,7 @@ describe('CustomFormulaForm', () => {
         );
         await userEvent.click(screen.getByRole('button', { name: /save/i }));
         expect(onSave).not.toHaveBeenCalled();
+        expect(screen.getByText(/enter a weight of 0 or more/i)).toBeInTheDocument();
     });
 
     it('normalizes a stored core importance the picker never offers', async () => {
@@ -111,6 +129,95 @@ describe('CustomFormulaForm', () => {
             kind: 'core',
             direction: 'max',
             importance: 1,
+        });
+    });
+
+    it('rejects a blank basis weight instead of silently submitting a 0-weight term', async () => {
+        // `addBasisTerm` seeds a blank weight field. `Number('')` is 0, which is finite and
+        // >= 0 — the SAME check `usableBasis` (customFormula.ts) uses at READ time — so without
+        // a stricter AUTHORING guard this silently submits `basis:[{ stat:'attack', weight:0 }]`
+        // and the player sees no feedback at all.
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(
+            'Every stat needs a weight above zero. Remove a stat instead of leaving it blank or at 0.'
+        );
+    });
+
+    it('rejects an explicit 0 basis weight, not only a blank one', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '0');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    it('rejects a negative basis weight with the same inline error as blank/zero', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '-1');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+    });
+
+    it('rejects more basis terms than the shared schema allows', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        for (let i = 0; i < 6; i++) {
+            await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        }
+        for (const input of screen.getAllByLabelText(/basis weight/i)) {
+            await userEvent.type(input, '1');
+        }
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/at most 5 stats/i);
+    });
+
+    it('rejects a basis weight outside the shared schema magnitude window', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '1e13');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).not.toHaveBeenCalled();
+        expect(screen.getByRole('alert')).toHaveTextContent(/too large or too small/i);
+    });
+
+    it('clears a stale basis error once the player edits the offending term', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+
+        await userEvent.type(screen.getByLabelText(/basis weight/i), '2.1');
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('accepts a positive basis weight', async () => {
+        const onAdd = vi.fn();
+        render(<CustomFormulaForm onAdd={onAdd} />);
+        await userEvent.click(screen.getByRole('button', { name: /add stat/i }));
+        const weightInput = screen.getByLabelText(/basis weight/i);
+        await userEvent.type(weightInput, '2.1');
+        await userEvent.click(screen.getByRole('button', { name: /add formula stat/i }));
+        expect(onAdd).toHaveBeenCalledWith({
+            stat: 'attack',
+            kind: 'core',
+            direction: 'max',
+            importance: 1,
+            basis: [{ stat: 'attack', weight: 2.1 }],
         });
     });
 

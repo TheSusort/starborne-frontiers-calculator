@@ -18,7 +18,9 @@ const setLabel = (setName: string): string =>
 export const communityBuildSummary = (build: SharedAutogearBuild): string => {
     const parts: string[] = [];
 
-    parts.push(SHIP_TYPES[build.shipRole]?.name ?? build.shipRole);
+    // Custom mode (`shipRole: null`) has no role to name — matches AutogearConfigList's
+    // own "Custom" fallback so a build reads the same way wherever it is shown.
+    parts.push(build.shipRole ? (SHIP_TYPES[build.shipRole]?.name ?? build.shipRole) : 'Custom');
 
     if (build.setPriorities.length > 0) {
         parts.push(

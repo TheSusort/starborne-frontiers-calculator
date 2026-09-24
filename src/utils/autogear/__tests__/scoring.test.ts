@@ -6,9 +6,10 @@ import {
     evictOldestIfFull,
     calculateTotalScore,
     clearScoreCache,
+    roleBasisKeyPart,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
-import { StatBonus, StatPriority } from '../../../types/autogear';
+import { CustomFormula, RoleBasis, StatBonus, StatPriority } from '../../../types/autogear';
 import { makeTestShip } from '../fastScoring/__tests__/fixtures/testInventory';
 import { GearPiece } from '../../../types/gear';
 
@@ -181,6 +182,25 @@ describe('calculateHardViolation', () => {
         ];
         expect(calculateHardViolation(stats, priorities)).toBeCloseTo(1.0, 10);
     });
+
+    // A limit of exactly 0 is "no limit" here, exactly as it is in `calculatePriorityScore`'s
+    // soft penalties and in `GeneticStrategy.computeViolations`. Honouring it in this function
+    // alone would make a stored `{maxLimit: 0, hardRequirement: true}` bind silently: the build
+    // is reported infeasible while the warning path, which reads the limit truthily, stays
+    // quiet.
+    it('treats a maxLimit of exactly 0 as no limit', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'hacking', maxLimit: 0, hardRequirement: true },
+        ];
+        expect(calculateHardViolation({ ...stats, hacking: 500 }, priorities)).toBe(0);
+    });
+
+    it('treats a minLimit of exactly 0 as no limit', () => {
+        const priorities: StatPriority[] = [
+            { stat: 'hacking', minLimit: 0, hardRequirement: true },
+        ];
+        expect(calculateHardViolation({ ...stats, hacking: 0 }, priorities)).toBe(0);
+    });
 });
 
 describe('evictOldestIfFull', () => {
@@ -276,5 +296,175 @@ describe('clearScoreCache', () => {
 
         expect(second).toBe(first);
         expect(third).not.toBe(first);
+    });
+});
+
+describe('calculateTotalScore cache key basis sensitivity', () => {
+    // Same ship, same equipment IDs, same everything except one row's `basis` — the cache
+    // key must still tell the two formulas apart, or the second call returns the first
+    // formula's cached score.
+    function makeWeapon(): GearPiece {
+        return {
+            id: 'w-basis',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'attack', value: 5000, type: 'flat' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const ship = makeTestShip({ id: 'basis-cache-ship' });
+    const equipment = { weapon: 'w-basis' } as const;
+    const priorities: StatPriority[] = [];
+    const noEngineering = () => undefined;
+
+    const noBasisFormula: CustomFormula = {
+        rows: [{ stat: 'hp', kind: 'core', direction: 'max' }],
+    };
+    const basisFormula: CustomFormula = {
+        rows: [
+            {
+                stat: 'hp',
+                kind: 'core',
+                direction: 'max',
+                basis: [
+                    { stat: 'hp', weight: 1 },
+                    { stat: 'defence', weight: 18.8 },
+                ],
+            },
+        ],
+    };
+
+    function score(customFormula: CustomFormula): number {
+        return calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            makeWeapon,
+            noEngineering,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            customFormula
+        );
+    }
+
+    it('scores a basis formula differently from an otherwise-identical basis-free formula', () => {
+        clearScoreCache();
+        const withoutBasis = score(noBasisFormula);
+        // No clearScoreCache() here on purpose: both calls must go through the same cache,
+        // since the cache key is exactly what is under test.
+        const withBasis = score(basisFormula);
+
+        expect(withBasis).not.toBe(withoutBasis);
+    });
+});
+
+describe('calculateTotalScore cache key roleBasis sensitivity', () => {
+    // Same ship, same equipment IDs, same everything except `roleBasis` — the cache key must
+    // still tell the two calls apart, or the second one returns the first's stale score
+    // (the bug this branch already hit once for the formula-row basis).
+    function makeWeapon(): GearPiece {
+        return {
+            id: 'w-role-basis',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            mainStat: { name: 'attack', value: 5000, type: 'flat' },
+            subStats: [],
+            setBonus: null,
+        };
+    }
+
+    const ship = makeTestShip({ id: 'role-basis-cache-ship' });
+    const equipment = { weapon: 'w-role-basis' } as const;
+    const priorities: StatPriority[] = [];
+    const noEngineering = () => undefined;
+
+    // SUPPORTER hosts a `repair` basis on its `hp` primary — mixing in `defence` (which the
+    // plain formula never reads) makes the two calls diverge by more than float noise.
+    const basis: RoleBasis = {
+        produces: 'repair',
+        terms: [
+            { stat: 'hp', weight: 1 },
+            { stat: 'defence', weight: 18.8 },
+        ],
+    };
+
+    function score(roleBasis: RoleBasis | undefined): number {
+        return calculateTotalScore(
+            ship,
+            equipment,
+            priorities,
+            makeWeapon,
+            noEngineering,
+            'SUPPORTER',
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            roleBasis
+        );
+    }
+
+    it('scores a roleBasis differently from an otherwise-identical roleBasis-free config', () => {
+        clearScoreCache();
+        const withoutBasis = score(undefined);
+        // No clearScoreCache() here on purpose: both calls must go through the same cache,
+        // since the cache key is exactly what is under test.
+        const withBasis = score(basis);
+
+        expect(withBasis).not.toBe(withoutBasis);
+    });
+});
+
+// `roleBasis` reaches this cache-keying step as a saved config's field — untyped JSON from
+// localStorage or Supabase JSONB (Security rule 5), not schema-validated the way a shared
+// community build is. `roleBasis.terms.length` crashed the whole autogear run for a missing or
+// non-array `terms` before `roleBasisKeyPart` sanitised its input — see PR #553 review.
+describe('roleBasisKeyPart — malformed roleBasis behaves as no basis', () => {
+    it('does not throw and keys a missing terms array as no basis', () => {
+        const malformed = { produces: 'damage' } as unknown as RoleBasis;
+        expect(() => roleBasisKeyPart(malformed)).not.toThrow();
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('does not throw and keys a non-array terms as no basis', () => {
+        const malformed = { produces: 'damage', terms: 'oops' } as unknown as RoleBasis;
+        expect(() => roleBasisKeyPart(malformed)).not.toThrow();
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys a basis whose only term has a string weight as no basis', () => {
+        const malformed = {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: '5' }],
+        } as unknown as RoleBasis;
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys a basis whose only term has a NaN weight as no basis', () => {
+        const malformed: RoleBasis = {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: NaN }],
+        };
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys an unrecognised produces as no basis', () => {
+        const malformed = {
+            produces: 'not-a-real-axis',
+            terms: [{ stat: 'attack', weight: 1 }],
+        } as unknown as RoleBasis;
+        expect(roleBasisKeyPart(malformed)).toBe('');
     });
 });

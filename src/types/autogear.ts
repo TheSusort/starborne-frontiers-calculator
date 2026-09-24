@@ -41,6 +41,15 @@ export type FormulaDirection = 'max' | 'min';
 /** Exponent applied to a core row's term. Slight / Normal / Heavy. */
 export type CoreImportance = 0.5 | 1 | 2;
 
+/** One stat feeding what a `basis`-bearing row scores on — a derived stat's primary factor, or
+ *  a plain stat's own value. Weighted in the game's own multiplier units divided by 100: a 200%
+ *  attack skill is `{ stat: 'attack', weight: 2.0 }` and a clause dealing 25% of max HP is
+ *  `{ stat: 'hp', weight: 0.25 }`. */
+export interface BasisTerm {
+    stat: LimitableStat;
+    weight: number;
+}
+
 export interface CustomFormulaRow {
     stat: LimitableStat;
     kind: FormulaRowKind;
@@ -49,12 +58,27 @@ export interface CustomFormulaRow {
     importance?: CoreImportance;
     /** Coefficient for a bonus row, as a percentage. Defaults to 100. Unused on a core row. */
     percentage?: number;
+    /** A weighted sum that replaces what this row scores on: on a derived stat, its primary
+     *  factor (`directDamage`'s is attack; `effectiveHp`'s is HP); on a plain stat, the stat's
+     *  own value. Honoured only on a `kind: 'core'`, `direction: 'max'` row — a minimised term
+     *  is `1/(1+n)` and so is not scale-invariant. Absent means the row scores exactly as it
+     *  did before bases existed. */
+    basis?: BasisTerm[];
 }
 
 export interface CustomFormula {
     rows: CustomFormulaRow[];
     /** The role this formula was seeded from. Drives the Reset button and the label. */
     seededFrom?: ShipTypeName;
+}
+
+/** A transcription of a ship's kit (`deriveBasis`, `basisDerivation.ts`), replacing the role
+ *  formula's primary quantity rather than the player's own preference. `produces` names the axis
+ *  the basis measures; a role scorer applies `terms` only when `roleHostsBasis(role, produces)`
+ *  is true (`offFormula/roleBasisHost.ts`) — every other role ignores it entirely. */
+export interface RoleBasis {
+    produces: 'damage' | 'repair' | 'shield';
+    terms: BasisTerm[];
 }
 
 export interface SavedAutogearConfig {
@@ -76,4 +100,5 @@ export interface SavedAutogearConfig {
     excludedImplantTypes?: string[];
     fleetBuffs?: FleetBuff[];
     customFormula?: CustomFormula;
+    roleBasis?: RoleBasis;
 }

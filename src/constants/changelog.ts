@@ -6,7 +6,16 @@ export const CURRENT_VERSION = '1.68.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Autogear: flags ships that score off a stat their role ignores.',
+    'Autogear: flagged ships show their real equation where their role can use it.',
+    "Autogear: apply a ship's derived equation to its role in one click.",
+    'Autogear: shows when an equation is applied, with a stop control.',
+    'Autogear: an applied equation can now be edited and restored.',
+    'Autogear: custom formula rows can now weight a stat by other stats.',
+    'Autogear: custom formulas started from a role can now be shared.',
+    'Ship Details: no longer crashes opening a geared ship with a sub-role.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {

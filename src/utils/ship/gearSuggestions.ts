@@ -2,7 +2,7 @@ import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
 import { BaseStats, StatName } from '../../types/stats';
 import { calculateTotalStats } from '../ship/statsCalculator';
-import { ShipTypeName } from '../../constants/shipTypes';
+import { ShipTypeName, resolveRoleEntry } from '../../constants/shipTypes';
 import { GEAR_SLOTS } from '../../constants/gearTypes';
 import { UpgradeReason } from '../../types/analysis';
 import { SlotContribution } from './statDistribution';
@@ -11,7 +11,7 @@ interface GearQualityCheck {
     reasons: UpgradeReason[];
 }
 
-const DESIRED_STATS: Record<ShipTypeName, StatName[]> = {
+const DESIRED_STATS: Partial<Record<ShipTypeName, StatName[]>> = {
     ATTACKER: ['crit', 'critDamage', 'attack', 'speed'],
     DEFENDER: ['hp', 'defence', 'security'],
     SUPPORTER: ['hp', 'crit', 'critDamage', 'healModifier'],
@@ -36,7 +36,7 @@ export function analyzeGearQuality(
     getGearPiece: (id: string) => GearPiece | undefined,
     slotContribution: SlotContribution
 ): GearQualityCheck {
-    const desiredStats = DESIRED_STATS[ship.type];
+    const desiredStats = resolveRoleEntry(DESIRED_STATS, ship.type) ?? [];
     const relevantSubstats = gear.subStats.filter((stat) => desiredStats.includes(stat.name));
 
     const qualityCheck: GearQualityCheck = {

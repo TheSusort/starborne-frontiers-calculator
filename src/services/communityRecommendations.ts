@@ -2,8 +2,13 @@ import { supabase } from '../config/supabase';
 import {
     CommunityRecommendation,
     CreateCommunityRecommendationInput,
+    SharedAutogearBuild,
 } from '../types/communityRecommendation';
-import { validateSharedAutogearBuild } from '../schemas/sharedAutogearBuild';
+import {
+    sharedAutogearBuildSchema,
+    isSharedBuildBasisCapIssue,
+} from '../schemas/sharedAutogearBuild';
+import { mirroredShipRole, ALLOW_ROLELESS_COMMUNITY_SHARE } from '../utils/communityBuild';
 
 /**
  * Thrown by createRecommendation when the shared config fails schema
@@ -14,6 +19,56 @@ export class InvalidSharedConfigError extends Error {
     constructor() {
         super('Invalid shared autogear build');
         this.name = 'InvalidSharedConfigError';
+    }
+}
+
+/**
+ * A more specific `InvalidSharedConfigError`, thrown by createRecommendation when the build is
+ * rejected specifically for exceeding the schema's basis caps (more than `MAX_BASIS_TERMS`
+ * terms in a `roleBasis`/`customFormula` row's `basis`, or a basis weight outside its allowed
+ * range) — `isSharedBuildBasisCapIssue` tells this apart from any other validation failure, so
+ * a caller that checks for it can name what to shrink rather than the generic "could not be
+ * validated". Extends `InvalidSharedConfigError` (rather than `Error`) so an
+ * `instanceof InvalidSharedConfigError` check written before this class existed still catches
+ * it — the specific message is additive, not a silent behaviour change for that caller.
+ */
+export class SharedBuildExceedsBasisCapsError extends InvalidSharedConfigError {
+    constructor() {
+        super();
+        this.message =
+            'This equation has too many stats, or a weight too large or too small, to be shared.';
+        this.name = 'SharedBuildExceedsBasisCapsError';
+    }
+}
+
+/**
+ * Thrown by createRecommendation when the shared build has no role to mirror into the legacy
+ * `ship_role` column and role-less sharing is switched off (`ALLOW_ROLELESS_COMMUNITY_SHARE`).
+ * `configToSharedBuild` already refuses this build for the app's own UI before it ever reaches
+ * here — this is the same refusal for any other caller that builds a `SharedAutogearBuild`
+ * directly and calls this service, so a null `ship_role` can never be written while the switch
+ * is off, regardless of caller.
+ */
+export class RolelessShareNotAllowedError extends Error {
+    constructor() {
+        super('Sharing a build with no role is not available yet');
+        this.name = 'RolelessShareNotAllowedError';
+    }
+}
+
+/**
+ * Thrown by createRecommendation when the insert fails on a NOT NULL violation for
+ * `ship_role` (Postgres code 23502) while writing a role-less build. This only fires when a
+ * caller passes `allowRoleless: true` explicitly — `ALLOW_ROLELESS_COMMUNITY_SHARE` is off by
+ * default, so `RolelessShareNotAllowedError` refuses a role-less build before insert is ever
+ * attempted. `community_recommendations.ship_role` is NOT NULL today; #552 relaxes it to
+ * nullable in the same change that turns that switch on. Until then, this error names a
+ * role-less write rejected at the DB rather than silently dropped or crashing.
+ */
+export class ShipRoleColumnNotNullableError extends Error {
+    constructor() {
+        super('Sharing a build with no role requires a pending database migration');
+        this.name = 'ShipRoleColumnNotNullableError';
     }
 }
 
@@ -46,15 +101,39 @@ export class CommunityRecommendationService {
         input: CreateCommunityRecommendationInput,
         // Authorship uses the active profile so alt accounts can share recommendations
         // independently. RLS allows any profile the auth user owns (has_profile_access).
-        createdBy: string
+        createdBy: string,
+        // Mirrors `configToSharedBuild`'s own parameter: a default read from the switch, not a
+        // module-level read baked into the function body, so both call patterns are testable
+        // without mocking. `configToSharedBuild` already refuses a role-less build for the
+        // app's own UI before it reaches here — this is the same refusal for any other caller
+        // that builds a `SharedAutogearBuild` directly and calls this service (defence in
+        // depth, so a null `ship_role` can never be written while the switch is off).
+        allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE
     ): Promise<CommunityRecommendation | null> {
-        // Use the parsed result, not the raw input: object schemas strip unknown
-        // keys (zod's .strip()), so `sharedConfig` is the sanitised build and
+        // Parse directly (rather than through `validateSharedAutogearBuild`) so a failure's
+        // `ZodIssue`s are available to classify below — the schema's object types still strip
+        // unknown keys (zod's .strip()), so `sharedConfig` is the sanitised build and
         // `input.sharedConfig` may still carry caller-supplied extra keys.
-        const sharedConfig = validateSharedAutogearBuild(input.sharedConfig);
-        if (!sharedConfig) {
+        const parseResult = sharedAutogearBuildSchema.safeParse(input.sharedConfig);
+        if (!parseResult.success) {
+            if (parseResult.error.issues.some(isSharedBuildBasisCapIssue)) {
+                console.error('Refusing to share a build that exceeds the basis caps');
+                throw new SharedBuildExceedsBasisCapsError();
+            }
             console.error('Refusing to share an invalid autogear build');
             throw new InvalidSharedConfigError();
+        }
+        const sharedConfig = parseResult.data as SharedAutogearBuild;
+
+        // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
+        // formula was seeded from. A hand-written formula with no `seededFrom` has neither,
+        // so this is null — a legitimate value for the SharedAutogearBuild the client
+        // computes, even though the database column itself is still NOT NULL (see
+        // `RolelessShareNotAllowedError` below, and `ShipRoleColumnNotNullableError` above).
+        const legacyShipRole = mirroredShipRole(sharedConfig);
+
+        if (!allowRoleless && legacyShipRole === null) {
+            throw new RolelessShareNotAllowedError();
         }
 
         const { data, error } = await supabase
@@ -66,12 +145,12 @@ export class CommunityRecommendationService {
                 description: input.description,
                 is_implant_specific: input.isImplantSpecific,
                 ultimate_implant: input.ultimateImplant,
-                // Dual write: shared_config is the source of truth, but the legacy
-                // columns keep being populated so a stale cached bundle still reads
-                // a usable build. Derived from the same (sanitised) object so they
-                // cannot drift.
+                // Dual write: shared_config is the source of truth, but the legacy columns
+                // keep being populated so a bundle with no `shared_config` reader (pre-2026-08-29)
+                // still reads a usable build from them. Derived from the same (sanitised)
+                // object so they cannot drift.
                 shared_config: JSON.parse(JSON.stringify(sharedConfig)),
-                ship_role: sharedConfig.shipRole,
+                ship_role: legacyShipRole,
                 stat_priorities: JSON.parse(JSON.stringify(sharedConfig.statPriorities)),
                 stat_bonuses: JSON.parse(JSON.stringify(sharedConfig.statBonuses)),
                 set_priorities: JSON.parse(JSON.stringify(sharedConfig.setPriorities)),
@@ -83,6 +162,18 @@ export class CommunityRecommendationService {
 
         if (error) {
             console.error('Error creating recommendation:', error);
+            // 23502 is Postgres' not_null_violation. `ship_name` and `title` are also NOT
+            // NULL on this table, so legacyShipRole === null alone does not identify which
+            // column rejected the write — the error must also name `ship_role` (Postgres
+            // reports the offending column in `message`/`details`) before this is reported
+            // as the pending-migration case rather than an unrelated insert failure.
+            if (
+                legacyShipRole === null &&
+                error.code === '23502' &&
+                (error.message?.includes('ship_role') || error.details?.includes('ship_role'))
+            ) {
+                throw new ShipRoleColumnNotNullableError();
+            }
             return null;
         }
 

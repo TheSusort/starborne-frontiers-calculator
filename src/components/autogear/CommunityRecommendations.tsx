@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Ship } from '../../types/ship';
 import { ShipTypeName } from '../../constants';
+import { CustomFormula } from '../../types/autogear';
 import { SharedAutogearBuild } from '../../types/communityRecommendation';
 import { CollapsibleAccordion } from '../ui/CollapsibleAccordion';
 import { ConfirmModal } from '../ui/layout/ConfirmModal';
@@ -9,7 +10,12 @@ import { useCommunityRecommendations } from '../../hooks/useCommunityRecommendat
 import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { useAuth } from '../../contexts/AuthProvider';
 import { useActiveProfile } from '../../contexts/ActiveProfileProvider';
-import { LEGACY_DEFAULT_SET_COUNT, type CommunityBuild } from '../../utils/communityBuild';
+import {
+    LEGACY_DEFAULT_SET_COUNT,
+    mirroredShipRole,
+    type CommunityBuild,
+} from '../../utils/communityBuild';
+import { formulaHasUsableRow } from '../../utils/autogear/customFormula';
 import { RecommendationHeader } from './RecommendationHeader';
 import { CommunityBuildList } from './CommunityBuildList';
 import { ShareRecommendationForm } from './ShareRecommendationForm';
@@ -19,6 +25,9 @@ interface CommunityRecommendationsProps {
     currentBuild: SharedAutogearBuild | null;
     /** The ship's selected role, or null in Custom mode. */
     shipRole: ShipTypeName | null;
+    /** The ship's Custom-mode formula, if any — read only to explain why a role-less but
+     *  otherwise usable formula isn't shareable yet (`ALLOW_ROLELESS_COMMUNITY_SHARE`). */
+    customFormula?: CustomFormula;
     /** Null when the page cannot apply (no ship). */
     onApplyBuild: ((build: SharedAutogearBuild) => void) | null;
     /** Whether the ship already has build config that Apply would overwrite. */
@@ -29,6 +38,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
     selectedShip,
     currentBuild,
     shipRole,
+    customFormula,
     onApplyBuild,
     hasExistingConfig,
 }) => {
@@ -57,7 +67,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
         ultimateImplantName,
         canShare,
         handleShare,
-    } = useCommunityRecommendations({ selectedShip, currentBuild, shipRole });
+    } = useCommunityRecommendations({ selectedShip, currentBuild });
 
     useTutorialTrigger('autogear-community');
 
@@ -142,10 +152,11 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                                 >
                                     Share your build
                                 </Button>
-                            ) : selectedShip && !shipRole ? (
+                            ) : formulaHasUsableRow(customFormula) &&
+                              !mirroredShipRole({ shipRole, customFormula }) ? (
                                 <p className="text-sm text-theme-text-secondary">
-                                    Custom builds can&apos;t be shared to the community yet — they
-                                    carry a formula the library has no field for.
+                                    This formula has no role to file it under yet. Reset it and
+                                    start from a role to make it shareable.
                                 </p>
                             ) : (
                                 <span className="text-sm text-theme-text-secondary">
@@ -185,7 +196,7 @@ export const CommunityRecommendations: React.FC<CommunityRecommendationsProps> =
                     <div className="space-y-2 text-sm">
                         <p>
                             This replaces your role, stat priorities, gear sets, stat bonuses, fleet
-                            buffs and implant settings for {selectedShip.name}.
+                            buffs, implant settings and applied equation for {selectedShip.name}.
                         </p>
                         <p className="text-theme-text-secondary">
                             Your algorithm choice and gear filters (ignore equipped, ignore

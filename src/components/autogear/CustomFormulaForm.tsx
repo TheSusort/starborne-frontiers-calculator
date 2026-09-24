@@ -2,19 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { Button, Input, Select } from '../ui';
 import type { LimitableStat } from '../../types/stats';
 import type {
+    BasisTerm,
     CoreImportance,
     CustomFormulaRow,
     FormulaDirection,
     FormulaRowKind,
 } from '../../types/autogear';
 import { getLimitStatLabel } from '../../constants/stats';
-import { FORMULA_STATS, coreImportanceOf } from '../../utils/autogear/customFormula';
+import { FORMULA_STATS, coreImportanceOf, isBasisTilt } from '../../utils/autogear/customFormula';
+import { BasisTermsEditor } from './BasisTermsEditor';
+import {
+    basisAuthoringError,
+    draftFromBasis,
+    nextBasisStat,
+    parseAuthoredBasisTerms,
+    type DraftBasisTerm,
+} from './basisTermDraft';
 
 const IMPORTANCE_OPTIONS: { value: string; label: string }[] = [
     { value: '0.5', label: 'Slight' },
     { value: '1', label: 'Normal' },
     { value: '2', label: 'Heavy' },
 ];
+
+const basisHelpText = (stat: LimitableStat): string =>
+    isBasisTilt(stat)
+        ? 'Defence already drives Effective HP through mitigation, so a term here is a deliberate tilt toward that stat, not a transcribed number.'
+        : "Replaces this row's value with a weighted sum of stats, in the ship's own kit numbers — e.g. Attack x2.100 for a 210% skill.";
 
 interface Props {
     onAdd: (row: CustomFormulaRow) => void;
@@ -29,6 +43,9 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
     const [direction, setDirection] = useState<FormulaDirection>('max');
     const [importance, setImportance] = useState<CoreImportance>(1);
     const [percentage, setPercentage] = useState<string>('100');
+    const [basisTerms, setBasisTerms] = useState<DraftBasisTerm[]>([]);
+    const [basisError, setBasisError] = useState<string | null>(null);
+    const [percentageError, setPercentageError] = useState<string | null>(null);
 
     useEffect(() => {
         if (editingValue) {
@@ -37,17 +54,63 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             setDirection(editingValue.direction);
             setImportance(coreImportanceOf(editingValue));
             setPercentage(String(editingValue.percentage ?? 100));
+            setBasisTerms(draftFromBasis(editingValue.basis));
         } else {
             setStat(FORMULA_STATS[0]);
             setKind('core');
             setDirection('max');
             setImportance(1);
             setPercentage('100');
+            setBasisTerms([]);
         }
+        setBasisError(null);
+        setPercentageError(null);
     }, [editingValue]);
+
+    // A basis is only ever honoured by the scorer on a `core`/`max` row — this mirrors
+    // `usableBasis`'s own gate, so the picker never offers a control the scorer would ignore
+    // and never withholds one it would honour.
+    const showsBasis = kind === 'core' && direction === 'max';
+
+    const addBasisTerm = () => {
+        setBasisTerms([...basisTerms, { stat: nextBasisStat(basisTerms), weight: '' }]);
+        setBasisError(null);
+    };
+
+    const updateBasisTerm = (index: number, patch: Partial<DraftBasisTerm>) => {
+        setBasisTerms(basisTerms.map((t, i) => (i === index ? { ...t, ...patch } : t)));
+        setBasisError(null);
+    };
+
+    const removeBasisTerm = (index: number) => {
+        setBasisTerms(basisTerms.filter((_, i) => i !== index));
+        setBasisError(null);
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        // A basis term the shared authoring validator (`basisAuthoringError`, basisTermDraft.ts)
+        // would refuse — bad stat, non-finite, non-positive, too many terms, or a weight outside
+        // the share schema's magnitude window — fails the whole submit with a visible error
+        // rather than a silent no-op. Authoring is stricter than the scorer's own read-time gate
+        // (`usableBasis`, customFormula.ts): a stored zero-weight term is harmless there —
+        // `resolveBasisValue` SUMS the terms, so it just contributes nothing, the same as an
+        // absent term — but a term the player is actively typing almost always means an unfilled
+        // field, not a deliberate zero. See `basisAuthoringError`'s own doc for that split. The
+        // bonus percentage branch below has its own, separate guard for its own field: bonus
+        // terms ADD rather than multiply, so 0 there stays a legitimate "add nothing" and blank
+        // instead defaults to 100.
+        let basis: BasisTerm[] | undefined;
+        if (showsBasis && basisTerms.length > 0) {
+            const authoringError = basisAuthoringError(basisTerms);
+            if (authoringError) {
+                setBasisError(authoringError);
+                return;
+            }
+            basis = parseAuthoredBasisTerms(basisTerms);
+        }
+
         let row: CustomFormulaRow;
         if (kind === 'core') {
             row = { stat, kind, direction, importance };
@@ -55,10 +118,17 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
             const trimmed = percentage.trim();
             const parsedPercentage = trimmed === '' ? 100 : Number(trimmed);
             if (!Number.isFinite(parsedPercentage) || parsedPercentage < 0) {
+                setPercentageError('Enter a weight of 0 or more.');
                 return;
             }
             row = { stat, kind, direction, percentage: parsedPercentage };
         }
+        if (basis) {
+            row.basis = basis;
+        }
+
+        setBasisError(null);
+        setPercentageError(null);
         if (editingValue && onSave) {
             onSave(row);
             return;
@@ -69,10 +139,14 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
         setDirection('max');
         setImportance(1);
         setPercentage('100');
+        setBasisTerms([]);
     };
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-3" role="form">
+        // `noValidate`: every field here already has its own JS-driven inline error (a negative
+        // basis weight, say) — without it, the browser's native min="0" tooltip would silently
+        // block the submit event before that error ever ran, on some inputs but not others.
+        <form onSubmit={handleSubmit} className="space-y-3" role="form" noValidate>
             <div className="flex gap-3 items-end flex-wrap">
                 <Select
                     label="Stat"
@@ -122,12 +196,32 @@ export const CustomFormulaForm: React.FC<Props> = ({ onAdd, editingValue, onSave
                             type="number"
                             min="0"
                             value={percentage}
-                            onChange={(e) => setPercentage(e.target.value)}
+                            onChange={(e) => {
+                                setPercentage(e.target.value);
+                                setPercentageError(null);
+                            }}
                             placeholder="100"
+                            error={percentageError ?? undefined}
                         />
                     </div>
                 )}
             </div>
+            {showsBasis && (
+                <div className="space-y-2 border-t border-dark-border pt-3">
+                    <p className="text-xs text-theme-text-secondary">{basisHelpText(stat)}</p>
+                    <BasisTermsEditor
+                        terms={basisTerms}
+                        onUpdate={updateBasisTerm}
+                        onRemove={removeBasisTerm}
+                        onAdd={addBasisTerm}
+                    />
+                    {basisError && (
+                        <p className="text-xs text-red-400" role="alert">
+                            {basisError}
+                        </p>
+                    )}
+                </div>
+            )}
             <div className="flex justify-end gap-2">
                 {editingValue ? (
                     <>

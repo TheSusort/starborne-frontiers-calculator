@@ -80,3 +80,28 @@ export function matchesRoleCategory(
     if (!type) return false;
     return categories.some((c) => type === c || type.startsWith(`${c}_`));
 }
+
+// A total record over `ShipRoleCategory`, not a hand-listed array: adding, renaming or removing
+// a member of that union without a matching edit here fails `tsc --noEmit` (a missing or excess
+// key against `Record<ShipRoleCategory, 0>`), rather than `resolveRoleEntry`'s fallback silently
+// skipping the new category.
+const ROLE_CATEGORIES = Object.keys({
+    ATTACKER: 0,
+    DEFENDER: 0,
+    DEBUFFER: 0,
+    SUPPORTER: 0,
+} satisfies Record<ShipRoleCategory, 0>) as ShipRoleCategory[];
+
+/** Looks up `type` in a role-keyed table, falling back to its role CATEGORY's entry
+ *  (`matchesRoleCategory`) when `type` has no entry of its own — e.g. DEFENDER_SECURITY
+ *  falls back to DEFENDER. An exact-role entry always wins over the category fallback:
+ *  SUPPORTER_BUFFER keeps its own entry rather than falling back to SUPPORTER's.
+ *  Returns `undefined` when neither the exact role nor its category has an entry. */
+export function resolveRoleEntry<T>(
+    table: Partial<Record<ShipTypeName, T>>,
+    type: ShipTypeName
+): T | undefined {
+    if (table[type] !== undefined) return table[type];
+    const category = ROLE_CATEGORIES.find((c) => matchesRoleCategory(type, [c]));
+    return category ? table[category] : undefined;
+}

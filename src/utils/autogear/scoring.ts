@@ -1,6 +1,6 @@
 import { EngineeringStat } from '../../types/stats';
 import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
-import type { FleetBuff, CustomFormula } from '../../types/autogear';
+import type { BasisTerm, FleetBuff, CustomFormula, RoleBasis } from '../../types/autogear';
 import { GearSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
 import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
@@ -22,6 +22,7 @@ import {
     calculateRoleScore,
     previewStatBonus,
 } from './priorityScore';
+import { sanitizeRoleBasis } from './customFormula';
 
 // Re-export calculatePriorityScore so existing imports from this module continue to work
 export {
@@ -145,6 +146,51 @@ function calculateArcaneSiegeMultiplier(
     return baseMultiplier;
 }
 
+/**
+ * A formula row's `basis` as a cache-key fragment. A basis is a sum, so term order is not
+ * significant — sorted here from a copy so two bases differing only in authored order collapse
+ * to one key. An absent or empty basis contributes '', so a basis-free row's key is unchanged
+ * from before `basis` existed.
+ */
+function basisKeyPart(basis: BasisTerm[] | undefined): string {
+    if (!basis || basis.length === 0) return '';
+    return (
+        ';' +
+        basis
+            .map((t) => `${t.stat}:${t.weight}`)
+            .sort()
+            .join(',')
+    );
+}
+
+/**
+ * A `roleBasis` as a cache-key fragment, order-independent in its terms and read from a copy
+ * (`.map` before `.sort`) exactly as `basisKeyPart` is for a formula row's `basis`. `produces` is
+ * part of the key too — two bases with identical terms but different `produces` apply to
+ * different roles (`roleHostsBasis`) and must not collide. An absent or unsanitisable basis
+ * contributes '', so a roleBasis-free call keeps the pre-existing key byte-for-byte.
+ *
+ * Runs `roleBasis` through `sanitizeRoleBasis` first: a saved config is untyped JSON reaching
+ * this from localStorage or Supabase JSONB (Security rule 5), so a missing/non-array `terms` or
+ * a non-finite weight must key as "no basis" here rather than throw on `.terms.length`.
+ *
+ * Exported so `fastScore`'s own local cache key can encode a `roleBasis` the same way, rather
+ * than a second encoder drifting from this one.
+ */
+export function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
+    const sanitized = sanitizeRoleBasis(roleBasis);
+    if (!sanitized) return '';
+    return (
+        ';' +
+        sanitized.produces +
+        ':' +
+        sanitized.terms
+            .map((t) => `${t.stat}:${t.weight}`)
+            .sort()
+            .join(',')
+    );
+}
+
 // Update calculateTotalScore to include shipRole and setPriorities
 export function calculateTotalScore(
     ship: Ship,
@@ -158,7 +204,8 @@ export function calculateTotalScore(
     tryToCompleteSets?: boolean,
     arenaModifiers?: Record<string, number> | null,
     fleetBuffs?: FleetBuff[],
-    customFormula?: CustomFormula
+    customFormula?: CustomFormula,
+    roleBasis?: RoleBasis
 ): number {
     performanceTracker.startTimer('CalculateTotalScore');
 
@@ -215,11 +262,13 @@ export function calculateTotalScore(
         ? customFormula.rows
               .map(
                   (r) =>
-                      `${r.stat}:${r.kind}:${r.direction}:${r.importance ?? 1}:${r.percentage ?? 100}`
+                      `${r.stat}:${r.kind}:${r.direction}:${r.importance ?? 1}:${r.percentage ?? 100}${basisKeyPart(r.basis)}`
               )
               .join(',')
         : 'none';
-    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}`;
+    // Appended directly (no `|` separator) so an absent `roleBasis` — which contributes '' —
+    // leaves the key byte-for-byte identical to before this parameter existed.
+    const cacheKey = `${ship.id}|${equipmentKey}|${implantsKey}|${shipRole || 'none'}|${bonusesKey}|${arenaKey}|${fleetBuffsKey}|${formulaKey}${roleBasisKeyPart(roleBasis)}`;
     performanceTracker.endTimer('CreateCacheKey');
 
     // Check cache first
@@ -293,7 +342,8 @@ export function calculateTotalScore(
         tryToCompleteSets,
         arcaneSiegeMultiplier,
         implantSetCount,
-        customFormula
+        customFormula,
+        roleBasis
     );
     performanceTracker.endTimer('CalculatePriorityScore');
 

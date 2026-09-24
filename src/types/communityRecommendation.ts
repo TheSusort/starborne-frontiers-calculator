@@ -1,5 +1,12 @@
 import type { ShipTypeName } from '../constants/shipTypes';
-import { StatPriority, SetPriority, StatBonus, FleetBuff } from './autogear';
+import {
+    StatPriority,
+    SetPriority,
+    StatBonus,
+    FleetBuff,
+    CustomFormula,
+    RoleBasis,
+} from './autogear';
 
 export interface CommunityRecommendation {
     id: string;
@@ -9,7 +16,11 @@ export interface CommunityRecommendation {
     description?: string;
     is_implant_specific: boolean;
     ultimate_implant?: string;
-    ship_role: string;
+    /** Null for a Custom-mode build with no role to mirror (a from-scratch formula, i.e. no
+     *  seededFrom) — see `mirroredShipRole` in `src/utils/communityBuild.ts`. The database
+     *  column itself is NOT NULL today; a null value here appears only once #552 relaxes it
+     *  to nullable in the same change that turns on `ALLOW_ROLELESS_COMMUNITY_SHARE`. */
+    ship_role: string | null;
     stat_priorities: StatPriority[];
     stat_bonuses: StatBonus[];
     set_priorities: SetPriority[];
@@ -45,17 +56,30 @@ export type SharedSetPriority = Omit<SetPriority, 'count'> & { count?: number };
  * assumeCalibrated, useArenaModifiers) — those describe the sharer's own
  * inventory and preferences, not the build.
  *
- * `version` exists so a future shape change can be migrated on read.
+ * `version` exists so a future shape change can be migrated on read. A `version: 1` row has a
+ * non-null `shipRole` and no `customFormula` — a plain role build, still written for every such
+ * build so production's live bundle (a `version: 1`-only reader) keeps reading it in full.
+ * `version: 2` adds Custom mode: `shipRole: null` plus a `customFormula` whose core row carries
+ * a weighted `basis`, so the formula (not a stat limit) is what travels — it generalises across
+ * the recipient's own inventory. `roleBasis`, a transcription of the sharer's own kit that
+ * replaces a role's primary scoring quantity (see `RoleBasis` in `types/autogear.ts`), can ride
+ * on either version.
  */
 export interface SharedAutogearBuild {
-    version: 1;
-    shipRole: ShipTypeName;
+    version: 1 | 2;
+    shipRole: ShipTypeName | null;
     statPriorities: StatPriority[];
     setPriorities: SharedSetPriority[];
     statBonuses: StatBonus[];
     fleetBuffs: FleetBuff[];
     excludedImplantTypes: string[];
     optimizeImplants: boolean;
+    /** Only ever present on a `version: 2` build (Custom mode, `shipRole: null` or a
+     *  role-seeded formula). */
+    customFormula?: CustomFormula;
+    /** Applies only where the shared `shipRole` hosts this basis's `produces` axis
+     *  (`roleHostsBasis`, `offFormula/roleBasisHost.ts`). Present on either version. */
+    roleBasis?: RoleBasis;
 }
 
 export interface CreateCommunityRecommendationInput {

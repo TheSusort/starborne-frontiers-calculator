@@ -12,3 +12,12 @@ callback by hand.
 Autogear is CPU-intensive and runs on the main thread. No Web Worker runs any part of it — the
 only worker in the project is the workbox service worker registered in `src/index.tsx`, which
 handles PWA auto-update and nothing else.
+
+**`runShipOptimizer.ts`:** `findOptimalGearForShip` is the single entry point that runs one ship
+through its configured strategy — the batch Autogear run calls it, never a strategy directly.
+`useAutogearShipConfigs` owns the per-ship config map; `toSavedAutogearConfig` is the one mapping
+from it to the persisted shape.
+
+**`offFormula/`:** off-formula detection (`offFormulaStats.ts`), the kit-derived scoring basis
+(`basisDerivation.ts`), and which roles host a basis (`roleBasisHost.ts`). Backs `OffFormulaNotice`
+and `roleBasis` scoring (#544).

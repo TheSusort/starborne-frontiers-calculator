@@ -31,4 +31,9 @@ describe('AutogearConfigList', () => {
         render(<AutogearConfigList {...baseProps} excludedImplantTypes={['HASTE']} />);
         expect(screen.getByText(/Excl\./)).toBeInTheDocument();
     });
+
+    it('renders a null shipRole as "Custom" rather than crashing or leaving it blank', () => {
+        render(<AutogearConfigList {...baseProps} shipRole={null} />);
+        expect(screen.getByText('Custom')).toBeInTheDocument();
+    });
 });

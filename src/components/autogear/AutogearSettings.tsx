@@ -16,7 +16,7 @@ import { useTutorialTrigger } from '../../hooks/useTutorialTrigger';
 import { AutogearAlgorithm } from '../../utils/autogear/AutogearStrategy';
 import { Ship } from '../../types/ship';
 import { StatPriority, SetPriority, StatBonus, FleetBuff } from '../../types/autogear';
-import type { CustomFormula, CustomFormulaRow } from '../../types/autogear';
+import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../types/autogear';
 import { ShipTypeName, SHIP_TYPES } from '../../constants';
 import { GEAR_SETS } from '../../constants/gearSets';
 import { IMPLANTS } from '../../constants/implants';
@@ -33,6 +33,7 @@ import { SetPriorityRow } from './SetPriorityRow';
 import { StatBonusRow } from './StatBonusRow';
 import { FleetBuffForm } from './FleetBuffForm';
 import { FleetBuffRow } from './FleetBuffRow';
+import { OffFormulaNotice, type OffFormulaApplyUpdate } from './OffFormulaNotice';
 
 type TweakView =
     | { mode: 'list' }
@@ -117,6 +118,15 @@ interface AutogearSettingsProps {
     onUpdateFormulaRow: (index: number, row: CustomFormulaRow) => void;
     onRemoveFormulaRow: (index: number) => void;
     onSeedFormula: (role: ShipTypeName) => void;
+    /** Optional: a caller not ready to persist the write simply omits it, and the Apply control
+     *  does not render. */
+    onApplyOffFormula?: (update: OffFormulaApplyUpdate) => void;
+    /** The ship's currently-stored `roleBasis`, read back so `OffFormulaNotice` can show whether
+     *  an equation is already in use. */
+    appliedRoleBasis?: RoleBasis;
+    /** Wires the "Stop using this equation" control on `OffFormulaNotice`. Optional for the same
+     *  reason as `onApplyOffFormula`. */
+    onClearOffFormula?: () => void;
 }
 
 const SetPriorityForm: React.FC<{
@@ -303,6 +313,9 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
     onUpdateFormulaRow,
     onRemoveFormulaRow,
     onSeedFormula,
+    onApplyOffFormula,
+    appliedRoleBasis,
+    onClearOffFormula,
 }) => {
     const [tweakView, setTweakView] = useState<TweakView>({ mode: 'list' });
     const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -413,6 +426,16 @@ export const AutogearSettings: React.FC<AutogearSettingsProps> = ({
                     </div>
                 )}
             </div>
+
+            {selectedShip && (
+                <OffFormulaNotice
+                    ship={selectedShip}
+                    configuredRole={selectedShipRole}
+                    appliedRoleBasis={appliedRoleBasis}
+                    onApply={onApplyOffFormula}
+                    onClear={onClearOffFormula}
+                />
+            )}
 
             {(selectedShipRole || isCustom) && (
                 <div className={`card space-y-3 ${isSubFlow ? 'ring-1 ring-primary' : ''}`}>

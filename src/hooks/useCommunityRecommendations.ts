@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Ship } from '../types/ship';
-import { ShipTypeName } from '../constants';
 import { SharedAutogearBuild } from '../types/communityRecommendation';
 import {
     CommunityRecommendationService,
     InvalidSharedConfigError,
+    ShipRoleColumnNotNullableError,
+    SharedBuildExceedsBasisCapsError,
 } from '../services/communityRecommendations';
 import {
     toCommunityBuild,
@@ -17,10 +18,13 @@ import { useActiveProfile } from '../contexts/ActiveProfileProvider';
 
 interface UseCommunityRecommendationsProps {
     selectedShip: Ship | null;
-    /** The user's current build for this ship, or null when no role is set. */
+    /**
+     * The user's current build for this ship, or null when `configToSharedBuild` refused it
+     * because there is nothing scoreable (no role and no usable custom formula). Its
+     * non-nullness IS the shareability verdict: `canShare` below trusts it rather than
+     * re-deriving the same predicate.
+     */
     currentBuild: SharedAutogearBuild | null;
-    /** The ship's selected role, or null in Custom mode — a roleless build cannot be shared. */
-    shipRole: ShipTypeName | null;
 }
 
 interface UseCommunityRecommendationsReturn {
@@ -47,12 +51,11 @@ interface UseCommunityRecommendationsReturn {
 export const useCommunityRecommendations = ({
     selectedShip,
     currentBuild,
-    shipRole,
 }: UseCommunityRecommendationsProps): UseCommunityRecommendationsReturn => {
     const { getGearPiece } = useInventory();
     const { activeProfileId } = useActiveProfile();
 
-    const canShare = !!selectedShip && !!currentBuild && !!shipRole;
+    const canShare = !!selectedShip && !!currentBuild;
 
     const [builds, setBuilds] = useState<CommunityBuild[]>([]);
     const [loading, setLoading] = useState(false);
@@ -206,8 +209,21 @@ export const useCommunityRecommendations = ({
                 );
             } catch (err) {
                 console.error('Error sharing recommendation:', err);
-                if (err instanceof InvalidSharedConfigError) {
+                // `SharedBuildExceedsBasisCapsError` EXTENDS `InvalidSharedConfigError`
+                // (services/communityRecommendations.ts), so it must be checked before its
+                // parent — the generic `InvalidSharedConfigError` branch below would otherwise
+                // shadow it and a basis over the schema's own caps would show the generic
+                // "could not be validated" copy instead of naming what to shrink.
+                if (err instanceof SharedBuildExceedsBasisCapsError) {
+                    setError(
+                        'This equation has too many stats, or a weight too large or too small, to be shared.'
+                    );
+                } else if (err instanceof InvalidSharedConfigError) {
                     setError('This build could not be validated and was not shared.');
+                } else if (err instanceof ShipRoleColumnNotNullableError) {
+                    setError(
+                        'Sharing a build with no role is not available yet — try again later.'
+                    );
                 } else {
                     setError('Failed to share recommendation');
                 }
