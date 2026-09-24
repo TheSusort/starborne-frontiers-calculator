@@ -1,8 +1,9 @@
 import { readFileSync } from 'fs';
-import { describe, it, expect, vi, beforeAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { OffFormulaNotice, type OffFormulaApplyUpdate } from '../OffFormulaNotice';
 import type { Ship } from '../../../types/ship';
+import type { RoleBasis } from '../../../types/autogear';
 import { deriveBasis } from '../../../utils/autogear/offFormula/basisDerivation';
 import {
     roleAxis,
@@ -73,6 +74,87 @@ describe('OffFormulaNotice', () => {
         // An empty wrapper div would still push layout and read as a bug in a dense settings
         // panel, so assert on the container rather than on absence of text.
         expect(container).toBeEmptyDOMElement();
+    });
+
+    // `appliedRoleBasis` is `AutogearShipConfig.roleBasis` read back — a saved config's field,
+    // reaching this component as untyped JSON from localStorage or Supabase JSONB (Security
+    // rule 5), not schema-validated the way a shared community build is. Rendering its terms
+    // with `term.weight.toFixed(3)` crashed the settings panel for a non-array `terms` or a
+    // non-numeric weight before `sanitizeRoleBasis` gated this read — see PR #553 review. Each
+    // malformed shape here has no usable term left, so it must render exactly like no applied
+    // basis at all (the empty-container case above), not throw.
+    describe('appliedRoleBasis — a malformed saved basis renders as no basis', () => {
+        beforeEach(() => mocked.mockReturnValue([]));
+
+        it('does not throw and renders nothing for a missing terms array', () => {
+            const malformed = { produces: 'damage' } as unknown as RoleBasis;
+            expect(() =>
+                render(
+                    <OffFormulaNotice
+                        ship={ship}
+                        configuredRole="ATTACKER"
+                        appliedRoleBasis={malformed}
+                    />
+                )
+            ).not.toThrow();
+        });
+
+        it('does not throw and renders nothing for a non-array terms', () => {
+            const malformed = { produces: 'damage', terms: 'oops' } as unknown as RoleBasis;
+            const { container } = render(
+                <OffFormulaNotice
+                    ship={ship}
+                    configuredRole="ATTACKER"
+                    appliedRoleBasis={malformed}
+                />
+            );
+            expect(container).toBeEmptyDOMElement();
+        });
+
+        it('does not throw and renders nothing when the only term has a string weight', () => {
+            const malformed = {
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: '5' }],
+            } as unknown as RoleBasis;
+            const { container } = render(
+                <OffFormulaNotice
+                    ship={ship}
+                    configuredRole="ATTACKER"
+                    appliedRoleBasis={malformed}
+                />
+            );
+            expect(container).toBeEmptyDOMElement();
+        });
+
+        it('does not throw and renders nothing when the only term has a NaN weight', () => {
+            const malformed: RoleBasis = {
+                produces: 'damage',
+                terms: [{ stat: 'attack', weight: NaN }],
+            };
+            const { container } = render(
+                <OffFormulaNotice
+                    ship={ship}
+                    configuredRole="ATTACKER"
+                    appliedRoleBasis={malformed}
+                />
+            );
+            expect(container).toBeEmptyDOMElement();
+        });
+
+        it('does not throw and renders nothing for an unrecognised produces', () => {
+            const malformed = {
+                produces: 'not-a-real-axis',
+                terms: [{ stat: 'attack', weight: 1 }],
+            } as unknown as RoleBasis;
+            const { container } = render(
+                <OffFormulaNotice
+                    ship={ship}
+                    configuredRole="ATTACKER"
+                    appliedRoleBasis={malformed}
+                />
+            );
+            expect(container).toBeEmptyDOMElement();
+        });
     });
 
     // A persisted config can carry a `configuredRole` string that no longer names a real

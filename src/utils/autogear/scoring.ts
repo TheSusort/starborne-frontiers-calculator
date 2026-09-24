@@ -22,6 +22,7 @@ import {
     calculateRoleScore,
     previewStatBonus,
 } from './priorityScore';
+import { sanitizeRoleBasis } from './customFormula';
 
 // Re-export calculatePriorityScore so existing imports from this module continue to work
 export {
@@ -166,19 +167,24 @@ function basisKeyPart(basis: BasisTerm[] | undefined): string {
  * A `roleBasis` as a cache-key fragment, order-independent in its terms and read from a copy
  * (`.map` before `.sort`) exactly as `basisKeyPart` is for a formula row's `basis`. `produces` is
  * part of the key too — two bases with identical terms but different `produces` apply to
- * different roles (`roleHostsBasis`) and must not collide. An absent basis contributes '', so a
- * roleBasis-free call keeps the pre-existing key byte-for-byte.
+ * different roles (`roleHostsBasis`) and must not collide. An absent or unsanitisable basis
+ * contributes '', so a roleBasis-free call keeps the pre-existing key byte-for-byte.
+ *
+ * Runs `roleBasis` through `sanitizeRoleBasis` first: a saved config is untyped JSON reaching
+ * this from localStorage or Supabase JSONB (Security rule 5), so a missing/non-array `terms` or
+ * a non-finite weight must key as "no basis" here rather than throw on `.terms.length`.
  *
  * Exported so `fastScore`'s own local cache key can encode a `roleBasis` the same way, rather
  * than a second encoder drifting from this one.
  */
 export function roleBasisKeyPart(roleBasis: RoleBasis | undefined): string {
-    if (!roleBasis || roleBasis.terms.length === 0) return '';
+    const sanitized = sanitizeRoleBasis(roleBasis);
+    if (!sanitized) return '';
     return (
         ';' +
-        roleBasis.produces +
+        sanitized.produces +
         ':' +
-        roleBasis.terms
+        sanitized.terms
             .map((t) => `${t.stat}:${t.weight}`)
             .sort()
             .join(',')

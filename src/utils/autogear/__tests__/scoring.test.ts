@@ -6,6 +6,7 @@ import {
     evictOldestIfFull,
     calculateTotalScore,
     clearScoreCache,
+    roleBasisKeyPart,
 } from '../scoring';
 import { BaseStats } from '../../../types/stats';
 import { CustomFormula, RoleBasis, StatBonus, StatPriority } from '../../../types/autogear';
@@ -423,5 +424,47 @@ describe('calculateTotalScore cache key roleBasis sensitivity', () => {
         const withBasis = score(basis);
 
         expect(withBasis).not.toBe(withoutBasis);
+    });
+});
+
+// `roleBasis` reaches this cache-keying step as a saved config's field — untyped JSON from
+// localStorage or Supabase JSONB (Security rule 5), not schema-validated the way a shared
+// community build is. `roleBasis.terms.length` crashed the whole autogear run for a missing or
+// non-array `terms` before `roleBasisKeyPart` sanitised its input — see PR #553 review.
+describe('roleBasisKeyPart — malformed roleBasis behaves as no basis', () => {
+    it('does not throw and keys a missing terms array as no basis', () => {
+        const malformed = { produces: 'damage' } as unknown as RoleBasis;
+        expect(() => roleBasisKeyPart(malformed)).not.toThrow();
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('does not throw and keys a non-array terms as no basis', () => {
+        const malformed = { produces: 'damage', terms: 'oops' } as unknown as RoleBasis;
+        expect(() => roleBasisKeyPart(malformed)).not.toThrow();
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys a basis whose only term has a string weight as no basis', () => {
+        const malformed = {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: '5' }],
+        } as unknown as RoleBasis;
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys a basis whose only term has a NaN weight as no basis', () => {
+        const malformed: RoleBasis = {
+            produces: 'damage',
+            terms: [{ stat: 'attack', weight: NaN }],
+        };
+        expect(roleBasisKeyPart(malformed)).toBe('');
+    });
+
+    it('keys an unrecognised produces as no basis', () => {
+        const malformed = {
+            produces: 'not-a-real-axis',
+            terms: [{ stat: 'attack', weight: 1 }],
+        } as unknown as RoleBasis;
+        expect(roleBasisKeyPart(malformed)).toBe('');
     });
 });

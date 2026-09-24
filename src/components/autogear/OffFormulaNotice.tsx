@@ -15,6 +15,7 @@ import {
     type ExcludedCarrier,
 } from '../../utils/autogear/offFormula/basisDerivation';
 import { roleAxis, rolePrimaryStat } from '../../utils/autogear/offFormula/roleBasisHost';
+import { sanitizeRoleBasis } from '../../utils/autogear/customFormula';
 import type { BasisTerm, RoleBasis } from '../../types/autogear';
 import { BasisTermsEditor } from './BasisTermsEditor';
 import {
@@ -218,11 +219,19 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
         configuredRole && Object.hasOwn(SHIP_TYPES, configuredRole)
             ? roleAxis(configuredRole)
             : null;
+    // `appliedRoleBasis` is a saved config's field, reaching this component as untyped JSON from
+    // localStorage or Supabase JSONB (Security rule 5) — `sanitizeRoleBasis` is the one place
+    // that shape is checked, so a missing/non-array `terms` or a non-numeric `weight` renders as
+    // "no basis" here rather than throwing when `appliedTerms` below is formatted for display.
+    const sanitizedAppliedRoleBasis = sanitizeRoleBasis(appliedRoleBasis);
     // An applied basis only reads as "in use" when its `produces` is the axis THIS role hosts —
     // the scorer applies it under that same condition (`roleHostsBasis`), so a basis stored under
     // a role the player has since changed away from is correctly ignored by both. Rendering it as
     // applied anyway would claim a scoring effect the ship no longer has.
-    const applied = !!appliedRoleBasis && !!hostAxis && appliedRoleBasis.produces === hostAxis;
+    const applied =
+        !!sanitizedAppliedRoleBasis &&
+        !!hostAxis &&
+        sanitizedAppliedRoleBasis.produces === hostAxis;
 
     // The derived equation for the axis THIS role hosts, computed independent of whether the
     // detector currently reports a finding on it — an applied basis stays "in use" even on a
@@ -294,7 +303,7 @@ export const OffFormulaNotice: React.FC<OffFormulaNoticeProps> = ({
 
     // The terms actually in force right now — what the "in use" state and the editor's starting
     // point both read, since a player's edit lives nowhere but `appliedRoleBasis` itself.
-    const appliedTerms = applied ? (appliedRoleBasis?.terms ?? []) : [];
+    const appliedTerms = applied ? (sanitizedAppliedRoleBasis?.terms ?? []) : [];
     // Whether the applied terms are still the kit's own derivation, or a player's edited version
     // of it — `derivedForApplied` is null only when `applied` is false, in which case this value
     // is never read.

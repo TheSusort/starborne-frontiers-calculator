@@ -7,7 +7,7 @@ import { arrayMove } from '../../utils/arrayMove';
 import { GearSuggestion } from '../../types/autogear';
 import { seedFormulaFromRole } from '../../utils/autogear/customFormulaSeeds';
 import type { OffFormulaApplyUpdate } from '../../components/autogear/OffFormulaNotice';
-import { partitionScoreableShips } from '../../utils/autogear/customFormula';
+import { partitionScoreableShips, sanitizeRoleBasis } from '../../utils/autogear/customFormula';
 import { GearPiece } from '../../types/gear';
 import { calculateTotalStats, StatBreakdown } from '../../utils/ship/statsCalculator';
 import { Button, PageLayout, ProgressBar, Tabs } from '../../components/ui';
@@ -336,6 +336,11 @@ export const AutogearPage: React.FC = () => {
                 updateShipConfig(ship.id, {
                     ...savedConfig,
                     fleetBuffs: savedConfig.fleetBuffs ?? [],
+                    // A saved config is untyped JSON from localStorage or Supabase JSONB
+                    // (Security rule 5) — sanitised here, at the one place a saved `roleBasis`
+                    // enters live page state, so every downstream reader (the scorer, the
+                    // off-formula notice) only ever sees a shape it can trust.
+                    roleBasis: sanitizeRoleBasis(savedConfig.roleBasis),
                 });
             }
         }

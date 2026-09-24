@@ -5,8 +5,9 @@ import {
     isFormulaEmpty,
     isBasisStat,
     usableBasisTerms,
+    sanitizeRoleBasis,
 } from '../customFormula';
-import type { CustomFormula, CustomFormulaRow } from '../../../types/autogear';
+import type { CustomFormula, CustomFormulaRow, RoleBasis } from '../../../types/autogear';
 import type { BaseStats, LimitableStat } from '../../../types/stats';
 
 const base: BaseStats = {
@@ -375,5 +376,63 @@ describe('usableBasisTerms — hardening', () => {
     it('drops a shield term', () => {
         const terms = usableBasisTerms([{ stat: 'shield', weight: 1 }]);
         expect(terms).toBeUndefined();
+    });
+});
+
+// A saved `roleBasis` reaches this boundary as untyped JSON from localStorage or Supabase
+// JSONB (Security rule 5), unlike a shared community build, which is Zod-validated on the way
+// in. `roleBasisKeyPart` (scoring.ts) and `OffFormulaNotice`'s applied-terms render both crash
+// on a malformed value without this sanitiser — see PR #553 review.
+describe('sanitizeRoleBasis — a saved roleBasis is untyped JSON at this boundary', () => {
+    it('returns undefined for a non-object value', () => {
+        expect(sanitizeRoleBasis(null)).toBeUndefined();
+        expect(sanitizeRoleBasis(undefined)).toBeUndefined();
+        expect(sanitizeRoleBasis('damage')).toBeUndefined();
+        expect(sanitizeRoleBasis(42)).toBeUndefined();
+    });
+
+    it('returns undefined for a produces that names no real axis', () => {
+        expect(
+            sanitizeRoleBasis({
+                produces: 'not-a-real-axis',
+                terms: [{ stat: 'attack', weight: 1 }],
+            })
+        ).toBeUndefined();
+    });
+
+    it('returns undefined when terms is missing', () => {
+        expect(sanitizeRoleBasis({ produces: 'damage' })).toBeUndefined();
+    });
+
+    it('returns undefined when terms is not an array', () => {
+        expect(sanitizeRoleBasis({ produces: 'damage', terms: 'attack:1' })).toBeUndefined();
+    });
+
+    it('drops a term with a string weight, keeping any other usable term', () => {
+        const sanitized = sanitizeRoleBasis({
+            produces: 'damage',
+            terms: [
+                { stat: 'attack', weight: '5' },
+                { stat: 'hp', weight: 1 },
+            ],
+        });
+        expect(sanitized).toEqual({ produces: 'damage', terms: [{ stat: 'hp', weight: 1 }] });
+    });
+
+    it('returns undefined when every term has a NaN weight', () => {
+        expect(
+            sanitizeRoleBasis({ produces: 'repair', terms: [{ stat: 'hp', weight: NaN }] })
+        ).toBeUndefined();
+    });
+
+    it('returns a well-formed roleBasis unchanged', () => {
+        const basis: RoleBasis = { produces: 'shield', terms: [{ stat: 'hp', weight: 2 }] };
+        expect(sanitizeRoleBasis(basis)).toEqual(basis);
+    });
+
+    it('rejects a prototype-chain produces value', () => {
+        expect(
+            sanitizeRoleBasis({ produces: 'constructor', terms: [{ stat: 'attack', weight: 1 }] })
+        ).toBeUndefined();
     });
 });

@@ -4,6 +4,7 @@ import type {
     CoreImportance,
     CustomFormula,
     CustomFormulaRow,
+    RoleBasis,
 } from '../../types/autogear';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import {
@@ -74,6 +75,42 @@ export function usableBasisTerms(basis: BasisTerm[] | undefined): BasisTerm[] | 
 export function usableBasis(row: CustomFormulaRow): BasisTerm[] | undefined {
     if (row.kind !== 'core' || row.direction !== 'max') return undefined;
     return usableBasisTerms(row.basis);
+}
+
+// Total on purpose, mirroring `DERIVED_STATS` above: a `RoleBasis['produces']` member added
+// without a matching entry here fails `tsc --noEmit` instead of a new axis silently passing
+// sanitization as if it were a recognised one. Mirrors the compile-time tie
+// `sharedAutogearBuild.ts` keeps against the same union for the share-schema path.
+const ROLE_BASIS_PRODUCES: Record<RoleBasis['produces'], true> = {
+    damage: true,
+    repair: true,
+    shield: true,
+};
+
+/**
+ * A stored `roleBasis` sanitised at the trust boundary. Unlike a shared community build (Zod,
+ * `sharedAutogearBuild.ts`), a `roleBasis` saved to localStorage or Supabase JSONB reaches its
+ * readers as untyped JSON with no schema validation (Security rule 5) — a hand-edited or
+ * corrupted record can carry a missing/non-array `terms`, a non-finite or negative `weight`, or
+ * a `produces` that names no real axis.
+ *
+ * Returns undefined unless `produces` is a real `RoleBasis['produces']` member (`Object.hasOwn`
+ * against `ROLE_BASIS_PRODUCES`, an own-property check for the same prototype-chain reason
+ * `isBasisStat` gives) and at least one term survives `usableBasisTerms` — the same predicate a
+ * formula row's `basis` is filtered through, so a `roleBasis` this function admits can never be
+ * one the scorer would treat differently. Every reader of a possibly-stored `roleBasis`
+ * (`roleBasisKeyPart`, `OffFormulaNotice`'s applied-terms render) calls this once rather than
+ * re-deriving its own shape check, so "no usable roleBasis" has one definition.
+ */
+export function sanitizeRoleBasis(value: unknown): RoleBasis | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const { produces, terms } = value as { produces?: unknown; terms?: unknown };
+    if (typeof produces !== 'string' || !Object.hasOwn(ROLE_BASIS_PRODUCES, produces)) {
+        return undefined;
+    }
+    const usableTerms = usableBasisTerms(terms as BasisTerm[] | undefined);
+    if (!usableTerms) return undefined;
+    return { produces: produces as RoleBasis['produces'], terms: usableTerms };
 }
 
 /** Whether a basis on this row's own stat is a tilt rather than a transcription. `effectiveHp`
