@@ -47,12 +47,10 @@ export class SharedBuildExceedsBasisCapsError extends InvalidSharedConfigError {
 }
 
 /**
- * Thrown by createRecommendation when the shared build has no role to mirror into the legacy
- * `ship_role` column and role-less sharing is switched off (`ALLOW_ROLELESS_COMMUNITY_SHARE`).
- * `configToSharedBuild` already refuses this build for the app's own UI before it ever reaches
- * here — this is the same refusal for any other caller that builds a `SharedAutogearBuild`
- * directly and calls this service, so a null `ship_role` can never be written while the switch
- * is off, regardless of caller.
+ * Thrown by createRecommendation when a caller explicitly passes `allowRoleless: false` for a
+ * build with no role to mirror into the legacy `ship_role` column. `ALLOW_ROLELESS_COMMUNITY_SHARE`
+ * defaults this parameter to `true`, so this only fires for a caller that opts out — defence
+ * in depth for anything that builds a `SharedAutogearBuild` directly and wants the old refusal.
  */
 export class RolelessShareNotAllowedError extends Error {
     constructor() {
@@ -62,12 +60,11 @@ export class RolelessShareNotAllowedError extends Error {
 }
 
 /**
- * Thrown by createRecommendation when the shared build names `critMultiplier` (a stat
- * priority, a stat bonus, or a custom-formula row — `buildReferencesCritMultiplier`) and
- * `ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE` is off. Mirrors `RolelessShareNotAllowedError`: the
- * share UI (`CommunityRecommendations.tsx`) already withholds the Share button for such a
- * build, so this is the same refusal for any other caller that builds a `SharedAutogearBuild`
- * directly and calls this service.
+ * Thrown by createRecommendation when a caller explicitly passes `allowCritMultiplier: false`
+ * for a build naming `critMultiplier` (a stat priority, a stat bonus, or a custom-formula row
+ * — `buildReferencesCritMultiplier`). Mirrors `RolelessShareNotAllowedError`:
+ * `ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE` defaults this parameter to `true`, so this only
+ * fires for a caller that opts out.
  */
 export class CritMultiplierShareNotAllowedError extends Error {
     constructor() {
@@ -78,12 +75,10 @@ export class CritMultiplierShareNotAllowedError extends Error {
 
 /**
  * Thrown by createRecommendation when the insert fails on a NOT NULL violation for
- * `ship_role` (Postgres code 23502) while writing a role-less build. This only fires when a
- * caller passes `allowRoleless: true` explicitly — `ALLOW_ROLELESS_COMMUNITY_SHARE` is off by
- * default, so `RolelessShareNotAllowedError` refuses a role-less build before insert is ever
- * attempted. `community_recommendations.ship_role` is NOT NULL today; #552 relaxes it to
- * nullable in the same change that turns that switch on. Until then, this error names a
- * role-less write rejected at the DB rather than silently dropped or crashing.
+ * `ship_role` (Postgres code 23502) while writing a role-less build. `ALLOW_ROLELESS_COMMUNITY_SHARE`
+ * defaults to `true`, so this fires whenever migration 20260924000001 (which drops the
+ * column's NOT NULL) has not yet been applied to the target database — it names a role-less
+ * write rejected at the DB rather than silently dropped or crashing.
  */
 export class ShipRoleColumnNotNullableError extends Error {
     constructor() {
@@ -124,15 +119,11 @@ export class CommunityRecommendationService {
         createdBy: string,
         // Mirrors `configToSharedBuild`'s own parameter: a default read from the switch, not a
         // module-level read baked into the function body, so both call patterns are testable
-        // without mocking. `configToSharedBuild` already refuses a role-less build for the
-        // app's own UI before it reaches here — this is the same refusal for any other caller
-        // that builds a `SharedAutogearBuild` directly and calls this service (defence in
-        // depth, so a null `ship_role` can never be written while the switch is off).
+        // without mocking. `ALLOW_ROLELESS_COMMUNITY_SHARE` is `true`, so this is `true` unless
+        // a caller opts out explicitly (`RolelessShareNotAllowedError`).
         allowRoleless: boolean = ALLOW_ROLELESS_COMMUNITY_SHARE,
         // Mirrors `allowRoleless` immediately above: a default read from the switch
-        // (`ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`), testable without mocking. The share UI
-        // (`CommunityRecommendations.tsx`) already withholds the Share button for a build
-        // naming `critMultiplier` — this is the same refusal for any other caller.
+        // (`ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`, also `true`), testable without mocking.
         allowCritMultiplier: boolean = ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE
     ): Promise<CommunityRecommendation | null> {
         // Parse directly (rather than through `validateSharedAutogearBuild`) so a failure's
@@ -157,8 +148,7 @@ export class CommunityRecommendationService {
 
         // `ship_role` mirrors the build's own role, or — in Custom mode — the role its
         // formula was seeded from. A hand-written formula with no `seededFrom` has neither,
-        // so this is null — a legitimate value for the SharedAutogearBuild the client
-        // computes, even though the database column itself is still NOT NULL (see
+        // so this is null — a legitimate value now that the column is nullable (see
         // `RolelessShareNotAllowedError` below, and `ShipRoleColumnNotNullableError` above).
         const legacyShipRole = mirroredShipRole(sharedConfig);
 

@@ -304,11 +304,12 @@ export const sortCommunityBuilds = (
 /**
  * The role a build's legacy `ship_role` column mirrors: the build's own role when it has
  * one, or — in Custom mode (`shipRole: null`) — the role its formula was seeded from.
- * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom`. The
- * column is NOT NULL today, so `CommunityRecommendationService.createRecommendation` only
- * writes this `null` through when a caller opts in via `allowRoleless` — otherwise it throws
- * `RolelessShareNotAllowedError` before the insert. Once written, `normalizeShipRole` and
- * every legacy-column reader treat a `null` here as "no role" rather than synthesizing one.
+ * `null` when neither exists, e.g. a hand-written Custom formula with no `seededFrom`.
+ * `community_recommendations.ship_role` is nullable (20260924000001), so
+ * `CommunityRecommendationService.createRecommendation` writes this `null` through by
+ * default; a caller can still opt out via `allowRoleless: false` (`RolelessShareNotAllowedError`).
+ * Once written, `normalizeShipRole` and every legacy-column reader treat a `null` here as
+ * "no role" rather than synthesizing one.
  */
 export const mirroredShipRole = (
     build: Pick<AutogearBuildFields, 'shipRole' | 'customFormula'>
@@ -316,25 +317,20 @@ export const mirroredShipRole = (
 
 /**
  * Whether a role-less Custom build (no `shipRole`, no `customFormula.seededFrom` for
- * `mirroredShipRole` to mirror) may be shared with a NULL `ship_role`. OFF: a bundle at
- * 1.68.0 or earlier has no `version: 2` reader and falls back to
- * `normalizeShipRole(row.ship_role)`, whose legacy fallback had no null guard — a player on
- * one of those bundles who has not reloaded gets every recommendation list for that ship
- * failing to load. `community_recommendations.ship_role` is NOT NULL today, and the client
- * never writes it NULL while this switch is off. #552 flips the switch to true and relaxes
- * the column to nullable in that same change, once tabs on those bundles have aged out.
+ * `mirroredShipRole` to mirror) may be shared with a NULL `ship_role`. ON: every bundle in
+ * the field has the `version: 2` / null-safe `normalizeShipRole` reader (shipped with #544),
+ * and migration 20260924000001 has made `community_recommendations.ship_role` nullable, so a
+ * from-scratch formula can be shared like any other build.
  */
-export const ALLOW_ROLELESS_COMMUNITY_SHARE = false;
+export const ALLOW_ROLELESS_COMMUNITY_SHARE = true;
 
 /**
  * Whether a build referencing the `critMultiplier` derived stat (a stat priority, a stat
- * bonus, or a custom-formula row — `buildReferencesCritMultiplier` below) may be shared. OFF:
- * the deployed reader (origin/production `sharedAutogearBuild.ts`) only knows
- * `effectiveHp`/`directDamage` in its `limitableStatSchema`, so a build naming `critMultiplier`
- * is dropped or mis-shown by a tab still on that bundle. Mirrors
- * `ALLOW_ROLELESS_COMMUNITY_SHARE`'s own reasoning and default.
+ * bonus, or a custom-formula row — `buildReferencesCritMultiplier` below) may be shared. ON:
+ * every bundle in the field reads `critMultiplier` in `limitableStatSchema` (shipped with
+ * #550), so a build naming it shares like any other stat.
  */
-export const ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE = false;
+export const ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE = true;
 
 /**
  * Whether `build` names `critMultiplier` anywhere `ALLOW_CRIT_MULTIPLIER_COMMUNITY_SHARE`

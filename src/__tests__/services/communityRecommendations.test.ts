@@ -155,10 +155,8 @@ describe('CommunityRecommendationService.createRecommendation', () => {
     });
 
     // A hand-written Custom formula with no seededFrom has no role to mirror. Writing a
-    // placeholder would display as a role the author never chose, so — when a caller opts in
-    // via `allowRoleless` (the third argument here) — this writes NULL instead of refusing.
-    // `ship_role` is NOT NULL today; #552 relaxes it to nullable in the same change that turns
-    // `ALLOW_ROLELESS_COMMUNITY_SHARE` on.
+    // placeholder would display as a role the author never chose, so this writes NULL instead
+    // of refusing. `ship_role` is nullable (migration 20260924000001).
     it('writes a null ship_role for a from-scratch Custom-mode build with no seededFrom to mirror', async () => {
         const fromScratch: SharedAutogearBuild = {
             version: 2,
@@ -191,11 +189,42 @@ describe('CommunityRecommendationService.createRecommendation', () => {
         expect(payload.shared_config.shipRole).toBeNull();
     });
 
-    // Defence in depth: `configToSharedBuild` already refuses a role-less build for the app's
-    // own UI before it ever builds a `SharedAutogearBuild`, but any other caller that builds
-    // one directly and calls this service must be refused here too — a null `ship_role` must
-    // never be written while the switch is off, regardless of caller.
-    it('refuses to write a null ship_role by default, without calling insert', async () => {
+    // No explicit third argument: this is the call AutogearQuickSettings's hook actually
+    // makes, so it must exercise ALLOW_ROLELESS_COMMUNITY_SHARE's real default rather than a
+    // hand-picked value.
+    it('writes a null ship_role by default, now that ALLOW_ROLELESS_COMMUNITY_SHARE is on', async () => {
+        const fromScratch: SharedAutogearBuild = {
+            version: 2,
+            shipRole: null,
+            statPriorities: [],
+            setPriorities: [],
+            statBonuses: [],
+            fleetBuffs: [],
+            excludedImplantTypes: [],
+            optimizeImplants: false,
+            customFormula: {
+                rows: [{ stat: 'directDamage', kind: 'core', direction: 'max' }],
+            },
+        };
+
+        const single = vi.fn().mockResolvedValue({ data: { id: 'rec-1' }, error: null });
+        const select = vi.fn().mockReturnValue({ single });
+        const insert = vi.fn().mockReturnValue({ select });
+        (supabase.from as ReturnType<typeof vi.fn>).mockReturnValue({ insert });
+
+        const result = await CommunityRecommendationService.createRecommendation(
+            { ...baseInput, sharedConfig: fromScratch },
+            'profile-1'
+        );
+
+        expect(result).toEqual({ id: 'rec-1' });
+        const payload = insert.mock.calls[0][0];
+        expect(payload.ship_role).toBeNull();
+    });
+
+    // Defence in depth: any caller that builds a `SharedAutogearBuild` directly and explicitly
+    // opts out via `allowRoleless: false` must still be refused, independent of the switch.
+    it('refuses to write a null ship_role when allowRoleless is explicitly false, without calling insert', async () => {
         const fromScratch: SharedAutogearBuild = {
             version: 2,
             shipRole: null,
@@ -216,7 +245,8 @@ describe('CommunityRecommendationService.createRecommendation', () => {
         await expect(
             CommunityRecommendationService.createRecommendation(
                 { ...baseInput, sharedConfig: fromScratch },
-                'profile-1'
+                'profile-1',
+                false
             )
         ).rejects.toThrow(RolelessShareNotAllowedError);
 
