@@ -898,15 +898,23 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                         (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
                         { ...ship.implants }
                     );
+                    // Merged over the ship's existing equipment, so a slot left out of
+                    // gearAssignments (or an implants-only write, where it's empty) keeps
+                    // whatever it already held — matching the DB path below, which only
+                    // deletes/upserts the slots it's given. An assigned piece leaves any other
+                    // slot it held here, as the DB's delete-by-gear_id does.
+                    const assignedGearIds = new Set(gearAssignments.map(({ gearId }) => gearId));
+                    const keptEquipment = { ...ship.equipment };
+                    Object.entries(keptEquipment).forEach(([key, value]) => {
+                        if (value && assignedGearIds.has(value) && isGearSlotName(key)) {
+                            keptEquipment[key] = undefined;
+                        }
+                    });
                     return {
                         ...ship,
-                        // Merged over the ship's existing equipment, so a slot left out of
-                        // gearAssignments (or an implants-only write, where it's empty) keeps
-                        // whatever it already held — matching the DB path below, which only
-                        // deletes/upserts the slots it's given.
                         equipment: gearAssignments.reduce(
                             (acc, { slot, gearId }) => ({ ...acc, [slot]: gearId }),
-                            { ...ship.equipment }
+                            keptEquipment
                         ),
                         implants: targetImplants,
                     };

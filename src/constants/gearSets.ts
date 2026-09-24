@@ -231,9 +231,8 @@ export const GEAR_SET_LIST: GearSetBonus[] = Object.values(GEAR_SETS);
 export const isGearSetName = (name: string): name is GearSetName =>
     Object.hasOwn(GEAR_SETS, name) || Object.hasOwn(IMPLANTS, name);
 
-/** A `GearSetName` may name an implant rather than one of `GEAR_SETS`' own multi-piece sets (a
- *  single equipped implant is its own one-piece "set"), so indexing `GEAR_SETS` directly needs a
- *  guard — this is that guard, returning `undefined` for the implant case instead of widening
- *  `GEAR_SETS`' key type back to `string`. */
+/** The `GEAR_SETS` entry for a name that is one of its own keys, else `undefined`. A `GearSetName`
+ *  may name an implant (a single equipped implant is its own one-piece "set"): implant-only names
+ *  return `undefined`, and a key shared by both tables (`AMBUSH`) returns the gear-set entry. */
 export const getGearSet = (name: string | null | undefined): GearSetBonus | undefined =>
     name && Object.hasOwn(GEAR_SETS, name) ? GEAR_SETS[name as keyof typeof GEAR_SETS] : undefined;

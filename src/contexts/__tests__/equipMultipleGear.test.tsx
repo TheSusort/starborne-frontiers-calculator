@@ -229,6 +229,22 @@ describe('writers issued back-to-back in one tick (#560)', () => {
             expect(hayyan.equipment.hull).toBe('old-hull');
         }
     });
+
+    it('a piece re-assigned to another slot on the same ship leaves its old slot', async () => {
+        const { result } = await mountSignedOutWith([
+            ship('hayyan', { equipment: { weapon: 'moved', hull: 'old-hull' }, implants: {} }),
+        ]);
+
+        await act(async () => {
+            await result.current.equipMultipleGear('hayyan', [{ slot: 'hull', gearId: 'moved' }]);
+        });
+
+        for (const ships of [result.current.ships, stored()]) {
+            const hayyan = byId(ships, 'hayyan');
+            expect(hayyan.equipment.hull).toBe('moved');
+            expect(hayyan.equipment.weapon).toBeUndefined();
+        }
+    });
 });
 
 describe('ship lookups stay reactive', () => {
