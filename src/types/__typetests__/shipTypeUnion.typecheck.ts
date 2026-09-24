@@ -1,10 +1,9 @@
 import type { ShipTypeName } from '../../constants/shipTypes';
 
 /**
- * Type-only tripwire for #547: `SHIP_TYPES` carried an explicit wide `Record<string, ShipType>`
- * annotation alongside its `satisfies` clause — the annotation won, so `keyof typeof SHIP_TYPES`
- * silently collapsed to `string` and every `Record<ShipTypeName, …>` in the codebase stopped
- * gating anything (`reference_key_union_silently_widened`). This file has no runtime behaviour;
+ * Type-only tripwire (#547): `ShipTypeName = keyof typeof SHIP_TYPES` is a literal union only
+ * while `SHIP_TYPES` has no explicit wide annotation — an annotation beats `satisfies` and
+ * collapses the union to `string`, so every `Record<ShipTypeName, …>` would gate nothing. This file has no runtime behaviour;
  * it exists only for `tsc --noEmit` to check.
  *
  * Non-vacuity: re-adding `: Record<string, ShipType>` to `SHIP_TYPES` in `constants/shipTypes.ts`

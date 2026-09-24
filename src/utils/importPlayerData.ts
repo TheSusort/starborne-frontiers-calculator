@@ -544,7 +544,7 @@ const getImplantSetBonus = (set: string): GearSetName | null => {
 // The export only ever names one of the 4 base roles (never a subtype like DEBUFFER_BOMBER —
 // those are assigned within this app, not by the game). A value outside `ShipTypeName` crosses
 // the file-upload trust boundary (a corrupted export, or a role the game adds later), so it
-// defaults to ATTACKER rather than crashing — the same fallback shape as `getFaction`/`getAffinity`.
+// defaults to ATTACKER — the same fallback shape as `getFaction`/`getAffinity`.
 const getShipTypeName = (shipType: string): ShipTypeName => {
     const upper = shipType.toUpperCase();
     return isShipTypeName(upper) ? upper : 'ATTACKER';

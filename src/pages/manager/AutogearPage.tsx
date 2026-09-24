@@ -636,9 +636,8 @@ export const AutogearPage: React.FC = () => {
                         ignoreUnleveled: shipConfig.ignoreUnleveled,
                         useUpgradedStats: shipConfig.useUpgradedStats,
                         tryToCompleteSets: shipConfig.tryToCompleteSets,
-                        // The UI no longer exposes an algorithm picker (#549) — every manual
-                        // run scores through Genetic. `ShipOptimizerConfig.selectedAlgorithm`
-                        // stays a real field because `findOptimalGearForShip` is also the
+                        // The app always runs Genetic (#549). `ShipOptimizerConfig.selectedAlgorithm`
+                        // is a real field because `findOptimalGearForShip` is also the
                         // entry point `roleBasisWiring.test.ts` drives against TwoPass/SetFirst
                         // directly.
                         selectedAlgorithm: AutogearAlgorithm.Genetic,

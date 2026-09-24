@@ -13,8 +13,7 @@ function isAutogearAlgorithm(value: string): value is AutogearAlgorithm {
     return Object.values<string>(AutogearAlgorithm).includes(value);
 }
 
-// The UI no longer exposes an algorithm choice (#549) — every manual run resolves through
-// Genetic. This function stays string-typed, and the Record above stays total over
+// The app always runs Genetic (#549). This function stays string-typed, and the Record above stays total over
 // AutogearAlgorithm, because `ShipOptimizerConfig.selectedAlgorithm` is still a real engine
 // knob: tests and tooling call `findOptimalGearForShip` directly with TwoPass/SetFirst
 // (`roleBasisWiring.test.ts`), and any future caller may pass a value this module never

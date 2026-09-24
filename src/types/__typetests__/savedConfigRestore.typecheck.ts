@@ -5,9 +5,8 @@ import type { AutogearShipConfig } from '../../utils/autogear/runShipOptimizer';
  * Type-only tripwire for #549: `AutogearPage.applySavedConfigs` restores a saved config into
  * live page state with `{ ...savedConfig, ... }` — a plain object spread, which silently drops
  * any saved key whose live counterpart has a different name (an excess property on a
- * non-literal spread is not a type error). `algorithm` vs `selectedAlgorithm` was exactly this;
- * both fields were removed rather than renamed once the algorithm picker turned out to be dead
- * UI, but a future field could reintroduce the same mismatch.
+ * non-literal spread is not a type error). This fails `tsc` when a saved key has no live
+ * counterpart of the same name.
  *
  * This file has no runtime behaviour — it exists only for `tsc --noEmit` to check. `shipId` is
  * excluded because it is saved-only: the live config map is already keyed by ship id

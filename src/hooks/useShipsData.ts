@@ -45,7 +45,12 @@ interface ShipTemplate {
 // boundary, so a row whose value fell out of the `ShipTypeName` union is dropped rather than
 // carried into a `Ship` with a role the rest of the app can't classify.
 const transformShipTemplate = (template: ShipTemplate): Ship | null => {
-    if (!isShipTypeName(template.type)) return null;
+    if (!isShipTypeName(template.type)) {
+        console.warn(
+            `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
+        );
+        return null;
+    }
 
     return {
         id: template.id,

@@ -1,11 +1,10 @@
 import type { GearSlotName, ImplantSlotName, EquipmentSlotName } from '../../constants/gearTypes';
 
 /**
- * Type-only tripwire for #542: `GEAR_SLOTS` and `IMPLANT_SLOTS` each carry an explicit wide
- * `Record<string, GearSlot>` annotation alongside their `satisfies` clause — the annotation
- * wins, so `keyof typeof GEAR_SLOTS` (and its implant counterpart) silently collapses to
- * `string` and every `Record<GearSlotName, …>` in the codebase stops gating anything
- * (`reference_key_union_silently_widened`). This file has no runtime behaviour; it exists only
+ * Type-only tripwire (#542): `GearSlotName` / `ImplantSlotName` are literal unions only while
+ * `GEAR_SLOTS` / `IMPLANT_SLOTS` have no explicit wide annotation — an annotation beats
+ * `satisfies` and collapses the union to `string`, so every `Record<GearSlotName, …>` would
+ * gate nothing. This file has no runtime behaviour; it exists only
  * for `tsc --noEmit` to check.
  *
  * Non-vacuity: re-adding `: Record<string, GearSlot>` to either `GEAR_SLOTS` or `IMPLANT_SLOTS`

@@ -41,7 +41,12 @@ const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats
         (acc, stat) => {
             // A row's `ship_type` crosses the Supabase trust boundary — skip a row whose value
             // fell out of the `ShipTypeName` union (a retired/renamed role) rather than crash.
-            if (!isShipTypeName(stat.ship_type)) return acc;
+            if (!isShipTypeName(stat.ship_type)) {
+                console.warn(
+                    `Unrecognised ship type "${stat.ship_type}" — skipping engineering stat`
+                );
+                return acc;
+            }
             const shipType = stat.ship_type;
             if (!acc[shipType]) {
                 acc[shipType] = {

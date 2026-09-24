@@ -78,7 +78,13 @@ export const ImportButton: React.FC<{
                 // the `ShipTypeName` union (a retired/renamed role) is dropped rather than
                 // carried into a `Ship` with a role the rest of the app can't classify.
                 data
-                    ?.filter((template) => isShipTypeName(template.type as string))
+                    ?.filter((template) => {
+                        if (isShipTypeName(template.type as string)) return true;
+                        console.warn(
+                            `Unrecognised ship type "${template.type}" — skipping template ${template.id}`
+                        );
+                        return false;
+                    })
                     .map((template) => ({
                         id: template.id,
                         name: template.name,
