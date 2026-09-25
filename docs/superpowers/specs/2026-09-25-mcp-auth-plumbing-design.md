@@ -202,8 +202,11 @@ imports `src/config/supabase.ts`.
    one-shot local server, exchanges it with PKCE, then calls `PUT <SUPABASE_URL>/auth/v1/user`
    with `{ "data": { "mcp_probe": "<timestamp>" } }` and prints the status. It also confirms a
    Data API `POST` with the same token gets 403 (spec 1, end to end).
-   - Rejected → the Auth API is closed to OAuth tokens; the gate can be lifted.
-   - Accepted → closing it blocks the public rollout; the admin gate stays.
+   - The probe also requests an email change (to a `--probe-email` address, never confirmed).
+     **Hard requirement: an OAuth/MCP token must never change the account email.** The admin
+     gate is lifted only if the probe reports `email-change: BLOCKED`.
+   - Metadata update rejected → the Auth API is closed to OAuth tokens.
+   - Either accepted → closing it blocks the public rollout; the admin gate stays.
 
 ## Out of scope
 
