@@ -96,12 +96,16 @@ export const isGearSlotName = (slot: string): slot is GearSlotName =>
 export const isImplantSlotName = (slot: string): slot is ImplantSlotName =>
     Object.hasOwn(IMPLANT_SLOTS, slot);
 
+/** True for a slot id from either space. A stored `GearPiece.slot` is a raw string (see its doc);
+ *  narrow with this before using it as an equipment key. */
+export const isEquipmentSlotName = (slot: string): slot is EquipmentSlotName =>
+    isGearSlotName(slot) || isImplantSlotName(slot);
+
 /** The display label for a slot from either space — several UI call sites read
- *  `GEAR_SLOTS[slot]` and `IMPLANT_SLOTS[slot]` side by side on a `GearPiece.slot`
- *  (`EquipmentSlotName`), which is not a key of either alone. Falls back to the raw slot id
- *  for a value in neither (should not happen for a real `GearPiece`, but avoids `undefined`
- *  leaking into rendered text). */
-export const getEquipmentSlotLabel = (slot: EquipmentSlotName): string =>
+ *  `GEAR_SLOTS[slot]` and `IMPLANT_SLOTS[slot]` side by side on a `GearPiece.slot`, which is not
+ *  a key of either alone. Falls back to the raw slot id for a value in neither (a stored piece
+ *  can carry an unrecognised slot), so `undefined` never leaks into rendered text. */
+export const getEquipmentSlotLabel = (slot: string): string =>
     (isGearSlotName(slot) ? GEAR_SLOTS[slot].label : undefined) ??
     (isImplantSlotName(slot) ? IMPLANT_SLOTS[slot].label : undefined) ??
     slot;

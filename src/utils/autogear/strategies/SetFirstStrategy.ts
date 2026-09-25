@@ -5,7 +5,8 @@ import { GearPiece } from '../../../types/gear';
 import { StatPriority, CustomFormula } from '../../../types/autogear';
 import { AutogearResult, ScoringInputs } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
-import type { EquipmentSlotName } from '../../../constants/gearTypes';
+import { type EquipmentSlotName, isEquipmentSlotName } from '../../../constants/gearTypes';
+import { isGearSetName } from '../../../constants/gearSets';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
@@ -86,6 +87,7 @@ export class SetFirstStrategy extends BaseStrategy {
             );
 
             setPieces.forEach((piece) => {
+                if (!isEquipmentSlotName(piece.slot)) return;
                 equipment[piece.slot] = piece.id;
                 usedSlots.add(piece.slot);
             });
@@ -134,7 +136,7 @@ export class SetFirstStrategy extends BaseStrategy {
 
         // Group pieces by set
         inventory.forEach((gear) => {
-            if (!gear.setBonus) return;
+            if (!gear.setBonus || !isGearSetName(gear.setBonus)) return;
             if (!setGroups[gear.setBonus]) {
                 setGroups[gear.setBonus] = [];
             }
@@ -186,7 +188,7 @@ export class SetFirstStrategy extends BaseStrategy {
         };
 
         // Find best possible combination of pieces from this set
-        const slots = new Set(pieces.map((p) => p.slot));
+        const slots = new Set(pieces.map((p) => p.slot).filter(isEquipmentSlotName));
         const testEquipment: Partial<Record<EquipmentSlotName, string>> = {};
 
         slots.forEach((slot) => {
@@ -248,7 +250,10 @@ export class SetFirstStrategy extends BaseStrategy {
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
         scoringInputs: ScoringInputs
     ): Promise<GearPiece[]> {
-        const availableSlots = pieces.map((p) => p.slot).filter((slot) => !usedSlots.has(slot));
+        const availableSlots = pieces
+            .map((p) => p.slot)
+            .filter(isEquipmentSlotName)
+            .filter((slot) => !usedSlots.has(slot));
 
         if (availableSlots.length < 2) return []; // Need at least 2 pieces for a set
 
@@ -268,6 +273,8 @@ export class SetFirstStrategy extends BaseStrategy {
                 const piece2 = pieces[j];
 
                 if (piece1.slot === piece2.slot) continue;
+                if (!isEquipmentSlotName(piece1.slot) || !isEquipmentSlotName(piece2.slot))
+                    continue;
                 if (usedSlots.has(piece1.slot) || usedSlots.has(piece2.slot)) continue;
 
                 const testEquipment = {

@@ -21,7 +21,7 @@
  * doesn't roll its own heal-crit; flagged as a modeling choice for reviewer confirmation.
  */
 
-import { getGearSet, GearSetName } from '../../constants/gearSets';
+import { getGearSet, GearSetName, isGearSetName } from '../../constants/gearSets';
 import { getImplantData } from '../../constants/implants';
 import { BUFFS } from '../../constants/buffs';
 import { parseBuffEffects, isStackable } from '../calculators/buffParser';
@@ -1174,7 +1174,7 @@ export function buildEquipmentAbilities(
     for (const gearId of Object.values(ship.equipment ?? {})) {
         if (!gearId) continue;
         const piece = getGearPiece(gearId);
-        if (!piece?.setBonus) continue;
+        if (!piece?.setBonus || !isGearSetName(piece.setBonus)) continue;
         setCounts[piece.setBonus] = (setCounts[piece.setBonus] ?? 0) + 1;
     }
 

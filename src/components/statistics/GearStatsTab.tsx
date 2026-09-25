@@ -295,7 +295,7 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
     const setOptions = useMemo(() => {
         const options = new Set<GearSetName>();
         gearOnly.forEach((piece) => {
-            if (piece.setBonus) {
+            if (piece.setBonus && isGearSetName(piece.setBonus)) {
                 options.add(piece.setBonus);
             }
         });

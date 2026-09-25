@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { Ship } from '../types/ship';
 import { GearPiece } from '../types/gear';
-import { getGearSet, GearSetName } from '../constants/gearSets';
+import { getGearSet, GearSetName, isGearSetName } from '../constants/gearSets';
 
 // Helper type for the gear lookup
 export type GearLookup = Record<string, GearPiece | undefined>;
@@ -40,7 +40,7 @@ export const useGearSets = (
             (acc, gearId) => {
                 if (!gearId) return acc;
                 const gear = gearLookup[gearId];
-                if (!gear?.setBonus) return acc;
+                if (!gear?.setBonus || !isGearSetName(gear.setBonus)) return acc;
 
                 acc[gear.setBonus] = (acc[gear.setBonus] || 0) + 1;
                 return acc;
@@ -72,7 +72,7 @@ export function useOrphanSetPieces(ship: Ship, gearLookup: GearLookup): GearPiec
             if (!gearId) return;
 
             const gear = gearLookup[gearId];
-            if (!gear?.setBonus) return;
+            if (!gear?.setBonus || !isGearSetName(gear.setBonus)) return;
 
             // Count the piece
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;

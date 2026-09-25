@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { isEquipmentSlotName } from '../../constants/gearTypes';
 import type { Ship } from '../../types/ship';
 import type { GearPiece } from '../../types/gear';
 import type {
@@ -236,6 +237,12 @@ function availableInventoryForShip(
 
     return inventory
         .filter((gear) => {
+            // A stored piece can carry an unrecognised slot (see `GearPiece.slot`); it has nowhere
+            // to be equipped.
+            if (!isEquipmentSlotName(gear.slot)) {
+                return false;
+            }
+
             const isImplant = gear.slot.startsWith('implant_');
 
             // Always exclude ultimate implants from optimization

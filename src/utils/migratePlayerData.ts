@@ -17,6 +17,7 @@ import {
 } from '../services/userDataService';
 import { tryEncodeGearStats } from './gear/statsCodec';
 import { normaliseShipFields } from './ship/normaliseShipFields';
+import { normaliseGearFields } from './gear/normaliseGearFields';
 
 interface MigrationResult {
     ships: Ship[];
@@ -99,7 +100,9 @@ export const migratePlayerData = async (
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS).map(normaliseShipFields);
     // Gear is cached in IndexedDB, not localStorage; a player who has never
     // signed in holds it under the unscoped key.
-    const inventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(null))) ?? [];
+    const inventory: GearPiece[] = ((await getFromIndexedDB(inventoryCacheKey(null))) ?? []).map(
+        normaliseGearFields
+    );
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);

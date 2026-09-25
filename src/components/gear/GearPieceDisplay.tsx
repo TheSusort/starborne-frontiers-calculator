@@ -231,9 +231,9 @@ export const GearPieceDisplay = memo(
                             )}
                             <span className={`font-secondary`}>
                                 {isImplant
-                                    ? getImplantData(gear.setBonus)?.name
+                                    ? (getImplantData(gear.setBonus)?.name ?? gear.setBonus)
                                     : showSetName
-                                      ? getGearSet(gear.setBonus)?.name +
+                                      ? (getGearSet(gear.setBonus)?.name ?? gear.setBonus ?? '') +
                                         ' ' +
                                         getEquipmentSlotLabel(gear.slot)
                                       : getEquipmentSlotLabel(gear.slot)}

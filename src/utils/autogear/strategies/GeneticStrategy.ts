@@ -11,6 +11,7 @@ import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import {
     type EquipmentSlotName,
     type ImplantSlotName,
+    isEquipmentSlotName,
     isGearSlotName,
     isImplantSlotName,
 } from '../../../constants/gearTypes';
@@ -152,6 +153,7 @@ export class GeneticStrategy extends BaseStrategy implements AutogearStrategy {
 
         const inventoryBySlot: InventoryBySlot = new Map();
         for (const piece of availableInventory) {
+            if (!isEquipmentSlotName(piece.slot)) continue;
             const existing = inventoryBySlot.get(piece.slot);
             if (existing) existing.push(piece);
             else inventoryBySlot.set(piece.slot, [piece]);
