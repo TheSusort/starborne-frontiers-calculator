@@ -116,16 +116,26 @@ general mechanism. Until spec 2 there is no exception.
 ## Verification
 
 No local Supabase exists and the CLI is off-limits, so the check is a SQL-editor snippet the user
-runs after applying. `set_config(..., true)` scopes to the transaction; the `ROLLBACK` leaves nothing behind.
+runs after applying, as **two separate runs**: run 1 is expected to error, and an error stops the
+rest of a multi-statement run. `set_config(..., true)` scopes to the transaction, so nothing
+persists either way.
+
+Run 1 — must fail with `OAuth client tokens are read-only`:
 
 ```sql
 BEGIN;
--- 1. OAuth token, write: must raise "OAuth client tokens are read-only"
+-- 1. OAuth token, write
 SELECT set_config('request.jwt.claims', '{"sub":"x","role":"authenticated","client_id":"c"}', true),
        set_config('request.method', 'POST', true);
 SELECT public.check_request();
 ROLLBACK;
+```
 
+If the editor leaves the aborted transaction open, run `ROLLBACK;` on its own before run 2.
+
+Run 2 — must complete without error:
+
+```sql
 BEGIN;
 -- 2. OAuth token, read: must return without error
 SELECT set_config('request.jwt.claims', '{"sub":"x","role":"authenticated","client_id":"c"}', true),

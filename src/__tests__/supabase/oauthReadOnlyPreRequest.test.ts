@@ -44,7 +44,7 @@ describe('OAuth client tokens are read-only (pre-request hook)', () => {
         expect(reg).toBeDefined();
         const sql = code(reg!.sql);
         expect(sql).toMatch(
-            /alter\s+role\s+authenticator\s+set\s+pgrst\.db_pre_request\s*=\s*'public\.check_request'/i
+            /alter\s+role\s+authenticator\s+set\s+pgrst\.db_pre_request\s*(?:=|to)\s*'public\.check_request'/i
         );
         expect(sql).toMatch(/notify\s+pgrst\s*,\s*'reload config'/i);
     });
@@ -53,7 +53,9 @@ describe('OAuth client tokens are read-only (pre-request hook)', () => {
         for (const m of migrations) {
             const sql = code(m.sql);
             expect(sql, m.file).not.toMatch(/reset\s+pgrst\.db_pre_request/i);
-            const targets = [...sql.matchAll(/pgrst\.db_pre_request\s*=\s*'([^']+)'/gi)].map(
+            // RESET ALL clears every role setting, the hook included.
+            expect(sql, m.file).not.toMatch(/alter\s+role\s+authenticator\s+reset\s+all\b/i);
+            const targets = [...sql.matchAll(/pgrst\.db_pre_request\s*(?:=|to)\s*'([^']+)'/gi)].map(
                 (x) => x[1]
             );
             for (const t of targets) expect(t, m.file).toBe('public.check_request');
