@@ -2,12 +2,14 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { toolErrorMessage } from './errors';
 import { listGearSets, listImplants } from './tools/gear';
 import { getShip, searchShips } from './tools/ships';
+import { getShipSkills } from './tools/skills';
 import { McpToolError, defineTool, type McpToolContext, type RegisteredMcpTool } from './types';
 
 /** Every tool the MCP server offers. All of them only read. */
 export const TOOLS: readonly RegisteredMcpTool[] = [
     defineTool(searchShips),
     defineTool(getShip),
+    defineTool(getShipSkills),
     defineTool(listGearSets),
     defineTool(listImplants),
 ];

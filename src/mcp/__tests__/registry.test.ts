@@ -42,6 +42,7 @@ describe('registerTools', () => {
 
         expect(tools.map((tool) => tool.name).sort()).toEqual([
             'get_ship',
+            'get_ship_skills',
             'list_gear_sets',
             'list_implants',
             'search_ships',
