@@ -29,7 +29,7 @@ import { buildSkillBuffAutoFill, mergeAutoFill } from '../../utils/calculators/s
 import { gatedAutoFilledBuffs, GatedBuffsPageState } from '../../utils/calculators/gatedBuffs';
 import { buildShipAbilitiesWithEquipment } from '../../utils/abilities/buildShipAbilitiesWithEquipment';
 import { buildDefaultShipSkills } from '../../utils/abilities/configToSimInputs';
-import { asFactionKey } from '../../constants/factions';
+import { asFactionName } from '../../constants/factions';
 import { targetingOf } from '../../utils/calculators/shipTargeting';
 
 /** Engine stats + kit for a defender built from a real ship. Shared by the URL-param initial
@@ -70,7 +70,7 @@ const defenderFieldsFromShip = (
     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
     affinity: ship.affinity,
     role: ship.type,
-    faction: asFactionKey(ship.faction),
+    faction: asFactionName(ship.faction),
     // Player-side kit grants only — `enemyDebuffs` belong to the enemy roster, not the defender.
     buffs: buildSkillBuffAutoFill(ship).selfBuffs,
 });

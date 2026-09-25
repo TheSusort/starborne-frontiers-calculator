@@ -97,7 +97,7 @@ export function activeSquadLeaderEffects(
 export type SquadLeaderEffectTargeting<T> =
     { scope: 'allies'; recipients: T[] } | { scope: 'enemies'; gateMet: boolean };
 
-export function squadLeaderEffectTargeting<T extends { faction: FactionName }>(
+export function squadLeaderEffectTargeting<T extends { faction: string }>(
     effect: SquadLeaderEffect,
     leaderFaction: FactionName,
     own: readonly T[]

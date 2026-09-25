@@ -18,9 +18,7 @@ import {
 } from '../constants/gearTypes';
 import { Ship } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
-import { isShipTypeName, toShipTypeName } from '../constants/shipTypes';
-import { toRarityName } from '../constants/rarities';
-import { toAffinityName } from '../constants/affinities';
+import { normaliseShipFields, normaliseShipIdentity } from '../utils/ship/normaliseShipFields';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -106,8 +104,9 @@ interface RawShipData {
     id: string;
     name: string;
     // Raw Supabase columns, typed as what the database actually holds and narrowed by
-    // `transformShipData` (`toRarityName` / `toShipTypeName` / `toAffinityName`). `faction` stays
-    // `string` because `FactionName` is `string`; narrow through `asFactionKey` if needed.
+    // `transformShipData` via the shared `normaliseShipIdentity`. `faction` stays `string` — the
+    // honest type of `Ship.faction` — and is narrowed through `asFactionName` / `getFaction` at
+    // read time rather than here, so an unrecognised faction is never dropped.
     rarity: string;
     faction: string;
     type: string;
@@ -228,24 +227,16 @@ const transformShipData = (data: RawShipData): Ship | null => {
             }
         };
 
-        // See `toShipTypeName` — this fallback changes autogear's scoring formula, so it is
-        // never silent.
-        if (!isShipTypeName(data.type.toUpperCase())) {
-            console.warn(
-                `Ship "${data.name}" (${data.id}) has an unrecognised type "${data.type}"; ` +
-                    `defaulting to ATTACKER. Its autogear scoring is wrong until the stored ` +
-                    `type is corrected.`
-            );
-        }
+        // See `normaliseShipIdentity` — the one place rarity/type/affinity get coerced (#568).
+        const normalised = normaliseShipIdentity(data);
 
         const ship: Ship = {
             id: data.id,
             name: data.name,
-            // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
-            rarity: toRarityName(data.rarity),
+            rarity: normalised.rarity,
             faction: data.faction,
-            type: toShipTypeName(data.type),
-            affinity: toAffinityName(data.affinity),
+            type: normalised.type,
+            affinity: normalised.affinity,
             copies: data.copies || 1,
             rank: data.rank,
             level: data.level,
@@ -333,6 +324,15 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         defaultValue: [],
     });
 
+    // `useStorage` casts parsed JSON straight to `Ship[]` with no runtime check — see
+    // `normaliseShipFields` for what a stored ship can carry. Normalised on every read rather
+    // than written back: it's idempotent, so nothing drifts by leaving storage as-is until a
+    // writer (e.g. `commitShips`) persists the normalised value anyway (#568).
+    const normalisedStorageShips = useMemo(
+        () => storageShips.map(normaliseShipFields),
+        [storageShips]
+    );
+
     // A writer's full commit: local state, ref and persisted storage together, so no call site
     // can update one without the others.
     const commitShips = useCallback(
@@ -358,18 +358,20 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     // Synchronize local state with storage, enriching skill text from templates for unauthenticated users
     useEffect(() => {
-        if (!storageShips) return;
+        if (!normalisedStorageShips) return;
 
         // Authenticated path: loadShips() handles enrichment via the ship_templates join
         if (activeProfileId) {
-            setShips(storageShips);
+            setShips(normalisedStorageShips);
             return;
         }
 
         // Unauthenticated path: fetch skill text from ship_templates for ships that are missing it
-        const shipsNeedingText = storageShips.filter((s) => !s.activeSkillText || !s.activeTarget);
+        const shipsNeedingText = normalisedStorageShips.filter(
+            (s) => !s.activeSkillText || !s.activeTarget
+        );
         if (shipsNeedingText.length === 0) {
-            setShips(storageShips);
+            setShips(normalisedStorageShips);
             return;
         }
 
@@ -385,12 +387,12 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             .then(({ data }) => {
                 if (controller.signal.aborted) return;
                 if (!data) {
-                    setShips(storageShips);
+                    setShips(normalisedStorageShips);
                     return;
                 }
                 const templateMap = new Map(data.map((t) => [t.name, t]));
                 setShips(
-                    storageShips.map((ship) => {
+                    normalisedStorageShips.map((ship) => {
                         // Outer filter casts a wide net (missing text OR targeting);
                         // skip only ships that already have both.
                         if (ship.activeSkillText && ship.activeTarget) return ship;
@@ -419,7 +421,7 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return () => {
             controller.abort();
         };
-    }, [storageShips, activeProfileId, setShips]);
+    }, [normalisedStorageShips, activeProfileId, setShips]);
 
     const loadShips = useCallback(async () => {
         // Skip loading if we're in the middle of migration

@@ -8,7 +8,7 @@ import {
 } from '../../types/abilities';
 import { matchesRoleCategory } from '../../constants/shipTypes';
 import type { ShipTypeName, ShipRoleCategory } from '../../constants/shipTypes';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import {
     DoTType,
     EnemyBaseClass,
@@ -1868,7 +1868,7 @@ export interface IntentExecContext {
      *  to its own side's matching allies with no mirrored branch. `undefined` for an actor whose
      *  faction is unknown, which NEVER matches a filter (conservative). Absent entirely (unit-test
      *  ctx / no factions supplied) → no faction narrowing at all. */
-    factionOf?: (id: string) => FactionKey | undefined;
+    factionOf?: (id: string) => FactionName | undefined;
     /** The `'lowest-hp-ally'` selector, resolved by the ENGINE (it owns live HP and
      *  buff-aware max HP) over the OWNER's OWN side — the lowest currentHp/maxHp living same-side
      *  ally, owner EXCLUDED, ties broken by source order. `undefined` means NO recipient (the

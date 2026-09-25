@@ -19,7 +19,7 @@ const args = {
     name: 'My Setup',
     playerBoard,
     enemyBoard,
-    playerSquadLeader: { faction: 'TERRAN', name: 'Someone', stage: 2 } as const,
+    playerSquadLeader: { faction: 'TERRAN_COMBINE', name: 'Someone', stage: 2 } as const,
     enemySquadLeader: undefined,
     seed: 424242,
     runCount: 20,
@@ -42,7 +42,11 @@ describe('serializeSetup', () => {
             shipId: 'template:tmpl-1:refitted',
             overrides: { hp: 9000 },
         });
-        expect(setup.playerSquadLeader).toEqual({ faction: 'TERRAN', name: 'Someone', stage: 2 });
+        expect(setup.playerSquadLeader).toEqual({
+            faction: 'TERRAN_COMBINE',
+            name: 'Someone',
+            stage: 2,
+        });
         expect(setup.enemySquadLeader).toBeUndefined();
     });
 
@@ -63,7 +67,11 @@ describe('deserializeSetup', () => {
         expect(result.enemyBoard.T4).toEqual({ ship: reference, overrides: { hp: 9000 } });
         expect(result.seed).toBe(424242);
         expect(result.runCount).toBe(20);
-        expect(result.playerSquadLeader).toEqual({ faction: 'TERRAN', name: 'Someone', stage: 2 });
+        expect(result.playerSquadLeader).toEqual({
+            faction: 'TERRAN_COMBINE',
+            name: 'Someone',
+            stage: 2,
+        });
     });
 
     it('drops a cell whose ship id no longer resolves and reports it, keeping the rest', () => {

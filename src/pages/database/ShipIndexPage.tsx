@@ -12,6 +12,7 @@ import { useShipComparison } from '../../hooks/useShipComparison';
 import {
     SHIP_TYPES,
     FACTIONS,
+    getFaction,
     factionMatchesSearch,
     RARITY_ORDER,
     RARITIES,
@@ -310,15 +311,15 @@ export const ShipIndexPage: React.FC = () => {
                         ? SHIP_TYPES[a.type].name.localeCompare(SHIP_TYPES[b.type].name)
                         : SHIP_TYPES[b.type].name.localeCompare(SHIP_TYPES[a.type].name);
                 case 'faction':
-                    // `FACTIONS[ship.faction]` can be undefined for a faction the catalogue
-                    // doesn't recognise (`FactionName` is unvalidated `string`) — fall back to
-                    // the raw value rather than indexing `.name` on `undefined`.
+                    // `getFaction` returns undefined for a faction the catalogue doesn't
+                    // recognise (`Ship.faction` is unvalidated `string`) — fall back to the raw
+                    // value rather than indexing `.name` on `undefined`.
                     return state.sort.direction === 'asc'
-                        ? (FACTIONS[a.faction]?.name ?? a.faction).localeCompare(
-                              FACTIONS[b.faction]?.name ?? b.faction
+                        ? (getFaction(a.faction)?.name ?? a.faction).localeCompare(
+                              getFaction(b.faction)?.name ?? b.faction
                           )
-                        : (FACTIONS[b.faction]?.name ?? b.faction).localeCompare(
-                              FACTIONS[a.faction]?.name ?? a.faction
+                        : (getFaction(b.faction)?.name ?? b.faction).localeCompare(
+                              getFaction(a.faction)?.name ?? a.faction
                           );
                 case 'rarity':
                     return state.sort.direction === 'asc'

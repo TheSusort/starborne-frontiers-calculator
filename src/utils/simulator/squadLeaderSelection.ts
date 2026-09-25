@@ -13,6 +13,7 @@
  * (whose pass throws on unknown leaders).
  */
 import { SQUAD_LEADERS } from '../../constants/squadLeaders';
+import { asFactionName } from '../../constants/factions';
 import type { SquadLeaderSelection } from '../combat/preFight';
 
 /** localStorage keys, one per board side. */
@@ -35,9 +36,11 @@ export function parseSquadLeaderSelection(raw: string | null): SquadLeaderSelect
     const { faction, name, stage } = parsed as Record<string, unknown>;
     if (typeof faction !== 'string' || typeof name !== 'string') return undefined;
     if (stage !== 1 && stage !== 2 && stage !== 3) return undefined;
-    const leaders = SQUAD_LEADERS[faction];
+    const key = asFactionName(faction);
+    if (key === undefined) return undefined;
+    const leaders = SQUAD_LEADERS[key];
     if (!leaders?.some((leader) => leader.name === name)) return undefined;
-    return { faction, name, stage };
+    return { faction: key, name, stage };
 }
 
 /** Read + validate the stored selection for a key. Never throws (storage may be

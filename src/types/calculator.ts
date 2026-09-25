@@ -1,5 +1,5 @@
 import type { ShipTypeName } from '../constants/shipTypes';
-import type { FactionKey } from '../constants/factions';
+import type { FactionName } from '../constants/factions';
 import type { ParsedTarget, ParsedPattern } from '../utils/targetingParser';
 import { AffinityName } from './ship';
 import type { Condition, ShipSkills } from './abilities';
@@ -216,7 +216,7 @@ export interface DPSShipConfig {
      *  `DPSSimulationInput.faction` for faction-scoped ally grants (Fuying's "grants Tianchen
      *  allies Stealth"). Absent for a manual config → unknown faction → never matches a faction
      *  filter (conservative, mirroring `TeamShipConfig.faction`'s contract). */
-    faction?: FactionKey;
+    faction?: FactionName;
 }
 
 export type DPSShipConfigUpdateableField =
@@ -291,7 +291,7 @@ export interface DefenseShipConfig {
     position?: Position;
     affinity?: AffinityName;
     role?: ShipTypeName;
-    faction?: FactionKey;
+    faction?: FactionName;
 }
 
 /** A healer config for the engine-backed Healing Calculator. Mirrors DPSShipConfig but
@@ -379,7 +379,7 @@ export interface TeamShipConfig {
     /** #363: ship faction — auto-filled on ship pick, threaded to TeamActorInput.faction for
      *  faction-scoped ally grants (Fuying's "grants Tianchen allies Stealth"). Absent for manual
      *  slots → unknown faction → never matches a faction filter (conservative). */
-    faction?: FactionKey;
+    faction?: FactionName;
 }
 
 /** A team ship as a real combat actor (Phase 2). Buff lists are the existing
@@ -429,5 +429,5 @@ export interface TeamActorInput {
      *  Stealth" → `Ability.factionFilter`, intersected in `resolveSupportRecipients`). Auto-filled
      *  from ship data in the team sim; absent → unknown faction → this actor never receives a
      *  faction-scoped grant (conservative, mirroring `role`'s contract). */
-    faction?: FactionKey;
+    faction?: FactionName;
 }

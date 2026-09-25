@@ -1,5 +1,5 @@
 import { Ability, IncomingCondition, IncomingHitContext } from '../../types/abilities';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import { resolveSupportRecipients } from './supportRecipients';
 
 /**
@@ -38,7 +38,7 @@ export function allyScopedIncomingRecipients(args: {
     livingSameSideIds: string[];
     /** Living ally ids on the owner's active support footprint; `undefined` → do not narrow. */
     footprintAllyIds: string[] | undefined;
-    factionOf: (id: string) => FactionKey | undefined;
+    factionOf: (id: string) => FactionName | undefined;
 }): string[] {
     const { ability, ownerId, livingSameSideIds, footprintAllyIds, factionOf } = args;
     return resolveSupportRecipients({

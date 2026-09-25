@@ -5,11 +5,9 @@ import { usePersistedFilters } from '../../hooks/usePersistedFilters';
 import Seo from '../../components/seo/Seo';
 import { SEO_CONFIG } from '../../constants/seo';
 import { SQUAD_LEADERS } from '../../constants/squadLeaders';
-import { FACTIONS } from '../../constants/factions';
+import { FACTIONS, FACTION_NAMES } from '../../constants/factions';
 import { RARITIES } from '../../constants/rarities';
 import { SquadLeaderCard } from '../../components/squadLeaders/SquadLeaderCard';
-
-const FACTION_KEYS = Object.keys(SQUAD_LEADERS);
 
 // Rarity filter options, legendary-first to match the rest of the app.
 const RARITY_OPTIONS = (['legendary', 'epic', 'rare'] as const).map((r) => ({
@@ -40,7 +38,7 @@ export const SquadLeadersPage: React.FC = () => {
             label: 'Faction',
             values: selectedFactions,
             onChange: setSelectedFactions,
-            options: FACTION_KEYS.map((key) => ({ value: key, label: FACTIONS[key].name })),
+            options: FACTION_NAMES.map((key) => ({ value: key, label: FACTIONS[key].name })),
         },
         {
             id: 'rarity',
@@ -53,7 +51,7 @@ export const SquadLeadersPage: React.FC = () => {
 
     const groups = useMemo(() => {
         const query = searchQuery.toLowerCase();
-        return FACTION_KEYS.filter(
+        return FACTION_NAMES.filter(
             (key) => selectedFactions.length === 0 || selectedFactions.includes(key)
         )
             .map((key) => {

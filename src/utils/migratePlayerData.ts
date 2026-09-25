@@ -16,6 +16,7 @@ import {
     pruneEngineeringStatsNotNamed,
 } from '../services/userDataService';
 import { tryEncodeGearStats } from './gear/statsCodec';
+import { normaliseShipFields } from './ship/normaliseShipFields';
 
 interface MigrationResult {
     ships: Ship[];
@@ -94,8 +95,8 @@ export const migratePlayerData = async (
         }
     };
 
-    // Load all relevant data
-    const ships = loadLocalData<Ship[]>(StorageKey.SHIPS);
+    // Load all relevant data. See `normaliseShipFields` — a stored ship is a trust boundary (#568).
+    const ships = loadLocalData<Ship[]>(StorageKey.SHIPS).map(normaliseShipFields);
     // Gear is cached in IndexedDB, not localStorage; a player who has never
     // signed in holds it under the unscoped key.
     const inventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(null))) ?? [];

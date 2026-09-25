@@ -10,7 +10,7 @@ import {
 } from '../../types/calculator';
 import { Ability, ShipSkills, Skill } from '../../types/abilities';
 import type { AffinityName } from '../../types/ship';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import type { ParsedPattern } from '../targetingParser';
 import type { ConditionContext } from '../abilities/evaluateConditions';
 import {
@@ -941,7 +941,7 @@ export interface PlayerTurnArgs {
      *  an actor whose faction the caller never supplied — an unknown faction NEVER matches a
      *  filter (conservative, mirroring `roleOf`/`matchesRoleCategory`). Absent entirely
      *  (standalone/unit-test callers, single-ship DPS) → no faction narrowing at all. */
-    factionOf?: (id: string) => FactionKey | undefined;
+    factionOf?: (id: string) => FactionName | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -1737,7 +1737,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
         // source ability at registration — see engine.ts's `registerActorAbilityStatuses`),
         // because by application time the ability itself is no longer in scope there. When both
         // are supplied the explicit one wins; in practice exactly one is ever present.
-        factionFilter?: FactionKey[]
+        factionFilter?: FactionName[]
     ): string[] =>
         resolveSupportRecipients({
             target,

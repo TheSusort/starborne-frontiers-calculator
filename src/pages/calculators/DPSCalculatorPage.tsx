@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
-import { asFactionKey } from '../../constants/factions';
+import { asFactionName } from '../../constants/factions';
 import { computeAffinityModifiers } from '../../utils/calculators/affinityUtils';
 import {
     DPSShipConfig,
@@ -358,11 +358,11 @@ const DPSCalculatorPage: React.FC = () => {
                             position: DEFAULT_ENEMY_SLOT,
                             affinity: enemyAffinity,
                             // #363 follow-up: the enemy's own faction, mirroring how the healing
-                            // page threads an enemy's faction (`asFactionKey(enemyShip?.faction)`)
+                            // page threads an enemy's faction (`asFactionName(enemyShip?.faction)`)
                             // — without this an enemy-side Fuying grants Stealth to nobody on her
                             // own (enemy) team. `enemyShip` is the picked-ship state; a manual
                             // enemy (no ship picked) stays unknown-faction.
-                            faction: asFactionKey(enemyShip?.faction),
+                            faction: asFactionName(enemyShip?.faction),
                         },
                     ],
                 })
@@ -485,7 +485,7 @@ const DPSCalculatorPage: React.FC = () => {
                     // #363 follow-up: thread the picked ship's faction for faction-scoped ally
                     // grants (Fuying's "grants Tianchen allies Stealth") — mirrors the healing
                     // page's selectShipForConfig/selectShipForTeamSlot.
-                    faction: asFactionKey(ship.faction),
+                    faction: asFactionName(ship.faction),
                     shipSkills: buildShipAbilitiesWithEquipment(ship, getGearPiece),
                 };
             })
@@ -548,7 +548,7 @@ const DPSCalculatorPage: React.FC = () => {
                     // #363 follow-up: thread the picked ship's faction — see selectShipForConfig's
                     // comment. TeamShipConfig.faction already existed on the type; this is the
                     // wiring that was missing on the DPS page.
-                    faction: asFactionKey(ship.faction),
+                    faction: asFactionName(ship.faction),
                     // Walked skills supersede auto-fill stamping; clear any prior auto-filled
                     // entries while preserving the user's manual extras.
                     buffs: t.buffs.filter((b) => !b.autoFilled),

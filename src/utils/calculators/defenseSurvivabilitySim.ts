@@ -2,7 +2,7 @@ import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import type { Position } from '../../types/encounters';
 import type { ShipTargeting } from '../targetingParser';
 import type { CombatEventBus } from '../combat/events';
@@ -32,7 +32,7 @@ export interface DefenseSimulationInput {
     startCharged: boolean;
     affinity?: AffinityName;
     role?: ShipTypeName;
-    faction?: FactionKey;
+    faction?: FactionName;
     position?: Position;
     targeting?: ShipTargeting;
     /** Optional supporting allies (healers, protectors). */

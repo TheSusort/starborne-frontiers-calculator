@@ -1,16 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import {
     FACTIONS,
-    FACTION_KEYS,
+    FACTION_NAMES,
     factionMatchesSearch,
     factionSpellings,
-    type FactionKey,
+    asFactionName,
+    getFaction,
+    type FactionName,
 } from '../factions';
 
-describe('FactionKey', () => {
+describe('FactionName', () => {
     it('is a literal union covering exactly the FACTIONS keys', () => {
         // A `satisfies`-checked exhaustive map: adding a faction to FACTIONS without adding it
-        // here is a tsc error, which is the compile-time guard FactionName never gave us.
+        // here is a tsc error — an independent tripwire from the union check itself, since it
+        // forces this hand-written list to stay in lock-step with FACTIONS' keys.
         const everyKey = {
             ATLAS_SYNDICATE: true,
             BINDERBURG: true,
@@ -22,18 +25,18 @@ describe('FactionKey', () => {
             TERRAN_COMBINE: true,
             TIANCHAO: true,
             XAOC: true,
-        } satisfies Record<FactionKey, true>;
+        } satisfies Record<FactionName, true>;
         expect(Object.keys(everyKey).sort()).toEqual(Object.keys(FACTIONS).sort());
     });
 
     it('exposes the keys at runtime for the same set', () => {
-        expect([...FACTION_KEYS].sort()).toEqual(Object.keys(FACTIONS).sort());
+        expect([...FACTION_NAMES].sort()).toEqual(Object.keys(FACTIONS).sort());
     });
 });
 
 describe('factionSpellings', () => {
     it('leads with the display name', () => {
-        for (const key of FACTION_KEYS) {
+        for (const key of FACTION_NAMES) {
             expect(factionSpellings(key)[0]).toBe(FACTIONS[key].name);
         }
     });
@@ -45,6 +48,34 @@ describe('factionSpellings', () => {
 
     it('is just the name for a faction with no aliases', () => {
         expect(factionSpellings('XAOC')).toEqual(['XAOC']);
+    });
+});
+
+describe('asFactionName', () => {
+    it('narrows a known key to itself', () => {
+        expect(asFactionName('XAOC')).toBe('XAOC');
+    });
+
+    it('returns undefined for an unrecognised faction string', () => {
+        expect(asFactionName('NOT_A_FACTION')).toBeUndefined();
+    });
+
+    it('returns undefined for undefined', () => {
+        expect(asFactionName(undefined)).toBeUndefined();
+    });
+});
+
+describe('getFaction', () => {
+    it('looks up a known key', () => {
+        expect(getFaction('XAOC')).toBe(FACTIONS.XAOC);
+    });
+
+    it('returns undefined for an unrecognised faction string — the caller shows the raw string', () => {
+        expect(getFaction('NOT_A_FACTION')).toBeUndefined();
+    });
+
+    it('returns undefined for undefined', () => {
+        expect(getFaction(undefined)).toBeUndefined();
     });
 });
 

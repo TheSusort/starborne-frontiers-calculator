@@ -10,7 +10,7 @@ import {
 import { GearPiece } from '../../types/gear';
 import { useInventory } from '../../contexts/InventoryProvider';
 import {
-    FACTIONS,
+    getFaction,
     factionMatchesSearch,
     GearSlotName,
     RARITIES,
@@ -34,6 +34,11 @@ import { ShipComparisonPanel } from './ShipComparisonPanel';
 import { ShipCard } from './ShipCard';
 
 const ITEMS_PER_PAGE = 48;
+
+/** Compares two raw `Ship.faction` strings by display name, falling back to the raw string for
+ *  a faction `getFaction` doesn't recognise rather than sorting it out of the list. */
+const compareFactionNames = (a: string, b: string): number =>
+    (getFaction(a)?.name ?? a).localeCompare(getFaction(b)?.name ?? b);
 
 const RARITY_POWER: Record<string, number> = {
     common: 1,
@@ -248,8 +253,8 @@ export const ShipInventory: React.FC<Props> = ({
                         : SHIP_TYPES[b.type]?.name.localeCompare(SHIP_TYPES[a.type]?.name);
                 case 'faction':
                     return state.sort.direction === 'asc'
-                        ? FACTIONS[a.faction]?.name.localeCompare(FACTIONS[b.faction]?.name)
-                        : FACTIONS[b.faction]?.name.localeCompare(FACTIONS[a.faction]?.name);
+                        ? compareFactionNames(a.faction, b.faction)
+                        : compareFactionNames(b.faction, a.faction);
                 case 'rarity':
                     return state.sort.direction === 'asc'
                         ? RARITY_ORDER.indexOf(b.rarity) - RARITY_ORDER.indexOf(a.rarity)
@@ -315,9 +320,7 @@ export const ShipInventory: React.FC<Props> = ({
 
     const uniqueFactions = useMemo(() => {
         const factions = new Set(ships.map((ship) => ship.faction));
-        return Array.from(factions).sort((a, b) =>
-            FACTIONS[a]?.name.localeCompare(FACTIONS[b]?.name)
-        );
+        return Array.from(factions).sort(compareFactionNames);
     }, [ships]);
 
     const uniqueShipTypes = useMemo(() => {
@@ -359,7 +362,7 @@ export const ShipInventory: React.FC<Props> = ({
             onChange: setSelectedFactions,
             options: uniqueFactions.map((faction) => ({
                 value: faction,
-                label: FACTIONS[faction]?.name,
+                label: getFaction(faction)?.name ?? faction,
             })),
         },
         {

@@ -1,14 +1,9 @@
 import type { Faction } from '../types/ship';
 
-// The object literal is bound WITHOUT a `Record<string, Faction>` annotation so `keyof typeof`
-// yields a real literal union. `FACTIONS` below re-exports it under the loose type that the 15
-// existing `FACTIONS[someString]` call sites (SquadLeaderPicker, ArenaModifiersTab, ShipInventory,
-// ShipSelector, ShipIndexPage, …) rely on, so none of them move.
-//
-// Do NOT annotate FACTION_DEFS — an explicit `Record<string, Faction>` is exactly what made
-// `FactionName` widen to `string` (same defect class as STAT_NORMALIZERS, #295). `satisfies`
-// gives the shape check without collapsing the keys.
-const FACTION_DEFS = {
+// No wide annotation on this object literal — an explicit `Record<string, Faction>` here would
+// collapse `keyof typeof FACTIONS` to `string`, the same defect class as STAT_NORMALIZERS (#295)
+// and RARITIES pre-#564. `satisfies` gives the shape check without widening the keys.
+export const FACTIONS = {
     ATLAS_SYNDICATE: {
         name: 'Atlas Syndicate',
         iconUrl: 'https://cdn.discordapp.com/emojis/1133426145023492116.webp',
@@ -57,14 +52,14 @@ const FACTION_DEFS = {
     },
 } satisfies Record<string, Faction>;
 
-export const FACTIONS: Record<string, Faction> = FACTION_DEFS;
+/** A real literal union of the faction keys. Use this anywhere a typo must be a compile error —
+ *  e.g. `Ability.factionFilter` — and narrow with `asFactionName` at a trust boundary. Loose
+ *  stored faction data (`Ship.faction`) is `string`, NOT this type: an unrecognised faction
+ *  (a new game faction, a legacy spelling) is kept raw rather than dropped or rewritten. */
+export type FactionName = keyof typeof FACTIONS;
 
-/** A real literal union of the faction keys. Prefer this over `FactionName` (which is `string`)
- *  anywhere a typo must be a compile error — e.g. `Ability.factionFilter`. */
-export type FactionKey = keyof typeof FACTION_DEFS;
-
-/** Runtime companion to `FactionKey`, for validation at trust boundaries. */
-export const FACTION_KEYS = Object.keys(FACTION_DEFS) as readonly FactionKey[];
+/** Runtime companion to `FactionName`, for validation at trust boundaries. */
+export const FACTION_NAMES = Object.keys(FACTIONS) as readonly FactionName[];
 
 /**
  * Every spelling a faction is known by — the display `name` first, then its `aliases`.
@@ -79,8 +74,8 @@ export const FACTION_KEYS = Object.keys(FACTION_DEFS) as readonly FactionKey[];
  * Display — labels, sort keys, icon alt text — reads `name` directly and must NOT come through
  * here; a faction shows one name in the UI.
  */
-export function factionSpellings(key: FactionKey): readonly string[] {
-    const def: Faction = FACTION_DEFS[key];
+export function factionSpellings(key: FactionName): readonly string[] {
+    const def: Faction = FACTIONS[key];
     return def.aliases ? [def.name, ...def.aliases] : [def.name];
 }
 
@@ -90,26 +85,32 @@ export function factionSpellings(key: FactionKey): readonly string[] {
  * matches nothing.
  */
 export function factionMatchesSearch(faction: string | undefined, query: string): boolean {
-    const key = asFactionKey(faction);
+    const key = asFactionName(faction);
     if (key === undefined) return false;
     const q = query.toLowerCase();
     return factionSpellings(key).some((spelling) => spelling.toLowerCase().includes(q));
 }
 
 /**
- * Narrows a loose faction string (`Ship.faction`, which is `FactionName` = `string`) to a real
- * `FactionKey`, or `undefined` when it names no known faction.
+ * Narrows a loose faction string (`Ship.faction`, which is `string`) to a real `FactionName`, or
+ * `undefined` when it names no known faction.
  *
  * #363: the boundary where imported/stored ship data becomes engine input. An unrecognised value
  * must NOT be cast through — a `factionFilter` treats an unknown faction as "never matches", so a
  * blind cast would silently produce a scope that reaches nobody instead of an honest "unknown".
  */
-export function asFactionKey(faction: string | undefined): FactionKey | undefined {
-    return faction !== undefined && (FACTION_KEYS as readonly string[]).includes(faction)
-        ? (faction as FactionKey)
+export function asFactionName(faction: string | undefined): FactionName | undefined {
+    return faction !== undefined && (FACTION_NAMES as readonly string[]).includes(faction)
+        ? (faction as FactionName)
         : undefined;
 }
 
-// Unchanged, and deliberately not migrated by this task: `FactionName` is `string` because
-// FACTIONS is annotated. Its existing consumers keep working exactly as before.
-export type FactionName = keyof typeof FACTIONS;
+/**
+ * Looks up a faction's display data from a loose string without widening `FACTIONS`' key type
+ * back to `string`. Returns `undefined` for anything outside the known set — a caller shows the
+ * raw faction string as the name and omits the icon rather than treating this as an error.
+ */
+export function getFaction(faction: string | undefined): Faction | undefined {
+    const key = asFactionName(faction);
+    return key ? FACTIONS[key] : undefined;
+}

@@ -12,7 +12,7 @@ import {
 } from '../../types/abilities';
 import { DoTType, ParsedBuffEffects, SelectedGameBuff } from '../../types/calculator';
 import { ShipRoleCategory } from '../../constants/shipTypes';
-import { FACTIONS, FACTION_KEYS, type FactionKey } from '../../constants/factions';
+import { FACTIONS, FACTION_NAMES, type FactionName } from '../../constants/factions';
 import { Select } from '../ui/Select';
 import { Input } from '../ui/Input';
 import { Checkbox } from '../ui/Checkbox';
@@ -164,11 +164,13 @@ const ROLE_FILTER_OPTIONS: { value: ShipRoleCategory; label: string }[] = [
 ];
 
 // #363: recipient FACTION scope options for an ally-scoped grant ("grants Tianchen allies
-// Stealth"). Derived from FACTION_KEYS so a new faction cannot be forgotten here.
-const FACTION_FILTER_OPTIONS: { value: FactionKey; label: string }[] = FACTION_KEYS.map((key) => ({
-    value: key,
-    label: FACTIONS[key].name,
-}));
+// Stealth"). Derived from FACTION_NAMES so a new faction cannot be forgotten here.
+const FACTION_FILTER_OPTIONS: { value: FactionName; label: string }[] = FACTION_NAMES.map(
+    (key) => ({
+        value: key,
+        label: FACTIONS[key].name,
+    })
+);
 
 const PRE_COMBAT_STAT_OPTIONS: { value: 'hp' | 'attack' | 'crit' | 'hacking'; label: string }[] = [
     { value: 'hp', label: 'HP' },
@@ -1189,7 +1191,7 @@ export const AbilityCard: React.FC<Props> = ({
                             const { factionFilter: _removed, ...rest } = ability;
                             onChange(rest);
                         } else {
-                            onChange({ ...ability, factionFilter: values as FactionKey[] });
+                            onChange({ ...ability, factionFilter: values as FactionName[] });
                         }
                     }}
                 />

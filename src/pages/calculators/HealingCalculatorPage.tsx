@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { PageLayout } from '../../components/ui';
 import { Ship, AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import { asFactionKey, type FactionKey } from '../../constants/factions';
+import { asFactionName, type FactionName } from '../../constants/factions';
 import {
     HealerShipConfig,
     HealerShipConfigUpdateableField,
@@ -173,7 +173,7 @@ const HealingCalculatorPage: React.FC = () => {
     // #363: selected heal-target ship's faction (explicit-target case). Decides whether a
     // faction-scoped ally grant reaches it (Fuying's "grants Tianchen allies Stealth"). Undefined
     // → no ship picked → unknown faction → never a recipient of one (conservative).
-    const [targetFaction, setTargetFaction] = useState<FactionKey | undefined>(undefined);
+    const [targetFaction, setTargetFaction] = useState<FactionName | undefined>(undefined);
     const [targetCombatStats, setTargetCombatStats] = useState<CombatStatBlock | undefined>(
         undefined
     );
@@ -287,7 +287,7 @@ const HealingCalculatorPage: React.FC = () => {
         setTargetStartCharged(detectShipCharged(ship));
         setTargetAffinity(ship.affinity);
         setTargetRole(ship.type);
-        setTargetFaction(asFactionKey(ship.faction));
+        setTargetFaction(asFactionName(ship.faction));
         setTargetCombatStats({
             attack: Math.round(final.attack ?? 0),
             crit: Math.round(final.crit ?? 0),
@@ -373,7 +373,7 @@ const HealingCalculatorPage: React.FC = () => {
             // #363: the healer's own faction — decides whether its OWN faction-scoped grant can
             // reach it, and (as the focus actor) seeds the engine's actor→faction map.
             const healerFaction = config.shipId
-                ? asFactionKey(getShipById(config.shipId)?.faction)
+                ? asFactionName(getShipById(config.shipId)?.faction)
                 : undefined;
             // The heal target's security drives each enemy's inbound debuff landing chance
             // (enemy hacking − security). Self-heal uses the healer config's own security

@@ -1,5 +1,5 @@
 import type { AbilityTarget, RecipientFilter } from '../../types/abilities';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import { matchesRoleCategory, type ShipTypeName } from '../../constants/shipTypes';
 import type { CombatActor } from './state';
 
@@ -16,11 +16,11 @@ export function resolveSupportRecipients(args: {
     baseRecipients: string[];
     footprintAllyIds?: string[];
     /** #363: intersect with recipients of these factions. Absent (or empty) → no narrowing. */
-    factionFilter?: FactionKey[];
+    factionFilter?: FactionName[];
     /** Actor id → faction. `undefined` for an actor whose faction is unknown, which NEVER
      *  matches a filter (conservative). Absent reader + present filter → nobody matches, which
      *  is the same conservative answer. */
-    factionOf?: (id: string) => FactionKey | undefined;
+    factionOf?: (id: string) => FactionName | undefined;
 }): string[] {
     // A named single-recipient selector is resolved by the CALLER (it needs live HP, which
     // this helper has no access to) via `lowestHpAllyRecipients` below, and the caller USES that
@@ -81,11 +81,11 @@ export function resolveSupportRecipients(args: {
  */
 export function narrowByFaction(
     ids: string[],
-    factionFilter: FactionKey[] | undefined,
-    factionOf: ((id: string) => FactionKey | undefined) | undefined
+    factionFilter: FactionName[] | undefined,
+    factionOf: ((id: string) => FactionName | undefined) | undefined
 ): string[] {
     if (!factionFilter || factionFilter.length === 0) return ids;
-    const wanted = new Set<FactionKey>(factionFilter);
+    const wanted = new Set<FactionName>(factionFilter);
     return ids.filter((id) => {
         const f = factionOf?.(id);
         return f !== undefined && wanted.has(f);

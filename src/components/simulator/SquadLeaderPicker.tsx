@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { Select } from '../ui/Select';
-import { FACTIONS } from '../../constants/factions';
+import { FACTION_NAMES, getFaction, asFactionName } from '../../constants/factions';
 import { RARITIES } from '../../constants/rarities';
 import { SQUAD_LEADERS, SquadLeaderEffect } from '../../constants/squadLeaders';
 import {
@@ -20,7 +20,7 @@ const STAGE_OPTIONS = STAGE_LABELS.map((label, i) => ({ value: String(i + 1), la
  *  only stage where legendary enemy debuffs exist, so the preview shows the full kit). */
 const DEFAULT_STAGE = 3;
 
-const factionLabel = (faction: string): string => FACTIONS[faction]?.name ?? faction;
+const factionLabel = (faction: string): string => getFaction(faction)?.name ?? faction;
 
 interface PreviewLine {
     effect: SquadLeaderEffect;
@@ -55,7 +55,7 @@ const SquadLeaderPicker: React.FC<Props> = ({ side, selection, onChange, board }
 
     const factionOptions = useMemo(
         () =>
-            Object.keys(SQUAD_LEADERS).map((faction) => ({
+            FACTION_NAMES.map((faction) => ({
                 value: faction,
                 label: factionLabel(faction),
             })),
@@ -71,18 +71,19 @@ const SquadLeaderPicker: React.FC<Props> = ({ side, selection, onChange, board }
     }, [selection]);
 
     const handleFactionChange = (faction: string) => {
-        if (!faction) {
+        const key = asFactionName(faction);
+        if (!key) {
             onChange(undefined);
             return;
         }
-        const leaders = SQUAD_LEADERS[faction];
+        const leaders = SQUAD_LEADERS[key];
         if (!leaders || leaders.length === 0) {
             onChange(undefined);
             return;
         }
         // Faction change resets the leader to the new faction's first (rare) leader so a
         // stale name can never pair with the wrong faction; the stage carries over.
-        onChange({ faction, name: leaders[0].name, stage: selection?.stage ?? DEFAULT_STAGE });
+        onChange({ faction: key, name: leaders[0].name, stage: selection?.stage ?? DEFAULT_STAGE });
     };
 
     const handleLeaderChange = (name: string) => {

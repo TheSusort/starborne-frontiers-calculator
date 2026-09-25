@@ -32,7 +32,7 @@ import { buildTraceShip } from '../../../../scripts/lib/traceShipFactory';
 import { csvAvailable, loadShipSkillRecords } from '../../../../scripts/lib/shipSkillCsv';
 import { shipDataAvailable } from '../../../../scripts/lib/shipDataSnapshot';
 import { BUFFS } from '../../../constants/buffs';
-import type { FactionKey } from '../../../constants/factions';
+import type { FactionName } from '../../../constants/factions';
 import type { Ability, ShipSkills } from '../../../types/abilities';
 import type { ParsedPattern, ParsedTarget } from '../../targetingParser';
 import type { Position } from '../../../types/encounters';
@@ -132,7 +132,7 @@ describe('Fuying faction-scoped Stealth grant (#363) — build', () => {
 
 describe('Fuying faction-scoped Stealth grant (#363) — recipient resolution', () => {
     it('narrows recipients to the matching faction, and drops unknown-faction actors', () => {
-        const factions: Record<string, FactionKey> = {
+        const factions: Record<string, FactionName> = {
             fuying: 'TIANCHAO',
             anjian: 'TIANCHAO',
             grif: 'XAOC',
@@ -152,7 +152,7 @@ describe('Fuying faction-scoped Stealth grant (#363) — recipient resolution', 
     it('composes with footprint narrowing rather than replacing it', () => {
         // The pattern says which allies the cast reaches; the faction says which of those qualify.
         // A caller supplying BOTH must get the intersection, not either one alone.
-        const factions: Record<string, FactionKey> = {
+        const factions: Record<string, FactionName> = {
             a: 'TIANCHAO',
             b: 'TIANCHAO',
             c: 'XAOC',
@@ -323,7 +323,7 @@ const inertEnemyStats = (hp: number) => ({
     hp,
 });
 
-const inertAlly = (id: string, faction?: FactionKey) => ({
+const inertAlly = (id: string, faction?: FactionName) => ({
     id,
     speed: 1,
     chargeCount: 0,
@@ -644,12 +644,12 @@ describe('Fuying Stealth DR aura (#363) — recipient set', () => {
         if (!a) throw new Error('Fuying built no incoming-reduction aura');
         return a;
     };
-    const FACTIONS_BY_ID: Record<string, FactionKey> = {
+    const FACTIONS_BY_ID: Record<string, FactionName> = {
         fuying: 'TIANCHAO',
         anjian: 'TIANCHAO',
         grif: 'XAOC',
     };
-    const factionOf = (id: string): FactionKey | undefined => FACTIONS_BY_ID[id];
+    const factionOf = (id: string): FactionName | undefined => FACTIONS_BY_ID[id];
 
     it('is footprint ∩ Tianchen', () => {
         expect(
@@ -783,7 +783,7 @@ const auraPassiveSlot = (): ShipSkills['slots'][number] => {
 };
 
 /** A Stealthed, positioned, harmless player victim. */
-const stealthedAlly = (id: string, position: Position, faction: FactionKey) => ({
+const stealthedAlly = (id: string, position: Position, faction: FactionName) => ({
     id,
     speed: 1000, // ahead of the enemy, so Stealth is up before it fires
     chargeCount: 0,
@@ -814,7 +814,7 @@ const corrosion = (): ActiveDoTStack => ({
     sourceId: 'enemy-1',
 });
 
-const auraBoard = (opts: { aura: boolean; m3Faction?: FactionKey }): CombatEngineInput => ({
+const auraBoard = (opts: { aura: boolean; m3Faction?: FactionName }): CombatEngineInput => ({
     // Fuying herself is the focus, so `pattern` below IS her support pattern (the engine reads
     // `input.pattern` for the focus actor) and `faction` is her Tianchen membership.
     attack: 0,
@@ -894,7 +894,7 @@ const auraBoard = (opts: { aura: boolean; m3Faction?: FactionKey }): CombatEngin
 });
 
 /** Landed direct damage and DoT-tick damage per victim for one board. */
-const runBoard = (opts: { aura: boolean; m3Faction?: FactionKey }) => {
+const runBoard = (opts: { aura: boolean; m3Faction?: FactionName }) => {
     const bus = createEventBus();
     const direct = new Map<string, number>();
     const dot = new Map<string, number>();

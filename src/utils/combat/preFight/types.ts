@@ -70,7 +70,10 @@ export function hasAnyPreFightModifier(m: PreFightCombatModifiers): boolean {
 export interface PreFightUnit {
     id: string;
     side: 'player' | 'enemy';
-    faction: FactionName;
+    /** Raw `Ship.faction` — `string`, not `FactionName`, since it is threaded straight through
+     *  from the ship without narrowing. An unrecognised faction simply matches no squad leader's
+     *  faction, which is the correct "no ally to grant to" outcome. */
+    faction: string;
     /** Shared BY REFERENCE with the caller's plan stats — passes mutate it in place. */
     stats: PreFightStatBlock;
     /** Modifier-channel baseline accumulated by passes (consumed by the engine in F3). */

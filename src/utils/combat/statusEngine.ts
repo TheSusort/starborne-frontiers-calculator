@@ -1,6 +1,6 @@
 import { ParsedBuffEffects, SelectedGameBuff, StackTrigger } from '../../types/calculator';
 import { Condition, SkillSlot } from '../../types/abilities';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import { conditionsMet, ConditionContext } from '../abilities/evaluateConditions';
 import { isPersistentByName, persistentCapFor } from '../../constants/oneShotPersistentBuffs';
 import { UNREMOVABLE_STATUSES, STACK_STEALABLE_STATUSES } from './cheatDeathBuffs';
@@ -84,7 +84,7 @@ interface AbilityStatusBase {
      *  the filter rides the status and is intersected in at APPLICATION time (playerTurn's
      *  per-slot timed loop → `resolveSupportRecipients`), where the engine's actor→faction map is
      *  in scope. Absent → no faction narrowing. */
-    factionFilter?: FactionKey[];
+    factionFilter?: FactionName[];
     /** Recipient BOARD-ADJACENCY scope, copied off the source ability's `target`. Set ONLY for
      *  `'adjacent-allies'`; absent for every other target.
      *

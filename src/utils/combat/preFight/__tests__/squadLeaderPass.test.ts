@@ -11,7 +11,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { squadLeaderPass, emptyPreFightModifiers, runPreFight } from '../index';
 import type { PreFightUnit } from '../index';
-import type { FactionName } from '../../../../constants/factions';
+import { FACTION_NAMES, type FactionName } from '../../../../constants/factions';
 import { SQUAD_LEADERS } from '../../../../constants/squadLeaders';
 
 // Synthetic leader exercising every skip rule the real data never hits. Appended to
@@ -148,11 +148,16 @@ describe('squadLeaderPass — lookup (trust boundary)', () => {
     it('throws on an unknown faction (runtime input)', () => {
         const player = [makeUnit('p1', 'player', 'MPL')];
         const enemy = [makeUnit('e1', 'enemy', 'MPL')];
-        expect(() =>
-            runPass(player, enemy, {
-                player: { faction: 'NOT_A_FACTION', name: 'Midas', stage: 1 },
-            })
-        ).toThrow('unknown squad leader');
+        // `faction` is now a real union at the type level; this simulates data that bypassed
+        // that check (e.g. an unvalidated read), which the pass must still reject at runtime.
+        const badSelection = { faction: 'NOT_A_FACTION', name: 'Midas', stage: 1 } as unknown as {
+            faction: FactionName;
+            name: string;
+            stage: 1 | 2 | 3;
+        };
+        expect(() => runPass(player, enemy, { player: badSelection })).toThrow(
+            'unknown squad leader'
+        );
     });
 
     it('with no selections the pass touches nothing (golden safety)', () => {
@@ -364,7 +369,8 @@ describe('squadLeaderPass — full-data sweep (real, unmocked SQUAD_LEADERS)', (
             typeof import('../../../../constants/squadLeaders')
         >('../../../../constants/squadLeaders');
 
-        for (const [faction, leaders] of Object.entries(REAL)) {
+        for (const faction of FACTION_NAMES) {
+            const leaders = REAL[faction];
             for (const leader of leaders) {
                 // One leader-faction ship + one off-faction ship on the own team, two foes.
                 const offFaction: FactionName = faction === 'MPL' ? 'XAOC' : 'MPL';

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { SQUAD_LEADERS } from '../constants/squadLeaders';
+import { asFactionName, type FactionName } from '../constants/factions';
 import { OVERRIDABLE_STATS, OVERRIDE_MIN } from '../utils/simulator/statOverrides';
 import { ALL_POSITIONS } from '../utils/targeting/board';
 import {
@@ -41,11 +42,6 @@ const placementSchema = z.object({
 
 const boardSchema = z.partialRecord(z.enum(ALL_POSITIONS), placementSchema);
 
-// `key in SQUAD_LEADERS` would admit 'toString'; own-property only, matching
-// sharedAutogearBuild.ts.
-const isKeyOf = (record: object, key: string): boolean =>
-    Object.prototype.hasOwnProperty.call(record, key);
-
 const squadLeaderSchema = z
     .object({
         faction: z.string(),
@@ -53,11 +49,15 @@ const squadLeaderSchema = z
         stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
     })
     .refine(
-        (value) =>
-            isKeyOf(SQUAD_LEADERS, value.faction) &&
-            !!SQUAD_LEADERS[value.faction]?.some((leader) => leader.name === value.name),
+        (value) => {
+            const key = asFactionName(value.faction);
+            return key !== undefined && !!SQUAD_LEADERS[key]?.some((l) => l.name === value.name);
+        },
         { message: 'Unknown squad leader' }
     )
+    // `refine` proves `faction` names a known key without narrowing the schema's output type —
+    // the cast here is load-bearing on that proof, not a blind widen.
+    .transform((value) => ({ ...value, faction: asFactionName(value.faction) as FactionName }))
     .optional();
 
 const setupSchema = z.object({

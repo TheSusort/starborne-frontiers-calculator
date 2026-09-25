@@ -10,7 +10,10 @@ export interface Ship {
     id: string;
     name: string;
     rarity: RarityName;
-    faction: FactionName;
+    /** The honest type of stored data: a ship may carry a faction string the app doesn't
+     *  recognise (a new game faction, a legacy spelling) and it must not be dropped or rewritten.
+     *  Narrow with `asFactionName`/`getFaction` (constants/factions.ts) at read time. */
+    faction: string;
     type: ShipTypeName;
     baseStats: BaseStats;
     equipment: Partial<Record<GearSlotName, string>>;
@@ -40,7 +43,7 @@ export interface Ship {
 
 export interface Faction {
     /** The frontend spelling, shown everywhere in the UI. */
-    name: FactionName;
+    name: string;
     iconUrl: string;
     /** Other spellings this faction is known by — a previous name the game data or a player may
      *  still use. Consumed by `factionSpellings`, whose doc holds the rule. */
