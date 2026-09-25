@@ -14,7 +14,12 @@ import { describe, it, expect } from 'vitest';
 
 const ROOT = resolve(__dirname, '../../..');
 
-const ENTRIES = ['src/mcp/registry.ts', 'src/services/fleetReads.ts'];
+const ENTRIES = [
+    'netlify/functions/mcp.ts',
+    'src/mcp/http.ts',
+    'src/mcp/registry.ts',
+    'src/services/fleetReads.ts',
+];
 
 /** Loads `file` in a clean Node child; resolves to its exit status and stderr. */
 const loadInNode = (file: string) => {

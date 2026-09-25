@@ -30,8 +30,8 @@
         "test:ui": "vitest --ui",
         "test:coverage": "vitest run --coverage",
         "test:watch": "vitest watch",
-        "lint": "eslint src --report-unused-disable-directives --max-warnings 0",
-        "lint:fix": "eslint src --fix",
+        "lint": "eslint src netlify/functions --report-unused-disable-directives --max-warnings 0",
+        "lint:fix": "eslint src netlify/functions --fix",
         "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
         "format:check": "prettier --check \"src/**/*.{ts,tsx,css,md}\"",
         "knip": "knip",
@@ -123,7 +123,7 @@
         "esbuild": "^0.28.1"
     },
     "lint-staged": {
-        "src/**/*.{ts,tsx}": [
+        "{src,netlify/functions}/**/*.{ts,tsx}": [
             "eslint --fix",
             "prettier --write"
         ],
