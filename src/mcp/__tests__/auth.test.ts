@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { errors, type JWTVerifyGetKey } from 'jose';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { AuthError, verifyAccessToken, type VerifyAccessTokenOptions } from '../auth';
 import { ISSUER, makeSigner } from './testTokens';
@@ -70,5 +71,17 @@ describe('verifyAccessToken', () => {
         const token = await signer.sign({ client_id: '' });
 
         expect(await refusal(token)).toBe('not_oauth');
+    });
+
+    it('rethrows a JWKS fetch failure unchanged, not as an AuthError', async () => {
+        const token = await signer.sign({ client_id: 'client-1' });
+        const outage = new errors.JWKSTimeout();
+        const brokenJwks: JWTVerifyGetKey = () => {
+            throw outage;
+        };
+
+        await expect(verifyAccessToken(token, { jwks: brokenJwks, issuer: ISSUER })).rejects.toBe(
+            outage
+        );
     });
 });

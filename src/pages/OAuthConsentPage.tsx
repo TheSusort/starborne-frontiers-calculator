@@ -107,6 +107,7 @@ export const OAuthConsentPage: React.FC = () => {
         if (state.kind === 'loading') return <Loader />;
         if (state.kind === 'error') return <ErrorCard message={state.message} />;
         if (state.kind === 'not-admin') {
+            // Rationale for the admin-only gate: `src/mcp/http.ts`, at the `is_admin` check.
             return (
                 <div className="card space-y-4">
                     <p>MCP access is currently limited to admins.</p>

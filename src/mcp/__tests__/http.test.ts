@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { errors, type JWTVerifyGetKey } from 'jose';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { config } from '../../../netlify/functions/mcp';
 import { stubDb, type StubDbError } from '../../__tests__/services/stubDb';
@@ -123,6 +124,26 @@ describe('POST /mcp', () => {
         );
 
         expect(response.status).toBe(503);
+    });
+
+    it('answers a JWKS outage with 503, not 401', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const brokenJwks: JWTVerifyGetKey = () => {
+            throw new errors.JWKSTimeout();
+        };
+        const handler = createMcpHandler({
+            supabaseUrl: SUPABASE_URL,
+            supabaseAnonKey: 'anon',
+            jwks: brokenJwks,
+            createDb: vi.fn(() => stubDb({ users: [{ id: AUTH_USER, is_admin: true }] }).db),
+        });
+
+        const response = await handler(
+            rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, await oauthToken())
+        );
+
+        expect(response.status).toBe(503);
+        expect(response.headers.get('www-authenticate')).toBeNull();
     });
 
     it("runs an admin's call with a client built from their token", async () => {

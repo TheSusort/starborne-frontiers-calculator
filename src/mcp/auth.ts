@@ -27,6 +27,19 @@ export interface VerifyAccessTokenOptions {
     issuer: string;
 }
 
+/** Whether `error` says the *token* is bad (expired, malformed, wrong signature/algorithm, wrong
+ *  issuer, no matching key). Anything else — a JWKS fetch timeout, a network error, a malformed
+ *  JWKS document — says nothing about the token and must not be reported as one. */
+const isTokenError = (error: unknown): boolean =>
+    error instanceof errors.JWTExpired ||
+    error instanceof errors.JWTClaimValidationFailed ||
+    error instanceof errors.JWSSignatureVerificationFailed ||
+    error instanceof errors.JWSInvalid ||
+    error instanceof errors.JWTInvalid ||
+    error instanceof errors.JOSEAlgNotAllowed ||
+    error instanceof errors.JWKSNoMatchingKey ||
+    error instanceof errors.JOSENotSupported;
+
 /**
  * Verifies a Supabase access token and requires it to be OAuth-issued. The project signs with
  * ES256, so no other algorithm is accepted. A token carries `client_id` only when Supabase issued
@@ -46,6 +59,7 @@ export async function verifyAccessToken(
             requiredClaims: ['sub', 'exp'],
         }));
     } catch (error) {
+        if (!isTokenError(error)) throw error;
         throw new AuthError(
             'unauthenticated',
             error instanceof errors.JOSEError ? error.code : 'invalid token'

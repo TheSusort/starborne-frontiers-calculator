@@ -110,7 +110,14 @@ export const createMcpHandler = ({
             ({ sub } = await verifyAccessToken(token, { jwks, issuer }));
         } catch (error) {
             if (error instanceof AuthError) return unauthorized();
-            throw error;
+            // Not a token problem — a JWKS fetch failure, timeout or other infrastructure error.
+            // Telling the client to restart OAuth would be wrong, so this is a 503, not a 401.
+            console.error('MCP token verification unavailable:', error);
+            return jsonRpcError(
+                503,
+                await requestId(request),
+                'Could not verify the token. Try again.'
+            );
         }
 
         const db = createDb(token);
@@ -129,6 +136,8 @@ export const createMcpHandler = ({
                 'Could not check MCP access. Try again.'
             );
         }
+        // Admin-only until `scripts/oauth-probe.ts` reports `email-change: BLOCKED` — an OAuth
+        // token must never be able to change the account email (#562).
         if ((profile as { is_admin?: boolean } | null)?.is_admin !== true) {
             return jsonRpcError(403, await requestId(request), ADMIN_ONLY_MESSAGE);
         }

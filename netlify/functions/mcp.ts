@@ -17,7 +17,8 @@ let handler: ((request: Request) => Promise<Response>) | undefined;
  */
 export default async (request: Request): Promise<Response> => {
     if (!handler) {
-        const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
+        // Trailing slashes would double up in the issuer/JWKS URLs below.
+        const supabaseUrl = requireEnv('VITE_SUPABASE_URL').replace(/\/+$/, '');
         handler = createMcpHandler({
             supabaseUrl,
             supabaseAnonKey: requireEnv('VITE_SUPABASE_ANON_KEY'),
