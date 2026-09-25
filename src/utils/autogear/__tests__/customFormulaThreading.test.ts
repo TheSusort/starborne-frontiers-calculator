@@ -3,8 +3,21 @@ import { calculateTotalScore, clearScoreCache } from '../scoring';
 import type { CustomFormula } from '../../../types/autogear';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
-import { AutogearAlgorithm } from '../AutogearStrategy';
+import { AutogearAlgorithm, type ScoringInputs } from '../AutogearStrategy';
 import { getAutogearStrategy } from '../getStrategy';
+
+// Matches the exact values these tests always exercised positionally, wrapped around
+// whichever formula (or none) a given call is checking.
+const scoringInputsFor = (customFormula: CustomFormula | undefined): ScoringInputs => ({
+    shipRole: undefined,
+    setPriorities: [],
+    statBonuses: [],
+    tryToCompleteSets: false,
+    arenaModifiers: null,
+    fleetBuffs: [],
+    customFormula,
+    roleBasis: undefined,
+});
 
 const attackFormula: CustomFormula = {
     rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
@@ -165,13 +178,7 @@ describe('every registered strategy forwards the custom formula', () => {
                     inventory,
                     resolve,
                     getEngineeringStats,
-                    undefined,
-                    [],
-                    [],
-                    false,
-                    null,
-                    [],
-                    undefined
+                    scoringInputsFor(undefined)
                 );
                 clearScoreCache();
                 const droppedFormulaSpeed = await strategy.findOptimalGear(
@@ -180,13 +187,7 @@ describe('every registered strategy forwards the custom formula', () => {
                     inventory,
                     resolve,
                     getEngineeringStats,
-                    undefined,
-                    [],
-                    [],
-                    false,
-                    null,
-                    [],
-                    undefined
+                    scoringInputsFor(undefined)
                 );
                 const wouldPassIfDropped =
                     pick(droppedFormulaAttack) === 'gear-attack' &&
@@ -203,13 +204,7 @@ describe('every registered strategy forwards the custom formula', () => {
                     inventory,
                     resolve,
                     getEngineeringStats,
-                    undefined,
-                    [],
-                    [],
-                    false,
-                    null,
-                    [],
-                    attackFormula
+                    scoringInputsFor(attackFormula)
                 )
             );
             clearScoreCache();
@@ -220,13 +215,7 @@ describe('every registered strategy forwards the custom formula', () => {
                     inventory,
                     resolve,
                     getEngineeringStats,
-                    undefined,
-                    [],
-                    [],
-                    false,
-                    null,
-                    [],
-                    speedFormula
+                    scoringInputsFor(speedFormula)
                 )
             );
 

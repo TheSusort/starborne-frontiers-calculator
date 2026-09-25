@@ -6,6 +6,7 @@ import { CustomFormula } from '../../../../types/autogear';
 import { BaseStats, EngineeringStat } from '../../../../types/stats';
 import { ShipTypeName } from '../../../../constants/shipTypes';
 import { clearScoreCache } from '../../scoring';
+import type { ScoringInputs } from '../../AutogearStrategy';
 
 const BASE: BaseStats = {
     hp: 1000,
@@ -82,6 +83,16 @@ describe('SetFirstStrategy — Custom formula in set ranking', () => {
         const customFormula: CustomFormula = {
             rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
         };
+        const scoringInputs: ScoringInputs = {
+            shipRole: undefined, // Custom mode
+            setPriorities: undefined,
+            statBonuses: undefined,
+            tryToCompleteSets: undefined,
+            arenaModifiers: undefined,
+            fleetBuffs: undefined,
+            customFormula,
+            roleBasis: undefined,
+        };
 
         const result = await strategy.findOptimalGear(
             ship,
@@ -89,14 +100,7 @@ describe('SetFirstStrategy — Custom formula in set ranking', () => {
             inventory,
             getGearPiece,
             getEng,
-            undefined, // shipRole: undefined -> Custom mode
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            customFormula,
-            undefined
+            scoringInputs
         );
 
         const gearIds = result.suggestions.map((s) => s.gearId);

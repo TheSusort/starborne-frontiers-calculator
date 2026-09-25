@@ -37,6 +37,24 @@ export interface AutogearProgress {
     maxAttempts?: number;
 }
 
+/**
+ * Every player-configurable input a strategy scores gear against, as one object. Each key is
+ * required (not `field?:`) with a `T | undefined` value: a caller must consciously write
+ * `field: undefined` to opt out, so a field omitted at a forward site is a `tsc` error instead
+ * of a silently-undefined argument (#548). Distinct from `GearScoringInputs` (`gearScoringInputs.ts`),
+ * which is the two gear-lookup VIEWS a run scores through, not these scoring PARAMETERS.
+ */
+export interface ScoringInputs {
+    shipRole: ShipTypeName | undefined;
+    setPriorities: SetPriority[] | undefined;
+    statBonuses: StatBonus[] | undefined;
+    tryToCompleteSets: boolean | undefined;
+    arenaModifiers: Record<string, number> | null | undefined;
+    fleetBuffs: FleetBuff[] | undefined;
+    customFormula: CustomFormula | undefined;
+    roleBasis: RoleBasis | undefined;
+}
+
 export interface AutogearStrategy {
     name: string;
     description: string;
@@ -46,14 +64,7 @@ export interface AutogearStrategy {
         inventory: GearPiece[],
         getGearPiece: (id: string) => GearPiece | undefined,
         getEngineeringStatsForShipType: (shipType: ShipTypeName) => EngineeringStat | undefined,
-        shipRole?: ShipTypeName,
-        setPriorities?: SetPriority[],
-        statBonuses?: StatBonus[],
-        tryToCompleteSets?: boolean,
-        arenaModifiers?: Record<string, number> | null,
-        fleetBuffs?: FleetBuff[],
-        customFormula?: CustomFormula,
-        roleBasis?: RoleBasis
+        scoringInputs: ScoringInputs
     ): Promise<AutogearResult> | AutogearResult;
     setProgressCallback(callback: (progress: AutogearProgress) => void): void;
 }

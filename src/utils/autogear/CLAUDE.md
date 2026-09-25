@@ -16,7 +16,11 @@ handles PWA auto-update and nothing else.
 **`runShipOptimizer.ts`:** `findOptimalGearForShip` is the single entry point that runs one ship
 through its configured strategy — the batch Autogear run calls it, never a strategy directly.
 `useAutogearShipConfigs` owns the per-ship config map; `toSavedAutogearConfig` is the one mapping
-from it to the persisted shape.
+from it to the persisted shape. Every player-configurable scoring input (role, priorities beyond
+`statPriorities`, formula, etc.) crosses into a strategy's `findOptimalGear` as one `ScoringInputs`
+object (`AutogearStrategy.ts`) built once here, from `config`, and forwarded unchanged — every
+field is a required key (`field: T | undefined`, not `field?:`), so a field a future caller forgets
+to name is a `tsc` error rather than a silently-undefined argument (#548).
 
 **`offFormula/`:** off-formula detection (`offFormulaStats.ts`), the kit-derived scoring basis
 (`basisDerivation.ts`), and which roles host a basis (`roleBasisHost.ts`). Backs `OffFormulaNotice`

@@ -7,6 +7,20 @@ import type { EquipmentSlotName } from '../../../../constants/gearTypes';
 import { clearScoreCache } from '../../scoring';
 import { BaseStats, EngineeringStat } from '../../../../types/stats';
 import { ShipTypeName } from '../../../../constants/shipTypes';
+import type { ScoringInputs } from '../../AutogearStrategy';
+
+// No scoring inputs this suite cares about — every field is named explicitly (required key,
+// see `ScoringInputs`' own doc) so a real run's fields never get silently dropped here either.
+const NO_SCORING_INPUTS: ScoringInputs = {
+    shipRole: undefined,
+    setPriorities: undefined,
+    statBonuses: undefined,
+    tryToCompleteSets: undefined,
+    arenaModifiers: undefined,
+    fleetBuffs: undefined,
+    customFormula: undefined,
+    roleBasis: undefined,
+};
 
 const BASE: BaseStats = {
     hp: 100000,
@@ -79,7 +93,8 @@ describe('GeneticStrategy.findOptimalGear', () => {
             priorities,
             inventory,
             getGearPiece,
-            getEng
+            getEng,
+            NO_SCORING_INPUTS
         );
 
         expect(result).toHaveProperty('suggestions');
@@ -101,7 +116,8 @@ describe('GeneticStrategy.findOptimalGear', () => {
             [{ stat: 'attack', weight: 1, minLimit: 1000 }],
             inventory,
             getGearPiece,
-            getEng
+            getEng,
+            NO_SCORING_INPUTS
         );
 
         expect(result.hardRequirementsMet).toBe(true);
@@ -128,7 +144,8 @@ describe('GeneticStrategy.findOptimalGear', () => {
             priorities,
             inventory,
             getGearPiece,
-            getEng
+            getEng,
+            NO_SCORING_INPUTS
         );
 
         expect(result.hardRequirementsMet).toBe(false);

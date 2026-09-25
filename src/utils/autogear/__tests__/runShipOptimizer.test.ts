@@ -9,7 +9,7 @@ import {
     type AutogearShipConfig,
     type ShipOptimizerConfig,
 } from '../runShipOptimizer';
-import { AutogearAlgorithm } from '../AutogearStrategy';
+import { AutogearAlgorithm, type ScoringInputs } from '../AutogearStrategy';
 import type { Ship } from '../../../types/ship';
 import type { GearPiece } from '../../../types/gear';
 import type {
@@ -26,7 +26,8 @@ import type { ShipTypeName } from '../../../constants/shipTypes';
 // Typed with explicit parameters (rather than inferred from a zero-arg arrow) so
 // `mock.calls[n]` is a tuple indexable at every argument position `findOptimalGear` takes —
 // an inferred `() => ...` would type every call as `[]` and hide an argument silently dropped
-// or reordered.
+// or reordered. The 6th argument is the whole `ScoringInputs` object (#548): a field a real run
+// forgets to name inside it is a `tsc` error at the build site, not a silent `undefined` here.
 const findOptimalGear = vi.fn(
     async (
         _ship: Ship,
@@ -34,14 +35,7 @@ const findOptimalGear = vi.fn(
         _inventory: GearPiece[],
         _getGearForShip: (id: string) => GearPiece | undefined,
         _getEngineeringStatsForShipType: (type: ShipTypeName) => EngineeringStat | undefined,
-        _shipRole?: ShipTypeName,
-        _setPriorities?: SetPriority[],
-        _statBonuses?: StatBonus[],
-        _tryToCompleteSets?: boolean,
-        _arenaModifiers?: Record<string, number> | null,
-        _fleetBuffs?: FleetBuff[],
-        _customFormula?: CustomFormula,
-        _roleBasis?: RoleBasis
+        _scoringInputs: ScoringInputs
     ) => ({
         suggestions: [],
         hardRequirementsMet: true,
@@ -166,11 +160,22 @@ describe('findOptimalGearForShip', () => {
         expect(passedInventory).toHaveLength(0);
     });
 
-    it('forwards the exact role, priorities, and formula the config names — nothing borrowed from elsewhere', async () => {
+    // The tripwire for #548: `findOptimalGearForShip` builds ONE `ScoringInputs` object from
+    // `config` and forwards it as the 6th argument. Every field is set to its own hoisted,
+    // referentially-distinct value (not `toEqual`-only literals) so a field the forward site
+    // rebuilds from the wrong source, or fails to copy at all, is caught even when its value
+    // happens to look right by shape. The trailing key-set assertion catches an extra or
+    // missing key that individual field assertions would miss.
+    it('forwards a single ScoringInputs object carrying every field the config names, referentially', async () => {
         const statPriorities: StatPriority[] = [{ stat: 'attack', minLimit: 100 }];
         const setPriorities: SetPriority[] = [{ setName: 'Bruiser', count: 2 }];
         const statBonuses: StatBonus[] = [{ stat: 'crit', percentage: 20 }];
         const fleetBuffs: FleetBuff[] = [{ stat: 'attack', percentage: 10 }];
+        const arenaModifiers = { attack: 1.1 };
+        const customFormula: CustomFormula = {
+            rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
+        };
+        const roleBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] };
         const config: ShipOptimizerConfig = {
             ...baseConfig,
             shipRole: 'ATTACKER',
@@ -179,22 +184,39 @@ describe('findOptimalGearForShip', () => {
             statBonuses,
             tryToCompleteSets: true,
             fleetBuffs,
-            arenaModifiers: { attack: 1.1 },
+            arenaModifiers,
+            customFormula,
+            roleBasis,
         };
         await findOptimalGearForShip(ship, config, baseDeps);
 
         const call = findOptimalGear.mock.calls[0];
-        expect(call[5]).toBe('ATTACKER'); // shipRole
         expect(call[1]).toBe(statPriorities);
-        expect(call[6]).toBe(setPriorities);
-        expect(call[7]).toBe(statBonuses);
-        expect(call[8]).toBe(true); // tryToCompleteSets
-        expect(call[9]).toEqual({ attack: 1.1 }); // arenaModifiers
-        expect(call[10]).toBe(fleetBuffs);
-        expect(call[11]).toBeUndefined(); // customFormula
+
+        const scoringInputs = call[5];
+        expect(scoringInputs.shipRole).toBe('ATTACKER');
+        expect(scoringInputs.setPriorities).toBe(setPriorities);
+        expect(scoringInputs.statBonuses).toBe(statBonuses);
+        expect(scoringInputs.tryToCompleteSets).toBe(true);
+        expect(scoringInputs.arenaModifiers).toBe(arenaModifiers);
+        expect(scoringInputs.fleetBuffs).toBe(fleetBuffs);
+        expect(scoringInputs.customFormula).toBe(customFormula);
+        expect(scoringInputs.roleBasis).toBe(roleBasis);
+        expect(Object.keys(scoringInputs).sort()).toEqual(
+            [
+                'shipRole',
+                'setPriorities',
+                'statBonuses',
+                'tryToCompleteSets',
+                'arenaModifiers',
+                'fleetBuffs',
+                'customFormula',
+                'roleBasis',
+            ].sort()
+        );
     });
 
-    it('a Custom-mode config (shipRole null) forwards its formula instead of a role name', async () => {
+    it('a Custom-mode config (shipRole null) forwards undefined shipRole, alongside its formula', async () => {
         const customFormula: CustomFormula = {
             rows: [{ stat: 'attack', kind: 'core', direction: 'max' }],
         };
@@ -203,9 +225,9 @@ describe('findOptimalGearForShip', () => {
             { ...baseConfig, shipRole: null, customFormula },
             baseDeps
         );
-        const call = findOptimalGear.mock.calls[0];
-        expect(call[5]).toBeUndefined(); // shipRole
-        expect(call[11]).toBe(customFormula);
+        const scoringInputs = findOptimalGear.mock.calls[0][5];
+        expect(scoringInputs.shipRole).toBeUndefined();
+        expect(scoringInputs.customFormula).toBe(customFormula);
     });
 
     it('always resets the shared strategy singleton progress callback, even with none supplied', async () => {
@@ -346,15 +368,9 @@ describe('findOptimalGearForShip', () => {
         expect(passedInventory).toHaveLength(30);
     });
 
-    it('forwards config.roleBasis to the strategy as the 13th positional argument', async () => {
-        const roleBasis: RoleBasis = { produces: 'damage', terms: [{ stat: 'attack', weight: 1 }] };
-        await findOptimalGearForShip(ship, { ...baseConfig, roleBasis }, baseDeps);
-        expect(findOptimalGear.mock.calls[0][12]).toBe(roleBasis);
-    });
-
-    it('forwards undefined when config carries no roleBasis', async () => {
+    it('forwards undefined roleBasis when config carries none, inside the same ScoringInputs object', async () => {
         await findOptimalGearForShip(ship, baseConfig, baseDeps);
-        expect(findOptimalGear.mock.calls[0][12]).toBeUndefined();
+        expect(findOptimalGear.mock.calls[0][5].roleBasis).toBeUndefined();
     });
 });
 
