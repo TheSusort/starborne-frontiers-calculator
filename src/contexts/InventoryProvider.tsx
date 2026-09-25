@@ -36,7 +36,7 @@ interface RawGearData {
     level: number;
     stars: number;
     rarity: string;
-    set_bonus: string;
+    set_bonus: string | null;
     calibration_ship_id?: string | null;
     stats: unknown;
 }
@@ -48,8 +48,9 @@ const isValidGearPiece = (gear: unknown): gear is GearPiece => {
     const gearData = gear as Partial<GearPiece>;
 
     // Check required string properties
-    const requiredStringProps = ['id', 'slot', 'rarity', 'setBonus'] as const;
+    const requiredStringProps = ['id', 'slot', 'rarity'] as const;
     if (!requiredStringProps.every((prop) => typeof gearData[prop] === 'string')) return false;
+    if (gearData.setBonus !== null && typeof gearData.setBonus !== 'string') return false;
 
     // Check required number properties
     const requiredNumberProps = ['level', 'stars'] as const;
