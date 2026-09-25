@@ -11,6 +11,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Autogear: builds using Crit Multiplier can now be shared with the community.',
     'Loadouts: Equip Team now equips gear on every ship in the team.',
     'Gear analysis: Repair and Boost set pieces are no longer flagged as off-set.',
+    'Ship inventory: a ship saved without an affinity no longer disappears on load.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

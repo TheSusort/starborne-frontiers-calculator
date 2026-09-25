@@ -7,6 +7,7 @@ import { isGearSlotName, isImplantSlotName } from '../constants/gearTypes';
 import { GearSetName } from '../constants/gearSets';
 import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
 import { FactionName } from '../constants/factions';
+import { toRarityName } from '../constants/rarities';
 import { calculateMainStatValue } from './gear/mainStatValueFetcher';
 import {
     createStat,
@@ -155,7 +156,7 @@ const transformShips = (data: ExportedPlayData['Units']): Ship[] => {
         return {
             id: unit.Id,
             name: unit.Name,
-            rarity: unit.Rarity.toLowerCase(),
+            rarity: toRarityName(unit.Rarity),
             faction: getFaction(unit.Faction),
             type: getShipTypeName(unit.ShipType),
             affinity: getAffinity(unit.Affinity),
@@ -198,7 +199,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 slot,
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase(),
+                rarity: toRarityName(item.Rarity),
                 mainStat: createStat(mainStatName, mainStatValue, mainStatType),
                 subStats: item.SubStats.map((stat) =>
                     createStat(
@@ -243,7 +244,7 @@ function transformInventory(items: ExportedPlayData['Equipment']): TransformInve
                 slot,
                 level: item.Level,
                 stars: item.Rank,
-                rarity: item.Rarity.toLowerCase(),
+                rarity: toRarityName(item.Rarity),
                 mainStat: null,
                 subStats: [...item.MainStats, ...item.SubStats].map((stat) =>
                     createStat(

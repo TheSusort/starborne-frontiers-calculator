@@ -19,7 +19,7 @@ import {
     isGearSlotName,
     isImplantSlotName,
 } from '../../constants/gearTypes';
-import { RarityName, RARITY_ORDER } from '../../constants/rarities';
+import { RarityName, RARITY_ORDER, isRarityName } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateGearStatistics, filterGear } from '../../utils/statistics/gearStats';
 import { BaseChart, ChartTooltip } from '../ui/charts';
@@ -354,7 +354,11 @@ export const GearStatsTab: React.FC<GearStatsTabProps> = ({ gear, ships, previou
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value)}
+                            onChange={(value) => {
+                                if (value === 'all' || isRarityName(value)) {
+                                    setRarityFilter(value);
+                                }
+                            }}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

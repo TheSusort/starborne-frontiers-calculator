@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { GearPiece } from '../../types/gear';
 import { Ship } from '../../types/ship';
-import { RarityName, RARITY_ORDER } from '../../constants/rarities';
+import { RarityName, RARITY_ORDER, isRarityName } from '../../constants/rarities';
 import { getImplantData } from '../../constants/implants';
 import { getGearSet } from '../../constants/gearSets';
 import { Select, StatCard } from '../ui';
@@ -227,7 +227,11 @@ export const ImplantsStatsTab: React.FC<ImplantsStatsTabProps> = ({
                         </label>
                         <Select
                             value={rarityFilter}
-                            onChange={(value) => setRarityFilter(value)}
+                            onChange={(value) => {
+                                if (value === 'all' || isRarityName(value)) {
+                                    setRarityFilter(value);
+                                }
+                            }}
                             options={[
                                 { value: 'all', label: 'All Rarities' },
                                 { value: 'common', label: 'Common' },

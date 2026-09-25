@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { matchesRoleCategory, resolveRoleEntry } from '../shipTypes';
+import { matchesRoleCategory, resolveRoleEntry, toShipTypeName } from '../shipTypes';
 import type { ShipTypeName } from '../shipTypes';
+
+describe('toShipTypeName (#564)', () => {
+    it('accepts a real role name, uppercasing it', () => {
+        expect(toShipTypeName('ATTACKER')).toBe('ATTACKER');
+        expect(toShipTypeName('debuffer_bomber')).toBe('DEBUFFER_BOMBER');
+    });
+
+    it('falls back to ATTACKER for a role outside the union', () => {
+        expect(toShipTypeName('RETIRED_ROLE')).toBe('ATTACKER');
+        expect(toShipTypeName('')).toBe('ATTACKER');
+    });
+});
 
 describe('matchesRoleCategory', () => {
     it('matches the exact category name', () => {

@@ -20,7 +20,7 @@ vi.mock('../../ship/ShipSelector', () => ({
 const minimalShip: Ship = {
     id: 'x',
     name: 'Test Ship',
-    rarity: 'LEGENDARY',
+    rarity: 'legendary',
     faction: 'ATLAS_SYNDICATE',
     type: 'ATTACKER',
     baseStats: {

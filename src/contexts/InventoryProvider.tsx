@@ -4,7 +4,7 @@ import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { GearSlotName } from '../constants/gearTypes';
-import { RarityName } from '../constants/rarities';
+import { toRarityName } from '../constants/rarities';
 import { GearSetName } from '../constants/gearSets';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey, inventoryCacheKey } from '../constants/storage';
@@ -36,7 +36,8 @@ interface RawGearData {
     slot: GearSlotName;
     level: number;
     stars: number;
-    rarity: RarityName;
+    // Raw Supabase column; coerced by `toRarityName` on load.
+    rarity: string;
     set_bonus: GearSetName;
     calibration_ship_id?: string | null;
     stats: unknown;
@@ -85,7 +86,8 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
             slot: data.slot,
             level: data.level,
             stars: data.stars,
-            rarity: data.rarity,
+            // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
+            rarity: toRarityName(data.rarity),
             setBonus: data.set_bonus,
             // A piece with no main stat reads as hp 0 here, unlike the other
             // decode sites which keep it null. `isValidGearPiece` below rejects

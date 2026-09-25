@@ -32,6 +32,7 @@ import { GEAR_SETS, getGearSet, GearSetName } from '../../../constants/gearSets'
 import { IMPLANTS, ImplantVariant } from '../../../constants/implants';
 import { Ship } from '../../../types/ship';
 import { GearPiece } from '../../../types/gear';
+import { isRarityName } from '../../../constants/rarities';
 
 // ---------------------------------------------------------------------------
 // Minimal fixture helpers
@@ -108,6 +109,9 @@ function implantAbilityCount(implantKey: GearSetName, rarity: GearPiece['rarity'
  * return the built abilities produced by buildEquipmentAbilities (for shape assertions).
  */
 function implantAbilities(implantKey: GearSetName, rarity: string) {
+    if (!isRarityName(rarity)) {
+        throw new Error(`implantAbilities: not a real rarity: "${rarity}"`);
+    }
     const id = `${implantKey}-piece`;
     const pieceMap: Record<string, GearPiece> = {
         [id]: makePiece({ id, slot: 'implant_major', rarity, setBonus: implantKey }),

@@ -75,6 +75,21 @@ export const SHIP_TYPE_NAMES = Object.keys(SHIP_TYPES) as ShipTypeName[];
 export const isShipTypeName = (role: string): role is ShipTypeName =>
     Object.hasOwn(SHIP_TYPES, role);
 
+/** Coerces a loose ship-type string crossing a trust boundary (a Supabase `ships` row) to
+ *  `ShipTypeName`, uppercasing first. Falls back to `'ATTACKER'` for anything outside the
+ *  union — the same fallback `getShipTypeName` (importPlayerData.ts) uses for the game-export
+ *  path — because `Ship.type` has no optional/neutral state and dropping a user's own ship on
+ *  load would lose it from their fleet.
+ *
+ *  `type` is a NOT NULL column; this fallback exists for the day a role is renamed or retired
+ *  and old rows still carry the previous value. Unlike rarity's fallback (cosmetic),
+ *  a wrong type changes which stats autogear scores for that ship — callers must warn loudly
+ *  when this falls back, naming the ship and the raw value, rather than swapping it silently. */
+export const toShipTypeName = (raw: string): ShipTypeName => {
+    const upper = raw.toUpperCase();
+    return isShipTypeName(upper) ? upper : 'ATTACKER';
+};
+
 /** Role CATEGORY for skill-text role filters ("an ally attacker or debuffer" — Graphite).
  *  A category matches its exact ShipTypeName AND every underscore-suffixed variant
  *  ('DEBUFFER' matches DEBUFFER, DEBUFFER_DEFENSIVE, DEBUFFER_BOMBER, …). */

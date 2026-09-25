@@ -17,7 +17,7 @@ import {
 import { useNotification } from '../../hooks/useNotification';
 import { FACTIONS } from '../../constants/factions';
 import { SHIP_TYPES, SHIP_TYPE_NAMES, isShipTypeName } from '../../constants/shipTypes';
-import { RARITIES } from '../../constants/rarities';
+import { RARITIES, RarityName, isRarityName } from '../../constants/rarities';
 import { STATS } from '../../constants/stats';
 import { StatName } from '../../types/stats';
 
@@ -55,7 +55,7 @@ function buildFilterSummary(rule: ArenaSeasonRule): string {
     const parts: string[] = [];
 
     if (rule.rarities && rule.rarities.length > 0) {
-        parts.push(rule.rarities.map((r) => RARITIES[r]?.label ?? r).join('/'));
+        parts.push(rule.rarities.map((r) => (isRarityName(r) ? RARITIES[r].label : r)).join('/'));
     }
     if (rule.ship_types && rule.ship_types.length > 0) {
         parts.push(
@@ -149,7 +149,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
         key,
         label: FACTIONS[key].name,
     }));
-    const rarityOptions = Object.keys(RARITIES).map((key) => ({
+    const rarityOptions = (Object.keys(RARITIES) as RarityName[]).map((key) => ({
         key,
         label: RARITIES[key].label,
     }));

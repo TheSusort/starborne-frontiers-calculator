@@ -4,7 +4,9 @@ import type { GearSlotName } from '../constants/gearTypes';
 import { isGearSetName } from '../constants/gearSets';
 import type { ShipTypeName } from '../constants/shipTypes';
 import { isShipTypeName } from '../constants/shipTypes';
-import type { AffinityName, Ship } from '../types/ship';
+import { isRarityName } from '../constants/rarities';
+import { toAffinityName } from '../constants/affinities';
+import type { Ship } from '../types/ship';
 import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
 import { tryDecodeGearStats } from '../utils/gear/statsCodec';
@@ -346,7 +348,9 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         rarity: string;
         faction: string;
         type: string;
-        affinity: string;
+        // `ships.affinity` is nullable; coerced by `toAffinityName` below rather than trusted
+        // as `AffinityName`.
+        affinity: string | null;
         rank: number;
         level: number;
         user_id: string;
@@ -475,6 +479,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
         // the `ShipTypeName` union (a retired/renamed role) rather than reject the whole
         // ranking, matching the gear-piece skip below.
         if (!isShipTypeName(data.type)) return [];
+        // Same trust-boundary shape as `data.type` above, for `RarityName`; case-normalised
+        // like every other rarity read.
+        const rarity = data.rarity.toLowerCase();
+        if (!isRarityName(rarity)) return [];
 
         const shipGearMap = new Map<string, InternalGearPiece>();
         data.ship_equipment?.forEach((eq) => {
@@ -524,10 +532,10 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             {
                 id: data.id,
                 name: data.name,
-                rarity: data.rarity,
+                rarity,
                 faction: data.faction,
                 type: data.type,
-                affinity: data.affinity as AffinityName,
+                affinity: toAffinityName(data.affinity),
                 rank: data.rank,
                 level: data.level,
                 baseStats: {
@@ -615,12 +623,16 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
                     // guard rather than cast, since this map is built once per leaderboard
                     // request from every user's stored gear.
                     if (!isGearSlotName(internalGear.slot)) return undefined;
+                    // `internalGear.rarity` is read straight off the inventory row (`string`) —
+                    // guard rather than cast, same trust boundary as `slot` above.
+                    const gearRarity = internalGear.rarity.toLowerCase();
+                    if (!isRarityName(gearRarity)) return undefined;
                     return {
                         id: internalGear.id,
                         slot: internalGear.slot,
                         level: internalGear.level,
                         stars: internalGear.stars,
-                        rarity: internalGear.rarity,
+                        rarity: gearRarity,
                         // `internalGear.setBonus` is read straight off the inventory row (`string`) —
                         // guard rather than cast, same trust boundary as `slot` above.
                         setBonus: isGearSetName(internalGear.setBonus)

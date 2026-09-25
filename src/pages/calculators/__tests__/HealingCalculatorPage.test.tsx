@@ -50,7 +50,7 @@ vi.mock('recharts', () => {
 const supportHealer: Ship = {
     id: 'support-healer',
     name: 'Kindly Medic',
-    rarity: 'LEGENDARY',
+    rarity: 'legendary',
     faction: 'ATLAS_SYNDICATE',
     type: 'SUPPORTER',
     baseStats: {

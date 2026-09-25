@@ -16,11 +16,11 @@ import {
     isGearSlotName,
     isImplantSlotName,
 } from '../constants/gearTypes';
-import { Ship, AffinityName } from '../types/ship';
+import { Ship } from '../types/ship';
 import { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
-import { ShipTypeName } from '../constants/shipTypes';
-import { RarityName } from '../constants/rarities';
-import { FactionName } from '../constants/factions';
+import { isShipTypeName, toShipTypeName } from '../constants/shipTypes';
+import { toRarityName } from '../constants/rarities';
+import { toAffinityName } from '../constants/affinities';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -105,10 +105,13 @@ interface RawShipBaseStats {
 interface RawShipData {
     id: string;
     name: string;
-    rarity: RarityName;
-    faction: FactionName;
-    type: ShipTypeName;
-    affinity: AffinityName;
+    // Raw Supabase columns, typed as what the database actually holds and narrowed by
+    // `transformShipData` (`toRarityName` / `toShipTypeName` / `toAffinityName`). `faction` stays
+    // `string` because `FactionName` is `string`; narrow through `asFactionKey` if needed.
+    rarity: string;
+    faction: string;
+    type: string;
+    affinity: string | null;
     copies: number;
     rank: number;
     level: number;
@@ -225,13 +228,24 @@ const transformShipData = (data: RawShipData): Ship | null => {
             }
         };
 
+        // See `toShipTypeName` — this fallback changes autogear's scoring formula, so it is
+        // never silent.
+        if (!isShipTypeName(data.type.toUpperCase())) {
+            console.warn(
+                `Ship "${data.name}" (${data.id}) has an unrecognised type "${data.type}"; ` +
+                    `defaulting to ATTACKER. Its autogear scoring is wrong until the stored ` +
+                    `type is corrected.`
+            );
+        }
+
         const ship: Ship = {
             id: data.id,
             name: data.name,
-            rarity: data.rarity,
+            // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
+            rarity: toRarityName(data.rarity),
             faction: data.faction,
-            type: data.type,
-            affinity: data.affinity,
+            type: toShipTypeName(data.type),
+            affinity: toAffinityName(data.affinity),
             copies: data.copies || 1,
             rank: data.rank,
             level: data.level,
