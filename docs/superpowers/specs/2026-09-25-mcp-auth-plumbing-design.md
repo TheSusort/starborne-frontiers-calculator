@@ -45,9 +45,11 @@ Admin-only until the Auth API question (below) is answered; lifting the gate is 
       `true` or refuse;
    4. builds `createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { global: { headers: { Authorization: 'Bearer <token>' } }, auth: { persistSession: false, autoRefreshToken: false } })`
       and hands it to the tool as `ctx.db`;
-   5. runs a fresh stateless `McpServer` + `StreamableHTTPServerTransport`
-      (`sessionIdGenerator: undefined`) for this one request, per
-      https://developers.netlify.com/guides/write-mcps-on-netlify/.
+   5. runs a fresh stateless `McpServer` + `WebStandardStreamableHTTPServerTransport`
+      (`sessionIdGenerator: undefined`, `enableJsonResponse: true` — plain JSON, no SSE from
+      Lambda) and returns `transport.handleRequest(request)`. The web-standard transport takes the
+      Functions-v2 `Request` directly, so the Netlify guide's `fetch-to-node` bridge is not needed
+      (verified: `@modelcontextprotocol/sdk` 1.30.1 ships it, peer `zod ^3.25 || ^4.0`).
 
 Env: the function reads the existing public `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` from
 `process.env` (never `import.meta.env`); Netlify exposes site env vars to functions when their scope
@@ -66,7 +68,10 @@ includes Functions. No service-role key, no JWT secret.
   `get_ship({ name })` from `ship_templates`: name, type, rarity, faction, affinity, base stats.
 - `tools/skills.ts` — `get_ship_skills({ name, refits? 0|2|4 })`: skill text for active, charge,
   the refit-active passive (via `getShipSkillRows()` on a template-built `Ship` with `refits`
-  of that length), plus the parsed effects the web app shows (`parseAllSkillEffects`).
+  of that length), plus the parsed effects the web app shows (`parseAllSkillEffects`). Reads
+  `ship_templates` because that is what the website renders (the same skill columns
+  `ShipsContext` joins); `docs/ship-skills.csv` is the dev-side source that populates the table and
+  stays the parser's reference, not a runtime input.
 - `tools/gear.ts` — `list_gear_sets()`, `list_implants({ query? })` from `src/constants`.
 - `tools/profiles.ts` — `list_profiles()`: rows of `users` where
   `id = authUserId OR owner_auth_user_id = authUserId` (same predicate as
@@ -106,7 +111,11 @@ unit-testable with a local key set.
 
 ### `src/pages/OAuthConsentPage.tsx` + route `/oauth/consent`
 
-- Not signed in → the existing Google sign-in, returning to the same URL.
+- Not signed in → Google sign-in that returns to this exact URL. Today's `signInWithGoogle`
+  (`src/services/auth/supabaseAuth.ts`) hard-codes `redirectTo: window.location.origin`, which
+  would drop `authorization_id`; it gains an optional `redirectTo` argument (default unchanged),
+  and the consent page passes `window.location.href`. The page must still read
+  `authorization_id` after the `?code=` round-trip — covered by a test.
 - Signed in, **not admin** → "MCP access is currently limited to admins" and a Deny that calls
   `denyAuthorization`. The same gate as the function: once DCR is on, any registered app can send
   a player here, and nobody but an admin can approve while the gate stands.
@@ -123,6 +132,23 @@ The admin check on the page is a UX gate; the function's check is the enforcemen
 `@modelcontextprotocol/sdk`, `jose` → **`dependencies`** (shipped runtime, so `npm run audit`
 covers them). Rewrite `package.json`'s `//dependencies` comment from "packages that end up in the
 browser bundle" to "shipped runtime — the browser bundle or a Netlify function".
+
+### Gates for `netlify/functions/`
+
+Today `tsconfig.json` includes only `src`, `npm run lint` is `eslint src`, and the pre-commit hook
+runs `tsc --noEmit` — so a file under `netlify/functions/` would be type-checked and linted by
+nothing. Widen `tsconfig.json` `include` to `["src", "netlify/functions"]` (not `netlify/` — the
+edge functions are Deno) and the lint script to `eslint src netlify/functions`. Run `npm run knip`
+and add an entry for `netlify/functions/mcp.ts` if knip reports `src/mcp/` unused.
+
+**Node-load tripwire.** vitest defines `import.meta.env`, so it cannot see a transitive import of
+`src/config/supabase.ts` (or anything else reading `import.meta.env`) from the function's graph —
+which would crash every cold start in prod. `src/mcp/__tests__/nodeLoad.test.ts` spawns
+`npx tsx -e "await import('<abs>/src/mcp/registry.ts')"` as a child process with the env scrubbed
+the way `src/__tests__/scripts/netlifyIgnore.test.ts` scrubs it, and asserts exit 0. Consequence
+for the code: tools import `src/constants/gearSets.ts`, `implants.ts` etc. directly, never the
+`src/constants/index.tsx` barrel, and nothing under `src/mcp/` or `src/services/fleetReads.ts`
+imports `src/config/supabase.ts`.
 
 ## Errors
 
@@ -165,8 +191,10 @@ browser bundle" to "shipped runtime — the browser bundle or a Netlify function
    the SPA's `/* → /index.html 200` rewrite; if HTML comes back, add `force = true` rewrites for
    these paths above the catch-all in `netlify.toml`.
 4. Supabase dashboard: Authentication → URL Configuration: Site URL is
-   `https://starborneplanner.com`. Authentication → OAuth Server: enable, Authorization Path
-   `/oauth/consent`, Allow Dynamic OAuth Apps on.
+   `https://starborneplanner.com`, and Redirect URLs includes
+   `https://starborneplanner.com/oauth/consent**` (the consent page's sign-in returns there with a
+   query string; Supabase rejects a `redirectTo` not on the list). Authentication → OAuth Server:
+   enable, Authorization Path `/oauth/consent`, Allow Dynamic OAuth Apps on.
 5. Connect from Claude, approve, exercise each tool.
 6. **Auth API probe.** Claude does not expose its token, so `scripts/oauth-probe.ts` (run with
    `npx tsx`, Node 22) does its own flow: registers a client via DCR with a
