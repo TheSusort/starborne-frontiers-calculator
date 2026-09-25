@@ -15,7 +15,6 @@ import {
     GEAR_SLOTS,
     isGearSlotName,
     type GearSlotName,
-    type EquipmentSlotName,
 } from '../../constants/gearTypes';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { getBaseRoleStats, getScoringBaselineStats } from '../../constants/roleBaseStats';
@@ -91,10 +90,10 @@ function getBaselineScore(role: ShipTypeName): number {
  * nothing.
  */
 function addSetBonusShare(
-    setBonus: GearSetName | null,
-    // Accepts either slot space — the `slot in GEAR_SLOTS` check below is the real gate, and
+    setBonus: string | null,
+    // Accepts any stored slot string — the `slot in GEAR_SLOTS` check below is the real gate, and
     // an implant's set bonus (if any) is credited by its own caller, not this one.
-    slot: EquipmentSlotName,
+    slot: string,
     target: BaseStats,
     reference: BaseStats
 ): void {

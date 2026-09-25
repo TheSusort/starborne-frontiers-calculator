@@ -10,7 +10,7 @@ import type {
     RoleBasis,
 } from '../../../types/autogear';
 import type { GearSlotName, ShipTypeName } from '../../../constants';
-import type { ImplantSlotName } from '../../../constants/gearTypes';
+import { type ImplantSlotName, isEquipmentSlotName } from '../../../constants/gearTypes';
 import { FastCache } from '../../fastScoring/fastCache';
 import { statVectorToBaseStats, type StatVector } from '../../fastScoring/statVector';
 import { buildGearRegistry, type GearRegistry } from './gearRegistry';
@@ -114,7 +114,7 @@ export function buildFastScoringContext(input: BuildContextInput): FastScoringCo
         for (const id of Object.values(input.ship.implants ?? {})) {
             if (!id) continue;
             const piece = input.resolveGearPiece?.(id);
-            if (piece) shipImplantPieces.push(piece);
+            if (piece && isEquipmentSlotName(piece.slot)) shipImplantPieces.push(piece);
         }
         implantRegistry = buildGearRegistry(shipImplantPieces, percentRef, input.ship.id);
         fixedImplantIds = shipImplantPieces.map((p) => implantRegistry.idOf.get(p.id)!);

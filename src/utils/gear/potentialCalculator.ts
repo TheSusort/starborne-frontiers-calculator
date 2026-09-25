@@ -13,7 +13,7 @@ import { calculatePriorityScore } from '../autogear/scoring';
 import { ShipTypeName, GearSlotName } from '../../constants';
 import { SUBSTAT_RANGES } from '../../constants/statValues';
 import { calculateTotalStats, StatBreakdown } from '../ship/statsCalculator';
-import { getGearSet, GearSetName } from '../../constants/gearSets';
+import { getGearSet, GearSetName, isGearSetName } from '../../constants/gearSets';
 import { UPGRADE_COSTS } from '../../constants/upgradeCosts';
 import { getScoringBaselineStats } from '../../constants/roleBaseStats';
 import { Ship } from '../../types/ship';
@@ -297,12 +297,12 @@ function calculateGearStats(
             Object.values(equipmentWithoutSlot).forEach((gearId) => {
                 if (!gearId) return;
                 const gear = getGearPiece(gearId);
-                if (!gear?.setBonus) return;
+                if (!gear?.setBonus || !isGearSetName(gear.setBonus)) return;
                 setCountsBefore[gear.setBonus] = (setCountsBefore[gear.setBonus] || 0) + 1;
             });
 
             const setCountsAfter: Partial<Record<GearSetName, number>> = { ...setCountsBefore };
-            if (piece.setBonus) {
+            if (piece.setBonus && isGearSetName(piece.setBonus)) {
                 setCountsAfter[piece.setBonus] = (setCountsAfter[piece.setBonus] || 0) + 1;
             }
 

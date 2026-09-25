@@ -1,5 +1,5 @@
 import type { GearPiece } from '../../../types/gear';
-import type { EquipmentSlotName } from '../../../constants/gearTypes';
+import { type EquipmentSlotName, isEquipmentSlotName } from '../../../constants/gearTypes';
 import type { BaseStats, Stat } from '../../../types/stats';
 import { PERCENTAGE_ONLY_STATS } from '../../../types/stats';
 import { getCalibratedMainStat, isCalibrationEligible } from '../../gear/calibrationUtils';
@@ -67,6 +67,12 @@ export function buildGearRegistry(
     for (let i = 0; i < pieces.length; i++) {
         const piece = pieces[i];
         idOf.set(piece.id, i);
+
+        // Every registry id indexes these typed arrays, so a piece cannot be skipped here; the
+        // caller's inventory is already narrowed (`availableInventoryForShip`).
+        if (!isEquipmentSlotName(piece.slot)) {
+            throw new Error(`Gear piece ${piece.id} has an unrecognised slot "${piece.slot}"`);
+        }
 
         // Slot id
         let slotId = slotNameToId.get(piece.slot);

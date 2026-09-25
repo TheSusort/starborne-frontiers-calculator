@@ -14,6 +14,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship inventory: a ship saved without an affinity no longer disappears on load.',
     'Ships: signed-out ships with outdated saved data no longer break cards.',
     'Ship inventory: an unrecognised faction now shows its raw name in filters.',
+    'Gear: pieces with outdated saved slot, set or rarity data now load safely.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

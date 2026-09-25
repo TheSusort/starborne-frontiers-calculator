@@ -3,9 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
-import { GearSlotName } from '../constants/gearTypes';
-import { toRarityName } from '../constants/rarities';
-import { GearSetName } from '../constants/gearSets';
+import { normaliseGearFields } from '../utils/gear/normaliseGearFields';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
@@ -33,12 +31,12 @@ const InventoryContext = createContext<InventoryContextType | undefined>(undefin
 
 interface RawGearData {
     id: string;
-    slot: GearSlotName;
+    // Raw Supabase columns; see `normaliseGearFields` for what each may carry.
+    slot: string;
     level: number;
     stars: number;
-    // Raw Supabase column; coerced by `toRarityName` on load.
     rarity: string;
-    set_bonus: GearSetName;
+    set_bonus: string;
     calibration_ship_id?: string | null;
     stats: unknown;
 }
@@ -81,13 +79,12 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
     try {
         const { mainStat, subStats } = decodeGearStats(data.stats);
 
-        const gear: GearPiece = {
+        const gear: GearPiece = normaliseGearFields({
             id: data.id,
             slot: data.slot,
             level: data.level,
             stars: data.stars,
-            // A user's own row is kept even when its rarity is unreadable; see `toRarityName`.
-            rarity: toRarityName(data.rarity),
+            rarity: data.rarity,
             setBonus: data.set_bonus,
             // A piece with no main stat reads as hp 0 here, unlike the other
             // decode sites which keep it null. `isValidGearPiece` below rejects
@@ -100,7 +97,7 @@ const transformGearData = (data: RawGearData): GearPiece | null => {
                     shipId: data.calibration_ship_id,
                 },
             }),
-        };
+        });
 
         return isValidGearPiece(gear) ? gear : null;
     } catch (error) {
@@ -150,7 +147,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     // Synchronize local state with storage (IndexedDB cache)
     useEffect(() => {
         if (storageInventory) {
-            setLocalInventory(storageInventory);
+            // The IndexedDB cache is a trust boundary: see `normaliseGearFields`.
+            setLocalInventory(storageInventory.map(normaliseGearFields));
             if (storageInventory.length > 0) {
                 setCacheLoaded(true);
             }

@@ -164,8 +164,8 @@ describe('buildEquipmentAbilities — unknown implant key', () => {
             id: 'fake-implant',
             slot: 'implant_major',
             rarity: 'legendary',
-            // Deliberately not a real GearSetName — the point of the test.
-            setBonus: 'FAKE_NONEXISTENT_IMPLANT' as GearSetName,
+            // Deliberately not a real set name — the point of the test.
+            setBonus: 'FAKE_NONEXISTENT_IMPLANT',
         });
         const ship = makeShip({
             implants: { implant_major: 'fake-implant' },

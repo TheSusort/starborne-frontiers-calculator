@@ -38,7 +38,11 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     const [subStats, setSubStats] = useState<Stat[]>(editingPiece?.subStats || []);
     const [rarity, setRarity] = useState<RarityName>(editingPiece?.rarity || 'rare');
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
-    const [setBonus, setSetBonus] = useState<GearSetName>(editingPiece?.setBonus || 'FORTITUDE');
+    const [setBonus, setSetBonus] = useState<GearSetName>(
+        editingPiece?.setBonus && isGearSetName(editingPiece.setBonus)
+            ? editingPiece.setBonus
+            : 'FORTITUDE'
+    );
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
     const [showAllFields, setShowAllFields] = useState(false);
 
@@ -50,7 +54,11 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             setSubStats(editingPiece.subStats);
             setRarity(editingPiece.rarity);
             setStars(editingPiece.stars);
-            setSetBonus(editingPiece.setBonus || 'FORTITUDE');
+            setSetBonus(
+                editingPiece.setBonus && isGearSetName(editingPiece.setBonus)
+                    ? editingPiece.setBonus
+                    : 'FORTITUDE'
+            );
             setLevel(editingPiece.level);
         } else {
             setShowAllFields(false);

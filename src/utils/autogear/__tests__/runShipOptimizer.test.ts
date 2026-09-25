@@ -111,6 +111,21 @@ describe('findOptimalGearForShip', () => {
         expect(passedInventory.map((g) => g.id)).toEqual(['b']);
     });
 
+    it('excludes a stored piece whose slot is unrecognised (#569)', async () => {
+        const inventory = [
+            gear({ id: 'a', slot: 'antenna' }),
+            gear({ id: 'b' }),
+            gear({ id: 'c', slot: 'implant_major', setBonus: 'CHAOS_PACT' }),
+        ];
+        await findOptimalGearForShip(
+            ship,
+            { ...baseConfig, optimizeImplants: true },
+            { ...baseDeps, inventory }
+        );
+        const passedInventory = findOptimalGear.mock.calls[0][2];
+        expect(passedInventory.map((g) => g.id)).toEqual(['b', 'c']);
+    });
+
     it('excludes equipped gear on another ship when ignoreEquipped is set', async () => {
         const inventory = [gear({ id: 'a' }), gear({ id: 'b' })];
         await findOptimalGearForShip(

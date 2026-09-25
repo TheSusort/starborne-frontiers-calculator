@@ -11,6 +11,7 @@ import { SavedAutogearConfig } from '../types/autogear';
 import { AutogearTeam } from '../types/autogearTeam';
 import { tryEncodeGearStats } from '../utils/gear/statsCodec';
 import { normaliseShipFields } from '../utils/ship/normaliseShipFields';
+import { normaliseGearFields } from '../utils/gear/normaliseGearFields';
 
 const BATCH_SIZE = 500;
 const CHILD_BATCH_SIZE = 50;
@@ -311,7 +312,9 @@ export async function reuploadLocalDataToSupabase(userId: string): Promise<strin
     const autogearTeams = loadLocalData<AutogearTeam[]>(StorageKey.AUTOGEAR_TEAMS);
 
     // Inventory is profile-scoped in IndexedDB
-    const inventory: GearPiece[] = (await getFromIndexedDB(inventoryCacheKey(userId))) ?? [];
+    const inventory: GearPiece[] = ((await getFromIndexedDB(inventoryCacheKey(userId))) ?? []).map(
+        normaliseGearFields
+    );
 
     // Step 1: Upsert inventory items (without calibration_ship_id to avoid FK issues)
     const validInventory = inventory.filter((item) => !!item.id);

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { StatPriority, RoleBasis } from '../../../../types/autogear';
 import type { GearPiece } from '../../../../types/gear';
 import { GEAR_SLOT_ORDER, SHIP_TYPE_NAMES, type GearSlotName } from '../../../../constants';
-import type { EquipmentSlotName } from '../../../../constants/gearTypes';
+import { type EquipmentSlotName, isEquipmentSlotName } from '../../../../constants/gearTypes';
 import { calculateTotalScore } from '../../scoring';
 import { fastScore } from '../fastScore';
 import { buildFastScoringContext } from '../context';
@@ -135,7 +135,7 @@ describe('fastScore equivalence with calculateTotalScore', () => {
                 const lookup = (id: string) => specific.find((p) => p.id === id);
 
                 const equipment: Partial<Record<EquipmentSlotName, string>> = {};
-                for (const p of specific) equipment[p.slot] = p.id;
+                for (const p of specific) if (isEquipmentSlotName(p.slot)) equipment[p.slot] = p.id;
 
                 const ctx = buildFastScoringContext({
                     ship,
