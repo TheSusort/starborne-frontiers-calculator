@@ -177,10 +177,8 @@ describe('migratePlayerData', () => {
         expect(result.inventory[2].calibration?.shipId).toBe(result.ships[0].id);
     });
 
-    // A ship saved to localStorage before rarity/type/affinity were real unions (or restored
-    // from an old backup) can carry a mixed-case rarity, a retired type or a null affinity.
-    // The migrated payload this function hands to `syncMigratedDataToSupabase` for upload must
-    // already be normalised — see `normaliseShipFields` (#568).
+    // See `normaliseShipFields` — a stored ship is a trust boundary; the migrated payload this
+    // function hands to `syncMigratedDataToSupabase` for upload must already be normalised (#568).
     it("normalises a legacy ship's rarity/type/affinity before migration", async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const legacyShip: Ship = {

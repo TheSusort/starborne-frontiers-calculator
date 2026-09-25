@@ -95,10 +95,7 @@ export const migratePlayerData = async (
         }
     };
 
-    // Load all relevant data. A ship saved before rarity/type/affinity were real unions (or
-    // restored from an old backup) can carry a mixed-case rarity, a retired type or a null
-    // affinity — normalised here so both this function's own return value and the upload in
-    // `syncMigratedDataToSupabase` see the same coerced values (#568).
+    // Load all relevant data. See `normaliseShipFields` — a stored ship is a trust boundary (#568).
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS).map(normaliseShipFields);
     // Gear is cached in IndexedDB, not localStorage; a player who has never
     // signed in holds it under the unscoped key.

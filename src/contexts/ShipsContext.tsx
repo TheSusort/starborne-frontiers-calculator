@@ -226,10 +226,7 @@ const transformShipData = (data: RawShipData): Ship | null => {
             }
         };
 
-        // `normaliseShipIdentity` is the one place rarity/type/affinity get coerced — the
-        // localStorage read (`ShipsContext`'s unauthenticated path) and `migratePlayerData`
-        // apply the same coercion via `normaliseShipFields`, so all three trust boundaries stay
-        // in lockstep (#568).
+        // See `normaliseShipIdentity` — the one place rarity/type/affinity get coerced (#568).
         const normalised = normaliseShipIdentity(data);
 
         const ship: Ship = {
@@ -326,12 +323,10 @@ export const ShipsProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         defaultValue: [],
     });
 
-    // `useStorage` casts parsed JSON straight to `Ship[]` with no runtime check, so a ship saved
-    // before rarity/type/affinity were real unions (or restored from an old backup) can carry a
-    // mixed-case rarity, a retired type or a null affinity — any of which crashes a ship card.
-    // Normalised on every read rather than written back: `normaliseShipFields` is idempotent, so
-    // nothing drifts by leaving storage as-is until a writer (e.g. `commitShips`) persists the
-    // normalised value anyway (#568).
+    // `useStorage` casts parsed JSON straight to `Ship[]` with no runtime check — see
+    // `normaliseShipFields` for what a stored ship can carry. Normalised on every read rather
+    // than written back: it's idempotent, so nothing drifts by leaving storage as-is until a
+    // writer (e.g. `commitShips`) persists the normalised value anyway (#568).
     const normalisedStorageShips = useMemo(
         () => storageShips.map(normaliseShipFields),
         [storageShips]

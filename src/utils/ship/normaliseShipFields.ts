@@ -4,9 +4,9 @@ import { toAffinityName } from '../../constants/affinities';
 import { AffinityName, Ship } from '../../types/ship';
 
 /** The fields this coerces, plus `id`/`name` for the fallback-type warning. Matches both a raw
- *  Supabase row (`RawShipData`, whose `rarity`/`type`/`affinity` are untyped `string`/`string |
- *  null` columns) and a `Ship` loaded from localStorage — JSON has no way to enforce `Ship`'s
- *  narrower field types at rest, so a stored value can carry the same raw shape as a DB row. */
+ *  Supabase row (whose `rarity`/`type`/`affinity` are untyped `string`/`string | null` columns)
+ *  and a `Ship` loaded from a JSON store — JSON has no way to enforce `Ship`'s narrower field
+ *  types at rest, so a stored value can carry the same raw shape as a DB row. */
 export interface RawShipIdentityFields {
     id: string;
     name: string;
@@ -47,10 +47,9 @@ export const normaliseShipIdentity = (ship: RawShipIdentityFields): NormalisedSh
 };
 
 /**
- * Applies `normaliseShipIdentity` to an already-Ship-shaped value — the localStorage read
- * (`ShipsContext`'s unauthenticated path) and `migratePlayerData`/`reuploadLocalDataToSupabase`,
- * none of which go through `transformShipData`'s Supabase-row construction. Idempotent:
- * normalising an already-normalised ship returns the same values.
+ * Applies `normaliseShipIdentity` to an already-Ship-shaped value, for a read that doesn't go
+ * through `transformShipData`'s Supabase-row construction. Idempotent: normalising an
+ * already-normalised ship returns the same values.
  */
 export const normaliseShipFields = (ship: Ship): Ship => ({
     ...ship,

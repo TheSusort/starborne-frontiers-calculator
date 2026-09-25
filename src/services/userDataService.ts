@@ -297,10 +297,8 @@ export async function pruneEngineeringStatsNotNamed(
 }
 
 export async function reuploadLocalDataToSupabase(userId: string): Promise<string[]> {
-    // Normalised here for the same reason `migratePlayerData` normalises its ships read: a
-    // pre-union-narrowing (or backup-restored) local ship can carry a bad rarity/type/affinity,
-    // and this function upserts `ship.rarity`/`ship.type`/`ship.affinity` straight to Supabase
-    // below (#568).
+    // See `normaliseShipFields` — a stored ship is a trust boundary, and this upserts
+    // `ship.rarity`/`ship.type`/`ship.affinity` straight to Supabase below (#568).
     const ships = loadLocalData<Ship[]>(StorageKey.SHIPS).map(normaliseShipFields);
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
