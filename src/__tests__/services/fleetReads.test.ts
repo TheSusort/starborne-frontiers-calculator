@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { supabase } from '../../config/supabase';
 import {
     INVENTORY_BATCH_SIZE,
+    engineeringStatForShipType,
+    fetchEngineeringStats,
     fetchInventory,
     fetchShips,
     transformGearData,
@@ -230,5 +232,70 @@ describe('transformGearData', () => {
             subStats: [{ name: 'crit', value: 5, type: 'percentage' }],
             calibration: { shipId: 'ship-1' },
         });
+    });
+});
+
+describe('fetchEngineeringStats', () => {
+    it('groups rows by ship type and skips an unknown type', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const { db } = stubDb({
+            engineering_stats: [
+                {
+                    user_id: USER,
+                    ship_type: 'ATTACKER',
+                    stat_name: 'attack',
+                    value: 10,
+                    type: 'percentage',
+                },
+                {
+                    user_id: USER,
+                    ship_type: 'ATTACKER',
+                    stat_name: 'crit',
+                    value: 5,
+                    type: 'percentage',
+                },
+                { user_id: USER, ship_type: 'RETIRED', stat_name: 'hp', value: 1, type: 'flat' },
+            ],
+        });
+
+        const stats = await fetchEngineeringStats(db, USER);
+
+        expect(stats).toEqual({
+            stats: [
+                {
+                    shipType: 'ATTACKER',
+                    stats: [
+                        { name: 'attack', value: 10, type: 'percentage' },
+                        { name: 'crit', value: 5, type: 'percentage' },
+                    ],
+                },
+            ],
+        });
+        warn.mockRestore();
+    });
+
+    it('throws the Supabase error', async () => {
+        const { db } = stubDb({}, { errors: { engineering_stats: { message: 'boom' } } });
+
+        await expect(fetchEngineeringStats(db, USER)).rejects.toEqual({ message: 'boom' });
+    });
+});
+
+describe('engineeringStatForShipType', () => {
+    const stats = {
+        stats: [
+            {
+                shipType: 'SUPPORTER' as const,
+                stats: [{ name: 'hp' as const, value: 5, type: 'percentage' as const }],
+            },
+        ],
+    };
+
+    it('gives SUPPORTER_BUFFER the SUPPORTER tree', () => {
+        expect(engineeringStatForShipType(stats, 'SUPPORTER_BUFFER')).toBe(stats.stats[0]);
+    });
+
+    it('is undefined for a type with no entry', () => {
+        expect(engineeringStatForShipType(stats, 'ATTACKER')).toBeUndefined();
     });
 });

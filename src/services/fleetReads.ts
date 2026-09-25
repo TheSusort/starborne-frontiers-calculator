@@ -1,8 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
+import { isShipTypeName, type ShipTypeName } from '../constants/shipTypes';
 import type { GearPiece } from '../types/gear';
 import type { Ship } from '../types/ship';
-import type { FlexibleStats, Stat, StatName, StatType } from '../types/stats';
+import type {
+    EngineeringStat,
+    EngineeringStats,
+    FlexibleStats,
+    Stat,
+    StatName,
+    StatType,
+} from '../types/stats';
 import { decodeGearStats } from '../utils/gear/statsCodec';
 import { normaliseGearFields } from '../utils/gear/normaliseGearFields';
 import { normaliseShipIdentity } from '../utils/ship/normaliseShipFields';
@@ -463,3 +471,67 @@ export async function fetchInventory(
 
     return allItems;
 }
+
+interface RawEngineeringStat {
+    user_id: string;
+    ship_type: string;
+    stat_name: StatName;
+    value: number;
+    type: StatType;
+}
+
+const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats => {
+    const statsByShipType = data.reduce(
+        (acc, stat) => {
+            // A row's `ship_type` crosses the Supabase trust boundary — skip a row whose value
+            // fell out of the `ShipTypeName` union (a retired/renamed role) rather than crash.
+            if (!isShipTypeName(stat.ship_type)) {
+                console.warn(
+                    `Unrecognised ship type "${stat.ship_type}" — skipping engineering stat`
+                );
+                return acc;
+            }
+            const shipType = stat.ship_type;
+            if (!acc[shipType]) {
+                acc[shipType] = {
+                    shipType,
+                    stats: [],
+                };
+            }
+            acc[shipType].stats.push({
+                name: stat.stat_name,
+                value: stat.value,
+                type: stat.type,
+            } as Stat);
+            return acc;
+        },
+        {} as Partial<Record<ShipTypeName, EngineeringStat>>
+    );
+
+    return {
+        stats: Object.values(statsByShipType),
+    };
+};
+
+/** The engineering stats of `profileId`, grouped by ship type; `null` when the read returned no
+ *  data and no error. */
+export async function fetchEngineeringStats(
+    db: SupabaseClient,
+    profileId: string
+): Promise<EngineeringStats | null> {
+    const { data, error } = await db.from('engineering_stats').select('*').eq('user_id', profileId);
+
+    if (error) throw error;
+
+    return data ? transformEngineeringStats(data as RawEngineeringStat[]) : null;
+}
+
+/** The engineering entry a ship of `shipType` uses. `SUPPORTER_BUFFER` has no engineering tree
+ *  of its own in game; it uses `SUPPORTER`'s. */
+export const engineeringStatForShipType = (
+    stats: EngineeringStats,
+    shipType: ShipTypeName
+): EngineeringStat | undefined => {
+    const engineeringType = shipType === 'SUPPORTER_BUFFER' ? 'SUPPORTER' : shipType;
+    return stats.stats.find((stat) => stat.shipType === engineeringType);
+};
