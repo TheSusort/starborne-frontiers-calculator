@@ -24,7 +24,7 @@ import {
     getBeaconDescription,
     getBeaconRarity,
 } from '../../utils/recruitmentCalculator';
-import { FACTIONS, FactionName } from '../../constants/factions';
+import { FACTIONS, FactionName, asFactionName } from '../../constants/factions';
 
 const RecruitmentCalculatorPage: React.FC = () => {
     const { ships: allShips, loading, error } = useShipsData();
@@ -380,7 +380,11 @@ const RecruitmentCalculatorPage: React.FC = () => {
                                             <Select
                                                 label="Select Faction"
                                                 value={factionEventFaction}
-                                                onChange={(value) => setFactionEventFaction(value)}
+                                                onChange={(value) =>
+                                                    setFactionEventFaction(
+                                                        asFactionName(value) ?? ''
+                                                    )
+                                                }
                                                 options={Object.entries(FACTIONS).map(
                                                     ([key, faction]) => ({
                                                         value: key,

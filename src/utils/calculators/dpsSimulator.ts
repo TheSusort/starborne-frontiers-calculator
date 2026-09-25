@@ -11,7 +11,7 @@ import {
 } from '../../types/calculator';
 import { ShipSkills } from '../../types/abilities';
 import { AffinityName } from '../../types/ship';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import type { ActiveBuff } from '../combat/statusEngine';
 import { runCombat, TeamActorEngineInput, CombatEngineInput } from '../combat/engine';
 import type { Position } from '../../types/encounters';
@@ -106,7 +106,7 @@ export interface DPSSimulationInput {
      *  `TeamActorInput` (already threaded — `deriveTeamEngineActors` spreads it through
      *  unchanged). Absent (manual config, no ship picked) → unknown faction → the focus never
      *  matches a faction filter (conservative), mirroring the healing adapter's `healerFaction`. */
-    faction?: FactionKey;
+    faction?: FactionName;
     /** #426: the focus attacker's SHIP name, for the live `ally-on-team` roster check
      *  (Isha/Nayra's reciprocal Affinity Override gate). Supply the picked ship's real name —
      *  NOT the config's display label, which is a placeholder like "Ship 1" for a manual config.

@@ -13,6 +13,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Gear analysis: Repair and Boost set pieces are no longer flagged as off-set.',
     'Ship inventory: a ship saved without an affinity no longer disappears on load.',
     'Ships: signed-out ships with outdated saved data no longer break cards.',
+    'Ship inventory: an unrecognised faction now shows its raw name in filters.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

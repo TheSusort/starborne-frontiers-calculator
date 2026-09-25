@@ -1,5 +1,5 @@
 import type { ShipRoleCategory } from '../constants/shipTypes';
-import type { FactionKey } from '../constants/factions';
+import type { FactionName } from '../constants/factions';
 import { EnemyBaseClass, DoTType, StackTrigger, ParsedBuffEffects } from './calculator';
 
 export type SkillSlot = 'active' | 'charged' | 'passive';
@@ -1204,9 +1204,9 @@ export interface Ability {
      *  faction; single-ship DPS has no allies at all, and every team-sim actor is derived from
      *  a picked ship.
      *
-     *  Typed `FactionKey`, NOT `FactionName` — the latter is `string` (see factions.ts), so a
-     *  typo'd 'TIANCHOA' would compile and, under the rule above, reach nobody. */
-    factionFilter?: FactionKey[];
+     *  Typed `FactionName` (the real union) so a typo'd 'TIANCHOA' is a compile error rather
+     *  than silently reaching nobody under the rule above. */
+    factionFilter?: FactionName[];
     /** Recipient STATE filter for an ally-scoped grant — the axes a clause can name about the
      *  allies it reaches, as opposed to `factionFilter`'s roster axis. Chimei's R2 names both:
      *  "all allies WITH STEALTH repair 10% …" and "NON-DEFENDER allies BELOW 40% HP are granted

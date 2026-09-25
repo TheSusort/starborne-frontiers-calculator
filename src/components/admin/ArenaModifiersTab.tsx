@@ -15,7 +15,7 @@ import {
     deleteRule,
 } from '../../services/arenaModifierService';
 import { useNotification } from '../../hooks/useNotification';
-import { FACTIONS } from '../../constants/factions';
+import { FACTIONS, FACTION_NAMES, getFaction } from '../../constants/factions';
 import { SHIP_TYPES, SHIP_TYPE_NAMES, isShipTypeName } from '../../constants/shipTypes';
 import { RARITIES, RarityName, isRarityName } from '../../constants/rarities';
 import { STATS } from '../../constants/stats';
@@ -63,7 +63,7 @@ function buildFilterSummary(rule: ArenaSeasonRule): string {
         );
     }
     if (rule.factions && rule.factions.length > 0) {
-        parts.push(`from ${rule.factions.map((f) => FACTIONS[f]?.name ?? f).join('/')}`);
+        parts.push(`from ${rule.factions.map((f) => getFaction(f)?.name ?? f).join('/')}`);
     }
 
     return parts.length > 0 ? parts.join(' ') : 'All units';
@@ -145,7 +145,7 @@ const RuleForm: React.FC<RuleFormProps> = ({ seasonId, existingRule, onSaved, on
     );
     const [saving, setSaving] = useState(false);
 
-    const factionOptions = Object.keys(FACTIONS).map((key) => ({
+    const factionOptions = FACTION_NAMES.map((key) => ({
         key,
         label: FACTIONS[key].name,
     }));

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Ship } from '../../types/ship';
-import { ShipTypeName, SHIP_TYPES, isShipTypeName, FACTIONS } from '../../constants';
+import { ShipTypeName, SHIP_TYPES, isShipTypeName, getFaction } from '../../constants';
 import { RarityName, RARITY_ORDER, isRarityName } from '../../constants/rarities';
 import { Select, StatCard } from '../ui';
 import { calculateShipStatistics, filterShips } from '../../utils/statistics/shipsStats';
@@ -444,7 +444,7 @@ export const ShipsStatsTab: React.FC<ShipsStatsTabProps> = ({ ships, previousSta
                                         className="border-b border-dark-border"
                                     >
                                         <td className="py-2">
-                                            {FACTIONS[faction.faction]?.name || faction.faction}
+                                            {getFaction(faction.faction)?.name || faction.faction}
                                         </td>
                                         <td className="text-right py-2">{faction.count}</td>
                                     </tr>

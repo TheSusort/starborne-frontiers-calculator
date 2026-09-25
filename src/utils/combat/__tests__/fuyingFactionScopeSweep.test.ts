@@ -24,7 +24,7 @@ import { runCombat, type CombatEngineInput } from '../engine';
 import { createEventBus, type CombatEvent } from '../events';
 import { bareEnemy } from '../__testutils__/bareRosterFixture';
 import type { ConditionContext } from '../../abilities/evaluateConditions';
-import type { FactionKey } from '../../../constants/factions';
+import type { FactionName } from '../../../constants/factions';
 import type { ShipSkills } from '../../../types/abilities';
 
 const inertWalkStats = (hp: number) => ({
@@ -37,7 +37,7 @@ const inertWalkStats = (hp: number) => ({
     hp,
 });
 
-const inertAlly = (id: string, faction?: FactionKey) => ({
+const inertAlly = (id: string, faction?: FactionName) => ({
     id,
     speed: 1,
     chargeCount: 0,

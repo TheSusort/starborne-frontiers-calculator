@@ -146,7 +146,7 @@ import {
 } from '../calculators/skillBuffAutoFill';
 import { CHEAT_DEATH_BUFFS } from '../combat/cheatDeathBuffs';
 import { TOXIC_OVERFLOW, TOXIC_OVERFLOW_DURATION } from '../../constants/toxicOverflow';
-import { FACTION_KEYS, factionSpellings, type FactionKey } from '../../constants/factions';
+import { FACTION_NAMES, factionSpellings, type FactionName } from '../../constants/factions';
 import { selectedBuffToAbility } from './buffAbilityConverters';
 
 let counter = 0;
@@ -827,7 +827,7 @@ interface ParsedIncomingDamageReduction {
     target?: 'self' | 'all-allies';
     /** #363: restrict ally recipients to these factions. Only meaningful with target
      *  'all-allies'. */
-    factionFilter?: FactionKey[];
+    factionFilter?: FactionName[];
     /** #363: the emitted ability carries `Ability.patternScoped`, so the engine narrows its
      *  recipients to the carrier's ACTIVE support footprint. OWNER-RULED 2026-08-22 — see the
      *  ally-aura arm below for why this is set despite the clause not naming the pattern. */
@@ -960,7 +960,7 @@ function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDama
         // Matched against every spelling the corpus uses for the faction (`factionSpellings`),
         // not just its display name — the game data can lag a frontend rename.
         const word = allyAuraM[1].trim().toLowerCase();
-        const key = FACTION_KEYS.find((k) =>
+        const key = FACTION_NAMES.find((k) =>
             factionSpellings(k).some((n) => n.toLowerCase() === word)
         );
         // Unrecognised faction word → emit NOTHING, so audit:skills keeps reporting the clause

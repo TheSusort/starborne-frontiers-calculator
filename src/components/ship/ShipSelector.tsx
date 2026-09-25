@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Ship } from '../../types/ship';
 import { useShips } from '../../contexts/ShipsContext';
 import { Button, Input, Modal } from '../ui';
-import { RARITY_ORDER, SHIP_TYPES, FACTIONS } from '../../constants';
+import { RARITY_ORDER, SHIP_TYPES, getFaction } from '../../constants';
 import { ShipDisplay } from './ShipDisplay';
 
 interface ShipSelectorProps {
@@ -109,8 +109,8 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                                 case 'faction':
                                     return (
                                         dir *
-                                        (FACTIONS[a.faction]?.name || '').localeCompare(
-                                            FACTIONS[b.faction]?.name || ''
+                                        (getFaction(a.faction)?.name || '').localeCompare(
+                                            getFaction(b.faction)?.name || ''
                                         )
                                     );
                                 case 'rarity':

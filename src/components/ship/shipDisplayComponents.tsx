@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { AffinityName, Ship } from '../../types/ship';
 import {
     SHIP_TYPES,
-    FACTIONS,
+    getFaction,
     RARITIES,
     IMPLANT_SLOT_ORDER,
     ImplantSlotName,
@@ -100,44 +100,42 @@ export const ShipHeader = memo(
         ship: Ship;
         variant?: 'full' | 'compact' | 'extended';
         minWidth?: boolean;
-    }) => (
-        <div>
-            <div
-                className={`flex items-center gap-1 min-h-[28px] ${minWidth ? 'min-w-[100px]' : ''}`}
-            >
-                {ship.type && SHIP_TYPES[ship.type] && (
-                    <ShipIcon
-                        iconUrl={SHIP_TYPES[ship.type].iconUrl}
-                        name={SHIP_TYPES[ship.type].name}
-                        className={`${ship.affinity ? getAffinityClass(ship.affinity) : ''}`}
-                    />
-                )}
-                {ship.faction && FACTIONS[ship.faction] && (
-                    <ShipIcon
-                        iconUrl={FACTIONS[ship.faction].iconUrl}
-                        name={FACTIONS[ship.faction].name}
-                    />
-                )}
-                <span
-                    className={`${variant === 'compact' ? 'text-sm' : 'lg:text-sm'} font-secondary ${RARITIES[ship.rarity || 'common'].textColor}`}
+    }) => {
+        const faction = getFaction(ship.faction);
+        return (
+            <div>
+                <div
+                    className={`flex items-center gap-1 min-h-[28px] ${minWidth ? 'min-w-[100px]' : ''}`}
                 >
-                    {ship.name}
-                </span>
-            </div>
-            {((ship.refits?.length ?? 0) > 0 || (ship.rank ?? 0) > 0) && (
-                <div className="flex items-center gap-1">
-                    {Array.from({ length: 6 }, (_, index) => (
-                        <span
-                            key={index}
-                            className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
-                        >
-                            ★
-                        </span>
-                    ))}
+                    {ship.type && SHIP_TYPES[ship.type] && (
+                        <ShipIcon
+                            iconUrl={SHIP_TYPES[ship.type].iconUrl}
+                            name={SHIP_TYPES[ship.type].name}
+                            className={`${ship.affinity ? getAffinityClass(ship.affinity) : ''}`}
+                        />
+                    )}
+                    {faction && <ShipIcon iconUrl={faction.iconUrl} name={faction.name} />}
+                    <span
+                        className={`${variant === 'compact' ? 'text-sm' : 'lg:text-sm'} font-secondary ${RARITIES[ship.rarity || 'common'].textColor}`}
+                    >
+                        {ship.name}
+                    </span>
                 </div>
-            )}
-        </div>
-    )
+                {((ship.refits?.length ?? 0) > 0 || (ship.rank ?? 0) > 0) && (
+                    <div className="flex items-center gap-1">
+                        {Array.from({ length: 6 }, (_, index) => (
+                            <span
+                                key={index}
+                                className={`text-xs tracking-tightest ${index < ship.refits?.length ? 'text-yellow-400' : ship.rank && index < ship.rank ? 'text-theme-text' : 'text-theme-text-secondary'}`}
+                            >
+                                ★
+                            </span>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    }
 );
 ShipHeader.displayName = 'ShipHeader';
 

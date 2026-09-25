@@ -2,7 +2,7 @@ import { ShipSkills } from '../../types/abilities';
 import { SelectedGameBuff, TeamActorInput } from '../../types/calculator';
 import { AffinityName } from '../../types/ship';
 import type { ShipTypeName } from '../../constants/shipTypes';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import type { Position } from '../../types/encounters';
 import type { ActiveBuff } from '../combat/statusEngine';
 import type { CombatEventBus } from '../combat/events';
@@ -105,7 +105,7 @@ export interface EnemyAttackerInput {
      *  (Fuying's "grants Tianchen allies Stealth"). Absent → unknown faction → an enemy-side
      *  faction-scoped grant never reaches this enemy (conservative). Spread straight through by
      *  `engineEnemyAttackers` below, same as every other passthrough field on this interface. */
-    faction?: FactionKey;
+    faction?: FactionName;
 }
 
 export interface HealingSimulationInput {
@@ -131,7 +131,7 @@ export interface HealingSimulationInput {
      *  Tianchen allies Stealth"). Team actors carry their own `faction` on TeamActorInput (passed
      *  through untouched). Absent (manual config, no ship picked) → unknown faction → the healer
      *  never receives a faction-scoped grant. */
-    healerFaction?: FactionKey;
+    healerFaction?: FactionName;
     /** #426: the HEALER ship's NAME, for the live `ally-on-team` roster check (Isha/Nayra's
      *  reciprocal Affinity Override gate). Team actors carry their own `name` on `TeamActorInput`
      *  (passed through untouched). Supply the picked ship's real name, never a display label —

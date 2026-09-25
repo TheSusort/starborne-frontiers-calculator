@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { Ship } from '../types/ship';
 import type { Position } from '../types/encounters';
-import { asFactionKey } from '../constants/factions';
+import { asFactionName } from '../constants/factions';
 import { targetingOf } from '../utils/calculators/shipTargeting';
 import { buildShipAbilitiesWithEquipment } from '../utils/abilities/buildShipAbilitiesWithEquipment';
 import { EnemyAttackerConfig } from '../components/calculator/EnemyAttackersPanel';
@@ -227,7 +227,7 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                         role: ship.type,
                         // #363: faction-scoped ally grants (Fuying's Tianchen Stealth) resolve the
                         // recipient's faction from here.
-                        faction: asFactionKey(ship.faction),
+                        faction: asFactionName(ship.faction),
                         buffs: t.buffs.filter((b) => !b.autoFilled),
                         enemyDebuffs: t.enemyDebuffs.filter((b) => !b.autoFilled),
                     };
@@ -324,12 +324,12 @@ export function useEnemyTeamRoster(options: UseEnemyTeamRosterOptions): UseEnemy
                 return {
                     id: e.id,
                     // #363: this enemy's own faction — mirrors how the player-side team-ship/
-                    // target-ship branches above already thread `faction: asFactionKey(ship.
+                    // target-ship branches above already thread `faction: asFactionName(ship.
                     // faction)`. Without this an ENEMY-side Fuying grants Stealth to nobody
                     // (unknown faction never matches a filter), the opposite-direction defect
                     // from those branches missing it. A manual enemy (no `shipId`) stays
                     // unknown-faction, same as before.
-                    faction: asFactionKey(enemyShip?.faction),
+                    faction: asFactionName(enemyShip?.faction),
                     stats: {
                         attack: e.attack,
                         crit: e.crit,

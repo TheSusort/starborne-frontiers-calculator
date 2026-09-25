@@ -21,7 +21,6 @@ import { submitTemplateProposal } from '../../services/shipTemplateProposalServi
 import { supabase } from '../../config/supabase';
 import { Ship } from '../../types/ship';
 import { isRarityName } from '../../constants/rarities';
-import { FactionName } from '../../constants/factions';
 import { ShipTypeName, isShipTypeName } from '../../constants/shipTypes';
 import { toAffinityName } from '../../constants/affinities';
 import { StorageKey } from '../../constants/storage';
@@ -98,7 +97,7 @@ export const ImportButton: React.FC<{
                         id: template.id,
                         name: template.name,
                         rarity: template.rarity.toLowerCase(),
-                        faction: template.faction as FactionName,
+                        faction: template.faction,
                         type: template.type as ShipTypeName,
                         baseStats: {
                             hp: template.base_stats.hp,

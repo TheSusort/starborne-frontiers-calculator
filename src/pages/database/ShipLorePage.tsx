@@ -7,7 +7,7 @@ import { Loader } from '../../components/ui/Loader';
 import { SearchInput } from '../../components/ui/SearchInput';
 import { Image } from '../../components/ui/Image';
 import { Button } from '../../components/ui/Button';
-import { RARITIES, FACTIONS, SHIP_TYPES } from '../../constants';
+import { RARITIES, getFaction, SHIP_TYPES } from '../../constants';
 import { SEO_CONFIG } from '../../constants/seo';
 import { Ship } from '../../types/ship';
 import { ShipIcon, getAffinityClass } from '../../components/ship/shipDisplayComponents';
@@ -264,6 +264,7 @@ const ShipBioCard: React.FC<{
         if (ship.quoteAuthor?.toLowerCase().includes(query)) return ship.quoteAuthor;
         return getMatchSnippet(ship.bio ?? '', searchQuery);
     }, [ship.bio, ship.quote, ship.quoteAuthor, searchQuery]);
+    const faction = getFaction(ship.faction);
 
     return (
         <ExpandableCard
@@ -279,12 +280,7 @@ const ShipBioCard: React.FC<{
                             className={ship.affinity ? getAffinityClass(ship.affinity) : ''}
                         />
                     )}
-                    {ship.faction && FACTIONS[ship.faction] && (
-                        <ShipIcon
-                            iconUrl={FACTIONS[ship.faction].iconUrl}
-                            name={FACTIONS[ship.faction].name}
-                        />
-                    )}
+                    {faction && <ShipIcon iconUrl={faction.iconUrl} name={faction.name} />}
                     <span
                         className={`font-secondary text-lg ${RARITIES[ship.rarity || 'common'].textColor}`}
                     >
@@ -369,66 +365,64 @@ const LoreArticleCard: React.FC<{
 
 // --- Reader pane content ---
 
-const ShipReaderPane: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, searchQuery }) => (
-    <div className="space-y-6">
-        <div className="flex items-start gap-4">
-            {ship.imageKey && (
-                <div className="w-28 h-28 flex-shrink-0">
-                    <Image
-                        src={`${ship.imageKey}_BigPortrait.jpg`}
-                        alt={ship.name}
-                        className="w-full h-full"
-                        imageClassName="w-full h-full object-cover object-top"
-                        aspectRatio="1/1"
-                    />
+const ShipReaderPane: React.FC<{ ship: Ship; searchQuery: string }> = ({ ship, searchQuery }) => {
+    const faction = getFaction(ship.faction);
+    return (
+        <div className="space-y-6">
+            <div className="flex items-start gap-4">
+                {ship.imageKey && (
+                    <div className="w-28 h-28 flex-shrink-0">
+                        <Image
+                            src={`${ship.imageKey}_BigPortrait.jpg`}
+                            alt={ship.name}
+                            className="w-full h-full"
+                            imageClassName="w-full h-full object-cover object-top"
+                            aspectRatio="1/1"
+                        />
+                    </div>
+                )}
+                <div>
+                    <div className="flex items-center gap-2 mb-1">
+                        {ship.type && SHIP_TYPES[ship.type] && (
+                            <ShipIcon
+                                iconUrl={SHIP_TYPES[ship.type].iconUrl}
+                                name={SHIP_TYPES[ship.type].name}
+                                className={ship.affinity ? getAffinityClass(ship.affinity) : ''}
+                            />
+                        )}
+                        {faction && <ShipIcon iconUrl={faction.iconUrl} name={faction.name} />}
+                    </div>
+                    <h2
+                        className={`font-secondary text-2xl ${RARITIES[ship.rarity || 'common'].textColor}`}
+                    >
+                        {ship.name}
+                    </h2>
                 </div>
+            </div>
+
+            {ship.quote && (
+                <blockquote className="border-l-2 border-primary pl-4 italic text-theme-text-secondary font-primary">
+                    <p>
+                        <HighlightedText text={ship.quote} query={searchQuery} />
+                    </p>
+                    {ship.quoteAuthor && (
+                        <footer className="mt-1 text-sm not-italic text-theme-text-secondary">
+                            — <HighlightedText text={ship.quoteAuthor} query={searchQuery} />
+                        </footer>
+                    )}
+                </blockquote>
             )}
-            <div>
-                <div className="flex items-center gap-2 mb-1">
-                    {ship.type && SHIP_TYPES[ship.type] && (
-                        <ShipIcon
-                            iconUrl={SHIP_TYPES[ship.type].iconUrl}
-                            name={SHIP_TYPES[ship.type].name}
-                            className={ship.affinity ? getAffinityClass(ship.affinity) : ''}
-                        />
-                    )}
-                    {ship.faction && FACTIONS[ship.faction] && (
-                        <ShipIcon
-                            iconUrl={FACTIONS[ship.faction].iconUrl}
-                            name={FACTIONS[ship.faction].name}
-                        />
-                    )}
-                </div>
-                <h2
-                    className={`font-secondary text-2xl ${RARITIES[ship.rarity || 'common'].textColor}`}
-                >
-                    {ship.name}
-                </h2>
+
+            <div className="border-t border-dark-border pt-4">
+                <BioContent
+                    bio={ship.bio ?? ''}
+                    searchQuery={searchQuery}
+                    className="text-theme-text leading-relaxed font-sans"
+                />
             </div>
         </div>
-
-        {ship.quote && (
-            <blockquote className="border-l-2 border-primary pl-4 italic text-theme-text-secondary font-primary">
-                <p>
-                    <HighlightedText text={ship.quote} query={searchQuery} />
-                </p>
-                {ship.quoteAuthor && (
-                    <footer className="mt-1 text-sm not-italic text-theme-text-secondary">
-                        — <HighlightedText text={ship.quoteAuthor} query={searchQuery} />
-                    </footer>
-                )}
-            </blockquote>
-        )}
-
-        <div className="border-t border-dark-border pt-4">
-            <BioContent
-                bio={ship.bio ?? ''}
-                searchQuery={searchQuery}
-                className="text-theme-text leading-relaxed font-sans"
-            />
-        </div>
-    </div>
-);
+    );
+};
 
 const ArticleReaderPane: React.FC<{ article: LoreArticle; searchQuery: string }> = ({
     article,

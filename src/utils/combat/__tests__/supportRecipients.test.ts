@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveSupportRecipients, narrowByFaction } from '../supportRecipients';
-import type { FactionKey } from '../../../constants/factions';
+import type { FactionName } from '../../../constants/factions';
 
 describe('resolveSupportRecipients', () => {
     const caster = 'caster-1';
@@ -106,12 +106,12 @@ describe('resolveSupportRecipients', () => {
 // `footprintFilteredRecipients`). Those engine-level tests prove each SITE calls this helper;
 // these test the helper's OWN narrowing rules directly.
 describe('narrowByFaction', () => {
-    const factions: Record<string, FactionKey> = {
+    const factions: Record<string, FactionName> = {
         a: 'TIANCHAO',
         b: 'TIANCHAO',
         c: 'XAOC',
     };
-    const factionOf = (id: string): FactionKey | undefined => factions[id];
+    const factionOf = (id: string): FactionName | undefined => factions[id];
 
     it('intersects with the matching faction, dropping the rest', () => {
         expect(narrowByFaction(['a', 'b', 'c'], ['TIANCHAO'], factionOf)).toEqual(['a', 'b']);

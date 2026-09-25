@@ -65,7 +65,7 @@ import { hasUsableChargedSkill } from '../abilities/applyAbilities';
 import { parseShipTargeting, SkillTargeting, ParsedTarget } from '../targetingParser';
 import { buildCombatLog } from '../combat/log/buildCombatLog';
 import type { CombatLogRound } from '../combat/log/types';
-import { asFactionKey, type FactionName } from '../../constants/factions';
+import { asFactionName } from '../../constants/factions';
 import {
     runPreFight,
     squadLeaderPass,
@@ -904,8 +904,10 @@ interface PlacementPlan {
     id: string;
     name: string;
     position: Position;
-    /** Ship faction — drives the pre-fight squad-leader aura's faction gating. */
-    faction: FactionName;
+    /** Raw `Ship.faction` — drives the pre-fight squad-leader aura's faction gating.
+     *  Narrowed to the real union via `asFactionName` only at the engine-input boundary
+     *  (`EnemyActorInput.faction` etc.), not here. */
+    faction: string;
     /** Ship role — gates role-conditional pre-fight ship passives (Enforcer/Defiant/Stalwart). */
     role: ShipTypeName | undefined;
     stats: DerivedCombatStats;
@@ -1118,7 +1120,7 @@ export function simulateBattle(
             // #363: thread the ship faction for faction-scoped ally grants (Fuying's "grants
             // Tianchen allies Stealth"). Narrowed at this boundary rather than cast — an
             // unrecognised value must read as UNKNOWN, not as a key that matches nothing.
-            faction: asFactionKey(plan.faction),
+            faction: asFactionName(plan.faction),
             // SP-F F4: thread the ship name for the live `ally-on-team` roster check
             // (Isha/Nayra reciprocal Affinity Override gate).
             name: plan.name,
@@ -1165,7 +1167,7 @@ export function simulateBattle(
                 role: plan.role,
                 // #363: thread the ship faction (team symmetry with the teamActors branch) so an
                 // ENEMY-side Fuying scopes her Stealth grant to enemy Tianchen allies.
-                faction: asFactionKey(plan.faction),
+                faction: asFactionName(plan.faction),
                 // SP-F F4: thread the ship name for the live `ally-on-team` roster check.
                 name: plan.name,
                 // §4.5 Stasis-break exemption: thread BOTH forms into the engine input so the
@@ -1252,7 +1254,7 @@ export function simulateBattle(
         // symmetry with the teamActors/enemyAttackers branches above.
         role: focus.role,
         // #363: thread the focus actor's ship faction (team symmetry with the branches above).
-        faction: asFactionKey(focus.faction),
+        faction: asFactionName(focus.faction),
         // SP-F F4: thread the focus actor's ship name for the live `ally-on-team` roster check.
         name: focus.name,
         // §4.5 Stasis-break exemption: thread BOTH forms from ShipSkills (see the team branch).

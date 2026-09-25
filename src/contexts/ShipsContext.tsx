@@ -104,8 +104,9 @@ interface RawShipData {
     id: string;
     name: string;
     // Raw Supabase columns, typed as what the database actually holds and narrowed by
-    // `transformShipData` via the shared `normaliseShipIdentity`. `faction` stays `string`
-    // because `FactionName` is `string`; narrow through `asFactionKey` if needed.
+    // `transformShipData` via the shared `normaliseShipIdentity`. `faction` stays `string` — the
+    // honest type of `Ship.faction` — and is narrowed through `asFactionName` / `getFaction` at
+    // read time rather than here, so an unrecognised faction is never dropped.
     rarity: string;
     faction: string;
     type: string;

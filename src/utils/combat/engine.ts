@@ -7,7 +7,7 @@ import {
 } from '../../types/calculator';
 import type { ShipTypeName } from '../../constants/shipTypes';
 import { matchesRoleCategory } from '../../constants/shipTypes';
-import type { FactionKey } from '../../constants/factions';
+import type { FactionName } from '../../constants/factions';
 import {
     TOXIC_OVERFLOW,
     SPREAD_CORROSION_TIER,
@@ -255,7 +255,7 @@ function registerActorAbilityStatuses(
     // aura/accumulating registration fan-out below. Optional: `narrowByFaction` treats an absent
     // reader the same as an absent filter, so a caller that supplies none keeps the un-narrowed
     // behaviour.
-    factionOf?: (id: string) => FactionKey | undefined,
+    factionOf?: (id: string) => FactionName | undefined,
     // Board-adjacency resolver over the owner's OWN side, for narrowing an `adjacent-allies`
     // AURA/ACCUMULATING fan-out. Those stores are registered here, at actor construction, and
     // never revisited, so unlike the timed statuses (which carry `allyScope` and are narrowed
@@ -598,7 +598,7 @@ function seedPassiveTimedStatuses(
     // #363: actor id → faction, for `factionFilter`'d ally scopes (Fuying-shaped passive-slot
     // grant). Optional so test fixtures that omit it get the pre-#363 unnarrowed behaviour
     // (`narrowByFaction` treats an absent filter as absent regardless of this reader).
-    factionOf?: (id: string) => FactionKey | undefined
+    factionOf?: (id: string) => FactionName | undefined
 ): void {
     for (const rt of runtimes) {
         const seedCtx = buildActorConditionContext(statusEngine, rt.actor.id, {
@@ -795,7 +795,7 @@ export interface EnemyActorInput {
      *  Mirrors `role`'s contract: absent → unknown faction → never matches a filter
      *  (conservative), so an enemy-side Fuying's Tianchen grant reaches only the enemy allies
      *  whose faction the caller supplied. */
-    faction?: FactionKey;
+    faction?: FactionName;
 }
 
 /** Build a full PlayerActorRuntime for a healing-mode enemy attacker.
@@ -813,7 +813,7 @@ export function buildEnemyPlayerActorRuntime(
         enemyDebuffLookup: Map<string, SelectedGameBuff[]>;
         /** #363: actor id → faction (side-agnostic by key — the same map runCombat threads to
          *  the player-side registration calls), for this enemy's `factionFilter`'d ally scopes. */
-        factionOf?: (id: string) => FactionKey | undefined;
+        factionOf?: (id: string) => FactionName | undefined;
         /** Board-adjacency resolver over the ENEMY side — the mirror of the one runCombat
          *  threads to the player-side registration calls, so an enemy-side Centurion's
          *  aura/accumulating `adjacent-allies` grant narrows to ITS neighbours. Absent → no
@@ -1498,7 +1498,7 @@ export interface CombatEngineInput {
     /** #363: FOCUS actor's faction, for `factionFilter`'d ally scopes (factionByActorId). Team
      *  actors carry their own `faction` on TeamActorInput. Absent (manual stats / no ship picked)
      *  → unknown faction → the focus never matches a faction filter (conservative). */
-    faction?: FactionKey;
+    faction?: FactionName;
     /** The player actor id that heals/shields route to and consume against. Must be a player
      *  actor id (focus or a team actor). Required by `mode: 'healing'`; optional under
      *  `mode: 'battle'` (battle mode otherwise anchors the heal target to the focus actor, and
@@ -1602,7 +1602,7 @@ export interface CombatEngineInput {
         name?: string;
         /** #363: this enemy attacker's faction — see EnemyActorInput.faction (factionByActorId,
          *  side-agnostic by key). Absent → unknown faction → never matches a filter. */
-        faction?: FactionKey;
+        faction?: FactionName;
     }[];
     /** Emit-only event tap. Listeners must not read or mutate combat state. */
     bus?: CombatEventBus;
@@ -2370,12 +2370,12 @@ export function runCombat(rawInput: CombatEngineInput): {
     // `buildEnemyPlayerActorRuntime` call below — all three now thread it through so the
     // aura/accumulating registration fan-out and the passive combat-start seed also honour
     // `factionFilter`, not just the timed cast-path loop in playerTurn.ts.
-    const factionByActorId = new Map<string, FactionKey>();
+    const factionByActorId = new Map<string, FactionName>();
     if (input.faction) factionByActorId.set(focusActorId, input.faction);
     for (const t of teamActors) if (t.faction) factionByActorId.set(t.id, t.faction);
     for (const e of input.enemyAttackers ?? [])
         if (e.faction) factionByActorId.set(e.id, e.faction);
-    const factionOf = (id: string): FactionKey | undefined => factionByActorId.get(id);
+    const factionOf = (id: string): FactionName | undefined => factionByActorId.get(id);
 
     // Board-adjacency resolver for the REGISTRATION-time fan-out of aura/accumulating
     // `adjacent-allies` grants (Centurion's charged Core Charge I is the corpus instance).
