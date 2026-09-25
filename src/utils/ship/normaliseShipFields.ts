@@ -10,10 +10,13 @@ import { AffinityName, Ship } from '../../types/ship';
 export interface RawShipIdentityFields {
     id: string;
     name: string;
-    rarity: string;
-    type: string;
-    affinity?: string | null;
+    rarity: unknown;
+    type: unknown;
+    affinity?: unknown;
 }
+
+/** JSON can hold any value in these fields; anything but a string is unreadable. */
+const asString = (value: unknown): string => (typeof value === 'string' ? value : '');
 
 interface NormalisedShipIdentity {
     rarity: RarityName;
@@ -30,19 +33,19 @@ interface NormalisedShipIdentity {
  * fabricated. `faction` is untouched; it stays the raw stored string (see `RawShipData`'s doc).
  */
 export const normaliseShipIdentity = (ship: RawShipIdentityFields): NormalisedShipIdentity => {
-    const rawType = String(ship.type ?? '');
+    const rawType = asString(ship.type);
     if (!isShipTypeName(rawType.toUpperCase())) {
         console.warn(
-            `Ship "${ship.name}" (${ship.id}) has an unrecognised type "${ship.type}"; ` +
+            `Ship "${ship.name}" (${ship.id}) has an unrecognised type "${rawType}"; ` +
                 `defaulting to ATTACKER. Its autogear scoring is wrong until the stored ` +
                 `type is corrected.`
         );
     }
 
     return {
-        rarity: toRarityName(String(ship.rarity ?? '')),
+        rarity: toRarityName(asString(ship.rarity)),
         type: toShipTypeName(rawType),
-        affinity: toAffinityName(ship.affinity ?? null),
+        affinity: toAffinityName(typeof ship.affinity === 'string' ? ship.affinity : null),
     };
 };
 

@@ -64,6 +64,18 @@ describe('normaliseShipFields (#568)', () => {
         vi.restoreAllMocks();
     });
 
+    it('coerces non-string stored rarity/type/affinity instead of throwing', () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const result = normaliseShipFields(
+            baseShip({ rarity: { toString: null }, type: { toString: null }, affinity: 1 })
+        );
+        expect(result.rarity).toBe('common');
+        expect(result.type).toBe('ATTACKER');
+        expect(result.affinity).toBeUndefined();
+        expect(warn).toHaveBeenCalledTimes(1);
+        warn.mockRestore();
+    });
+
     it('does not touch faction', () => {
         const result = normaliseShipFields(baseShip({ faction: 'not-a-real-faction' }));
         expect(result.faction).toBe('not-a-real-faction');

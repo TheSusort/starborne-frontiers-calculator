@@ -109,8 +109,8 @@ export const ShipSelector: React.FC<ShipSelectorProps> = ({
                                 case 'faction':
                                     return (
                                         dir *
-                                        (getFaction(a.faction)?.name || '').localeCompare(
-                                            getFaction(b.faction)?.name || ''
+                                        (getFaction(a.faction)?.name ?? a.faction).localeCompare(
+                                            getFaction(b.faction)?.name ?? b.faction
                                         )
                                     );
                                 case 'rarity':
