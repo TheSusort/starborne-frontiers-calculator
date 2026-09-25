@@ -40,7 +40,12 @@ describe('registerTools', () => {
 
         const { tools } = await client.listTools();
 
-        expect(tools.map((tool) => tool.name).sort()).toEqual(['list_gear_sets', 'list_implants']);
+        expect(tools.map((tool) => tool.name).sort()).toEqual([
+            'get_ship',
+            'list_gear_sets',
+            'list_implants',
+            'search_ships',
+        ]);
         expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
     });
 
