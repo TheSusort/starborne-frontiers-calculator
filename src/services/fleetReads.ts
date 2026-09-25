@@ -1,7 +1,10 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { GearSlotName, ImplantSlotName } from '../constants/gearTypes';
+import type { GearPiece } from '../types/gear';
 import type { Ship } from '../types/ship';
 import type { FlexibleStats, Stat, StatName, StatType } from '../types/stats';
+import { decodeGearStats } from '../utils/gear/statsCodec';
+import { normaliseGearFields } from '../utils/gear/normaliseGearFields';
 import { normaliseShipIdentity } from '../utils/ship/normaliseShipFields';
 
 /**
@@ -288,4 +291,175 @@ export async function fetchShips(db: SupabaseClient, profileId: string): Promise
             ...ship,
             equipment: ship.equipment || {},
         }));
+}
+
+/** The raw `inventory_items` row. Exported for `InventoryProvider.addGear`, which transforms the
+ *  row its insert returns. */
+export interface RawGearData {
+    id: string;
+    // Raw Supabase columns; see `normaliseGearFields` for what each may carry.
+    slot: string;
+    level: number;
+    stars: number;
+    rarity: string;
+    set_bonus: string | null;
+    calibration_ship_id?: string | null;
+    stats: unknown;
+}
+
+/** Rows per keyset page of `inventory_items`. */
+export const INVENTORY_BATCH_SIZE = 5000;
+const MAX_RETRIES = 3;
+const RETRY_DELAY_MS = 1000;
+
+// Type guard for valid gear piece
+const isValidGearPiece = (gear: unknown): gear is GearPiece => {
+    if (!gear || typeof gear !== 'object') return false;
+
+    const gearData = gear as Partial<GearPiece>;
+
+    // Check required string properties
+    const requiredStringProps = ['id', 'slot', 'rarity'] as const;
+    if (!requiredStringProps.every((prop) => typeof gearData[prop] === 'string')) return false;
+    if (gearData.setBonus !== null && typeof gearData.setBonus !== 'string') return false;
+
+    // Check required number properties
+    const requiredNumberProps = ['level', 'stars'] as const;
+    if (!requiredNumberProps.every((prop) => typeof gearData[prop] === 'number')) return false;
+
+    // Check mainStat object
+    if (!gearData.mainStat || typeof gearData.mainStat !== 'object') return false;
+    if (typeof gearData.mainStat.name !== 'string' || typeof gearData.mainStat.value !== 'number') {
+        return false;
+    }
+
+    // Check subStats array
+    if (!Array.isArray(gearData.subStats)) return false;
+    if (
+        !gearData.subStats.every(
+            (stat) => typeof stat.name === 'string' && typeof stat.value === 'number'
+        )
+    ) {
+        return false;
+    }
+
+    return true;
+};
+
+// Helper function to transform Supabase data into GearPiece format
+export const transformGearData = (data: RawGearData): GearPiece | null => {
+    try {
+        const { mainStat, subStats } = decodeGearStats(data.stats);
+
+        const gear: GearPiece = normaliseGearFields({
+            id: data.id,
+            slot: data.slot,
+            level: data.level,
+            stars: data.stars,
+            rarity: data.rarity,
+            setBonus: data.set_bonus,
+            // A piece with no main stat reads as hp 0 here, unlike the other
+            // decode sites which keep it null. `isValidGearPiece` below rejects
+            // a null mainStat, so the fallback is what keeps such rows loadable.
+            mainStat: mainStat ?? { name: 'hp', value: 0, type: 'flat' },
+            subStats,
+            // Include calibration if calibration_ship_id exists
+            ...(data.calibration_ship_id && {
+                calibration: {
+                    shipId: data.calibration_ship_id,
+                },
+            }),
+        });
+
+        return isValidGearPiece(gear) ? gear : null;
+    } catch (error) {
+        console.error('Error transforming gear data:', error);
+        return null;
+    }
+};
+
+/** One keyset page: the pieces with `id` after `lastId`, in `id` order. A failed page is retried
+ *  `MAX_RETRIES` times, `retryDelayMs` apart, before its error is thrown. */
+async function fetchInventoryBatch(
+    db: SupabaseClient,
+    profileId: string,
+    lastId: string | null,
+    retryDelayMs: number,
+    retryCount = 0
+): Promise<{ items: GearPiece[]; lastId: string | null }> {
+    try {
+        let query = db
+            .from('inventory_items')
+            .select('*')
+            .eq('user_id', profileId)
+            .order('id')
+            .limit(INVENTORY_BATCH_SIZE);
+
+        // Only add gt condition if we have a lastId
+        if (lastId) {
+            query = query.gt('id', lastId);
+        }
+
+        const { data, error } = await query;
+
+        if (error) throw error;
+
+        const rows = data as RawGearData[];
+        const transformedGear = rows
+            .map(transformGearData)
+            .filter((gear): gear is GearPiece => gear !== null)
+            .map((gear) => ({
+                ...gear,
+                subStats: gear.subStats || [],
+            }));
+
+        return {
+            items: transformedGear,
+            lastId: rows[rows.length - 1]?.id || null,
+        };
+    } catch (error) {
+        if (retryCount < MAX_RETRIES) {
+            await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+            return fetchInventoryBatch(db, profileId, lastId, retryDelayMs, retryCount + 1);
+        }
+        throw error;
+    }
+}
+
+export interface FetchInventoryOptions {
+    /** Called after each page with every piece read so far. */
+    onBatch?: (itemsSoFar: GearPiece[]) => void;
+    /** Checked before each page; returning true stops the walk and makes `fetchInventory`
+     *  resolve to `null`. */
+    isCancelled?: () => boolean;
+    /** Wait between retries of a failed page. */
+    retryDelayMs?: number;
+}
+
+/** Every gear piece and implant of `profileId`, walked page by page. Resolves to `null` when
+ *  `isCancelled` stopped the walk. The walk ends at the first page holding fewer than
+ *  `INVENTORY_BATCH_SIZE` valid pieces. */
+export async function fetchInventory(
+    db: SupabaseClient,
+    profileId: string,
+    options: FetchInventoryOptions = {}
+): Promise<GearPiece[] | null> {
+    const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
+    let allItems: GearPiece[] = [];
+    let lastId: string | null = null;
+
+    while (true) {
+        if (options.isCancelled?.()) return null;
+        const batch = await fetchInventoryBatch(db, profileId, lastId, retryDelayMs);
+
+        if (batch.items.length === 0) break;
+
+        allItems = [...allItems, ...batch.items];
+        lastId = batch.lastId;
+        options.onBatch?.(allItems);
+
+        if (batch.items.length < INVENTORY_BATCH_SIZE) break;
+    }
+
+    return allItems;
 }

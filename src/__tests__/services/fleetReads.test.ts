@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { supabase } from '../../config/supabase';
-import { fetchShips } from '../../services/fleetReads';
+import {
+    INVENTORY_BATCH_SIZE,
+    fetchInventory,
+    fetchShips,
+    transformGearData,
+} from '../../services/fleetReads';
+import { encodeGearStats } from '../../utils/gear/statsCodec';
 import { fakeSupabase } from './fakeSupabase';
 import { stubDb } from './stubDb';
 
@@ -24,6 +30,25 @@ const rawShipRow = (overrides: Record<string, unknown> = {}) => ({
     ship_templates: { image_key: '', active_skill_text: 'x', active_target: 'enemy' },
     ...overrides,
 });
+
+const gearRow = (id: string, overrides: Record<string, unknown> = {}) => ({
+    id,
+    user_id: USER,
+    slot: 'weapon',
+    level: 16,
+    stars: 6,
+    rarity: 'legendary',
+    set_bonus: 'ATTACK',
+    calibration_ship_id: null,
+    stats: encodeGearStats({
+        mainStat: { name: 'attack', value: 100, type: 'flat' },
+        subStats: [{ name: 'crit', value: 5, type: 'percentage' }],
+    }),
+    ...overrides,
+});
+
+/** Zero-padded so string order is numeric order, the way keyset paging on uuids is. */
+const gearId = (n: number) => `gear-${String(n).padStart(6, '0')}`;
 
 describe('fetchShips', () => {
     beforeEach(() => {
@@ -128,5 +153,82 @@ describe('fetchShips', () => {
         const { db } = stubDb({}, { errors: { ships: { message: 'boom' } } });
 
         await expect(fetchShips(db, USER)).rejects.toEqual({ message: 'boom' });
+    });
+});
+
+describe('fetchInventory', () => {
+    it('walks past one page, keyset on the last id', async () => {
+        const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) => gearRow(gearId(i)));
+        const { db, calls } = stubDb({ inventory_items: rows });
+
+        const items = await fetchInventory(db, USER);
+
+        expect(items).toHaveLength(INVENTORY_BATCH_SIZE + 1);
+        expect(calls.filter((call) => call.method === 'gt')).toEqual([
+            {
+                table: 'inventory_items',
+                method: 'gt',
+                args: ['id', gearId(INVENTORY_BATCH_SIZE - 1)],
+            },
+        ]);
+    });
+
+    it('reports every page to onBatch with the items read so far', async () => {
+        const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) => gearRow(gearId(i)));
+        const { db } = stubDb({ inventory_items: rows });
+        const seen: number[] = [];
+
+        await fetchInventory(db, USER, { onBatch: (itemsSoFar) => seen.push(itemsSoFar.length) });
+
+        expect(seen).toEqual([INVENTORY_BATCH_SIZE, INVENTORY_BATCH_SIZE + 1]);
+    });
+
+    it('resolves to null when cancelled before a page', async () => {
+        const { db, calls } = stubDb({ inventory_items: [gearRow(gearId(0))] });
+
+        const items = await fetchInventory(db, USER, { isCancelled: () => true });
+
+        expect(items).toBeNull();
+        expect(calls).toEqual([]);
+    });
+
+    it('retries a failed page, then succeeds', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(gearId(0))] },
+            { failTimes: { inventory_items: 2 } }
+        );
+
+        const items = await fetchInventory(db, USER, { retryDelayMs: 0 });
+
+        expect(items).toHaveLength(1);
+    });
+
+    it('throws once the retries are spent', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(gearId(0))] },
+            { failTimes: { inventory_items: 4 } }
+        );
+
+        await expect(fetchInventory(db, USER, { retryDelayMs: 0 })).rejects.toEqual({
+            message: 'inventory_items is unavailable',
+        });
+    });
+});
+
+describe('transformGearData', () => {
+    it('decodes the stats column and keeps the calibration', () => {
+        const piece = transformGearData(gearRow('g1', { calibration_ship_id: 'ship-1' }));
+
+        expect(piece).toEqual({
+            id: 'g1',
+            slot: 'weapon',
+            level: 16,
+            stars: 6,
+            rarity: 'legendary',
+            setBonus: 'ATTACK',
+            mainStat: { name: 'attack', value: 100, type: 'flat' },
+            subStats: [{ name: 'crit', value: 5, type: 'percentage' }],
+            calibration: { shipId: 'ship-1' },
+        });
     });
 });
