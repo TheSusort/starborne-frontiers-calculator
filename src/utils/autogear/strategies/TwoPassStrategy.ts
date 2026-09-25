@@ -6,6 +6,7 @@ import { StatPriority, SetPriority } from '../../../types/autogear';
 import { AutogearResult, ScoringInputs } from '../AutogearStrategy';
 import { GEAR_SLOTS, GearSlotName, ShipTypeName } from '../../../constants';
 import { type EquipmentSlotName, isEquipmentSlotName } from '../../../constants/gearTypes';
+import { isGearSetName } from '../../../constants/gearSets';
 import { calculateTotalStats } from '../../ship/statsCalculator';
 import { BaseStats, EngineeringStat } from '../../../types/stats';
 import { calculatePriorityScore, calculateTotalScore } from '../scoring';
@@ -216,7 +217,7 @@ export class TwoPassStrategy extends BaseStrategy {
 
         // Group inventory items by set
         inventory.forEach((gear) => {
-            if (!gear.setBonus) return;
+            if (!gear.setBonus || !isGearSetName(gear.setBonus)) return;
             if (!sets[gear.setBonus]) {
                 sets[gear.setBonus] = [];
             }

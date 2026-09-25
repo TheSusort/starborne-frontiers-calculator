@@ -72,7 +72,7 @@ export function useOrphanSetPieces(ship: Ship, gearLookup: GearLookup): GearPiec
             if (!gearId) return;
 
             const gear = gearLookup[gearId];
-            if (!gear?.setBonus) return;
+            if (!gear?.setBonus || !isGearSetName(gear.setBonus)) return;
 
             // Count the piece
             setCount[gear.setBonus] = (setCount[gear.setBonus] || 0) + 1;

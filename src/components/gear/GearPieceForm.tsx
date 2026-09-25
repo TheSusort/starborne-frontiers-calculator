@@ -2,10 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { GearPiece } from '../../types/gear';
 import { StatName, StatType, Stat } from '../../types/stats';
 import {
-    GearSetName,
     GEAR_SETS,
     getGearSet,
-    isGearSetName,
     RARITIES,
     RarityName,
     isRarityName,
@@ -14,7 +12,7 @@ import {
     STATS,
     SLOT_MAIN_STATS,
 } from '../../constants';
-import { isGearSlotName } from '../../constants/gearTypes';
+import { getEquipmentSlotLabel, isGearSlotName } from '../../constants/gearTypes';
 import { Button, Input, Select } from '../ui';
 import { StatModifierInput } from '../stats/StatModifierInput';
 import { calculateMainStatValue } from '../../utils/gear/mainStatValueFetcher';
@@ -27,22 +25,21 @@ interface Props {
 
 export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
     // This form's slot dropdown only ever offers real gear slots (`gearTypeOptions` below is
-    // built solely from GEAR_SLOTS) — it cannot represent an implant piece, so an
-    // implant `editingPiece` falls back to 'weapon' rather than widening the field.
+    // built solely from GEAR_SLOTS), so `slot` drives the main-stat options with 'weapon' standing
+    // in for a stored slot outside GEAR_SLOTS (an implant, or an unrecognised value). That stored
+    // slot is still what gets saved until the player picks one — see `GearPiece.slot`'s doc.
     const [slot, setSlot] = useState<GearSlotName>(
         editingPiece && isGearSlotName(editingPiece.slot) ? editingPiece.slot : 'weapon'
     );
+    const [slotChosen, setSlotChosen] = useState(false);
     const [mainStat, setMainStat] = useState<Stat>(
         editingPiece?.mainStat || { name: 'attack', value: 0, type: 'flat' }
     );
     const [subStats, setSubStats] = useState<Stat[]>(editingPiece?.subStats || []);
     const [rarity, setRarity] = useState<RarityName>(editingPiece?.rarity || 'rare');
     const [stars, setStars] = useState<number>(editingPiece?.stars || 1);
-    const [setBonus, setSetBonus] = useState<GearSetName>(
-        editingPiece?.setBonus && isGearSetName(editingPiece.setBonus)
-            ? editingPiece.setBonus
-            : 'FORTITUDE'
-    );
+    // The raw stored set, kept even when unrecognised; `setOptions` offers it back.
+    const [setBonus, setSetBonus] = useState<string>(editingPiece?.setBonus || 'FORTITUDE');
     const [level, setLevel] = useState<number>(editingPiece?.level || 0);
     const [showAllFields, setShowAllFields] = useState(false);
 
@@ -54,11 +51,8 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
             setSubStats(editingPiece.subStats);
             setRarity(editingPiece.rarity);
             setStars(editingPiece.stars);
-            setSetBonus(
-                editingPiece.setBonus && isGearSetName(editingPiece.setBonus)
-                    ? editingPiece.setBonus
-                    : 'FORTITUDE'
-            );
+            setSetBonus(editingPiece.setBonus || 'FORTITUDE');
+            setSlotChosen(false);
             setLevel(editingPiece.level);
         } else {
             setShowAllFields(false);
@@ -176,7 +170,10 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
 
         const piece = {
             id: editingPiece?.id,
-            slot,
+            slot:
+                editingPiece && !isGearSlotName(editingPiece.slot) && !slotChosen
+                    ? editingPiece.slot
+                    : slot,
             mainStat,
             subStats: filteredSubStats as Stat[],
             setBonus,
@@ -191,14 +188,18 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
         setStars(1);
         setLevel(0);
         setSlot('weapon');
+        setSlotChosen(false);
         setMainStat({ name: 'attack', value: 0, type: 'flat' });
         setRarity('rare');
         setSetBonus('FORTITUDE');
     };
 
-    const setOptions = Object.entries(GEAR_SETS)
+    const knownSetOptions = Object.entries(GEAR_SETS)
         .map(([key, set]) => ({ value: key, label: set.name }))
         .sort((a, b) => a.label.localeCompare(b.label));
+    const setOptions = getGearSet(setBonus)
+        ? knownSetOptions
+        : [{ value: setBonus, label: setBonus }, ...knownSetOptions];
 
     const rarityOptions = Object.entries(RARITIES).map(([key, rarity]) => ({
         value: key,
@@ -231,7 +232,10 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                                     />
                                 )}
                                 <span className="font-secondary text-sm">
-                                    {getGearSet(setBonus)?.name} {GEAR_SLOTS[slot].label}
+                                    {getGearSet(setBonus)?.name ?? setBonus}{' '}
+                                    {getEquipmentSlotLabel(
+                                        editingPiece && !slotChosen ? editingPiece.slot : slot
+                                    )}
                                 </span>
                             </div>
                             <div className="flex items-center gap-3 text-sm mt-1.5">
@@ -285,9 +289,7 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                     <Select
                         label="Set Bonus"
                         value={setBonus}
-                        onChange={(value) => {
-                            if (isGearSetName(value)) setSetBonus(value);
-                        }}
+                        onChange={setSetBonus}
                         options={setOptions}
                     />
 
@@ -296,7 +298,10 @@ export const GearPieceForm: React.FC<Props> = ({ onSubmit, editingPiece }) => {
                         value={slot}
                         // `gearTypeOptions` is built solely from GEAR_SLOTS' own keys, so every
                         // value this fires with is a real GearSlotName.
-                        onChange={(value) => setSlot(value as GearSlotName)}
+                        onChange={(value) => {
+                            setSlot(value as GearSlotName);
+                            setSlotChosen(true);
+                        }}
                         options={gearTypeOptions}
                     />
 
