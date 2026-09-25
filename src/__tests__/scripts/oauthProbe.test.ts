@@ -30,17 +30,23 @@ describe('pkcePair', () => {
 });
 
 describe('verdicts', () => {
-    it('calls an Auth API check ALLOWED only on 2xx', () => {
-        expect(authApiVerdict(200)).toBe('ALLOWED');
-        expect(authApiVerdict(403)).toBe('BLOCKED');
-        expect(authApiVerdict(401)).toBe('BLOCKED');
+    it.each([
+        [200, 'ALLOWED'],
+        [401, 'BLOCKED'],
+        [403, 'BLOCKED'],
+        [422, 'INCONCLUSIVE'],
+        [429, 'INCONCLUSIVE'],
+        [500, 'INCONCLUSIVE'],
+    ])('calls an Auth API check %i %s', (status, verdict) => {
+        expect(authApiVerdict(status)).toBe(verdict);
     });
 
     it("calls a Data API write BLOCKED only on the read-only hook's own 403", () => {
         const hook = '{"code":"PT403","message":"OAuth client tokens are read-only"}';
 
         expect(dataApiVerdict(403, hook)).toBe('BLOCKED');
-        expect(dataApiVerdict(403, '{"message":"permission denied"}')).toBe('ALLOWED');
+        expect(dataApiVerdict(403, '{"message":"permission denied"}')).toBe('INCONCLUSIVE');
         expect(dataApiVerdict(204, '')).toBe('ALLOWED');
+        expect(dataApiVerdict(401, '')).toBe('INCONCLUSIVE');
     });
 });

@@ -7,15 +7,20 @@
  * client does: dynamic client registration with a `http://127.0.0.1:<port>/callback` redirect,
  * the authorize URL in the browser (sign in and approve on the planner's consent page, as an
  * admin), the code caught by a one-shot local server, and a PKCE code exchange. With the token it
- * makes three checks and prints one verdict line each:
+ * makes three checks and prints one verdict line each, each verdict one of three outcomes:
  *
  *   metadata-update  PUT /auth/v1/user { data: { mcp_probe } }
  *   email-change     PUT /auth/v1/user { email: --probe-email } — never confirmed by this script
  *   data-api-write   DELETE /rest/v1/inventory_items?id=eq.<nil uuid> — the read-only hook must
  *                    answer 403; without the hook it is a 204 that matches no row
  *
- * A check is ALLOWED when the server answered 2xx; data-api-write is BLOCKED only on the hook's
- * own 403. The registered client stays in Supabase (Authentication → OAuth Apps) until deleted.
+ * ALLOWED means the server accepted the request (a 2xx) — the token really could do this.
+ * BLOCKED means the server's own refusal proved it: 401/403 for the Auth API checks, or the
+ * read-only hook's own 403 message for the Data API check. Anything else — a 422, a 429, a 500,
+ * a 403 with a different message — is INCONCLUSIVE: it neither proves the token was refused nor
+ * that the write went through, so it must never be read as BLOCKED (a false sense of safety on
+ * the email-change check) or as ALLOWED (a false alarm). The registered client stays in Supabase
+ * (Authentication → OAuth Apps) until deleted.
  */
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
@@ -23,7 +28,7 @@ import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
-export type Verdict = 'BLOCKED' | 'ALLOWED';
+export type Verdict = 'BLOCKED' | 'ALLOWED' | 'INCONCLUSIVE';
 
 /** No inventory row has this id, so the Data API probe deletes nothing even if it is allowed. */
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
@@ -54,14 +59,23 @@ export function pkcePair(): { verifier: string; challenge: string } {
     return { verifier, challenge };
 }
 
-/** An Auth API check is ALLOWED when the server accepted the request. */
-export const authApiVerdict = (status: number): Verdict =>
-    status >= 200 && status < 300 ? 'ALLOWED' : 'BLOCKED';
+/** An Auth API check is ALLOWED on a 2xx, BLOCKED only on the server's own 401/403 refusal, and
+ *  INCONCLUSIVE otherwise (a 422/429/5xx proves neither outcome — never call it BLOCKED, which
+ *  would give a false-safe verdict on the email-change check). */
+export const authApiVerdict = (status: number): Verdict => {
+    if (status >= 200 && status < 300) return 'ALLOWED';
+    if (status === 401 || status === 403) return 'BLOCKED';
+    return 'INCONCLUSIVE';
+};
 
-/** A Data API write is BLOCKED only when the read-only hook refused it; any other answer means the
- *  request reached the database. */
-export const dataApiVerdict = (status: number, body: string): Verdict =>
-    status === 403 && body.includes('OAuth client tokens are read-only') ? 'BLOCKED' : 'ALLOWED';
+/** A Data API write is BLOCKED only when the read-only hook's own message refused it, ALLOWED on
+ *  a 2xx (the request reached the database), and INCONCLUSIVE otherwise — a 401/500 proves the
+ *  write didn't go through as tested, not that it would be refused if it did. */
+export const dataApiVerdict = (status: number, body: string): Verdict => {
+    if (status === 403 && body.includes('OAuth client tokens are read-only')) return 'BLOCKED';
+    if (status >= 200 && status < 300) return 'ALLOWED';
+    return 'INCONCLUSIVE';
+};
 
 const requireEnv = (name: string): string => {
     const value = process.env[name];
@@ -220,9 +234,21 @@ async function main(): Promise<void> {
         })
     );
 
-    console.log(`\nmetadata-update: ${authApiVerdict(metadataCheck.status)}`);
-    console.log(`email-change: ${authApiVerdict(emailCheck.status)}`);
-    console.log(`data-api-write: ${dataApiVerdict(dataCheck.status, dataCheck.body)}`);
+    const verdicts = {
+        'metadata-update': authApiVerdict(metadataCheck.status),
+        'email-change': authApiVerdict(emailCheck.status),
+        'data-api-write': dataApiVerdict(dataCheck.status, dataCheck.body),
+    };
+    console.log(`\nmetadata-update: ${verdicts['metadata-update']}`);
+    console.log(`email-change: ${verdicts['email-change']}`);
+    console.log(`data-api-write: ${verdicts['data-api-write']}`);
+
+    if (Object.values(verdicts).includes('INCONCLUSIVE')) {
+        console.log(
+            '\nAt least one check was INCONCLUSIVE: re-run after fixing the cause shown above. ' +
+                'The admin gate stays until email-change is BLOCKED.'
+        );
+    }
 }
 
 // Importing this file for its pure helpers must not start a flow.
