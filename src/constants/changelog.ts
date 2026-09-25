@@ -12,6 +12,7 @@ export const UNRELEASED_CHANGES: string[] = [
     'Loadouts: Equip Team now equips gear on every ship in the team.',
     'Gear analysis: Repair and Boost set pieces are no longer flagged as off-set.',
     'Ship inventory: a ship saved without an affinity no longer disappears on load.',
+    'Ships: signed-out ships with outdated saved data no longer break cards.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

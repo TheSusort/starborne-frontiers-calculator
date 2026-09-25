@@ -176,6 +176,32 @@ describe('migratePlayerData', () => {
 
         expect(result.inventory[2].calibration?.shipId).toBe(result.ships[0].id);
     });
+
+    // A ship saved to localStorage before rarity/type/affinity were real unions (or restored
+    // from an old backup) can carry a mixed-case rarity, a retired type or a null affinity.
+    // The migrated payload this function hands to `syncMigratedDataToSupabase` for upload must
+    // already be normalised — see `normaliseShipFields` (#568).
+    it("normalises a legacy ship's rarity/type/affinity before migration", async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const legacyShip: Ship = {
+            ...SHIPS[0],
+            id: 'ship-legacy',
+            rarity: 'Epic' as Ship['rarity'],
+            type: 'RETIRED_ROLE' as Ship['type'],
+            affinity: null as unknown as Ship['affinity'],
+        };
+        localStorage.setItem(StorageKey.SHIPS, JSON.stringify([...SHIPS, legacyShip]));
+
+        const result = await migratePlayerData(USER_ID);
+        const migrated = result.ships[1];
+
+        expect(migrated.rarity).toBe('epic');
+        expect(migrated.type).toBe('ATTACKER');
+        expect(migrated.affinity).toBeUndefined();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('RETIRED_ROLE'));
+
+        warn.mockRestore();
+    });
 });
 
 /**

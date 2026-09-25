@@ -10,6 +10,7 @@ import { EngineeringStat, EngineeringStats } from '../types/stats';
 import { SavedAutogearConfig } from '../types/autogear';
 import { AutogearTeam } from '../types/autogearTeam';
 import { tryEncodeGearStats } from '../utils/gear/statsCodec';
+import { normaliseShipFields } from '../utils/ship/normaliseShipFields';
 
 const BATCH_SIZE = 500;
 const CHILD_BATCH_SIZE = 50;
@@ -296,7 +297,11 @@ export async function pruneEngineeringStatsNotNamed(
 }
 
 export async function reuploadLocalDataToSupabase(userId: string): Promise<string[]> {
-    const ships = loadLocalData<Ship[]>(StorageKey.SHIPS);
+    // Normalised here for the same reason `migratePlayerData` normalises its ships read: a
+    // pre-union-narrowing (or backup-restored) local ship can carry a bad rarity/type/affinity,
+    // and this function upserts `ship.rarity`/`ship.type`/`ship.affinity` straight to Supabase
+    // below (#568).
+    const ships = loadLocalData<Ship[]>(StorageKey.SHIPS).map(normaliseShipFields);
     const encounters = loadLocalData<LocalEncounterNote[]>(StorageKey.ENCOUNTERS);
     const loadouts = loadLocalData<Loadout[]>(StorageKey.LOADOUTS);
     const teamLoadouts = loadLocalData<TeamLoadout[]>(StorageKey.TEAM_LOADOUTS);
