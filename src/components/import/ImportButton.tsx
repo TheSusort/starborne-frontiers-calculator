@@ -118,9 +118,7 @@ export const ImportButton: React.FC<{
                         equipment: {},
                         refits: [],
                         implants: {},
-                        // `ship_templates.affinity` is nullable; `toAffinityName` handles both
-                        // that and a value outside the union — a blind `.toLowerCase()` crashed
-                        // on a null row.
+                        // `ship_templates.affinity` is nullable; see `toAffinityName`.
                         affinity: toAffinityName(template.affinity as string | null),
                         imageKey: template.image_key,
                         activeSkillText: template.active_skill_text,

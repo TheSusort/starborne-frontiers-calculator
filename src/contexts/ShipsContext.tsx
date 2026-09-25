@@ -105,13 +105,9 @@ interface RawShipBaseStats {
 interface RawShipData {
     id: string;
     name: string;
-    // Raw Supabase columns, narrowed by `transformShipData` below rather than trusted as their
-    // union types: `rarity` (-> `toRarityName`), `type` (-> `toShipTypeName`) and `affinity`
-    // (-> `toAffinityName`) are real unions with no runtime check on this row. `rarity`/`faction`/
-    // `type` are NOT NULL text columns; `affinity` is nullable. `faction` types as `string`
-    // because `FactionName` already is (`constants/factions.ts` — the loose `FACTIONS[str]` index
-    // sites depend on it staying that way); narrow through `asFactionKey` if a real union is ever
-    // needed from this field.
+    // Raw Supabase columns, typed as what the database actually holds and narrowed by
+    // `transformShipData` (`toRarityName` / `toShipTypeName` / `toAffinityName`). `faction` stays
+    // `string` because `FactionName` is `string`; narrow through `asFactionKey` if needed.
     rarity: string;
     faction: string;
     type: string;

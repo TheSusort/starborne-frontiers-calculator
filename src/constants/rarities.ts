@@ -52,9 +52,6 @@ export const sortRarities = <T extends string>(rarities: T[]): T[] => {
  *  URL params, community builds, ship templates) — narrow with this rather than a blind cast. */
 export const isRarityName = (name: string): name is RarityName => Object.hasOwn(RARITIES, name);
 
-/** Looks up a rarity by a loose string (e.g. from an import payload) without widening `RARITIES`'
- *  key type back to `string` — returns `undefined` for anything outside the real union instead of
- *  indexing blind. */
 /** Coerces a loose rarity string (any casing) to `RarityName`, falling back to `'common'` for a
  *  value outside the union. For rows that must be kept even when their rarity is unreadable — a
  *  user's own ships and gear — where dropping the row would lose it from the fleet. */
@@ -63,5 +60,8 @@ export const toRarityName = (raw: string): RarityName => {
     return isRarityName(lower) ? lower : 'common';
 };
 
+/** Looks up a rarity by a loose string (e.g. from an import payload) without widening `RARITIES`'
+ *  key type back to `string` — returns `undefined` for anything outside the real union instead of
+ *  indexing blind. */
 export const getRarity = (name: string | null | undefined) =>
     name && isRarityName(name) ? RARITIES[name] : undefined;

@@ -12,8 +12,7 @@ interface ShipTemplate {
     rarity: string;
     faction: string;
     type: string;
-    // `ship_templates.affinity` is nullable; coerced by `toAffinityName` below rather than
-    // trusted as `AffinityName` or blindly `.toLowerCase()`'d (a null value crashes that call).
+    // `ship_templates.affinity` is nullable; coerced by `toAffinityName` below.
     affinity: string | null;
     image_key: string;
     active_skill_text?: string;
