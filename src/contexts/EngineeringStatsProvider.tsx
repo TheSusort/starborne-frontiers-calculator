@@ -1,12 +1,13 @@
 import React, { useCallback, useState, useEffect, createContext, useContext } from 'react';
-import { EngineeringStats, EngineeringStat, StatName, StatType, Stat } from '../types/stats';
+import { EngineeringStats, StatName, StatType } from '../types/stats';
 import { STATS } from '../constants/stats';
-import { ShipTypeName, isShipTypeName } from '../constants/shipTypes';
+import { ShipTypeName } from '../constants/shipTypes';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { useStorage } from '../hooks/useStorage';
 import { StorageKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
+import { engineeringStatForShipType, fetchEngineeringStats } from '../services/fleetReads';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 // -- Start of merged context definition --
@@ -28,47 +29,6 @@ export const EngineeringStatsContext = createContext<EngineeringStatsContextType
     undefined
 );
 
-interface RawEngineeringStat {
-    user_id: string;
-    ship_type: string;
-    stat_name: StatName;
-    value: number;
-    type: StatType;
-}
-
-const transformEngineeringStats = (data: RawEngineeringStat[]): EngineeringStats => {
-    const statsByShipType = data.reduce(
-        (acc, stat) => {
-            // A row's `ship_type` crosses the Supabase trust boundary — skip a row whose value
-            // fell out of the `ShipTypeName` union (a retired/renamed role) rather than crash.
-            if (!isShipTypeName(stat.ship_type)) {
-                console.warn(
-                    `Unrecognised ship type "${stat.ship_type}" — skipping engineering stat`
-                );
-                return acc;
-            }
-            const shipType = stat.ship_type;
-            if (!acc[shipType]) {
-                acc[shipType] = {
-                    shipType,
-                    stats: [],
-                };
-            }
-            acc[shipType].stats.push({
-                name: stat.stat_name,
-                value: stat.value,
-                type: stat.type,
-            } as Stat);
-            return acc;
-        },
-        {} as Partial<Record<ShipTypeName, EngineeringStat>>
-    );
-
-    return {
-        stats: Object.values(statsByShipType),
-    };
-};
-
 export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
     const { activeProfileId, profilesLoading } = useActiveProfile();
@@ -88,19 +48,9 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
         try {
             setLoading(true);
             if (activeProfileId) {
-                const { data, error } = await supabase
-                    .from('engineering_stats')
-                    .select('*')
-                    .eq('user_id', activeProfileId);
-
-                if (error) {
-                    throw error;
-                }
-
-                if (data) {
-                    void setEngineeringStats(
-                        transformEngineeringStats(data as RawEngineeringStat[])
-                    );
+                const loaded = await fetchEngineeringStats(supabase, activeProfileId);
+                if (loaded) {
+                    void setEngineeringStats(loaded);
                 }
             }
         } catch (error) {
@@ -267,10 +217,7 @@ export const EngineeringStatsProvider: React.FC<{ children: React.ReactNode }> =
 
     const getEngineeringStatsForShipType = useCallback(
         (shipType: ShipTypeName): EngineeringStats['stats'][0] | undefined => {
-            if (shipType === 'SUPPORTER_BUFFER') {
-                return engineeringStats.stats.find((stat) => stat.shipType === 'SUPPORTER');
-            }
-            return engineeringStats.stats.find((stat) => stat.shipType === shipType);
+            return engineeringStatForShipType(engineeringStats, shipType);
         },
         [engineeringStats]
     );

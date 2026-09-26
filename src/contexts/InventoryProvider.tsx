@@ -4,10 +4,11 @@ import { GearPiece } from '../types/gear';
 import { useNotification } from '../hooks/useNotification';
 import { supabase } from '../config/supabase';
 import { normaliseGearFields } from '../utils/gear/normaliseGearFields';
+import { fetchInventory, transformGearData, type RawGearData } from '../services/fleetReads';
 import { useStorage, removeFromIndexedDB, clearIndexedDBStorage } from '../hooks/useStorage';
 import { StorageKey, inventoryCacheKey } from '../constants/storage';
 import { isSupabaseSyncEnabled } from '../utils/syncUtils';
-import { decodeGearStats, encodeGearStats } from '../utils/gear/statsCodec';
+import { encodeGearStats } from '../utils/gear/statsCodec';
 import { useActiveProfile, PROFILE_SWITCH_EVENT } from './ActiveProfileProvider';
 
 interface InventoryContextType {
@@ -23,89 +24,7 @@ interface InventoryContextType {
     setData: (data: GearPiece[] | ((prev: GearPiece[]) => GearPiece[])) => Promise<void>;
 }
 
-const BATCH_SIZE = 5000;
-const MAX_RETRIES = 3;
-const RETRY_DELAY = 1000; // 1 second
-
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
-
-interface RawGearData {
-    id: string;
-    // Raw Supabase columns; see `normaliseGearFields` for what each may carry.
-    slot: string;
-    level: number;
-    stars: number;
-    rarity: string;
-    set_bonus: string | null;
-    calibration_ship_id?: string | null;
-    stats: unknown;
-}
-
-// Type guard for valid gear piece
-const isValidGearPiece = (gear: unknown): gear is GearPiece => {
-    if (!gear || typeof gear !== 'object') return false;
-
-    const gearData = gear as Partial<GearPiece>;
-
-    // Check required string properties
-    const requiredStringProps = ['id', 'slot', 'rarity'] as const;
-    if (!requiredStringProps.every((prop) => typeof gearData[prop] === 'string')) return false;
-    if (gearData.setBonus !== null && typeof gearData.setBonus !== 'string') return false;
-
-    // Check required number properties
-    const requiredNumberProps = ['level', 'stars'] as const;
-    if (!requiredNumberProps.every((prop) => typeof gearData[prop] === 'number')) return false;
-
-    // Check mainStat object
-    if (!gearData.mainStat || typeof gearData.mainStat !== 'object') return false;
-    if (typeof gearData.mainStat.name !== 'string' || typeof gearData.mainStat.value !== 'number') {
-        return false;
-    }
-
-    // Check subStats array
-    if (!Array.isArray(gearData.subStats)) return false;
-    if (
-        !gearData.subStats.every(
-            (stat) => typeof stat.name === 'string' && typeof stat.value === 'number'
-        )
-    ) {
-        return false;
-    }
-
-    return true;
-};
-
-// Helper function to transform Supabase data into GearPiece format
-const transformGearData = (data: RawGearData): GearPiece | null => {
-    try {
-        const { mainStat, subStats } = decodeGearStats(data.stats);
-
-        const gear: GearPiece = normaliseGearFields({
-            id: data.id,
-            slot: data.slot,
-            level: data.level,
-            stars: data.stars,
-            rarity: data.rarity,
-            setBonus: data.set_bonus,
-            // A piece with no main stat reads as hp 0 here, unlike the other
-            // decode sites which keep it null. `isValidGearPiece` below rejects
-            // a null mainStat, so the fallback is what keeps such rows loadable.
-            mainStat: mainStat ?? { name: 'hp', value: 0, type: 'flat' },
-            subStats,
-            // Include calibration if calibration_ship_id exists
-            ...(data.calibration_ship_id && {
-                calibration: {
-                    shipId: data.calibration_ship_id,
-                },
-            }),
-        });
-
-        return isValidGearPiece(gear) ? gear : null;
-    } catch (error) {
-        console.error('Error transforming gear data:', error);
-        return null;
-    }
-};
 
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { addNotification } = useNotification();
@@ -168,53 +87,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         [setStorageInventory, localInventory]
     );
 
-    const loadBatch = useCallback(
-        async (
-            lastId: string | null,
-            retryCount = 0
-        ): Promise<{ items: GearPiece[]; lastId: string | null }> => {
-            if (!activeProfileId) return { items: [], lastId: null };
-
-            try {
-                let query = supabase
-                    .from('inventory_items')
-                    .select('*')
-                    .eq('user_id', activeProfileId)
-                    .order('id')
-                    .limit(BATCH_SIZE);
-
-                // Only add gt condition if we have a lastId
-                if (lastId) {
-                    query = query.gt('id', lastId);
-                }
-
-                const { data, error } = await query;
-
-                if (error) throw error;
-
-                const transformedGear = data
-                    .map(transformGearData)
-                    .filter((gear): gear is GearPiece => gear !== null)
-                    .map((gear) => ({
-                        ...gear,
-                        subStats: gear.subStats || [],
-                    }));
-
-                return {
-                    items: transformedGear,
-                    lastId: data[data.length - 1]?.id || null,
-                };
-            } catch (error) {
-                if (retryCount < MAX_RETRIES) {
-                    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-                    return loadBatch(lastId, retryCount + 1);
-                }
-                throw error;
-            }
-        },
-        [activeProfileId]
-    );
-
     const loadInventory = useCallback(async () => {
         // Skip loading if we're in the middle of migration
         if (isMigrating) return;
@@ -231,9 +103,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
                 setLoading(true);
             }
             setLoadingProgress(0);
-            let allItems: GearPiece[] = [];
-            let lastId: string | null = null;
-            let totalLoaded = 0;
 
             // First, get the total count
             const { count, error: countError } = await supabase
@@ -244,30 +113,20 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             if (countError) throw countError;
             const totalItems = count || 0;
 
-            // Load all batches
-            while (true) {
+            const allItems = await fetchInventory(supabase, activeProfileId, {
                 // Bail if the user signed out while we were awaiting a batch.
                 // activeProfileIdRef.current is set to null synchronously in handleSignOut
                 // (before React re-renders), so this check is reliable mid-loop.
-                if (activeProfileIdRef.current !== activeProfileId) return;
-                const { items, lastId: newLastId } = await loadBatch(lastId);
-
-                if (items.length === 0) break;
-
-                allItems = [...allItems, ...items];
-                lastId = newLastId;
-                totalLoaded += items.length;
-
-                // Update progress
-                setLoadingProgress(Math.round((totalLoaded / totalItems) * 100));
-
-                // Update temporary inventory with the latest batch (only when not syncing)
-                if (!hasCachedData) {
-                    setTempInventory(allItems);
-                }
-
-                if (items.length < BATCH_SIZE) break;
-            }
+                isCancelled: () => activeProfileIdRef.current !== activeProfileId,
+                onBatch: (itemsSoFar) => {
+                    setLoadingProgress(Math.round((itemsSoFar.length / totalItems) * 100));
+                    // Update temporary inventory with the latest batch (only when not syncing)
+                    if (!hasCachedData) {
+                        setTempInventory(itemsSoFar);
+                    }
+                },
+            });
+            if (allItems === null) return;
 
             // Once all items are loaded, update the main inventory and
             // cache to IndexedDB so the next visit can hydrate instantly
@@ -289,7 +148,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }, [
         activeProfileId,
         addNotification,
-        loadBatch,
         setTempInventory,
         isMigrating,
         localInventory.length,

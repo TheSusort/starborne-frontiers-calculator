@@ -21,11 +21,11 @@ export class SupabaseAuthService implements AuthService {
         return this.convertSupabaseUser(user);
     }
 
-    async signInWithGoogle(): Promise<void> {
+    async signInWithGoogle(redirectTo: string = window.location.origin): Promise<void> {
         const { error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.origin,
+                redirectTo,
             },
         });
         if (error) throw error;
