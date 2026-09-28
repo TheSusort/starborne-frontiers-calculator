@@ -1,21 +1,26 @@
 /**
  * Manual probe: what can a Supabase OAuth access token do outside the Data API?
  *
- *   npx tsx scripts/oauth-probe.ts --probe-email <address>     (Node 22, .env with VITE_SUPABASE_*)
+ *   npx tsx scripts/oauth-probe.ts [--probe-email <address>] [--password-set]
+ *       (Node 22, .env with VITE_SUPABASE_*; at least one of the two flags)
  *
  * Claude never exposes the token it holds, so this runs its own OAuth 2.1 flow the way an MCP
  * client does: dynamic client registration with a `http://127.0.0.1:<port>/callback` redirect,
  * the authorize URL in the browser (sign in and approve on the planner's consent page, as an
  * admin), the code caught by a one-shot local server, and a PKCE code exchange. With the token it
  * first reads the account (GET /auth/v1/user), which confirms the token is accepted at all, then
- * makes three further checks and prints one verdict line each, each verdict one of three outcomes:
+ * makes further checks and prints one verdict line each, each verdict one of three outcomes:
  *
  *   metadata-update  PUT /auth/v1/user { data: { mcp_probe } }
- *   email-change     PUT /auth/v1/user { email: --probe-email } — never confirmed by this script
+ *   email-change     PUT /auth/v1/user { email: --probe-email } — never confirmed by this script;
+ *                    runs only with --probe-email
  *   data-api-write   DELETE /rest/v1/inventory_items?id=eq.<nil uuid>&id=neq.<nil uuid> — a
  *                    filter matching no row (PostgREST ANDs repeated filters on the same
  *                    column), so this cannot delete anything even without the hook; the
  *                    read-only hook must still answer its own 403
+ *   password-set     PUT /auth/v1/user { password: <random> }, then a password sign-in with the
+ *                    account email and that password; runs only with --password-set. If the
+ *                    password is set, GoTrue also signs out every other session of the account
  *
  * The email-change verdict is judged by the account's STATE, not the PUT's status: right after
  * the PUT the probe reads the account again and looks for the probe address in `new_email` (a
@@ -28,7 +33,12 @@
  * `emailChangeVerdict` for the full rule order. A BLOCKED verdict still needs the Postgres log
  * check the probe prints, because an SMTP failure returns the same response.
  *
- * The other two checks are judged by status. ALLOWED means the server accepted the request (a
+ * The password-set verdict is judged by that sign-in, not the PUT's status: a sign-in that works
+ * is ALLOWED whatever the PUT returned. See `passwordSetVerdict` for the full rule order. Unlike
+ * email-change, the refused sign-in proves no password was set; the Postgres log check the probe
+ * prints on BLOCKED shows it was the trigger's rule and not some other error in the write.
+ *
+ * metadata-update and data-api-write are judged by status. ALLOWED means the server accepted the request (a
  * 2xx) — the token really could do this. BLOCKED means the server's own refusal proved it: 401/403
  * for metadata-update, or the read-only hook's own 403 message for data-api-write. Anything else
  * — a 422, a 429, a 500, a 403 with a different message — is INCONCLUSIVE: it neither proves the
@@ -38,7 +48,7 @@
  *
  * metadata-update is reported but does not gate anything: an OAuth token rewriting the display
  * name and avatar in the user metadata is accepted. The admin gate on the MCP endpoint stays
- * until email-change is BLOCKED (and data-api-write with it). The registered client stays in
+ * until email-change and password-set are BLOCKED (and data-api-write with them). The registered client stays in
  * Supabase (Authentication → OAuth Apps) until deleted.
  */
 import 'dotenv/config';
@@ -55,20 +65,29 @@ export type Verdict = 'BLOCKED' | 'ALLOWED' | 'INCONCLUSIVE';
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export interface ProbeArgs {
-    probeEmail: string;
+    /** Runs the email-change check against this address when set. */
+    probeEmail?: string;
+    /** Runs the password-set check. */
+    passwordSet: boolean;
 }
 
-/** Parses `--probe-email <address>`; the address is required. */
+const USAGE =
+    'usage: npx tsx scripts/oauth-probe.ts [--probe-email <address>] [--password-set] ' +
+    '(at least one; the address must be one you control, different from the account email)';
+
+/** Parses `--probe-email <address>` and `--password-set`; at least one is required. */
 export function parseArgs(argv: string[]): ProbeArgs {
+    const passwordSet = argv.includes('--password-set');
     const at = argv.indexOf('--probe-email');
-    const probeEmail = at >= 0 ? argv[at + 1] : undefined;
-    if (!probeEmail || probeEmail.startsWith('--') || !probeEmail.includes('@')) {
-        throw new Error(
-            'usage: npx tsx scripts/oauth-probe.ts --probe-email <address> ' +
-                '(an address you control, different from the account email)'
-        );
+    if (at < 0) {
+        if (!passwordSet) throw new Error(USAGE);
+        return { passwordSet };
     }
-    return { probeEmail };
+    const probeEmail = argv[at + 1];
+    if (!probeEmail || probeEmail.startsWith('--') || !probeEmail.includes('@')) {
+        throw new Error(USAGE);
+    }
+    return { probeEmail, passwordSet };
 }
 
 const base64url = (bytes: Buffer): string => bytes.toString('base64url');
@@ -187,6 +206,62 @@ export const probeEmailAlreadyPending = (
     probeEmail: string
 ): boolean => holdsProbeEmail(userBefore, probeEmail);
 
+/** A throwaway password for the password-set check: 32 random bytes plus one character of each
+ *  class, so it passes any password-strength rule the project sets. Never printed. */
+export const probePassword = (): string => `${base64url(randomBytes(32))}aA1!`;
+
+/** The public message of the Auth API's 500 when PUT /auth/v1/user { password } fails to write
+ *  (supabase/auth, internal/api/user.go `UserUpdate`). The trigger's refusal
+ *  (`block_account_password_change`) arrives as this 500. */
+export const PASSWORD_WRITE_FAILED = 'Error during password storage';
+
+export interface PasswordSetObservation {
+    /** HTTP status of PUT /auth/v1/user { password }. */
+    putStatus: number;
+    /** Response body of that PUT. */
+    putBody: string;
+    /** GET /auth/v1/user returned 2xx before the PUT. */
+    tokenValidBefore: boolean;
+    /** GET /auth/v1/user returned 2xx right after the PUT. */
+    tokenValidAfter: boolean;
+    /** HTTP status of the password sign-in with the account email and the probe password; null
+     *  when it was not attempted (the account email could not be read). */
+    signInStatus: number | null;
+    /** Response body of that sign-in. */
+    signInBody: string;
+}
+
+/** The password-set verdict, judged by the sign-in. Rules, first match wins:
+ *
+ *  1. The sign-in returned 2xx → ALLOWED, whatever the PUT returned: the token set a password
+ *     that logs in.
+ *  2. Either token check failed, or no sign-in was attempted → INCONCLUSIVE.
+ *  3. The PUT was a 500 carrying `PASSWORD_WRITE_FAILED` and the sign-in was GoTrue's 400
+ *     `invalid_credentials` → BLOCKED.
+ *  4. Otherwise → INCONCLUSIVE: a 2xx PUT whose password does not log in, a 4xx PUT (a 422 weak
+ *     password, a 401 reauthentication demand, a 429), another 5xx, or a sign-in refused for any
+ *     other reason (a 422 when the email provider is disabled, a 429). */
+export const passwordSetVerdict = ({
+    putStatus,
+    putBody,
+    tokenValidBefore,
+    tokenValidAfter,
+    signInStatus,
+    signInBody,
+}: PasswordSetObservation): Verdict => {
+    if (signInStatus !== null && signInStatus >= 200 && signInStatus < 300) return 'ALLOWED';
+    if (!tokenValidBefore || !tokenValidAfter || signInStatus === null) return 'INCONCLUSIVE';
+    if (
+        putStatus === 500 &&
+        putBody.includes(PASSWORD_WRITE_FAILED) &&
+        signInStatus === 400 &&
+        signInBody.includes('invalid_credentials')
+    ) {
+        return 'BLOCKED';
+    }
+    return 'INCONCLUSIVE';
+};
+
 /** A Data API write is BLOCKED only when the read-only hook's own message refused it, ALLOWED on
  *  a 2xx (the request reached the database), and INCONCLUSIVE otherwise — a 401/500 proves the
  *  write didn't go through as tested, not that it would be refused if it did. */
@@ -252,7 +327,7 @@ async function report(
 }
 
 async function main(): Promise<void> {
-    const { probeEmail } = parseArgs(process.argv.slice(2));
+    const { probeEmail, passwordSet } = parseArgs(process.argv.slice(2));
     const supabaseUrl = requireEnv('VITE_SUPABASE_URL');
     const anonKey = requireEnv('VITE_SUPABASE_ANON_KEY');
 
@@ -338,7 +413,7 @@ async function main(): Promise<void> {
             '\ntoken-check: the token itself was not accepted — every Auth API verdict below is INCONCLUSIVE.'
         );
     }
-    if (probeEmailAlreadyPending(before.user, probeEmail)) {
+    if (probeEmail && probeEmailAlreadyPending(before.user, probeEmail)) {
         console.log(
             `\ntoken-check: the account already holds ${probeEmail} (a pending change from an ` +
                 'earlier run, or the account email itself), so email-change cannot be judged. ' +
@@ -357,38 +432,41 @@ async function main(): Promise<void> {
         })
     );
 
-    const emailCheck = await report(
-        'email-change',
-        await fetch(`${supabaseUrl}/auth/v1/user`, {
-            method: 'PUT',
-            headers: json,
-            body: JSON.stringify({ email: probeEmail }),
-        })
-    );
-    const after = await checkToken('token-check (after email-change)');
-    const emailVerdict = emailChangeVerdict({
-        putStatus: emailCheck.status,
-        putBody: emailCheck.body,
-        tokenValidBefore: before.ok,
-        tokenValidAfter: after.ok,
-        userBefore: before.user,
-        userAfter: after.user,
-        probeEmail,
-    });
-    if (emailVerdict === 'ALLOWED') {
-        console.warn(
-            '\nWARNING: the email change was accepted. If it is pending, do NOT click the ' +
-                'confirmation links; ignore the confirmation mail and the change never completes. ' +
-                'If the account email itself changed, restore it in the dashboard.'
+    let emailVerdict: Verdict | undefined;
+    if (probeEmail) {
+        const emailCheck = await report(
+            'email-change',
+            await fetch(`${supabaseUrl}/auth/v1/user`, {
+                method: 'PUT',
+                headers: json,
+                body: JSON.stringify({ email: probeEmail }),
+            })
         );
-    }
-    if (emailVerdict === 'BLOCKED') {
-        console.log(
-            `\nemail-change: an SMTP failure returns the same 500 as the trigger. Confirm in ` +
-                'Supabase Logs (Postgres) that "Changing the account email is disabled" was ' +
-                `raised just now. The confirmation mail to ${probeEmail} is sent before the ` +
-                'refused write, so it may still arrive; its link cannot complete the change.'
-        );
+        const after = await checkToken('token-check (after email-change)');
+        emailVerdict = emailChangeVerdict({
+            putStatus: emailCheck.status,
+            putBody: emailCheck.body,
+            tokenValidBefore: before.ok,
+            tokenValidAfter: after.ok,
+            userBefore: before.user,
+            userAfter: after.user,
+            probeEmail,
+        });
+        if (emailVerdict === 'ALLOWED') {
+            console.warn(
+                '\nWARNING: the email change was accepted. If it is pending, do NOT click the ' +
+                    'confirmation links; ignore the confirmation mail and the change never completes. ' +
+                    'If the account email itself changed, restore it in the dashboard.'
+            );
+        }
+        if (emailVerdict === 'BLOCKED') {
+            console.log(
+                `\nemail-change: an SMTP failure returns the same 500 as the trigger. Confirm in ` +
+                    'Supabase Logs (Postgres) that "Changing the account email is disabled" was ' +
+                    `raised just now. The confirmation mail to ${probeEmail} is sent before the ` +
+                    'refused write, so it may still arrive; its link cannot complete the change.'
+            );
+        }
     }
 
     const dataCheck = await report(
@@ -402,23 +480,108 @@ async function main(): Promise<void> {
         })
     );
 
-    const verdicts = {
+    // Last, because a password that does get set signs out every other session of the account.
+    const passwordVerdict = passwordSet
+        ? await checkPasswordSet(supabaseUrl, anonKey, json, before, checkToken)
+        : undefined;
+
+    const verdicts: Record<string, Verdict | undefined> = {
         'metadata-update': authApiVerdict(metadataCheck.status, before.ok),
         'email-change': emailVerdict,
         'data-api-write': dataApiVerdict(dataCheck.status, dataCheck.body),
+        'password-set': passwordVerdict,
     };
-    console.log(`\nmetadata-update: ${verdicts['metadata-update']}`);
-    console.log(`email-change: ${verdicts['email-change']}`);
-    console.log(`data-api-write: ${verdicts['data-api-write']}`);
+    console.log('');
+    for (const [check, verdict] of Object.entries(verdicts)) {
+        if (verdict) console.log(`${check}: ${verdict}`);
+    }
 
     // metadata-update is reported but gates nothing (see the header).
-    const gating = [verdicts['email-change'], verdicts['data-api-write']];
+    const gating = [emailVerdict, verdicts['data-api-write'], passwordVerdict];
     if (gating.includes('INCONCLUSIVE')) {
         console.log(
-            '\nemail-change or data-api-write was INCONCLUSIVE: re-run after fixing the cause ' +
-                'shown above. The admin gate stays until email-change is BLOCKED.'
+            '\nA gating check was INCONCLUSIVE: re-run after fixing the cause shown above. The ' +
+                'admin gate stays until email-change and password-set are BLOCKED.'
         );
     }
+}
+
+/** Tries to set a throwaway password with the OAuth token, then signs in with it. A sign-in that
+ *  works is revoked straight away, and the probe prints how to clear the password. */
+async function checkPasswordSet(
+    supabaseUrl: string,
+    anonKey: string,
+    json: Record<string, string>,
+    before: { ok: boolean; user: AccountContact | null },
+    checkToken: (label: string) => Promise<{ ok: boolean; user: AccountContact | null }>
+): Promise<Verdict> {
+    const password = probePassword();
+    const put = await report(
+        'password-set',
+        await fetch(`${supabaseUrl}/auth/v1/user`, {
+            method: 'PUT',
+            headers: json,
+            body: JSON.stringify({ password }),
+        })
+    );
+    const after = await checkToken('token-check (after password-set)');
+
+    const email = before.user?.email;
+    let signIn: { status: number; body: string } | null = null;
+    if (email) {
+        const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+            method: 'POST',
+            headers: { apikey: anonKey, 'content-type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+        const body = await response.text();
+        // A successful body carries a first-party session; print only the status.
+        console.log(`\npassword-sign-in: HTTP ${response.status}`);
+        if (!response.ok) console.log(body);
+        signIn = { status: response.status, body };
+        if (response.ok) {
+            let sessionToken: string | undefined;
+            try {
+                ({ access_token: sessionToken } = JSON.parse(body) as { access_token?: string });
+            } catch {
+                sessionToken = undefined;
+            }
+            if (sessionToken) {
+                await fetch(`${supabaseUrl}/auth/v1/logout?scope=local`, {
+                    method: 'POST',
+                    headers: { apikey: anonKey, authorization: `Bearer ${sessionToken}` },
+                });
+            }
+        }
+    } else {
+        console.log('\npassword-sign-in: skipped, the account email could not be read.');
+    }
+
+    const verdict = passwordSetVerdict({
+        putStatus: put.status,
+        putBody: put.body,
+        tokenValidBefore: before.ok,
+        tokenValidAfter: after.ok,
+        signInStatus: signIn?.status ?? null,
+        signInBody: signIn?.body ?? '',
+    });
+    if (verdict === 'ALLOWED' || (put.status >= 200 && put.status < 300)) {
+        console.warn(
+            '\nWARNING: the token set a password on this account, and GoTrue signed out its other ' +
+                'sessions. Clear the password in the SQL editor:\n' +
+                "  update auth.users set encrypted_password = null where email = '" +
+                (email ?? '<account email>') +
+                "';"
+        );
+    }
+    if (verdict === 'BLOCKED') {
+        console.log(
+            '\npassword-set: confirm in Supabase Logs (Postgres) that "Changing the account ' +
+                'password is disabled" was raised just now. Any other error in the write returns ' +
+                'the same 500.'
+        );
+    }
+    return verdict;
 }
 
 // Importing this file for its pure helpers must not start a flow.

@@ -8,15 +8,31 @@ import {
     emailChangeVerdict,
     parseAccountContact,
     parseArgs,
+    PASSWORD_WRITE_FAILED,
+    passwordSetVerdict,
     pkcePair,
     probeEmailAlreadyPending,
+    probePassword,
     type EmailChangeObservation,
+    type PasswordSetObservation,
 } from '../../../scripts/oauth-probe';
 
 describe('parseArgs', () => {
     it('reads --probe-email', () => {
         expect(parseArgs(['--probe-email', 'me@example.com'])).toEqual({
             probeEmail: 'me@example.com',
+            passwordSet: false,
+        });
+    });
+
+    it('reads --password-set alone', () => {
+        expect(parseArgs(['--password-set'])).toEqual({ passwordSet: true });
+    });
+
+    it('reads both flags', () => {
+        expect(parseArgs(['--password-set', '--probe-email', 'me@example.com'])).toEqual({
+            probeEmail: 'me@example.com',
+            passwordSet: true,
         });
     });
 
@@ -25,8 +41,83 @@ describe('parseArgs', () => {
         [['--probe-email']],
         [['--probe-email', '--other']],
         [['--probe-email', 'nope']],
+        [['--password-set', '--probe-email', 'nope']],
     ])('refuses %j', (argv) => {
         expect(() => parseArgs(argv)).toThrow(/--probe-email/);
+    });
+});
+
+describe('probePassword', () => {
+    it('is fresh each call and has every character class', () => {
+        const a = probePassword();
+        expect(a).not.toBe(probePassword());
+        expect(a).toMatch(/[a-z]/);
+        expect(a).toMatch(/[A-Z]/);
+        expect(a).toMatch(/[0-9]/);
+        expect(a).toMatch(/[^A-Za-z0-9]/);
+        expect(Buffer.byteLength(a)).toBeLessThanOrEqual(72);
+    });
+});
+
+describe('passwordSetVerdict', () => {
+    // The trigger's refusal: the password-storage 500, the sign-in refused as bad credentials, and
+    // both token checks fine. Each case below changes one field.
+    const blocked: PasswordSetObservation = {
+        putStatus: 500,
+        putBody: `{"code":500,"error_code":"unexpected_failure","msg":"${PASSWORD_WRITE_FAILED}"}`,
+        tokenValidBefore: true,
+        tokenValidAfter: true,
+        signInStatus: 400,
+        signInBody:
+            '{"code":400,"error_code":"invalid_credentials","msg":"Invalid login credentials"}',
+    };
+
+    it('is BLOCKED on the password-storage 500 with the sign-in refused as bad credentials', () => {
+        expect(passwordSetVerdict(blocked)).toBe('BLOCKED');
+    });
+
+    it('is ALLOWED when the sign-in works, whatever the PUT returned', () => {
+        expect(passwordSetVerdict({ ...blocked, putStatus: 200, signInStatus: 200 })).toBe(
+            'ALLOWED'
+        );
+        expect(passwordSetVerdict({ ...blocked, signInStatus: 200 })).toBe('ALLOWED');
+        expect(passwordSetVerdict({ ...blocked, tokenValidAfter: false, signInStatus: 200 })).toBe(
+            'ALLOWED'
+        );
+    });
+
+    it('is INCONCLUSIVE when no sign-in was attempted', () => {
+        expect(passwordSetVerdict({ ...blocked, signInStatus: null, signInBody: '' })).toBe(
+            'INCONCLUSIVE'
+        );
+    });
+
+    it.each(['tokenValidBefore', 'tokenValidAfter'] as const)(
+        'is INCONCLUSIVE when %s failed',
+        (field) => {
+            expect(passwordSetVerdict({ ...blocked, [field]: false })).toBe('INCONCLUSIVE');
+        }
+    );
+
+    it.each([
+        [200, ''],
+        [401, '{"msg":"Password update requires reauthentication"}'],
+        [422, '{"error_code":"weak_password"}'],
+        [429, ''],
+        [500, '{"msg":"Error recording audit log entry"}'],
+        [502, `{"msg":"${PASSWORD_WRITE_FAILED}"}`],
+    ])('is INCONCLUSIVE on a %i PUT (%j) whose password does not log in', (putStatus, putBody) => {
+        expect(passwordSetVerdict({ ...blocked, putStatus, putBody })).toBe('INCONCLUSIVE');
+    });
+
+    it.each([
+        [422, '{"error_code":"email_provider_disabled"}'],
+        [429, '{"error_code":"over_request_rate_limit"}'],
+        [400, '{"error_code":"email_not_confirmed"}'],
+    ])('is INCONCLUSIVE when the sign-in is refused for another reason (%i %j)', (status, body) => {
+        expect(passwordSetVerdict({ ...blocked, signInStatus: status, signInBody: body })).toBe(
+            'INCONCLUSIVE'
+        );
     });
 });
 
