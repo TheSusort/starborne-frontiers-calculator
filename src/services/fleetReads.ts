@@ -479,11 +479,14 @@ export async function fetchInventory(
     return allItems;
 }
 
-/** `fetchGearByIds` request size. `ship_equipment`/`ship_implants` have no index on `gear_id`
- *  (their PK is `(ship_id, slot)`), so a `!inner` embed join back onto `inventory_items` makes
- *  PostgREST scan the whole join table per inventory row; reading the wanted ids directly with
- *  `.in()` instead needs them chunked to keep each request URL a sane size. */
+/** `fetchGearByIds` request size: ids go in the request URL, so they are sent in chunks. Reading
+ *  by primary key is also why this does not embed-join `ship_equipment` — it has no index on
+ *  `gear_id`, and a PostgREST `!inner` embed scans it once per inventory row. */
 const GEAR_ID_CHUNK_SIZE = 150;
+
+/** `inventory_items.id` is a uuid column: one non-uuid value in an `in` filter fails the whole
+ *  request, and a ship's implant slot can hold the implant's description instead of its id. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const chunk = <T>(items: T[], size: number): T[][] => {
     const chunks: T[][] = [];
@@ -503,7 +506,7 @@ export async function fetchGearByIds(
     profileId: string,
     ids: readonly string[]
 ): Promise<GearPiece[]> {
-    const uniqueIds = [...new Set(ids)].filter((id) => id);
+    const uniqueIds = [...new Set(ids)].filter((id) => UUID_PATTERN.test(id));
     if (uniqueIds.length === 0) return [];
 
     const results = await Promise.all(
