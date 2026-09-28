@@ -21,11 +21,12 @@
  * the PUT the probe reads the account again and looks for the probe address in `new_email` (a
  * pending change) or `email` (a change applied outright, which is what happens when email
  * confirmation is off). Either one is ALLOWED whatever the PUT returned. The database trigger
- * that blocks the change (`block_account_contact_change`) surfaces from the Auth API as a 5xx,
- * so a status alone cannot tell a refusal from a server fault; BLOCKED needs a 5xx PUT, no
+ * that blocks the change (`block_account_contact_change`) surfaces from the Auth API as the
+ * email-change write failure (see `EMAIL_CHANGE_WRITE_FAILED`); BLOCKED needs that failure, no
  * probe address on the account afterwards, and the token confirmed accepted both before and
  * after the PUT (a token expiring mid-run would otherwise read as a refusal). See
- * `emailChangeVerdict` for the full rule order.
+ * `emailChangeVerdict` for the full rule order. A BLOCKED verdict still needs the Postgres log
+ * check the probe prints, because an SMTP failure returns the same response.
  *
  * The other two checks are judged by status. ALLOWED means the server accepted the request (a
  * 2xx) — the token really could do this. BLOCKED means the server's own refusal proved it: 401/403
@@ -124,9 +125,18 @@ const holdsProbeEmail = (user: AccountContact | null, probeEmail: string): boole
     return normalizeEmail(user.new_email) === probe || normalizeEmail(user.email) === probe;
 };
 
+/** The public message of the Auth API's 500 when the email-change step fails: GoTrue's
+ *  `sendEmailChange` (supabase/auth, internal/api/mail.go) sends the confirmation mail FIRST and
+ *  then writes `email_change`, and returns this same message whether the mail send or the write
+ *  failed. The trigger's refusal is a write failure, so it arrives as this 500 — and so does an
+ *  SMTP failure, which only the Postgres log tells apart. */
+export const EMAIL_CHANGE_WRITE_FAILED = 'Error sending email change email';
+
 export interface EmailChangeObservation {
     /** HTTP status of PUT /auth/v1/user { email: probeEmail }. */
     putStatus: number;
+    /** Response body of that PUT. */
+    putBody: string;
     /** GET /auth/v1/user returned 2xx before the PUT. */
     tokenValidBefore: boolean;
     /** GET /auth/v1/user returned 2xx right after the PUT. */
@@ -146,12 +156,16 @@ export interface EmailChangeObservation {
  *  2. The account holds the probe address after the PUT, in `new_email` or `email` → ALLOWED,
  *     whatever the PUT's status.
  *  3. The token was not confirmed accepted both before and after the PUT → INCONCLUSIVE.
- *  4. The PUT was a 5xx → BLOCKED (the trigger's refusal arrives as a 5xx).
- *  5. Otherwise → INCONCLUSIVE: a 2xx that left no pending change, or a 4xx. A 4xx is refused
- *     before the database write (a 429 email rate limit, a 422 for an address already
- *     registered), so it says nothing about the trigger. */
+ *  4. The PUT was a 500 carrying `EMAIL_CHANGE_WRITE_FAILED` → BLOCKED. That response is the
+ *     trigger's refusal OR an SMTP failure; `main()` prints the Postgres log check that tells
+ *     them apart.
+ *  5. Otherwise → INCONCLUSIVE: a 2xx that left no pending change, a 4xx, or any other 5xx. A
+ *     4xx is refused before the database write (a 429 email rate limit, a 422 for an address
+ *     already registered), and another 5xx failed somewhere other than the email-change step,
+ *     so neither says anything about the trigger. */
 export const emailChangeVerdict = ({
     putStatus,
+    putBody,
     tokenValidBefore,
     tokenValidAfter,
     userBefore,
@@ -161,7 +175,7 @@ export const emailChangeVerdict = ({
     if (holdsProbeEmail(userBefore, probeEmail)) return 'INCONCLUSIVE';
     if (holdsProbeEmail(userAfter, probeEmail)) return 'ALLOWED';
     if (!tokenValidBefore || !tokenValidAfter) return 'INCONCLUSIVE';
-    if (putStatus >= 500) return 'BLOCKED';
+    if (putStatus === 500 && putBody.includes(EMAIL_CHANGE_WRITE_FAILED)) return 'BLOCKED';
     return 'INCONCLUSIVE';
 };
 
@@ -353,6 +367,7 @@ async function main(): Promise<void> {
     const after = await checkToken('token-check (after email-change)');
     const emailVerdict = emailChangeVerdict({
         putStatus: emailCheck.status,
+        putBody: emailCheck.body,
         tokenValidBefore: before.ok,
         tokenValidAfter: after.ok,
         userBefore: before.user,
@@ -364,6 +379,14 @@ async function main(): Promise<void> {
             '\nWARNING: the email change was accepted. If it is pending, do NOT click the ' +
                 'confirmation links; ignore the confirmation mail and the change never completes. ' +
                 'If the account email itself changed, restore it in the dashboard.'
+        );
+    }
+    if (emailVerdict === 'BLOCKED') {
+        console.log(
+            `\nemail-change: an SMTP failure returns the same 500 as the trigger. Confirm in ` +
+                'Supabase Logs (Postgres) that "Changing the account email is disabled" was ' +
+                `raised just now. The confirmation mail to ${probeEmail} is sent before the ` +
+                'refused write, so it may still arrive; its link cannot complete the change.'
         );
     }
 

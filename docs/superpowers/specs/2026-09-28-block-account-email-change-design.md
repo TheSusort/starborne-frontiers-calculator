@@ -94,10 +94,18 @@ First match wins:
 - `new_email` or `email` equals the probe address after the PUT → **ALLOWED** (regardless of the
   PUT's status).
 - Either token check was not 2xx → **INCONCLUSIVE**.
-- The PUT was a 5xx → **BLOCKED**.
-- Anything else → **INCONCLUSIVE**: a 2xx with no pending change, or a 4xx. A 4xx (a 429 email
-  rate limit, a 422 for an already-registered address) is refused before the database write, so
-  it says nothing about the trigger.
+- The PUT was a 500 with `Error sending email change email` → **BLOCKED**, pending the log check
+  below.
+- Anything else → **INCONCLUSIVE**: a 2xx with no pending change, a 4xx, or any other 5xx. A 4xx
+  (a 429 email rate limit, a 422 for an already-registered address) is refused before the
+  database write, and another 5xx failed outside the email-change step, so neither says anything
+  about the trigger.
+
+GoTrue's `sendEmailChange` (supabase/auth, `internal/api/mail.go`) sends the confirmation mail
+first and then writes `email_change`, returning the same 500 message whether the send or the write
+failed. So the response cannot tell the trigger's refusal from an SMTP failure: a BLOCKED verdict
+is confirmed only by the trigger's exception in the Postgres log. The mail to the probe address may
+still arrive; its token was rolled back with the write, so its link cannot complete the change.
 
 Pure helper, unit-tested for each branch. `metadata-update` keeps its status-based verdict and is
 reported, but it no longer blocks lifting the admin gate (only its display fields are exposed).
@@ -114,10 +122,15 @@ reported, but it no longer blocks lifting the admin gate (only its display field
 
 1. Clear the pending change the probe started (does not touch the confirmed email):
    `update auth.users set email_change = '', email_change_token_new = '', email_change_token_current = '', email_change_sent_at = null where id = '03daacdb-66a5-4034-af97-0ab5a9a4e614';`
+   `delete from auth.one_time_tokens where user_id = '03daacdb-66a5-4034-af97-0ab5a9a4e614' and token_type in ('email_change_token_new', 'email_change_token_current');`
+   Then check no other account has a pending change, since the trigger does not stop one that
+   predates it from being confirmed (confirmation writes `email` and clears `email_change`):
+   `select id, email, email_change, phone_change from auth.users where coalesce(email_change, '') <> '' or coalesce(phone_change, '') <> '';`
 2. Apply the migration. If it fails with `42501`, stop.
 3. Smoke test: sign out, sign in with Google, save a loadout.
 4. Re-run the probe (`npx tsx scripts/oauth-probe.ts --probe-email <address you control>`); it must
-   print `email-change: BLOCKED`. Then delete the probe's OAuth app in the dashboard.
-5. `email-change: BLOCKED` satisfies the requirement for lifting the admin gate (a separate PR).
+   print `email-change: BLOCKED`, and Supabase Logs (Postgres) must show `Changing the account
+   email is disabled` at that time. Then delete the probe's OAuth app in the dashboard.
+5. `email-change: BLOCKED` plus that log line satisfies the requirement for lifting the admin gate (a separate PR).
 
 No changelog entry: nothing a player sees.

@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 import {
     authApiVerdict,
     dataApiVerdict,
+    EMAIL_CHANGE_WRITE_FAILED,
     emailChangeVerdict,
     parseAccountContact,
     parseArgs,
@@ -69,10 +70,11 @@ describe('verdicts', () => {
 describe('emailChangeVerdict', () => {
     const PROBE = 'probe@example.com';
     const ACCOUNT = { email: 'owner@example.com' };
-    // The trigger's refusal, as the Auth API reports it: a 5xx, both token checks fine, and no
-    // pending change afterwards. Each case below changes one field of this.
+    // The trigger's refusal, as the Auth API reports it: the email-change write failure, both
+    // token checks fine, and no pending change afterwards. Each case below changes one field.
     const blocked: EmailChangeObservation = {
         putStatus: 500,
+        putBody: `{"code":500,"error_code":"unexpected_failure","msg":"${EMAIL_CHANGE_WRITE_FAILED}"}`,
         tokenValidBefore: true,
         tokenValidAfter: true,
         userBefore: ACCOUNT,
@@ -80,10 +82,21 @@ describe('emailChangeVerdict', () => {
         probeEmail: PROBE,
     };
 
-    it('is BLOCKED on a 5xx PUT with both token checks ok and no pending change', () => {
+    it('is BLOCKED on the email-change write failure with both token checks ok and no pending change', () => {
         expect(emailChangeVerdict(blocked)).toBe('BLOCKED');
-        expect(emailChangeVerdict({ ...blocked, putStatus: 503 })).toBe('BLOCKED');
     });
+
+    it.each([
+        [500, '{"code":500,"msg":"Error recording audit log entry"}'],
+        [500, ''],
+        [502, `{"msg":"${EMAIL_CHANGE_WRITE_FAILED}"}`],
+        [503, 'upstream unavailable'],
+    ])(
+        'is INCONCLUSIVE on a %i PUT that is not the email-change write failure (%j)',
+        (putStatus, putBody) => {
+            expect(emailChangeVerdict({ ...blocked, putStatus, putBody })).toBe('INCONCLUSIVE');
+        }
+    );
 
     it.each([400, 401, 403, 422, 429])(
         'is INCONCLUSIVE on a %i PUT, refused before the database write',
