@@ -87,9 +87,17 @@ A trigger rejection surfaces from GoTrue as a 5xx, which today's verdict rules s
 The email-change verdict becomes **state-based**: after the `PUT`, the probe reads
 `GET /auth/v1/user` and inspects `new_email`.
 
-- `new_email` or `email` equals the probe address → **ALLOWED** (regardless of the PUT's status).
-- `new_email` absent/different, the PUT was non-2xx, and both token checks were 2xx → **BLOCKED**.
-- Anything else (token not valid before/after, PUT 2xx but no pending change) → **INCONCLUSIVE**.
+First match wins:
+
+- The account already held the probe address before the PUT (a leftover pending change) →
+  **INCONCLUSIVE**; the probe tells the user to run rollout step 1 first.
+- `new_email` or `email` equals the probe address after the PUT → **ALLOWED** (regardless of the
+  PUT's status).
+- Either token check was not 2xx → **INCONCLUSIVE**.
+- The PUT was a 5xx → **BLOCKED**.
+- Anything else → **INCONCLUSIVE**: a 2xx with no pending change, or a 4xx. A 4xx (a 429 email
+  rate limit, a 422 for an already-registered address) is refused before the database write, so
+  it says nothing about the trigger.
 
 Pure helper, unit-tested for each branch. `metadata-update` keeps its status-based verdict and is
 reported, but it no longer blocks lifting the admin gate (only its display fields are exposed).

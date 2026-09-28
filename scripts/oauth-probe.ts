@@ -361,8 +361,9 @@ async function main(): Promise<void> {
     });
     if (emailVerdict === 'ALLOWED') {
         console.warn(
-            '\nWARNING: the email change was accepted and is pending. Do NOT click the ' +
-                'confirmation links; ignore the confirmation mail and the change never completes.'
+            '\nWARNING: the email change was accepted. If it is pending, do NOT click the ' +
+                'confirmation links; ignore the confirmation mail and the change never completes. ' +
+                'If the account email itself changed, restore it in the dashboard.'
         );
     }
 
