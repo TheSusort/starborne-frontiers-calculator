@@ -4,6 +4,7 @@ import { factionMatchesSearch } from '../../constants/factions';
 import { RARITIES, type RarityName } from '../../constants/rarities';
 import { SHIP_TYPE_NAMES, type ShipTypeName } from '../../constants/shipTypes';
 import type { Ship } from '../../types/ship';
+import { parseAscensionStats, type AscensionStat } from '../../utils/ship/referenceShip';
 import { transformShipTemplate, type ShipTemplate } from '../../utils/ship/shipTemplate';
 import { playerStats } from '../playerStats';
 import { McpToolError, type McpTool } from '../types';
@@ -11,23 +12,60 @@ import { McpToolError, type McpTool } from '../types';
 const RARITY_NAMES = Object.keys(RARITIES) as [RarityName, ...RarityName[]];
 const TYPE_NAMES = SHIP_TYPE_NAMES as [ShipTypeName, ...ShipTypeName[]];
 
-/** Every ship template, as the website's ship database builds them. */
-async function fetchShipTemplates(db: SupabaseClient): Promise<Ship[]> {
+async function fetchTemplateRows(db: SupabaseClient): Promise<ShipTemplate[]> {
     const { data, error } = await db.from('ship_templates').select('*');
     if (error) throw error;
-    return (data as ShipTemplate[])
+    return data as ShipTemplate[];
+}
+
+/** Every ship template, as the website's ship database builds them. */
+async function fetchShipTemplates(db: SupabaseClient): Promise<Ship[]> {
+    return (await fetchTemplateRows(db))
         .map(transformShipTemplate)
         .filter((ship): ship is Ship => ship !== null);
 }
+
+const unknownShip = (name: string) =>
+    new McpToolError(`No ship named "${name}". Use search_ships to find the exact name.`);
 
 /** The one template named `name`, case-insensitively. */
 export async function findShipTemplate(db: SupabaseClient, name: string): Promise<Ship> {
     const wanted = name.toLowerCase();
     const ship = (await fetchShipTemplates(db)).find((t) => t.name.toLowerCase() === wanted);
-    if (!ship) {
-        throw new McpToolError(`No ship named "${name}". Use search_ships to find the exact name.`);
-    }
+    if (!ship) throw unknownShip(name);
     return ship;
+}
+
+/** A template and the ascension rows `referenceShip` builds its refits and innate stats from.
+ *  `transformShipTemplate` drops `ascension_stats`, so it is read off the raw row here, as
+ *  `useShipsData` does. */
+export interface TemplateWithAscension {
+    ship: Ship;
+    ascension: AscensionStat[] | null;
+}
+
+/** Each of `names`, case-insensitively, keyed by its lower-cased name. One read of the table. */
+export async function findShipTemplates(
+    db: SupabaseClient,
+    names: readonly string[]
+): Promise<Map<string, TemplateWithAscension>> {
+    const byName = new Map<string, TemplateWithAscension>();
+    for (const row of await fetchTemplateRows(db)) {
+        const ship = transformShipTemplate(row);
+        if (ship) {
+            byName.set(ship.name.toLowerCase(), {
+                ship,
+                ascension: parseAscensionStats(row.ascension_stats),
+            });
+        }
+    }
+    const found = new Map<string, TemplateWithAscension>();
+    for (const name of names) {
+        const template = byName.get(name.toLowerCase());
+        if (!template) throw unknownShip(name);
+        found.set(name.toLowerCase(), template);
+    }
+    return found;
 }
 
 const shipSummary = (ship: Ship) => ({

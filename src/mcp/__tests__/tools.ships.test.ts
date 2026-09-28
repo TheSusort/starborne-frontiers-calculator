@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { McpToolError } from '../types';
-import { getShip, searchShips } from '../tools/ships';
+import { getShip, searchShips, findShipTemplates } from '../tools/ships';
 import { call, ctxOver, templateRow } from './fixtures';
 
 const templates = [
@@ -84,5 +84,31 @@ describe('get_ship', () => {
         const { ctx } = ctxOver({ ship_templates: templates });
 
         await expect(call(getShip, { name: 'Nope' }, ctx)).rejects.toBeInstanceOf(McpToolError);
+    });
+});
+
+describe('findShipTemplates', () => {
+    const ascension = [{ level: 1, attribute: 'HullPoints', type: 'Percentage', value: 0.15 }];
+
+    it('returns each named template with its parsed ascension rows, keyed by lower-case name', async () => {
+        const { ctx } = ctxOver({
+            ship_templates: [
+                templateRow({ id: 't1', name: 'Atlas', ascension_stats: ascension }),
+                templateRow({ id: 't2', name: 'Zeta' }),
+            ],
+        });
+
+        const found = await findShipTemplates(ctx.db, ['ATLAS', 'zeta']);
+
+        expect(found.get('atlas')).toMatchObject({ ship: { name: 'Atlas' }, ascension });
+        expect(found.get('zeta')).toMatchObject({ ship: { name: 'Zeta' }, ascension: null });
+    });
+
+    it('rejects an unknown name with the search_ships hint', async () => {
+        const { ctx } = ctxOver({ ship_templates: [templateRow()] });
+
+        await expect(findShipTemplates(ctx.db, ['Nobody'])).rejects.toEqual(
+            new McpToolError('No ship named "Nobody". Use search_ships to find the exact name.')
+        );
     });
 });
