@@ -25,8 +25,8 @@ interface StubDbOptions {
  * A minimal chainable stand-in for a `SupabaseClient` handed to code as an argument — the
  * `db` of `src/services/fleetReads.ts` and the MCP tools' `ctx.db`. Unlike `fakeSupabase` it
  * is not wired to the global client, and it EVALUATES the predicates that read path uses —
- * `eq`, `or` over `column.eq.value` terms, `gt`, `order`, `limit` — so a test sees the page a
- * real query returns. The column list passed to `select` is recorded, not projected.
+ * `eq`, `or` over `column.eq.value` terms, `gt`, `in`, `order`, `limit` — so a test sees the
+ * page a real query returns. The column list passed to `select` is recorded, not projected.
  */
 export const stubDb = (tables: Record<string, Row[]>, options: StubDbOptions = {}) => {
     const calls: StubCall[] = [];
@@ -77,6 +77,11 @@ export const stubDb = (tables: Record<string, Row[]>, options: StubDbOptions = {
             gt: (column: string, value: string) => {
                 record('gt', [column, value]);
                 rows = rows.filter((row) => String(row[column]) > value);
+                return chain;
+            },
+            in: (column: string, values: unknown[]) => {
+                record('in', [column, values]);
+                rows = rows.filter((row) => values.includes(row[column]));
                 return chain;
             },
             order: (column: string) => {

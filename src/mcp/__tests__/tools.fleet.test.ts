@@ -30,7 +30,9 @@ const shipRow = (id: string, name: string, userId: string, overrides = {}) => ({
 const tables = () => ({
     users,
     ships: [
-        shipRow('s1', 'Zeta', AUTH_USER),
+        shipRow('s1', 'Zeta', AUTH_USER, {
+            ship_implants: [{ id: 'implant-1', slot: 'implant_major' }],
+        }),
         shipRow('s2', 'Alpha', AUTH_USER),
         shipRow('s3', 'Altfleet', ALT_PROFILE),
     ],
@@ -47,6 +49,20 @@ const tables = () => ({
             stats: encodeGearStats({
                 mainStat: { name: 'attack', value: 50, type: 'flat' },
                 subStats: [],
+            }),
+        },
+        {
+            id: 'implant-1',
+            user_id: AUTH_USER,
+            slot: 'implant_major',
+            level: 1,
+            stars: 6,
+            rarity: 'legendary',
+            set_bonus: null,
+            calibration_ship_id: null,
+            stats: encodeGearStats({
+                mainStat: { name: 'hacking', value: 0, type: 'flat' },
+                subStats: [{ name: 'hacking', value: 5, type: 'flat' }],
             }),
         },
     ],
@@ -85,6 +101,14 @@ describe('get_my_fleet', () => {
         // 1000 hp +10% engineering; 100 attack +50 flat from the weapon.
         expect(ship.stats).toMatchObject({ hp: 1100, attack: 150, crit: 10, critDamage: 50 });
         expect(ship.stats).not.toHaveProperty('hpRegen');
+    });
+
+    it('applies an equipped implant, not just equipped gear, to final stats', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const [ship] = ((await call(getMyFleet, { name: 'zeta' }, ctx)) as FleetResult).ships;
+
+        expect(ship.stats).toMatchObject({ hacking: 5 });
     });
 
     it('reads an alt profile when asked', async () => {
