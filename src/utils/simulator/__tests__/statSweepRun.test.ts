@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { stepInput, runStatSweepAsync } from '../statSweep';
+import { stepInput, runStatSweepAsync, runStatSweep, sweepSteps } from '../statSweep';
 import type { BattleSimulationInput, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Position } from '../../../types/encounters';
 import type { Ship } from '../../../types/ship';
@@ -105,5 +105,31 @@ describe('runStatSweepAsync', () => {
             onProgress,
         });
         expect(onProgress.mock.calls.some(([done, total]) => done === total)).toBe(false);
+    });
+});
+
+describe('runStatSweep', () => {
+    it('returns exactly what runStatSweepAsync returns for the same input', async () => {
+        const input = sweepBoardInput();
+        const target = { side: 'player', position: 'T1' } as const;
+        const steps = sweepSteps('attack', 3000, 5000, 1000, 4000);
+
+        const sync = runStatSweep(input, target, 'attack', steps, 7, 3);
+        const async = await runStatSweepAsync(input, target, 'attack', steps, 7, 3);
+
+        expect(sync).toEqual(async);
+    });
+
+    it('is not vacuous: the steps differ from each other', () => {
+        const input = sweepBoardInput();
+        const target = { side: 'player', position: 'T1' } as const;
+        const steps = sweepSteps('attack', 1000, 8000, 7000, 4000);
+
+        const result = runStatSweep(input, target, 'attack', steps, 7, 3);
+
+        const damage = result.steps.map((s) =>
+            Object.values(s.aggregate.perActorMean).reduce((t, a) => t + a.damageDealt, 0)
+        );
+        expect(new Set(damage).size).toBeGreaterThan(1);
     });
 });
