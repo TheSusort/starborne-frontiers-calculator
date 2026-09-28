@@ -1,23 +1,28 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.69.0';
+export const CURRENT_VERSION = '1.69.1';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Autogear: even a Custom formula built from scratch can now be shared.',
-    'Autogear: builds using Crit Multiplier can now be shared with the community.',
-    'Loadouts: Equip Team now equips gear on every ship in the team.',
-    'Gear analysis: Repair and Boost set pieces are no longer flagged as off-set.',
-    'Ship inventory: a ship saved without an affinity no longer disappears on load.',
-    'Ships: signed-out ships with outdated saved data no longer break cards.',
-    'Ship inventory: an unrecognised faction now shows its raw name in filters.',
-    'Gear: pieces with outdated saved slot, set or rarity data now load safely.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.69.1',
+        date: '2026-09-28',
+        changes: [
+            'Autogear: even a Custom formula built from scratch can now be shared.',
+            'Autogear: builds using Crit Multiplier can now be shared with the community.',
+            'Loadouts: Equip Team now equips gear on every ship in the team.',
+            'Gear analysis: Repair and Boost set pieces are no longer flagged as off-set.',
+            'Ship inventory: a ship saved without an affinity no longer disappears on load.',
+            'Ships: signed-out ships with outdated saved data no longer break cards.',
+            'Ship inventory: an unrecognised faction now shows its raw name in filters.',
+            'Gear: pieces with outdated saved slot, set or rarity data now load safely.',
+        ],
+    },
     {
         version: '1.69.0',
         date: '2026-09-24',
