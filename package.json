@@ -8,7 +8,7 @@
         "@cloudinary/react": "^1.14.4",
         "@cloudinary/url-gen": "^1.22.0",
         "@modelcontextprotocol/sdk": "1.30.1",
-        "@supabase/supabase-js": "^2.116.0",
+        "@supabase/supabase-js": "^2.117.1",
         "canvas-confetti": "^1.9.4",
         "html-to-image": "^1.11.13",
         "jose": "^6.2.12",
