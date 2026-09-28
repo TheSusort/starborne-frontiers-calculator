@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
@@ -40,12 +40,18 @@ const DETAILS_B = {
     scope: 'openid',
 };
 
-const renderAt = (url: string) =>
-    render(
+/** Renders at `url`. The page reads `window.location.href` (where sign-in must return to), which
+ *  `MemoryRouter` never sets, so the browser URL is moved there too. */
+const renderAt = (url: string) => {
+    window.history.pushState({}, '', url);
+    return render(
         <MemoryRouter initialEntries={[url]}>
             <OAuthConsentPage />
         </MemoryRouter>
     );
+};
+
+const CONSENT_URL = `${window.location.origin}/oauth/consent?authorization_id=auth-1`;
 
 /** A button that navigates to `to` without remounting `OAuthConsentPage`, the way a client
  *  clicking a second connect link in the same tab would. */
@@ -63,6 +69,8 @@ const renderWithNav = (url: string, navigateTo: string) =>
     );
 
 describe('OAuthConsentPage', () => {
+    afterEach(() => window.history.pushState({}, '', '/'));
+
     beforeEach(() => {
         vi.clearAllMocks();
         auth.user = { id: 'u1' };
@@ -120,7 +128,7 @@ describe('OAuthConsentPage', () => {
 
         await userEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
-        expect(auth.signInWithGoogle).toHaveBeenCalledWith(window.location.href);
+        expect(auth.signInWithGoogle).toHaveBeenCalledWith(CONSENT_URL);
         expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled();
     });
 
@@ -131,7 +139,7 @@ describe('OAuthConsentPage', () => {
         expect(screen.queryByTestId('auth-modal')).not.toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
 
-        expect(screen.getByTestId('auth-modal')).toHaveTextContent(window.location.href);
+        expect(screen.getByTestId('auth-modal')).toHaveTextContent(CONSENT_URL);
         expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled();
     });
 
