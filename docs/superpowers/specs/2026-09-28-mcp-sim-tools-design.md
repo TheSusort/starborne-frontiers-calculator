@@ -53,7 +53,7 @@ Returns:
 { runs, seed,
   outcome: { player_wins, enemy_wins, draws, win_rate, mean_rounds, median_rounds },
   ships: [{ side, position, name, damage_dealt, damage_taken, healing_done }],   // per-run means
-  unsimulated: string[] }   // squad-leader effects the engine did not model (preFight.unsimulated)
+  unsimulated: [{ ship, texts }] }   // squad-leader effects the engine did not model (preFight.unsimulated)
 ```
 
 No per-round log — it does not fit a tool response. The description tells the assistant that
@@ -69,7 +69,7 @@ Adds `target: { side, position }`, `stat` (an `OverridableStat`), `from`, `to`, 
   current final stat. The reference step is always included; at most `MAX_SWEEP_STEPS` (25).
 - `steps × runs_per_step ≤ 500` (the total battle cap), checked before any battle runs.
 
-Returns `{ stat, target, seed, runs_per_step, points }`, one point per step from `analyseSweep`:
+Returns `{ stat, target, seed, runs_per_step, current_value, points }`, one point per step from `analyseSweep`:
 `value, is_reference, win_rate, mean_rounds, team_damage`, and on non-reference steps a
 `delta` per series `{ mean, se, n, distinguishable }` against the reference step.
 
