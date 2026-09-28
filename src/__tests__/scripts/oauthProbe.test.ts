@@ -4,9 +4,13 @@ import { describe, it, expect } from 'vitest';
 import {
     authApiVerdict,
     dataApiVerdict,
+    EMAIL_CHANGE_WRITE_FAILED,
     emailChangeVerdict,
+    parseAccountContact,
     parseArgs,
     pkcePair,
+    probeEmailAlreadyPending,
+    type EmailChangeObservation,
 } from '../../../scripts/oauth-probe';
 
 describe('parseArgs', () => {
@@ -64,19 +68,124 @@ describe('verdicts', () => {
 });
 
 describe('emailChangeVerdict', () => {
-    it('is INCONCLUSIVE when the token check before this call was not 2xx', () => {
-        expect(emailChangeVerdict(401, false, true)).toBe('INCONCLUSIVE');
+    const PROBE = 'probe@example.com';
+    const ACCOUNT = { email: 'owner@example.com' };
+    // The trigger's refusal, as the Auth API reports it: the email-change write failure, both
+    // token checks fine, and no pending change afterwards. Each case below changes one field.
+    const blocked: EmailChangeObservation = {
+        putStatus: 500,
+        putBody: `{"code":500,"error_code":"unexpected_failure","msg":"${EMAIL_CHANGE_WRITE_FAILED}"}`,
+        tokenValidBefore: true,
+        tokenValidAfter: true,
+        userBefore: ACCOUNT,
+        userAfter: ACCOUNT,
+        probeEmail: PROBE,
+    };
+
+    it('is BLOCKED on the email-change write failure with both token checks ok and no pending change', () => {
+        expect(emailChangeVerdict(blocked)).toBe('BLOCKED');
     });
 
-    it('calls a 401 BLOCKED only when the token check before AND after both returned 2xx', () => {
-        expect(emailChangeVerdict(401, true, true)).toBe('BLOCKED');
-        expect(emailChangeVerdict(401, true, false)).toBe('INCONCLUSIVE');
+    it.each([
+        [500, '{"code":500,"msg":"Error recording audit log entry"}'],
+        [500, ''],
+        [502, `{"msg":"${EMAIL_CHANGE_WRITE_FAILED}"}`],
+        [503, 'upstream unavailable'],
+    ])(
+        'is INCONCLUSIVE on a %i PUT that is not the email-change write failure (%j)',
+        (putStatus, putBody) => {
+            expect(emailChangeVerdict({ ...blocked, putStatus, putBody })).toBe('INCONCLUSIVE');
+        }
+    );
+
+    it.each([400, 401, 403, 422, 429])(
+        'is INCONCLUSIVE on a %i PUT, refused before the database write',
+        (putStatus) => {
+            expect(emailChangeVerdict({ ...blocked, putStatus })).toBe('INCONCLUSIVE');
+        }
+    );
+
+    it('is ALLOWED when the account holds the probe address as a pending new_email', () => {
+        expect(
+            emailChangeVerdict({
+                ...blocked,
+                putStatus: 200,
+                userAfter: { ...ACCOUNT, new_email: PROBE },
+            })
+        ).toBe('ALLOWED');
     });
 
-    it('falls back to the ordinary Auth API verdict for a non-401 status', () => {
-        expect(emailChangeVerdict(200, true, true)).toBe('ALLOWED');
-        expect(emailChangeVerdict(200, true, false)).toBe('ALLOWED');
-        expect(emailChangeVerdict(403, true, false)).toBe('BLOCKED');
-        expect(emailChangeVerdict(422, true, true)).toBe('INCONCLUSIVE');
+    it('is ALLOWED when the probe address replaced the email outright (confirmation off)', () => {
+        expect(
+            emailChangeVerdict({ ...blocked, putStatus: 200, userAfter: { email: PROBE } })
+        ).toBe('ALLOWED');
+    });
+
+    it('is ALLOWED on a pending change even when the PUT returned 500', () => {
+        expect(
+            emailChangeVerdict({ ...blocked, userAfter: { ...ACCOUNT, new_email: PROBE } })
+        ).toBe('ALLOWED');
+    });
+
+    it('matches the probe address trimmed and case-insensitively', () => {
+        expect(
+            emailChangeVerdict({
+                ...blocked,
+                userAfter: { ...ACCOUNT, new_email: ' PROBE@Example.COM ' },
+            })
+        ).toBe('ALLOWED');
+    });
+
+    it('is INCONCLUSIVE when the token check before the PUT failed', () => {
+        expect(emailChangeVerdict({ ...blocked, tokenValidBefore: false, userBefore: null })).toBe(
+            'INCONCLUSIVE'
+        );
+    });
+
+    it('is INCONCLUSIVE when the token check after the PUT failed', () => {
+        expect(emailChangeVerdict({ ...blocked, tokenValidAfter: false, userAfter: null })).toBe(
+            'INCONCLUSIVE'
+        );
+    });
+
+    it.each(['userBefore', 'userAfter'] as const)(
+        'is INCONCLUSIVE when %s was a 2xx but unreadable',
+        (field) => {
+            expect(emailChangeVerdict({ ...blocked, [field]: null })).toBe('INCONCLUSIVE');
+        }
+    );
+
+    it('is INCONCLUSIVE on a 2xx PUT that left no pending change', () => {
+        expect(emailChangeVerdict({ ...blocked, putStatus: 200 })).toBe('INCONCLUSIVE');
+    });
+
+    it('is INCONCLUSIVE when the probe address was already pending before the PUT', () => {
+        const pending = { ...ACCOUNT, new_email: PROBE };
+        expect(
+            emailChangeVerdict({
+                ...blocked,
+                putStatus: 200,
+                userBefore: pending,
+                userAfter: pending,
+            })
+        ).toBe('INCONCLUSIVE');
+        expect(probeEmailAlreadyPending(pending, PROBE)).toBe(true);
+        expect(probeEmailAlreadyPending(ACCOUNT, PROBE)).toBe(false);
+    });
+});
+
+describe('parseAccountContact', () => {
+    it('reads email and new_email from a user body', () => {
+        expect(
+            parseAccountContact('{"id":"x","email":"a@example.com","new_email":"b@example.com"}')
+        ).toEqual({ email: 'a@example.com', new_email: 'b@example.com' });
+    });
+
+    it('drops non-string fields', () => {
+        expect(parseAccountContact('{"email":42,"new_email":null}')).toEqual({});
+    });
+
+    it.each(['', 'not json', '[]', 'null', '"a string"'])('is null for %j', (body) => {
+        expect(parseAccountContact(body)).toBeNull();
     });
 });
