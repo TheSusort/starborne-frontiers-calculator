@@ -35,7 +35,8 @@
  *
  * The password-set verdict is judged by that sign-in, not the PUT's status: a sign-in that works
  * is ALLOWED whatever the PUT returned. See `passwordSetVerdict` for the full rule order. Unlike
- * email-change, BLOCKED needs no log check: the refused sign-in is itself the account's state.
+ * email-change, the refused sign-in proves no password was set; the Postgres log check the probe
+ * prints on BLOCKED shows it was the trigger's rule and not some other error in the write.
  *
  * metadata-update and data-api-write are judged by status. ALLOWED means the server accepted the request (a
  * 2xx) — the token really could do this. BLOCKED means the server's own refusal proved it: 401/403
@@ -571,6 +572,13 @@ async function checkPasswordSet(
                 "  update auth.users set encrypted_password = null where email = '" +
                 (email ?? '<account email>') +
                 "';"
+        );
+    }
+    if (verdict === 'BLOCKED') {
+        console.log(
+            '\npassword-set: confirm in Supabase Logs (Postgres) that "Changing the account ' +
+                'password is disabled" was raised just now. Any other error in the write returns ' +
+                'the same 500.'
         );
     }
     return verdict;

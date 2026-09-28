@@ -31,10 +31,14 @@
 --
 -- Also redefines public.block_account_contact_change() to allow the soft-delete transition:
 -- SoftDeleteUser writes obfuscated hashes into email_change and phone_change, which the original
--- definition rejected, so an admin soft delete failed.
+-- definition rejected, so an admin soft delete failed. 20260928000001's header calls the app
+-- Google-only; it is not (AuthModal offers email+password sign-up and sign-in). Its rule stands
+-- because nothing in the app calls auth.updateUser.
 --
 -- End-to-end check: `npx tsx scripts/oauth-probe.ts --password-set` must print
--- `password-set: BLOCKED`.
+-- `password-set: BLOCKED`, AND Supabase Logs (Postgres) must show `Changing the account password
+-- is disabled` at that time: any other error inside the function returns the same 500 and the
+-- same refused sign-in.
 -- Tripwire: src/__tests__/supabase/blockAccountPasswordChange.test.ts.
 -- Rollback: DROP TRIGGER block_account_password_change ON auth.users;
 

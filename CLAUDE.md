@@ -166,7 +166,7 @@ Focus on utility functions (autogear scoring, stat calculations) and data transf
 
 ## Authentication Flow
 
-**Auth:** Supabase Auth (Google OAuth). Key events dispatched on the window:
+**Auth:** Supabase Auth: Google OAuth, plus email+password sign-up and sign-in (`AuthModal`). There is no change-password or forgot-password flow, and `auth.users` triggers block email, phone and password changes (#562). Key events dispatched on the window:
 
 - Sign-in: `app:migration:start` → sync localStorage → Supabase → `app:migration:end`
 - Sign-out: `app:signout` (contexts listen and preserve localStorage)
