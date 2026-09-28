@@ -386,19 +386,21 @@ export const transformGearData = (data: RawGearData): GearPiece | null => {
     }
 };
 
-/** One keyset page: the pieces with `id` after `lastId`, in `id` order. A failed page is retried
- *  `MAX_RETRIES` times, `retryDelayMs` apart, before its error is thrown. */
+/** One keyset page: the pieces with `id` after `lastId`, in `id` order, read through `select`
+ *  (defaults to the bare row; `fetchEquippedGear` passes a `!inner` join instead). A failed page
+ *  is retried `MAX_RETRIES` times, `retryDelayMs` apart, before its error is thrown. */
 async function fetchInventoryBatch(
     db: SupabaseClient,
     profileId: string,
     lastId: string | null,
     retryDelayMs: number,
+    select = '*',
     retryCount = 0
 ): Promise<{ items: GearPiece[]; lastId: string | null }> {
     try {
         let query = db
             .from('inventory_items')
-            .select('*')
+            .select(select)
             .eq('user_id', profileId)
             .order('id')
             .limit(INVENTORY_BATCH_SIZE);
@@ -412,7 +414,11 @@ async function fetchInventoryBatch(
 
         if (error) throw error;
 
-        const rows = data as RawGearData[];
+        // A joined `select` (`fetchEquippedGear`'s `!inner` embeds) puts a `ship_equipment` or
+        // `ship_implants` key on each row alongside the plain columns; `transformGearData` reads
+        // its fields by name into an object literal rather than spreading the row, so the embed
+        // key is never copied onto the returned `GearPiece`.
+        const rows = data as unknown as RawGearData[];
         const transformedGear = rows
             .map(transformGearData)
             .filter((gear): gear is GearPiece => gear !== null)
@@ -428,7 +434,7 @@ async function fetchInventoryBatch(
     } catch (error) {
         if (retryCount < MAX_RETRIES) {
             await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
-            return fetchInventoryBatch(db, profileId, lastId, retryDelayMs, retryCount + 1);
+            return fetchInventoryBatch(db, profileId, lastId, retryDelayMs, select, retryCount + 1);
         }
         throw error;
     }
@@ -442,23 +448,28 @@ export interface FetchInventoryOptions {
     isCancelled?: () => boolean;
     /** Wait between retries of a failed page. */
     retryDelayMs?: number;
+    /** The columns/embeds each page selects. Defaults to the bare row (`fetchInventory`'s own
+     *  use); `fetchEquippedGear` passes a `ship_equipment` / `ship_implants` `!inner` join here to
+     *  page that join instead of the whole table. */
+    select?: string;
 }
 
-/** Every gear piece and implant of `profileId`, walked page by page. Resolves to `null` when
- *  `isCancelled` stopped the walk. The walk ends at the first page holding fewer than
- *  `INVENTORY_BATCH_SIZE` valid pieces. */
+/** Every piece `options.select` returns for `profileId` — the whole inventory by default, walked
+ *  page by page. Resolves to `null` when `isCancelled` stopped the walk. The walk ends at the
+ *  first page holding fewer than `INVENTORY_BATCH_SIZE` valid pieces. */
 export async function fetchInventory(
     db: SupabaseClient,
     profileId: string,
     options: FetchInventoryOptions = {}
 ): Promise<GearPiece[] | null> {
     const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
+    const select = options.select ?? '*';
     let allItems: GearPiece[] = [];
     let lastId: string | null = null;
 
     while (true) {
         if (options.isCancelled?.()) return null;
-        const batch = await fetchInventoryBatch(db, profileId, lastId, retryDelayMs);
+        const batch = await fetchInventoryBatch(db, profileId, lastId, retryDelayMs, select);
 
         if (batch.items.length === 0) break;
 
@@ -470,6 +481,36 @@ export async function fetchInventory(
     }
 
     return allItems;
+}
+
+/** The pieces `fetchEquippedGear`'s two selects page: every `inventory_items` row of `profileId`
+ *  that has a matching `ship_equipment` row (gear on a ship) or `ship_implants` row (an implant on
+ *  a ship). The `!inner` join is what does the filtering — PostgREST returns only rows with at
+ *  least one match — so a piece sitting unequipped in the bag is excluded. */
+const EQUIPPED_GEAR_SELECT = '*, ship_equipment!inner(ship_id)';
+const EQUIPPED_IMPLANTS_SELECT = '*, ship_implants!inner(ship_id)';
+
+/** Only the gear and implants `profileId` currently has equipped on a ship — not the whole
+ *  inventory. `calculateTotalStats` never reads past what a ship's `equipment`/`implants` name, so
+ *  a caller building final stats (`get_my_fleet`) needs no more than this. Walks both selects with
+ *  `fetchInventory`'s own paging/retry/guard behaviour and merges the results, de-duplicated by
+ *  `id` (a piece is never both equipped gear and an equipped implant, but the merge is safe either
+ *  way). */
+export async function fetchEquippedGear(
+    db: SupabaseClient,
+    profileId: string
+): Promise<GearPiece[]> {
+    const [gear, implants] = await Promise.all([
+        fetchInventory(db, profileId, { select: EQUIPPED_GEAR_SELECT }),
+        fetchInventory(db, profileId, { select: EQUIPPED_IMPLANTS_SELECT }),
+    ]);
+
+    const byId = new Map<string, GearPiece>();
+    for (const piece of [...(gear ?? []), ...(implants ?? [])]) {
+        byId.set(piece.id, piece);
+    }
+
+    return [...byId.values()];
 }
 
 interface RawEngineeringStat {

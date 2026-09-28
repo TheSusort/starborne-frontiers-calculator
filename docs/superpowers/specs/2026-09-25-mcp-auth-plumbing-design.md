@@ -80,7 +80,9 @@ includes Functions. No service-role key, no JWT secret.
   the main account and must be one of `list_profiles`' ids (RLS enforces it too). Returns compact
   rows `{ id, name, type, rarity, level, refits, stats: { hp, attack, defence, speed, crit, critDamage, hacking, security, … } }`
   with **final** stats from `calculateTotalStats` (gear + implants + refits + engineering for the
-  ship's type), plus `total` so the agent knows when a filter truncated.
+  ship's type), plus `total` so the agent knows when a filter truncated. Reads only the gear and
+  implants a ship has equipped (`fetchEquippedGear`), not the whole inventory —
+  `calculateTotalStats` never looks past what `ship.equipment`/`ship.implants` reference.
 
 ### `src/services/fleetReads.ts` — shared read path (extraction)
 

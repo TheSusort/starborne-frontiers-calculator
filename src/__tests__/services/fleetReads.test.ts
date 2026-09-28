@@ -4,6 +4,7 @@ import {
     INVENTORY_BATCH_SIZE,
     engineeringStatForShipType,
     fetchEngineeringStats,
+    fetchEquippedGear,
     fetchInventory,
     fetchShips,
     transformGearData,
@@ -214,6 +215,57 @@ describe('fetchInventory', () => {
         await expect(fetchInventory(db, USER, { retryDelayMs: 0 })).rejects.toEqual({
             message: 'inventory_items is unavailable',
         });
+    });
+});
+
+describe('fetchEquippedGear', () => {
+    it('selects only equipped gear and implants, scoped to the profile', async () => {
+        const { db, calls } = stubDb({ inventory_items: [] });
+
+        await fetchEquippedGear(db, USER);
+
+        const selects = calls
+            .filter((call) => call.method === 'select')
+            .map((call) => call.args[0]);
+        expect(selects).toContain('*, ship_equipment!inner(ship_id)');
+        expect(selects).toContain('*, ship_implants!inner(ship_id)');
+        expect(calls).toContainEqual({
+            table: 'inventory_items',
+            method: 'eq',
+            args: ['user_id', USER],
+        });
+    });
+
+    it('never lets an embedded join key reach the returned piece', async () => {
+        const row = {
+            ...gearRow('gear-1'),
+            ship_equipment: [{ ship_id: 'ship-1' }],
+            ship_implants: [{ ship_id: 'ship-1' }],
+        };
+        const { db } = stubDb({ inventory_items: [row] });
+
+        const [piece] = await fetchEquippedGear(db, USER);
+
+        expect(piece).not.toHaveProperty('ship_equipment');
+        expect(piece).not.toHaveProperty('ship_implants');
+        expect(piece.id).toBe('gear-1');
+    });
+
+    it('de-duplicates a piece read through both the gear and implant queries', async () => {
+        const { db } = stubDb({ inventory_items: [gearRow('gear-1')] });
+
+        const pieces = await fetchEquippedGear(db, USER);
+
+        expect(pieces.map((piece) => piece.id)).toEqual(['gear-1']);
+    });
+
+    it('drops an invalid row through the same guard fetchInventory uses', async () => {
+        const badRow = { ...gearRow('bad-1'), level: 'not-a-number' };
+        const { db } = stubDb({ inventory_items: [badRow] });
+
+        const pieces = await fetchEquippedGear(db, USER);
+
+        expect(pieces).toEqual([]);
     });
 });
 
