@@ -443,8 +443,8 @@ async function fetchInventoryBatch(
 export interface FetchInventoryOptions {
     /** Called after each page with every piece read so far. */
     onBatch?: (itemsSoFar: GearPiece[]) => void;
-    /** Checked before each page; returning true stops the walk and makes `fetchInventory`
-     *  resolve to `null`. */
+    /** Checked before AND right after each page's await resolves; returning true stops the walk
+     *  and makes `fetchInventory` resolve to `null` without reaching `onBatch` for that page. */
     isCancelled?: () => boolean;
     /** Wait between retries of a failed page. */
     retryDelayMs?: number;
@@ -470,6 +470,9 @@ export async function fetchInventory(
     while (true) {
         if (options.isCancelled?.()) return null;
         const batch = await fetchInventoryBatch(db, profileId, lastId, retryDelayMs, select);
+        // Re-check right away: cancellation (e.g. sign-out) may have landed while that page
+        // was in flight, and a page already read must not reach onBatch/accumulation after it.
+        if (options.isCancelled?.()) return null;
 
         if (batch.items.length === 0) break;
 

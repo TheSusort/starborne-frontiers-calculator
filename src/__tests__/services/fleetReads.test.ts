@@ -195,6 +195,24 @@ describe('fetchInventory', () => {
         expect(calls).toEqual([]);
     });
 
+    it('resolves to null and never calls onBatch when cancelled while awaiting the first page', async () => {
+        const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) => gearRow(gearId(i)));
+        const { db } = stubDb({ inventory_items: rows });
+        const onBatch = vi.fn();
+        // False on the pre-fetch check (lets the first page start), true on the post-await
+        // check (simulates cancellation landing while that page was in flight).
+        let calls = 0;
+        const isCancelled = () => {
+            calls += 1;
+            return calls > 1;
+        };
+
+        const items = await fetchInventory(db, USER, { isCancelled, onBatch });
+
+        expect(items).toBeNull();
+        expect(onBatch).not.toHaveBeenCalled();
+    });
+
     it('retries a failed page, then succeeds', async () => {
         const { db } = stubDb(
             { inventory_items: [gearRow(gearId(0))] },

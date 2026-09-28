@@ -7,20 +7,28 @@
  * client does: dynamic client registration with a `http://127.0.0.1:<port>/callback` redirect,
  * the authorize URL in the browser (sign in and approve on the planner's consent page, as an
  * admin), the code caught by a one-shot local server, and a PKCE code exchange. With the token it
- * makes three checks and prints one verdict line each, each verdict one of three outcomes:
+ * first checks the token is accepted at all (GET /auth/v1/user), then makes three further checks
+ * and prints one verdict line each, each verdict one of three outcomes:
  *
  *   metadata-update  PUT /auth/v1/user { data: { mcp_probe } }
  *   email-change     PUT /auth/v1/user { email: --probe-email } — never confirmed by this script
- *   data-api-write   DELETE /rest/v1/inventory_items?id=eq.<nil uuid> — the read-only hook must
- *                    answer 403; without the hook it is a 204 that matches no row
+ *   data-api-write   DELETE /rest/v1/inventory_items?id=eq.<nil uuid>&id=neq.<nil uuid> — a
+ *                    filter matching no row (PostgREST ANDs repeated filters on the same
+ *                    column), so this cannot delete anything even without the hook; the
+ *                    read-only hook must still answer its own 403
  *
  * ALLOWED means the server accepted the request (a 2xx) — the token really could do this.
  * BLOCKED means the server's own refusal proved it: 401/403 for the Auth API checks, or the
  * read-only hook's own 403 message for the Data API check. Anything else — a 422, a 429, a 500,
  * a 403 with a different message — is INCONCLUSIVE: it neither proves the token was refused nor
  * that the write went through, so it must never be read as BLOCKED (a false sense of safety on
- * the email-change check) or as ALLOWED (a false alarm). The registered client stays in Supabase
- * (Authentication → OAuth Apps) until deleted.
+ * the email-change check) or as ALLOWED (a false alarm). A 401 on an Auth API check is also
+ * INCONCLUSIVE rather than BLOCKED whenever the token itself wasn't confirmed accepted at the
+ * time: a 401 can mean the Auth API refused the request, or it can mean the token had expired or
+ * was never valid, and those read very differently. The email-change check re-checks the token
+ * immediately after its own call and only calls a 401 BLOCKED when both the before and the after
+ * token check came back 2xx (guards against the token expiring mid-run). The registered client
+ * stays in Supabase (Authentication → OAuth Apps) until deleted.
  */
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
@@ -30,7 +38,9 @@ import type { AddressInfo } from 'node:net';
 
 export type Verdict = 'BLOCKED' | 'ALLOWED' | 'INCONCLUSIVE';
 
-/** No inventory row has this id, so the Data API probe deletes nothing even if it is allowed. */
+/** No inventory row has this id, and the Data API probe's URL also ANDs `id=neq.<NIL_UUID>` onto
+ *  the same filter, a contradiction no row can satisfy — so the delete matches nothing even if
+ *  it is allowed, hook or no hook. */
 const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
 export interface ProbeArgs {
@@ -61,11 +71,29 @@ export function pkcePair(): { verifier: string; challenge: string } {
 
 /** An Auth API check is ALLOWED on a 2xx, BLOCKED only on the server's own 401/403 refusal, and
  *  INCONCLUSIVE otherwise (a 422/429/5xx proves neither outcome — never call it BLOCKED, which
- *  would give a false-safe verdict on the email-change check). */
-export const authApiVerdict = (status: number): Verdict => {
+ *  would give a false-safe verdict on the email-change check). `tokenValid` is whether the
+ *  bearer token itself was confirmed accepted (a 2xx on GET /auth/v1/user) around the same time
+ *  as this check; when it wasn't, a refusal here could be the token, not the Auth API, so the
+ *  verdict is INCONCLUSIVE regardless of status. */
+export const authApiVerdict = (status: number, tokenValid: boolean): Verdict => {
+    if (!tokenValid) return 'INCONCLUSIVE';
     if (status >= 200 && status < 300) return 'ALLOWED';
     if (status === 401 || status === 403) return 'BLOCKED';
     return 'INCONCLUSIVE';
+};
+
+/** The email-change check's own verdict. A 401 here is ambiguous between "the Auth API refused
+ *  the email change" and "the token expired between the before/after token checks", so it is
+ *  only read as BLOCKED when both the token check made before this call and the one made right
+ *  after it came back 2xx; any other status falls back to the ordinary `authApiVerdict`. */
+export const emailChangeVerdict = (
+    status: number,
+    tokenValidBefore: boolean,
+    tokenValidAfter: boolean
+): Verdict => {
+    if (!tokenValidBefore) return 'INCONCLUSIVE';
+    if (status === 401) return tokenValidAfter ? 'BLOCKED' : 'INCONCLUSIVE';
+    return authApiVerdict(status, tokenValidBefore);
 };
 
 /** A Data API write is BLOCKED only when the read-only hook's own message refused it, ALLOWED on
@@ -200,6 +228,23 @@ async function main(): Promise<void> {
     const asCaller = { apikey: anonKey, authorization: `Bearer ${accessToken}` };
     const json = { ...asCaller, 'content-type': 'application/json' };
 
+    // A 401 on one of the checks below is ambiguous unless we know the token itself was still
+    // accepted around that time — otherwise the 401 proves the token, not the Auth API, refused.
+    const checkToken = async (label: string): Promise<boolean> => {
+        const { status } = await report(
+            label,
+            await fetch(`${supabaseUrl}/auth/v1/user`, { headers: asCaller })
+        );
+        return status >= 200 && status < 300;
+    };
+
+    const tokenValidBefore = await checkToken('token-check');
+    if (!tokenValidBefore) {
+        console.log(
+            '\ntoken-check: the token itself was not accepted — every Auth API verdict below is INCONCLUSIVE.'
+        );
+    }
+
     const metadataCheck = await report(
         'metadata-update',
         await fetch(`${supabaseUrl}/auth/v1/user`, {
@@ -217,7 +262,9 @@ async function main(): Promise<void> {
             body: JSON.stringify({ email: probeEmail }),
         })
     );
-    if (authApiVerdict(emailCheck.status) === 'ALLOWED') {
+    const tokenValidAfter = await checkToken('token-check (after email-change)');
+    const emailVerdict = emailChangeVerdict(emailCheck.status, tokenValidBefore, tokenValidAfter);
+    if (emailVerdict === 'ALLOWED') {
         console.warn(
             '\nWARNING: the email change was accepted and is pending. Do NOT click the ' +
                 'confirmation links; ignore the confirmation mail and the change never completes.'
@@ -227,16 +274,17 @@ async function main(): Promise<void> {
     const dataCheck = await report(
         'data-api-write',
         // A real-table write only the pre-request hook stops. Not `rpc/check_request`: that
-        // function raises from its own body on any POST, hook or no hook, so it cannot tell.
-        await fetch(`${supabaseUrl}/rest/v1/inventory_items?id=eq.${NIL_UUID}`, {
+        // function raises from its own body on any POST, hook or no hook, so it cannot tell. The
+        // repeated `id` filter is contradictory (see `NIL_UUID`), so this matches no row either way.
+        await fetch(`${supabaseUrl}/rest/v1/inventory_items?id=eq.${NIL_UUID}&id=neq.${NIL_UUID}`, {
             method: 'DELETE',
             headers: { ...asCaller, prefer: 'return=minimal' },
         })
     );
 
     const verdicts = {
-        'metadata-update': authApiVerdict(metadataCheck.status),
-        'email-change': authApiVerdict(emailCheck.status),
+        'metadata-update': authApiVerdict(metadataCheck.status, tokenValidBefore),
+        'email-change': emailVerdict,
         'data-api-write': dataApiVerdict(dataCheck.status, dataCheck.body),
     };
     console.log(`\nmetadata-update: ${verdicts['metadata-update']}`);

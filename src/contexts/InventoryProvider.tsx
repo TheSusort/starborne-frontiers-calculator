@@ -114,7 +114,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             const totalItems = count || 0;
 
             const allItems = await fetchInventory(supabase, activeProfileId, {
-                // Bail if the user signed out while we were awaiting a batch.
+                // fetchInventory checks this before AND after each page's await, so a sign-out
+                // is caught even if it happens while a page is in flight, not just between pages.
                 // activeProfileIdRef.current is set to null synchronously in handleSignOut
                 // (before React re-renders), so this check is reliable mid-loop.
                 isCancelled: () => activeProfileIdRef.current !== activeProfileId,

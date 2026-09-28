@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { OAuthConsentPage } from '../OAuthConsentPage';
 
 const { auth, oauth, isAdmin } = vi.hoisted(() => ({
@@ -30,9 +30,32 @@ const DETAILS = {
     scope: 'openid',
 };
 
+const DETAILS_B = {
+    authorization_id: 'auth-2',
+    redirect_uri: 'https://other-app.example/callback',
+    client: { id: 'c2', name: 'Other App', uri: '', logo_uri: '' },
+    user: { id: 'u1', email: 'admin@example.com' },
+    scope: 'openid',
+};
+
 const renderAt = (url: string) =>
     render(
         <MemoryRouter initialEntries={[url]}>
+            <OAuthConsentPage />
+        </MemoryRouter>
+    );
+
+/** A button that navigates to `to` without remounting `OAuthConsentPage`, the way a client
+ *  clicking a second connect link in the same tab would. */
+const NavButton = ({ to }: { to: string }) => {
+    const navigate = useNavigate();
+    return <button onClick={() => void navigate(to)}>go-to-{to}</button>;
+};
+
+const renderWithNav = (url: string, navigateTo: string) =>
+    render(
+        <MemoryRouter initialEntries={[url]}>
+            <NavButton to={navigateTo} />
             <OAuthConsentPage />
         </MemoryRouter>
     );
@@ -124,5 +147,38 @@ describe('OAuthConsentPage', () => {
         await screen.findByText('Claude');
 
         expect(oauth.getAuthorizationDetails).toHaveBeenCalledWith('auth-1');
+    });
+
+    it("never shows request A's details or approves them once the URL moves to request B", async () => {
+        isAdmin.mockResolvedValue(true);
+        oauth.getAuthorizationDetails.mockResolvedValueOnce({ data: DETAILS, error: null });
+        let resolveB: (value: { data: typeof DETAILS_B; error: null }) => void = () => {};
+        oauth.getAuthorizationDetails.mockImplementationOnce(
+            () =>
+                new Promise((resolve) => {
+                    resolveB = resolve;
+                })
+        );
+
+        renderWithNav(
+            '/oauth/consent?authorization_id=auth-1',
+            '/oauth/consent?authorization_id=auth-2'
+        );
+
+        expect(await screen.findByText('Claude')).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: /go-to-/ }));
+
+        // B's details are still loading: A's client name must be gone, no Approve to click.
+        expect(screen.queryByText('Claude')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
+
+        resolveB({ data: DETAILS_B, error: null });
+        expect(await screen.findByText('Other App')).toBeInTheDocument();
+
+        await userEvent.click(screen.getByRole('button', { name: 'Approve' }));
+
+        expect(oauth.approveAuthorization).toHaveBeenCalledWith('auth-2');
+        expect(oauth.approveAuthorization).not.toHaveBeenCalledWith('auth-1');
     });
 });

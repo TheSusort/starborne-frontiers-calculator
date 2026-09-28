@@ -12,7 +12,7 @@ type ConsentState =
     | { kind: 'loading' }
     | { kind: 'error'; message: string }
     | { kind: 'not-admin' }
-    | { kind: 'consent'; details: OAuthAuthorizationDetails };
+    | { kind: 'consent'; details: OAuthAuthorizationDetails; authorizationId: string };
 
 const hostOf = (uri: string): string => {
     try {
@@ -43,6 +43,10 @@ export const OAuthConsentPage: React.FC = () => {
     const [deciding, setDeciding] = useState(false);
 
     useEffect(() => {
+        // A new authorization_id means a different request: never leave the previous one's
+        // details on screen while this one loads (the `decide` guard below is belt-and-suspenders
+        // for the single render between this reset committing and `authorizationId` changing).
+        setState({ kind: 'loading' });
         if (!authorizationId || !user) return;
         let cancelled = false;
 
@@ -66,7 +70,7 @@ export const OAuthConsentPage: React.FC = () => {
                 window.location.assign(data.redirect_url);
                 return;
             }
-            setState({ kind: 'consent', details: data });
+            setState({ kind: 'consent', details: data, authorizationId: data.authorization_id });
         };
 
         void load();
@@ -77,6 +81,9 @@ export const OAuthConsentPage: React.FC = () => {
 
     const decide = async (approve: boolean) => {
         if (!authorizationId) return;
+        // Displayed details must belong to the request the URL is currently pointing at — a
+        // stale `consent` state (request A still rendered while B is loading) must not decide.
+        if (state.kind === 'consent' && state.authorizationId !== authorizationId) return;
         setDeciding(true);
         const { error } = approve
             ? await supabase.auth.oauth.approveAuthorization(authorizationId)
