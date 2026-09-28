@@ -155,7 +155,8 @@ export interface EmailChangeObservation {
  *     cannot start a change that already exists, so the check says nothing.
  *  2. The account holds the probe address after the PUT, in `new_email` or `email` → ALLOWED,
  *     whatever the PUT's status.
- *  3. The token was not confirmed accepted both before and after the PUT → INCONCLUSIVE.
+ *  3. Either account read, before or after the PUT, failed (the token was not accepted, or the
+ *     body was unreadable) → INCONCLUSIVE: rules 1 and 2 could not see the probe address.
  *  4. The PUT was a 500 carrying `EMAIL_CHANGE_WRITE_FAILED` → BLOCKED. That response is the
  *     trigger's refusal OR an SMTP failure; `main()` prints the Postgres log check that tells
  *     them apart.
@@ -174,7 +175,7 @@ export const emailChangeVerdict = ({
 }: EmailChangeObservation): Verdict => {
     if (holdsProbeEmail(userBefore, probeEmail)) return 'INCONCLUSIVE';
     if (holdsProbeEmail(userAfter, probeEmail)) return 'ALLOWED';
-    if (!tokenValidBefore || !tokenValidAfter) return 'INCONCLUSIVE';
+    if (!tokenValidBefore || !tokenValidAfter || !userBefore || !userAfter) return 'INCONCLUSIVE';
     if (putStatus === 500 && putBody.includes(EMAIL_CHANGE_WRITE_FAILED)) return 'BLOCKED';
     return 'INCONCLUSIVE';
 };

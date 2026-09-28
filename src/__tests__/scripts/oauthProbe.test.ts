@@ -148,6 +148,13 @@ describe('emailChangeVerdict', () => {
         );
     });
 
+    it.each(['userBefore', 'userAfter'] as const)(
+        'is INCONCLUSIVE when %s was a 2xx but unreadable',
+        (field) => {
+            expect(emailChangeVerdict({ ...blocked, [field]: null })).toBe('INCONCLUSIVE');
+        }
+    );
+
     it('is INCONCLUSIVE on a 2xx PUT that left no pending change', () => {
         expect(emailChangeVerdict({ ...blocked, putStatus: 200 })).toBe('INCONCLUSIVE');
     });
