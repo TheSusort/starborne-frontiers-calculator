@@ -11,7 +11,6 @@ export const PROTECTED_RESOURCE_PATHS = [
     '/.well-known/oauth-protected-resource',
     '/.well-known/oauth-protected-resource/mcp',
 ];
-export const ADMIN_ONLY_MESSAGE = 'MCP access is currently limited to admins';
 
 export interface McpHandlerConfig {
     /** The project URL, `https://<ref>.supabase.co`. */
@@ -62,8 +61,8 @@ const methodNotAllowed = (allow: string) =>
  *
  * - `GET` on a `PROTECTED_RESOURCE_PATHS` path: the metadata pointing clients at Supabase Auth.
  * - `POST /mcp`: 401 (with `WWW-Authenticate` naming the metadata) unless the bearer token is a
- *   valid OAuth-issued Supabase token; 403 unless the caller is an admin; otherwise the call runs
- *   on a fresh stateless server and transport. The transport cannot be reused across requests,
+ *   valid OAuth-issued Supabase token; otherwise the call runs on a fresh stateless server and
+ *   transport, reading through a client that carries the caller's token. The transport cannot be reused across requests,
  *   and answers a POST whose `Accept` lacks `application/json, text/event-stream` with 406.
  * - Any other method on `/mcp`: 405. The server is stateless, so there is no SSE stream to GET
  *   and no session to DELETE.
@@ -120,27 +119,11 @@ export const createMcpHandler = ({
             );
         }
 
+        // Open to every signed-in player. What makes that safe lives in the database, not here:
+        // OAuth tokens are read-only on the Data API (`20260925000001`), and auth.users triggers
+        // refuse email, phone and password changes through the Auth API (`20260928000001`,
+        // `20260928000002`), each checked end to end by `scripts/oauth-probe.ts` (#562).
         const db = createDb(token);
-        // A table read, never the `is_user_admin` RPC: an RPC is a POST, which the database
-        // refuses for an OAuth token.
-        const { data: profile, error } = await db
-            .from('users')
-            .select('is_admin')
-            .eq('id', sub)
-            .maybeSingle();
-        if (error) {
-            console.error('MCP admin check failed:', error);
-            return jsonRpcError(
-                503,
-                await requestId(request),
-                'Could not check MCP access. Try again.'
-            );
-        }
-        // Admin-only until `scripts/oauth-probe.ts` reports `email-change: BLOCKED` — an OAuth
-        // token must never be able to change the account email (#562).
-        if ((profile as { is_admin?: boolean } | null)?.is_admin !== true) {
-            return jsonRpcError(403, await requestId(request), ADMIN_ONLY_MESSAGE);
-        }
 
         const server = new McpServer({ name: 'starborne-planner', version: '1.0.0' });
         registerTools(server, { db, authUserId: sub });

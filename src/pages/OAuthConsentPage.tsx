@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { OAuthAuthorizationDetails } from '@supabase/supabase-js';
+import { AuthModal } from '../components/auth/AuthModal';
 import { Button } from '../components/ui/Button';
 import { Loader } from '../components/ui/Loader';
 import { PageLayout } from '../components/ui/layout/PageLayout';
 import { supabase } from '../config/supabase';
 import { useAuth } from '../contexts/AuthProvider';
-import { isAdmin } from '../services/adminService';
 
 type ConsentState =
     | { kind: 'loading' }
     | { kind: 'error'; message: string }
-    | { kind: 'not-admin' }
     | { kind: 'consent'; details: OAuthAuthorizationDetails; authorizationId: string };
 
 const hostOf = (uri: string): string => {
@@ -32,8 +31,7 @@ const ErrorCard: React.FC<{ message: string }> = ({ message }) => (
 /**
  * Supabase Auth's OAuth consent screen (Authorization Path `/oauth/consent`). An app connecting to
  * the planner's MCP server sends the player here with `authorization_id`; approving lets that app
- * read the player's fleet. The admin check here is the UX half of the gate — the MCP function
- * enforces it (`src/mcp/http.ts`).
+ * read the player's fleet. Any signed-in player may approve; why that is safe: `src/mcp/http.ts`.
  */
 export const OAuthConsentPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -41,6 +39,7 @@ export const OAuthConsentPage: React.FC = () => {
     const { user, loading: authLoading, signInWithGoogle } = useAuth();
     const [state, setState] = useState<ConsentState>({ kind: 'loading' });
     const [deciding, setDeciding] = useState(false);
+    const [showEmailSignIn, setShowEmailSignIn] = useState(false);
 
     useEffect(() => {
         // A new authorization_id means a different request: never leave the previous one's
@@ -51,10 +50,6 @@ export const OAuthConsentPage: React.FC = () => {
         let cancelled = false;
 
         const load = async () => {
-            if (!(await isAdmin(user.id))) {
-                if (!cancelled) setState({ kind: 'not-admin' });
-                return;
-            }
             const { data, error } =
                 await supabase.auth.oauth.getAuthorizationDetails(authorizationId);
             if (cancelled) return;
@@ -105,29 +100,24 @@ export const OAuthConsentPage: React.FC = () => {
             return (
                 <div className="card space-y-4">
                     <p>Sign in to choose whether this app may read your planner data.</p>
-                    <Button onClick={() => void signInWithGoogle(window.location.href)}>
-                        Sign in with Google
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                        <Button onClick={() => void signInWithGoogle(window.location.href)}>
+                            Sign in with Google
+                        </Button>
+                        <Button variant="secondary" onClick={() => setShowEmailSignIn(true)}>
+                            Sign in with email
+                        </Button>
+                    </div>
+                    <AuthModal
+                        isOpen={showEmailSignIn}
+                        onClose={() => setShowEmailSignIn(false)}
+                        googleRedirectTo={window.location.href}
+                    />
                 </div>
             );
         }
         if (state.kind === 'loading') return <Loader />;
         if (state.kind === 'error') return <ErrorCard message={state.message} />;
-        if (state.kind === 'not-admin') {
-            // Rationale for the admin-only gate: `src/mcp/http.ts`, at the `is_admin` check.
-            return (
-                <div className="card space-y-4">
-                    <p>MCP access is currently limited to admins.</p>
-                    <Button
-                        variant="secondary"
-                        disabled={deciding}
-                        onClick={() => void decide(false)}
-                    >
-                        Deny
-                    </Button>
-                </div>
-            );
-        }
         const { details } = state;
         return (
             <div className="card space-y-4">

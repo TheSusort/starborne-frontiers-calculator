@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { OAuthConsentPage } from '../OAuthConsentPage';
 
-const { auth, oauth, isAdmin } = vi.hoisted(() => ({
+const { auth, oauth } = vi.hoisted(() => ({
     auth: {
         user: null as { id: string } | null,
         loading: false,
@@ -15,12 +15,14 @@ const { auth, oauth, isAdmin } = vi.hoisted(() => ({
         approveAuthorization: vi.fn(),
         denyAuthorization: vi.fn(),
     },
-    isAdmin: vi.fn(),
 }));
 
 vi.mock('../../config/supabase', () => ({ supabase: { auth: { oauth } } }));
 vi.mock('../../contexts/AuthProvider', () => ({ useAuth: () => auth }));
-vi.mock('../../services/adminService', () => ({ isAdmin }));
+vi.mock('../../components/auth/AuthModal', () => ({
+    AuthModal: ({ isOpen, googleRedirectTo }: { isOpen: boolean; googleRedirectTo?: string }) =>
+        isOpen ? <div data-testid="auth-modal">{googleRedirectTo}</div> : null,
+}));
 
 const DETAILS = {
     authorization_id: 'auth-1',
@@ -38,12 +40,18 @@ const DETAILS_B = {
     scope: 'openid',
 };
 
-const renderAt = (url: string) =>
-    render(
+/** Renders at `url`. The page reads `window.location.href` (where sign-in must return to), which
+ *  `MemoryRouter` never sets, so the browser URL is moved there too. */
+const renderAt = (url: string) => {
+    window.history.pushState({}, '', url);
+    return render(
         <MemoryRouter initialEntries={[url]}>
             <OAuthConsentPage />
         </MemoryRouter>
     );
+};
+
+const CONSENT_URL = `${window.location.origin}/oauth/consent?authorization_id=auth-1`;
 
 /** A button that navigates to `to` without remounting `OAuthConsentPage`, the way a client
  *  clicking a second connect link in the same tab would. */
@@ -61,6 +69,8 @@ const renderWithNav = (url: string, navigateTo: string) =>
     );
 
 describe('OAuthConsentPage', () => {
+    afterEach(() => window.history.pushState({}, '', '/'));
+
     beforeEach(() => {
         vi.clearAllMocks();
         auth.user = { id: 'u1' };
@@ -70,8 +80,7 @@ describe('OAuthConsentPage', () => {
         oauth.denyAuthorization.mockResolvedValue({ data: { redirect_url: 'x' }, error: null });
     });
 
-    it('shows an admin the request and approves it', async () => {
-        isAdmin.mockResolvedValue(true);
+    it('shows a signed-in player the request and approves it', async () => {
         renderAt('/oauth/consent?authorization_id=auth-1');
 
         expect(await screen.findByText('Claude')).toBeInTheDocument();
@@ -86,29 +95,13 @@ describe('OAuthConsentPage', () => {
         expect(oauth.approveAuthorization).toHaveBeenCalledWith('auth-1');
     });
 
-    it('lets an admin deny', async () => {
-        isAdmin.mockResolvedValue(true);
+    it('lets a signed-in player deny', async () => {
         renderAt('/oauth/consent?authorization_id=auth-1');
 
         await userEvent.click(await screen.findByRole('button', { name: 'Deny' }));
 
         expect(oauth.denyAuthorization).toHaveBeenCalledWith('auth-1');
         expect(oauth.approveAuthorization).not.toHaveBeenCalled();
-    });
-
-    it('shows a non-admin the gate and only Deny', async () => {
-        isAdmin.mockResolvedValue(false);
-        renderAt('/oauth/consent?authorization_id=auth-1');
-
-        expect(
-            await screen.findByText('MCP access is currently limited to admins.')
-        ).toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument();
-        expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled();
-
-        await userEvent.click(screen.getByRole('button', { name: 'Deny' }));
-
-        expect(oauth.denyAuthorization).toHaveBeenCalledWith('auth-1');
     });
 
     it('shows an error card and no buttons without authorization_id', () => {
@@ -119,7 +112,6 @@ describe('OAuthConsentPage', () => {
     });
 
     it('shows an error card and no buttons when Supabase rejects the request', async () => {
-        isAdmin.mockResolvedValue(true);
         oauth.getAuthorizationDetails.mockResolvedValue({
             data: null,
             error: { message: 'authorization not found' },
@@ -136,12 +128,22 @@ describe('OAuthConsentPage', () => {
 
         await userEvent.click(screen.getByRole('button', { name: 'Sign in with Google' }));
 
-        expect(auth.signInWithGoogle).toHaveBeenCalledWith(window.location.href);
+        expect(auth.signInWithGoogle).toHaveBeenCalledWith(CONSENT_URL);
+        expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled();
+    });
+
+    it('offers a signed-out visitor email sign-in, with Google in it returning here too', async () => {
+        auth.user = null;
+        renderAt('/oauth/consent?authorization_id=auth-1');
+
+        expect(screen.queryByTestId('auth-modal')).not.toBeInTheDocument();
+        await userEvent.click(screen.getByRole('button', { name: 'Sign in with email' }));
+
+        expect(screen.getByTestId('auth-modal')).toHaveTextContent(CONSENT_URL);
         expect(oauth.getAuthorizationDetails).not.toHaveBeenCalled();
     });
 
     it('still reads authorization_id after the sign-in round-trip adds ?code=', async () => {
-        isAdmin.mockResolvedValue(true);
         renderAt('/oauth/consent?authorization_id=auth-1&code=returned-code');
 
         await screen.findByText('Claude');
@@ -150,7 +152,6 @@ describe('OAuthConsentPage', () => {
     });
 
     it("never shows request A's details or approves them once the URL moves to request B", async () => {
-        isAdmin.mockResolvedValue(true);
         oauth.getAuthorizationDetails.mockResolvedValueOnce({ data: DETAILS, error: null });
         let resolveB: (value: { data: typeof DETAILS_B; error: null }) => void = () => {};
         oauth.getAuthorizationDetails.mockImplementationOnce(

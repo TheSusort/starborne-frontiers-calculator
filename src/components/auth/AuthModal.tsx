@@ -9,6 +9,8 @@ import { CloseIcon } from '../ui/icons/CloseIcon';
 interface AuthModalProps {
     isOpen: boolean;
     onClose: () => void;
+    /** Where Google sign-in returns to; the site root when omitted. */
+    googleRedirectTo?: string;
 }
 
 const PORTAL_ID = 'modal-root-high';
@@ -24,7 +26,7 @@ const getPortalRoot = () => {
     return root;
 };
 
-export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, googleRedirectTo }) => {
     const [isSignUp, setIsSignUp] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -76,7 +78,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     const handleGoogleSignIn = async () => {
         let succeeded = false;
         try {
-            await signInWithGoogle();
+            await signInWithGoogle(googleRedirectTo);
             addNotification('success', 'You are now signed in');
             succeeded = true;
         } catch {
