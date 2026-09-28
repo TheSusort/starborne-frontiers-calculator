@@ -7,8 +7,8 @@
  * client does: dynamic client registration with a `http://127.0.0.1:<port>/callback` redirect,
  * the authorize URL in the browser (sign in and approve on the planner's consent page, as an
  * admin), the code caught by a one-shot local server, and a PKCE code exchange. With the token it
- * first checks the token is accepted at all (GET /auth/v1/user), then makes three further checks
- * and prints one verdict line each, each verdict one of three outcomes:
+ * first reads the account (GET /auth/v1/user), which confirms the token is accepted at all, then
+ * makes three further checks and prints one verdict line each, each verdict one of three outcomes:
  *
  *   metadata-update  PUT /auth/v1/user { data: { mcp_probe } }
  *   email-change     PUT /auth/v1/user { email: --probe-email } — never confirmed by this script
@@ -17,18 +17,28 @@
  *                    column), so this cannot delete anything even without the hook; the
  *                    read-only hook must still answer its own 403
  *
- * ALLOWED means the server accepted the request (a 2xx) — the token really could do this.
- * BLOCKED means the server's own refusal proved it: 401/403 for the Auth API checks, or the
- * read-only hook's own 403 message for the Data API check. Anything else — a 422, a 429, a 500,
- * a 403 with a different message — is INCONCLUSIVE: it neither proves the token was refused nor
- * that the write went through, so it must never be read as BLOCKED (a false sense of safety on
- * the email-change check) or as ALLOWED (a false alarm). A 401 on an Auth API check is also
- * INCONCLUSIVE rather than BLOCKED whenever the token itself wasn't confirmed accepted at the
- * time: a 401 can mean the Auth API refused the request, or it can mean the token had expired or
- * was never valid, and those read very differently. The email-change check re-checks the token
- * immediately after its own call and only calls a 401 BLOCKED when both the before and the after
- * token check came back 2xx (guards against the token expiring mid-run). The registered client
- * stays in Supabase (Authentication → OAuth Apps) until deleted.
+ * The email-change verdict is judged by the account's STATE, not the PUT's status: right after
+ * the PUT the probe reads the account again and looks for the probe address in `new_email` (a
+ * pending change) or `email` (a change applied outright, which is what happens when email
+ * confirmation is off). Either one is ALLOWED whatever the PUT returned. The database trigger
+ * that blocks the change (`block_account_contact_change`) surfaces from the Auth API as a 5xx,
+ * so a status alone cannot tell a refusal from a server fault; BLOCKED needs a non-2xx PUT, no
+ * probe address on the account afterwards, and the token confirmed accepted both before and
+ * after the PUT (a token expiring mid-run would otherwise read as a refusal). See
+ * `emailChangeVerdict` for the full rule order.
+ *
+ * The other two checks are judged by status. ALLOWED means the server accepted the request (a
+ * 2xx) — the token really could do this. BLOCKED means the server's own refusal proved it: 401/403
+ * for metadata-update, or the read-only hook's own 403 message for data-api-write. Anything else
+ * — a 422, a 429, a 500, a 403 with a different message — is INCONCLUSIVE: it neither proves the
+ * token was refused nor that the write went through. metadata-update is also INCONCLUSIVE
+ * whenever the token itself wasn't confirmed accepted beforehand, since its 401 could then mean
+ * an expired or invalid token rather than a refusal.
+ *
+ * metadata-update is reported but does not gate anything: an OAuth token rewriting the display
+ * name and avatar in the user metadata is accepted. The admin gate on the MCP endpoint stays
+ * until email-change is BLOCKED (and data-api-write with it). The registered client stays in
+ * Supabase (Authentication → OAuth Apps) until deleted.
  */
 import 'dotenv/config';
 import { createHash, randomBytes } from 'node:crypto';
@@ -69,12 +79,11 @@ export function pkcePair(): { verifier: string; challenge: string } {
     return { verifier, challenge };
 }
 
-/** An Auth API check is ALLOWED on a 2xx, BLOCKED only on the server's own 401/403 refusal, and
- *  INCONCLUSIVE otherwise (a 422/429/5xx proves neither outcome — never call it BLOCKED, which
- *  would give a false-safe verdict on the email-change check). `tokenValid` is whether the
- *  bearer token itself was confirmed accepted (a 2xx on GET /auth/v1/user) around the same time
- *  as this check; when it wasn't, a refusal here could be the token, not the Auth API, so the
- *  verdict is INCONCLUSIVE regardless of status. */
+/** The metadata-update check's verdict: ALLOWED on a 2xx, BLOCKED only on the server's own
+ *  401/403 refusal, and INCONCLUSIVE otherwise (a 422/429/5xx proves neither outcome).
+ *  `tokenValid` is whether the bearer token itself was confirmed accepted (a 2xx on
+ *  GET /auth/v1/user) before this check; when it wasn't, a refusal here could be the token, not
+ *  the Auth API, so the verdict is INCONCLUSIVE regardless of status. */
 export const authApiVerdict = (status: number, tokenValid: boolean): Verdict => {
     if (!tokenValid) return 'INCONCLUSIVE';
     if (status >= 200 && status < 300) return 'ALLOWED';
@@ -82,19 +91,84 @@ export const authApiVerdict = (status: number, tokenValid: boolean): Verdict => 
     return 'INCONCLUSIVE';
 };
 
-/** The email-change check's own verdict. A 401 here is ambiguous between "the Auth API refused
- *  the email change" and "the token expired between the before/after token checks", so it is
- *  only read as BLOCKED when both the token check made before this call and the one made right
- *  after it came back 2xx; any other status falls back to the ordinary `authApiVerdict`. */
-export const emailChangeVerdict = (
-    status: number,
-    tokenValidBefore: boolean,
-    tokenValidAfter: boolean
-): Verdict => {
-    if (!tokenValidBefore) return 'INCONCLUSIVE';
-    if (status === 401) return tokenValidAfter ? 'BLOCKED' : 'INCONCLUSIVE';
-    return authApiVerdict(status, tokenValidBefore);
+/** The contact fields of GET /auth/v1/user that the email-change verdict reads. */
+export interface AccountContact {
+    email?: string;
+    new_email?: string;
+}
+
+/** Extracts `email` / `new_email` from a GET /auth/v1/user body; null when the body is not a
+ *  JSON object (an error page, an empty body). Non-string fields are dropped. */
+export function parseAccountContact(body: string): AccountContact | null {
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(body);
+    } catch {
+        return null;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return null;
+    const record = parsed as Record<string, unknown>;
+    const contact: AccountContact = {};
+    if (typeof record.email === 'string') contact.email = record.email;
+    if (typeof record.new_email === 'string') contact.new_email = record.new_email;
+    return contact;
+}
+
+const normalizeEmail = (value: string | undefined): string => (value ?? '').trim().toLowerCase();
+
+/** Whether either contact field holds `probeEmail`, compared trimmed and case-insensitively. An
+ *  absent or blank field never matches. */
+const holdsProbeEmail = (user: AccountContact | null, probeEmail: string): boolean => {
+    const probe = normalizeEmail(probeEmail);
+    if (!probe || !user) return false;
+    return normalizeEmail(user.new_email) === probe || normalizeEmail(user.email) === probe;
 };
+
+export interface EmailChangeObservation {
+    /** HTTP status of PUT /auth/v1/user { email: probeEmail }. */
+    putStatus: number;
+    /** GET /auth/v1/user returned 2xx before the PUT. */
+    tokenValidBefore: boolean;
+    /** GET /auth/v1/user returned 2xx right after the PUT. */
+    tokenValidAfter: boolean;
+    /** The account as read before the PUT; null when unreadable. */
+    userBefore: AccountContact | null;
+    /** The account as read right after the PUT; null when unreadable. */
+    userAfter: AccountContact | null;
+    probeEmail: string;
+}
+
+/** The email-change verdict, judged by account state. Rules, first match wins:
+ *
+ *  1. The account already held the probe address before the PUT (a pending change left over
+ *     from an earlier run, or the probe address IS the account email) → INCONCLUSIVE: the PUT
+ *     cannot start a change that already exists, so the check says nothing.
+ *  2. The account holds the probe address after the PUT, in `new_email` or `email` → ALLOWED,
+ *     whatever the PUT's status.
+ *  3. The token was not confirmed accepted both before and after the PUT → INCONCLUSIVE.
+ *  4. The PUT was non-2xx → BLOCKED (the trigger's refusal arrives as a 5xx).
+ *  5. Otherwise — a 2xx PUT that left no pending change → INCONCLUSIVE. */
+export const emailChangeVerdict = ({
+    putStatus,
+    tokenValidBefore,
+    tokenValidAfter,
+    userBefore,
+    userAfter,
+    probeEmail,
+}: EmailChangeObservation): Verdict => {
+    if (holdsProbeEmail(userBefore, probeEmail)) return 'INCONCLUSIVE';
+    if (holdsProbeEmail(userAfter, probeEmail)) return 'ALLOWED';
+    if (!tokenValidBefore || !tokenValidAfter) return 'INCONCLUSIVE';
+    if (putStatus < 200 || putStatus >= 300) return 'BLOCKED';
+    return 'INCONCLUSIVE';
+};
+
+/** Whether the email-change check was uninformative because the account already held the probe
+ *  address before the PUT (rule 1 of `emailChangeVerdict`). */
+export const probeEmailAlreadyPending = (
+    userBefore: AccountContact | null,
+    probeEmail: string
+): boolean => holdsProbeEmail(userBefore, probeEmail);
 
 /** A Data API write is BLOCKED only when the read-only hook's own message refused it, ALLOWED on
  *  a 2xx (the request reached the database), and INCONCLUSIVE otherwise — a 401/500 proves the
@@ -228,20 +302,32 @@ async function main(): Promise<void> {
     const asCaller = { apikey: anonKey, authorization: `Bearer ${accessToken}` };
     const json = { ...asCaller, 'content-type': 'application/json' };
 
-    // A 401 on one of the checks below is ambiguous unless we know the token itself was still
-    // accepted around that time — otherwise the 401 proves the token, not the Auth API, refused.
-    const checkToken = async (label: string): Promise<boolean> => {
-        const { status } = await report(
+    // Reads the account: `ok` says the token itself was accepted (a refusal on a check is only a
+    // refusal if the token was), `user` is the state the email-change verdict is judged by.
+    const checkToken = async (
+        label: string
+    ): Promise<{ ok: boolean; user: AccountContact | null }> => {
+        const { status, body } = await report(
             label,
             await fetch(`${supabaseUrl}/auth/v1/user`, { headers: asCaller })
         );
-        return status >= 200 && status < 300;
+        const ok = status >= 200 && status < 300;
+        return { ok, user: ok ? parseAccountContact(body) : null };
     };
 
-    const tokenValidBefore = await checkToken('token-check');
-    if (!tokenValidBefore) {
+    const before = await checkToken('token-check');
+    if (!before.ok) {
         console.log(
             '\ntoken-check: the token itself was not accepted — every Auth API verdict below is INCONCLUSIVE.'
+        );
+    }
+    if (probeEmailAlreadyPending(before.user, probeEmail)) {
+        console.log(
+            `\ntoken-check: the account already holds ${probeEmail} (a pending change from an ` +
+                'earlier run, or the account email itself), so email-change cannot be judged. ' +
+                'Clear the pending change first (rollout step 1 of ' +
+                'docs/superpowers/specs/2026-09-28-block-account-email-change-design.md), or ' +
+                'use a different --probe-email.'
         );
     }
 
@@ -262,8 +348,15 @@ async function main(): Promise<void> {
             body: JSON.stringify({ email: probeEmail }),
         })
     );
-    const tokenValidAfter = await checkToken('token-check (after email-change)');
-    const emailVerdict = emailChangeVerdict(emailCheck.status, tokenValidBefore, tokenValidAfter);
+    const after = await checkToken('token-check (after email-change)');
+    const emailVerdict = emailChangeVerdict({
+        putStatus: emailCheck.status,
+        tokenValidBefore: before.ok,
+        tokenValidAfter: after.ok,
+        userBefore: before.user,
+        userAfter: after.user,
+        probeEmail,
+    });
     if (emailVerdict === 'ALLOWED') {
         console.warn(
             '\nWARNING: the email change was accepted and is pending. Do NOT click the ' +
@@ -283,7 +376,7 @@ async function main(): Promise<void> {
     );
 
     const verdicts = {
-        'metadata-update': authApiVerdict(metadataCheck.status, tokenValidBefore),
+        'metadata-update': authApiVerdict(metadataCheck.status, before.ok),
         'email-change': emailVerdict,
         'data-api-write': dataApiVerdict(dataCheck.status, dataCheck.body),
     };
@@ -291,10 +384,12 @@ async function main(): Promise<void> {
     console.log(`email-change: ${verdicts['email-change']}`);
     console.log(`data-api-write: ${verdicts['data-api-write']}`);
 
-    if (Object.values(verdicts).includes('INCONCLUSIVE')) {
+    // metadata-update is reported but gates nothing (see the header).
+    const gating = [verdicts['email-change'], verdicts['data-api-write']];
+    if (gating.includes('INCONCLUSIVE')) {
         console.log(
-            '\nAt least one check was INCONCLUSIVE: re-run after fixing the cause shown above. ' +
-                'The admin gate stays until email-change is BLOCKED.'
+            '\nemail-change or data-api-write was INCONCLUSIVE: re-run after fixing the cause ' +
+                'shown above. The admin gate stays until email-change is BLOCKED.'
         );
     }
 }
