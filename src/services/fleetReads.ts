@@ -500,27 +500,34 @@ const chunk = <T>(items: T[], size: number): T[][] => {
  *  caller already knows it wants (e.g. `get_my_fleet` reading `ship.equipment`/`ship.implants`
  *  values), not a join-derived "what's equipped" set. De-duplicated and chunked at
  *  `GEAR_ID_CHUNK_SIZE`, chunks requested in parallel. Guarded and transformed the same as
- *  `fetchInventory`; a Supabase error is thrown for the caller to report. */
+ *  `fetchInventory`; a failed chunk is retried like a `fetchInventory` page, then its error is
+ *  thrown for the caller to report. */
 export async function fetchGearByIds(
     db: SupabaseClient,
     profileId: string,
-    ids: readonly string[]
+    ids: readonly string[],
+    options: { retryDelayMs?: number } = {}
 ): Promise<GearPiece[]> {
+    const retryDelayMs = options.retryDelayMs ?? RETRY_DELAY_MS;
     const uniqueIds = [...new Set(ids)].filter((id) => UUID_PATTERN.test(id));
     if (uniqueIds.length === 0) return [];
 
+    /** One chunk, retried `MAX_RETRIES` times, `retryDelayMs` apart, before its error is thrown. */
+    const readChunk = async (idsChunk: string[], retryCount = 0): Promise<GearPiece[]> => {
+        const { data, error } = await db
+            .from('inventory_items')
+            .select('*')
+            .eq('user_id', profileId)
+            .in('id', idsChunk);
+
+        if (!error) return transformGearRows(data as RawGearData[]);
+        if (retryCount >= MAX_RETRIES) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+        return readChunk(idsChunk, retryCount + 1);
+    };
+
     const results = await Promise.all(
-        chunk(uniqueIds, GEAR_ID_CHUNK_SIZE).map(async (idsChunk) => {
-            const { data, error } = await db
-                .from('inventory_items')
-                .select('*')
-                .eq('user_id', profileId)
-                .in('id', idsChunk);
-
-            if (error) throw error;
-
-            return transformGearRows(data as RawGearData[]);
-        })
+        chunk(uniqueIds, GEAR_ID_CHUNK_SIZE).map((idsChunk) => readChunk(idsChunk))
     );
 
     return results.flat();

@@ -302,7 +302,31 @@ describe('fetchGearByIds', () => {
             { errors: { inventory_items: { message: 'boom' } } }
         );
 
-        await expect(fetchGearByIds(db, USER, [uuid(1)])).rejects.toEqual({ message: 'boom' });
+        await expect(fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 })).rejects.toEqual({
+            message: 'boom',
+        });
+    });
+
+    it('retries a failed chunk, then succeeds', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(uuid(1))] },
+            { failTimes: { inventory_items: 2 } }
+        );
+
+        const pieces = await fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 });
+
+        expect(pieces.map((piece) => piece.id)).toEqual([uuid(1)]);
+    });
+
+    it('throws once the retries are spent', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(uuid(1))] },
+            { failTimes: { inventory_items: 4 } }
+        );
+
+        await expect(fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 })).rejects.toEqual({
+            message: 'inventory_items is unavailable',
+        });
     });
 
     it('drops a non-uuid id (an implant slot holding a description) and keeps the rest', async () => {
