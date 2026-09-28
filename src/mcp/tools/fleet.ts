@@ -3,7 +3,7 @@ import { SHIP_TYPE_NAMES, type ShipTypeName } from '../../constants/shipTypes';
 import {
     engineeringStatForShipType,
     fetchEngineeringStats,
-    fetchEquippedGear,
+    fetchGearByIds,
     fetchShips,
 } from '../../services/fleetReads';
 import { calculateTotalStats, clearGearStatsCache } from '../../utils/ship/statsCalculator';
@@ -37,11 +37,15 @@ export const getMyFleet: McpTool<z.output<typeof getMyFleetInput>> = {
             throw new McpToolError('not one of your profiles');
         }
 
-        const [ships, equippedGear, engineering] = await Promise.all([
+        const [ships, engineering] = await Promise.all([
             fetchShips(ctx.db, profileId),
-            fetchEquippedGear(ctx.db, profileId),
             fetchEngineeringStats(ctx.db, profileId),
         ]);
+
+        const gearIds = ships
+            .flatMap((ship) => [...Object.values(ship.equipment), ...Object.values(ship.implants)])
+            .filter((id): id is string => Boolean(id));
+        const equippedGear = await fetchGearByIds(ctx.db, profileId, gearIds);
         const gearById = new Map(equippedGear.map((piece) => [piece.id, piece]));
         const engineeringStats = engineering ?? { stats: [] };
         // `calculateTotalStats` caches gear stats by gear id in module scope; a warm function

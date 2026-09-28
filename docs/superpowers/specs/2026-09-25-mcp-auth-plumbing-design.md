@@ -81,8 +81,9 @@ includes Functions. No service-role key, no JWT secret.
   rows `{ id, name, type, rarity, level, refits, stats: { hp, attack, defence, speed, crit, critDamage, hacking, security, … } }`
   with **final** stats from `calculateTotalStats` (gear + implants + refits + engineering for the
   ship's type), plus `total` so the agent knows when a filter truncated. Reads only the gear and
-  implants a ship has equipped (`fetchEquippedGear`), not the whole inventory —
-  `calculateTotalStats` never looks past what `ship.equipment`/`ship.implants` reference.
+  implant ids named by `ship.equipment`/`ship.implants` (`fetchGearByIds`), not the whole
+  inventory — `ship_equipment`/`ship_implants` have no index on `gear_id`, so a `!inner` embed join
+  back onto `inventory_items` scans the whole join table per inventory row.
 
 ### `src/services/fleetReads.ts` — shared read path (extraction)
 

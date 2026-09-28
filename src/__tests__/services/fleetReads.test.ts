@@ -4,7 +4,7 @@ import {
     INVENTORY_BATCH_SIZE,
     engineeringStatForShipType,
     fetchEngineeringStats,
-    fetchEquippedGear,
+    fetchGearByIds,
     fetchInventory,
     fetchShips,
     transformGearData,
@@ -52,6 +52,9 @@ const gearRow = (id: string, overrides: Record<string, unknown> = {}) => ({
 
 /** Zero-padded so string order is numeric order, the way keyset paging on uuids is. */
 const gearId = (n: number) => `gear-${String(n).padStart(6, '0')}`;
+
+/** A valid `inventory_items.id` — `fetchGearByIds` filters ids through `UUID_PATTERN`. */
+const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 describe('fetchShips', () => {
     beforeEach(() => {
@@ -236,54 +239,114 @@ describe('fetchInventory', () => {
     });
 });
 
-describe('fetchEquippedGear', () => {
-    it('selects only equipped gear and implants, scoped to the profile', async () => {
-        const { db, calls } = stubDb({ inventory_items: [] });
-
-        await fetchEquippedGear(db, USER);
-
-        const selects = calls
-            .filter((call) => call.method === 'select')
-            .map((call) => call.args[0]);
-        expect(selects).toContain('*, ship_equipment!inner(ship_id)');
-        expect(selects).toContain('*, ship_implants!inner(ship_id)');
-        expect(calls).toContainEqual({
-            table: 'inventory_items',
-            method: 'eq',
-            args: ['user_id', USER],
+describe('fetchGearByIds', () => {
+    it('returns only the requested pieces, scoped to the profile', async () => {
+        const { db } = stubDb({
+            inventory_items: [
+                gearRow(uuid(1)),
+                gearRow(uuid(2)),
+                gearRow(uuid(1), { user_id: 'other-user' }),
+            ],
         });
+
+        const pieces = await fetchGearByIds(db, USER, [uuid(1)]);
+
+        // The other user's row shares the id but is filtered out by the `user_id` scope
+        // before the `in()` match, so only the caller's own piece comes back.
+        expect(pieces.map((piece) => piece.id)).toEqual([uuid(1)]);
     });
 
-    it('never lets an embedded join key reach the returned piece', async () => {
-        const row = {
-            ...gearRow('gear-1'),
-            ship_equipment: [{ ship_id: 'ship-1' }],
-            ship_implants: [{ ship_id: 'ship-1' }],
-        };
-        const { db } = stubDb({ inventory_items: [row] });
+    it('de-duplicates ids before querying', async () => {
+        const { db, calls } = stubDb({ inventory_items: [gearRow(uuid(1))] });
 
-        const [piece] = await fetchEquippedGear(db, USER);
+        const pieces = await fetchGearByIds(db, USER, [uuid(1), uuid(1)]);
 
-        expect(piece).not.toHaveProperty('ship_equipment');
-        expect(piece).not.toHaveProperty('ship_implants');
-        expect(piece.id).toBe('gear-1');
+        expect(pieces.map((piece) => piece.id)).toEqual([uuid(1)]);
+        expect(calls.filter((call) => call.method === 'in')).toEqual([
+            { table: 'inventory_items', method: 'in', args: ['id', [uuid(1)]] },
+        ]);
     });
 
-    it('de-duplicates a piece read through both the gear and implant queries', async () => {
-        const { db } = stubDb({ inventory_items: [gearRow('gear-1')] });
+    it('chunks more than 150 ids into multiple requests', async () => {
+        const ids = Array.from({ length: 151 }, (_, i) => uuid(i));
+        const rows = ids.map((id) => gearRow(id));
+        const { db, calls } = stubDb({ inventory_items: rows });
 
-        const pieces = await fetchEquippedGear(db, USER);
+        const pieces = await fetchGearByIds(db, USER, ids);
 
-        expect(pieces.map((piece) => piece.id)).toEqual(['gear-1']);
+        expect(pieces).toHaveLength(151);
+        expect(calls.filter((call) => call.method === 'in')).toHaveLength(2);
+    });
+
+    it('makes no request and returns [] for empty ids', async () => {
+        const { db, calls } = stubDb({ inventory_items: [gearRow(uuid(1))] });
+
+        const pieces = await fetchGearByIds(db, USER, []);
+
+        expect(pieces).toEqual([]);
+        expect(calls).toEqual([]);
     });
 
     it('drops an invalid row through the same guard fetchInventory uses', async () => {
-        const badRow = { ...gearRow('bad-1'), level: 'not-a-number' };
+        const badRow = { ...gearRow(uuid(1)), level: 'not-a-number' };
         const { db } = stubDb({ inventory_items: [badRow] });
 
-        const pieces = await fetchEquippedGear(db, USER);
+        const pieces = await fetchGearByIds(db, USER, [uuid(1)]);
 
         expect(pieces).toEqual([]);
+    });
+
+    it('throws the Supabase error', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(uuid(1))] },
+            { errors: { inventory_items: { message: 'boom' } } }
+        );
+
+        await expect(fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 })).rejects.toEqual({
+            message: 'boom',
+        });
+    });
+
+    it('retries a failed chunk, then succeeds', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(uuid(1))] },
+            { failTimes: { inventory_items: 2 } }
+        );
+
+        const pieces = await fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 });
+
+        expect(pieces.map((piece) => piece.id)).toEqual([uuid(1)]);
+    });
+
+    it('throws once the retries are spent', async () => {
+        const { db } = stubDb(
+            { inventory_items: [gearRow(uuid(1))] },
+            { failTimes: { inventory_items: 4 } }
+        );
+
+        await expect(fetchGearByIds(db, USER, [uuid(1)], { retryDelayMs: 0 })).rejects.toEqual({
+            message: 'inventory_items is unavailable',
+        });
+    });
+
+    it('drops a non-uuid id (an implant slot holding a description) and keeps the rest', async () => {
+        const { db, calls } = stubDb({ inventory_items: [gearRow(uuid(1))] });
+
+        const pieces = await fetchGearByIds(db, USER, [uuid(1), 'Some implant description text']);
+
+        expect(pieces.map((piece) => piece.id)).toEqual([uuid(1)]);
+        expect(calls.filter((call) => call.method === 'in')).toEqual([
+            { table: 'inventory_items', method: 'in', args: ['id', [uuid(1)]] },
+        ]);
+    });
+
+    it('makes no request and returns [] when every id is non-uuid', async () => {
+        const { db, calls } = stubDb({ inventory_items: [gearRow(uuid(1))] });
+
+        const pieces = await fetchGearByIds(db, USER, ['not-a-uuid']);
+
+        expect(pieces).toEqual([]);
+        expect(calls).toEqual([]);
     });
 });
 

@@ -4,6 +4,9 @@ import { getMyFleet } from '../tools/fleet';
 import { McpToolError } from '../types';
 import { ALT_PROFILE, AUTH_USER, STRANGER, call, ctxOver } from './fixtures';
 
+/** A valid `inventory_items.id` — `fetchGearByIds` filters ids through `UUID_PATTERN`. */
+const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
 const users = [
     { id: AUTH_USER, username: 'main', in_game_id: '1', owner_auth_user_id: null },
     { id: ALT_PROFILE, username: 'alt', in_game_id: '2', owner_auth_user_id: AUTH_USER },
@@ -20,7 +23,7 @@ const shipRow = (id: string, name: string, userId: string, overrides = {}) => ({
     level: 60,
     rank: 6,
     ship_base_stats: { hp: 1000, attack: 100, crit: 10, crit_damage: 50, hp_regen: 5 },
-    ship_equipment: [{ slot: 'weapon', gear_id: 'gear-1' }],
+    ship_equipment: [{ slot: 'weapon', gear_id: uuid(1) }],
     ship_implants: [],
     ship_refits: [{ id: 'r1', ship_refit_stats: [] }],
     ship_templates: { image_key: '', active_skill_text: 'x' },
@@ -30,13 +33,15 @@ const shipRow = (id: string, name: string, userId: string, overrides = {}) => ({
 const tables = () => ({
     users,
     ships: [
-        shipRow('s1', 'Zeta', AUTH_USER),
+        shipRow('s1', 'Zeta', AUTH_USER, {
+            ship_implants: [{ id: uuid(2), slot: 'implant_major' }],
+        }),
         shipRow('s2', 'Alpha', AUTH_USER),
         shipRow('s3', 'Altfleet', ALT_PROFILE),
     ],
     inventory_items: [
         {
-            id: 'gear-1',
+            id: uuid(1),
             user_id: AUTH_USER,
             slot: 'weapon',
             level: 16,
@@ -47,6 +52,20 @@ const tables = () => ({
             stats: encodeGearStats({
                 mainStat: { name: 'attack', value: 50, type: 'flat' },
                 subStats: [],
+            }),
+        },
+        {
+            id: uuid(2),
+            user_id: AUTH_USER,
+            slot: 'implant_major',
+            level: 1,
+            stars: 6,
+            rarity: 'legendary',
+            set_bonus: null,
+            calibration_ship_id: null,
+            stats: encodeGearStats({
+                mainStat: { name: 'hacking', value: 0, type: 'flat' },
+                subStats: [{ name: 'hacking', value: 5, type: 'flat' }],
             }),
         },
     ],
@@ -87,6 +106,14 @@ describe('get_my_fleet', () => {
         expect(ship.stats).not.toHaveProperty('hpRegen');
     });
 
+    it('applies an equipped implant, not just equipped gear, to final stats', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const [ship] = ((await call(getMyFleet, { name: 'zeta' }, ctx)) as FleetResult).ships;
+
+        expect(ship.stats).toMatchObject({ hacking: 5 });
+    });
+
     it('reads an alt profile when asked', async () => {
         const { ctx } = ctxOver(tables());
 
@@ -114,5 +141,25 @@ describe('get_my_fleet', () => {
 
     it('rejects a limit above 100', () => {
         expect(getMyFleet.input.safeParse({ limit: 101 }).success).toBe(false);
+    });
+
+    it('still resolves gear stats when an implant slot holds a description, not an id', async () => {
+        const { ctx } = ctxOver({
+            ...tables(),
+            ships: [
+                ...tables().ships,
+                shipRow('s4', 'Nebula', AUTH_USER, {
+                    ship_implants: [
+                        { id: uuid(3), slot: 'implant_major', description: 'Some implant text' },
+                    ],
+                }),
+            ],
+        });
+
+        const [ship] = ((await call(getMyFleet, { name: 'nebula' }, ctx)) as FleetResult).ships;
+
+        // The weapon's gear id still resolves even though the implant slot's value
+        // (the description) isn't a uuid and would otherwise fail the whole `in()` request.
+        expect(ship.stats).toMatchObject({ attack: 150 });
     });
 });
