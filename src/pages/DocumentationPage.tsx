@@ -252,6 +252,16 @@ const DocumentationPage: React.FC = () => {
                             </li>
                             <li className="[counter-increment:index]">
                                 <a
+                                    href="#ai-assistants"
+                                    className="text-primary hover:text-primary-light"
+                                >
+                                    <span className="before:content-[counter(index)'.'] before:mr-2">
+                                        AI Assistants (MCP)
+                                    </span>
+                                </a>
+                            </li>
+                            <li className="[counter-increment:index]">
+                                <a
                                     href="#changelog"
                                     className="text-primary hover:text-primary-light"
                                 >
@@ -4589,6 +4599,72 @@ const DocumentationPage: React.FC = () => {
                                         which will simplify data import.
                                     </li>
                                 </ul>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* AI Assistants Section */}
+                    <section id="ai-assistants" className="space-y-4 [counter-increment:section]">
+                        <h2 className="text-2xl font-bold before:content-[counter(section)'.'] before:mr-2">
+                            AI Assistants (MCP)
+                        </h2>
+                        <div className="card space-y-4">
+                            <h3 className="text-xl font-semibold mb-2">Overview</h3>
+                            <p className="text-theme-text">
+                                You can connect an AI assistant that supports the Model Context
+                                Protocol (MCP), such as Claude, to your planner account. The
+                                assistant can then look up ships and read your own fleet to answer
+                                questions about it. It reads the data saved to your account, so sign
+                                in and let your data sync first.
+                            </p>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">How to Connect</h4>
+                                <ol className="text-theme-text list-decimal pl-4 space-y-1">
+                                    <li>
+                                        In your assistant, add a custom connector (remote MCP
+                                        server) with the URL{' '}
+                                        <code className="break-all">
+                                            https://starborneplanner.com/mcp
+                                        </code>
+                                        . In Claude Code:{' '}
+                                        <code className="break-all">
+                                            claude mcp add --transport http starborne
+                                            https://starborneplanner.com/mcp
+                                        </code>
+                                    </li>
+                                    <li>
+                                        When the assistant opens the planner&apos;s &quot;Connect an
+                                        app&quot; page, sign in with Google or email.
+                                    </li>
+                                    <li>Check the app name and click Approve.</li>
+                                </ol>
+                            </div>
+
+                            <div className="p-4 bg-dark-lighter">
+                                <h4 className="font-semibold text-primary mb-2">
+                                    What the Assistant Can Read
+                                </h4>
+                                <ul className="text-theme-text list-disc pl-4 space-y-1">
+                                    <li>Ship search, ship details and skill text</li>
+                                    <li>Gear set and implant reference data</li>
+                                    <li>Your profiles (main and alt accounts)</li>
+                                    <li>
+                                        Your fleet: ships with their equipped gear, implants and
+                                        final stats
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
+                                <h4 className="font-semibold text-yellow-200 mb-2">
+                                    Read-Only Access
+                                </h4>
+                                <p className="text-yellow-100">
+                                    A connected assistant can only read. It cannot change your
+                                    ships, gear or loadouts, or your account email or password. Make
+                                    changes on the website.
+                                </p>
                             </div>
                         </div>
                     </section>

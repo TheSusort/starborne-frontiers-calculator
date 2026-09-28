@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { AuthModal } from '../AuthModal';
 
+const { signInWithGoogle } = vi.hoisted(() => ({ signInWithGoogle: vi.fn() }));
+
 vi.mock('../../../contexts/AuthProvider', () => ({
     useAuth: () => ({
         signInWithEmail: vi.fn(),
         signUpWithEmail: vi.fn(),
-        signInWithGoogle: vi.fn(),
+        signInWithGoogle,
     }),
 }));
 
@@ -16,7 +18,27 @@ vi.mock('../../../hooks/useNotification', () => ({
 
 describe('AuthModal', () => {
     const onClose = vi.fn();
-    beforeEach(() => onClose.mockClear());
+    beforeEach(() => {
+        onClose.mockClear();
+        signInWithGoogle.mockClear();
+    });
+
+    it('sends Google sign-in back to googleRedirectTo, or to the default when omitted', () => {
+        const { unmount } = render(
+            <AuthModal
+                isOpen
+                onClose={onClose}
+                googleRedirectTo="https://x.test/oauth/consent?a=1"
+            />
+        );
+        fireEvent.click(screen.getByTestId('auth-google-button'));
+        expect(signInWithGoogle).toHaveBeenLastCalledWith('https://x.test/oauth/consent?a=1');
+        unmount();
+
+        render(<AuthModal isOpen onClose={onClose} />);
+        fireEvent.click(screen.getByTestId('auth-google-button'));
+        expect(signInWithGoogle).toHaveBeenLastCalledWith(undefined);
+    });
 
     it('does not render when closed', () => {
         const { container } = render(<AuthModal isOpen={false} onClose={onClose} />);

@@ -3,7 +3,7 @@ import { errors, type JWTVerifyGetKey } from 'jose';
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { config } from '../../../netlify/functions/mcp';
 import { stubDb, type StubDbError } from '../../__tests__/services/stubDb';
-import { ADMIN_ONLY_MESSAGE, MCP_PATH, PROTECTED_RESOURCE_PATHS, createMcpHandler } from '../http';
+import { MCP_PATH, PROTECTED_RESOURCE_PATHS, createMcpHandler } from '../http';
 import { AUTH_USER } from './fixtures';
 import { ISSUER, makeSigner } from './testTokens';
 
@@ -100,30 +100,26 @@ describe('POST /mcp', () => {
         expect(createDb).not.toHaveBeenCalled();
     });
 
-    it('answers a non-admin with 403 and a JSON-RPC error for the same id', async () => {
+    it("runs a non-admin's call", async () => {
         const { handler } = handlerFor({ isAdmin: false });
 
         const response = await handler(
             rpc({ jsonrpc: '2.0', id: 7, method: 'tools/list' }, await oauthToken())
         );
 
-        expect(response.status).toBe(403);
-        expect(await response.json()).toEqual({
-            jsonrpc: '2.0',
-            id: 7,
-            error: { code: -32001, message: ADMIN_ONLY_MESSAGE },
-        });
+        expect(response.status).toBe(200);
+        const body = (await response.json()) as { result: { tools: { name: string }[] } };
+        expect(body.result.tools.map((tool) => tool.name)).toContain('get_my_fleet');
     });
 
-    it('answers a failed admin check with 503', async () => {
-        vi.spyOn(console, 'error').mockImplementation(() => {});
+    it('lists tools without reading the users table first', async () => {
         const { handler } = handlerFor({ usersError: { message: 'down' } });
 
         const response = await handler(
             rpc({ jsonrpc: '2.0', id: 1, method: 'tools/list' }, await oauthToken())
         );
 
-        expect(response.status).toBe(503);
+        expect(response.status).toBe(200);
     });
 
     it('answers a JWKS outage with 503, not 401', async () => {
