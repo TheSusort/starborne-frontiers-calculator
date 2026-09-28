@@ -8,7 +8,8 @@ export interface AuthUser {
 
 export interface AuthService {
     getCurrentUser: () => Promise<AuthUser | null>;
-    signInWithGoogle: () => Promise<void>;
+    /** `redirectTo` is where Google sign-in returns; defaults to the site root. */
+    signInWithGoogle: (redirectTo?: string) => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;

@@ -11,7 +11,8 @@ import { removeFromIndexedDB } from '../hooks/useStorage';
 interface AuthContextType {
     user: AuthUser | null;
     loading: boolean;
-    signInWithGoogle: () => Promise<void>;
+    /** `redirectTo` is where Google sign-in returns; defaults to the site root. */
+    signInWithGoogle: (redirectTo?: string) => Promise<void>;
     signInWithEmail: (email: string, password: string) => Promise<void>;
     signUpWithEmail: (email: string, password: string) => Promise<void>;
     signOut: () => Promise<void>;
@@ -112,9 +113,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const errorMessage = (error: unknown) =>
         error instanceof Error ? error.message : 'Unknown error';
 
-    const signInWithGoogle = async () => {
+    const signInWithGoogle = async (redirectTo?: string) => {
         try {
-            await authService.signInWithGoogle();
+            await authService.signInWithGoogle(redirectTo);
 
             addNotification('success', 'Logging in with Google');
         } catch (error) {

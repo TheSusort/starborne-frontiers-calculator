@@ -80,6 +80,7 @@ describe('inventory_items.stats has a single codec', () => {
         expect(routed).toEqual([
             'contexts/InventoryProvider.tsx',
             'pages/database/LeaderboardPage.tsx',
+            'services/fleetReads.ts',
             'services/userDataService.ts',
             'services/userProfileService.ts',
             CODEC,

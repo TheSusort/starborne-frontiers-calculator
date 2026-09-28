@@ -65,6 +65,7 @@ const ChronoReaverCalculatorPage = lazy(
 const SimulatorPage = lazy(() => import('./pages/SimulatorPage'));
 const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 const ClassifiedPage = lazy(() => import('./pages/ClassifiedPage'));
+const OAuthConsentPage = lazy(() => import('./pages/OAuthConsentPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 const App: React.FC = () => {
@@ -325,6 +326,12 @@ const App: React.FC = () => {
                                                                                         path="/classified"
                                                                                         element={
                                                                                             <ClassifiedPage />
+                                                                                        }
+                                                                                    />
+                                                                                    <Route
+                                                                                        path="/oauth/consent"
+                                                                                        element={
+                                                                                            <OAuthConsentPage />
                                                                                         }
                                                                                     />
                                                                                     <Route

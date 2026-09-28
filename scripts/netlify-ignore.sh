@@ -8,7 +8,7 @@
 # Only paths that cannot reach `npm run build` are cancellable:
 #   *.md       — no markdown is imported anywhere in src/
 #   .github/   — GitHub Actions, a separate runner
-#   e2e/       — its own package; the root tsconfig's `include` is ["src"], so
+#   e2e/       — its own package; the root tsconfig's `include` is ["src", "netlify/functions"], so
 #                `tsc && vite build` never reads it
 # `docs/` and `.claude/` are gitignored, so they cannot appear in a diff at all.
 #
