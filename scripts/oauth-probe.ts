@@ -22,7 +22,7 @@
  * pending change) or `email` (a change applied outright, which is what happens when email
  * confirmation is off). Either one is ALLOWED whatever the PUT returned. The database trigger
  * that blocks the change (`block_account_contact_change`) surfaces from the Auth API as a 5xx,
- * so a status alone cannot tell a refusal from a server fault; BLOCKED needs a non-2xx PUT, no
+ * so a status alone cannot tell a refusal from a server fault; BLOCKED needs a 5xx PUT, no
  * probe address on the account afterwards, and the token confirmed accepted both before and
  * after the PUT (a token expiring mid-run would otherwise read as a refusal). See
  * `emailChangeVerdict` for the full rule order.
@@ -146,8 +146,10 @@ export interface EmailChangeObservation {
  *  2. The account holds the probe address after the PUT, in `new_email` or `email` → ALLOWED,
  *     whatever the PUT's status.
  *  3. The token was not confirmed accepted both before and after the PUT → INCONCLUSIVE.
- *  4. The PUT was non-2xx → BLOCKED (the trigger's refusal arrives as a 5xx).
- *  5. Otherwise — a 2xx PUT that left no pending change → INCONCLUSIVE. */
+ *  4. The PUT was a 5xx → BLOCKED (the trigger's refusal arrives as a 5xx).
+ *  5. Otherwise → INCONCLUSIVE: a 2xx that left no pending change, or a 4xx. A 4xx is refused
+ *     before the database write (a 429 email rate limit, a 422 for an address already
+ *     registered), so it says nothing about the trigger. */
 export const emailChangeVerdict = ({
     putStatus,
     tokenValidBefore,
@@ -159,7 +161,7 @@ export const emailChangeVerdict = ({
     if (holdsProbeEmail(userBefore, probeEmail)) return 'INCONCLUSIVE';
     if (holdsProbeEmail(userAfter, probeEmail)) return 'ALLOWED';
     if (!tokenValidBefore || !tokenValidAfter) return 'INCONCLUSIVE';
-    if (putStatus < 200 || putStatus >= 300) return 'BLOCKED';
+    if (putStatus >= 500) return 'BLOCKED';
     return 'INCONCLUSIVE';
 };
 

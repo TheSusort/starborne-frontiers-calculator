@@ -80,9 +80,17 @@ describe('emailChangeVerdict', () => {
         probeEmail: PROBE,
     };
 
-    it('is BLOCKED on a non-2xx PUT with both token checks ok and no pending change', () => {
+    it('is BLOCKED on a 5xx PUT with both token checks ok and no pending change', () => {
         expect(emailChangeVerdict(blocked)).toBe('BLOCKED');
+        expect(emailChangeVerdict({ ...blocked, putStatus: 503 })).toBe('BLOCKED');
     });
+
+    it.each([400, 401, 403, 422, 429])(
+        'is INCONCLUSIVE on a %i PUT, refused before the database write',
+        (putStatus) => {
+            expect(emailChangeVerdict({ ...blocked, putStatus })).toBe('INCONCLUSIVE');
+        }
+    );
 
     it('is ALLOWED when the account holds the probe address as a pending new_email', () => {
         expect(
