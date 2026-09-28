@@ -4658,12 +4658,13 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="mt-4 p-4 bg-yellow-900/50 border border-yellow-700">
                                 <h4 className="font-semibold text-yellow-200 mb-2">
-                                    Read-Only Access
+                                    What It Cannot Change
                                 </h4>
                                 <p className="text-yellow-100">
-                                    A connected assistant can only read. It cannot change your
-                                    ships, gear or loadouts, or your account email or password. Make
-                                    changes on the website.
+                                    A connected assistant cannot change your ships, gear or
+                                    loadouts, or your account email or password. The only thing it
+                                    can update is the display name and avatar on your account. Make
+                                    all other changes on the website.
                                 </p>
                             </div>
                         </div>
