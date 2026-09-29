@@ -14,8 +14,9 @@ import { OVERRIDABLE_STATS, OVERRIDE_MIN } from '../utils/simulator/statOverride
 import type { TemplateWithAscension } from './tools/ships';
 import { McpToolError } from './types';
 
-/** Battles one tool call may run: about 10 s on a full 12v12 board at the measured ~20 ms a
- *  battle, inside the function's time limit with room for the database reads and a cold start. */
+/** Battles one tool call may run. This bounds the battle count only: per-battle cost varies with
+ *  how long a fight runs, so the call's time is bounded separately by `SIM_TIME_BUDGET_MS` in
+ *  `tools/simulate.ts`. */
 export const MAX_BATTLES = 500;
 
 const POSITIONS = [

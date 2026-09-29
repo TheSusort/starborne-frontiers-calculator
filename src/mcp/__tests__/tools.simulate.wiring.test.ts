@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { encodeGearStats } from '../../utils/gear/statsCodec';
 import * as seededRuns from '../../utils/simulator/seededRuns';
-import { simulateBattle, sweepStat } from '../tools/simulate';
+import { SIM_TIME_BUDGET_MS, simulateBattle, sweepStat } from '../tools/simulate';
 import { McpToolError } from '../types';
 import { AUTH_USER, call, ctxOver, templateRow } from './fixtures';
 
@@ -119,5 +119,53 @@ describe('simulator tool wiring', () => {
             )
         ).rejects.toBeInstanceOf(McpToolError);
         expect(seededRuns.runSeedSet).not.toHaveBeenCalled();
+    });
+
+    const stopped = (battles: number) =>
+        new McpToolError(
+            `Stopped after ${battles} battles: one call has about 20 seconds. Lower runs (or runs_per_step, or the number of steps) and try again.`
+        );
+    const sweepRaw = {
+        ...raw,
+        target: { side: 'player', position: 'T1' },
+        stat: 'speed',
+        from: 100,
+        to: 140,
+        step: 20,
+        runs_per_step: 1,
+    };
+
+    it('simulate_battle turns a passed deadline into a tool error with the battle count', async () => {
+        const { ctx } = ctxOver(tables());
+        vi.mocked(seededRuns.runSeedSet).mockImplementationOnce(() => {
+            throw new seededRuns.SimulationDeadlineError(7);
+        });
+
+        await expect(call(simulateBattle, raw, ctx)).rejects.toEqual(stopped(7));
+    });
+
+    it('sweep_stat turns a passed deadline into a tool error with the battle count', async () => {
+        const { ctx } = ctxOver(tables());
+        vi.mocked(seededRuns.runSeedSet).mockImplementationOnce(() => {
+            throw new seededRuns.SimulationDeadlineError(7);
+        });
+
+        await expect(call(sweepStat, sweepRaw, ctx)).rejects.toEqual(stopped(7));
+    });
+
+    it('both tools hand runSeedSet a deadline one time budget from the start of the call', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const before = performance.now();
+        await call(simulateBattle, raw, ctx);
+        await call(sweepStat, sweepRaw, ctx);
+        const after = performance.now();
+
+        const calls = vi.mocked(seededRuns.runSeedSet).mock.calls;
+        expect(calls.length).toBeGreaterThan(1);
+        for (const args of calls) {
+            expect(args[4]).toBeGreaterThanOrEqual(before + SIM_TIME_BUDGET_MS);
+            expect(args[4]).toBeLessThanOrEqual(after + SIM_TIME_BUDGET_MS);
+        }
     });
 });

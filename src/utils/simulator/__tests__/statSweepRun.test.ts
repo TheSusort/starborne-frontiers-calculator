@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { stepInput, runStatSweepAsync, runStatSweep, sweepSteps } from '../statSweep';
+import { SimulationDeadlineError } from '../seededRuns';
+import * as battleSimulator from '../../calculators/battleSimulator';
 import type { BattleSimulationInput, BattlePlacement } from '../../calculators/battleSimulator';
 import type { Position } from '../../../types/encounters';
 import type { Ship } from '../../../types/ship';
@@ -131,5 +133,73 @@ describe('runStatSweep', () => {
             Object.values(s.aggregate.perActorMean).reduce((t, a) => t + a.damageDealt, 0)
         );
         expect(new Set(damage).size).toBeGreaterThan(1);
+    });
+
+    describe('deadline', () => {
+        const target = { side: 'player', position: 'T1' } as const;
+        const steps = [
+            { value: 3000, isReference: false },
+            { value: 4000, isReference: true },
+        ];
+        const deadlineError = (run: () => unknown): SimulationDeadlineError => {
+            try {
+                run();
+            } catch (error) {
+                if (error instanceof SimulationDeadlineError) return error;
+                throw error;
+            }
+            throw new Error('expected a SimulationDeadlineError');
+        };
+
+        it('stops a sweep whose deadline has passed', () => {
+            const error = deadlineError(() =>
+                runStatSweep(
+                    sweepBoardInput(),
+                    target,
+                    'attack',
+                    steps,
+                    7,
+                    3,
+                    undefined,
+                    performance.now() - 1
+                )
+            );
+            expect(error.completed).toBe(1);
+        });
+
+        it('stops between steps too, so one run per step still respects the deadline', () => {
+            const error = deadlineError(() =>
+                runStatSweep(
+                    sweepBoardInput(),
+                    target,
+                    'attack',
+                    steps,
+                    7,
+                    1,
+                    undefined,
+                    performance.now() - 1
+                )
+            );
+            expect(error.completed).toBe(1);
+        });
+
+        it('counts the battles of every finished step, not only the step it stopped in', () => {
+            // The clock passes the deadline once the fourth battle has run: the first step (3
+            // battles) finishes, the second stops after its first battle.
+            const battles = vi.spyOn(battleSimulator, 'simulateBattle');
+            const before = battles.mock.calls.length;
+            const clock = vi
+                .spyOn(performance, 'now')
+                .mockImplementation(() => (battles.mock.calls.length - before >= 4 ? 2 : 0));
+            try {
+                const error = deadlineError(() =>
+                    runStatSweep(sweepBoardInput(), target, 'attack', steps, 7, 3, undefined, 1)
+                );
+                expect(error.completed).toBe(4);
+            } finally {
+                clock.mockRestore();
+                battles.mockRestore();
+            }
+        });
     });
 });

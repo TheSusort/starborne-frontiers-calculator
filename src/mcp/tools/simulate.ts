@@ -3,7 +3,11 @@ import { fetchEngineeringStats, fetchGearByIds, fetchShips } from '../../service
 import type { BattleSimulationInput } from '../../utils/calculators/battleSimulator';
 import type { GearPiece } from '../../types/gear';
 import { clearGearStatsCache } from '../../utils/ship/statsCalculator';
-import { runSeedSet, runSeededBattle } from '../../utils/simulator/seededRuns';
+import {
+    runSeedSet,
+    runSeededBattle,
+    SimulationDeadlineError,
+} from '../../utils/simulator/seededRuns';
 import { OVERRIDABLE_STATS } from '../../utils/simulator/statOverrides';
 import { runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
 import { analyseSweep } from '../../utils/simulator/sweepAnalysis';
@@ -19,6 +23,25 @@ import {
 import { McpToolError, type McpTool, type McpToolContext } from '../types';
 import { fetchProfiles } from './profiles';
 import { findShipTemplates } from './ships';
+
+/** Wall-clock time one tool call may spend, database reads included. Per-battle cost grows with
+ *  how many rounds a fight lasts, so `MAX_BATTLES` alone cannot keep a call inside the
+ *  function's time limit; this stops the battles before the platform kills the call. */
+export const SIM_TIME_BUDGET_MS = 20_000;
+
+/** Runs `battles`, turning a passed deadline into an error the assistant can act on. */
+function withinBudget<T>(battles: () => T): T {
+    try {
+        return battles();
+    } catch (error) {
+        if (error instanceof SimulationDeadlineError) {
+            throw new McpToolError(
+                `Stopped after ${error.completed} battles: one call has about ${SIM_TIME_BUDGET_MS / 1000} seconds. Lower runs (or runs_per_step, or the number of steps) and try again.`
+            );
+        }
+        throw error;
+    }
+}
 
 /** Reads everything `buildBattleInput` needs, as the caller (RLS applies). */
 async function loadBoardData(board: BoardInput, ctx: McpToolContext): Promise<BoardData> {
@@ -98,8 +121,11 @@ export const simulateBattle: McpTool<z.output<typeof simulateBattleInput>> = {
         CAVEATS,
     input: simulateBattleInput,
     run: async (board, ctx) => {
+        const deadline = performance.now() + SIM_TIME_BUDGET_MS;
         const { input, getGearPiece } = buildBattleInput(board, await loadBoardData(board, ctx));
-        const aggregate = runSeedSet(input, board.seed, board.runs, getGearPiece);
+        const aggregate = withinBudget(() =>
+            runSeedSet(input, board.seed, board.runs, getGearPiece, deadline)
+        );
         const { wins } = aggregate;
 
         return {
@@ -159,6 +185,7 @@ export const sweepStat: McpTool<z.output<typeof sweepStatInput>> = {
         CAVEATS,
     input: sweepStatInput,
     run: async (args, ctx) => {
+        const deadline = performance.now() + SIM_TIME_BUDGET_MS;
         const { input, getGearPiece } = buildBattleInput(args, await loadBoardData(args, ctx));
         const { target, stat } = args;
         const team = target.side === 'player' ? input.playerTeam : input.enemyTeam;
@@ -181,7 +208,18 @@ export const sweepStat: McpTool<z.output<typeof sweepStatInput>> = {
         }
 
         const points = analyseSweep(
-            runStatSweep(input, target, stat, steps, args.seed, args.runs_per_step, getGearPiece)
+            withinBudget(() =>
+                runStatSweep(
+                    input,
+                    target,
+                    stat,
+                    steps,
+                    args.seed,
+                    args.runs_per_step,
+                    getGearPiece,
+                    deadline
+                )
+            )
         );
         return {
             stat,

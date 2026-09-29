@@ -145,6 +145,15 @@ export function aggregateRuns(
     };
 }
 
+/** A seed set stopped at its deadline. `completed` is the number of battles that ran; no
+ *  aggregate is returned for them, because a partial seed set compares nothing. */
+export class SimulationDeadlineError extends Error {
+    constructor(readonly completed: number) {
+        super(`simulation deadline passed after ${completed} battles`);
+        this.name = 'SimulationDeadlineError';
+    }
+}
+
 /**
  * Run the same input over seeds `baseSeed .. baseSeed + count - 1` and aggregate.
  *
@@ -155,18 +164,26 @@ export function aggregateRuns(
  *
  * Synchronous: the whole seed set runs on the calling task. `runSeedSetAsync` is the same loop
  * with a yield between seeds, for a run that needs progress or cancellation.
+ *
+ * `deadline` is a `performance.now()` timestamp. Before every seed after the first, a passed
+ * deadline throws `SimulationDeadlineError` with the number of battles already run, so a caller
+ * with a hard time limit gets an answer before it is killed. The first seed always runs.
  */
 export function runSeedSet(
     input: BattleSimulationInput,
     baseSeed: number,
     count: number,
-    getGearPiece?: (id: string) => GearPiece | undefined
+    getGearPiece?: (id: string) => GearPiece | undefined,
+    deadline?: number
 ): SeedSetAggregate {
     assertRunCount(count);
 
     const runs: SeedRunSummary[] = [];
     let roster: BattleResult['roster'] = [];
     for (let i = 0; i < count; i++) {
+        if (i > 0 && deadline !== undefined && performance.now() > deadline) {
+            throw new SimulationDeadlineError(i);
+        }
         const seed = baseSeed + i;
         const result = runSeededBattle(input, seed, getGearPiece);
         if (i === 0) roster = result.roster;
