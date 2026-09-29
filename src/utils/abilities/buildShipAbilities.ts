@@ -3690,9 +3690,15 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             // cascade at line ~1790) — no new detector/regex/trigger-literal required. Guarded by
             // the same !isAccumulatingBuff check above, so per-round stacking auras
             // (Overload/Blast/Warding-Screen) are untouched.
+            // "after damaging a <Role>" is checked FIRST: Shashou's Stealth shares its sentence
+            // with "gains 1 stack of Blast each turn", and the Blast clause's "each turn" must not
+            // make the Stealth recur every turn. The role gate itself is the ability's parsed
+            // `enemy-type` conditions, checked against the ships the attack hit.
             else {
-                const everyTurnTrigger = detectEveryTurnTrigger(rowText, pos);
-                if (everyTurnTrigger) ability.trigger = everyTurnTrigger;
+                const trigger =
+                    detectDealDamageToRoleTrigger(rowText, pos) ??
+                    detectEveryTurnTrigger(rowText, pos);
+                if (trigger) ability.trigger = trigger;
             }
         }
         pushToSlot(bySlot, slot, [{ ability, pos: pos >= 0 ? pos : MAX_POS }]);

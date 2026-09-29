@@ -215,3 +215,75 @@ describe('start-of-round order and the enemy-buff gate side', () => {
         expect(g.player).toBe(0);
     });
 });
+
+/** An end-of-round purger (Rhodium's passive text) whose own active buffs its whole side for 3
+ *  turns, so the opposing purger always has something to strip. */
+const purger = (speed: number): Ship => ({
+    ...shipBase(`purger-${speed}`, 'Purger', 'SUPPORTER', speed),
+    activeSkillText:
+        'This unit grants <unit-skill>Attack Up I</unit-skill> for 3 turns to all allies.',
+    activeTarget: 'allies',
+    activePattern: 'Pattern-Support-All',
+    firstPassiveSkillText:
+        'At the end of the round, this Unit <unit-aid>purges 2</unit-aid> buffs from the enemy with the most buffs.',
+});
+
+/** Sides of the round-1 log entries of `kind` in `phase`, in log (= resolution) order. */
+function round1Order(
+    playerTeam: BattlePlacement[],
+    enemyTeam: BattlePlacement[],
+    phase: 'startOfRound' | 'endOfRound',
+    kind: CombatLogEntry['kind']
+): ('player' | 'enemy' | undefined)[] {
+    const result = simulateBattle({ playerTeam, enemyTeam, rounds: 1 }, getGearPiece);
+    const sideOf = new Map(result.roster.map((r) => [r.actorId, r.side]));
+    const round1 = result.combatLog.find((r) => r.round === 1);
+    expect(round1).toBeDefined();
+    return round1![phase].filter((e) => e.kind === kind).map((e) => sideOf.get(e.actorId));
+}
+
+describe('start-of-combat and end-of-round follow turn order too', () => {
+    it('start of combat: the faster ENEMY cloaker’s Stealth lands first', () => {
+        expect(
+            round1Order(
+                [at(cloaker(100), 'M3'), at(filler(50), 'M4')],
+                [at(cloaker(200), 'M3'), at(filler(50), 'M4')],
+                'startOfRound',
+                'buff'
+            )
+        ).toEqual(['enemy', 'player']);
+    });
+
+    it('end of round: the faster ENEMY purger resolves first', () => {
+        expect(
+            round1Order(
+                [at(purger(100), 'M3'), at(filler(50), 'M4')],
+                [at(purger(200), 'M3'), at(filler(50), 'M4')],
+                'endOfRound',
+                'purge'
+            )
+        ).toEqual(['enemy', 'player']);
+    });
+
+    it('end of round: the faster PLAYER purger resolves first', () => {
+        expect(
+            round1Order(
+                [at(purger(200), 'M3'), at(filler(50), 'M4')],
+                [at(purger(100), 'M3'), at(filler(50), 'M4')],
+                'endOfRound',
+                'purge'
+            )
+        ).toEqual(['player', 'enemy']);
+    });
+
+    it('end of round: a speed tie on the mirrored cell resolves the PLAYER purger first', () => {
+        expect(
+            round1Order(
+                [at(purger(150), 'M3'), at(filler(50), 'M4')],
+                [at(purger(150), 'M3'), at(filler(50), 'M4')],
+                'endOfRound',
+                'purge'
+            )
+        ).toEqual(['player', 'enemy']);
+    });
+});

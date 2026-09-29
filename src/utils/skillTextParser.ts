@@ -2785,15 +2785,17 @@ export function detectKilledByDirectDamageTrigger(
     return phrasePosTrigger(text, KILLED_BY_DIRECT_RE, anchorPos, 'on-destroyed');
 }
 
-// Ship-kit W8 Task 12: "… purges 1 buff from the enemy when dealing damage to a Defender"
-// (Zeolite passive). Verified against RAW CSV: 'This Unit purges 1 buff from the enemy when
-// dealing damage to a Defender.' Position-scoped (mirrors detectKilledByDirectDamageTrigger).
+// "when dealing damage to a <Role>" (Zeolite's passive purge: 'This Unit purges 1 buff from the
+// enemy when dealing damage to a Defender.') and "after damaging a <Role>" (Shashou's passive:
+// 'This Unit gains Stealth for 2 turns after damaging a Debuffer or Supporter …'). Only a ROLE
+// word matches, so "after damaging an enemy affected by Stasis" does not. Position-scoped
+// (mirrors detectKilledByDirectDamageTrigger).
 const DEAL_DAMAGE_TO_ROLE_RE =
-    /\bwhen\s+dealing\s+damage\s+to\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
+    /\b(?:when\s+dealing\s+damage\s+to|after\s+damaging)\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
 
 /**
- * Returns 'on-deal-damage' when `anchorPos` falls inside the sentence carrying the "when
- * dealing damage to a <Role>" phrase (Zeolite's passive purge reactive); otherwise undefined.
+ * Returns 'on-deal-damage' when `anchorPos` falls inside the sentence carrying a "when dealing
+ * damage to a <Role>" / "after damaging a <Role>" phrase; otherwise undefined.
  * Reuses the SAME 'on-deal-damage' trigger Burner's on-deal-damage Inferno rider already
  * drives (triggers.ts) — the owner's own damage-dealing turn, victim-routed via eventCtx.victimId.
  */
