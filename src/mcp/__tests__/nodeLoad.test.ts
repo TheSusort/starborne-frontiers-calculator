@@ -19,6 +19,9 @@ const ENTRIES = [
     'src/mcp/http.ts',
     'src/mcp/registry.ts',
     'src/services/fleetReads.ts',
+    'src/mcp/simBoards.ts',
+    'src/mcp/tools/simulate.ts',
+    'src/utils/simulator/seededRuns.ts',
 ];
 
 /** Loads `file` in a clean Node child; resolves to its exit status and stderr. */

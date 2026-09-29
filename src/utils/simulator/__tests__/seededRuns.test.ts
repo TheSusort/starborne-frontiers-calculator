@@ -2,7 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import type { BattlePlacement, BattleSimulationInput } from '../../calculators/battleSimulator';
 import type { Ship } from '../../../types/ship';
 import type { Position } from '../../../types/encounters';
-import { median, runSeededBattle, runSeedSet, runSeedSetAsync, summarizeRun } from '../seededRuns';
+import {
+    median,
+    runSeededBattle,
+    runSeedSet,
+    runSeedSetAsync,
+    SimulationDeadlineError,
+    summarizeRun,
+} from '../seededRuns';
 import * as rateAccumulator from '../../calculators/rateAccumulator';
 import * as battleSimulator from '../../calculators/battleSimulator';
 
@@ -206,6 +213,30 @@ describe('runSeedSet', () => {
 
         const replayedLast = summarizeRun(runSeededBattle(input(), 504), 504);
         expect(agg.runs[4]).toEqual(replayedLast);
+    });
+});
+
+describe('runSeedSet deadline', () => {
+    it('runs the first seed even past the deadline, then stops with the count it completed', () => {
+        const simulateSpy = vi.spyOn(battleSimulator, 'simulateBattle');
+        const before = simulateSpy.mock.calls.length;
+
+        let thrown: unknown;
+        try {
+            runSeedSet(input(), 500, 3, undefined, performance.now() - 1);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(SimulationDeadlineError);
+        expect((thrown as SimulationDeadlineError).completed).toBe(1);
+        expect(simulateSpy.mock.calls.length - before).toBe(1);
+        simulateSpy.mockRestore();
+    });
+
+    it('runs every seed when the deadline is still ahead', () => {
+        const agg = runSeedSet(input(), 500, 3, undefined, performance.now() + 60_000);
+        expect(agg.runs).toHaveLength(3);
     });
 });
 

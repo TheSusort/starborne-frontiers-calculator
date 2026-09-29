@@ -6,7 +6,7 @@ import {
     fetchGearByIds,
     fetchShips,
 } from '../../services/fleetReads';
-import { calculateTotalStats, clearGearStatsCache } from '../../utils/ship/statsCalculator';
+import { calculateTotalStats } from '../../utils/ship/statsCalculator';
 import { playerStats } from '../playerStats';
 import { McpToolError, type McpTool } from '../types';
 import { fetchProfiles } from './profiles';
@@ -48,9 +48,6 @@ export const getMyFleet: McpTool<z.output<typeof getMyFleetInput>> = {
         const equippedGear = await fetchGearByIds(ctx.db, profileId, gearIds);
         const gearById = new Map(equippedGear.map((piece) => [piece.id, piece]));
         const engineeringStats = engineering ?? { stats: [] };
-        // `calculateTotalStats` caches gear stats by gear id in module scope; a warm function
-        // instance serves many requests, so the cache must not outlive this one.
-        clearGearStatsCache();
 
         const q = name?.toLowerCase();
         const matches = ships

@@ -48,6 +48,8 @@ describe('registerTools', () => {
             'list_implants',
             'list_profiles',
             'search_ships',
+            'simulate_battle',
+            'sweep_stat',
         ]);
         expect(tools.every((tool) => tool.annotations?.readOnlyHint === true)).toBe(true);
     });

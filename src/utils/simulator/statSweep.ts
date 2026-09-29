@@ -1,7 +1,12 @@
 import type { Position } from '../../types/encounters';
 import type { GearPiece } from '../../types/gear';
 import type { BattlePlacement, BattleSimulationInput } from '../calculators/battleSimulator';
-import { runSeedSetAsync, type SeedSetAggregate } from './seededRuns';
+import {
+    runSeedSet,
+    runSeedSetAsync,
+    SimulationDeadlineError,
+    type SeedSetAggregate,
+} from './seededRuns';
 import { OVERRIDE_MIN, type OverridableStat } from './statOverrides';
 
 /** Cost is multiplicative — steps x seeds battles — so an uncapped range at `step: 1` would queue
@@ -165,5 +170,49 @@ export async function runStatSweepAsync(
     }
 
     if (signal?.aborted) return null;
+    return { stat, target, baseSeed, count, steps: results };
+}
+
+/**
+ * `runStatSweepAsync` without the yields: every step runs on the calling task. For a caller with
+ * no page to keep responsive (the MCP server). Same seed set per step, so steps stay paired.
+ *
+ * `deadline` (a `performance.now()` timestamp) is checked before every step after the first and
+ * inside each step's `runSeedSet`. A passed deadline throws `SimulationDeadlineError` whose
+ * `completed` counts the battles of the whole sweep, not only of the step it stopped in.
+ */
+export function runStatSweep(
+    input: BattleSimulationInput,
+    target: SweepTarget,
+    stat: OverridableStat,
+    steps: SweepStep[],
+    baseSeed: number,
+    count: number,
+    getGearPiece?: (id: string) => GearPiece | undefined,
+    deadline?: number
+): SweepResult {
+    const results: SweepStepResult[] = [];
+    for (const [index, step] of steps.entries()) {
+        const completedBefore = index * count;
+        if (index > 0 && deadline !== undefined && performance.now() > deadline) {
+            throw new SimulationDeadlineError(completedBefore);
+        }
+        let aggregate: SeedSetAggregate;
+        try {
+            aggregate = runSeedSet(
+                stepInput(input, target, stat, step.value),
+                baseSeed,
+                count,
+                getGearPiece,
+                deadline
+            );
+        } catch (error) {
+            if (error instanceof SimulationDeadlineError) {
+                throw new SimulationDeadlineError(completedBefore + error.completed);
+            }
+            throw error;
+        }
+        results.push({ value: step.value, isReference: step.isReference, aggregate });
+    }
     return { stat, target, baseSeed, count, steps: results };
 }

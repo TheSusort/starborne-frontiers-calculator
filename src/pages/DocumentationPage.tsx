@@ -4613,9 +4613,9 @@ const DocumentationPage: React.FC = () => {
                             <p className="text-theme-text">
                                 You can connect an AI assistant that supports the Model Context
                                 Protocol (MCP), such as Claude, to your planner account. The
-                                assistant can then look up ships and read your own fleet to answer
-                                questions about it. It reads the data saved to your account, so sign
-                                in and let your data sync first.
+                                assistant can then look up ships, read your own fleet and run
+                                simulated battles with it to answer questions about it. It reads the
+                                data saved to your account, so sign in and let your data sync first.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">
@@ -4643,7 +4643,7 @@ const DocumentationPage: React.FC = () => {
 
                             <div className="p-4 bg-dark-lighter">
                                 <h4 className="font-semibold text-primary mb-2">
-                                    What the Assistant Can Read
+                                    What the Assistant Can Do
                                 </h4>
                                 <ul className="text-theme-text list-disc pl-4 space-y-1">
                                     <li>Ship search, ship details and skill text</li>
@@ -4652,6 +4652,11 @@ const DocumentationPage: React.FC = () => {
                                     <li>
                                         Your fleet: ships with their equipped gear, implants and
                                         final stats
+                                    </li>
+                                    <li>
+                                        Run your ships through the combat simulator against your own
+                                        ships or reference ships, and sweep one stat to see where it
+                                        stops mattering
                                     </li>
                                 </ul>
                             </div>
