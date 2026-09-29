@@ -4613,9 +4613,9 @@ const DocumentationPage: React.FC = () => {
                             <p className="text-theme-text">
                                 You can connect an AI assistant that supports the Model Context
                                 Protocol (MCP), such as Claude, to your planner account. The
-                                assistant can then look up ships and read your own fleet to answer
-                                questions about it. It reads the data saved to your account, so sign
-                                in and let your data sync first.
+                                assistant can then look up ships, read your own fleet and run
+                                simulated battles with it to answer questions about it. It reads the
+                                data saved to your account, so sign in and let your data sync first.
                             </p>
 
                             <div className="p-4 bg-dark-lighter">

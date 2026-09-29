@@ -241,6 +241,7 @@ export const sweepStat: McpTool<z.output<typeof sweepStatInput>> = {
                     },
                 }),
             })),
+            unsimulated: unsimulatedEffects(input, args.seed, getGearPiece),
         };
     },
 };

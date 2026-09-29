@@ -1,84 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { encodeGearStats } from '../../utils/gear/statsCodec';
 import { simulateBattle, sweepStat } from '../tools/simulate';
 import { McpToolError } from '../types';
-import { AUTH_USER, STRANGER, call, ctxOver, templateRow } from './fixtures';
-
-const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-
-const KIT = {
-    image_key: '',
-    active_skill_text: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
-    active_target: 'front',
-    active_pattern: 'Pattern-Base',
-};
-
-const shipRow = (id: string, name: string, overrides = {}) => ({
-    id,
-    name,
-    user_id: AUTH_USER,
-    rarity: 'legendary',
-    faction: 'ATLAS_SYNDICATE',
-    type: 'ATTACKER',
-    affinity: 'thermal',
-    level: 60,
-    rank: 6,
-    ship_base_stats: {
-        hp: 20000,
-        attack: 2000,
-        defence: 500,
-        crit: 50,
-        crit_damage: 150,
-        speed: 120,
-    },
-    ship_equipment: [],
-    ship_implants: [],
-    ship_refits: [],
-    ship_templates: KIT,
-    ...overrides,
-});
-
-const tables = () => ({
-    users: [{ id: AUTH_USER, username: 'main', in_game_id: '1', owner_auth_user_id: null }],
-    ships: [
-        shipRow('s1', 'Geared', { ship_equipment: [{ slot: 'weapon', gear_id: uuid(1) }] }),
-        shipRow('s2', 'Bare'),
-    ],
-    inventory_items: [
-        {
-            id: uuid(1),
-            user_id: AUTH_USER,
-            slot: 'weapon',
-            level: 16,
-            stars: 6,
-            rarity: 'legendary',
-            set_bonus: null,
-            calibration_ship_id: null,
-            stats: encodeGearStats({
-                mainStat: { name: 'attack', value: 3000, type: 'flat' },
-                subStats: [],
-            }),
-        },
-    ],
-    engineering_stats: [],
-    ship_templates: [
-        templateRow({
-            id: 't1',
-            name: 'Atlas',
-            active_target: 'front',
-            active_pattern: 'Pattern-Base',
-            ascension_stats: [
-                { level: 1, attribute: 'HullPoints', type: 'Percentage', value: 0.15 },
-            ],
-        }),
-    ],
-});
-
-const vsAtlas = (shipId: string, extra = {}) => ({
-    player: [{ position: 'T1', ship_id: shipId }],
-    enemy: [{ position: 'T1', template: 'Atlas', variant: 'r0' }],
-    ...extra,
-});
+import { STRANGER, call, ctxOver } from './fixtures';
+import { simTables as tables, vsAtlas } from './simFixtures';
 
 interface BattleOut {
     runs: number;
@@ -86,6 +10,17 @@ interface BattleOut {
     ships: { side: string; position: string; name: string; damage_dealt: number }[];
     unsimulated: unknown[];
 }
+
+/** A battle's output with the ship names removed, to compare two boards that differ only in
+ *  which of your ships sits at a position. */
+const withoutNames = (out: unknown) => {
+    const battle = out as BattleOut;
+    return { ...battle, ships: battle.ships.map(({ name: _name, ...rest }) => rest) };
+};
+
+/** A Marauders leader whose stage-2 effect the simulator does not model. */
+const BRANDISHER = { faction: 'MARAUDERS', name: 'Brandisher', stage: 2 };
+const BRANDISHER_UNSIMULATED = '+25% direct damage to secondary targets';
 
 describe('simulate_battle', () => {
     it('runs one battle by default and reports both sides', async () => {
@@ -111,16 +46,59 @@ describe('simulate_battle', () => {
         expect(await call(simulateBattle, raw, ctx)).toEqual(await call(simulateBattle, raw, ctx));
     });
 
-    it('reads gear: a geared ship out-damages the same ship bare', async () => {
+    it('reads gear: a geared ship fights exactly as a bare ship with the same final attack', async () => {
         const { ctx } = ctxOver(tables());
 
-        // A single fight's total damage is bounded near the target's HP (whoever wins still
-        // only need deal ~that much), so at n=3 which ship "wins" the comparison is overkill
-        // noise, not a read of gear. n=10 gives the higher-attack ship room to pull ahead.
-        const geared = (await call(simulateBattle, vsAtlas('s1', { runs: 10 }), ctx)) as BattleOut;
-        const bare = (await call(simulateBattle, vsAtlas('s2', { runs: 10 }), ctx)) as BattleOut;
+        // 2000 base + the 3000 weapon, against a bare 5000.
+        const geared = await call(simulateBattle, vsAtlas('s1'), ctx);
+        const base5000 = await call(simulateBattle, vsAtlas('s3'), ctx);
+        const bare = await call(simulateBattle, vsAtlas('s2'), ctx);
 
-        expect(geared.ships[0].damage_dealt).toBeGreaterThan(bare.ships[0].damage_dealt);
+        expect(withoutNames(geared)).toEqual(withoutNames(base5000));
+        expect(withoutNames(bare)).not.toEqual(withoutNames(geared));
+    });
+
+    it('reads gear stats afresh on every call', async () => {
+        const first = ctxOver(tables({ weaponAttack: 3000 }));
+        const second = ctxOver(tables({ weaponAttack: 500 }));
+
+        const before = await call(simulateBattle, vsAtlas('s1'), first.ctx);
+        const after = await call(simulateBattle, vsAtlas('s1'), second.ctx);
+
+        expect(withoutNames(before)).toEqual(
+            withoutNames(await call(simulateBattle, vsAtlas('s3'), first.ctx))
+        );
+        expect(withoutNames(after)).not.toEqual(withoutNames(before));
+    });
+
+    it('lists the effects of your squad leader the simulator does not model', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(
+            simulateBattle,
+            vsAtlas('m1', { player_leader: BRANDISHER }),
+            ctx
+        )) as BattleOut;
+
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+    });
+
+    it("lists the effects of the enemy's squad leader the simulator does not model", async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(
+            simulateBattle,
+            {
+                player: [{ position: 'T1', ship_id: 's2' }],
+                enemy: [{ position: 'T1', ship_id: 'm2' }],
+                enemy_leader: BRANDISHER,
+            },
+            ctx
+        )) as BattleOut;
+
+        expect(out.unsimulated).toEqual([
+            { ship: 'Other Marauder', texts: [BRANDISHER_UNSIMULATED] },
+        ]);
     });
 
     it('refuses a profile that is not one of yours', async () => {
@@ -138,6 +116,7 @@ describe('simulate_battle', () => {
 
 interface SweepOut {
     current_value: number;
+    unsimulated: unknown[];
     points: {
         value: number;
         is_reference: boolean;
@@ -176,6 +155,41 @@ describe('sweep_stat', () => {
         const out = (await call(sweepStat, sweep(), ctx)) as SweepOut;
 
         expect(new Set(out.points.map((p) => p.team_damage)).size).toBeGreaterThan(1);
+    });
+
+    it('sweeps a stat on an enemy ship', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(
+            sweepStat,
+            sweep({ target: { side: 'enemy', position: 'T1' } }),
+            ctx
+        )) as SweepOut;
+
+        // The Atlas template's attack, not the player ship's 5000.
+        expect(out.current_value).toBe(3000);
+        expect(out.points.filter((p) => p.is_reference).map((p) => p.value)).toEqual([3000]);
+        expect(out.points.map((p) => p.value)).toEqual([1000, 3000, 5000, 9000]);
+    });
+
+    it('lists squad-leader effects the simulator does not model', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(
+            sweepStat,
+            sweep({ player: [{ position: 'T1', ship_id: 'm1' }], player_leader: BRANDISHER }),
+            ctx
+        )) as SweepOut;
+
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+    });
+
+    it('reports no unsimulated effects without a squad leader', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(sweepStat, sweep(), ctx)) as SweepOut;
+
+        expect(out.unsimulated).toEqual([]);
     });
 
     it('rejects a target position with no ship', async () => {

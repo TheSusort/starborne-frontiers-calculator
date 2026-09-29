@@ -105,6 +105,17 @@ describe('board schema', () => {
             { ...ok, player: [{ position: 'T1', ship_id: 's1', stat_overrides: { luck: 5 } }] },
         ],
         ['an unknown position', { ...ok, player: [{ position: 'X9', ship_id: 's1' }] }],
+        [
+            'an enemy cell with both a ship id and a template',
+            {
+                ...ok,
+                enemy: [{ position: 'T1', ship_id: 's2', template: 'Atlas', variant: 'r0' }],
+            },
+        ],
+        [
+            'an unknown squad-leader faction',
+            { ...ok, player_leader: { faction: 'NOBODY', name: LEADER_NAME, stage: 1 } },
+        ],
     ])('rejects %s', (_label, raw) => {
         expect(schema.safeParse(raw).success).toBe(false);
     });
@@ -177,6 +188,21 @@ describe('buildBattleInput', () => {
         expect(stats(raw, 'playerTeam')).toMatchObject({ speed: 180, attack: 1500 });
     });
 
+    it('puts overrides on a template enemy', () => {
+        const raw = {
+            player: [{ position: 'T1', ship_id: 's2' }],
+            enemy: [
+                {
+                    position: 'T1',
+                    template: 'Atlas',
+                    variant: 'r0',
+                    stat_overrides: { speed: 175 },
+                },
+            ],
+        };
+        expect(stats(raw, 'enemyTeam')).toMatchObject({ speed: 175, attack: 1000 });
+    });
+
     it('orders a side T1..B4 whatever order the cells came in', () => {
         const { input } = buildBattleInput(
             board({
@@ -223,6 +249,14 @@ describe('buildBattleInput', () => {
                 enemy: [{ position: 'T1', template: 'Bare', variant: 'refitted' }],
             },
             'Bare has no refit data, so only variant "r0" is available.',
+        ],
+        [
+            'a template the data does not hold',
+            {
+                player: [{ position: 'T1', ship_id: 's1' }],
+                enemy: [{ position: 'T1', template: 'Nobody', variant: 'r0' }],
+            },
+            'No ship named "Nobody". Use search_ships to find the exact name.',
         ],
         [
             'an unknown squad leader',

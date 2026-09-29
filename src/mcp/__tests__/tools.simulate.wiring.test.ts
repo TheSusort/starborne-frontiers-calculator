@@ -1,71 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { encodeGearStats } from '../../utils/gear/statsCodec';
 import * as seededRuns from '../../utils/simulator/seededRuns';
 import { SIM_TIME_BUDGET_MS, simulateBattle, sweepStat } from '../tools/simulate';
 import { McpToolError } from '../types';
-import { AUTH_USER, call, ctxOver, templateRow } from './fixtures';
+import { call, ctxOver } from './fixtures';
+import { GEAR_ID, simTables as tables, vsAtlas } from './simFixtures';
 
 vi.mock('../../utils/simulator/seededRuns', async (importOriginal) => {
     const actual = await importOriginal<typeof seededRuns>();
-    return { ...actual, runSeedSet: vi.fn(actual.runSeedSet) };
+    return {
+        ...actual,
+        runSeedSet: vi.fn(actual.runSeedSet),
+        runSeededBattle: vi.fn(actual.runSeededBattle),
+    };
 });
 
-const GEAR_ID = '00000000-0000-4000-8000-000000000001';
-
-const tables = () => ({
-    users: [{ id: AUTH_USER, username: 'main', in_game_id: '1', owner_auth_user_id: null }],
-    ships: [
-        {
-            id: 's1',
-            name: 'Geared',
-            user_id: AUTH_USER,
-            rarity: 'legendary',
-            faction: 'ATLAS_SYNDICATE',
-            type: 'ATTACKER',
-            level: 60,
-            rank: 6,
-            ship_base_stats: { hp: 20000, attack: 2000, speed: 120 },
-            ship_equipment: [{ slot: 'weapon', gear_id: GEAR_ID }],
-            ship_implants: [],
-            ship_refits: [],
-            ship_templates: {
-                image_key: '',
-                active_skill_text: 'This Unit deals <unit-damage>100% damage</unit-damage>.',
-                active_target: 'front',
-                active_pattern: 'Pattern-Base',
-            },
-        },
-    ],
-    inventory_items: [
-        {
-            id: GEAR_ID,
-            user_id: AUTH_USER,
-            slot: 'weapon',
-            level: 16,
-            stars: 6,
-            rarity: 'legendary',
-            set_bonus: null,
-            calibration_ship_id: null,
-            stats: encodeGearStats({
-                mainStat: { name: 'attack', value: 3000, type: 'flat' },
-                subStats: [],
-            }),
-        },
-    ],
-    engineering_stats: [],
-    ship_templates: [templateRow({ active_target: 'front', active_pattern: 'Pattern-Base' })],
-});
-
-const raw = {
-    player: [{ position: 'T1', ship_id: 's1' }],
-    enemy: [{ position: 'T1', template: 'Atlas', variant: 'r0' }],
-};
+const raw = vsAtlas('s1');
 
 // The arrow body must not be an expression: `mockClear()` returns the mock itself (for
 // chaining), and a hook that returns a function has Vitest treat it as a teardown callback —
 // which would invoke `runSeedSet()` with no arguments after every test.
 beforeEach(() => {
     vi.mocked(seededRuns.runSeedSet).mockClear();
+    vi.mocked(seededRuns.runSeededBattle).mockClear();
 });
 
 describe('simulator tool wiring', () => {
@@ -167,5 +123,22 @@ describe('simulator tool wiring', () => {
             expect(args[4]).toBeGreaterThanOrEqual(before + SIM_TIME_BUDGET_MS);
             expect(args[4]).toBeLessThanOrEqual(after + SIM_TIME_BUDGET_MS);
         }
+    });
+
+    it('sweep_stat looks for unsimulated squad-leader effects in one battle, not one per step', async () => {
+        const { ctx } = ctxOver(tables());
+
+        await call(
+            sweepStat,
+            {
+                ...sweepRaw,
+                player: [{ position: 'T1', ship_id: 'm1' }],
+                player_leader: { faction: 'MARAUDERS', name: 'Brandisher', stage: 2 },
+            },
+            ctx
+        );
+
+        expect(vi.mocked(seededRuns.runSeedSet).mock.calls.length).toBeGreaterThan(1);
+        expect(seededRuns.runSeededBattle).toHaveBeenCalledTimes(1);
     });
 });

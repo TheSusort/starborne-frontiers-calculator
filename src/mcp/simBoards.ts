@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { FactionName } from '../constants/factions';
+import { SQUAD_LEADERS } from '../constants/squadLeaders';
 import type { BoardState } from '../components/simulator/PlacementBoard';
 import { engineeringStatForShipType } from '../services/fleetReads';
 import type { GearPiece } from '../types/gear';
@@ -11,7 +13,7 @@ import { canBeFullyRefitted, referenceShip } from '../utils/ship/referenceShip';
 import { buildTeam } from '../utils/simulator/buildTeam';
 import { parseSquadLeaderSelection } from '../utils/simulator/squadLeaderSelection';
 import { OVERRIDABLE_STATS, OVERRIDE_MIN } from '../utils/simulator/statOverrides';
-import type { TemplateWithAscension } from './tools/ships';
+import { unknownShip, type TemplateWithAscension } from './tools/ships';
 import { McpToolError } from './types';
 
 /** Battles one tool call may run. This bounds the battle count only: per-battle cost varies with
@@ -52,13 +54,15 @@ const statOverrides = z
         'Replace a stat after gear, refits, implants and engineering. Units as get_my_fleet reports them (crit 70, not 0.7).'
     );
 
-const ownCell = z.object({
+/** Cells are strict so a cell carrying both `ship_id` and `template` fails validation instead of
+ *  resolving as one kind with the other key stripped. */
+const ownCell = z.strictObject({
     position: z.enum(POSITIONS),
     ship_id: z.string().trim().min(1).describe('A ship id from get_my_fleet.'),
     stat_overrides: statOverrides.optional(),
 });
 
-const templateCell = z.object({
+const templateCell = z.strictObject({
     position: z.enum(POSITIONS),
     template: z.string().trim().min(1).describe('A ship name from search_ships.'),
     variant: z
@@ -67,8 +71,12 @@ const templateCell = z.object({
     stat_overrides: statOverrides.optional(),
 });
 
+const LEADER_FACTIONS = Object.keys(SQUAD_LEADERS) as [FactionName, ...FactionName[]];
+
 const leader = z.object({
-    faction: z.string().trim().min(1),
+    faction: z
+        .enum(LEADER_FACTIONS)
+        .describe("The squad leader's faction; `name` is a leader name within that faction."),
     name: z.string().trim().min(1),
     stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
 });
@@ -96,14 +104,7 @@ export const boardInputShape = {
     seed: z.number().int().default(1).describe('Same seed and input, same result.'),
 };
 
-export type BoardInput = {
-    profile_id?: string;
-    player: z.output<typeof ownCell>[];
-    enemy: Cell[];
-    player_leader?: z.output<typeof leader>;
-    enemy_leader?: z.output<typeof leader>;
-    seed: number;
-};
+export type BoardInput = z.output<z.ZodObject<typeof boardInputShape>>;
 
 /** One ship per position, and each own ship at most once, per board. */
 export const refineBoards = (value: BoardInput, ctx: z.RefinementCtx): void => {
@@ -150,11 +151,7 @@ const resolveShip = (cell: Cell, data: BoardData): Ship => {
         return ship;
     }
     const template = data.templates.get(cell.template.toLowerCase());
-    if (!template) {
-        throw new McpToolError(
-            `No ship named "${cell.template}". Use search_ships to find the exact name.`
-        );
-    }
+    if (!template) throw unknownShip(cell.template);
     if (cell.variant === 'refitted' && !canBeFullyRefitted(template.ascension)) {
         throw new McpToolError(
             `${template.ship.name} has no refit data, so only variant "r0" is available.`

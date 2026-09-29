@@ -25,7 +25,7 @@ async function fetchShipTemplates(db: SupabaseClient): Promise<Ship[]> {
         .filter((ship): ship is Ship => ship !== null);
 }
 
-const unknownShip = (name: string) =>
+export const unknownShip = (name: string) =>
     new McpToolError(`No ship named "${name}". Use search_ships to find the exact name.`);
 
 /** The one template named `name`, case-insensitively. */
