@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.69.1';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'AI assistants: connect Claude or another MCP app to read your fleet.',
+    'AI assistants: your assistant can now run battles and stat sweeps.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
