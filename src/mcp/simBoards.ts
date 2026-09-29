@@ -16,10 +16,21 @@ import { OVERRIDABLE_STATS, OVERRIDE_MIN } from '../utils/simulator/statOverride
 import { unknownShip, type TemplateWithAscension } from './tools/ships';
 import { McpToolError } from './types';
 
-/** Battles one tool call may run. This bounds the battle count only: per-battle cost varies with
- *  how long a fight runs, so the call's time is bounded separately by `SIM_TIME_BUDGET_MS` in
+/** Battles one `sweep_stat` call may run; a full default sweep fits under it (asserted in
+ *  `tools.simulate.test.ts`). This bounds the battle count only: per-battle cost varies with how
+ *  long a fight runs, so the call's time is bounded separately by `SIM_TIME_BUDGET_MS` in
  *  `tools/simulate.ts`. */
-export const MAX_BATTLES = 500;
+export const MAX_BATTLES = 120;
+
+/** Values one `sweep_stat` call may request. The ship's current value, added when it falls off
+ *  the requested grid, does not count against it. */
+export const MAX_SWEEP_POINTS = 10;
+
+/** Runs one `simulate_battle` call may ask for. */
+export const MAX_RUNS = 50;
+
+export const MAX_RUNS_PER_STEP = 20;
+export const DEFAULT_RUNS_PER_STEP = 10;
 
 const POSITIONS = [
     'T1',

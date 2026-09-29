@@ -4,7 +4,14 @@ import { runSeedSet } from '../../utils/simulator/seededRuns';
 import { runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
 import { analyseSweep } from '../../utils/simulator/sweepAnalysis';
 import type { PairedDelta } from '../../utils/simulator/deltaStats';
-import { buildBattleInput, type BoardData, type BoardInput } from '../simBoards';
+import {
+    DEFAULT_RUNS_PER_STEP,
+    MAX_BATTLES,
+    MAX_SWEEP_POINTS,
+    buildBattleInput,
+    type BoardData,
+    type BoardInput,
+} from '../simBoards';
 import { simulateBattle, sweepStat } from '../tools/simulate';
 import { findShipTemplates } from '../tools/ships';
 import { McpToolError, type McpToolContext } from '../types';
@@ -75,14 +82,14 @@ const BRANDISHER = { faction: 'MARAUDERS', name: 'Brandisher', stage: 2 };
 const BRANDISHER_UNSIMULATED = '+25% direct damage to secondary targets';
 
 describe('simulate_battle', () => {
-    it('runs one battle by default and reports both sides', async () => {
+    it('runs 20 battles by default and reports both sides', async () => {
         const { ctx } = ctxOver(tables());
 
         const out = (await call(simulateBattle, vsAtlas('s1'), ctx)) as BattleOut;
 
-        expect(out.runs).toBe(1);
+        expect(out.runs).toBe(20);
         const { player_wins, enemy_wins, draws } = out.outcome;
-        expect(player_wins + enemy_wins + draws).toBe(1);
+        expect(player_wins + enemy_wins + draws).toBe(20);
         expect(out.ships.map((s) => [s.side, s.position, s.name])).toEqual([
             ['player', 'T1', 'Geared'],
             ['enemy', 'T1', 'Atlas'],
@@ -161,8 +168,9 @@ describe('simulate_battle', () => {
         ).rejects.toEqual(new McpToolError('not one of your profiles'));
     });
 
-    it('rejects more than 200 runs', () => {
-        expect(simulateBattle.input.safeParse(vsAtlas('s1', { runs: 201 })).success).toBe(false);
+    it('accepts 50 runs and rejects 51', () => {
+        expect(simulateBattle.input.safeParse(vsAtlas('s1', { runs: 50 })).success).toBe(true);
+        expect(simulateBattle.input.safeParse(vsAtlas('s1', { runs: 51 })).success).toBe(false);
     });
 
     it('reports the same figures the engine itself produces for this input', async () => {
@@ -310,17 +318,36 @@ describe('sweep_stat', () => {
         ).rejects.toEqual(new McpToolError('No player ship at B4.'));
     });
 
-    it('passes on the step limit as a tool error', async () => {
+    it('rejects more than 10 requested steps as a tool error', async () => {
         const { ctx } = ctxOver(tables());
 
-        await expect(call(sweepStat, sweep({ from: 1, to: 100, step: 1 }), ctx)).rejects.toEqual(
-            new McpToolError('a sweep runs at most 25 steps')
+        await expect(
+            call(sweepStat, sweep({ from: 1000, to: 11000, step: 1000 }), ctx)
+        ).rejects.toEqual(
+            new McpToolError('a sweep runs at most 10 steps, not counting the current value')
         );
     });
 
-    it('defaults to 20 runs per step', () => {
+    it('does not count the current value against the step limit', async () => {
+        const { ctx } = ctxOver(tables());
+
+        // Ten grid points, none of them the current 5000, at the default runs per step.
+        const { runs_per_step: _omitted, ...rest } = sweep({ from: 1100, to: 10100, step: 1000 });
+        const out = (await call(sweepStat, rest, ctx)) as SweepOut;
+
+        expect(out.points).toHaveLength(11);
+        expect(out.points.filter((p) => p.is_reference).map((p) => p.value)).toEqual([5000]);
+    });
+
+    it('fits a full default sweep under the battle cap', () => {
+        expect((MAX_SWEEP_POINTS + 1) * DEFAULT_RUNS_PER_STEP).toBeLessThanOrEqual(MAX_BATTLES);
+    });
+
+    it('defaults to 10 runs per step, and accepts 20 but not 21', () => {
         const { runs_per_step: _omitted, ...rest } = sweep();
-        expect(sweepStat.input.parse(rest).runs_per_step).toBe(20);
+        expect(sweepStat.input.parse(rest).runs_per_step).toBe(10);
+        expect(sweepStat.input.safeParse(sweep({ runs_per_step: 20 })).success).toBe(true);
+        expect(sweepStat.input.safeParse(sweep({ runs_per_step: 21 })).success).toBe(false);
     });
 
     it('reports the same points the engine itself produces for this input', async () => {

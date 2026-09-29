@@ -20,6 +20,12 @@ export interface SweepStep {
     isReference: boolean;
 }
 
+/** How many values `from`..`to` by `step` visits, rounded the way `sweepSteps` rounds them. The
+ *  resolved value `sweepSteps` adds when it falls off that grid is not among them. */
+export function plannedSweepSteps(from: number, to: number, step: number): number {
+    return Math.floor((Math.round(to) - Math.round(from)) / Math.max(1, Math.round(step))) + 1;
+}
+
 /**
  * The values one sweep visits, ascending, with the resolved value always among them.
  *
@@ -49,8 +55,7 @@ export function sweepSteps(
 
     // Counted BEFORE the loop: `from: 0, to: 1e9, step: 1` is one keystroke away in a number
     // field, and discovering the cap by iterating to it freezes the page first.
-    const plannedSteps = Math.floor((end - start) / increment) + 1;
-    if (plannedSteps > MAX_SWEEP_STEPS) {
+    if (plannedSweepSteps(from, to, step) > MAX_SWEEP_STEPS) {
         throw new Error(`a sweep runs at most ${MAX_SWEEP_STEPS} steps`);
     }
 

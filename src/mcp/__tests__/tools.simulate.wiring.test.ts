@@ -67,9 +67,9 @@ describe('simulator tool wiring', () => {
                     target: { side: 'player', position: 'T1' },
                     stat: 'speed',
                     from: 100,
-                    to: 340,
+                    to: 190,
                     step: 10,
-                    runs_per_step: 100,
+                    runs_per_step: 20,
                 },
                 ctx
             )
