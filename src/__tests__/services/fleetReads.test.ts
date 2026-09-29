@@ -179,6 +179,38 @@ describe('fetchInventory', () => {
         ]);
     });
 
+    it('keeps walking past a full page that holds an invalid row (#576)', async () => {
+        const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) =>
+            i === 0 ? { ...gearRow(gearId(i)), level: 'not-a-number' } : gearRow(gearId(i))
+        );
+        const { db, calls } = stubDb({ inventory_items: rows });
+
+        const items = await fetchInventory(db, USER);
+
+        expect(items).toHaveLength(INVENTORY_BATCH_SIZE);
+        expect(items?.at(-1)?.id).toBe(gearId(INVENTORY_BATCH_SIZE));
+        expect(calls.filter((call) => call.method === 'gt')).toEqual([
+            {
+                table: 'inventory_items',
+                method: 'gt',
+                args: ['id', gearId(INVENTORY_BATCH_SIZE - 1)],
+            },
+        ]);
+    });
+
+    it('keeps walking past a full page of only invalid rows', async () => {
+        const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) =>
+            i < INVENTORY_BATCH_SIZE
+                ? { ...gearRow(gearId(i)), level: 'not-a-number' }
+                : gearRow(gearId(i))
+        );
+        const { db } = stubDb({ inventory_items: rows });
+
+        const items = await fetchInventory(db, USER);
+
+        expect(items?.map((item) => item.id)).toEqual([gearId(INVENTORY_BATCH_SIZE)]);
+    });
+
     it('reports every page to onBatch with the items read so far', async () => {
         const rows = Array.from({ length: INVENTORY_BATCH_SIZE + 1 }, (_, i) => gearRow(gearId(i)));
         const { db } = stubDb({ inventory_items: rows });

@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { calculateTotalStats, clearGearStatsCache } from '../statsCalculator';
+import { describe, it, expect } from 'vitest';
+import { calculateTotalStats } from '../statsCalculator';
 import { GearPiece } from '../../../types/gear';
 import { BaseStats } from '../../../types/stats';
 
@@ -55,10 +55,6 @@ const SHIP_A = 'ship-a';
 const SHIP_B = 'ship-b';
 
 describe('calculateTotalStats — calibration', () => {
-    beforeEach(() => {
-        clearGearStatsCache();
-    });
-
     it('applies calibration bonus when gear is calibrated to the target ship', () => {
         const weapon = makeCalibratedWeapon(SHIP_A);
         const gearMap: Record<string, GearPiece> = { [weapon.id]: weapon };
@@ -128,8 +124,6 @@ describe('calculateTotalStats — calibration', () => {
             undefined,
             SHIP_A
         );
-
-        clearGearStatsCache();
 
         const withoutShip = calculateTotalStats(
             BASE_STATS,

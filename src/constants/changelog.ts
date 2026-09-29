@@ -9,6 +9,8 @@ export const CURRENT_VERSION = '1.69.1';
 export const UNRELEASED_CHANGES: string[] = [
     'AI assistants: connect Claude or another MCP app to read your fleet.',
     'AI assistants: your assistant can now run battles and stat sweeps.',
+    'Gear inventory: very large inventories now load every piece after a damaged one.',
+    'Profile: Buffer ship rankings now include their Supporter engineering bonuses.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
