@@ -4662,6 +4662,10 @@ const DocumentationPage: React.FC = () => {
                                         ships or reference ships, and sweep one stat to see where it
                                         stops mattering
                                     </li>
+                                    <li>
+                                        Replay one simulated fight as a full turn-by-turn log, to
+                                        see exactly what each ship did and why
+                                    </li>
                                 </ul>
                             </div>
 

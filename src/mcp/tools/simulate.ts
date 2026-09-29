@@ -1,11 +1,14 @@
 import { z } from 'zod';
 import { fetchEngineeringStats, fetchGearByIds, fetchShips } from '../../services/fleetReads';
-import type { BattleSimulationInput } from '../../utils/calculators/battleSimulator';
+import { formatCombatLogText } from '../../utils/combat/log/formatText';
+import type { BattleResult, BattleSimulationInput } from '../../utils/calculators/battleSimulator';
 import type { GearPiece } from '../../types/gear';
 import {
     runSeedSet,
     runSeededBattle,
+    summarizeRun,
     SimulationDeadlineError,
+    type ActorTotals,
 } from '../../utils/simulator/seededRuns';
 import { OVERRIDABLE_STATS } from '../../utils/simulator/statOverrides';
 import { plannedSweepSteps, runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
@@ -96,7 +99,25 @@ const unsimulatedEffects = (
     return (preFight?.unsimulated ?? []).map(({ name, texts }) => ({ ship: name, texts }));
 };
 
-const CAVEATS = ` One call has about ${SIM_TIME_BUDGET_MS / 1000} seconds; long fights fit fewer battles, and a call that runs out stops with an error saying how many battles finished. An implant stored by its description rather than an id is not read (#578). \`unsimulated\` lists squad-leader effects the simulator does not model; figures are less reliable when it is not empty.`;
+/** Per-ship figures in roster order, as every sim tool reports them. */
+const shipTotals = (roster: BattleResult['roster'], totalsById: Record<string, ActorTotals>) =>
+    roster.map((entry) => {
+        const totals = totalsById[entry.actorId];
+        return {
+            side: entry.side,
+            position: entry.position,
+            name: entry.name,
+            damage_dealt: Math.round(totals?.damageDealt ?? 0),
+            damage_taken: Math.round(totals?.damageTaken ?? 0),
+            healing_done: Math.round(totals?.healingDone ?? 0),
+        };
+    });
+
+const DATA_CAVEATS = ` An implant stored by its description rather than an id is not read (#578). \`unsimulated\` lists squad-leader effects the simulator does not model; figures are less reliable when it is not empty.`;
+
+const CAVEATS =
+    ` One call has about ${SIM_TIME_BUDGET_MS / 1000} seconds; long fights fit fewer battles, and a call that runs out stops with an error saying how many battles finished.` +
+    DATA_CAVEATS;
 
 const simulateBattleInput = z
     .object({
@@ -138,18 +159,32 @@ export const simulateBattle: McpTool<z.output<typeof simulateBattleInput>> = {
                 mean_rounds: aggregate.meanRounds,
                 median_rounds: aggregate.medianRounds,
             },
-            ships: aggregate.roster.map((entry) => {
-                const totals = aggregate.perActorMean[entry.actorId];
-                return {
-                    side: entry.side,
-                    position: entry.position,
-                    name: entry.name,
-                    damage_dealt: Math.round(totals?.damageDealt ?? 0),
-                    damage_taken: Math.round(totals?.damageTaken ?? 0),
-                    healing_done: Math.round(totals?.healingDone ?? 0),
-                };
-            }),
+            ships: shipTotals(aggregate.roster, aggregate.perActorMean),
             unsimulated: unsimulatedEffects(input, board.seed, getGearPiece),
+        };
+    },
+};
+
+const battleLogInput = z.object(boardInputShape).strict().superRefine(refineBoards);
+
+export const battleLog: McpTool<z.output<typeof battleLogInput>> = {
+    name: 'battle_log',
+    description:
+        "Replay one simulated fight and return its full turn-by-turn log: every turn, attack, heal, shield, buff, debuff, resist, charge change and death, with each reaction indented under the event that caused it. Ships are labelled P.<name>@<position> (yours) and E.<name>@<position> (enemy). Token-intensive: one fight is thousands of tokens, so find the seed worth reading with simulate_battle first. The same board and seed give the same fight simulate_battle reports for that seed. Also returns the outcome and each ship's damage dealt, taken and healing done in this fight." +
+        DATA_CAVEATS,
+    input: battleLogInput,
+    run: async (board, ctx) => {
+        const { input, getGearPiece } = buildBattleInput(board, await loadBoardData(board, ctx));
+        const result = runSeededBattle(input, board.seed, getGearPiece);
+        return {
+            seed: board.seed,
+            outcome: { winner: result.outcome.winner, rounds: result.outcome.lastRound },
+            ships: shipTotals(result.roster, summarizeRun(result, board.seed).perActor),
+            unsimulated: (result.preFight?.unsimulated ?? []).map(({ name, texts }) => ({
+                ship: name,
+                texts,
+            })),
+            log: formatCombatLogText(result.combatLog, result.roster),
         };
     },
 };

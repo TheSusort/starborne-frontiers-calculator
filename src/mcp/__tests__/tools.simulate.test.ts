@@ -12,7 +12,7 @@ import {
     type BoardData,
     type BoardInput,
 } from '../simBoards';
-import { simulateBattle, sweepStat } from '../tools/simulate';
+import { battleLog, simulateBattle, sweepStat } from '../tools/simulate';
 import { findShipTemplates } from '../tools/ships';
 import { McpToolError, type McpToolContext } from '../types';
 import { AUTH_USER, STRANGER, call, ctxOver } from './fixtures';
@@ -229,6 +229,72 @@ describe('simulate_battle', () => {
         });
         expect(mutantShips).not.toEqual(correctShips);
         expect(out.ships).not.toEqual(mutantShips);
+    });
+});
+
+interface LogOut {
+    seed: number;
+    outcome: { winner: string; rounds: number };
+    ships: BattleOut['ships'];
+    unsimulated: unknown[];
+    log: string;
+}
+
+describe('battle_log', () => {
+    it('returns one fight with its full log, every line naming a roster ship', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(battleLog, vsAtlas('s1', { seed: 7 }), ctx)) as LogOut;
+
+        expect(out.seed).toBe(7);
+        expect(['player', 'enemy', 'draw']).toContain(out.outcome.winner);
+        expect(out.outcome.rounds).toBeGreaterThan(0);
+        expect(out.ships.map((s) => [s.side, s.position, s.name])).toEqual([
+            ['player', 'T1', 'Geared'],
+            ['enemy', 'T1', 'Atlas'],
+        ]);
+        expect(out.log.startsWith('=== ROUND 1\n')).toBe(true);
+        expect(out.log).toContain('P.Geared@T1');
+        expect(out.log).toContain('E.Atlas@T1');
+        // A raw engine actor id in place of a label means the roster and the log disagree.
+        const lineShape =
+            /^(=== ROUND \d+|-- TURN [PE]\..+?@[TMB][1-4] .*|\s+(\[start\] |\[end\] )?[a-z-]+ [PE]\..+?@[TMB][1-4].*)$/;
+        for (const line of out.log.split('\n').filter(Boolean)) {
+            expect(line).toMatch(lineShape);
+        }
+    });
+
+    it('is the same fight simulate_battle reports for one run of that seed', async () => {
+        const { ctx } = ctxOver(tables());
+
+        for (const seed of [1, 2, 3]) {
+            const log = (await call(battleLog, vsAtlas('s1', { seed }), ctx)) as LogOut;
+            const sim = (await call(
+                simulateBattle,
+                vsAtlas('s1', { seed, runs: 1 }),
+                ctx
+            )) as BattleOut & { outcome: { mean_rounds: number } };
+
+            expect(log.ships).toEqual(sim.ships);
+            expect(log.outcome.rounds).toBe(sim.outcome.mean_rounds);
+            expect(log.unsimulated).toEqual(sim.unsimulated);
+        }
+    });
+
+    it('lists squad-leader effects the simulator does not model', async () => {
+        const { ctx } = ctxOver(tables());
+
+        const out = (await call(
+            battleLog,
+            vsAtlas('m1', { player_leader: BRANDISHER }),
+            ctx
+        )) as LogOut;
+
+        expect(out.unsimulated).toEqual([{ ship: 'Marauder', texts: [BRANDISHER_UNSIMULATED] }]);
+    });
+
+    it('takes no runs', () => {
+        expect(battleLog.input.safeParse(vsAtlas('s1', { runs: 2 })).success).toBe(false);
     });
 });
 
