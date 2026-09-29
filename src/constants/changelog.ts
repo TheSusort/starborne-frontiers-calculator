@@ -10,6 +10,9 @@ export const UNRELEASED_CHANGES: string[] = [
     'AI assistants: battle simulations now run 20 fights by default.',
     'AI assistants: one battle simulation now runs at most 50 fights.',
     'AI assistants: stat sweeps now take up to 10 steps plus your current value.',
+    'Combat simulator: start-of-round effects now resolve in turn order across both teams.',
+    'Combat simulator: Cloaking Stealth now lands before any start-of-round effect.',
+    'Combat simulator: enemy "if an enemy has" passives, like Graphite\'s, now check your team.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

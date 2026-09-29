@@ -57,6 +57,7 @@ import {
     PendingBomb,
     createActor,
     selectNextBySpeed,
+    orderByTurnPriority,
     positionTurnRank,
     MAX_SELECTION_TICKS,
     emptyActorDamage,
@@ -1820,6 +1821,10 @@ interface ReactiveSideCtx {
     adjacentOpposingIdsFor?: (anchorId: string) => string[];
     /** Per-side support footprint resolver (pattern-scoped reactive grants). See IntentExecContext. */
     footprintAllyIdsFor: (ownerId: string) => string[] | undefined;
+    /** Every actor id on the side OPPOSING this drain's owners (player drain → enemy roster, enemy
+     *  drain → player roster), dead included — the executor filters by `isActorAlive`. Feeds
+     *  `IntentExecContext.enemyAttackerIds`, the roster a drain-time `enemy-buff` gate reads. */
+    opposingIds: string[];
 }
 
 /** Per-victim incoming accounting bucket, keyed by victim actor id. Written in parallel with the
@@ -10253,9 +10258,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         removeChargesFrom: sideCtx.removeChargesFrom,
                         grantExtraAction,
                         playerIds: sideCtx.recipientIds,
-                        // Drain `enemy-buff` gates read the union of enemy attackers'
-                        // self-buffs (names only).
-                        enemyAttackerIds: enemyAttackerActorIds,
+                        // Drain `enemy-buff` gates read the union of the OWNER's opposing
+                        // side's self-buffs (names only).
+                        enemyAttackerIds: sideCtx.opposingIds,
                         isActorAlive,
                         selfShieldFullFor: isSelfShieldFull,
                         // Name map for the live `ally-on-team` roster check. With no ship names
@@ -10587,6 +10592,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // adjacentAllyIdsFor's (which stays bound to this drain's OWN side, player).
             adjacentOpposingIdsFor: bySide('enemy').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
+            opposingIds: enemyAttackerActorIds,
         });
         // Enemy drain — binds the SEPARATE enemy queue + enemy-side ctx. recipientIds is the
         // enemy-attacker ids, so an enemy→enemy reaction resolves within its own side, and
@@ -10620,6 +10626,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // 'adjacent-enemies' anchor lives on the PLAYER side.
             adjacentOpposingIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
+            opposingIds: playerIds,
         });
         // Side-parameterized drain — one closure for both sides. The queue-empty guard is an
         // allocation saving, not a behaviour change: drainQueue's `while (queue.length > 0)`
@@ -10658,6 +10665,82 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (p.length) drainQueue(p, playerDrainCtx());
             const e = take(intentQueues.enemy);
             if (e.length) drainQueue(e, enemyDrainCtx());
+        };
+
+        /**
+         * Drain point (a): resolve the round's start-of-round effects, both sides interleaved.
+         *
+         * Start-of-COMBAT effects go first — a `start-of-round` ability flagged `oncePerCombat`
+         * (the Cloaking set's Stealth). They land before any round-1 start-of-round effect on
+         * EITHER side resolves, so a start-of-round gate reading them sees them whichever side it
+         * is on and wherever it sits in turn order.
+         *
+         * Everything else then resolves OWNER BY OWNER in turn order — the same
+         * `orderByTurnPriority` the round loop uses (live effective speed DESC, board position, the
+         * player side on a cross-team tie), re-ranked after each owner so a start-of-round Speed
+         * Up/Down reorders the owners still waiting. An owner's own effects keep their registration
+         * order, and any reaction they enqueue drains before the next owner starts.
+         *
+         * Intents already queued that are NOT start-of-round (nothing enqueues one between the
+         * previous round's end and here today) drain first, side by side, as before.
+         */
+        const drainStartOfRound = (): void => {
+            const isStartOfRound = (i: Intent): boolean => i.ability.trigger === 'start-of-round';
+            const isStartOfCombat = (i: Intent): boolean =>
+                isStartOfRound(i) &&
+                'oncePerCombat' in i.ability.config &&
+                i.ability.config.oncePerCombat === true;
+            const take = (side: Side, pred: (i: Intent) => boolean): Intent[] => {
+                const queue = intentQueues[side];
+                const taken: Intent[] = [];
+                for (let i = 0; i < queue.length;) {
+                    if (pred(queue[i])) taken.push(queue.splice(i, 1)[0]);
+                    else i++;
+                }
+                return taken;
+            };
+            const takeBoth = (pred: (i: Intent) => boolean) => ({
+                player: take('player', pred),
+                enemy: take('enemy', pred),
+            });
+            const startOfCombat = takeBoth(isStartOfCombat);
+            const startOfRound = takeBoth(isStartOfRound);
+            drainIntentsFor('player');
+            drainIntentsFor('enemy');
+
+            const drainInTurnOrder = (batch: Record<Side, Intent[]>): void => {
+                const byOwner = new Map<string, { side: Side; intents: Intent[] }>();
+                for (const side of ['player', 'enemy'] as const) {
+                    for (const intent of batch[side]) {
+                        const group = byOwner.get(intent.ownerId);
+                        if (group) group.intents.push(intent);
+                        else byOwner.set(intent.ownerId, { side, intents: [intent] });
+                    }
+                }
+                while (byOwner.size > 0) {
+                    const [next] = orderByTurnPriority(
+                        [...byOwner.entries()].map(([ownerId, group]) => {
+                            const actor = allActorsById.get(ownerId);
+                            return {
+                                ownerId,
+                                group,
+                                side: group.side,
+                                speed: actor ? effectiveSpeedOf(actor) : 0,
+                                position: actor?.position,
+                            };
+                        })
+                    );
+                    byOwner.delete(next.ownerId);
+                    drainQueue(
+                        next.group.intents,
+                        next.side === 'player' ? playerDrainCtx() : enemyDrainCtx()
+                    );
+                    drainIntentsFor('player');
+                    drainIntentsFor('enemy');
+                }
+            };
+            drainInTurnOrder(startOfCombat);
+            drainInTurnOrder(startOfRound);
         };
 
         // Path-B flush: grants buffered from a PRIOR round's post-round enemy death
@@ -10725,9 +10808,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
-        // Drain point (a): start-of-round intents execute before the first turn.
-        drainIntentsFor('player');
-        drainIntentsFor('enemy');
+        drainStartOfRound();
 
         // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
         // whole fight — see its declaration for why a round-scoped map dropped the break entirely

@@ -1778,9 +1778,8 @@ export interface IntentExecContext {
      *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
      *  sideCtx.recipientIds — used for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
-    /** Enemy attacker ids. The opposing side for a PLAYER drain owner's
-     *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
-     *  here. Optional on this type for the direct callers that build a drain ctx by hand; no
+    /** The drain OWNER's opposing roster: the enemy side for a player drain, the player side for
+     *  an enemy drain. The owner's `enemy-buff` gate sources its UNION self-buff names from here. Optional on this type for the direct callers that build a drain ctx by hand; no
      *  `runCombat` run leaves it empty. Every `simulateDPS` run carries a real enemy too, whose
      *  self-buff union is empty for the synthesized stand-in — an emptiness of CONTENT, not of
      *  roster: the normalization boundary throws on an absent/empty roster. */
@@ -2465,7 +2464,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // `?? 100` fallback is for callers with no closure, not for DPS mode.
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
-        // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
+        // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both read EMPTY on a DPS run
         // — an emptiness of CONTENT, not of roster: every `simulateDPS` run carries a real enemy
         // (the normalization boundary refuses a roster-less run), the synthesized stand-in holds
