@@ -119,6 +119,25 @@ describe('board schema', () => {
     ])('rejects %s', (_label, raw) => {
         expect(schema.safeParse(raw).success).toBe(false);
     });
+
+    it('bounds a side at the number of board positions', () => {
+        // 13 cells has a duplicate position too (only 12 positions exist), so this checks for
+        // the array's own too_big issue rather than relying on that duplicate check.
+        const player = Array.from({ length: 13 }, (_, i) => ({
+            position: 'T1',
+            ship_id: `s${i}`,
+        }));
+
+        const result = schema.safeParse({ ...ok, player });
+
+        expect(result.success).toBe(false);
+        expect(
+            !result.success &&
+                result.error.issues.some(
+                    (issue) => issue.code === 'too_big' && issue.path[0] === 'player'
+                )
+        ).toBe(true);
+    });
 });
 
 describe('buildBattleInput', () => {

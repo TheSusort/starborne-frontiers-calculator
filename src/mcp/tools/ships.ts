@@ -53,10 +53,11 @@ export async function findShipTemplates(
     for (const row of await fetchTemplateRows(db)) {
         const ship = transformShipTemplate(row);
         if (ship) {
-            byName.set(ship.name.toLowerCase(), {
-                ship,
-                ascension: parseAscensionStats(row.ascension_stats),
-            });
+            const key = ship.name.toLowerCase();
+            // Matches `findShipTemplate`'s `.find()`: the first row for a name wins a collision.
+            if (!byName.has(key)) {
+                byName.set(key, { ship, ascension: parseAscensionStats(row.ascension_stats) });
+            }
         }
     }
     const found = new Map<string, TemplateWithAscension>();

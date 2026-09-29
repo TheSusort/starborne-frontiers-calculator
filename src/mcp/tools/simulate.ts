@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { fetchEngineeringStats, fetchGearByIds, fetchShips } from '../../services/fleetReads';
 import type { BattleSimulationInput } from '../../utils/calculators/battleSimulator';
 import type { GearPiece } from '../../types/gear';
-import { clearGearStatsCache } from '../../utils/ship/statsCalculator';
 import {
     runSeedSet,
     runSeededBattle,
@@ -72,9 +71,6 @@ async function loadBoardData(board: BoardInput, ctx: McpToolContext): Promise<Bo
         .flatMap((ship) => [...Object.values(ship.equipment), ...Object.values(ship.implants)])
         .filter((id): id is string => Boolean(id));
     const gear = await fetchGearByIds(ctx.db, profileId, gearIds);
-    // `calculateTotalStats` caches gear stats by gear id in module scope; a warm function
-    // instance serves many requests, so the cache must not outlive this one.
-    clearGearStatsCache();
 
     return {
         ships,
@@ -96,8 +92,7 @@ const unsimulatedEffects = (
     return (preFight?.unsimulated ?? []).map(({ name, texts }) => ({ ship: name, texts }));
 };
 
-const CAVEATS =
-    ' An implant stored by its description rather than an id is not read (#578). `unsimulated` lists squad-leader effects the simulator does not model; figures are less reliable when it is not empty.';
+const CAVEATS = ` One call has about ${SIM_TIME_BUDGET_MS / 1000} seconds; long fights fit fewer battles, and a call that runs out stops with an error saying how many battles finished. An implant stored by its description rather than an id is not read (#578). \`unsimulated\` lists squad-leader effects the simulator does not model; figures are less reliable when it is not empty.`;
 
 const simulateBattleInput = z
     .object({

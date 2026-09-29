@@ -73,13 +73,15 @@ const templateCell = z.strictObject({
 
 const LEADER_FACTIONS = Object.keys(SQUAD_LEADERS) as [FactionName, ...FactionName[]];
 
-const leader = z.object({
-    faction: z
-        .enum(LEADER_FACTIONS)
-        .describe("The squad leader's faction; `name` is a leader name within that faction."),
-    name: z.string().trim().min(1),
-    stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
-});
+const leader = z
+    .object({
+        faction: z
+            .enum(LEADER_FACTIONS)
+            .describe("The squad leader's faction; `name` is a leader name within that faction."),
+        name: z.string().trim().min(1),
+        stage: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+    })
+    .describe('Its effects apply to ships of that faction on that side.');
 
 type Cell = z.output<typeof ownCell> | z.output<typeof templateCell>;
 
@@ -94,10 +96,12 @@ export const boardInputShape = {
     player: z
         .array(ownCell)
         .min(1)
+        .max(POSITIONS.length)
         .describe('Your ships. Board positions T1-T4 front, M middle, B back.'),
     enemy: z
         .array(z.union([ownCell, templateCell]))
         .min(1)
+        .max(POSITIONS.length)
         .describe('Your own ships, or reference ships by name.'),
     player_leader: leader.optional(),
     enemy_leader: leader.optional(),

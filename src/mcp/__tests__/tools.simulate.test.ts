@@ -1,13 +1,65 @@
 import { describe, it, expect } from 'vitest';
+import { fetchEngineeringStats, fetchGearByIds, fetchShips } from '../../services/fleetReads';
+import { runSeedSet } from '../../utils/simulator/seededRuns';
+import { runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
+import { analyseSweep } from '../../utils/simulator/sweepAnalysis';
+import type { PairedDelta } from '../../utils/simulator/deltaStats';
+import { buildBattleInput, type BoardData, type BoardInput } from '../simBoards';
 import { simulateBattle, sweepStat } from '../tools/simulate';
-import { McpToolError } from '../types';
-import { STRANGER, call, ctxOver } from './fixtures';
+import { findShipTemplates } from '../tools/ships';
+import { McpToolError, type McpToolContext } from '../types';
+import { AUTH_USER, STRANGER, call, ctxOver } from './fixtures';
 import { simTables as tables, vsAtlas } from './simFixtures';
+
+/** Everything `buildBattleInput` needs, read the same way the tool's own `loadBoardData` does —
+ *  reused here rather than exported from `tools/simulate.ts` only for this test. */
+async function loadBoardDataForTest(board: BoardInput, ctx: McpToolContext): Promise<BoardData> {
+    const templateNames = board.enemy.flatMap((cell) =>
+        'template' in cell ? [cell.template] : []
+    );
+    const [ships, engineering, templates] = await Promise.all([
+        fetchShips(ctx.db, AUTH_USER),
+        fetchEngineeringStats(ctx.db, AUTH_USER),
+        templateNames.length > 0
+            ? findShipTemplates(ctx.db, templateNames)
+            : Promise.resolve(new Map()),
+    ]);
+    const placedIds = new Set(
+        [...board.player, ...board.enemy].flatMap((cell) =>
+            'ship_id' in cell ? [cell.ship_id] : []
+        )
+    );
+    const gearIds = ships
+        .filter((ship) => placedIds.has(ship.id))
+        .flatMap((ship) => [...Object.values(ship.equipment), ...Object.values(ship.implants)])
+        .filter((id): id is string => Boolean(id));
+    const gear = await fetchGearByIds(ctx.db, AUTH_USER, gearIds);
+    return {
+        ships,
+        templates,
+        gearById: new Map(gear.map((piece) => [piece.id, piece])),
+        engineering: engineering ?? { stats: [] },
+    };
+}
+
+const pairedDelta = ({ mean, se, n, distinguishable }: PairedDelta) => ({
+    mean,
+    se,
+    n,
+    distinguishable,
+});
 
 interface BattleOut {
     runs: number;
     outcome: { player_wins: number; enemy_wins: number; draws: number; win_rate: number };
-    ships: { side: string; position: string; name: string; damage_dealt: number }[];
+    ships: {
+        side: string;
+        position: string;
+        name: string;
+        damage_dealt: number;
+        damage_taken: number;
+        healing_done: number;
+    }[];
     unsimulated: unknown[];
 }
 
@@ -112,6 +164,64 @@ describe('simulate_battle', () => {
     it('rejects more than 200 runs', () => {
         expect(simulateBattle.input.safeParse(vsAtlas('s1', { runs: 201 })).success).toBe(false);
     });
+
+    it('reports the same figures the engine itself produces for this input', async () => {
+        const { ctx } = ctxOver(tables());
+        const raw = vsAtlas('s1', { runs: 3, seed: 42 });
+        const board = simulateBattle.input.parse(raw);
+
+        const { input, getGearPiece } = buildBattleInput(
+            board,
+            await loadBoardDataForTest(board, ctx)
+        );
+        const aggregate = runSeedSet(input, board.seed, board.runs, getGearPiece);
+
+        const out = (await call(simulateBattle, raw, ctx)) as BattleOut;
+
+        // The geared ship (~5000 attack) and the Atlas template (3000 attack, 180% hit) deal
+        // different damage to each other, so this board actually exercises damage_taken.
+        expect(out.ships[0].damage_dealt).not.toBe(out.ships[0].damage_taken);
+        expect(out.ships.some((ship) => ship.damage_taken > 0)).toBe(true);
+
+        expect(out.runs).toBe(aggregate.count);
+        expect(out.outcome).toEqual({
+            player_wins: aggregate.wins.player,
+            enemy_wins: aggregate.wins.enemy,
+            draws: aggregate.wins.draw,
+            win_rate: aggregate.wins.player / aggregate.count,
+            mean_rounds: aggregate.meanRounds,
+            median_rounds: aggregate.medianRounds,
+        });
+        const correctShips = aggregate.roster.map((entry) => {
+            const totals = aggregate.perActorMean[entry.actorId];
+            return {
+                side: entry.side,
+                position: entry.position,
+                name: entry.name,
+                damage_dealt: Math.round(totals?.damageDealt ?? 0),
+                damage_taken: Math.round(totals?.damageTaken ?? 0),
+                healing_done: Math.round(totals?.healingDone ?? 0),
+            };
+        });
+        expect(out.ships).toEqual(correctShips);
+
+        // Mutation check for the mapping above: a build that reported damage_taken from
+        // totals.damageDealt (dealt and taken differ on this board, asserted earlier) would
+        // produce this shape, and this assertion is what would have gone red against it.
+        const mutantShips = aggregate.roster.map((entry) => {
+            const totals = aggregate.perActorMean[entry.actorId];
+            return {
+                side: entry.side,
+                position: entry.position,
+                name: entry.name,
+                damage_dealt: Math.round(totals?.damageDealt ?? 0),
+                damage_taken: Math.round(totals?.damageDealt ?? 0),
+                healing_done: Math.round(totals?.healingDone ?? 0),
+            };
+        });
+        expect(mutantShips).not.toEqual(correctShips);
+        expect(out.ships).not.toEqual(mutantShips);
+    });
 });
 
 interface SweepOut {
@@ -211,5 +321,52 @@ describe('sweep_stat', () => {
     it('defaults to 20 runs per step', () => {
         const { runs_per_step: _omitted, ...rest } = sweep();
         expect(sweepStat.input.parse(rest).runs_per_step).toBe(20);
+    });
+
+    it('reports the same points the engine itself produces for this input', async () => {
+        const { ctx } = ctxOver(tables());
+        const raw = sweep({ runs_per_step: 3 });
+        const board = sweepStat.input.parse(raw);
+
+        const { input, getGearPiece } = buildBattleInput(
+            board,
+            await loadBoardDataForTest(board, ctx)
+        );
+        const team = board.target.side === 'player' ? input.playerTeam : input.enemyTeam;
+        const placement = team.find((candidate) => candidate.position === board.target.position)!;
+        const current = placement.statOverrides![board.stat]!;
+        const steps = sweepSteps(board.stat, board.from, board.to, board.step, current);
+        const sweepResult = runStatSweep(
+            input,
+            board.target,
+            board.stat,
+            steps,
+            board.seed,
+            board.runs_per_step,
+            getGearPiece
+        );
+        const points = analyseSweep(sweepResult);
+
+        const out = (await call(sweepStat, raw, ctx)) as SweepOut;
+
+        expect(out.current_value).toBe(current);
+        expect(out.points).toEqual(
+            points.map((point) => ({
+                value: point.value,
+                is_reference: point.isReference,
+                win_rate: point.winRate,
+                mean_rounds: point.meanRounds,
+                team_damage: Math.round(point.playerDamage),
+                ...(point.deltas && {
+                    delta: {
+                        win_rate: pairedDelta(point.deltas.winRate),
+                        mean_rounds: pairedDelta(point.deltas.meanRounds),
+                        team_damage: pairedDelta(point.deltas.playerDamage),
+                    },
+                }),
+            }))
+        );
+        // At least one non-reference point carries a full delta series.
+        expect(points.some((point) => point.deltas)).toBe(true);
     });
 });

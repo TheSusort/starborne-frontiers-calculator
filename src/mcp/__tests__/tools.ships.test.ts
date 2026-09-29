@@ -111,4 +111,17 @@ describe('findShipTemplates', () => {
             new McpToolError('No ship named "Nobody". Use search_ships to find the exact name.')
         );
     });
+
+    it('keeps the first template on a lower-cased name collision', async () => {
+        const { ctx } = ctxOver({
+            ship_templates: [
+                templateRow({ id: 't1', name: 'Atlas', rarity: 'LEGENDARY' }),
+                templateRow({ id: 't2', name: 'atlas', rarity: 'EPIC' }),
+            ],
+        });
+
+        const found = await findShipTemplates(ctx.db, ['Atlas']);
+
+        expect(found.get('atlas')).toMatchObject({ ship: { rarity: 'legendary' } });
+    });
 });
