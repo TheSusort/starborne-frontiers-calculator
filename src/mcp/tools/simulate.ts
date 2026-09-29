@@ -8,11 +8,15 @@ import {
     SimulationDeadlineError,
 } from '../../utils/simulator/seededRuns';
 import { OVERRIDABLE_STATS } from '../../utils/simulator/statOverrides';
-import { runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
+import { plannedSweepSteps, runStatSweep, sweepSteps } from '../../utils/simulator/statSweep';
 import { analyseSweep } from '../../utils/simulator/sweepAnalysis';
 import type { PairedDelta } from '../../utils/simulator/deltaStats';
 import {
+    DEFAULT_RUNS_PER_STEP,
     MAX_BATTLES,
+    MAX_RUNS,
+    MAX_RUNS_PER_STEP,
+    MAX_SWEEP_POINTS,
     boardInputShape,
     buildBattleInput,
     refineBoards,
@@ -101,8 +105,8 @@ const simulateBattleInput = z
             .number()
             .int()
             .min(1)
-            .max(200)
-            .default(1)
+            .max(MAX_RUNS)
+            .default(20)
             .describe(
                 'Seeds seed .. seed+runs-1. One run replays one fight; compare configurations over 20 or more.'
             ),
@@ -165,8 +169,8 @@ const sweepStatInput = z
             .number()
             .int()
             .min(1)
-            .max(100)
-            .default(20)
+            .max(MAX_RUNS_PER_STEP)
+            .default(DEFAULT_RUNS_PER_STEP)
             .describe('Every step fights the same seeds, so steps are compared fight by fight.'),
     })
     .superRefine(refineBoards);
@@ -176,7 +180,7 @@ const delta = ({ mean, se, n, distinguishable }: PairedDelta) => ({ mean, se, n,
 export const sweepStat: McpTool<z.output<typeof sweepStatInput>> = {
     name: 'sweep_stat',
     description:
-        `Vary one stat on one ship across a range and fight each value, to see where the stat stops mattering. Same boards as simulate_battle. Each point has win rate, mean rounds and team damage; every point but the ship's current value carries a paired delta against it, and \`distinguishable\` says whether the difference is more than noise. At most 25 steps and ${MAX_BATTLES} battles (steps × runs_per_step).` +
+        `Vary one stat on one ship across a range and fight each value, to see where the stat stops mattering. Same boards as simulate_battle. Each point has win rate, mean rounds and team damage; every point but the ship's current value carries a paired delta against it, and \`distinguishable\` says whether the difference is more than noise. At most ${MAX_SWEEP_POINTS} steps, not counting the current value, and ${MAX_BATTLES} battles (steps × runs_per_step).` +
         CAVEATS,
     input: sweepStatInput,
     run: async (args, ctx) => {
@@ -189,6 +193,11 @@ export const sweepStat: McpTool<z.output<typeof sweepStatInput>> = {
         const current = placement.statOverrides?.[stat];
         if (current === undefined) throw new Error(`buildTeam resolved no ${stat}`);
 
+        if (plannedSweepSteps(args.from, args.to, args.step) > MAX_SWEEP_POINTS) {
+            throw new McpToolError(
+                `a sweep runs at most ${MAX_SWEEP_POINTS} steps, not counting the current value`
+            );
+        }
         let steps;
         try {
             steps = sweepSteps(stat, args.from, args.to, args.step, current);
