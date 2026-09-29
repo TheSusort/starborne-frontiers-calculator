@@ -8,6 +8,8 @@ export const CURRENT_VERSION = '1.70.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'AI assistants: battle simulations now run 20 fights by default.',
+    'AI assistants: one battle simulation now runs at most 50 fights.',
+    'AI assistants: stat sweeps now take up to 10 steps plus your current value.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
