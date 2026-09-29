@@ -116,7 +116,15 @@ export const boardInputShape = {
         .describe('Your own ships, or reference ships by name.'),
     player_leader: leader.optional(),
     enemy_leader: leader.optional(),
-    seed: z.number().int().default(1).describe('Same seed and input, same result.'),
+    // The engine reads a seed's low 32 bits; the ceiling keeps every `seed + i` of a run set a
+    // safe integer that `battle_log` accepts back.
+    seed: z
+        .number()
+        .int()
+        .min(0)
+        .max(2_147_483_647)
+        .default(1)
+        .describe('Same seed and input, same result.'),
 };
 
 export type BoardInput = z.output<z.ZodObject<typeof boardInputShape>>;

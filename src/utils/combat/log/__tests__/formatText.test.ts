@@ -139,4 +139,42 @@ describe('formatCombatLogText', () => {
     it('renders an empty log as an empty string', () => {
         expect(formatCombatLogText([], roster)).toBe('');
     });
+    it('keeps every entry on one line when a name or note carries a line break', () => {
+        const text = formatCombatLogText(
+            [
+                {
+                    round: 1,
+                    startOfRound: [],
+                    turns: [
+                        {
+                            actorId: 'x',
+                            chargeBefore: 0,
+                            chargeMax: 0,
+                            entries: [
+                                {
+                                    kind: 'buff',
+                                    actorId: 'x',
+                                    skillName: 'Two\nLines',
+                                    note: 'a\r\nb',
+                                    targets: [{ targetId: 'x' }],
+                                    reactions: [],
+                                },
+                            ],
+                        },
+                    ],
+                    endOfRound: [],
+                },
+            ],
+            [{ actorId: 'x', side: 'player', name: 'Bad\nName', position: 'T1' }]
+        );
+
+        expect(text).toBe(
+            [
+                '=== ROUND 1',
+                '-- TURN P.Bad Name@T1',
+                '  buff P.Bad Name@T1 "Two Lines" {a b} -> P.Bad Name@T1',
+                '',
+            ].join('\n')
+        );
+    });
 });

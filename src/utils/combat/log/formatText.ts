@@ -1,5 +1,8 @@
 import type { CombatLogEntry, CombatLogRound, CombatLogTarget } from './types';
 
+/** Collapses line breaks to one space, so free text cannot split an entry across lines. */
+const oneLine = (text: string) => text.replace(/[\r\n]+/g, ' ');
+
 /** The roster fields the formatter reads. `BattleResult['roster']` satisfies it. */
 export interface LogRosterEntry {
     actorId: string;
@@ -21,7 +24,10 @@ export function formatCombatLogText(
     roster: readonly LogRosterEntry[]
 ): string {
     const labels = new Map(
-        roster.map((r) => [r.actorId, `${r.side === 'player' ? 'P' : 'E'}.${r.name}@${r.position}`])
+        roster.map((r) => [
+            r.actorId,
+            `${r.side === 'player' ? 'P' : 'E'}.${oneLine(r.name)}@${r.position}`,
+        ])
     );
     const label = (id: string) => labels.get(id) ?? id;
 
@@ -50,9 +56,9 @@ export function formatCombatLogText(
             }
         } else {
             text = `${indent}${e.kind} ${label(e.actorId)}`;
-            if (e.skillName) text += ` "${e.skillName}"`;
+            if (e.skillName) text += ` "${oneLine(e.skillName)}"`;
             if (e.slot) text += ` (${e.slot})`;
-            if (e.note) text += ` {${e.note}}`;
+            if (e.note) text += ` {${oneLine(e.note)}}`;
             if (e.healerId) text += ` healer ${label(e.healerId)}`;
             if (e.targets.length > 0) text += ` -> ${e.targets.map(target).join(', ')}`;
         }

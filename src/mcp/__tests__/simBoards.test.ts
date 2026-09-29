@@ -65,6 +65,14 @@ describe('board schema', () => {
         enemy: [{ position: 'T1', template: 'Atlas', variant: 'r0' }],
     };
 
+    it('bounds the seed so every seed of a run set stays a safe integer', () => {
+        expect(schema.safeParse({ ...ok, seed: 0 }).success).toBe(true);
+        expect(schema.safeParse({ ...ok, seed: 2_147_483_647 }).success).toBe(true);
+        expect(schema.safeParse({ ...ok, seed: 2_147_483_648 }).success).toBe(false);
+        expect(schema.safeParse({ ...ok, seed: -1 }).success).toBe(false);
+        expect(schema.safeParse({ ...ok, seed: Number.MAX_SAFE_INTEGER }).success).toBe(false);
+    });
+
     it('accepts a minimal board and defaults the seed to 1', () => {
         expect(board(ok).seed).toBe(1);
     });
