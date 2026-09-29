@@ -86,6 +86,10 @@ export type CombatEvent =
            *  victims but not the selected anchor, `targetId` names a victim that never crit, so a
            *  "deals X to that enemy" reactive routed off `targetId` hits the wrong ship. */
           critVictimIds?: string[];
+          /** Every victim THIS sub-attack struck, in footprint order (positionalApply's per-sub-attack
+           *  `victimIds`). Present only on the POSITIONAL deferred emit; consumers fall back to
+           *  `[targetId]` when absent, where `targetId` is the only victim. */
+          victimIds?: string[];
           /** What this sub-attack actually DELIVERED — post-crit, post-amplification,
            *  post-victim-defence, INCLUDING damage a Protection cascade diverted to protectors and
            *  EXCLUDING damage deferred into a DoT. The locked basis for damage-proportional outgoing

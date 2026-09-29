@@ -427,7 +427,7 @@ export function conditionsMet(conditions: Condition[], ctx: ConditionContext): b
 }
 
 /** Group runs of `anyOf` together; non-anyOf conditions are their own singleton groups. */
-function groupConditions(conditions: Condition[]): Condition[][] {
+export function groupConditions(conditions: Condition[]): Condition[][] {
     const groups: Condition[][] = [];
     let run: Condition[] = [];
     for (const c of conditions) {

@@ -2844,6 +2844,10 @@ const DocumentationPage: React.FC = () => {
                                         Speed buffs or debuffs. End-of-round extra actions (such as
                                         Harvester&apos;s on-ally-destroyed passive) drain after
                                         every other ship has acted, regardless of Speed.
+                                        Start-of-combat, start-of-round and end-of-round effects
+                                        resolve in the same turn order, across both teams.
+                                        Start-of-combat effects, such as the Cloaking set&apos;s
+                                        Stealth, land before any start-of-round effect.
                                     </p>
                                     <p className="text-theme-text mb-2">
                                         <span className="text-primary">Reactive Triggers:</span>{' '}

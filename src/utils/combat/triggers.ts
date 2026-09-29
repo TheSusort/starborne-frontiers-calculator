@@ -17,7 +17,7 @@ import {
 } from '../../types/calculator';
 import type { AffinityName } from '../../types/ship';
 import { PERSISTENT_STACKING_BUFFS } from '../../constants/persistentStackingBuffs';
-import { conditionsMet } from '../abilities/evaluateConditions';
+import { conditionsMet, groupConditions } from '../abilities/evaluateConditions';
 import { enemySelectorKind, type EnemySelectorKind } from '../abilities/abilityTargetSide';
 import { buildRoundContext, dotFamilyCounts } from '../abilities/roundContext';
 import { makeRateGate } from '../calculators/rateAccumulator';
@@ -222,6 +222,11 @@ export interface Intent {
          *  SELECTED anchor — which, in an AoE, is frequently a victim that never crit. Mirrors
          *  repairedEnemyIds' fan-out shape. Never empty when present. */
         critVictimIds?: string[];
+        /** Every enemy the owner's damaging sub-attack struck (ability-performed.victimIds, else
+         *  its lone `targetId`), stamped by the on-deal-damage listener. Read by
+         *  `dealtVictimRoleGateMet`: "after damaging a Debuffer or Supporter" asks whether ANY ship
+         *  the attack hit has that role. Never empty when present. */
+        dealtVictimIds?: string[];
         /** The clipped overheal carried from an own-repair-to-ally event, summed across EVERY
          *  recipient of the triggering repair — THE CASTER INCLUDED. Read by an `overheal`-basis
          *  reactive heal/shield to scale off the wasted amount rather than the owner's max HP.
@@ -697,6 +702,10 @@ export function registerReactiveListeners(args: {
                             eventCtx: {
                                 ...intent.eventCtx,
                                 victimId: e.targetId,
+                                dealtVictimIds:
+                                    e.victimIds && e.victimIds.length > 0
+                                        ? e.victimIds
+                                        : [e.targetId],
                                 // See the on-crit listener above.
                                 subAttackIndex: e.subAttackIndex,
                             },
@@ -1778,9 +1787,8 @@ export interface IntentExecContext {
      *  draining the player side; enemy attacker ids when draining the enemy side. Sourced from
      *  sideCtx.recipientIds — used for ally/all-allies buff recipients (deterministic application). */
     playerIds: string[];
-    /** Enemy attacker ids. The opposing side for a PLAYER drain owner's
-     *  `enemy-buff` gate is the enemy attacker(s) — drain sources their UNION self-buff names from
-     *  here. Optional on this type for the direct callers that build a drain ctx by hand; no
+    /** The drain OWNER's opposing roster: the enemy side for a player drain, the player side for
+     *  an enemy drain. The owner's `enemy-buff` gate sources its UNION self-buff names from here. Optional on this type for the direct callers that build a drain ctx by hand; no
      *  `runCombat` run leaves it empty. Every `simulateDPS` run carries a real enemy too, whose
      *  self-buff union is empty for the synthesized stand-in — an emptiness of CONTENT, not of
      *  roster: the normalization boundary throws on an absent/empty roster. */
@@ -2324,7 +2332,50 @@ function dispatchType(intent: Intent): Ability['config']['type'] {
  *  so each half re-groups the way the author wrote it. DELIBERATELY NOT ATTEMPTED: it changes
  *  which conditions gate where, so it needs an owner ruling on the intended semantics and its own
  *  tests. */
+/** An on-deal-damage reaction's `enemy-type` conditions ("after damaging a Debuffer or
+ *  Supporter", Zeolite's "when dealing damage to a Defender") name the role of a ship the attack
+ *  HIT. They never gate globally — the fight-wide `ctx.enemyType` scalar describes no actor and is
+ *  undefined for an enemy-owned reaction — and are checked by `dealtVictimRoleGateMet` instead.
+ *  `perVictimOk` must not take them either: its per-victim ctx carries that same undefined
+ *  `enemyType`, so they would always block. */
 function splitDrainGateConditions(intent: Intent): DrainGateSplit {
+    const split = splitDrainGateConditionsByShape(intent);
+    if (intent.ability.trigger !== 'on-deal-damage') return split;
+    return {
+        kept: split.kept.filter((c) => c.subject !== 'enemy-type'),
+        perVictim: split.perVictim,
+    };
+}
+
+/** True when an on-deal-damage reaction's `enemy-type` conditions hold for at least ONE ship its
+ *  sub-attack struck (`eventCtx.dealtVictimIds`), judged by that ship's role via `ctx.roleOf`.
+ *  The conditions combine as `conditionsMet` does (an `anyOf` run is one OR-group, every group
+ *  must hold) and each victim is judged on its own. An unknown role never matches. No
+ *  `enemy-type` condition, or a trigger other than on-deal-damage → true. */
+function dealtVictimRoleGateMet(intent: Intent, ctx: IntentExecContext): boolean {
+    if (intent.ability.trigger !== 'on-deal-damage') return true;
+    const roleConditions = intent.ability.conditions.filter(
+        (c) => c.subject === 'enemy-type' && c.requiredEnemyType !== undefined
+    );
+    if (roleConditions.length === 0) return true;
+    const victims =
+        intent.eventCtx?.dealtVictimIds ??
+        (intent.eventCtx?.victimId !== undefined ? [intent.eventCtx.victimId] : []);
+    const groups = groupConditions(roleConditions);
+    return victims.some((victimId) => {
+        const role = ctx.roleOf?.(victimId);
+        return groups.every((group) =>
+            group.some((c) => {
+                const matches = matchesRoleCategory(role, [
+                    c.requiredEnemyType!.toUpperCase() as ShipRoleCategory,
+                ]);
+                return c.negate ? !matches : matches;
+            })
+        );
+    });
+}
+
+function splitDrainGateConditionsByShape(intent: Intent): DrainGateSplit {
     // The self hp-threshold on an on-hp-threshold-crossed ability is TRIGGER CONFIG (the listener
     // read N from it), NOT a drain-time gate. The crossing already proved the threshold; re-gating
     // at drain time would WRONGLY BLOCK the reaction when an earlier reactive heal in the intent
@@ -2339,22 +2390,6 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
             kept: intent.ability.conditions.filter(
                 (c) => !(c.subject === 'hp-threshold' && c.hpSubject === 'self')
             ),
-            perVictim: NO_CONDITIONS,
-        };
-    }
-    // Zeolite: an on-deal-damage purge's `enemy-type` gate must check the
-    // ACTUAL victim this event carries, not the fight-wide `ctx.enemyType` (one scalar for the
-    // whole fight, hardcoded undefined for an enemy-owned reaction, so it can never be
-    // team-symmetric). RE-CHECKED by a DEDICATED block in the `purge` branch against
-    // `ctx.roleOf(targetId)` (see `enemyTypeCond` there) — hence `perVictim: NO_CONDITIONS`.
-    // Routing `enemy-type` through `perVictimOk` instead would evaluate it with `conditionsMet`
-    // against the per-victim ctx, whose `enemyType` is that same undefined fight-wide field
-    // (evaluateConditions' `enemy-type` case returns 0 for an unknown type) → BLOCKED, and
-    // `perVictimOk` sits ABOVE the dedicated block, so Zeolite would die on both sides. Verified,
-    // not assumed: doing so fails both cases of wave8ZeolitePurge.integration.test.ts.
-    if (intent.ability.type === 'purge' && intent.ability.trigger === 'on-deal-damage') {
-        return {
-            kept: intent.ability.conditions.filter((c) => c.subject !== 'enemy-type'),
             perVictim: NO_CONDITIONS,
         };
     }
@@ -2389,8 +2424,8 @@ function splitDrainGateConditions(intent: Intent): DrainGateSplit {
     // enemy-facing with no re-check is exactly the dangerous combination. The genuinely
     // ally/self-facing shapes (`buff`, `heal`, `shield`, `cleanse`) resolve no opposing victim at
     // all, so for them the question does not arise either way.
-    // ARM ORDERING: an `on-hp-threshold-crossed` intent, or an on-deal-damage `purge`, takes an
-    // earlier arm and never reaches here — such an intent's non-self hp-threshold stays in `kept`
+    // ARM ORDERING: an `on-hp-threshold-crossed` intent takes an earlier arm and never reaches
+    // here — such an intent's non-self hp-threshold stays in `kept`
     // (still gating globally, dead on a positional run) and, because that arm returned
     // `perVictim: NO_CONDITIONS`, is NOT also re-checked per target. Single gate, not two.
     const dt = dispatchType(intent);
@@ -2465,7 +2500,7 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // `?? 100` fallback is for callers with no closure, not for DPS mode.
         selfHpPct: ctx.selfHpPctFor?.(ownerId) ?? 100,
         // Names only — never folded, no double-fold: the drain owner's `enemy-buff` gate
-        // reads the UNION of enemy attackers' self-buffs; its `self-debuff` gate reads its OWN
+        // reads the UNION of its opposing side's self-buffs; its `self-debuff` gate reads its OWN
         // enemy-applied debuffs (per-target store keyed by ownerId). Both read EMPTY on a DPS run
         // — an emptiness of CONTENT, not of roster: every `simulateDPS` run carries a real enemy
         // (the normalization boundary refuses a roster-less run), the synthesized stand-in holds
@@ -3764,6 +3799,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
               }
             : baseDrainCtx;
     if (!conditionsMet(gateConditions, drainCtx)) return;
+    if (!dealtVictimRoleGateMet(intent, ctx)) return;
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
@@ -5382,18 +5418,13 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
         if (targetId === undefined) return;
         // As in the debuff branch — re-check against the real routed target.
         if (!perVictimOk(targetId)) return;
-        // Zeolite: the `enemy-type` gate is scrubbed from the generic drain-time
-        // condition check above (it only sees the single fight-wide `enemyType` scalar, which
-        // describes no actor) — re-check it
-        // HERE against the ACTUAL victim's role via `ctx.roleOf` (side-agnostic —
-        // roleByActorId is populated from BOTH TeamActorInput.role and EnemyActorInput.role, the
-        // same source Meatshield's defense-substitution and Graphite's roleFilter already use).
-        // An unknown role (`roleOf` undefined / no ship picked) never matches — conservative,
-        // mirrors matchesRoleCategory's contract elsewhere.
-        // Scoped to trigger==='on-deal-damage', symmetric with the
-        // scrub above — a hypothetical purge with a genuinely PvE-class `enemy-type` condition on
-        // a DIFFERENT trigger was never scrubbed from gateConditions, so re-deriving+re-evaluating
-        // it here via ctx.roleOf would double-gate/misread it against the wrong target.
+        // Zeolite: `dealtVictimRoleGateMet` has already required SOME struck ship to hold the
+        // `enemy-type` role; this re-checks it against the ship the purge actually LANDS on, via
+        // `ctx.roleOf` (side-agnostic — roleByActorId is populated from BOTH TeamActorInput.role
+        // and EnemyActorInput.role). An unknown role never matches, mirroring matchesRoleCategory.
+        // Scoped to trigger==='on-deal-damage', where `splitDrainGateConditions` removes the
+        // condition from the global gate; on any other trigger it still gates globally, so
+        // re-evaluating it here would double-gate it against the wrong target.
         const enemyTypeCond =
             intent.ability.trigger === 'on-deal-damage'
                 ? intent.ability.conditions.find((c) => c.subject === 'enemy-type')

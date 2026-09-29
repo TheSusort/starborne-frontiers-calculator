@@ -57,6 +57,7 @@ import {
     PendingBomb,
     createActor,
     selectNextBySpeed,
+    orderByTurnPriority,
     positionTurnRank,
     MAX_SELECTION_TICKS,
     emptyActorDamage,
@@ -1820,6 +1821,10 @@ interface ReactiveSideCtx {
     adjacentOpposingIdsFor?: (anchorId: string) => string[];
     /** Per-side support footprint resolver (pattern-scoped reactive grants). See IntentExecContext. */
     footprintAllyIdsFor: (ownerId: string) => string[] | undefined;
+    /** Every actor id on the side OPPOSING this drain's owners (player drain → enemy roster, enemy
+     *  drain → player roster), dead included — the executor filters by `isActorAlive`. Feeds
+     *  `IntentExecContext.enemyAttackerIds`, the roster a drain-time `enemy-buff` gate reads. */
+    opposingIds: string[];
 }
 
 /** Per-victim incoming accounting bucket, keyed by victim actor id. Written in parallel with the
@@ -8594,7 +8599,10 @@ export function runCombat(rawInput: CombatEngineInput): {
             subAttack?: number,
             // This sub-attack's delivered damage. Omitted on the single-event paths, whose
             // consumers fall back to `damage`.
-            deliveredDamage?: number
+            deliveredDamage?: number,
+            // Every victim this sub-attack struck. Omitted on the single-event paths, whose
+            // consumers fall back to `[targetId]`.
+            victimIds?: string[]
         ) => {
             bus.emit({
                 type: 'ability-performed',
@@ -8611,6 +8619,7 @@ export function runCombat(rawInput: CombatEngineInput): {
                 // sub-attack. Conditional spread → the single-event paths emit no index.
                 ...(subAttack !== undefined ? { subAttackIndex: subAttack } : {}),
                 ...(deliveredDamage !== undefined ? { deliveredDamage } : {}),
+                ...(victimIds !== undefined && victimIds.length > 0 ? { victimIds } : {}),
                 didHit: true,
             });
             // The attack entry now exists — drain the reflect rows THIS sub-attack
@@ -9909,7 +9918,8 @@ export function runCombat(rawInput: CombatEngineInput): {
                                         sub.critVictimIds.length,
                                         sub.critVictimIds,
                                         idx,
-                                        sub.deliveredDamage
+                                        sub.deliveredDamage,
+                                        sub.victimIds
                                     ),
                             });
                         }
@@ -10253,9 +10263,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                         removeChargesFrom: sideCtx.removeChargesFrom,
                         grantExtraAction,
                         playerIds: sideCtx.recipientIds,
-                        // Drain `enemy-buff` gates read the union of enemy attackers'
-                        // self-buffs (names only).
-                        enemyAttackerIds: enemyAttackerActorIds,
+                        // Drain `enemy-buff` gates read the union of the OWNER's opposing
+                        // side's self-buffs (names only).
+                        enemyAttackerIds: sideCtx.opposingIds,
                         isActorAlive,
                         selfShieldFullFor: isSelfShieldFull,
                         // Name map for the live `ally-on-team` roster check. With no ship names
@@ -10587,6 +10597,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // adjacentAllyIdsFor's (which stays bound to this drain's OWN side, player).
             adjacentOpposingIdsFor: bySide('enemy').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('player').footprintAllyIdsFor,
+            opposingIds: enemyAttackerActorIds,
         });
         // Enemy drain — binds the SEPARATE enemy queue + enemy-side ctx. recipientIds is the
         // enemy-attacker ids, so an enemy→enemy reaction resolves within its own side, and
@@ -10620,6 +10631,7 @@ export function runCombat(rawInput: CombatEngineInput): {
             // 'adjacent-enemies' anchor lives on the PLAYER side.
             adjacentOpposingIdsFor: bySide('player').adjacentAllyIdsFor,
             footprintAllyIdsFor: bySide('enemy').footprintAllyIdsFor,
+            opposingIds: playerIds,
         });
         // Side-parameterized drain — one closure for both sides. The queue-empty guard is an
         // allocation saving, not a behaviour change: drainQueue's `while (queue.length > 0)`
@@ -10658,6 +10670,85 @@ export function runCombat(rawInput: CombatEngineInput): {
             if (p.length) drainQueue(p, playerDrainCtx());
             const e = take(intentQueues.enemy);
             if (e.length) drainQueue(e, enemyDrainCtx());
+        };
+
+        /**
+         * Round-boundary phases — start of combat, start of round, end of round — resolve in the
+         * SAME order as the round's turns, both sides interleaved: OWNER BY OWNER by
+         * `orderByTurnPriority` (live effective speed DESC, board position, the player side on a
+         * cross-team tie), re-ranked after each owner so a Speed Up/Down granted mid-phase reorders
+         * the owners still waiting. An owner's own effects keep their registration order, and any
+         * reaction they enqueue drains before the next owner starts.
+         *
+         * `drainPhaseInTurnOrder` pulls the phase's intents out of both queues, drains whatever
+         * else is queued first (player queue then enemy queue), then resolves the phase.
+         */
+        const takeFromBothQueues = (pred: (i: Intent) => boolean): Record<Side, Intent[]> => {
+            const take = (side: Side): Intent[] => {
+                const queue = intentQueues[side];
+                const taken: Intent[] = [];
+                for (let i = 0; i < queue.length;) {
+                    if (pred(queue[i])) taken.push(queue.splice(i, 1)[0]);
+                    else i++;
+                }
+                return taken;
+            };
+            return { player: take('player'), enemy: take('enemy') };
+        };
+        const drainInTurnOrder = (batch: Record<Side, Intent[]>): void => {
+            const byOwner = new Map<string, { side: Side; intents: Intent[] }>();
+            for (const side of ['player', 'enemy'] as const) {
+                for (const intent of batch[side]) {
+                    const group = byOwner.get(intent.ownerId);
+                    if (group) group.intents.push(intent);
+                    else byOwner.set(intent.ownerId, { side, intents: [intent] });
+                }
+            }
+            while (byOwner.size > 0) {
+                const [next] = orderByTurnPriority(
+                    [...byOwner.entries()].map(([ownerId, group]) => {
+                        const actor = allActorsById.get(ownerId);
+                        return {
+                            ownerId,
+                            group,
+                            side: group.side,
+                            speed: actor ? effectiveSpeedOf(actor) : 0,
+                            position: actor?.position,
+                        };
+                    })
+                );
+                byOwner.delete(next.ownerId);
+                drainQueue(
+                    next.group.intents,
+                    next.side === 'player' ? playerDrainCtx() : enemyDrainCtx()
+                );
+                drainIntentsFor('player');
+                drainIntentsFor('enemy');
+            }
+        };
+        const isStartOfRound = (i: Intent): boolean => i.ability.trigger === 'start-of-round';
+        /** Start of COMBAT = a `start-of-round` ability flagged `oncePerCombat` (the Cloaking set's
+         *  Stealth). Drained as its own phase before round 1's start-of-round effects, so a
+         *  start-of-round gate reading it sees it whichever side the gate is on. */
+        const isStartOfCombat = (i: Intent): boolean =>
+            isStartOfRound(i) &&
+            'oncePerCombat' in i.ability.config &&
+            i.ability.config.oncePerCombat === true;
+        /** Drain point (a), after `round-started`: start of combat, then start of round. */
+        const drainStartOfRound = (): void => {
+            const startOfCombat = takeFromBothQueues(isStartOfCombat);
+            const startOfRound = takeFromBothQueues(isStartOfRound);
+            drainIntentsFor('player');
+            drainIntentsFor('enemy');
+            drainInTurnOrder(startOfCombat);
+            drainInTurnOrder(startOfRound);
+        };
+        /** The round tail, after `round-ended`. */
+        const drainEndOfRound = (): void => {
+            const endOfRound = takeFromBothQueues((i) => i.ability.trigger === 'end-of-round');
+            drainIntentsFor('player');
+            drainIntentsFor('enemy');
+            drainInTurnOrder(endOfRound);
         };
 
         // Path-B flush: grants buffered from a PRIOR round's post-round enemy death
@@ -10725,9 +10816,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })();
 
         bus.emit({ type: 'round-started', round: r });
-        // Drain point (a): start-of-round intents execute before the first turn.
-        drainIntentsFor('player');
-        drainIntentsFor('enemy');
+        drainStartOfRound();
 
         // §4.5 Stasis-break pending map. Constructed ONCE before the round loop and living for the
         // whole fight — see its declaration for why a round-scoped map dropped the break entirely
@@ -12992,14 +13081,12 @@ export function runCombat(rawInput: CombatEngineInput): {
             bus.emit({ type: 'corrosion-spread', sourceId: holder.id, affectedIds, round: r });
         }
 
-        // round-ended: end-of-round reactive purge (Rhodium). Emitted at the round TAIL, after
-        // every turn and its per-turn drain — so the purge sees post-death state — and before
-        // roundData assembly. This is the LAST drain of the round, and the only one after the turn
-        // loop. Drain BOTH queues (player + enemy), mirroring the round-started emit+drain.
-        // Drains the single-target reactive executor (most-buffs) — single-target by design.
+        // round-ended: end-of-round reactives (Rhodium's purge, Incinerator's damage). Emitted at
+        // the round TAIL, after every turn and its per-turn drain — so they see post-death state —
+        // and before roundData assembly. This is the LAST drain of the round, and the only one
+        // after the turn loop; it resolves in turn order (see `drainInTurnOrder`).
         bus.emit({ type: 'round-ended', round: r });
-        drainIntentsFor('player');
-        drainIntentsFor('enemy');
+        drainEndOfRound();
 
         // LOG-ONLY per-actor status snapshot (see the events.ts doc). Emitted at the round TAIL —
         // after every turn, the round-ended reactives AND their drains — so it reports the statuses
