@@ -70,13 +70,14 @@ const shipBase = (id: string, name: string, type: ShipTypeName, speed: number): 
     activePattern: 'Pattern-Base',
 });
 
-/** The Stealth reader. An all-allies footprint, so every ally is inside its active pattern. */
-const granter = (speed: number): Ship => ({
+/** The Stealth reader. Defaults to an all-allies footprint, so every ally is inside its active
+ *  pattern; `pattern` swaps in another support footprint. */
+const granter = (speed: number, pattern = 'Pattern-Support-All'): Ship => ({
     ...shipBase(`granter-${speed}`, 'Granter', 'SUPPORTER', speed),
     activeSkillText:
         'This unit grants <unit-skill>Attack Up I</unit-skill> for 1 turn to all allies.',
     activeTarget: 'allies',
-    activePattern: 'Pattern-Support-All',
+    activePattern: pattern,
     firstPassiveSkillText: GRAPHITE_STEALTH_CHARGE_PASSIVE,
 });
 
@@ -132,6 +133,16 @@ describe('start-of-round order and the enemy-buff gate side', () => {
         // The reader is FASTER than the cloaker, so only a start-of-combat Stealth (not a
         // start-of-round one resolved in speed order) is up in time for it.
         const team = () => [at(granter(300), 'M3'), at(cloaker(100), 'M4')];
+        const g = round1Grants(team(), team());
+        expect(g.player).toBeGreaterThan(0);
+        expect(g.enemy).toBe(g.player);
+    });
+
+    it('mirrored Cloaking teams on Graphite’s real support footprint grant on both sides', () => {
+        const team = () => [
+            at(granter(300, 'Pattern-Support-Double-Pickaxe-Range-0'), 'M3'),
+            at(cloaker(100), 'M4'),
+        ];
         const g = round1Grants(team(), team());
         expect(g.player).toBeGreaterThan(0);
         expect(g.enemy).toBe(g.player);

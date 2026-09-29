@@ -10681,8 +10681,8 @@ export function runCombat(rawInput: CombatEngineInput): {
          * Up/Down reorders the owners still waiting. An owner's own effects keep their registration
          * order, and any reaction they enqueue drains before the next owner starts.
          *
-         * Intents already queued that are NOT start-of-round (nothing enqueues one between the
-         * previous round's end and here today) drain first, side by side, as before.
+         * Any queued intent that is NOT start-of-round drains first, player queue then enemy
+         * queue, ahead of every start-of-combat and start-of-round effect.
          */
         const drainStartOfRound = (): void => {
             const isStartOfRound = (i: Intent): boolean => i.ability.trigger === 'start-of-round';
