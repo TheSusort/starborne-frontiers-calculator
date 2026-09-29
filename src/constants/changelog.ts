@@ -1,19 +1,24 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.69.1';
+export const CURRENT_VERSION = '1.70.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'AI assistants: connect Claude or another MCP app to read your fleet.',
-    'AI assistants: your assistant can now run battles and stat sweeps.',
-    'Gear inventory: very large inventories now load every piece after a damaged one.',
-    'Profile: Buffer ship rankings now include their Supporter engineering bonuses.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.70.0',
+        date: '2026-09-29',
+        changes: [
+            'AI assistants: connect Claude or another MCP app to read your fleet.',
+            'AI assistants: your assistant can now run battles and stat sweeps.',
+            'Gear inventory: very large inventories now load every piece after a damaged one.',
+            'Profile: Buffer ship rankings now include their Supporter engineering bonuses.',
+        ],
+    },
     {
         version: '1.69.1',
         date: '2026-09-28',
