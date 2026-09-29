@@ -32,7 +32,7 @@ Lives beside `buildCombatLog.ts` so scripts (e.g. `traceShip`) can reuse it; imp
 - Turn header: `-- TURN <label> charge <chargeBefore>/<chargeMax>`, plus
   `hp <currentHp>/<maxHp>` when `statsSnapshot` is present.
 - Entry line: `<kind> <actor label>` then, when present, `"<skillName>"`, `(<slot>)`, `{<note>}`,
-  then `-> ` and a comma-joined target list. Nested `reactions` are indented one level (two
+  then, when the entry has targets, ` -> ` and a comma-joined target list. Nested `reactions` are indented one level (two
   spaces) deeper, recursively.
 - Target: `<label>` then, when present, the rounded `amount`, ` crit`, ` miss` (`didHit === false`),
   ` overheal <n>`, ` overshield <n>`, ` shield hit` (`shieldWasHit`), ` [<resultingHpPct>%]`.
@@ -50,11 +50,11 @@ Lives beside `buildCombatLog.ts` so scripts (e.g. `traceShip`) can reuse it; imp
   - `outcome`: `{ winner: 'player' | 'enemy' | 'draw', rounds }` (`rounds` = `outcome.lastRound`)
   - `ships`: same per-ship shape as `simulate_battle` (`side, position, name, damage_dealt,
     damage_taken, healing_done`), totals for this one fight via `summarizeRun`
-  - `unsimulated`: as `simulate_battle`
+  - `unsimulated`: as `simulate_battle`, read from this fight's own `preFight` (no extra battle)
   - `log`: the formatter's string
 - **Description:** returns one fight's full turn-by-turn log; token-intensive; intended for
   replaying a seed that `simulate_battle` flagged; same seed and input give the same fight. Plus
-  the shared `CAVEATS`.
+  the implant and `unsimulated` caveats (not the time-budget one, which does not apply).
 - Registered in `TOOLS` (`src/mcp/registry.ts`) after `sweep_stat`.
 
 ### 3. Tests
@@ -74,7 +74,7 @@ Lives beside `buildCombatLog.ts` so scripts (e.g. `traceShip`) can reuse it; imp
 
 - `DocumentationPage.tsx` MCP "What the Assistant Can Do": add replaying one simulated fight as a
   full turn-by-turn log.
-- `UNRELEASED_CHANGES`: `MCP: new battle_log tool returns one fight's full turn-by-turn log.`
+- `UNRELEASED_CHANGES`: `AI assistants: can now read one simulated battle's full turn-by-turn log.`
 
 ## Error handling
 
