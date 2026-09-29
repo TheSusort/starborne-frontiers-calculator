@@ -7,12 +7,17 @@ returns only aggregates (wins, rounds, per-ship damage/taken/healing); diagnosin
 dealt 0 or healed 785k needs the event log. Workflow it enables: run `simulate_battle` over N
 seeds, spot an odd run, replay that seed with `battle_log`.
 
+To make a seed pickable, `simulate_battle` also returns a per-seed `seeds` list — one entry per
+run in the seed set, `{ seed, winner, rounds }` (`SeedRunSummary`'s `seed`/`winner`/`lastRound`) —
+placed after `outcome` and before `ships`.
+
 Out of scope: rule fixes found during the 2026-09-29 bug hunt (Hayyan self-as-ally, Grif
 per-cleansed-enemy) — separate PR.
 
 ## Owner decisions
 
-- **Format:** compact plain text, one line per log entry, reactions indented under their cause.
+- **Format:** compact plain text, one line per log entry, reactions indented under the latest
+  action of the turn they fired in (positional, not a causal claim).
 - **Shape:** a new tool `battle_log`, not a flag on `simulate_battle`.
 - **Size:** no filters and no cap. The player side is at most 5 ships (7 in one rare mode), so a
   log stays manageable. The tool description warns that it is token-intensive.
@@ -29,14 +34,19 @@ Lives beside `buildCombatLog.ts` so scripts (e.g. `traceShip`) can reuse it; imp
   of the same name). An id missing from `roster` prints raw.
 - Per round: `=== ROUND n`, then `startOfRound` entries prefixed `[start]`, then each turn, then
   `endOfRound` entries prefixed `[end]`.
-- Turn header: `-- TURN <label> charge <chargeBefore>/<chargeMax>`, plus
-  `hp <currentHp>/<maxHp>` when `statsSnapshot` is present.
+- Turn header: `-- TURN <label>`, plus `charge <chargeBefore>/<chargeMax>` unless `chargeMax === 0`
+  (no charge skill), plus `hp <currentHp>/<maxHp>` when `statsSnapshot` is present, plus
+  `shield <shieldPool>` when the snapshot's `shieldPool > 0`.
 - Entry line: `<kind> <actor label>` then, when present, `"<skillName>"`, `(<slot>)`, `{<note>}`,
-  then, when the entry has targets, ` -> ` and a comma-joined target list. Nested `reactions` are indented one level (two
-  spaces) deeper, recursively.
+  then, when the entry has targets, ` -> ` and a comma-joined target list. Nested `reactions` are
+  indented one level (two spaces) deeper under the latest action of the turn they fired in —
+  nesting is positional, not a claim that entry caused the reaction.
 - Target: `<label>` then, when present, the rounded `amount`, ` crit`, ` miss` (`didHit === false`),
   ` overheal <n>`, ` overshield <n>`, ` shield hit` (`shieldWasHit`), ` [<resultingHpPct>%]`.
 - `reversed-repair` entries also show `healer <label>` from `healerId`.
+- `death` entries render as `death <victim>` plus, when the entry carries killers,
+  ` killed by <killer1>, <killer2>` — the entry's `actorId` is the victim and its `targets` are the
+  killers, so the generic ` -> ` phrasing would read backwards.
 - Numbers are rounded to integers. Output ends with a trailing newline.
 
 ### 2. Tool — `battle_log` in `src/mcp/tools/simulate.ts`

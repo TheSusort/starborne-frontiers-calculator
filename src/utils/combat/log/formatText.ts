@@ -10,9 +10,11 @@ export interface LogRosterEntry {
 
 /**
  * The combat log as plain text: one line per entry, reactions indented two spaces under the
- * entry that caused them. Ships print as `P.<name>@<position>` / `E.<name>@<position>` so two
- * ships of one name stay distinct; an id missing from `roster` prints raw. Numbers are rounded.
- * An empty log is an empty string; otherwise the text ends with a newline.
+ * latest action of the turn they fired in — nesting is positional, not a causal link, so a
+ * reaction is not necessarily a reply to the entry it nests under. Ships print as
+ * `P.<name>@<position>` / `E.<name>@<position>` so two ships of one name stay distinct; an id
+ * missing from `roster` prints raw. Numbers are rounded. An empty log is an empty string;
+ * otherwise the text ends with a newline.
  */
 export function formatCombatLogText(
     combatLog: readonly CombatLogRound[],
@@ -37,12 +39,23 @@ export function formatCombatLogText(
 
     const lines: string[] = [];
     const entry = (e: CombatLogEntry, depth: number, prefix = ''): void => {
-        let text = `${'  '.repeat(depth)}${prefix}${e.kind} ${label(e.actorId)}`;
-        if (e.skillName) text += ` "${e.skillName}"`;
-        if (e.slot) text += ` (${e.slot})`;
-        if (e.note) text += ` {${e.note}}`;
-        if (e.healerId) text += ` healer ${label(e.healerId)}`;
-        if (e.targets.length > 0) text += ` -> ${e.targets.map(target).join(', ')}`;
+        const indent = `${'  '.repeat(depth)}${prefix}`;
+        let text: string;
+        // A death entry carries the VICTIM as actorId and the KILLER(S) as targets — the generic
+        // ` -> target` reads backwards here, so it gets its own "killed by" phrasing instead.
+        if (e.kind === 'death') {
+            text = `${indent}death ${label(e.actorId)}`;
+            if (e.targets.length > 0) {
+                text += ` killed by ${e.targets.map((t) => label(t.targetId)).join(', ')}`;
+            }
+        } else {
+            text = `${indent}${e.kind} ${label(e.actorId)}`;
+            if (e.skillName) text += ` "${e.skillName}"`;
+            if (e.slot) text += ` (${e.slot})`;
+            if (e.note) text += ` {${e.note}}`;
+            if (e.healerId) text += ` healer ${label(e.healerId)}`;
+            if (e.targets.length > 0) text += ` -> ${e.targets.map(target).join(', ')}`;
+        }
         lines.push(text);
         for (const reaction of e.reactions) entry(reaction, depth + 1);
     };
@@ -51,9 +64,13 @@ export function formatCombatLogText(
         lines.push(`=== ROUND ${round.round}`);
         for (const e of round.startOfRound) entry(e, 1, '[start] ');
         for (const turn of round.turns) {
-            let header = `-- TURN ${label(turn.actorId)} charge ${turn.chargeBefore}/${turn.chargeMax}`;
+            let header = `-- TURN ${label(turn.actorId)}`;
+            if (turn.chargeMax !== 0) header += ` charge ${turn.chargeBefore}/${turn.chargeMax}`;
             const s = turn.statsSnapshot;
-            if (s) header += ` hp ${Math.round(s.currentHp)}/${Math.round(s.maxHp)}`;
+            if (s) {
+                header += ` hp ${Math.round(s.currentHp)}/${Math.round(s.maxHp)}`;
+                if (s.shieldPool > 0) header += ` shield ${Math.round(s.shieldPool)}`;
+            }
             lines.push(header);
             for (const e of turn.entries) entry(e, 1);
         }

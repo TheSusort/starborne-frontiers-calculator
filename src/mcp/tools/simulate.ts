@@ -87,6 +87,11 @@ async function loadBoardData(board: BoardInput, ctx: McpToolContext): Promise<Bo
     };
 }
 
+/** Maps a pre-fight pass's `unsimulated` list to the tool output shape, `[]` when the pass did
+ *  not run (no squad leader on either side). */
+const toUnsimulated = (preFight: BattleResult['preFight']) =>
+    (preFight?.unsimulated ?? []).map(({ name, texts }) => ({ ship: name, texts }));
+
 /** Squad-leader effect texts the engine does not model. They are found in the pre-fight pass,
  *  which runs only when a leader is set, so a leaderless board costs no extra battle. */
 const unsimulatedEffects = (
@@ -96,7 +101,7 @@ const unsimulatedEffects = (
 ) => {
     if (!input.playerSquadLeader && !input.enemySquadLeader) return [];
     const { preFight } = runSeededBattle(input, seed, getGearPiece);
-    return (preFight?.unsimulated ?? []).map(({ name, texts }) => ({ ship: name, texts }));
+    return toUnsimulated(preFight);
 };
 
 /** Per-ship figures in roster order, as every sim tool reports them. */
@@ -137,7 +142,7 @@ const simulateBattleInput = z
 export const simulateBattle: McpTool<z.output<typeof simulateBattleInput>> = {
     name: 'simulate_battle',
     description:
-        "Fight your ships against enemies in the planner's combat simulator, with gear, implants, refits and engineering applied as the Simulator page does. Enemies are your own ships or reference ships by name (level 60, r0 or fully refitted, no gear); your engineering applies to both sides. Returns win/loss counts, rounds, and each ship's mean damage dealt, taken and healing done." +
+        "Fight your ships against enemies in the planner's combat simulator, with gear, implants, refits and engineering applied as the Simulator page does. Enemies are your own ships or reference ships by name (level 60, r0 or fully refitted, no gear); your engineering applies to both sides. Returns win/loss counts, rounds, and each ship's mean damage dealt, taken and healing done, plus each individual fight's seed, winner and length — pick one from there to replay in full with battle_log." +
         CAVEATS,
     input: simulateBattleInput,
     run: async (board, ctx) => {
@@ -159,6 +164,11 @@ export const simulateBattle: McpTool<z.output<typeof simulateBattleInput>> = {
                 mean_rounds: aggregate.meanRounds,
                 median_rounds: aggregate.medianRounds,
             },
+            seeds: aggregate.runs.map((r) => ({
+                seed: r.seed,
+                winner: r.winner,
+                rounds: r.lastRound,
+            })),
             ships: shipTotals(aggregate.roster, aggregate.perActorMean),
             unsimulated: unsimulatedEffects(input, board.seed, getGearPiece),
         };
@@ -170,7 +180,7 @@ const battleLogInput = z.object(boardInputShape).strict().superRefine(refineBoar
 export const battleLog: McpTool<z.output<typeof battleLogInput>> = {
     name: 'battle_log',
     description:
-        "Replay one simulated fight and return its full turn-by-turn log: every turn, attack, heal, shield, buff, debuff, resist, charge change and death, with each reaction indented under the event that caused it. Ships are labelled P.<name>@<position> (yours) and E.<name>@<position> (enemy). Token-intensive: one fight is thousands of tokens, so find the seed worth reading with simulate_battle first. The same board and seed give the same fight simulate_battle reports for that seed. Also returns the outcome and each ship's damage dealt, taken and healing done in this fight." +
+        "Replay one simulated fight and return its full turn-by-turn log: every turn, attack, heal, shield, buff, debuff, resist, charge change and death, with each reaction indented under the latest action of the turn it fired in (nesting is positional, not necessarily the entry that caused it). Ships are labelled P.<name>@<position> (yours) and E.<name>@<position> (enemy). Pick a seed from simulate_battle's per-seed seeds list and replay it here with the same board — the same board and seed always give the same fight. Legend: a target's number is what actually landed (damage, repair or shield), crit/miss is the hit result, overheal/overshield is what was wasted, [N%] is that target's HP right after the entry, and a death line names the killer. No cap on size: expect roughly 1-4k tokens per round, and a long fight can pass 20k tokens. Also returns the outcome and each ship's damage dealt, taken and healing done in this fight." +
         DATA_CAVEATS,
     input: battleLogInput,
     run: async (board, ctx) => {
@@ -180,10 +190,7 @@ export const battleLog: McpTool<z.output<typeof battleLogInput>> = {
             seed: board.seed,
             outcome: { winner: result.outcome.winner, rounds: result.outcome.lastRound },
             ships: shipTotals(result.roster, summarizeRun(result, board.seed).perActor),
-            unsimulated: (result.preFight?.unsimulated ?? []).map(({ name, texts }) => ({
-                ship: name,
-                texts,
-            })),
+            unsimulated: toUnsimulated(result.preFight),
             log: formatCombatLogText(result.combatLog, result.roster),
         };
     },

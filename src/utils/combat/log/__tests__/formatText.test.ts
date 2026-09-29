@@ -21,6 +21,8 @@ const snapshot = {
     shieldPool: 0,
 };
 
+const snapshotWithShield = { ...snapshot, currentHp: 400, maxHp: 800, shieldPool: 150.6 };
+
 const log: CombatLogRound[] = [
     {
         round: 1,
@@ -77,12 +79,19 @@ const log: CombatLogRound[] = [
                         targets: [{ targetId: 'ghost', amount: 10, didHit: false }],
                         reactions: [],
                     },
+                    {
+                        kind: 'death',
+                        actorId: 'e1',
+                        targets: [{ targetId: 'p1' }],
+                        reactions: [],
+                    },
                 ],
             },
             {
                 actorId: 'e1',
                 chargeBefore: 1,
-                chargeMax: 2,
+                chargeMax: 0,
+                statsSnapshot: snapshotWithShield,
                 entries: [
                     {
                         kind: 'shield',
@@ -118,7 +127,8 @@ describe('formatCombatLogText', () => {
                 '    heal E.Beta@M2 -> E.Beta@M2 0 overheal 500',
                 '      charge-changed P.Alpha@T1 {charge 0→1 (manip)}',
                 '  attack P.Alpha@T1 -> ghost 10 miss',
-                '-- TURN E.Beta@M2 charge 1/2',
+                '  death E.Beta@M2 killed by P.Alpha@T1',
+                '-- TURN E.Beta@M2 hp 400/800 shield 151',
                 '  shield E.Beta@M2 -> E.Beta@M2 300 overshield 50 shield hit',
                 '  [end] reversed-repair E.Beta@M2 healer P.Alpha@T1 -> P.Alpha@T1 100',
                 '',
