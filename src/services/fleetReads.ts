@@ -397,15 +397,16 @@ const transformGearRows = (rows: RawGearData[]): GearPiece[] =>
             subStats: gear.subStats || [],
         }));
 
-/** One keyset page: the pieces with `id` after `lastId`, in `id` order. A failed page is retried
- *  `MAX_RETRIES` times, `retryDelayMs` apart, before its error is thrown. */
+/** One keyset page: the pieces with `id` after `lastId`, in `id` order. `rowCount` counts the rows
+ *  the page returned before invalid ones are dropped. A failed page is retried `MAX_RETRIES` times,
+ *  `retryDelayMs` apart, before its error is thrown. */
 async function fetchInventoryBatch(
     db: SupabaseClient,
     profileId: string,
     lastId: string | null,
     retryDelayMs: number,
     retryCount = 0
-): Promise<{ items: GearPiece[]; lastId: string | null }> {
+): Promise<{ items: GearPiece[]; rowCount: number; lastId: string | null }> {
     try {
         let query = db
             .from('inventory_items')
@@ -427,6 +428,7 @@ async function fetchInventoryBatch(
 
         return {
             items: transformGearRows(rows),
+            rowCount: rows.length,
             lastId: rows[rows.length - 1]?.id || null,
         };
     } catch (error) {
@@ -450,7 +452,7 @@ export interface FetchInventoryOptions {
 
 /** Every piece `options.select` returns for `profileId` — the whole inventory by default, walked
  *  page by page. Resolves to `null` when `isCancelled` stopped the walk. The walk ends at the
- *  first page holding fewer than `INVENTORY_BATCH_SIZE` valid pieces. */
+ *  first page returning fewer than `INVENTORY_BATCH_SIZE` rows, valid or not (#576). */
 export async function fetchInventory(
     db: SupabaseClient,
     profileId: string,
@@ -467,13 +469,13 @@ export async function fetchInventory(
         // was in flight, and a page already read must not reach onBatch/accumulation after it.
         if (options.isCancelled?.()) return null;
 
-        if (batch.items.length === 0) break;
+        if (batch.rowCount === 0) break;
 
         allItems = [...allItems, ...batch.items];
         lastId = batch.lastId;
         options.onBatch?.(allItems);
 
-        if (batch.items.length < INVENTORY_BATCH_SIZE) break;
+        if (batch.rowCount < INVENTORY_BATCH_SIZE) break;
     }
 
     return allItems;

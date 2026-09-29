@@ -11,9 +11,6 @@ import { getGearSet } from '../../constants/gearSets';
 import { EquipmentSlotName, ImplantSlotName } from '../../constants/gearTypes';
 import { getCalibratedMainStat, isCalibrationEligible } from '../gear/calibrationUtils';
 
-// Cache for gear piece stats to avoid recalculating
-const gearStatsCache = new Map<string, { mainStat?: Stat; subStats?: Stat[] }>();
-
 export interface StatBreakdown {
     base: BaseStats;
     afterRefits: BaseStats;
@@ -225,9 +222,4 @@ function getSpecialImplantMultiplier(setBonus: string, rarity: string): number |
     }
 
     return null;
-}
-
-// Function to clear the gear stats cache
-export function clearGearStatsCache(): void {
-    gearStatsCache.clear();
 }

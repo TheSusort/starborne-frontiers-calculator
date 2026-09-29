@@ -7,9 +7,10 @@ import { isShipTypeName } from '../constants/shipTypes';
 import { isRarityName } from '../constants/rarities';
 import { toAffinityName } from '../constants/affinities';
 import type { Ship } from '../types/ship';
-import type { Stat, StatName, StatType, FlexibleStats } from '../types/stats';
+import type { EngineeringStats, Stat, StatName, StatType, FlexibleStats } from '../types/stats';
 import type { GearPiece as ActualGearPiece } from '../types/gear';
 import { tryDecodeGearStats } from '../utils/gear/statsCodec';
+import { engineeringStatForShipType } from './fleetReads';
 
 export interface UserProfile {
     id: string;
@@ -277,9 +278,9 @@ async function getTopShipRankingsWithScoring(userId: string): Promise<TopShipRan
             );
     });
 
-    const getEngineeringStatsForShipType = (shipType: ShipTypeName) => {
-        return engineeringStatsMap.get(shipType);
-    };
+    const engineeringStats: EngineeringStats = { stats: [...engineeringStatsMap.values()] };
+    const getEngineeringStatsForShipType = (shipType: ShipTypeName) =>
+        engineeringStatForShipType(engineeringStats, shipType);
 
     // Get user's ships with full data
     const { data: userShipsData, error: userShipsError } = await supabase

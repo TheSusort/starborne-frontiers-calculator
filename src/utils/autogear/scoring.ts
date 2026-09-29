@@ -3,7 +3,7 @@ import { StatPriority, SetPriority, StatBonus } from '../../types/autogear';
 import type { BasisTerm, FleetBuff, CustomFormula, RoleBasis } from '../../types/autogear';
 import { EquipmentSlotName, ShipTypeName } from '../../constants';
 import { Ship } from '../../types/ship';
-import { calculateTotalStats, clearGearStatsCache } from '../ship/statsCalculator';
+import { calculateTotalStats } from '../ship/statsCalculator';
 import { GearPiece } from '../../types/gear';
 import { RarityName } from '../../constants/rarities';
 import { performanceTracker } from './performanceTimer';
@@ -365,5 +365,4 @@ export function clearScoreCache(): void {
     equipmentKeyCache.clear();
     implantsKeyCache.clear();
     arcaneSiegeCache.clear();
-    clearGearStatsCache();
 }
