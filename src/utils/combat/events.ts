@@ -149,13 +149,16 @@ export type CombatEvent =
      *  reactions — set when this debuff was applied by an ability whose OWN trigger is
      *  `on-ally-debuff-inflicted`. A separate field from `viaDebuffInflictedReaction`
      *  deliberately: the two triggers are gated by different owners (`on-debuff-inflicted` is
-     *  self-scoped, `on-ally-debuff-inflicted` is same-side-scoped since the 2026-09-30 "an ally
-     *  includes the caster" ruling), so a shared flag would make one trigger's reaction silently
-     *  suppress the OTHER trigger's listener on a ship that carries both — a real infliction each
-     *  is entitled to see. The `on-ally-debuff-inflicted` listener ignores an event carrying this
-     *  brand only when its OWN `sourceId === ownerId` (the self-chain case); a same-brand event
-     *  from a DIFFERENT same-side source (the two-ship ping-pong shape) is NOT filtered by this
-     *  flag — see that listener's guard for the scope this leaves open. */
+     *  self-scoped; `on-ally-debuff-inflicted` is same-side-scoped, owner included — see the
+     *  ruling in triggers.ts's trigger doc block), so a shared flag would make one trigger's
+     *  reaction silently suppress the OTHER trigger's listener on a ship that carries both — a
+     *  real infliction each is entitled to see. The `on-ally-debuff-inflicted` listener ignores an
+     *  event carrying this brand only when its OWN `sourceId === ownerId` (the self-chain case); a
+     *  same-brand event from a DIFFERENT same-side source (the two-ship ping-pong shape) is NOT
+     *  filtered by this flag — see that listener's guard for the scope this leaves open. The brand
+     *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
+     *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
+     *  by neither brand against the other's chain — no corpus ship has that shape. */
     | ({
           type: 'debuff-applied';
           sourceId: string;

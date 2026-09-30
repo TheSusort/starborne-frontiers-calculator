@@ -661,7 +661,7 @@ const passiveEnemy = (id: string, position: Position): EnemyAttacker => ({
 describe('Sentinel (player-side) — reacts to her OWN crit too (self included)', () => {
     it("Sentinel's own crit repairs herself and deals her reactive damage exactly once (no chain)", () => {
         // "An ally" includes the caster (owner ruling 2026-09-30): Sentinel IS the attacking
-        // focus here, so her own crit now satisfies on-ally-crit exactly as an ally's crit does.
+        // focus here, so her own crit satisfies on-ally-crit exactly as an ally's crit does.
         // A reactive damage proc never re-triggers this listener regardless of its own crit
         // outcome — it credits through reactive-damage-performed, which emits NO
         // ability-performed at all (see that event's doc in events.ts), so on-ally-crit's own

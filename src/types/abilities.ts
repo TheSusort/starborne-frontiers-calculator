@@ -251,7 +251,7 @@ export type AbilityTrigger =
     // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
     // (separate `dot-applied` event) — matches "when debuffed".
     | 'on-debuffed'
-    // Phase 3 PR-E: fires when a same-side ally receives a timed debuff (rides the existing
+    // Fires when a same-side ally receives a timed debuff (rides the existing
     // `debuff-applied` event, ally-scoped on targetId being any same-side actor — owner included,
     // see the 2026-09-30 "an ally includes the caster" ruling in triggers.ts's trigger doc block).
     // The ally counterpart of `on-debuffed`. Does NOT fire for DoTs (dot-applied), matching
@@ -286,7 +286,7 @@ export type AbilityTrigger =
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
     | 'on-shield-applied'
-    // SP-F F2: fires when a same-side unit has their shield pool FULLY DEPLETED by a direct hit
+    // Fires when a same-side unit has their shield pool FULLY DEPLETED by a direct hit
     // (rides the new `shield-destroyed` event, victim-scoped, owner included — AEGIS's own
     // pattern is centered on itself, so its own destroyed shield self-reacts too; see
     // triggers.ts's `on-ally-shield-destroyed` listener). AEGIS's "grants Defense Up II and

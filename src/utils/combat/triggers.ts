@@ -374,8 +374,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (not opposing) — owner included, see the ruling above. For the PLAYER registration this is
  *    any PLAYER's infliction; for the ENEMY registration this is any enemy actor's infliction. A
  *    reaction whose OWN trigger is on-ally-debuff-inflicted cannot re-wake this same listener off
- *    its own output — see the self-chain guard in `executeIntent`'s `debuff` branch and in
- *    `landDotOn`.
+ *    its own output — the guard lives in this listener's own debuff-applied/dot-applied handlers
+ *    below; `executeIntent`'s `debuff` branch and `landDotOn` only SET the brand it reads.
  *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
@@ -1360,7 +1360,7 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Same-side scoped: fires when ANY same-side actor is hit — per HIT
-                        // (the engine emits one event per hit, PR 1) — owner included, see the
+                        // (the engine emits one event per hit) — owner included, see the
                         // ruling in the trigger doc block above; only every opposing actor is
                         // excluded. triggerCritFilter discriminates on the hit's own crit outcome,
                         // same contract as on-attacked. roleFilter (Graphite) matches the DAMAGED
@@ -1381,11 +1381,15 @@ export function registerReactiveListeners(args: {
                             return;
                         }
                         // Bulwark: fire only when the DAMAGED ally is adjacent to this owner. A
-                        // ship is never adjacent to itself — `adjacentAllyIdsFor` never returns the
-                        // owner — so the explicit `e.targetId === ownerId` check below rejects the
-                        // owner's own hit even though on-ally-attacked otherwise includes the owner
-                        // (the ruling above). Pure read (listener stays enqueue-only). Helper
-                        // absent → allow any OTHER same-side ally.
+                        // ship is never adjacent to itself, so the explicit `e.targetId ===
+                        // ownerId` check below rejects the owner's own hit even though
+                        // on-ally-attacked otherwise includes the owner (the ruling above).
+                        // `adjacentAllyIdsFor` is optional — a registration that omits it (the
+                        // Bulwark implant in a non-positional mode) has no delegate to exclude the
+                        // owner on its own, so this explicit check is what covers that case; a
+                        // registration that DOES supply the delegate never returns the owner from
+                        // it either, so the two checks agree. Pure read (listener stays
+                        // enqueue-only).
                         if (ra.ability.requireDamagedAllyAdjacent) {
                             if (e.targetId === ownerId) return;
                             if (
@@ -1560,12 +1564,15 @@ export function registerReactiveListeners(args: {
                         // call: enemy side. For the enemy call: player side.
                         if (!isOpposing(e.casterId)) return;
                         // Grif's damage reaction hits EACH cleansed enemy once per cast (owner
-                        // ruling 2026-09-30): one enqueue per id in e.targets, routed via
+                        // ruling 2026-09-30): one enqueue per DISTINCT id in e.targets, routed via
                         // counterTargetId so the damage branch's single-victim resolution lands on
                         // that specific cleansed enemy — the cleanser itself only when it was among
                         // the cleansed (a cleanse that touches the caster and an ally hits both).
+                        // `new Set` collapses a target listed twice (a cast with two cleanse
+                        // abilities that both cleanse the same enemy) to one hit — one hit per
+                        // cleansed enemy per cast, not per removed debuff.
                         if (ra.ability.config.type === 'damage') {
-                            for (const targetId of e.targets ?? []) {
+                            for (const targetId of new Set(e.targets ?? [])) {
                                 enqueue({
                                     ...intent,
                                     eventCtx: { ...intent.eventCtx, counterTargetId: targetId },
@@ -2587,9 +2594,11 @@ function buildDrainContext(ctx: IntentExecContext, ownerId: string) {
         // `gte 2` and Berserker's `gte 3` are unaffected — a fabricated 1 already failed both.
         enemiesHitThisCast: ctx.enemiesHitThisCastFor?.(ownerId),
         // Live same-team ally ship names (Isha/Nayra reciprocal Override gate). Only when
-        // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; we
-        // exclude the owner itself (ALLY names, self-excluded — mirrors `isSameSideAlly`), keep only
-        // living members, and map ids → names. Absent map → undefined → assume-met fallback.
+        // the engine supplied a name map (team-sim). `playerIds` is the drain owner's OWN side; a
+        // TEAM-MEMBERSHIP name list excludes the owner's own name by construction (Isha/Nayra name
+        // each other, never themselves) — a separate rule from the "an ally" trigger-scope ruling
+        // above, which this gate does not use. Keep only living members, and map ids → names.
+        // Absent map → undefined → assume-met fallback.
         allyTeamNames: ctx.nameByActorId
             ? ctx.playerIds
                   .filter((id) => id !== ownerId && (ctx.isActorAlive?.(id) ?? true))

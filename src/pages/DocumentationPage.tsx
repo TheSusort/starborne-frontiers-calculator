@@ -4254,7 +4254,12 @@ const DocumentationPage: React.FC = () => {
                                     caster itself &mdash; so if no other ally is alive, the repair
                                     lands on nobody rather than on the caster. Every other
                                     ally-targeted repair, shield, buff, cleanse or charge grant
-                                    follows the pattern as described above.
+                                    follows the pattern as described above. Separately, a reactive
+                                    skill worded &quot;when an ally &hellip;&quot; (is hit, inflicts
+                                    a debuff, critically hits, is purged) also fires on the
+                                    ship&apos;s own qualifying action or state, exactly as it would
+                                    for a teammate, unless the text explicitly says &quot;another
+                                    ally&quot; or &quot;other ally&quot;.
                                 </p>
                             </div>
 

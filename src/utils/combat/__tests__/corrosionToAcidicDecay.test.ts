@@ -220,7 +220,7 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
 
 describe('Belladonna (player-side) — her OWN Corrosion infliction converts too (self included)', () => {
     // "An ally" includes the caster (owner ruling 2026-09-30: only "another/other ally" text
-    // excludes it), so Belladonna's own active casting Corrosion now satisfies
+    // excludes it), so Belladonna's own active casting Corrosion satisfies
     // on-ally-debuff-inflicted exactly as an ally's infliction does — no separate ally actor
     // needed; Belladonna carries both the infliction and the convert-dot passive herself.
     const belladonnaSelfInflictSkills = (): ShipSkills => ({

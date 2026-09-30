@@ -235,7 +235,7 @@ describe('C2b-1 T6 Step 1: Salvation heals the purged ally (on-ally-purged)', ()
 // Test 1b: Salvation's OWN buff being purged fires on-ally-purged on HERSELF (self included).
 // =============================================================================
 
-describe('C2b-1 T6 Step 1b: Salvation heals HERSELF when her own buff is purged', () => {
+describe('Salvation heals HERSELF when her own buff is purged', () => {
     const SALVATION_HP = 20_000;
     const SALVATION_HEAL_PCT = 5;
 

@@ -112,7 +112,7 @@ describe('Oleander RoT grant — extracted ability shape (mutation guard)', () =
 
 describe('Oleander (player-side) — her OWN debuff infliction also adds a charge (self included)', () => {
     it("Oleander's own active inflicting a debuff adds 1 charge to her own Charged Skill", () => {
-        // "An ally" includes the caster (owner ruling 2026-09-30): Oleander's OWN infliction now
+        // "An ally" includes the caster (owner ruling 2026-09-30): Oleander's OWN infliction
         // satisfies on-ally-debuff-inflicted exactly as any other ally's would, so the
         // self-targeted charge half fires off her own cast.
         const oleanderSkills: ShipSkills = {

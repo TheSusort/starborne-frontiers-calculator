@@ -2070,6 +2070,165 @@ describe('on-ally-debuff-inflicted self-chain guard', () => {
         expect(infernoEvents).toHaveLength(1);
         expect(infernoEvents[0].sourceId).toBe('enemy-chainer');
     });
+
+    // The `debuff-applied` sibling arm: a `debuff`-type reactive ability whose own trigger is
+    // on-ally-debuff-inflicted applies its debuff via the same executeIntent `debuff` branch a
+    // real cast uses, which emits debuff-applied with sourceId = the owner. `application: 'apply'`
+    // on both abilities removes the hacking/security landing draw (an 'apply' debuff lands
+    // deterministically absent an affinity disadvantage, which baseInput's default
+    // affinityDamageModifier: 0 never is), so the count below is exact rather than bounded.
+    const seedDownOnCast = (): Ability =>
+        ab({
+            type: 'debuff',
+            target: 'enemy',
+            config: {
+                type: 'debuff',
+                buffName: 'Seed Down',
+                stacks: 1,
+                parsedEffects: { defense: -20 },
+                isStackable: false,
+                application: 'apply',
+                duration: 2,
+            },
+        });
+
+    // `target: 'enemy-highest-attack'` (Doomsayer's selector) resolves via
+    // `ctx.enemyWithHighestAttack`, a global delegate independent of any eventCtx routing field —
+    // the on-ally-debuff-inflicted listener stamps only `damagedAllyId` (ally/self routing) on its
+    // debuff-applied arm, with no enemy-routing field for a `debuff`-type reaction to fall back
+    // on, so a plain `target: 'enemy'` reaction here would never resolve a victim and could never
+    // exercise the guard.
+    const outDamageDownAllyReaction = (): Ability =>
+        ab({
+            type: 'debuff',
+            target: 'enemy-highest-attack',
+            trigger: 'on-ally-debuff-inflicted',
+            config: {
+                type: 'debuff',
+                buffName: 'Out. Damage Down I',
+                stacks: 1,
+                parsedEffects: { outgoingDamage: -15 },
+                isStackable: false,
+                application: 'apply',
+                duration: 2,
+            },
+        });
+
+    const debuffSelfChainSkills = (): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [seedDownOnCast()] },
+            { slot: 'passive', abilities: [outDamageDownAllyReaction()] },
+        ],
+    });
+
+    const collectOutDamageDown = (bus: ReturnType<typeof createEventBus>) => {
+        const events: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
+        bus.on('debuff-applied', (e) => {
+            if (e.type === 'debuff-applied' && e.buffName === 'Out. Damage Down I') events.push(e);
+        });
+        return events;
+    };
+
+    it("one Seed Down cast wakes the owner's own Out. Damage Down reaction exactly ONCE — no throw, bounded chain", () => {
+        const bus = createEventBus();
+        const outEvents = collectOutDamageDown(bus);
+
+        expect(() =>
+            runCombat(baseInput({ shipSkills: debuffSelfChainSkills(), numRounds: 1, bus }))
+        ).not.toThrow();
+
+        // Exactly one reactive Out. Damage Down application per real Seed Down infliction — the
+        // guard silences only the REACTION's own output, not the real cast-path infliction that
+        // legitimately wakes it the first time.
+        expect(outEvents).toHaveLength(1);
+        expect(outEvents[0].sourceId).toBe(FOCUS);
+    });
+
+    it('enemy-side mirror: an enemy ship with the same debuff-applied self-chain shape does not throw either', () => {
+        type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+        const enemySelfChainer: EnemyAttacker = {
+            id: 'enemy-debuff-chainer',
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 200,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: debuffSelfChainSkills(),
+        };
+        const bus = createEventBus();
+        const outEvents = collectOutDamageDown(bus);
+
+        expect(() =>
+            runCombat(
+                baseInput({
+                    numRounds: 1,
+                    enemyAttackers: [enemySelfChainer],
+                    bus,
+                })
+            )
+        ).not.toThrow();
+        expect(outEvents).toHaveLength(1);
+        expect(outEvents[0].sourceId).toBe('enemy-debuff-chainer');
+    });
+});
+
+// ----------------------------------------------------------------------
+// on-enemy-cleansed Grif fan-out: unit-level test for the pure listener. A cast with two cleanse
+// abilities that both cleanse the same enemy lists that enemy id twice in cleanse-performed.targets
+// (playerTurn.ts's cleansedRecipientIds is a plain per-ability push, not deduped) — Grif's damage
+// reaction must hit that enemy once per cast, not once per listed occurrence.
+// ----------------------------------------------------------------------
+describe('on-enemy-cleansed Grif fan-out: distinct-target dedupe', () => {
+    const grifDamageAbility = (): Ability =>
+        ab({
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-enemy-cleansed',
+            config: { type: 'damage', multiplier: 75 },
+        });
+
+    function emitCleanse(event: Extract<CombatEvent, { type: 'cleanse-performed' }>): Intent[] {
+        const bus = createEventBus();
+        const intents: Intent[] = [];
+        const ra: ReactiveAbility = { ability: grifDamageAbility(), sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus,
+            perOwner: [{ ownerId: 'grif', reactiveAbilities: [ra] }],
+            enqueue: (i) => intents.push(i),
+            isOpposing: (id) => id === 'enemy-caster',
+        });
+        bus.emit(event);
+        return intents;
+    }
+
+    it('a duplicate id in cleanse-performed.targets enqueues one Grif intent per DISTINCT id', () => {
+        const intents = emitCleanse({
+            type: 'cleanse-performed',
+            casterId: 'enemy-caster',
+            count: 2,
+            round: 1,
+            targets: ['e1', 'e1', 'e2'],
+        });
+        expect(intents).toHaveLength(2);
+        expect(intents.map((i) => i.eventCtx?.counterTargetId).sort()).toEqual(['e1', 'e2']);
+    });
+
+    it('no duplicates: one intent per target, unaffected by the dedupe', () => {
+        const intents = emitCleanse({
+            type: 'cleanse-performed',
+            casterId: 'enemy-caster',
+            count: 2,
+            round: 1,
+            targets: ['e1', 'e2'],
+        });
+        expect(intents).toHaveLength(2);
+        expect(intents.map((i) => i.eventCtx?.counterTargetId).sort()).toEqual(['e1', 'e2']);
+    });
 });
 
 // ----------------------------------------------------------------------
@@ -4051,7 +4210,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
         //   R1  ea1 attacks the tank (an ally of the owner) → the reactive fires → Provoke on ea1
         //       (duration 2).
         //   R2  ea1 is provoked → it must attack the PROVOKER, graphite. A hit on the owner
-        //       itself is ALSO an ally hit now (owner ruling 2026-09-30: "an ally" includes the
+        //       itself is ALSO an ally hit (owner ruling 2026-09-30: "an ally" includes the
         //       caster), so the ally listener fires again → Provoke is REFRESHED to duration 2
         //       (non-stackable), still targeting ea1.
         //   R3  the R2 refresh kept Provoke alive → ea1 is still provoked → attacks graphite
@@ -4105,8 +4264,8 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
 
     it('scenario 16d: the heal target OWNING the on-ally-attacked ability fires on its OWN hits too (self included)', () => {
         // The tank itself carries the reactive; only the tank is ever attacked. "An ally"
-        // includes the caster (owner ruling 2026-09-30), so on-ally-attacked now fires on the
-        // tank's own hits exactly as it would on any other ally's — once per attack turn,
+        // includes the caster (owner ruling 2026-09-30), so on-ally-attacked fires on the tank's
+        // own hits exactly as it would on any other ally's — once per attack turn,
         // routed back to itself via damagedAllyId.
         const events = runScenario({
             ownerSkills: { slots: [] },

@@ -1642,7 +1642,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
 
         // Routing: with no critVictimIds on the event (single-target inline emit), the rider falls
         // back to the cast's targetId — the only possible crit victim there. Index 2 is this last
-        // enqueue (index 1 is now the OWN-crit enqueue from above, not this one).
+        // enqueue (index 1 is the OWN-crit enqueue from above, not this one).
         expect(enqueued[2].eventCtx?.critVictimIds).toEqual(['enemy']);
         expect(enqueued[2].eventCtx?.counterTargetId).toBe('enemy');
     });
