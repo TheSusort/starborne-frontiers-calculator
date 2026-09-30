@@ -1710,6 +1710,11 @@ export interface CombatEngineInput {
      *  cast-path purge removed an enemy's self-buffs). Never set by production code; inert when
      *  absent. The engine reference is LIVE — read it after the run when state is fully settled. */
     __testTapStatusEngine?: (engine: StatusEngine) => void;
+    /** TEST-ONLY: disables the #590 R1 outclass pre-roll skip (a weaker same-family debuff onto a
+     *  target already holding a stronger one is never attempted). For attributing a moved golden
+     *  to the skip — rerun the SAME fixture with this true and diff. Never set by production
+     *  code; inert (skip stays enabled) when absent. */
+    __testDisableOutclassSkip?: boolean;
 }
 
 /** One round's healing accounting (healing mode only). `perActor` mirrors the round
@@ -2624,6 +2629,7 @@ export function runCombat(rawInput: CombatEngineInput): {
         })),
         landsTimedEnemyApplication: (buff) => landsTimedEnemyApplication(buff.application),
         buffDurationExtensionFor: (casterId) => buffDurationExtensionByOwner.get(casterId) ?? 0,
+        __testDisableOutclassSkip: input.__testDisableOutclassSkip,
     });
 
     // TEST-ONLY: expose the live status engine so a test can read settled self/enemy state after

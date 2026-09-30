@@ -3273,6 +3273,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
 {
   "plain": [
     "attack",
+    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",
@@ -3282,6 +3283,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   ],
   "richEnemy": [
     "attack",
+    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",
@@ -3291,6 +3293,7 @@ exports[`kit fingerprints > Sha Xing 1`] = `
   ],
   "wounded": [
     "attack",
+    "attack:active",
     "bomb",
     "charge-changed",
     "debuff",

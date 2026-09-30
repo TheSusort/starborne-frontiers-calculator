@@ -38,6 +38,11 @@ export interface StatusEngineInput {
      *  (the firing source for scheduled buffs, `status.casterId` for ability buffs). Returns 0
      *  for non-wearers. Default → always 0 (no wearer, no change). */
     buffDurationExtensionFor?: (casterId: string) => number;
+    /** TEST-ONLY: disables the outclass pre-roll skip (#590 R1 — a weaker same-family debuff onto
+     *  a target already holding a stronger one is never attempted). Lets a golden/fingerprint
+     *  fixture be reran byte-for-byte with the skip off, to attribute a moved golden to it. No
+     *  production caller sets this; default undefined (skip enabled). */
+    __testDisableOutclassSkip?: boolean;
 }
 
 /** Effect payload of an ability-sourced status, folded into the round totals by the engine. */
@@ -430,6 +435,17 @@ export interface StatusEngine {
         ownerId?: string,
         enemyTargetId?: string
     ): ActiveAbilityStatus[];
+    /** #590 R1: true when `side`'s target (`recipientId` for self, `enemyTargetId` for enemy —
+     *  same defaulting as `applyTimedAbilityStatus`) already holds `buffName`'s family at a
+     *  STRICTLY higher tier. Callers MUST check this before drawing a debuff landing roll and
+     *  skip the whole application (no roll, no land, no resist) when it answers true — see
+     *  `outclassedByFamily`'s doc for why this is tier-only and DoT-proof. */
+    isOutclassedByExistingFamily(
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): boolean;
 }
 
 const ROMAN_SUFFIX = /\s+(I{1,3}|IV|V)$/;
@@ -484,6 +500,19 @@ function familyApplicationWins(
 ): boolean {
     if (!existing) return true;
     return familyChallengerWins(existing.tier, existing.turnsRemaining, tier, duration);
+}
+
+/** #590 R1 (game-verified 2026-09-30): a weaker same-family debuff onto a target already holding
+ *  a STRONGER one is never attempted — no landing roll is drawn, nothing lands, nothing resists,
+ *  as if the clause were absent from the skill. TIER-ONLY, unlike `familyApplicationWins`'s
+ *  duration tie-break: a SAME-tier (or stronger) challenger is never outclassed regardless of how
+ *  long `existing` has left, and still draws its roll normally (see `familyApplicationWins` for
+ *  what the STORE then does with a landed same-tier, shorter-duration re-land). A DoT/bomb name
+ *  (`deriveFamilyKey`'s DOT_PREFIXES branch) always derives tier 0 on BOTH sides of this call, so
+ *  it can never outclass or be outclassed — `statusEngine.test.ts` pins that as a real assertion,
+ *  not a comment. This is the ONE such comparison; call it, never re-derive it. */
+function outclassedByFamily(existing: BuffState | undefined, tier: number): boolean {
+    return existing !== undefined && existing.tier > tier;
 }
 
 function isAccumulating(buff: SelectedGameBuff): boolean {
@@ -865,6 +894,26 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         return m;
     };
 
+    // #590 R1: the pre-roll skip, exposed so every roll site (playerTurn.ts's ability-timed
+    // loop, this engine's own scheduled `sourceFired` upsert below, triggers.ts's reactive debuff
+    // branch) reads the SAME family entry `applyTimedAbilityStatus` would later contest — never a
+    // second copy of the self/enemy map resolution. `__testDisableOutclassSkip` is the ONLY way
+    // to turn this off; no production caller sets it.
+    const isOutclassedByExistingFamily = (
+        side: 'self' | 'enemy',
+        buffName: string,
+        recipientId?: string,
+        enemyTargetId?: string
+    ): boolean => {
+        if (input.__testDisableOutclassSkip) return false;
+        const { familyKey, tier } = deriveFamilyKey(buffName);
+        const existing =
+            side === 'self'
+                ? getSelfMap(recipientId ?? 'attacker').get(familyKey)
+                : getEnemyMap(enemyTargetId ?? DEFAULT_ENEMY_TARGET).get(familyKey);
+        return outclassedByFamily(existing, tier);
+    };
+
     // Add one application's worth of stacks (capped) to a side's persistent entry, creating it
     // on first application. `payload` is stored for ability-sourced applications and refreshed on
     // each application (the effect is identical per stack; the fold multiplies effect × stacks).
@@ -1155,6 +1204,11 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             // Persistent statuses ignore skillDuration; non-persistent timed entries require a
             // numeric duration to upsert a finite window.
             if (!isPersistent && typeof buff.skillDuration !== 'number') continue;
+            // #590 R1: this scheduled (manual-picker) upsert always targets the singular default
+            // enemy target — matching the `upsertBuff(buff, 'enemy')` call below, which takes no
+            // target id either. A persistent-stacking name never has a TIMED-store entry to be
+            // outclassed by (it lives in the separate persistent map), so this is a no-op for it.
+            if (isOutclassedByExistingFamily('enemy', buff.buffName)) continue;
             if (!landsTimedEnemyApplication(buff)) {
                 resistedEnemy.push(buff.buffName);
                 continue;
@@ -2213,5 +2267,6 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         applyTimedAbilityStatus,
         activeAbilityStatuses,
         timedAbilityStatuses,
+        isOutclassedByExistingFamily,
     };
 }

@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createStatusEngine, DEFAULT_ENEMY_TARGET, RegisteredAbilityStatus } from '../statusEngine';
+import {
+    createStatusEngine,
+    DEFAULT_ENEMY_TARGET,
+    RegisteredAbilityStatus,
+    deriveFamilyKey,
+} from '../statusEngine';
 import { SelectedGameBuff } from '../../../types/calculator';
 import { ConditionContext } from '../../abilities/evaluateConditions';
 
@@ -448,6 +453,89 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
         eng.applyTimedAbilityStatus(1, tierOne); // same family, lower tier → ignored
         const active = eng.timedAbilityStatuses('self');
         expect(active.map((s) => s.payload.buffName)).toEqual(['Attack Up II']);
+    });
+
+    describe('#590 R1: isOutclassedByExistingFamily (the pre-roll outclass check)', () => {
+        const enemyStatus = (
+            buffName: string
+        ): Extract<RegisteredAbilityStatus, { kind: 'timed' }> => ({
+            payload: { buffName, stacks: 1, parsedEffects: {} },
+            side: 'enemy',
+            sourceSlot: 'active',
+            duration: 3,
+            conditions: [],
+            kind: 'timed',
+        });
+
+        it('a weaker challenger is outclassed by an existing stronger same-family entry', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const strong = enemyStatus('Defense Down III');
+            eng.registerAbilityStatuses([strong]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, strong, undefined, 'e1');
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down II', undefined, 'e1')
+            ).toBe(true);
+        });
+
+        it('a same-tier or stronger challenger is NOT outclassed (R2: it still rolls)', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const strong = enemyStatus('Defense Down III');
+            eng.registerAbilityStatuses([strong]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, strong, undefined, 'e1');
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down III', undefined, 'e1')
+            ).toBe(false);
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down IV', undefined, 'e1')
+            ).toBe(false);
+        });
+
+        it('no existing entry for the family → never outclassed', () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down II', undefined, 'e1')
+            ).toBe(false);
+        });
+
+        it("a DIFFERENT target id is never outclassed by another target's status (per-victim keying)", () => {
+            const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [] });
+            const strong = enemyStatus('Defense Down III');
+            eng.registerAbilityStatuses([strong]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, strong, undefined, 'e1');
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down II', undefined, 'e2')
+            ).toBe(false);
+        });
+
+        it('a DoT-prefixed name always derives tier 0, so it can never outclass or be outclassed', () => {
+            // DoTs never reach the TIMED map at all (they stack in their own separate containers),
+            // so there is no existing entry to seed here — this pins the MECHANICAL reason a DoT
+            // name is immune: deriveFamilyKey gives it tier 0 on both sides of the comparison,
+            // and outclassedByFamily requires a STRICTLY greater tier.
+            expect(deriveFamilyKey('Corrosion III')).toEqual({
+                familyKey: 'Corrosion III',
+                tier: 0,
+            });
+            expect(deriveFamilyKey('Inferno II')).toEqual({ familyKey: 'Inferno II', tier: 0 });
+        });
+
+        it('__testDisableOutclassSkip forces false regardless of what already exists', () => {
+            const eng = createStatusEngine({
+                selfBuffs: [],
+                enemyDebuffs: [],
+                __testDisableOutclassSkip: true,
+            });
+            const strong = enemyStatus('Defense Down III');
+            eng.registerAbilityStatuses([strong]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, strong, undefined, 'e1');
+            expect(
+                eng.isOutclassedByExistingFamily('enemy', 'Defense Down II', undefined, 'e1')
+            ).toBe(false);
+        });
     });
 
     it('accumulating ability status stacks per-active and excludes from snapshot at 0', () => {

@@ -2415,6 +2415,22 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
             if (resolvedVictim === undefined) continue;
             const emitTargetId = vid ?? resolvedVictim.id;
 
+            // #590 R1: a weaker same-family debuff onto a victim already holding a stronger one
+            // is never attempted — no roll, no landing, no resist. Checked PER VICTIM (this loop
+            // already fans over the AoE footprint) and BEFORE the decision below, so it also takes
+            // priority over Block-Debuff immunity — the whole clause behaves as absent, not as a
+            // Block-Debuff resist. `vid` (not `emitTargetId`) matches the target id `writeState`
+            // below hands `applyTimedAbilityStatus`, so the two read the same family entry.
+            if (
+                statusEngine.isOutclassedByExistingFamily(
+                    'enemy',
+                    status.payload.buffName,
+                    undefined,
+                    vid
+                )
+            )
+                continue;
+
             // #413: the DECISION, not just its boolean — the resist emits below need to know
             // whether a gate was drawn. Called exactly once per recipient: both faces draw.
             const decision = usePerVictim

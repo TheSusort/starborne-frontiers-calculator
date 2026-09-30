@@ -4399,11 +4399,24 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `applicationTargetIds` is the resolution the loop actually applies to, so it is the
             // only place every route has a real target in hand.
             if (!perVictimOk(applicationTargetId)) continue;
+            const debuffTargetId = applicationTargetId;
+            // #590 R1: a weaker same-family debuff onto a target already holding a stronger one
+            // is never attempted — no roll, no landing, no resist. Checked before Block Debuff so
+            // an outclassed reactive application skips silently rather than surfacing as a
+            // Block-Debuff resist (the whole clause behaves as absent).
+            if (
+                ctx.statusEngine.isOutclassedByExistingFamily(
+                    'enemy',
+                    cfg.buffName,
+                    undefined,
+                    debuffTargetId
+                )
+            )
+                continue;
             // Block Debuff fold: a target carrying Block Debuff auto-resists
             // every incoming timed debuff. Gate immunity into the landing condition so the
             // resist `else` below handles it (no duplicated resist code); `&&` short-circuits
             // when not immune.
-            const debuffTargetId = applicationTargetId;
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
             // #413: computed HERE, beside `blockedByImmunity` and before the `if`, because the
             // `else` below cannot tell which of the two short-circuits sent it there — that fold is
