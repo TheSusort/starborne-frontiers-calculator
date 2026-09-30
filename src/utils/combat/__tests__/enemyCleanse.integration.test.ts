@@ -214,7 +214,7 @@ describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on
     });
 });
 
-// ── Task 2: Grif hits EACH cleansed enemy, not just the cleanser (owner ruling, 2026-09-30) ───
+// ── Grif hits EACH cleansed enemy, not just the cleanser (owner ruling, 2026-09-30) ───
 // Example: a cleanser that removes one debuff from each of two allies in a single cast (Hayyan's
 // active cleansing Meiying and itself) must produce TWO Grif hits, one per cleansed ship — landing
 // on the cleansed ships themselves, never on the cleanser unless the cleanser was itself cleansed.
@@ -390,7 +390,7 @@ const runAndCollectProcTargets = (input: CombatEngineInput): string[] => {
     return procs;
 };
 
-describe('Task 2: Grif hits EACH enemy whose debuff is cleansed, not just the cleanser', () => {
+describe('Grif hits EACH enemy whose debuff is cleansed, not just the cleanser', () => {
     it('a cleanser removes one debuff from each of two allies in one cast → Grif hits both, not the cleanser', () => {
         const input = playerVsEnemy(
             singleDebuff('Attack Down'),
