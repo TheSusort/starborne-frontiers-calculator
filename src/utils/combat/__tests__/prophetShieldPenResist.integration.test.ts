@@ -26,8 +26,7 @@ import { createEventBus, CombatEvent } from '../events';
 import { registerReactiveListeners, Intent, ReactiveAbility } from '../triggers';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import { Ship } from '../../../types/ship';
-import { Ability, ShipSkills } from '../../../types/abilities';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { Ability } from '../../../types/abilities';
 import type { CombatActor } from '../state';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
@@ -53,20 +52,6 @@ function prophetPassiveAbilities(refit: 0 | 4): Ability[] {
               });
     return buildShipAbilities(s).slots.find((sl) => sl.slot === 'passive')?.abilities ?? [];
 }
-
-const noopActiveSlot = (): ShipSkills['slots'][number] => ({
-    slot: 'active',
-    abilities: [
-        {
-            id: 'noop-atk',
-            type: 'damage',
-            target: 'enemy',
-            trigger: 'on-cast',
-            conditions: [],
-            config: { type: 'damage', multiplier: 0 },
-        },
-    ],
-});
 
 const simpleDamageAbility = (multiplier: number): Ability => ({
     id: 'simple-dmg',
