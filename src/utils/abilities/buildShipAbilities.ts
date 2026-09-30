@@ -41,6 +41,7 @@ import {
     detectGrantConditions,
     detectReactiveTrigger,
     detectAllyInflictsGrantTrigger,
+    detectOtherAllyInflictsGrantTrigger,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
@@ -107,7 +108,7 @@ import {
     parseOverRepairRedirect,
     REMOVE_CHARGE_RE,
     ONCE_PER_ALLY_PER_ROUND_RE,
-    parseAllyInflictsDebuff,
+    parseOtherAllyInflictsDebuff,
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
@@ -1738,13 +1739,11 @@ function abilitiesFromText(
         ];
     }
 
-    // "when an ally inflicts a debuff, this Unit deals N% damage" — gate the damage on the
-    // manual, team-dependent ally-inflicts-debuff trigger (Provider).
-    if (parseAllyInflictsDebuff(text) && out[0]?.ability.type === 'damage') {
-        out[0].ability.conditions = [
-            ...out[0].ability.conditions,
-            { subject: 'ally-inflicts-debuff', derivable: false },
-        ];
+    // "when another ally inflicts a debuff, this Unit deals N% damage" (Provider) rides the live
+    // owner-excluded on-other-ally-debuff-inflicted trigger, landing on the debuff's own victim
+    // via eventCtx.debuffVictimId (triggers.ts). The trigger IS the gate, so no manual condition.
+    if (parseOtherAllyInflictsDebuff(text) && out[0]?.ability.type === 'damage') {
+        out[0].ability.trigger = 'on-other-ally-debuff-inflicted';
     }
 
     // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
@@ -3468,9 +3467,9 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             reactiveTrigger = detectRoundStartContinuationTrigger(rowText, pos);
         }
         // Oleander: an ally-target buff granted "when an ally inflicts a debuff" rides
-        // on-ally-debuff-inflicted, routed to the inflicting ally via eventCtx.damagedAllyId. Gated on
-        // target==='ally' + type 'buff' so Provider's enemy-target Crit Rate Down II counter-debuff in the
-        // same phrasing family stays on-cast (a deferred deep one-off).
+        // on-ally-debuff-inflicted, routed to the inflicting ally via eventCtx.damagedAllyId. Gated
+        // on target==='ally' + type 'buff' so it never matches Provider's enemy-target counter-
+        // debuff below (a different target/config shape from a different, "another ally" clause).
         if (
             reactiveTrigger === undefined &&
             target === 'ally' &&
@@ -3478,6 +3477,23 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
             rowText
         ) {
             reactiveTrigger = detectAllyInflictsGrantTrigger(rowText, buff.buffName, occurrence);
+        }
+        // Provider (#590): an enemy-target debuff granted "when another ally inflicts a debuff"
+        // rides the owner-excluded on-other-ally-debuff-inflicted, landing on the debuff's own
+        // victim via eventCtx.debuffVictimId (triggers.ts). Requires the explicit "another/other
+        // ally" phrasing (detectOtherAllyInflictsGrantTrigger), so Oleander's inclusive "an ally"
+        // buff-grant above is unaffected.
+        if (
+            reactiveTrigger === undefined &&
+            target === 'enemy' &&
+            ability.config.type === 'debuff' &&
+            rowText
+        ) {
+            reactiveTrigger = detectOtherAllyInflictsGrantTrigger(
+                rowText,
+                buff.buffName,
+                occurrence
+            );
         }
         // Harvester p2: "When an allied Unit is destroyed, this Unit gains 1 extra end of round
         // action and Speed Up I for 6 turns" — the extra-action grant resolves on-ally-destroyed
@@ -3528,7 +3544,16 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                     // on the positional path (DoTs live in per-victim stores), so the stale condition
                     // silently blocks Butcher's Marauder Rage II in real team battles — a team-symmetry
                     // violation. (overloadLifecycle.test.ts test 3b pins the positional path.)
-                    !(reactiveTrigger === 'on-debuff-inflicted' && c.subject === 'enemy-debuff')
+                    !(reactiveTrigger === 'on-debuff-inflicted' && c.subject === 'enemy-debuff') &&
+                    // Provider (#590): detectGrantConditions' rule 4a independently attaches the
+                    // manual ally-inflicts-debuff condition from the SAME "another ally inflicts a
+                    // debuff" clause the on-other-ally-debuff-inflicted trigger above just
+                    // resolved from. Same COLLISION-SCOPE pattern as the two drops above — drop
+                    // the now-redundant condition since the trigger is the gate.
+                    !(
+                        reactiveTrigger === 'on-other-ally-debuff-inflicted' &&
+                        c.subject === 'ally-inflicts-debuff'
+                    )
             );
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if

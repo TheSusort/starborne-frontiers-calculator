@@ -357,8 +357,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * RULING (2026-09-30): "an ally" in skill text includes the caster itself; only an explicit
  * "another/other ally" excludes it. `on-ally-debuff-inflicted`, `on-ally-debuffed`, `on-ally-crit`,
  * `on-ally-attacked` and `on-ally-purged` fire on the owner's own qualifying action/state below.
- * `on-ally-crit-dot` (Crocus names "another ally") and `on-ally-destroyed` (a destroyed ship
- * cannot take its own reaction) are carved out and keep excluding the owner via `isSameSideAlly`.
+ * `on-ally-crit-dot` (Crocus names "another ally"), `on-other-ally-debuff-inflicted` (Provider
+ * names "another ally") and `on-ally-destroyed` (a destroyed ship cannot take its own reaction)
+ * are carved out and keep excluding the owner via `isSameSideAlly`.
  *
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
  *    target. Every emitter is per-sub-attack, so ONE enqueue per event implements this
@@ -376,6 +377,13 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    reaction whose OWN trigger is on-ally-debuff-inflicted cannot re-wake this same listener off
  *    its own output — the guard lives in this listener's own debuff-applied/dot-applied handlers
  *    below; `executeIntent`'s `debuff` branch and `landDotOn` only SET the brand it reads.
+ *  - on-other-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a
+ *    same-side ally EXCLUDING the owner (`isSameSideAlly`) — Provider's "another ally" text, see
+ *    the ruling above. Stamps eventCtx.debuffVictimId with the debuff's own victim so a damage
+ *    clause and a debuff clause riding this trigger both land on "that enemy". Bounded
+ *    source-agnostically via `viaOtherAllyDebuffInflictedReaction` (see events.ts's doc on that
+ *    flag) rather than the same-owner check on-ally-debuff-inflicted uses, because this trigger's
+ *    owner exclusion makes the loop risk cross-owner, not self.
  *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
@@ -816,6 +824,50 @@ export function registerReactiveListeners(args: {
                                     victimId: e.targetId,
                                     dotType: e.dotType,
                                 },
+                            });
+                    });
+                    break;
+                case 'on-other-ally-debuff-inflicted':
+                    // Owner-EXCLUDED sibling of on-ally-debuff-inflicted (Provider — #590): the
+                    // skill text says "another/other ally", so isSameSideAlly (not !isOpposing)
+                    // is the gate. eventCtx.debuffVictimId carries the debuff's own victim
+                    // ("that enemy") — read by both the reactive `damage` executor's
+                    // counterTargetId-then-debuffVictimId fallback and the `debuff` executor's
+                    // identical fallback, so a damage clause and a debuff clause riding this same
+                    // trigger both land on the enemy the ally's debuff actually hit.
+                    //
+                    // `viaOtherAllyDebuffInflictedReaction` bounds the chain SOURCE-AGNOSTICALLY,
+                    // unlike on-ally-debuff-inflicted's self-chain guard: that guard only needs to
+                    // skip the OWNER's own output, because an owner-excluded trigger's `sourceId`
+                    // can never equal `ownerId` in the first place (isSameSideAlly excludes it
+                    // structurally). The unbounded risk here is CROSS-owner: two ships on this
+                    // trigger would otherwise wake each other's reaction forever (A's reaction
+                    // lands a debuff → wakes B → B's reaction lands a debuff → wakes A → …).
+                    // Ignoring any event carrying this brand, regardless of who emitted it, cuts
+                    // that ping-pong at generation 1 — each ship still reacts exactly once to the
+                    // original, non-reactive infliction (proven by a two-Provider integration
+                    // test), and no OTHER reactive family's debuff output is affected (the brand
+                    // is set only at this trigger's own emission sites).
+                    bus.on('debuff-applied', (e) => {
+                        if (
+                            isSameSideAlly(e.sourceId, ownerId) &&
+                            !e.viaOtherAllyDebuffInflictedReaction
+                        )
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
+                    });
+                    bus.on('dot-applied', (e) => {
+                        // An ally's DoT landing counts as a debuff inflicted (ruling 3) — same
+                        // guard as the debuff-applied arm above.
+                        if (
+                            isSameSideAlly(e.sourceId, ownerId) &&
+                            !e.viaOtherAllyDebuffInflictedReaction
+                        )
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
                             });
                     });
                     break;
@@ -4359,6 +4411,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
+                    ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
+                        ? { viaOtherAllyDebuffInflictedReaction: true as const }
+                        : {}),
                 });
             } else {
                 // A persistent-stacking name (would have landed as a never-expiring stack)
@@ -4487,6 +4542,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 tier: cfg.tier,
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
+                    : {}),
+                ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
+                    ? { viaOtherAllyDebuffInflictedReaction: true as const }
                     : {}),
             });
         };

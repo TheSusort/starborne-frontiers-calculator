@@ -158,7 +158,15 @@ export type CombatEvent =
      *  filtered by this flag — see that listener's guard for the scope this leaves open. The brand
      *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
-     *  by neither brand against the other's chain — no corpus ship has that shape. */
+     *  by neither brand against the other's chain — no corpus ship has that shape.
+     *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
+     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two brands above). That
+     *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
+     *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
+     *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
+     *  structurally), so the loop risk is CROSS-owner — two ships on this trigger would otherwise
+     *  wake each other's reaction forever. Ignoring the brand unconditionally cuts that ping-pong
+     *  at generation 1; each ship still reacts once to the original, non-reactive infliction. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
@@ -167,6 +175,7 @@ export type CombatEvent =
           buffName: string;
           viaDebuffInflictedReaction?: true;
           viaAllyDebuffInflictedReaction?: true;
+          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -221,6 +230,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `on-other-ally-debuff-inflicted` brand — see that
+           *  field's doc. */
+          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.

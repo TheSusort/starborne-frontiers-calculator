@@ -854,6 +854,13 @@ const EVERY_SECOND_REPAIR_RE = /every second repair/i;
 // A team-dependent trigger: manual (non-derivable) since the single-ship sim has no allies.
 const ALLY_INFLICTS_DEBUFF_RE = /\ball(?:y|ies)\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
 
+// "when another/other ally inflicts a debuff" — the owner-EXCLUDED sibling phrasing (Provider,
+// #590). ALLY_INFLICTS_DEBUFF_RE above also matches this text (it also matches Oleander's
+// owner-inclusive "an ally"), so a caller needing the exclusive reading requires this regex
+// specifically rather than adding a negative lookahead to the shared one.
+const OTHER_ALLY_INFLICTS_DEBUFF_RE =
+    /\b(?:another|other)\s+ally\b[^.]*\b(?:appl|inflict)\w*\s+a\s+debuff\b/i;
+
 // Oleander's "once per ally per round" cap on the RoT-to-ally grant — distinct from the plain
 // "once per round" cap (ECC_ONCE_PER_ROUND_RE) which caps once per round OVERALL, not per ally.
 // Exported: buildShipAbilities.ts's mergeBuff path tests it directly against the buff's clause.
@@ -1745,9 +1752,9 @@ export function detectReactiveTrigger(
 /** Oleander: an ALLY-target buff granted in a "when an ally inflicts a debuff" clause rides
  *  on-ally-debuff-inflicted (routed to the inflicting ally via eventCtx.damagedAllyId). Scoped to
  *  the buff's OWN clause (resolveBuffClause). Distinct from detectReactiveTrigger because that
- *  function is target-blind: the caller gates this on target==='ally' so an enemy-target counter-
- *  debuff in the same "ally inflicts a debuff" phrasing family (Provider's Crit Rate Down II)
- *  stays on-cast. */
+ *  function is target-blind: the caller gates this on target==='ally' so an enemy-target
+ *  counter-debuff in the same phrasing family (Provider's Crit Rate Down II) is routed instead by
+ *  the owner-excluded sibling, detectOtherAllyInflictsGrantTrigger below. */
 export function detectAllyInflictsGrantTrigger(
     text: string | null | undefined,
     buffName: string,
@@ -1756,6 +1763,24 @@ export function detectAllyInflictsGrantTrigger(
     if (!text || !buffName) return undefined;
     return ALLY_INFLICTS_DEBUFF_RE.test(resolveBuffClause(text, buffName, occurrenceIndex))
         ? 'on-ally-debuff-inflicted'
+        : undefined;
+}
+
+/** Provider: an ENEMY-target debuff granted in a "when another ally inflicts a debuff" clause
+ *  rides the owner-excluded on-other-ally-debuff-inflicted (landing on "that enemy" via
+ *  eventCtx.debuffVictimId — triggers.ts). Requires the explicit "another/other ally" qualifier
+ *  (OTHER_ALLY_INFLICTS_DEBUFF_RE) so Oleander's owner-inclusive "an ally" buff-grant above is
+ *  unaffected — the two functions are mutually exclusive on real corpus text, but neither reads
+ *  the other's result, so a hypothetical row matching both phrasings would resolve by whichever
+ *  the caller checks first. */
+export function detectOtherAllyInflictsGrantTrigger(
+    text: string | null | undefined,
+    buffName: string,
+    occurrenceIndex = 0
+): AbilityTrigger | undefined {
+    if (!text || !buffName) return undefined;
+    return OTHER_ALLY_INFLICTS_DEBUFF_RE.test(resolveBuffClause(text, buffName, occurrenceIndex))
+        ? 'on-other-ally-debuff-inflicted'
         : undefined;
 }
 
@@ -3867,9 +3892,12 @@ export function parseOverRepairRedirect(text: string | null | undefined): Abilit
     };
 }
 
-/** Whether a skill triggers "when an ally inflicts a debuff" (a manual, team-dependent gate). */
-export function parseAllyInflictsDebuff(text: string | null | undefined): boolean {
-    return !!text && ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
+/** Whether a skill triggers "when another/other ally inflicts a debuff" (Provider's
+ *  owner-excluded phrasing — #590). Distinct from `ALLY_INFLICTS_DEBUFF_RE`, which also matches
+ *  Oleander's owner-INCLUSIVE "an ally" text; this requires the explicit qualifier so the two
+ *  ships' damage/debuff clauses route to their own (opposite) triggers. */
+export function parseOtherAllyInflictsDebuff(text: string | null | undefined): boolean {
+    return !!text && OTHER_ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
 }
 
 /**

@@ -216,7 +216,7 @@ describe('buildShipAbilities', () => {
         expect(extend.target).toBe('enemy');
     });
 
-    it('Provider passive: no-crit damage gated by ally-inflicts-debuff + gated Crit Rate Down II', () => {
+    it('Provider passive: no-crit damage + Crit Rate Down II both ride on-other-ally-debuff-inflicted (#590)', () => {
         const s = ship({
             thirdPassiveSkillText:
                 'This Unit has 20% Shield Penetration. When another ally inflicts a debuff onto an enemy, this unit deals <unit-damage>50% damage</unit-damage> to that enemy that cannont critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.',
@@ -226,12 +226,14 @@ describe('buildShipAbilities', () => {
 
         const dmg = abilityOfType(passive.abilities, 'damage')!;
         expect(dmg.config).toMatchObject({ type: 'damage', multiplier: 50, noCrit: true });
-        expect(dmg.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
+        expect(dmg.trigger).toBe('on-other-ally-debuff-inflicted');
+        expect(dmg.conditions).toEqual([]);
 
         const debuff = passive.abilities.find(
             (a) => a.config.type === 'debuff' && a.config.buffName === 'Crit Rate Down II'
         )!;
-        expect(debuff.conditions).toEqual([{ subject: 'ally-inflicts-debuff', derivable: false }]);
+        expect(debuff.trigger).toBe('on-other-ally-debuff-inflicted');
+        expect(debuff.conditions).toEqual([]);
     });
 
     it('Lodolite active: Concentrate Fire debuff gated by a negated enemy-type (non-Defenders)', () => {
@@ -2440,18 +2442,19 @@ describe('buildShipAbilities', () => {
             expect(dot?.conditions).toEqual([]);
         });
 
-        it('Provider (negative): ally-inflicts sentence with "cannont critically hit" is unchanged', () => {
+        it('Provider (negative): ally-inflicts sentence with "cannont critically hit" does not read as a damage-reaction', () => {
+            // Provider's ACTIVE-voice "another ally inflicts a debuff" is an outgoing reaction
+            // (on-other-ally-debuff-inflicted, #590), not a damage-reaction (on-attacked) — the
+            // sentence never names Provider herself as the one being hit.
             const s = ship({
                 refits: [{}, {}] as Ship['refits'],
                 secondPassiveSkillText:
                     'This Unit has 20% Shield Penetration. When another ally inflicts a debuff onto an enemy, this unit deals <unit-damage>50% damage</unit-damage> to that enemy that cannont critically hit and inflict <unit-skill>Crit Rate Down II</unit-skill> for 1 turn.',
             });
             const debuff = passiveOf(s)?.abilities.find((a) => a.type === 'debuff');
-            expect(debuff?.trigger).toBe('on-cast');
+            expect(debuff?.trigger).toBe('on-other-ally-debuff-inflicted');
             expect(debuff?.triggerCritFilter).toBeUndefined();
-            expect(debuff?.conditions).toEqual([
-                { subject: 'ally-inflicts-debuff', derivable: false },
-            ]);
+            expect(debuff?.conditions).toEqual([]);
         });
 
         it('Refine first passive: ally-subject reaction grant rides on-ally-attacked, recipient forced to the damaged ALLY', () => {

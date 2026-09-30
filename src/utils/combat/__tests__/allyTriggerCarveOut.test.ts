@@ -48,6 +48,13 @@ const OWNER_INCLUSIVE_TRIGGERS = new Set<AbilityTrigger>([
     'on-ally-purged',
 ]);
 
+// The owner-EXCLUDED counterpart: every ability on one of these came from a skill row that must
+// say "another/other ally" — the inverse of the census above, catching an ability parsed onto
+// the excluded trigger from ordinary "an ally" text (which belongs on an inclusive sibling
+// instead). `on-ally-crit-dot` (Crocus) predates this file; `on-other-ally-debuff-inflicted`
+// (Provider, #590) is the newest member.
+const OWNER_EXCLUDED_TRIGGERS = new Set<AbilityTrigger>(['on-other-ally-debuff-inflicted']);
+
 const ANOTHER_ALLY_RE = /\b(another|other)\s+ally\b/i;
 
 const REFIT_LEVELS: RefitLevel[] = [0, 2, 4];
@@ -92,12 +99,52 @@ function censusOwnerInclusiveAbilities(): { violations: Violation[]; checked: nu
     return { violations, checked };
 }
 
+/** Inverse census: every owner-EXCLUDED-trigger ability in the corpus (refits 0/2/4), flagged as
+ *  a violation when its source row does NOT say "another/other ally" — that shape belongs on an
+ *  owner-inclusive sibling instead. */
+function censusOwnerExcludedAbilities(): { violations: Violation[]; checked: number } {
+    const violations: Violation[] = [];
+    let checked = 0;
+    for (const record of loadShipSkillRecords()) {
+        for (const refitLevel of REFIT_LEVELS) {
+            const ship = buildTraceShip(record.name, { refitLevel });
+            if (!ship) continue;
+            const skills = buildShipAbilities(ship);
+            for (const slotEntry of skills.slots) {
+                for (const ability of slotEntry.abilities) {
+                    if (!OWNER_EXCLUDED_TRIGGERS.has(ability.trigger)) continue;
+                    checked++;
+                    const text = getSkillRowForSlot(ship, slotEntry.slot)?.text ?? '';
+                    if (!ANOTHER_ALLY_RE.test(text)) {
+                        violations.push({
+                            ship: ship.name,
+                            refitLevel,
+                            slot: slotEntry.slot,
+                            trigger: ability.trigger,
+                            text,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    return { violations, checked };
+}
+
 describe('ally-trigger "another ally" carve-out tripwire', () => {
     it('no owner-inclusive-trigger ability comes from a skill row that says "another/other ally"', () => {
         const { violations, checked } = censusOwnerInclusiveAbilities();
         // Not vacuous: the corpus must actually exercise at least one of the five triggers
         // (Oleander/on-ally-debuff-inflicted, Hayyan/on-ally-debuffed, Sentinel-Hermes/on-ally-crit,
         // reactive-plating ships/on-ally-attacked, Salvation/on-ally-purged all do today).
+        expect(checked).toBeGreaterThan(0);
+        expect(violations).toEqual([]);
+    });
+
+    it('every owner-excluded-trigger ability comes from a skill row that says "another/other ally"', () => {
+        const { violations, checked } = censusOwnerExcludedAbilities();
+        // Not vacuous: Provider's damage + Crit Rate Down II both resolve to
+        // on-other-ally-debuff-inflicted at refits 0/2/4 (#590).
         expect(checked).toBeGreaterThan(0);
         expect(violations).toEqual([]);
     });
