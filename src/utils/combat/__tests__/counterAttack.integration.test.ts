@@ -407,12 +407,15 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
 
     it('SELF hit does NOT double-retaliate: on-ally-attacked now wakes too but requireDamagedAllyAdjacent blocks it', () => {
         // Owner ruling 2026-09-30: "an ally" includes the caster, so the on-ally-attacked
-        // listener no longer excludes the owner's own hit up front. Centurion's clause is "this
-        // Unit OR AN ADJACENT ally" — requireDamagedAllyAdjacent reads adjacentAllyIdsFor(ownerId),
-        // which never contains the owner itself, so the second (adjacent-ally) counter still
-        // never wakes on a self-hit. Only the unconditional self `on-attacked` counter fires.
-        // Counted directly via reactive-damage-performed (not perTargetDamage magnitude) so a
-        // regression that doubles the retaliation can't hide behind a summed number.
+        // listener no longer excludes the owner's own hit up front. Two guards independently hold
+        // the count at 1: (1) the adjacency gate — Centurion's clause is "this Unit OR AN
+        // ADJACENT ally", and requireDamagedAllyAdjacent rejects e.targetId === ownerId
+        // structurally (a ship is never adjacent to itself), so the adjacent-ally counter never
+        // even enqueues on a self-hit; (2) the counterGroupId dedupe at the executor — even if it
+        // did enqueue, it shares a group id with the self `on-attacked` counter and would collapse
+        // into the same one retaliation (R4). Counted directly via reactive-damage-performed (not
+        // perTargetDamage magnitude) so a regression that doubles the retaliation can't hide
+        // behind a summed number.
         const skills = buildShipAbilities(centurionShip(CENTURION_P2));
         const bus = createEventBus();
         const reactive: CombatEvent[] = [];

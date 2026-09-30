@@ -353,6 +353,13 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * Register each owner's reactive abilities as bus listeners. Listener bodies are
  * PURE: they only `enqueue` an intent — never mutate combat state. Match
  * guards are per OWNER so a team ship's reactive ability keys on ITS OWN events:
+ *
+ * RULING (2026-09-30): "an ally" in skill text includes the caster itself; only an explicit
+ * "another/other ally" excludes it. `on-ally-debuff-inflicted`, `on-ally-debuffed`, `on-ally-crit`,
+ * `on-ally-attacked` and `on-ally-purged` fire on the owner's own qualifying action/state below.
+ * `on-ally-crit-dot` (Crocus names "another ally") and `on-ally-destroyed` (a destroyed ship
+ * cannot take its own reaction) are carved out and keep excluding the owner via `isSameSideAlly`.
+ *
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
  *    target. Every emitter is per-sub-attack, so ONE enqueue per event implements this
  *    on every path: the POSITIONAL path's own sub-attack `deliveredDamage`, or (every other
@@ -364,20 +371,15 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
  *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
  *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is same-side
- *    (not opposing). "An ally" includes this owner's OWN infliction (owner ruling 2026-09-30:
- *    "an ally" in skill text includes the caster; only "another/other ally" excludes it) — so a
- *    ship carrying both on-debuff-inflicted and on-ally-debuff-inflicted fires BOTH on its own
- *    cast. For the PLAYER registration this is any PLAYER's infliction; for the ENEMY
- *    registration this is any enemy actor's infliction.
- *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing). Includes
- *    this owner itself under the same ruling — the ally counterpart of on-debuffed (Hayyan), and
- *    the two now co-fire on a self-landed debuff exactly as on-debuff-inflicted/
- *    on-ally-debuff-inflicted do above. Does NOT subscribe to dot-applied, matching on-debuffed's
- *    scoping.
+ *    (not opposing) — owner included, see the ruling above. For the PLAYER registration this is
+ *    any PLAYER's infliction; for the ENEMY registration this is any enemy actor's infliction. A
+ *    reaction whose OWN trigger is on-ally-debuff-inflicted cannot re-wake this same listener off
+ *    its own output — see the self-chain guard at the `debuff`/`dot` executors (~4330, ~4450).
+ *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
+ *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
+ *    subscribe to dot-applied, matching on-debuffed's scoping.
  *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER same-side actor (opposing sources
- *    excluded, own casts excluded). Crocus's text names "another ally" explicitly, so this
- *    trigger is carved out of the 2026-09-30 ruling and keeps excluding the owner — unlike its
- *    on-ally-debuff-inflicted sibling above.
+ *    excluded, own casts excluded) — carved out of the ruling above, see there.
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw (Pallas). The recipient may be the owner itself — owner ruling
  *    2026-08-31, #446. One enqueue per qualifying cast.
@@ -395,12 +397,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    an `overheal`-basis reaction. One enqueue per qualifying repair. On the reactive arm an
  *    ability never observes its OWN output (the #435 redirect must not redirect itself); every
  *    other observer still does.
- *  - on-ally-crit → a same-side actor's ability-performed with critting hits, INCLUDING this
- *    owner's own crit (owner ruling 2026-09-30: "an ally" includes the caster): fires once per
- *    critting ability-performed — i.e. once per critting SUB-ATTACK, and ONCE for an AoE
- *    footprint however many victims it crit, never per (hit, victim) pair; every opposing actor
- *    is excluded (a walked enemy attacker now emits ability-performed, but its crit is NOT an
- *    ally crit).
+ *  - on-ally-crit → a same-side actor's ability-performed with critting hits — owner included, see
+ *    the ruling above: fires once per critting ability-performed — i.e. once per critting
+ *    SUB-ATTACK, and ONCE for an AoE footprint however many victims it crit, never per (hit,
+ *    victim) pair; every opposing actor is excluded (a walked enemy attacker emits
+ *    ability-performed too, but its crit is never an ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round)
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
@@ -417,10 +418,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
  *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
  *  - on-ally-attacked → attacked where the target is same-side (not opposing) — per hit; critFilter
- *    + roleFilter applied. Fires when ANY same-side actor is hit, INCLUDING this owner's own hits
- *    (owner ruling 2026-09-30: "an ally" includes the caster) — a ship carrying both on-attacked
- *    and on-ally-attacked fires BOTH on its own hit; an opposing-side target is never an ally.
- *    triggerCritFilter discriminates on the hit's own crit outcome (same contract as on-attacked);
+ *    + roleFilter applied. Fires when ANY same-side actor is hit — owner included, see the ruling
+ *    above; an opposing-side target is never an ally. triggerCritFilter discriminates on the
+ *    hit's own crit outcome (same contract as on-attacked);
  *    roleFilter (Graphite) matches the DAMAGED ally's role category via the optional roleOf lookup.
  *    requireDamagedAllyStatus (#363 Fuying) requires the DAMAGED ally to be holding a named
  *    status ("when an ally IN Stealth … is directly damaged") via the optional statusNamesOf
@@ -429,10 +429,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
  *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not
- *    self) (any OTHER same-side actor's destruction). Harvester's text carries no "another"
- *    qualifier, but the owner ruled this trigger stays excluded regardless: a destroyed ship
- *    cannot take the extra-action grant, so on-ally-destroyed is carved out of the 2026-09-30
- *    "an ally includes the caster" ruling alongside on-ally-crit-dot.
+ *    self) — carved out of the ruling above, see there (Harvester's text carries no "another"
+ *    qualifier, but a destroyed ship cannot take the extra-action grant regardless).
  *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
  *    (any opposing-side actor — for players: the enemy attackers; for enemy owners: any player
  *    actor).
@@ -528,14 +526,12 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
-    // Same-side ally, OWNER EXCLUDED. Most "an ally" triggers use `!isOpposing` directly instead
-    // (owner ruling 2026-09-30: "an ally" includes the caster) — this helper now serves only the
-    // carve-outs: a trigger whose text names "another/other ally" (on-ally-crit-dot), a trigger
-    // where the owner cannot be its own subject (on-ally-destroyed — a destroyed ship cannot take
-    // the action), and the `allyTeamNames` roster-membership condition (a ship checking its own
-    // team for a named ally can't sensibly name itself). Side-agnostic: `isOpposing` is supplied
-    // per registration, so the enemy-side registration resolves its own side's allies with no
-    // mirrored branch.
+    // Same-side ally, OWNER EXCLUDED — for a trigger whose skill text names "another/other
+    // ally", or whose subject structurally cannot be the owner (a destroyed ship cannot take the
+    // reaction it would grant itself). See the 2026-09-30 "an ally includes the caster" ruling in
+    // the trigger doc block above: this helper is the carve-out, not the default. Side-agnostic:
+    // `isOpposing` is supplied per registration, so the enemy-side registration resolves its own
+    // side's allies with no mirrored branch.
     const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
         !isOpposing(actorId) && actorId !== ownerId;
     /**
@@ -781,12 +777,22 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        // "An ally" includes this owner's own infliction (owner ruling
-                        // 2026-09-30: only "another/other ally" text excludes the caster) — so
-                        // this fires on the owner's OWN debuff cast too, alongside
-                        // on-debuff-inflicted. Every opposing actor is still excluded (an
-                        // opposing actor is never an ally).
-                        if (!isOpposing(e.sourceId))
+                        // Owner included, see the ruling in the trigger doc block above — so this
+                        // fires on the owner's OWN debuff cast too, alongside on-debuff-inflicted.
+                        // Every opposing actor is still excluded (an opposing actor is never an
+                        // ally). `viaAllyDebuffInflictedReaction` + `sourceId === ownerId` breaks a
+                        // SELF-chain: an on-ally-debuff-inflicted reaction whose own application is
+                        // itself a qualifying infliction would otherwise re-enter this same listener
+                        // every generation until MAX_INTENT_GENERATIONS throws (the corrosionToAcidicDecay
+                        // Belladonna case chains fine — her convert-dot executor never emits a new
+                        // debuff-applied/dot-applied, so it never reaches this guard at all). Does
+                        // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
+                        // back) — that guard would have to ignore the brand regardless of source,
+                        // which is a separate game-rule question this fix does not resolve.
+                        if (
+                            !isOpposing(e.sourceId) &&
+                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction)
+                        )
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
@@ -794,8 +800,12 @@ export function registerReactiveListeners(args: {
                     });
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
-                        // DoT infliction triggers this listener exactly as an ally debuff does.
-                        if (!isOpposing(e.sourceId))
+                        // DoT infliction triggers this listener exactly as an ally debuff does. Same
+                        // self-chain guard as the debuff-applied arm above.
+                        if (
+                            !isOpposing(e.sourceId) &&
+                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction)
+                        )
                             enqueue({
                                 ...intent,
                                 eventCtx: {
@@ -1011,10 +1021,10 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
-                        // A same-side actor's critting attack, INCLUDING this owner's own crit
-                        // (owner ruling 2026-09-30: "an ally" includes the caster) — every
-                        // opposing actor is excluded: an opposing crit is NOT an ally crit, even
-                        // though a walked enemy now emits ability-performed.
+                        // A same-side actor's critting attack — owner included, see the ruling in
+                        // the trigger doc block above. Every opposing actor is excluded: an
+                        // opposing crit is NOT an ally crit, even though a walked enemy emits
+                        // ability-performed too.
                         if (isOpposing(e.actorId)) return;
                         // ONE enqueue per ATTACK that crit, NOT one per critting (hit, victim)
                         // pair. The corpus clauses all read "when an ally critically hits an enemy,
@@ -1215,12 +1225,11 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuffed':
                     bus.on('debuff-applied', (e) => {
-                        // Victim-scoped: a timed debuff landed on a same-side unit (Hayyan),
-                        // INCLUDING this owner itself (owner ruling 2026-09-30: "an ally"
-                        // includes the caster) — on-debuffed and on-ally-debuffed now co-fire on
-                        // a self-landed debuff. Route the reactive repair to that unit via
-                        // damagedAllyId. Excludes every opposing actor and DoTs (dot-applied),
-                        // matching on-debuffed's debuff-applied-only scoping.
+                        // Victim-scoped: a timed debuff landed on a same-side unit (Hayyan) —
+                        // owner included, see the ruling in the trigger doc block above. Route
+                        // the reactive repair to that unit via damagedAllyId. Excludes every
+                        // opposing actor and DoTs (dot-applied), matching on-debuffed's
+                        // debuff-applied-only scoping.
                         if (!isOpposing(e.targetId))
                             enqueue({
                                 ...intent,
@@ -1356,13 +1365,11 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Same-side scoped: fires when ANY same-side actor is hit — per HIT
-                        // (the engine emits one event per hit, PR 1), INCLUDING this owner's own
-                        // hits (owner ruling 2026-09-30: "an ally" includes the caster) — a ship
-                        // carrying both on-attacked and on-ally-attacked fires BOTH on its own
-                        // hit. Only every opposing actor is excluded. triggerCritFilter
-                        // discriminates on the hit's own crit outcome, same contract as
-                        // on-attacked. roleFilter (Graphite) matches the DAMAGED ally's role
-                        // category; an unknown role never matches (conservative — a manual actor
+                        // (the engine emits one event per hit, PR 1) — owner included, see the
+                        // ruling in the trigger doc block above; only every opposing actor is
+                        // excluded. triggerCritFilter discriminates on the hit's own crit outcome,
+                        // same contract as on-attacked. roleFilter (Graphite) matches the DAMAGED
+                        // ally's role category; an unknown role never matches (conservative — a manual actor
                         // with no ship picked keeps role-filtered reactions dormant rather than
                         // inflating numbers); an EMPTY filter array is treated as absent (any
                         // ally), not never-match.
@@ -1378,14 +1385,20 @@ export function registerReactiveListeners(args: {
                         ) {
                             return;
                         }
-                        // Bulwark: fire only when the DAMAGED ally is adjacent to this
-                        // owner. Pure read (listener stays enqueue-only). Helper absent → allow.
-                        if (
-                            ra.ability.requireDamagedAllyAdjacent &&
-                            adjacentAllyIdsFor &&
-                            !adjacentAllyIdsFor(ownerId).includes(e.targetId)
-                        ) {
-                            return;
+                        // Bulwark: fire only when the DAMAGED ally is adjacent to this owner. A
+                        // ship is never adjacent to itself, so the owner's own hit is rejected
+                        // structurally — independent of whether adjacentAllyIdsFor is wired — now
+                        // that on-ally-attacked's owner-inclusion (the ruling above) would
+                        // otherwise let it through here too. Pure read (listener stays
+                        // enqueue-only). Helper absent → allow any OTHER same-side ally.
+                        if (ra.ability.requireDamagedAllyAdjacent) {
+                            if (e.targetId === ownerId) return;
+                            if (
+                                adjacentAllyIdsFor &&
+                                !adjacentAllyIdsFor(ownerId).includes(e.targetId)
+                            ) {
+                                return;
+                            }
                         }
                         // #363 Fuying R3/R4: fire only when the DAMAGED ally is currently holding
                         // the named status ("when an ally IN Stealth … is directly damaged").
@@ -1680,10 +1693,10 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-purged':
                     bus.on('purge-performed', (e) => {
-                        // Victim-scoped: a buff was purged from a same-side unit (Salvation),
-                        // INCLUDING this owner itself (owner ruling 2026-09-30: "an ally"
-                        // includes the caster). Route the heal to that unit via damagedAllyId;
-                        // fromPurgeEvent guards any chained purge.
+                        // Victim-scoped: a buff was purged from a same-side unit (Salvation) —
+                        // owner included, see the ruling in the trigger doc block above. Route
+                        // the heal to that unit via damagedAllyId; fromPurgeEvent guards any
+                        // chained purge.
                         if (!isOpposing(e.targetId))
                             enqueue({
                                 ...intent,
@@ -4319,10 +4332,12 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     applicationTargetId
                 );
                 // Discrete infliction event — sourceId = the owner so the application is chainable.
-                // Brand the event when THIS reaction is itself an on-debuff-inflicted
-                // follow-up (Warden's Out. Damage Down II), so the on-debuff-inflicted listener
-                // skips it and the reaction cannot re-trigger itself (bounded, no generation-cap
-                // throw). Other reactive debuffs (on-crit/on-attacked) stay unbranded → still chain.
+                // Brand the event when THIS reaction is itself an on-debuff-inflicted follow-up
+                // (Warden's Out. Damage Down II) or an on-ally-debuff-inflicted follow-up, so that
+                // trigger's own listener skips it and the reaction cannot re-trigger itself
+                // (bounded, no generation-cap throw) — see events.ts's doc on each flag for why
+                // they are separate. Other reactive debuffs (on-crit/on-attacked) stay unbranded
+                // → still chain.
                 ctx.bus.emit({
                     type: 'debuff-applied',
                     sourceId: intent.ownerId,
@@ -4331,6 +4346,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     buffName: cfg.buffName,
                     ...(intent.ability.trigger === 'on-debuff-inflicted'
                         ? { viaDebuffInflictedReaction: true as const }
+                        : {}),
+                    ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
+                        ? { viaAllyDebuffInflictedReaction: true as const }
                         : {}),
                 });
             } else {
@@ -4445,7 +4463,11 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 });
             }
             // Discrete infliction event — sourceId = the owner so the application is chainable
-            // and feeds OTHER owners' on-ally-debuff-inflicted dot-applied listeners.
+            // and feeds on-ally-debuff-inflicted's dot-applied arm. Brand it when THIS reaction is
+            // itself an on-ally-debuff-inflicted follow-up, mirroring the sibling `debuff` branch's
+            // guard above: without it, an owner's own reactive DoT (this landDotOn call) would
+            // re-wake its OWN on-ally-debuff-inflicted listener and loop until
+            // MAX_INTENT_GENERATIONS throws — the self-chain guard covers this event too.
             ctx.bus.emit({
                 type: 'dot-applied',
                 sourceId: intent.ownerId,
@@ -4454,6 +4476,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 dotType: cfg.dotType,
                 stacks: cfg.stacks,
                 tier: cfg.tier,
+                ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
+                    ? { viaAllyDebuffInflictedReaction: true as const }
+                    : {}),
             });
         };
 

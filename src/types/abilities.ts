@@ -251,10 +251,11 @@ export type AbilityTrigger =
     // `debuff-applied` event, self-scoped on targetId === ownerId). Does NOT fire for DoTs
     // (separate `dot-applied` event) — matches "when debuffed".
     | 'on-debuffed'
-    // Phase 3 PR-E: fires when a same-side ALLY (not the owner) receives a timed debuff
-    // (rides the existing `debuff-applied` event, ally-scoped on targetId being a same-side
-    // actor other than the owner). The ally counterpart of `on-debuffed`. Does NOT fire for
-    // DoTs (dot-applied), matching on-debuffed's debuff-applied-only scoping.
+    // Phase 3 PR-E: fires when a same-side ally receives a timed debuff (rides the existing
+    // `debuff-applied` event, ally-scoped on targetId being any same-side actor — owner included,
+    // see the 2026-09-30 "an ally includes the caster" ruling in triggers.ts's trigger doc block).
+    // The ally counterpart of `on-debuffed`. Does NOT fire for DoTs (dot-applied), matching
+    // on-debuffed's debuff-applied-only scoping.
     | 'on-ally-debuffed'
     // Phase 3 PR-H: fires when THIS unit performs a cleanse that actually removes >= 1 debuff
     // (rides the existing `cleanse-performed` event, self-scoped on casterId === ownerId).
@@ -285,11 +286,12 @@ export type AbilityTrigger =
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
     | 'on-shield-applied'
-    // SP-F F2: fires when a same-side ALLY (not the owner) has their shield pool FULLY DEPLETED
-    // by a direct hit (rides the new `shield-destroyed` event, ally-scoped on victimId — mirrors
-    // on-ally-debuffed's ally scoping). AEGIS's "grants Defense Up II and cleanses all debuffs
-    // when an ally within the Active pattern has their Shield destroyed" — the sole corpus user.
-    // Opposite direction of on-shield-applied (grant vs loss).
+    // SP-F F2: fires when a same-side unit has their shield pool FULLY DEPLETED by a direct hit
+    // (rides the new `shield-destroyed` event, victim-scoped, owner included — AEGIS's own
+    // pattern is centered on itself, so its own destroyed shield self-reacts too; see
+    // triggers.ts's `on-ally-shield-destroyed` listener). AEGIS's "grants Defense Up II and
+    // cleanses all debuffs when an ally within the Active pattern has their Shield destroyed" —
+    // the sole corpus user. Opposite direction of on-shield-applied (grant vs loss).
     | 'on-ally-shield-destroyed'
     // Ship-kit Wave 3, Task 4: fires when an OPPOSING-side actor gains the named "Taunt" buff
     // (rides the existing `buff-applied` event, opposing-scoped on actorId — the buff RECIPIENT

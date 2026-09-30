@@ -1958,6 +1958,122 @@ describe('Phase 3 reactive triggers', () => {
 });
 
 // ----------------------------------------------------------------------
+// on-ally-debuff-inflicted self-chain guard (review fix wave 1 on #588's ally-includes-self
+// change): a `dot`-type reactive ability whose OWN trigger is on-ally-debuff-inflicted applies
+// its DoT via the SAME landDotOn executor a real cast uses, which emits dot-applied with
+// sourceId = the owner. Now that the owner is included in "an ally" (2026-09-30 ruling), that
+// event re-wakes the owner's OWN on-ally-debuff-inflicted listener — an unbounded self-chain
+// that threw MAX_INTENT_GENERATIONS before the viaAllyDebuffInflictedReaction brand (see the
+// listener's guard and the debuff/dot executors' emit sites in triggers.ts).
+// ----------------------------------------------------------------------
+describe('on-ally-debuff-inflicted self-chain guard', () => {
+    const corrosionOnCast = (): Ability =>
+        ab({
+            type: 'dot',
+            config: { type: 'dot', dotType: 'corrosion', tier: 5, stacks: 1, duration: 3 },
+        });
+
+    const infernoAllyReaction = (): Ability =>
+        ab({
+            type: 'dot',
+            target: 'enemy',
+            trigger: 'on-ally-debuff-inflicted',
+            config: { type: 'dot', dotType: 'inferno', tier: 5, stacks: 1, duration: 2 },
+        });
+
+    const selfChainSkills = (): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [corrosionOnCast()] },
+            { slot: 'passive', abilities: [infernoAllyReaction()] },
+        ],
+    });
+
+    const collectInferno = (bus: ReturnType<typeof createEventBus>) => {
+        const events: Extract<CombatEvent, { type: 'dot-applied' }>[] = [];
+        bus.on('dot-applied', (e) => {
+            if (e.type === 'dot-applied' && e.dotType === 'inferno') events.push(e);
+        });
+        return events;
+    };
+
+    it("one Corrosion cast wakes the owner's own Inferno reaction exactly ONCE — no throw, bounded chain", () => {
+        const bus = createEventBus();
+        const infernoEvents = collectInferno(bus);
+
+        expect(() =>
+            runCombat(baseInput({ shipSkills: selfChainSkills(), numRounds: 1, bus }))
+        ).not.toThrow();
+
+        // Exactly one reactive Inferno application per real Corrosion infliction — the guard
+        // silences only the REACTION's own output, not the real cast-path infliction that
+        // legitimately wakes it the first time.
+        expect(infernoEvents).toHaveLength(1);
+        expect(infernoEvents[0].sourceId).toBe(FOCUS);
+    });
+
+    // Control: the same Inferno ability wired to on-cast instead of the reactive trigger — fires
+    // once from its own cast, independent of the reactive machinery under test above.
+    it('control: the same Inferno ability on on-cast fires once, no reactive machinery involved', () => {
+        const controlSkills: ShipSkills = {
+            slots: [
+                {
+                    slot: 'active',
+                    abilities: [
+                        corrosionOnCast(),
+                        ab({
+                            type: 'dot',
+                            config: {
+                                type: 'dot',
+                                dotType: 'inferno',
+                                tier: 5,
+                                stacks: 1,
+                                duration: 2,
+                            },
+                        }),
+                    ],
+                },
+            ],
+        };
+        const bus = createEventBus();
+        const infernoEvents = collectInferno(bus);
+        runCombat(baseInput({ shipSkills: controlSkills, numRounds: 1, bus }));
+        expect(infernoEvents).toHaveLength(1);
+    });
+
+    it('enemy-side mirror: an enemy ship with the same self-chain shape does not throw either', () => {
+        type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
+        const enemySelfChainer: EnemyAttacker = {
+            id: 'enemy-chainer',
+            stats: {
+                attack: 100,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000_000,
+                speed: 200,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: selfChainSkills(),
+        };
+        const bus = createEventBus();
+        const infernoEvents = collectInferno(bus);
+
+        expect(() =>
+            runCombat(
+                baseInput({
+                    numRounds: 1,
+                    enemyAttackers: [enemySelfChainer],
+                    bus,
+                })
+            )
+        ).not.toThrow();
+        expect(infernoEvents).toHaveLength(1);
+        expect(infernoEvents[0].sourceId).toBe('enemy-chainer');
+    });
+});
+
+// ----------------------------------------------------------------------
 // on-attacked live trigger: unit-level tests for the pure listener.
 // These tests drive registerReactiveListeners + createEventBus directly
 // (nothing emits `attacked` from the engine yet — Task 8). They verify
@@ -2342,6 +2458,30 @@ describe('on-ally-attacked listener', () => {
             [{ type: 'attacked', targetId: 'enemy', attackerId: 'tank', round: 1 }]
         );
         expect(enemyIntents).toHaveLength(0);
+    });
+
+    // (1b) requireDamagedAllyAdjacent structural self-exclusion: with adjacentAllyIdsFor absent
+    // (this unit ctx omits it, same as a DPS/unit fixture), an owner-inclusive on-ally-attacked
+    // would otherwise let the owner's OWN hit through the adjacency gate — a ship is never
+    // adjacent to itself, so the gate must reject e.targetId === ownerId regardless of whether
+    // the helper is wired. Another ally's hit still passes (helper-absent-allows is preserved for
+    // every target that is not the owner).
+    it("requireDamagedAllyAdjacent rejects the owner's own hit even when adjacentAllyIdsFor is absent", () => {
+        const ra: ReactiveAbility = {
+            ability: onAllyAttackedBuff({ requireDamagedAllyAdjacent: true }),
+            sourceSlot: 'passive',
+        };
+        const ownIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'graphite', attackerId: 'ea1', round: 1 }]
+        );
+        expect(ownIntents).toHaveLength(0);
+
+        const allyIntents = emitAllyAttacked(
+            [ra],
+            [{ type: 'attacked', targetId: 'tank', attackerId: 'ea1', round: 1 }]
+        );
+        expect(allyIntents).toHaveLength(1);
     });
 
     // (2) per-HIT semantics: the engine emits one attacked event per hit

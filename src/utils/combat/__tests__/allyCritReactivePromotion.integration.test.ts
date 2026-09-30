@@ -662,8 +662,10 @@ describe('Sentinel (player-side) — reacts to her OWN crit too (self included)'
     it("Sentinel's own crit repairs herself and deals her reactive damage exactly once (no chain)", () => {
         // "An ally" includes the caster (owner ruling 2026-09-30): Sentinel IS the attacking
         // focus here, so her own crit now satisfies on-ally-crit exactly as an ally's crit does.
-        // The reactive damage config carries noCrit: true, so the injected hit itself can never
-        // crit and re-wake this same listener — no infinite chain.
+        // A reactive damage proc never re-triggers this listener regardless of its own crit
+        // outcome — it credits through reactive-damage-performed, which emits NO
+        // ability-performed at all (see that event's doc in events.ts), so on-ally-crit's own
+        // listener is structurally deaf to it, not merely blocked by noCrit.
         const input: CombatEngineInput = {
             attack: 1000,
             crit: 100, // guaranteed self-crit
@@ -702,7 +704,8 @@ describe('Sentinel (player-side) — reacts to her OWN crit too (self included)'
         const selfHeals = reactiveHeals.filter((e) => e.casterId === 'attacker');
         expect(selfHeals).toHaveLength(1);
         const selfDamage = reactiveDamage.filter((e) => e.sourceId === 'attacker');
-        // Exactly one reactive hit per own crit — the noCrit hit cannot itself crit and re-fire.
+        // Exactly one reactive hit per own crit — a reactive proc emits no ability-performed, so
+        // it cannot re-wake this listener regardless of whether it itself crit.
         expect(selfDamage).toHaveLength(1);
     });
 });
