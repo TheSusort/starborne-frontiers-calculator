@@ -1,24 +1,23 @@
 /**
  * #591 — Prophet: "When an ally resists a debuff infliction from an enemy, this Unit gains 1%
- * more shield penetration" (R0/R2), "...2% more" (R4). Owner rulings (spec-590-591.md):
- *  7.  STACKS and is PERMANENT for the fight — not a status, never removed.
- *  8.  PER RESISTED DEBUFF — two resists from one enemy attack = two stacks.
- *  9.  "an ally" INCLUDES Prophet herself.
- *  10. Only a FAILED LANDING ROLL counts (`debuff-resisted.viaLandingRoll === true`) — a Block
- *      Debuff or affinity auto-resist does not.
- *  11. Only resists of an ENEMY's infliction (source opposing the resister).
+ * more shield penetration" (R0/R2), "...2% more" (R4). The bonus:
+ *  - STACKS and is PERMANENT for the fight — not a status, never removed;
+ *  - fires PER RESISTED DEBUFF — two resists from one enemy attack = two stacks;
+ *  - counts an ally's resist where "an ally" INCLUDES Prophet herself;
+ *  - only counts a FAILED LANDING ROLL (`debuff-resisted.viaLandingRoll === true`) — a Block
+ *    Debuff or affinity auto-resist does not draw one;
+ *  - only counts a resist of an ENEMY's infliction (source opposing the resister).
  *
- * #591/#590 spec Part C: the SAME roll-only rule (ruling 10) extends to the resister-side
- * `on-debuff-resisted` trigger (Prophet's own R2+ extra action, Vindicator's HP-basis
- * retaliation, the Lockdown implant) — see triggers.ts's `on-debuff-resisted` case and
- * lockdownApplier.test.ts's updated SYNERGY (negative) case.
+ * The same roll-only rule also gates the pre-existing, self-scoped `on-debuff-resisted` trigger
+ * (Prophet's own R2+ extra action, Vindicator's HP-basis retaliation, the Lockdown implant) — see
+ * triggers.ts's `on-debuff-resisted` case and lockdownApplier.test.ts's SYNERGY (negative) case.
  *
  * This file has three parts, mirroring providerOtherAllyDebuffReaction.integration.test.ts's
  * structure: a hand-rolled-bus unit test of the new `on-ally-debuff-resisted` LISTENER (precise,
  * deterministic engine-wiring checks), a parser test of Prophet's REAL kit (buildShipAbilities on
  * the verbatim docs/ship-skills.csv text), and an engine-level integration test that measures the
- * bonus's real effect on shield absorption (not just the stored field) — plus Part C's Block
- * Debuff vs real-roll pairing for Prophet's own extra action.
+ * bonus's real effect on shield absorption (not just the stored field) — plus a Block Debuff vs
+ * real-roll pairing for Prophet's own extra action.
  */
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -132,7 +131,7 @@ describe('on-ally-debuff-resisted — listener wiring', () => {
         return enqueued;
     }
 
-    it('ruling 9 — the owner\'s OWN resist counts ("an ally" includes the caster)', () => {
+    it('the owner\'s OWN resist counts ("an ally" includes the caster)', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'prophet');
         handBus.emit({
@@ -174,7 +173,7 @@ describe('on-ally-debuff-resisted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
-    it("ruling 11 — a same-side resist of ANOTHER ally's debuff (not an enemy's) is excluded", () => {
+    it("a same-side resist of ANOTHER ally's debuff (not an enemy's) is excluded", () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'prophet');
         handBus.emit({
@@ -188,7 +187,7 @@ describe('on-ally-debuff-resisted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
-    it('ruling 11 — a resist with no attributable source is excluded (cannot prove "from an enemy")', () => {
+    it('a resist with no attributable source is excluded (cannot prove "from an enemy")', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'prophet');
         handBus.emit({
@@ -202,7 +201,7 @@ describe('on-ally-debuff-resisted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
-    it('ruling 10 — a resist with no drawn roll (Block Debuff / affinity auto-resist) is excluded', () => {
+    it('a resist with no drawn roll (Block Debuff / affinity auto-resist) is excluded', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'prophet');
         handBus.emit({
@@ -216,7 +215,7 @@ describe('on-ally-debuff-resisted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
-    it('ruling 8 — two resisted debuffs from one enemy attack enqueue TWICE', () => {
+    it('two resisted debuffs from one enemy attack enqueue TWICE', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'prophet');
         handBus.emit({
@@ -438,20 +437,20 @@ describe('Prophet (enemy-side) — team symmetry mirror', () => {
 });
 
 // =============================================================================
-// Part C — the resister-side gate: Block Debuff never grants Prophet's own extra action.
+// The resister-side gate: Block Debuff does not grant Prophet's own extra action.
 //
 // Engine-level, full-fidelity proof of the SHARED `on-debuff-resisted` gate (Block-Debuff
-// auto-resist → no fire; real roll → fires) already lives in lockdownApplier.test.ts's DIRECT
-// and SYNERGY (negative) cases — the same trigger, the same gate, a different consumer (the
+// auto-resist → no fire; real roll → fires) lives in lockdownApplier.test.ts's DIRECT and
+// SYNERGY (negative) cases — the same trigger, the same gate, a different consumer (the
 // Lockdown implant's Buff Protection grant instead of Prophet's extra action). Duplicating that
 // multi-round choreography here would prove nothing new about Prophet's OWN ability beyond what
 // the parser test above already pins (her extra-action ability rides exactly `on-debuff-resisted`
 // with `oncePerRound: true`) — so this part proves PROPHET'S consumption of the gate at the
 // listener level: the same shape as Part 1's on-ally-debuff-resisted tests, applied to the
-// pre-existing on-debuff-resisted trigger her extra action already used before #591.
+// pre-existing on-debuff-resisted trigger her extra action rides.
 // =============================================================================
 
-describe('on-debuff-resisted — resister-side roll gate (#591 spec Part C)', () => {
+describe('on-debuff-resisted — resister-side roll gate (#591)', () => {
     function makeHandBus() {
         const listeners = new Map<string, ((e: CombatEvent) => void)[]>();
         return {

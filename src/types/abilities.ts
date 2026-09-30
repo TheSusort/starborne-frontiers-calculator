@@ -924,9 +924,9 @@ export type AbilityConfig =
      *  decide whether the removal runs at all. */
     | { type: 'charge'; amount: number | 'all' }
     /** Prophet (#591): "gains N% more shield penetration" each qualifying reactive fire — a
-     *  PERMANENT, STACKING per-fight bonus (ruling 7: not a status, never cleansable/purgeable,
-     *  no cap of its own — the existing 100% total-pen clamp in shieldAbsorb.ts is the only
-     *  ceiling). Consumed by the reactive executor (triggers.ts), which adds `pct` to the owner's
+     *  PERMANENT, STACKING per-fight bonus: not a status, never cleansable/purgeable, no cap of
+     *  its own — the existing 100% total-pen clamp in shieldAbsorb.ts is the only ceiling.
+     *  Consumed by the reactive executor (triggers.ts), which adds `pct` to the owner's
      *  live bonus via IntentExecContext.addShieldPenBonus; engine.ts's `attackerShieldPenOf` is
      *  the sole read site that folds it onto the static base. `stat` is a union of one today,
      *  matching `additional-damage`'s shape, so a future non-shield-pen stat-gain clause can

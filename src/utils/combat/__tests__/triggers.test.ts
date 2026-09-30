@@ -4775,9 +4775,9 @@ describe('on-debuff-resisted listener — source routing', () => {
             targetId: 'vindi',
             round: 1,
             buffName: 'Def Down',
-            // #591 ruling 10 (extended to the resister side): on-debuff-resisted now gates on a
-            // drawn-and-failed landing roll. This suite is about SOURCE ROUTING, not the gate
-            // itself, so every emit here is a genuine roll-based resist.
+            // on-debuff-resisted (#591) gates on a drawn-and-failed landing roll. This suite is
+            // about SOURCE ROUTING, not the gate itself, so every emit here is a genuine
+            // roll-based resist.
             viaLandingRoll: true,
         });
         return intents;

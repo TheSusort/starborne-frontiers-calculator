@@ -1,13 +1,13 @@
 /**
  * #590 — Provider: "20% Shield Penetration. When another ally inflicts a debuff onto an enemy,
  * this unit deals 50% damage to that enemy that cannot critically hit [and inflict Crit Rate
- * Down II for 1 turn (R2+)]." Owner rulings (2026-09-30, spec-590-591.md):
- *  1. Fires PER DEBUFF LANDED (two debuffs from one cast = two hits).
- *  2. An AoE debuff on several enemies hits EACH victim.
- *  3. An ally's DoT landing counts as a debuff.
- *  4. A debuff an ally lands from a REACTION counts too.
- *  5. "another ally" EXCLUDES Provider's own debuffs (including her own reaction's output).
- *  6. Only a debuff that actually LANDED counts.
+ * Down II for 1 turn (R2+)]." The reaction:
+ *  - fires PER DEBUFF LANDED (two debuffs from one cast = two hits);
+ *  - hits EACH victim of an AoE debuff on several enemies;
+ *  - counts an ally's landed DoT as a debuff;
+ *  - counts a debuff an ally lands from a REACTION, not only its own cast;
+ *  - EXCLUDES Provider's own debuffs (including her own reaction's output) — "another ally";
+ *  - only counts a debuff that actually LANDED (a resisted one was never inflicted).
  *
  * Both halves (damage, and the R2+ Crit Rate Down II) parse onto the new owner-excluded
  * `on-other-ally-debuff-inflicted` trigger (buildShipAbilities.ts, skillTextParser.ts) and are
@@ -161,7 +161,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'provider');
 
-        // Ruling 1: two debuffs landed by the SAME ally in one cast → two enqueues.
+        // Two debuffs landed by the SAME ally in one cast → two enqueues (fires per debuff landed).
         handBus.emit({
             type: 'debuff-applied',
             sourceId: 'curator',
@@ -180,7 +180,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued.every((i) => i.eventCtx?.debuffVictimId === 'e1')).toBe(true);
     });
 
-    it('ruling 2 — an AoE debuff landed on several enemies enqueues once PER victim', () => {
+    it('an AoE debuff landed on several enemies enqueues once PER victim', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'provider');
 
@@ -197,7 +197,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued.map((i) => i.eventCtx?.debuffVictimId).sort()).toEqual(['e1', 'e2', 'e3']);
     });
 
-    it('ruling 3 — an ally DoT landing also enqueues, stamping debuffVictimId', () => {
+    it('an ally DoT landing also enqueues, stamping debuffVictimId', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'provider');
 
@@ -213,7 +213,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued[0].eventCtx?.debuffVictimId).toBe('e1');
     });
 
-    it("ruling 5 — the owner's OWN debuff infliction is excluded", () => {
+    it('the owner\'s OWN debuff infliction is excluded — "another ally" excludes the caster', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'provider');
 
@@ -241,7 +241,7 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
-    it('ruling 6 — a debuff-resisted event never enqueues (only debuff-applied/dot-applied do)', () => {
+    it('a debuff-resisted event never enqueues (only debuff-applied/dot-applied do — a resisted debuff was never inflicted)', () => {
         const handBus = makeHandBus();
         const enqueued = registerOwner(handBus, 'provider');
 
@@ -371,14 +371,14 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         ).toHaveLength(1);
     });
 
-    // Ruling 2 (an AoE ally debuff hits EACH victim) is proven precisely and deterministically at
-    // the LISTENER level above ("ruling 2 — an AoE debuff landed on several enemies enqueues once
-    // PER victim") — debuff-applied is emitted per-victim regardless of how the landing debuff was
-    // targeted (playerTurn.ts's emitDebuffApplied takes one victimId per call), so the listener
-    // test already covers the real mechanism without needing positional/pattern plumbing to force
-    // a genuine 3-enemy AoE cast through the non-positional engine harness here.
+    // An AoE ally debuff hitting EACH victim is proven precisely and deterministically at the
+    // LISTENER level above ("an AoE debuff landed on several enemies enqueues once PER victim") —
+    // debuff-applied is emitted per-victim regardless of how the landing debuff was targeted
+    // (playerTurn.ts's emitDebuffApplied takes one victimId per call), so the listener test
+    // already covers the real mechanism without needing positional/pattern plumbing to force a
+    // genuine 3-enemy AoE cast through the non-positional engine harness here.
 
-    it('ruling 3 — an ally DoT landing also fires the reaction', () => {
+    it('an ally DoT landing also fires the reaction', () => {
         const { reactiveDamage } = collectReactiveDamage({
             ...BASE(),
             teamActors: [
@@ -394,7 +394,7 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         expect(reactiveDamage.filter((e) => e.sourceId === 'attacker')).toHaveLength(1);
     });
 
-    it("ruling 5 — Provider's OWN active debuffs never trigger her own reaction", () => {
+    it("Provider's OWN active debuffs never trigger her own reaction", () => {
         const { reactiveDamage } = collectReactiveDamage({
             ...BASE(),
             numRounds: 3, // several of her own casts, still zero self-reactions
@@ -402,7 +402,7 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         expect(reactiveDamage.filter((e) => e.sourceId === 'attacker')).toHaveLength(0);
     });
 
-    it('ruling 6 — a resisted ally debuff (security ≫ hacking) never fires the reaction', () => {
+    it('a resisted ally debuff (security ≫ hacking) never fires the reaction', () => {
         const { reactiveDamage } = collectReactiveDamage({
             ...BASE(),
             enemyAttackers: bareEnemy({ stats: { security: 1000, hp: 500_000 } }),
@@ -425,6 +425,96 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
             ],
         });
         expect(reactiveDamage.filter((e) => e.sourceId === 'attacker')).toHaveLength(0);
+    });
+
+    it("a debuff an ally lands from a REACTION (not its own cast) also fires Provider's hit", () => {
+        // The FOCUS actor (AllyReactor) holds a passive that fires when SHE is directly attacked
+        // and inflicts a debuff back on the attacking enemy (an on-attacked counter-debuff, the
+        // same shape as Warden's Out. Damage Down) — a non-positional run always routes the
+        // enemy's plain attack at the FOCUS, so putting the reactor there (rather than on a team
+        // actor) makes the enemy's hit land on her deterministically. Provider rides as a team
+        // actor with her REAL passive (providerPassiveAbilities) and a no-op active, so her own
+        // cast never inflicts anything and the only debuff she can react to is the enemy's
+        // attack — not AllyReactor's own cast — landing AllyReactor's counter-debuff.
+        const reactiveCounterDebuff: Ability = {
+            id: 'ally-reactor-counter',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Retaliation Mark',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 5,
+            },
+        };
+        const providerTeamActor: TeamActorEngineInput = {
+            id: 'provider-team',
+            speed: 90,
+            chargeCount: 0,
+            startCharged: false,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            walk: {
+                shipSkills: {
+                    slots: [
+                        noopActiveSlot(),
+                        { slot: 'passive', abilities: providerPassiveAbilities(0) },
+                    ],
+                },
+                stats: {
+                    attack: 100,
+                    crit: 0,
+                    critDamage: 0,
+                    defensePenetration: 0,
+                    hacking: 100,
+                    defence: 0,
+                    hp: 1_000_000,
+                },
+                selfDotModifier: 0,
+                defensePenetrationBuff: 0,
+                affinityDamageModifier: 0,
+                affinityCritCap: 100,
+                affinityCritPenalty: 0,
+                hasChargedSkill: false,
+            },
+        };
+        const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
+            enemyAttackers: bareEnemy({ stats: { attack: 10_000, security: 0, hp: 500_000 } }),
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [noopActiveSlot(), { slot: 'passive', abilities: [reactiveCounterDebuff] }],
+            },
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+            teamActors: [providerTeamActor],
+        });
+        const counterDebuff = debuffsApplied.filter(
+            (e) => e.sourceId === 'attacker' && e.buffName === 'Retaliation Mark'
+        );
+        expect(counterDebuff).toHaveLength(1);
+        const providerHits = reactiveDamage.filter((e) => e.sourceId === 'provider-team');
+        expect(providerHits).toHaveLength(1);
+        expect(providerHits[0].targetId).toBe(counterDebuff[0].targetId);
     });
 });
 

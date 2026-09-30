@@ -7,10 +7,9 @@
  * the RESISTER) — and grants the whole same side a `Buff Protection` buff
  * (target = 'all-allies' → the reactive buff executor routes to ctx.playerIds).
  *
- * The `debuff-resisted` event is emitted on multiple paths, but #591 ruling 10 (extended to the
- * resister side) gates `on-debuff-resisted` on `viaLandingRoll === true` — only a DRAWN,
- * FAILED hacking-vs-security roll counts as "resisting" for the resister's own reactions. Two
- * cases cover the two routes that matter:
+ * The `debuff-resisted` event is emitted on multiple paths, but (#591) `on-debuff-resisted` gates
+ * on `viaLandingRoll === true` — only a DRAWN, FAILED hacking-vs-security roll counts as
+ * "resisting" for the resister's own reactions. Two cases cover the two routes that matter:
  *
  *   1. DIRECT (normal hacking/affinity resist): an enemy attacker with hacking 0 casts a
  *      TIMED debuff at the carrier every round. The live landing roll is DRAWN and fails
@@ -18,11 +17,11 @@
  *      targetId = the carrier AND `viaLandingRoll: true`. Over enough rounds the proc gate
  *      (legendary 0.16) accumulates and fires → the team carries Buff Protection.
  *
- *   2. SYNERGY (negative — #591 ruling 10): the carrier holds a recurring `Block Debuff`
- *      self-buff. A high-hacking enemy WOULD land its timed debuff, but the Block-Debuff
- *      immunity fold auto-resists it and emits `debuff-resisted` from `debuffImmunity.ts` with
- *      NO `viaLandingRoll` (no roll was ever drawn). Lockdown does NOT fire — proves the
- *      Block-Debuff → resist chain no longer reaches Lockdown.
+ *   2. SYNERGY (negative): the carrier holds a recurring `Block Debuff` self-buff. A
+ *      high-hacking enemy WOULD land its timed debuff, but the Block-Debuff immunity fold
+ *      auto-resists it and emits `debuff-resisted` from `debuffImmunity.ts` with NO
+ *      `viaLandingRoll` (no roll was ever drawn). Lockdown does NOT fire — proves the
+ *      Block-Debuff → resist chain does not reach Lockdown.
  *
  * Both exercise the FULL registry path (NOT direct ability injection): a Lockdown implant
  * is equipped via a stubbed `getGearPiece` + `setBonus='LOCKDOWN'`,
@@ -254,13 +253,13 @@ describe('D-PR16 Lockdown (on-debuff-resisted → all-ally Buff Protection)', ()
         expect(count).toBeGreaterThan(0);
     });
 
-    it('SYNERGY (negative, #591 ruling 10): a Block Debuff auto-resist does NOT drive Lockdown', () => {
+    it('SYNERGY (negative, #591): a Block Debuff auto-resist does NOT drive Lockdown', () => {
         // Carrier holds a recurring Block Debuff self-buff AND a legendary Lockdown implant.
         // The enemy (hacking 200) WOULD land its timed debuff, but Block Debuff auto-resists it
         // and emits `debuff-resisted` (debuffImmunity.ts) with targetId = the carrier and NO
-        // `viaLandingRoll` (no hacking-vs-security gate was ever drawn). #591 ruling 10 — only a
-        // drawn-and-failed roll counts as "resisting" — now applies to the resister's own
-        // reactions too, so Lockdown's on-debuff-resisted listener does NOT fire here.
+        // `viaLandingRoll` (no hacking-vs-security gate was ever drawn). Only a drawn-and-failed
+        // roll counts as "resisting" for the resister's own reactions, so Lockdown's
+        // on-debuff-resisted listener does NOT fire here.
         const synergySkills = buildLockdownSkills({ withBlockDebuff: true });
 
         const count = buffAppliedOn(

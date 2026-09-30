@@ -861,8 +861,8 @@ export function registerReactiveListeners(args: {
                             });
                     });
                     bus.on('dot-applied', (e) => {
-                        // An ally's DoT landing counts as a debuff inflicted (ruling 3) — same
-                        // guard as the debuff-applied arm above.
+                        // An ally's DoT landing counts as a debuff inflicted — same guard as the
+                        // debuff-applied arm above.
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction
@@ -1323,11 +1323,11 @@ export function registerReactiveListeners(args: {
                         // downstream (triggers.ts damage branch). all-allies recipient routing
                         // happens in the buff executor.
                         if (e.targetId !== ownerId) return;
-                        // Roll-only (#591 ruling 10, extended to the resister side): a Block-Debuff
-                        // auto-resist or an affinity-disadvantage `apply` draws no hacking-vs-security
-                        // gate, so it is not a resist the RESISTER's own reactions see either —
-                        // Prophet's R2+ extra action, Vindicator's HP-basis retaliation, and the
-                        // Lockdown implant's Buff Protection grant all gate on the roll now.
+                        // Roll-only (#591): a Block-Debuff auto-resist or an affinity-disadvantage
+                        // `apply` draws no hacking-vs-security gate, so it is not a resist the
+                        // RESISTER's own reactions see — Prophet's R2+ extra action, Vindicator's
+                        // HP-basis retaliation, and the Lockdown implant's Buff Protection grant
+                        // all gate on the roll.
                         if (e.viaLandingRoll !== true) return;
                         enqueue(
                             e.sourceId !== undefined
@@ -1421,20 +1421,20 @@ export function registerReactiveListeners(args: {
                     bus.on('debuff-resisted', (e) => {
                         // Prophet (#591): "When an ally resists a debuff infliction from an
                         // enemy" — BOTH ends are scoped, unlike every sibling above. The resister
-                        // (e.targetId) must be same-side, owner INCLUDED (ruling 9 — "an ally"
-                        // includes the caster, unlike on-enemy-debuff-resisted's opposing scope).
+                        // (e.targetId) must be same-side, owner INCLUDED — "an ally" includes the
+                        // caster, unlike on-enemy-debuff-resisted's opposing scope.
                         if (isOpposing(e.targetId)) return;
-                        // The inflictor (e.sourceId) must be OPPOSING (ruling 11 — only an
-                        // enemy's infliction counts). An undefined source (a display-only resist
-                        // with no attributable inflictor) can never satisfy "from an enemy".
+                        // The inflictor (e.sourceId) must be OPPOSING — only an enemy's infliction
+                        // counts. An undefined source (a display-only resist with no attributable
+                        // inflictor) can never satisfy "from an enemy".
                         if (e.sourceId === undefined || !isOpposing(e.sourceId)) return;
-                        // Roll-only (ruling 10) — same viaLandingRoll gate as
-                        // on-enemy-debuff-resisted: a Block-Debuff auto-resist or an
-                        // affinity-disadvantage `apply` draws no roll and must not proc.
+                        // Roll-only — same viaLandingRoll gate as on-enemy-debuff-resisted: a
+                        // Block-Debuff auto-resist or an affinity-disadvantage `apply` draws no
+                        // roll and must not proc.
                         if (e.viaLandingRoll !== true) return;
-                        // Self-target grant (the owner's own bonus) — no eventCtx capture needed;
-                        // one enqueue per resisted debuff (ruling 8), matching debuff-resisted's
-                        // existing per-debuff cardinality.
+                        // Self-target grant (the owner's own bonus) — no eventCtx capture needed.
+                        // One enqueue per resisted debuff, matching debuff-resisted's existing
+                        // per-debuff cardinality.
                         enqueue(intent);
                     });
                     break;
@@ -2233,12 +2233,12 @@ export interface IntentExecContext {
      *  across both sides, like oncePerRoundConsumed). Absent → no cap is ever enforced. */
     perRoundFireCounts?: Map<string, number>;
     /** Prophet (#591): adds `pct` percentage points to `ownerId`'s LIVE, per-fight,
-     *  PERMANENTLY-stacking shield-penetration bonus (ruling 7 — not a status, never removed).
-     *  Engine-owned (a bare per-actor accumulator alongside `lastTurnCtxByActor`, outside the
-     *  round loop so it survives every round); `attackerShieldPenOf` (engine.ts) is the sole read
-     *  site, adding this on top of the actor's static base. Side-agnostic — the same accumulator
-     *  serves either side, so an enemy-side Prophet stacks identically (#591's team-symmetry
-     *  requirement). Absent → the stat-gain branch is inert (unit fixtures / DPS mode). */
+     *  PERMANENTLY-stacking shield-penetration bonus — not a status, never removed. Engine-owned
+     *  (a bare per-actor accumulator alongside `lastTurnCtxByActor`, outside the round loop so it
+     *  survives every round); `attackerShieldPenOf` (engine.ts) is the sole read site, adding this
+     *  on top of the actor's static base. Side-agnostic — the same accumulator serves either side,
+     *  so an enemy-side Prophet stacks identically. Absent → the stat-gain branch is inert (unit
+     *  fixtures / DPS mode). */
     addShieldPenBonus?: (ownerId: string, pct: number) => void;
 }
 
@@ -3947,8 +3947,8 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
 
     if (cfg.type === 'stat-gain') {
         // Prophet (#591): a permanent, stacking per-fight bonus — no once-per-round/proc-chance
-        // gate (the ability carries none; every qualifying resist counts, ruling 8). Self-target
-        // by construction (the owner's own bonus), so no recipient resolution is needed. Absent
+        // gate (the ability carries none; every qualifying resist counts). Self-target by
+        // construction (the owner's own bonus), so no recipient resolution is needed. Absent
         // delegate (unit fixtures / DPS mode) → inert, matching every other engine-owned
         // accumulator in this file.
         ctx.addShieldPenBonus?.(intent.ownerId, cfg.pct);
