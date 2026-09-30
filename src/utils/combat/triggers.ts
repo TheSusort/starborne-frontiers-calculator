@@ -1323,6 +1323,12 @@ export function registerReactiveListeners(args: {
                         // downstream (triggers.ts damage branch). all-allies recipient routing
                         // happens in the buff executor.
                         if (e.targetId !== ownerId) return;
+                        // Roll-only (#591 ruling 10, extended to the resister side): a Block-Debuff
+                        // auto-resist or an affinity-disadvantage `apply` draws no hacking-vs-security
+                        // gate, so it is not a resist the RESISTER's own reactions see either —
+                        // Prophet's R2+ extra action, Vindicator's HP-basis retaliation, and the
+                        // Lockdown implant's Buff Protection grant all gate on the roll now.
+                        if (e.viaLandingRoll !== true) return;
                         enqueue(
                             e.sourceId !== undefined
                                 ? {

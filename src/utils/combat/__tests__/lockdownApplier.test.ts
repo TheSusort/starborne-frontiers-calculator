@@ -7,19 +7,22 @@
  * the RESISTER) — and grants the whole same side a `Buff Protection` buff
  * (target = 'all-allies' → the reactive buff executor routes to ctx.playerIds).
  *
- * The `debuff-resisted` event is emitted on multiple paths, and Lockdown chains off ALL
- * of them. Two cases cover the two routes that matter:
+ * The `debuff-resisted` event is emitted on multiple paths, but #591 ruling 10 (extended to the
+ * resister side) gates `on-debuff-resisted` on `viaLandingRoll === true` — only a DRAWN,
+ * FAILED hacking-vs-security roll counts as "resisting" for the resister's own reactions. Two
+ * cases cover the two routes that matter:
  *
  *   1. DIRECT (normal hacking/affinity resist): an enemy attacker with hacking 0 casts a
- *      TIMED debuff at the carrier every round. The live landing roll fails → the cast-side
- *      `emitDebuffResisted` fires with targetId = the carrier. Over enough rounds the proc
- *      gate (legendary 0.16) accumulates and fires → the team carries Buff Protection.
+ *      TIMED debuff at the carrier every round. The live landing roll is DRAWN and fails
+ *      (0% chance is still a real roll) → the cast-side `emitDebuffResisted` fires with
+ *      targetId = the carrier AND `viaLandingRoll: true`. Over enough rounds the proc gate
+ *      (legendary 0.16) accumulates and fires → the team carries Buff Protection.
  *
- *   2. SYNERGY (headline — chains off D-PR15's Block-Debuff auto-resist): the carrier holds
- *      a recurring `Block Debuff` self-buff. A high-hacking enemy WOULD land its
- *      timed debuff, but the Block-Debuff immunity fold auto-resists it and emits
- *      `debuff-resisted` from `debuffImmunity.ts`. That same event drives Lockdown → the
- *      team gains Buff Protection. Proves the full Block-Debuff → resist → Lockdown chain.
+ *   2. SYNERGY (negative — #591 ruling 10): the carrier holds a recurring `Block Debuff`
+ *      self-buff. A high-hacking enemy WOULD land its timed debuff, but the Block-Debuff
+ *      immunity fold auto-resists it and emits `debuff-resisted` from `debuffImmunity.ts` with
+ *      NO `viaLandingRoll` (no roll was ever drawn). Lockdown does NOT fire — proves the
+ *      Block-Debuff → resist chain no longer reaches Lockdown.
  *
  * Both exercise the FULL registry path (NOT direct ability injection): a Lockdown implant
  * is equipped via a stubbed `getGearPiece` + `setBonus='LOCKDOWN'`,
@@ -251,11 +254,13 @@ describe('D-PR16 Lockdown (on-debuff-resisted → all-ally Buff Protection)', ()
         expect(count).toBeGreaterThan(0);
     });
 
-    it('SYNERGY: a Block Debuff auto-resist drives Lockdown → team gains Buff Protection (chains off D-PR15)', () => {
+    it('SYNERGY (negative, #591 ruling 10): a Block Debuff auto-resist does NOT drive Lockdown', () => {
         // Carrier holds a recurring Block Debuff self-buff AND a legendary Lockdown implant.
-        // The enemy (hacking 200) WOULD land its timed debuff, but Block Debuff auto-resists
-        // it and emits `debuff-resisted` (debuffImmunity.ts) with targetId = the carrier →
-        // Lockdown's on-debuff-resisted listener fires → all-allies Buff Protection.
+        // The enemy (hacking 200) WOULD land its timed debuff, but Block Debuff auto-resists it
+        // and emits `debuff-resisted` (debuffImmunity.ts) with targetId = the carrier and NO
+        // `viaLandingRoll` (no hacking-vs-security gate was ever drawn). #591 ruling 10 — only a
+        // drawn-and-failed roll counts as "resisting" — now applies to the resister's own
+        // reactions too, so Lockdown's on-debuff-resisted listener does NOT fire here.
         const synergySkills = buildLockdownSkills({ withBlockDebuff: true });
 
         const count = buffAppliedOn(
@@ -263,7 +268,7 @@ describe('D-PR16 Lockdown (on-debuff-resisted → all-ally Buff Protection)', ()
             'Buff Protection',
             'attacker'
         );
-        expect(count).toBeGreaterThan(0);
+        expect(count).toBe(0);
     });
 
     it('control: WITHOUT Lockdown the team never gains Buff Protection (non-vacuity)', () => {

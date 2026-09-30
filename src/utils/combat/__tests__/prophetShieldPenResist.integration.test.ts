@@ -8,11 +8,17 @@
  *      Debuff or affinity auto-resist does not.
  *  11. Only resists of an ENEMY's infliction (source opposing the resister).
  *
+ * #591/#590 spec Part C: the SAME roll-only rule (ruling 10) extends to the resister-side
+ * `on-debuff-resisted` trigger (Prophet's own R2+ extra action, Vindicator's HP-basis
+ * retaliation, the Lockdown implant) — see triggers.ts's `on-debuff-resisted` case and
+ * lockdownApplier.test.ts's updated SYNERGY (negative) case.
+ *
  * This file has three parts, mirroring providerOtherAllyDebuffReaction.integration.test.ts's
  * structure: a hand-rolled-bus unit test of the new `on-ally-debuff-resisted` LISTENER (precise,
  * deterministic engine-wiring checks), a parser test of Prophet's REAL kit (buildShipAbilities on
  * the verbatim docs/ship-skills.csv text), and an engine-level integration test that measures the
- * bonus's real effect on shield absorption (not just the stored field).
+ * bonus's real effect on shield absorption (not just the stored field) — plus Part C's Block
+ * Debuff vs real-roll pairing for Prophet's own extra action.
  */
 import { describe, expect, it } from 'vitest';
 import { runCombat, CombatEngineInput } from '../engine';
@@ -443,5 +449,85 @@ describe('Prophet (enemy-side) — team symmetry mirror', () => {
         // 10,000-damage hit against the bare player focus (no shield to bind against — this run
         // only proves the bonus was gained and read; Part 3 above proves the absorption effect).
         expect(hit.damage).toBe(10_000);
+    });
+});
+
+// =============================================================================
+// Part C — the resister-side gate: Block Debuff never grants Prophet's own extra action.
+//
+// Engine-level, full-fidelity proof of the SHARED `on-debuff-resisted` gate (Block-Debuff
+// auto-resist → no fire; real roll → fires) already lives in lockdownApplier.test.ts's DIRECT
+// and SYNERGY (negative) cases — the same trigger, the same gate, a different consumer (the
+// Lockdown implant's Buff Protection grant instead of Prophet's extra action). Duplicating that
+// multi-round choreography here would prove nothing new about Prophet's OWN ability beyond what
+// the parser test above already pins (her extra-action ability rides exactly `on-debuff-resisted`
+// with `oncePerRound: true`) — so this part proves PROPHET'S consumption of the gate at the
+// listener level: the same shape as Part 1's on-ally-debuff-resisted tests, applied to the
+// pre-existing on-debuff-resisted trigger her extra action already used before #591.
+// =============================================================================
+
+describe('on-debuff-resisted — resister-side roll gate (#591 spec Part C)', () => {
+    function makeHandBus() {
+        const listeners = new Map<string, ((e: CombatEvent) => void)[]>();
+        return {
+            on<T extends CombatEvent['type']>(
+                type: T,
+                listener: (event: Extract<CombatEvent, { type: T }>) => void
+            ) {
+                const existing = listeners.get(type) ?? [];
+                listeners.set(type, [...existing, listener as unknown as (e: CombatEvent) => void]);
+            },
+            emit(event: CombatEvent) {
+                for (const l of listeners.get(event.type) ?? []) l(event);
+            },
+        };
+    }
+
+    function registerExtraAction(handBus: ReturnType<typeof makeHandBus>) {
+        const enqueued: Intent[] = [];
+        const extraActionAbility: Ability = {
+            id: 'prophet-extra-action',
+            type: 'extra-action',
+            target: 'self',
+            trigger: 'on-debuff-resisted',
+            conditions: [],
+            config: { type: 'extra-action', oncePerRound: true },
+        };
+        const ra: ReactiveAbility = { ability: extraActionAbility, sourceSlot: 'passive' };
+        registerReactiveListeners({
+            bus: handBus,
+            perOwner: [{ ownerId: 'prophet', reactiveAbilities: [ra] }],
+            enqueue: (intent) => enqueued.push(intent),
+            isOpposing: (id) => id === 'enemy1',
+        });
+        return enqueued;
+    }
+
+    it('Block Debuff / affinity auto-resist (no drawn roll) → NO extra-action enqueue', () => {
+        const handBus = makeHandBus();
+        const enqueued = registerExtraAction(handBus);
+        handBus.emit({
+            type: 'debuff-resisted',
+            sourceId: 'enemy1',
+            targetId: 'prophet',
+            round: 1,
+            buffName: 'Hacking Down',
+            // no viaLandingRoll — Block-Debuff/affinity-apply auto-resist never drew a roll
+        });
+        expect(enqueued).toHaveLength(0);
+    });
+
+    it('a real, drawn-and-failed roll → the extra action DOES enqueue', () => {
+        const handBus = makeHandBus();
+        const enqueued = registerExtraAction(handBus);
+        handBus.emit({
+            type: 'debuff-resisted',
+            sourceId: 'enemy1',
+            targetId: 'prophet',
+            round: 1,
+            buffName: 'Hacking Down',
+            viaLandingRoll: true,
+        });
+        expect(enqueued).toHaveLength(1);
     });
 });

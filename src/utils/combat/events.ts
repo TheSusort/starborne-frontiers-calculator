@@ -190,9 +190,11 @@ export type CombatEvent =
            *  auto-resist, an affinity-disadvantage `apply`, and a failed roll — and by emit time
            *  they were indistinguishable, so no consumer could tell "the enemy rolled a resist"
            *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence) and
-           *  `on-ally-debuff-resisted` (Prophet — #591) fire on the roll only; every other resist
-           *  consumer (Vindicator, Ravager, Lockdown, Prophet's own `on-debuff-resisted` extra
-           *  action) stays cause-agnostic and ignores this field.
+           *  `on-ally-debuff-resisted` (Prophet — #591) fire on the roll only. `on-debuff-resisted`
+           *  (Prophet's extra action, Vindicator, the Lockdown implant) also gates on the roll as
+           *  of #591 — a Block-Debuff or affinity auto-resist is not a resist the RESISTER's own
+           *  reactions see either. `on-own-debuff-resisted` (Ravager, inflictor-scoped) remains
+           *  cause-agnostic — ruling 10 is about what the RESISTER sees, not the inflictor.
            *
            *  MUST be stamped at the point of decision and passed through — never re-derived at
            *  the emit site. The reactive path deliberately folds immunity INTO its landing
