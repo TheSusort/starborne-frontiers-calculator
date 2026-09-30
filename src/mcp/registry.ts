@@ -5,7 +5,7 @@ import { listGearSets, listImplants } from './tools/gear';
 import { listProfiles } from './tools/profiles';
 import { getShip, searchShips } from './tools/ships';
 import { getShipSkills } from './tools/skills';
-import { simulateBattle, sweepStat } from './tools/simulate';
+import { battleLog, simulateBattle, sweepStat } from './tools/simulate';
 import { McpToolError, defineTool, type McpToolContext, type RegisteredMcpTool } from './types';
 
 /** Every tool the MCP server offers. None of them writes. */
@@ -19,6 +19,7 @@ export const TOOLS: readonly RegisteredMcpTool[] = [
     defineTool(getMyFleet),
     defineTool(simulateBattle),
     defineTool(sweepStat),
+    defineTool(battleLog),
 ];
 
 /**

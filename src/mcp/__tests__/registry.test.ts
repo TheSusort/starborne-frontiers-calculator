@@ -41,6 +41,7 @@ describe('registerTools', () => {
         const { tools } = await client.listTools();
 
         expect(tools.map((tool) => tool.name).sort()).toEqual([
+            'battle_log',
             'get_my_fleet',
             'get_ship',
             'get_ship_skills',
