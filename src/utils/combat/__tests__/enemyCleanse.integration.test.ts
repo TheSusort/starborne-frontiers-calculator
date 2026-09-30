@@ -214,6 +214,266 @@ describe('enemy on-cast cleanse: drives a focus on-enemy-cleansed (Grif) proc on
     });
 });
 
+// ── Task 2: Grif hits EACH cleansed enemy, not just the cleanser (owner ruling, 2026-09-30) ───
+// Example: a cleanser that removes one debuff from each of two allies in a single cast (Hayyan's
+// active cleansing Meiying and itself) must produce TWO Grif hits, one per cleansed ship — landing
+// on the cleansed ships themselves, never on the cleanser unless the cleanser was itself cleansed.
+type TeamActor = NonNullable<CombatEngineInput['teamActors']>[number];
+
+const emptySkills = (): ShipSkills => ({ slots: [] });
+
+// A single always-landing debuff active, anchored on the ship's own declared `target`/`pattern`
+// (front-most opposing actor for every fixture below).
+const singleDebuff = (name: string): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: `dbf-${name}`,
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: name,
+                parsedEffects: { attack: -30 },
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 5,
+            },
+        } as unknown as Ability,
+    ],
+});
+
+// TWO distinct debuffs co-cast in ONE active — both share the ship's single anchor, so both land
+// on the same front-most opposing actor.
+const twoDebuffs = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        ...singleDebuff('Attack Down').abilities,
+        ...singleDebuff('Defense Down').abilities,
+    ],
+});
+
+// A cleanse active targeting the caster's own WHOLE side. `target: 'ally'` resolves unnarrowed
+// here: `basePattern()` carries no `support` modifier, so `supportFootprintAllyIds` returns
+// `undefined` and `resolveSupportRecipients` leaves the full side unnarrowed (playerTurn.ts).
+// `count` is generous enough to strip every debuff any one recipient carries in a single pass.
+const cleanseWholeSide = (count: number): ShipSkills => ({
+    slots: [
+        {
+            slot: 'active',
+            abilities: [
+                {
+                    id: 'cleanse-whole-side',
+                    type: 'cleanse',
+                    target: 'ally',
+                    trigger: 'on-cast',
+                    conditions: [],
+                    config: { type: 'cleanse', count },
+                } as unknown as Ability,
+            ],
+        },
+    ],
+});
+
+// A no-op active (0% damage), so this actor's own attack never itself changes anyone's HP —
+// mirrors the Paracelsus/Grif/Rhodium 0%-damage idiom in reactiveDamagePositionalHp.test.ts.
+const zeroDamageActive = (): ShipSkills['slots'][number] => ({
+    slot: 'active',
+    abilities: [
+        {
+            id: 'noop',
+            type: 'damage',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: { type: 'damage', multiplier: 0 },
+        },
+    ],
+});
+
+// An enemy attacker with an explicit `target` (front/back), instead of `enemyAt`'s fixed 'front'.
+const enemyAtTargeted = (
+    id: string,
+    position: Position,
+    target: ParsedTarget,
+    shipSkills: ShipSkills
+): EnemyAttacker => ({
+    id,
+    stats: { attack: 1_000, crit: 0, critDamage: 0, defence: 0, hp: 40_000, speed: 50 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target,
+    pattern: basePattern(),
+    shipSkills,
+});
+
+// A no-op player-side team actor: carries a position and HP-bearing stats (targetability) but
+// never acts — mirrors `bystanderAlly` (plainAllyCleanseFootprintReach.integration.test.ts).
+const playerBystander = (id: string, position: Position, hp: number): TeamActor => ({
+    id,
+    speed: 5,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    walk: {
+        shipSkills: emptySkills(),
+        stats: {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 0,
+            defence: 0,
+            hp,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+// A player-side team actor that fires a single-target debuff (front or back) at the opposing
+// roster, acting at `speed` (faster than the cleanser it feeds).
+const debuffTeamActor = (
+    id: string,
+    position: Position,
+    speed: number,
+    target: ParsedTarget,
+    buffName: string
+): TeamActor => ({
+    id,
+    speed,
+    chargeCount: 0,
+    startCharged: false,
+    selfBuffs: [],
+    enemyDebuffs: [],
+    position,
+    target,
+    pattern: basePattern(),
+    walk: {
+        shipSkills: { slots: [singleDebuff(buffName)] },
+        stats: {
+            attack: 10_000,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            hacking: 200,
+            defence: 0,
+            hp: 1_000_000,
+        },
+        selfDotModifier: 0,
+        defensePenetrationBuff: 0,
+        affinityDamageModifier: 0,
+        affinityCritCap: 100,
+        affinityCritPenalty: 0,
+        hasChargedSkill: false,
+    },
+});
+
+const runAndCollectProcTargets = (input: CombatEngineInput): string[] => {
+    const bus = createEventBus();
+    const procs: string[] = [];
+    bus.on('reactive-damage-performed', (e) => {
+        if (e.type === 'reactive-damage-performed') procs.push(e.targetId);
+    });
+    input.bus = bus;
+    runCombat(input);
+    return procs;
+};
+
+describe('Task 2: Grif hits EACH enemy whose debuff is cleansed, not just the cleanser', () => {
+    it('a cleanser removes one debuff from each of two allies in one cast → Grif hits both, not the cleanser', () => {
+        const input = playerVsEnemy(
+            singleDebuff('Attack Down'),
+            [
+                enemyAt('foe-a', 'M4', emptySkills()),
+                enemyAt('foe-c', 'M2', cleanseWholeSide(5)),
+                enemyAt('foe-b', 'M1', emptySkills()),
+            ],
+            {
+                teamActors: [
+                    debuffTeamActor(
+                        'back-debuffer',
+                        'T4',
+                        190,
+                        parsedTarget('back'),
+                        'Defense Down'
+                    ),
+                ],
+            }
+        );
+        // Inject the Grif passive alongside the front-anchored debuff active.
+        input.shipSkills = { slots: [singleDebuff('Attack Down'), grifPassive()] };
+
+        const procs = runAndCollectProcTargets(input);
+
+        expect(procs.filter((id) => id === 'foe-a')).toHaveLength(1);
+        expect(procs.filter((id) => id === 'foe-b')).toHaveLength(1);
+        // The cleanser itself carried no debuff, so it is not among the cleansed — Grif must not
+        // hit it (today: it always does, via `counterTargetId: e.casterId`).
+        expect(procs.filter((id) => id === 'foe-c')).toHaveLength(0);
+        expect(procs).toHaveLength(2);
+    });
+
+    it('a cleanser removes two debuffs from ONE ally in one cast → Grif hits that ally once', () => {
+        const input = playerVsEnemy(twoDebuffs(), [
+            enemyAt('foe-a2', 'M4', emptySkills()),
+            enemyAt('foe-c2', 'M1', cleanseWholeSide(5)),
+        ]);
+        input.shipSkills = { slots: [twoDebuffs(), grifPassive()] };
+
+        const procs = runAndCollectProcTargets(input);
+
+        expect(procs.filter((id) => id === 'foe-a2')).toHaveLength(1);
+        expect(procs.filter((id) => id === 'foe-c2')).toHaveLength(0);
+        expect(procs).toHaveLength(1);
+    });
+
+    it('mirrored: Grif on the enemy side hits both player allies whose debuffs a cleanser removed in one cast', () => {
+        const input = playerVsEnemy(
+            cleanseWholeSide(5).slots[0],
+            [
+                enemyAtTargeted('foe-front-debuffer', 'M4', parsedTarget('front'), {
+                    slots: [singleDebuff('Attack Down')],
+                }),
+                enemyAtTargeted('foe-back-debuffer', 'M1', parsedTarget('back'), {
+                    slots: [singleDebuff('Defense Down')],
+                }),
+                // The Grif owner: a no-op active + the reactive passive. Sits at M2 — never
+                // front (M4) nor back (M1) — so it is never itself a debuff target.
+                enemyAtTargeted('foe-grif', 'M2', parsedTarget('front'), {
+                    slots: [zeroDamageActive(), grifPassive()],
+                }),
+            ],
+            {
+                position: 'M2', // never front (M4) nor back (M1) among the player roster
+                speed: 10, // slower than the enemy debuffers (50), so their hits land first
+                teamActors: [
+                    playerBystander('ally-a', 'M4', 50_000),
+                    playerBystander('ally-b', 'M1', 50_000),
+                ],
+            }
+        );
+
+        const procs = runAndCollectProcTargets(input);
+
+        expect(procs.filter((id) => id === 'ally-a')).toHaveLength(1);
+        expect(procs.filter((id) => id === 'ally-b')).toHaveLength(1);
+        // The cleanser ('attacker', the focus) carried no debuff — Grif must not hit it.
+        expect(procs.filter((id) => id === 'attacker')).toHaveLength(0);
+        expect(procs).toHaveLength(2);
+    });
+});
+
 // PR11 (epic PR11) team-symmetry: an ENEMY carrying the debuff-duration-reduction reactive
 // (Heliodor's shape: on-attacked, target self, count:'all') behaves identically to a player-side
 // carrier — proving the mechanic is not player-only. The reduce-duration branch is a "pure status

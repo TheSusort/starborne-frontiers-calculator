@@ -1958,13 +1958,12 @@ describe('Phase 3 reactive triggers', () => {
 });
 
 // ----------------------------------------------------------------------
-// on-ally-debuff-inflicted self-chain guard (review fix wave 1 on #588's ally-includes-self
-// change): a `dot`-type reactive ability whose OWN trigger is on-ally-debuff-inflicted applies
-// its DoT via the SAME landDotOn executor a real cast uses, which emits dot-applied with
-// sourceId = the owner. Now that the owner is included in "an ally" (2026-09-30 ruling), that
-// event re-wakes the owner's OWN on-ally-debuff-inflicted listener — an unbounded self-chain
-// that threw MAX_INTENT_GENERATIONS before the viaAllyDebuffInflictedReaction brand (see the
-// listener's guard and the debuff/dot executors' emit sites in triggers.ts).
+// on-ally-debuff-inflicted self-chain guard: a `dot`-type reactive ability whose OWN trigger is
+// on-ally-debuff-inflicted applies its DoT via the SAME landDotOn executor a real cast uses, which
+// emits dot-applied with sourceId = the owner. Since "an ally" includes the owner, that event would
+// re-wake the owner's OWN on-ally-debuff-inflicted listener — an unbounded self-chain, closed by the
+// viaAllyDebuffInflictedReaction brand (see the listener's guard and the debuff/dot executors' emit
+// sites in triggers.ts).
 // ----------------------------------------------------------------------
 describe('on-ally-debuff-inflicted self-chain guard', () => {
     const corrosionOnCast = (): Ability =>

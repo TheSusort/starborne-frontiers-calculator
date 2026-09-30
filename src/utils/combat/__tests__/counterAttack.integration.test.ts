@@ -405,7 +405,7 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
         expect(totalPerTargetDamage(result, 'foe')).toBe(0);
     });
 
-    it('SELF hit does NOT double-retaliate: on-ally-attacked now wakes too but requireDamagedAllyAdjacent blocks it', () => {
+    it('SELF hit does NOT double-retaliate: on-ally-attacked wakes on the self-hit too, but requireDamagedAllyAdjacent blocks it', () => {
         // Owner ruling 2026-09-30: "an ally" includes the caster, so the on-ally-attacked
         // listener no longer excludes the owner's own hit up front. Two guards independently hold
         // the count at 1: (1) the adjacency gate — Centurion's clause is "this Unit OR AN

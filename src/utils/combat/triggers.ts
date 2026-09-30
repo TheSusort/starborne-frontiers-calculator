@@ -374,7 +374,8 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    (not opposing) — owner included, see the ruling above. For the PLAYER registration this is
  *    any PLAYER's infliction; for the ENEMY registration this is any enemy actor's infliction. A
  *    reaction whose OWN trigger is on-ally-debuff-inflicted cannot re-wake this same listener off
- *    its own output — see the self-chain guard at the `debuff`/`dot` executors (~4330, ~4450).
+ *    its own output — see the self-chain guard in `executeIntent`'s `debuff` branch and in
+ *    `landDotOn`.
  *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
@@ -787,8 +788,7 @@ export function registerReactiveListeners(args: {
                         // Belladonna case chains fine — her convert-dot executor never emits a new
                         // debuff-applied/dot-applied, so it never reaches this guard at all). Does
                         // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
-                        // back) — that guard would have to ignore the brand regardless of source,
-                        // which is a separate game-rule question this fix does not resolve.
+                        // back) — that guard would have to ignore the brand regardless of source.
                         if (
                             !isOpposing(e.sourceId) &&
                             !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction)
@@ -821,13 +821,8 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-crit-dot':
                     bus.on('dot-applied', (e) => {
-                        // Ally DoT infliction whose cast crit (viaCrit): any OTHER
-                        // same-side actor's crit-cast DoT. Own casts and every opposing actor
-                        // are excluded — Crocus's text names "another ally" explicitly, so this
-                        // trigger is carved out of the owner's 2026-09-30 "an ally includes the
-                        // caster" ruling and keeps isSameSideAlly, unlike its
-                        // on-ally-debuff-inflicted sibling above. One enqueue per qualifying
-                        // infliction EVENT (per-infliction-event rule).
+                        // Owner-excluded (Crocus's "another ally") — see the trigger doc block's
+                        // on-ally-crit-dot entry. One enqueue per qualifying infliction EVENT.
                         if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
                             enqueue({
                                 ...intent,
@@ -1386,11 +1381,11 @@ export function registerReactiveListeners(args: {
                             return;
                         }
                         // Bulwark: fire only when the DAMAGED ally is adjacent to this owner. A
-                        // ship is never adjacent to itself, so the owner's own hit is rejected
-                        // structurally — independent of whether adjacentAllyIdsFor is wired — now
-                        // that on-ally-attacked's owner-inclusion (the ruling above) would
-                        // otherwise let it through here too. Pure read (listener stays
-                        // enqueue-only). Helper absent → allow any OTHER same-side ally.
+                        // ship is never adjacent to itself — `adjacentAllyIdsFor` never returns the
+                        // owner — so the explicit `e.targetId === ownerId` check below rejects the
+                        // owner's own hit even though on-ally-attacked otherwise includes the owner
+                        // (the ruling above). Pure read (listener stays enqueue-only). Helper
+                        // absent → allow any OTHER same-side ally.
                         if (ra.ability.requireDamagedAllyAdjacent) {
                             if (e.targetId === ownerId) return;
                             if (
@@ -1474,13 +1469,8 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-destroyed':
                     bus.on('ship-destroyed', (e) => {
-                        // Ally-scoped: any OTHER same-side actor's destruction. Exclude this
-                        // owner (own death goes to on-destroyed) AND every opposing actor (an
-                        // opposing actor is never an ally). Harvester's text carries no "another"
-                        // qualifier, but the owner ruled this stays excluded regardless: a
-                        // destroyed ship cannot take the extra-action grant, so on-ally-destroyed
-                        // is carved out of the 2026-09-30 "an ally includes the caster" ruling
-                        // alongside on-ally-crit-dot.
+                        // Owner-excluded (a destroyed ship cannot take the extra-action grant) —
+                        // see the trigger doc block's on-ally-destroyed entry.
                         if (isSameSideAlly(e.actorId, ownerId)) enqueue(intent);
                     });
                     break;
@@ -1568,25 +1558,35 @@ export function registerReactiveListeners(args: {
                     bus.on('cleanse-performed', (e) => {
                         // Opposing-scoped: any opposing-side actor's cleanse. For the player
                         // call: enemy side. For the enemy call: player side.
-                        // One enqueue per cast.
-                        // Stamp the cleansing enemy as the reaction victim so Grif's 75%
-                        // damage lands on the REAL cleanser: the damage branch resolves either this
-                        // stamp or a LIVING opposing actor.
-                        // Pestilence: ALSO stamp cleansedEnemyIds = e.targets (the
+                        if (!isOpposing(e.casterId)) return;
+                        // Grif's damage reaction hits EACH cleansed enemy once per cast (owner
+                        // ruling 2026-09-30): one enqueue per id in e.targets, routed via
+                        // counterTargetId so the damage branch's single-victim resolution lands on
+                        // that specific cleansed enemy — the cleanser itself only when it was among
+                        // the cleansed (a cleanse that touches the caster and an ally hits both).
+                        if (ra.ability.config.type === 'damage') {
+                            for (const targetId of e.targets ?? []) {
+                                enqueue({
+                                    ...intent,
+                                    eventCtx: { ...intent.eventCtx, counterTargetId: targetId },
+                                });
+                            }
+                            return;
+                        }
+                        // Every other on-enemy-cleansed consumer (Pestilence's dot, Arum's debuff,
+                        // Larkspur/Yarrow's self buff) fires ONCE per cast: single enqueue stamped
+                        // with counterTargetId = the cleanser and cleansedEnemyIds = e.targets (the
                         // enemies whose debuffs were actually removed) so a reactive `dot` ability
                         // (target 'all-enemies') fans Corrosion II out over ALL cleansed enemies —
-                        // mirrors on-own-cleanse's cleansedAllyIds. counterTargetId (single cleanser)
-                        // is kept for Grif's single-target damage proc; the two consumers read
-                        // different fields, so both coexist.
-                        if (isOpposing(e.casterId))
-                            enqueue({
-                                ...intent,
-                                eventCtx: {
-                                    ...intent.eventCtx,
-                                    counterTargetId: e.casterId,
-                                    cleansedEnemyIds: e.targets,
-                                },
-                            });
+                        // mirrors on-own-cleanse's cleansedAllyIds.
+                        enqueue({
+                            ...intent,
+                            eventCtx: {
+                                ...intent.eventCtx,
+                                counterTargetId: e.casterId,
+                                cleansedEnemyIds: e.targets,
+                            },
+                        });
                     });
                     break;
                 case 'on-enemy-buffed':

@@ -8,6 +8,7 @@ export const CURRENT_VERSION = '1.70.0';
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: skills that trigger on "an ally" now also trigger on the ship itself.',
+    'Combat simulator: Grif now hits every enemy whose debuff gets cleansed.',
     "AI assistants: can now read one simulated battle's full turn-by-turn log.",
     "AI assistants: battle simulations now list each fight's winner and length.",
     'AI assistants: battle simulations now run 20 fights by default.',
