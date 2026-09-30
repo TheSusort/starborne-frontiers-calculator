@@ -104,7 +104,8 @@ export type ReactiveAbilityType =
     | 'counter' // counter-attack reactive; parsed by parseCounterAbilities
     | 'purge' // purge can be reactive — Sefuba on-enemy-purged chain
     | 'remove-self-buff' // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
-    | 'convert-dot'; // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    | 'convert-dot' // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    | 'stat-gain'; // Prophet's permanent shield-pen gain on an ally's resist (#591)
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -121,6 +122,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'purge', // purge can be reactive — Sefuba on-enemy-purged chain
     'remove-self-buff', // Overload lifecycle: reactive self-buff removal
     'convert-dot', // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    'stat-gain', // Prophet's permanent shield-pen gain on an ally's resist (#591)
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -1409,6 +1411,27 @@ export function registerReactiveListeners(args: {
                         });
                     });
                     break;
+                case 'on-ally-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // Prophet (#591): "When an ally resists a debuff infliction from an
+                        // enemy" — BOTH ends are scoped, unlike every sibling above. The resister
+                        // (e.targetId) must be same-side, owner INCLUDED (ruling 9 — "an ally"
+                        // includes the caster, unlike on-enemy-debuff-resisted's opposing scope).
+                        if (isOpposing(e.targetId)) return;
+                        // The inflictor (e.sourceId) must be OPPOSING (ruling 11 — only an
+                        // enemy's infliction counts). An undefined source (a display-only resist
+                        // with no attributable inflictor) can never satisfy "from an enemy".
+                        if (e.sourceId === undefined || !isOpposing(e.sourceId)) return;
+                        // Roll-only (ruling 10) — same viaLandingRoll gate as
+                        // on-enemy-debuff-resisted: a Block-Debuff auto-resist or an
+                        // affinity-disadvantage `apply` draws no roll and must not proc.
+                        if (e.viaLandingRoll !== true) return;
+                        // Self-target grant (the owner's own bonus) — no eventCtx capture needed;
+                        // one enqueue per resisted debuff (ruling 8), matching debuff-resisted's
+                        // existing per-debuff cardinality.
+                        enqueue(intent);
+                    });
+                    break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
                         // Same-side scoped: fires when ANY same-side actor is hit — per HIT
@@ -2203,6 +2226,14 @@ export interface IntentExecContext {
      *  fire; the gate blocks once the count reaches the cap. Reset each round in the engine (shared
      *  across both sides, like oncePerRoundConsumed). Absent → no cap is ever enforced. */
     perRoundFireCounts?: Map<string, number>;
+    /** Prophet (#591): adds `pct` percentage points to `ownerId`'s LIVE, per-fight,
+     *  PERMANENTLY-stacking shield-penetration bonus (ruling 7 — not a status, never removed).
+     *  Engine-owned (a bare per-actor accumulator alongside `lastTurnCtxByActor`, outside the
+     *  round loop so it survives every round); `attackerShieldPenOf` (engine.ts) is the sole read
+     *  site, adding this on top of the actor's static base. Side-agnostic — the same accumulator
+     *  serves either side, so an enemy-side Prophet stacks identically (#591's team-symmetry
+     *  requirement). Absent → the stat-gain branch is inert (unit fixtures / DPS mode). */
+    addShieldPenBonus?: (ownerId: string, pct: number) => void;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -3907,6 +3938,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             : baseDrainCtx;
     if (!conditionsMet(gateConditions, drainCtx)) return;
     if (!dealtVictimRoleGateMet(intent, ctx)) return;
+
+    if (cfg.type === 'stat-gain') {
+        // Prophet (#591): a permanent, stacking per-fight bonus — no once-per-round/proc-chance
+        // gate (the ability carries none; every qualifying resist counts, ruling 8). Self-target
+        // by construction (the owner's own bonus), so no recipient resolution is needed. Absent
+        // delegate (unit fixtures / DPS mode) → inert, matching every other engine-owned
+        // accumulator in this file.
+        ctx.addShieldPenBonus?.(intent.ownerId, cfg.pct);
+        return;
+    }
 
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;

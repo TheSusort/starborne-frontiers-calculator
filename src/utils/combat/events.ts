@@ -189,9 +189,10 @@ export type CombatEvent =
            *  came back a failure. Three unrelated causes emit this one event — a Block-Debuff
            *  auto-resist, an affinity-disadvantage `apply`, and a failed roll — and by emit time
            *  they were indistinguishable, so no consumer could tell "the enemy rolled a resist"
-           *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence) fires
-           *  on the roll only; every other resist consumer (Vindicator, Ravager, Lockdown) stays
-           *  cause-agnostic and ignores this field.
+           *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence) and
+           *  `on-ally-debuff-resisted` (Prophet — #591) fire on the roll only; every other resist
+           *  consumer (Vindicator, Ravager, Lockdown, Prophet's own `on-debuff-resisted` extra
+           *  action) stays cause-agnostic and ignores this field.
            *
            *  MUST be stamped at the point of decision and passed through — never re-derived at
            *  the emit site. The reactive path deliberately folds immunity INTO its landing

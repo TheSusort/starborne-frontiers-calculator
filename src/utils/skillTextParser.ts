@@ -3645,6 +3645,33 @@ export function parseWhileShieldedFlatDefence(text: string | null | undefined): 
     return isNaN(flat) ? undefined : flat;
 }
 
+// Prophet (#591): "When an ally resists a debuff infliction from an enemy, this Unit gains N%
+// more shield penetration." The value rides a <unit-damage> tag (a raw percentage, not a named
+// <unit-skill> status), so it never reaches the buff-grant auto-fill path — a bespoke regex,
+// matching WHILE_SHIELDED_FLAT_DEFENCE_RE's shape above. The captured number carries the R0/R2
+// (1%) vs R4 (2%) difference; one regex covers every refit's row.
+const ALLY_DEBUFF_RESIST_SHIELD_PEN_GAIN_RE =
+    /when\s+an\s+ally\s+resists\s+a\s+debuff\s+infliction\s+from\s+an\s+enemy,?\s+this\s+unit\s+gains\s+(\d+(?:\.\d+)?)%\s+more\s+shield\s+penetration/i;
+
+/**
+ * Returns the shield-penetration percentage Prophet's "when an ally resists a debuff infliction
+ * from an enemy" clause grants, or undefined if no such clause is present. The build layer
+ * (buildShipAbilities) turns this into a `stat-gain` ability on the new
+ * `on-ally-debuff-resisted` trigger — a live reactive fire (not a no-op marker like
+ * `parseWhileShieldedFlatDefence`'s sibling above), since the grant is event-driven and
+ * accumulates across the whole fight rather than resolving from a static per-turn condition.
+ */
+export function parseAllyDebuffResistShieldPenGain(
+    text: string | null | undefined
+): number | undefined {
+    if (!text) return undefined;
+    const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
+    const match = ALLY_DEBUFF_RESIST_SHIELD_PEN_GAIN_RE.exec(plain);
+    if (!match) return undefined;
+    const pct = parseFloat(match[1]);
+    return isNaN(pct) ? undefined : pct;
+}
+
 /**
  * Parses an enemy-targeted charge removal from skill text. Returns
  * `{ amount, trigger, everyNthEvent?, requiredEnemyType? }` or null if no removal clause is

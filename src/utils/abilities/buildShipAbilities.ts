@@ -133,6 +133,7 @@ import {
     parseInsteadDamageReplacement,
     parseDefenseSubstitution,
     parseWhileShieldedFlatDefence,
+    parseAllyDebuffResistShieldPenGain,
     findBuffNamePos,
     maskAbbrev,
     detectExtraActionCoTrigger,
@@ -3092,6 +3093,31 @@ function abilitiesFromText(
                 autoFilled: true,
             },
             pos: whileShieldedPos >= 0 ? whileShieldedPos : MAX_POS,
+        });
+    }
+
+    // Prophet (#591): "When an ally resists a debuff infliction from an enemy, this Unit gains
+    // N% more shield penetration" — a live reactive fire (unlike the no-op markers above), since
+    // the grant is event-driven and accumulates across the whole fight rather than resolving from
+    // a static per-turn condition. Self-target; on-ally-debuff-resisted is the gate.
+    const allyResistShieldPenGain = parseAllyDebuffResistShieldPenGain(text);
+    if (allyResistShieldPenGain !== undefined) {
+        const allyResistPos = text.search(/when\s+an\s+ally\s+resists/i);
+        out.push({
+            ability: {
+                id: nextId(),
+                type: 'stat-gain',
+                target: 'self',
+                trigger: 'on-ally-debuff-resisted',
+                conditions: [],
+                config: {
+                    type: 'stat-gain',
+                    stat: 'shieldPenetration',
+                    pct: allyResistShieldPenGain,
+                },
+                autoFilled: true,
+            },
+            pos: allyResistPos >= 0 ? allyResistPos : MAX_POS,
         });
     }
 

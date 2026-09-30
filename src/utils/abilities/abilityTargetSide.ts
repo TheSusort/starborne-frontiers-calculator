@@ -194,6 +194,8 @@ export const ABILITY_TYPE_TARGET_SIDES: Record<AbilityType, 'self' | 'enemy' | '
     // Self-gain, enemy-removal and ally-bulk grants all exist in the corpus. Narrowed further by
     // CHARGE_TARGET_OPTIONS in the editor.
     charge: 'both',
+    // #591 (Prophet): always self-target — the owner's own permanent stat bonus.
+    'stat-gain': 'self',
     'extra-action': 'self',
     heal: 'self',
     shield: 'self',

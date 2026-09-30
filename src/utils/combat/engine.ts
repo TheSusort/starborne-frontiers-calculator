@@ -3115,6 +3115,17 @@ export function runCombat(rawInput: CombatEngineInput): {
     // Used by grantExtraAction; the side-partitioned view is `actorsBySide`.
     const allActorsById = new Map<string, CombatActor>(allActors.map((a) => [a.id, a]));
 
+    /** Prophet (#591): each actor's LIVE, per-fight shield-penetration bonus — permanent and
+     *  stacking, added on top of the static base at `attackerShieldPenOf`. Combat-wide (persists
+     *  across every round, like `allActorsById`), keyed by actor id so it serves either side
+     *  identically (team-symmetric). Never read directly outside `attackerShieldPenOf`/
+     *  `addShieldPenBonus` below — every other attacker-pen call site in this file resolves
+     *  through `attackerShieldPenOf`. */
+    const shieldPenBonusByActorId = new Map<string, number>();
+    const addShieldPenBonus = (ownerId: string, pct: number): void => {
+        shieldPenBonusByActorId.set(ownerId, (shieldPenBonusByActorId.get(ownerId) ?? 0) + pct);
+    };
+
     /** The landing chance the REACTIVE path needs — `ownerId`'s live effective hacking vs
      *  `victimId`'s live effective security, with the two actors' own affinity matchup applied.
      *
@@ -7222,11 +7233,15 @@ export function runCombat(rawInput: CombatEngineInput): {
         //    per-target rows, which is why those read `incomingBooked` alone.
         const detonationDelivered = (outcome: AppliedVictimDamage): number =>
             outcome.incomingBooked + (outcome.protectionRedirected ?? 0);
-        // The effective shield penetration % of an attacker, resolved from its static
-        // ActorStats.shieldPenetration. Defaults to 0 for an unknown id or an attacker that
-        // never set the stat.
+        // The effective shield penetration % of an attacker: its static ActorStats.shieldPenetration
+        // base PLUS its live, per-fight `shieldPenBonusByActorId` bonus (Prophet — #591). Defaults
+        // to 0 for an unknown id or an attacker that never set the stat and never gained a bonus.
+        // The SOLE read site for an attacker's effective pen — every other `shieldPenetrationPct`
+        // in this file is either an explicit intentional bypass (0) or already-resolved input
+        // forwarded from here.
         const attackerShieldPenOf = (id?: string): number =>
-            (id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0;
+            ((id ? allActorsById.get(id)?.stats.shieldPenetration : undefined) ?? 0) +
+            (id ? (shieldPenBonusByActorId.get(id) ?? 0) : 0);
         const applyIncomingToTarget = (
             damage: number,
             victim: CombatActor = healTarget,
@@ -10279,6 +10294,9 @@ export function runCombat(rawInput: CombatEngineInput): {
                             victimSelfBuffs(statusEngine, id, selfBuffLookup),
                         reactiveDealtByOwner,
                         enemyType,
+                        // Prophet (#591): side-agnostic — the same accumulator serves either
+                        // drain side, so no per-side threading through `sideCtx` is needed.
+                        addShieldPenBonus,
                         // Bomb damagePerStack/affinity resolve per OWNER inside the executor
                         // (lastTurnCtxByActor.get(intent.ownerId)) — there is no global
                         // effectiveAttack/affinityMult on this ctx.

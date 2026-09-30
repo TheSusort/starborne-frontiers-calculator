@@ -22,6 +22,9 @@ export type AbilityType =
     | 'detonate-dot'
     | 'accumulate-detonate'
     | 'charge'
+    // Prophet (#591): a permanent, stacking per-fight stat bonus fired from a reactive event
+    // (never a status). See AbilityConfig's 'stat-gain' variant.
+    | 'stat-gain'
     | 'extra-action'
     | 'heal'
     | 'shield'
@@ -287,6 +290,12 @@ export type AbilityTrigger =
     // a drawn-and-failed landing roll (`viaLandingRoll`) — an affinity-disadvantage or Block-Debuff
     // auto-resist draws no roll and must not proc.
     | 'on-enemy-debuff-resisted'
+    // Prophet (#591): "When an ally resists a debuff infliction from an enemy" — BOTH ends are
+    // scoped, unlike any sibling above: the resister (targetId) must be same-side, owner
+    // INCLUDED ("an ally" includes the caster), and the inflictor (sourceId) must be OPPOSING
+    // (an ally resisting another ally's debuff does not qualify). Roll-only, like
+    // on-enemy-debuff-resisted (`viaLandingRoll`).
+    | 'on-ally-debuff-resisted'
     // Fired once per shield-application CAST. Reaction is keyed on the granter (acting actor)
     // and targets the shield recipient set — used by Resonating Fury to grant Crit Power Up 3
     // to everyone the carrier just shielded.
@@ -399,6 +408,8 @@ export const LIVE_TRIGGERS = new Set<AbilityTrigger>([
     // #413 Xcellence: opposing-resister-scoped and inflictor-agnostic — any enemy resisting any
     // debuff, whoever inflicted it. Roll-only.
     'on-enemy-debuff-resisted',
+    // Prophet (#591): same-side-resister-scoped AND opposing-inflictor-scoped. Roll-only.
+    'on-ally-debuff-resisted',
     // Warpstrike: owner dealt direct damage on its turn.
     'on-deal-damage',
     // Resonating Fury: granter-scoped reaction fired once per shield-application cast.
@@ -912,6 +923,15 @@ export type AbilityConfig =
      *  gates: conditions, the landing/affinity charge-manip gate and chargeLossImmune all still
      *  decide whether the removal runs at all. */
     | { type: 'charge'; amount: number | 'all' }
+    /** Prophet (#591): "gains N% more shield penetration" each qualifying reactive fire — a
+     *  PERMANENT, STACKING per-fight bonus (ruling 7: not a status, never cleansable/purgeable,
+     *  no cap of its own — the existing 100% total-pen clamp in shieldAbsorb.ts is the only
+     *  ceiling). Consumed by the reactive executor (triggers.ts), which adds `pct` to the owner's
+     *  live bonus via IntentExecContext.addShieldPenBonus; engine.ts's `attackerShieldPenOf` is
+     *  the sole read site that folds it onto the static base. `stat` is a union of one today,
+     *  matching `additional-damage`'s shape, so a future non-shield-pen stat-gain clause can
+     *  reuse this config rather than inventing a sibling. */
+    | { type: 'stat-gain'; stat: 'shieldPenetration'; pct: number }
     // A full extra turn: the engine re-inserts the granting actor into the round's
     // remaining turn queue at its speed position (game-verified 2026-06-06).
     | { type: 'extra-action'; oncePerRound: boolean; endOfRound?: boolean }
