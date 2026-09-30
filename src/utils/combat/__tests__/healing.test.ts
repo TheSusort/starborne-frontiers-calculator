@@ -1590,7 +1590,7 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         expect(enqueued).toHaveLength(2);
     });
 
-    it('on-ally-crit (non-charge rider): an ally crit enqueues once PER ATTACK; own/enemy/no-crit do not', () => {
+    it('on-ally-crit (non-charge rider): an ally OR own crit enqueues once PER ATTACK; enemy/no-crit do not', () => {
         const handBus = makeHandBus();
         const enqueued: Intent[] = [];
         // A NON-charge rider (Sentinel-style reactive damage). Every on-ally-crit rider — not just
@@ -1624,26 +1624,27 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 2, ...base });
         expect(enqueued).toHaveLength(1);
 
-        // Own cast → excluded → 0 additional.
+        // Own cast → an ally crit too (self included, owner ruling 2026-09-30) → +1.
         handBus.emit({ type: 'ability-performed', actorId: 'attacker', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
-        // Enemy cast → excluded → 0 additional.
+        // Enemy cast → still excluded (never an ally) → 0 additional.
         handBus.emit({ type: 'ability-performed', actorId: 'enemy', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
         // Another player's cast with NO crit (no critHits, didCrit false) → 0 additional.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: false });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
         // Another player's cast with didCrit binary only (no critHits field) → 1 enqueue.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: true });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(3);
 
         // Routing: with no critVictimIds on the event (single-target inline emit), the rider falls
-        // back to the cast's targetId — the only possible crit victim there.
-        expect(enqueued[1].eventCtx?.critVictimIds).toEqual(['enemy']);
-        expect(enqueued[1].eventCtx?.counterTargetId).toBe('enemy');
+        // back to the cast's targetId — the only possible crit victim there. Index 2 is this last
+        // enqueue (index 1 is the OWN-crit enqueue from above, not this one).
+        expect(enqueued[2].eventCtx?.critVictimIds).toEqual(['enemy']);
+        expect(enqueued[2].eventCtx?.counterTargetId).toBe('enemy');
     });
 
     it('on-ally-crit: critVictimIds routes "that enemy" to the victims that CRIT, not the anchor', () => {
@@ -1716,18 +1717,21 @@ describe('healing — Task 9: reactive listeners (on-ally-critically-repaired / 
         handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 2, ...base });
         expect(enqueued).toHaveLength(1);
 
-        // Own / enemy casts → excluded → 0 additional.
+        // Own cast → an ally crit too (self included, owner ruling 2026-09-30) → +1.
         handBus.emit({ type: 'ability-performed', actorId: 'attacker', critHits: 2, ...base });
+        expect(enqueued).toHaveLength(2);
+
+        // Enemy cast → still excluded (never an ally) → 0 additional.
         handBus.emit({ type: 'ability-performed', actorId: 'enemy', critHits: 2, ...base });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
         // An ally's non-critting cast → 0 additional.
         handBus.emit({ ...base, type: 'ability-performed', actorId: 'other', didCrit: false });
-        expect(enqueued).toHaveLength(1);
+        expect(enqueued).toHaveLength(2);
 
         // Another ally attack that crits → +1 (one per ATTACK).
         handBus.emit({ type: 'ability-performed', actorId: 'other', critHits: 3, ...base });
-        expect(enqueued).toHaveLength(2);
+        expect(enqueued).toHaveLength(3);
     });
 
     it('on-debuff-inflicted shield (APEX): own infliction enqueues; ally/enemy infliction does not', () => {

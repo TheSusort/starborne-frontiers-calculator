@@ -144,7 +144,21 @@ export type CombatEvent =
      *  `on-debuff-inflicted` listener ignores such events so a debuff-inflicted reaction whose
      *  own follow-up is itself a debuff cannot re-trigger ITSELF (an unbounded self-chain that
      *  would otherwise hit MAX_INTENT_GENERATIONS). Debuffs from OTHER reactive triggers
-     *  (on-crit/on-attacked) carry no flag and still feed on-debuff-inflicted as before. */
+     *  (on-crit/on-attacked) carry no flag and still feed on-debuff-inflicted as before.
+     *  `viaAllyDebuffInflictedReaction`: the sibling brand for `on-ally-debuff-inflicted`
+     *  reactions — set when this debuff was applied by an ability whose OWN trigger is
+     *  `on-ally-debuff-inflicted`. A separate field from `viaDebuffInflictedReaction`
+     *  deliberately: the two triggers are gated by different owners (`on-debuff-inflicted` is
+     *  self-scoped; `on-ally-debuff-inflicted` is same-side-scoped, owner included — see the
+     *  ruling in triggers.ts's trigger doc block), so a shared flag would make one trigger's
+     *  reaction silently suppress the OTHER trigger's listener on a ship that carries both — a
+     *  real infliction each is entitled to see. The `on-ally-debuff-inflicted` listener ignores an
+     *  event carrying this brand only when its OWN `sourceId === ownerId` (the self-chain case); a
+     *  same-brand event from a DIFFERENT same-side source (the two-ship ping-pong shape) is NOT
+     *  filtered by this flag — see that listener's guard for the scope this leaves open. The brand
+     *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
+     *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
+     *  by neither brand against the other's chain — no corpus ship has that shape. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
@@ -152,6 +166,7 @@ export type CombatEvent =
           round: number;
           buffName: string;
           viaDebuffInflictedReaction?: true;
+          viaAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -201,6 +216,11 @@ export type CombatEvent =
           /** The applying cast had >= 1 critting hit (per-hit crits). Present only when
            *  true. Executor-applied dots omit it (drain-time has no crit outcome). */
           viaCrit?: boolean;
+          /** The `debuff-applied` sibling's self-chain brand — see that field's doc. Set when
+           *  this DoT was applied by an ability whose OWN trigger is `on-ally-debuff-inflicted`,
+           *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
+           *  reaction's output the same way the `debuff-applied` arm does. */
+          viaAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.
@@ -456,7 +476,8 @@ export type CombatEvent =
      *  Suppressed when 0 removed and when the triggering intent carried
      *  `eventCtx.fromPurgeEvent` (depth-1 chain guard — a purge triggered by a purge
      *  does not re-emit). `on-enemy-purged` filters `casterId === ownerId`;
-     *  `on-ally-purged` filters `isSameSideAlly(targetId, ownerId)`. */
+     *  `on-ally-purged` filters `!isOpposing(targetId)` — same-side, owner included (the
+     *  2026-09-30 "an ally includes the caster" ruling — see triggers.ts's trigger doc block). */
     | ({
           type: 'purge-performed';
           casterId: string;

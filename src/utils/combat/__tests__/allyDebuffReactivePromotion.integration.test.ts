@@ -79,6 +79,19 @@ function oleanderRotGrant(): Ability {
     return rot;
 }
 
+/** Extracts Oleander's "adds 1 charge" half of the same clause — also on-ally-debuff-inflicted,
+ *  self-targeted (routes to the OWNER's own Charged Skill regardless of which ally inflicted). */
+function oleanderChargeGrant(): Ability {
+    const abilities =
+        buildShipAbilities(ship({ firstPassiveSkillText: OLEANDER_P3 })).slots.find(
+            (s) => s.slot === 'passive'
+        )?.abilities ?? [];
+    const charge = abilities.find((a) => a.config.type === 'charge');
+    if (!charge)
+        throw new Error('mutation guard: Oleander on-ally-debuff-inflicted charge not found');
+    return charge;
+}
+
 // Sanity-check the extracted ability BEFORE using it as engine input — a mutation guard so a
 // regression in Tasks 2/3 fails loudly here rather than silently no-op'ing the engine tests below.
 describe('Oleander RoT grant — extracted ability shape (mutation guard)', () => {
@@ -87,6 +100,57 @@ describe('Oleander RoT grant — extracted ability shape (mutation guard)', () =
         expect(rot.trigger).toBe('on-ally-debuff-inflicted');
         expect(rot.target).toBe('ally');
         expect(rot.oncePerRoundPerAlly).toBe(true);
+    });
+
+    it('charge half rides on-ally-debuff-inflicted, self-targeted, +1 charge', () => {
+        const charge = oleanderChargeGrant();
+        expect(charge.trigger).toBe('on-ally-debuff-inflicted');
+        expect(charge.target).toBe('self');
+        expect(charge.config).toMatchObject({ type: 'charge', amount: 1 });
+    });
+});
+
+describe('Oleander (player-side) — her OWN debuff infliction also adds a charge (self included)', () => {
+    it("Oleander's own active inflicting a debuff adds 1 charge to her own Charged Skill", () => {
+        // "An ally" includes the caster (owner ruling 2026-09-30): Oleander's OWN infliction
+        // satisfies on-ally-debuff-inflicted exactly as any other ally's would, so the
+        // self-targeted charge half fires off her own cast.
+        const oleanderSkills: ShipSkills = {
+            slots: [
+                { slot: 'active', abilities: [debuffAbility('Def Down')] },
+                { slot: 'passive', abilities: [oleanderChargeGrant()] },
+            ],
+        };
+        const bus = createEventBus();
+        const chargeGains: Extract<CombatEvent, { type: 'charge-changed' }>[] = [];
+        bus.on('charge-changed', (e) => {
+            if (e.actorId === 'attacker' && e.reason === 'manip') chargeGains.push(e);
+        });
+        const input: CombatEngineInput = {
+            enemyAttackers: bareEnemy(),
+            attack: 100,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 6, // headroom for the charged-skill cap — a 0 cap skips the grant entirely
+            shipSkills: oleanderSkills,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+        };
+        runCombat({ ...input, bus });
+        const totalGained = chargeGains.reduce((s, e) => s + (e.newCharge - e.oldCharge), 0);
+        expect(totalGained).toBe(1);
     });
 });
 
@@ -436,7 +500,7 @@ function sumDirectHeal(result: ReturnType<typeof runCombat>, actorId: string): n
     );
 }
 
-describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, not on a DoT', () => {
+describe('Hayyan (player-side) — repairs the debuffed ally, HERSELF included, not on a DoT', () => {
     it('an enemy debuff on the ally (focus) is repaired by Hayyan (team actor) for 6% of Hayyan Max HP', () => {
         const result = runCombat(
             HAYYAN_BASE({
@@ -448,20 +512,25 @@ describe('Hayyan (player-side) — repairs ONLY the debuffed ally, not itself, n
         expect(sumDirectHeal(result, 'hayyan')).toBeCloseTo((HAYYAN_HP * HAYYAN_HEAL_PCT) / 100, 6);
     });
 
-    it('a debuff landing on Hayyan ITSELF (self, not an ally) does NOT fire on-ally-debuffed', () => {
+    it('a debuff landing on Hayyan ITSELF fires on-ally-debuffed and repairs herself for 6% of Max HP', () => {
         // Hayyan IS the focus here (ownerId === 'attacker'); the enemy debuffs 'attacker' → the
-        // targetId equals the OWNER's own id → isSameSideAlly excludes it (that is on-debuffed's
-        // job, not on-ally-debuffed's).
+        // targetId equals the OWNER's own id. "An ally" includes the caster (owner ruling
+        // 2026-09-30: only "another/other ally" text excludes it), so on-ally-debuffed fires on
+        // her own debuffed self exactly as it does on any other ally.
         const selfHayyanSkills: ShipSkills = {
             slots: [noopActiveSlot(), { slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }],
         };
         const result = runCombat(
             HAYYAN_BASE({
                 shipSkills: selfHayyanSkills,
+                hp: HAYYAN_HP, // Hayyan IS the focus here → her own max HP is the heal's basis
                 enemyAttackers: [debuffEnemy('enemy-deb')],
             })
         );
-        expect(sumDirectHeal(result, 'attacker')).toBe(0);
+        expect(sumDirectHeal(result, 'attacker')).toBeCloseTo(
+            (HAYYAN_HP * HAYYAN_HEAL_PCT) / 100,
+            6
+        );
     });
 
     it('a DoT (not a timed debuff) landing on the ally does NOT fire on-ally-debuffed', () => {
@@ -541,5 +610,54 @@ describe('Hayyan (enemy-side) — team symmetry: an enemy Hayyan repairs its OWN
         );
         // The reactive is ALLY-scoped: the debuffed actor itself repairs nothing.
         expect(sumDirectHeal(result, 'enemy-victim')).toBe(0);
+    });
+
+    it('team symmetry, self-included: a debuff landing on enemy-hayyan HERSELF fires her own on-ally-debuffed repair', () => {
+        // Mirrors the player-side self-debuff test above, on the ENEMY registration: enemy-hayyan
+        // is the focus's front-most target, so the debuff lands on HER — "an ally" includes the
+        // caster on either side (owner ruling 2026-09-30; `isOpposing` is side-relative).
+        const enemyHayyanSelf: EnemyAttacker = {
+            id: 'enemy-hayyan',
+            stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: HAYYAN_HP, speed: 10 },
+            chargeCount: 0,
+            startCharged: false,
+            position: 'M4', // front-most enemy → the focus's `front enemy` debuff lands on herself
+            shipSkills: { slots: [{ slot: 'passive', abilities: [hayyanAllyDebuffedHeal()] }] },
+        };
+
+        const playerDebuffSkills: ShipSkills = {
+            slots: [{ slot: 'active', abilities: [debuffAbility('Def Down')] }],
+        };
+
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: playerDebuffSkills,
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 200,
+            healTargetId: 'attacker',
+            mode: 'healing',
+            enemyAttackers: [enemyHayyanSelf],
+        };
+
+        const result = runCombat(input);
+        expect(sumDirectHeal(result, 'enemy-hayyan')).toBeCloseTo(
+            (HAYYAN_HP * HAYYAN_HEAL_PCT) / 100,
+            6
+        );
     });
 });
