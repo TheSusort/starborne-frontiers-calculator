@@ -723,6 +723,7 @@ exports[`kit fingerprints > Cultivator 1`] = `
     "buff:active",
     "buff:charged",
     "charge-changed",
+    "heal",
   ],
 }
 `;

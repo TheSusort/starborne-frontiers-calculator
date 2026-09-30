@@ -363,14 +363,21 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *  - on-debuff-inflicted → debuff-applied | dot-applied with `sourceId === ownerId`.
  *    Cardinality follows the LANDING, which is once per SUB-ATTACK for a direct debuff clause,
  *    not once per cast: an N-hit cast that lands its clause every hit enqueues N times.
- *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a same-side
- *    ally (not opposing, not the owner itself). For the PLAYER registration this is any OTHER
- *    PLAYER's infliction; for the ENEMY registration this is any other enemy actor's infliction.
- *  - on-ally-debuffed → debuff-applied where the TARGET is a same-side ally (not opposing, not
- *    the owner itself) — the ally counterpart of on-debuffed (Hayyan). Does NOT subscribe to
- *    dot-applied, matching on-debuffed's scoping.
- *  - on-ally-crit-dot → dot-applied with viaCrit from any same-side ally (opposing sources
- *    excluded, own casts excluded)
+ *  - on-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is same-side
+ *    (not opposing). "An ally" includes this owner's OWN infliction (owner ruling 2026-09-30:
+ *    "an ally" in skill text includes the caster; only "another/other ally" excludes it) — so a
+ *    ship carrying both on-debuff-inflicted and on-ally-debuff-inflicted fires BOTH on its own
+ *    cast. For the PLAYER registration this is any PLAYER's infliction; for the ENEMY
+ *    registration this is any enemy actor's infliction.
+ *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing). Includes
+ *    this owner itself under the same ruling — the ally counterpart of on-debuffed (Hayyan), and
+ *    the two now co-fire on a self-landed debuff exactly as on-debuff-inflicted/
+ *    on-ally-debuff-inflicted do above. Does NOT subscribe to dot-applied, matching on-debuffed's
+ *    scoping.
+ *  - on-ally-crit-dot → dot-applied with viaCrit from any OTHER same-side actor (opposing sources
+ *    excluded, own casts excluded). Crocus's text names "another ally" explicitly, so this
+ *    trigger is carved out of the 2026-09-30 ruling and keeps excluding the owner — unlike its
+ *    on-ally-debuff-inflicted sibling above.
  *  - on-ally-critically-repaired → the OWNER's OWN heal-performed (casterId === ownerId) with
  *    >= 1 critting draw (Pallas). The recipient may be the owner itself — owner ruling
  *    2026-08-31, #446. One enqueue per qualifying cast.
@@ -388,11 +395,12 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    an `overheal`-basis reaction. One enqueue per qualifying repair. On the reactive arm an
  *    ability never observes its OWN output (the #435 redirect must not redirect itself); every
  *    other observer still does.
- *  - on-ally-crit → an ALLY's ability-performed with critting hits (mirrors on-crit ally-scoped):
- *    fires once per critting ability-performed — i.e. once per critting SUB-ATTACK, and ONCE for
- *    an AoE footprint however many victims it crit, never per (hit, victim) pair; the owner's own
- *    casts and every opposing actor are excluded (a walked enemy attacker now emits
- *    ability-performed, but its crit is NOT an ally crit).
+ *  - on-ally-crit → a same-side actor's ability-performed with critting hits, INCLUDING this
+ *    owner's own crit (owner ruling 2026-09-30: "an ally" includes the caster): fires once per
+ *    critting ability-performed — i.e. once per critting SUB-ATTACK, and ONCE for an AoE
+ *    footprint however many victims it crit, never per (hit, victim) pair; every opposing actor
+ *    is excluded (a walked enemy attacker now emits ability-performed, but its crit is NOT an
+ *    ally crit).
  *  - start-of-round → round-started (global — every owner's start-of-round fires once per round)
  *  - end-of-round → round-ended (global — every owner's end-of-round fires once per round)
  *  - on-charged-cast → skill-fired where actorId === ownerId && slot === 'charged' (self-scoped;
@@ -408,9 +416,10 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    discriminates on the hit's own crit outcome: 'crit' → critting hits only,
  *    'non-crit' → non-critting only, absent → every hit. Each enqueued intent is per-event (not
  *    the shared const): eventCtx captures the attacker for "on that enemy" counter routing.
- *  - on-ally-attacked → attacked where the target is a same-side ally (not opposing, not self)
- *    (per hit; critFilter + roleFilter applied). Fires when ANY OTHER same-side actor is hit —
- *    own hits are on-attacked's job; an opposing-side target is never an ally.
+ *  - on-ally-attacked → attacked where the target is same-side (not opposing) — per hit; critFilter
+ *    + roleFilter applied. Fires when ANY same-side actor is hit, INCLUDING this owner's own hits
+ *    (owner ruling 2026-09-30: "an ally" includes the caster) — a ship carrying both on-attacked
+ *    and on-ally-attacked fires BOTH on its own hit; an opposing-side target is never an ally.
  *    triggerCritFilter discriminates on the hit's own crit outcome (same contract as on-attacked);
  *    roleFilter (Graphite) matches the DAMAGED ally's role category via the optional roleOf lookup.
  *    requireDamagedAllyStatus (#363 Fuying) requires the DAMAGED ally to be holding a named
@@ -419,8 +428,11 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    roleFilter rather than requireDamagedAllyAdjacent's helper-absent-allows rule).
  *  - on-destroyed → ship-destroyed where actorId === ownerId (self-scoped; mirrors on-attacked's
  *    target-scoped guard). One enqueue per destruction event.
- *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not self)
- *    (any OTHER same-side actor's destruction; mirrors on-ally-crit's ally scoping).
+ *  - on-ally-destroyed → ship-destroyed where the actor is a same-side ally (not opposing, not
+ *    self) (any OTHER same-side actor's destruction). Harvester's text carries no "another"
+ *    qualifier, but the owner ruled this trigger stays excluded regardless: a destroyed ship
+ *    cannot take the extra-action grant, so on-ally-destroyed is carved out of the 2026-09-30
+ *    "an ally includes the caster" ruling alongside on-ally-crit-dot.
  *  - on-enemy-destroyed → ship-destroyed where isOpposing(actorId)
  *    (any opposing-side actor — for players: the enemy attackers; for enemy owners: any player
  *    actor).
@@ -516,9 +528,14 @@ export function registerReactiveListeners(args: {
         footprintAllyIdsFor,
         maxHpOf,
     } = args;
-    // Same-side ally = NOT opposing AND not the owner itself (own events route to the
-    // self-scoped triggers). Side-agnostic: `isOpposing` is supplied per registration, so the
-    // enemy-side registration resolves its own side's allies with no mirrored branch.
+    // Same-side ally, OWNER EXCLUDED. Most "an ally" triggers use `!isOpposing` directly instead
+    // (owner ruling 2026-09-30: "an ally" includes the caster) — this helper now serves only the
+    // carve-outs: a trigger whose text names "another/other ally" (on-ally-crit-dot), a trigger
+    // where the owner cannot be its own subject (on-ally-destroyed — a destroyed ship cannot take
+    // the action), and the `allyTeamNames` roster-membership condition (a ship checking its own
+    // team for a named ally can't sensibly name itself). Side-agnostic: `isOpposing` is supplied
+    // per registration, so the enemy-side registration resolves its own side's allies with no
+    // mirrored branch.
     const isSameSideAlly = (actorId: string, ownerId: string): boolean =>
         !isOpposing(actorId) && actorId !== ownerId;
     /**
@@ -764,10 +781,12 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuff-inflicted':
                     bus.on('debuff-applied', (e) => {
-                        // Ally = any OTHER same-side actor's infliction. Exclude this owner
-                        // (own inflictions go to on-debuff-inflicted) AND every opposing actor
-                        // (an opposing actor is never an ally).
-                        if (isSameSideAlly(e.sourceId, ownerId))
+                        // "An ally" includes this owner's own infliction (owner ruling
+                        // 2026-09-30: only "another/other ally" text excludes the caster) — so
+                        // this fires on the owner's OWN debuff cast too, alongside
+                        // on-debuff-inflicted. Every opposing actor is still excluded (an
+                        // opposing actor is never an ally).
+                        if (!isOpposing(e.sourceId))
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.sourceId },
@@ -776,7 +795,7 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Team DoT applications emit dot-applied with the team sourceId — an ally
                         // DoT infliction triggers this listener exactly as an ally debuff does.
-                        if (isSameSideAlly(e.sourceId, ownerId))
+                        if (!isOpposing(e.sourceId))
                             enqueue({
                                 ...intent,
                                 eventCtx: {
@@ -794,8 +813,11 @@ export function registerReactiveListeners(args: {
                     bus.on('dot-applied', (e) => {
                         // Ally DoT infliction whose cast crit (viaCrit): any OTHER
                         // same-side actor's crit-cast DoT. Own casts and every opposing actor
-                        // are excluded (mirrors on-ally-debuff-inflicted's ally scoping). One
-                        // enqueue per qualifying infliction EVENT (per-infliction-event rule).
+                        // are excluded — Crocus's text names "another ally" explicitly, so this
+                        // trigger is carved out of the owner's 2026-09-30 "an ally includes the
+                        // caster" ruling and keeps isSameSideAlly, unlike its
+                        // on-ally-debuff-inflicted sibling above. One enqueue per qualifying
+                        // infliction EVENT (per-infliction-event rule).
                         if (e.viaCrit && isSameSideAlly(e.sourceId, ownerId)) {
                             enqueue({
                                 ...intent,
@@ -989,10 +1011,11 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-crit':
                     bus.on('ability-performed', (e) => {
-                        // An ALLY's critting attack (mirrors on-crit with ally scoping): own casts
-                        // and every opposing actor excluded — an opposing crit is NOT an ally crit,
-                        // even though a walked enemy now emits ability-performed.
-                        if (!isSameSideAlly(e.actorId, ownerId)) return;
+                        // A same-side actor's critting attack, INCLUDING this owner's own crit
+                        // (owner ruling 2026-09-30: "an ally" includes the caster) — every
+                        // opposing actor is excluded: an opposing crit is NOT an ally crit, even
+                        // though a walked enemy now emits ability-performed.
+                        if (isOpposing(e.actorId)) return;
                         // ONE enqueue per ATTACK that crit, NOT one per critting (hit, victim)
                         // pair. The corpus clauses all read "when an ally critically hits an enemy,
                         // this Unit <does X>" — X is a single reaction to the attack: Hermes gains
@@ -1192,11 +1215,13 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-debuffed':
                     bus.on('debuff-applied', (e) => {
-                        // Victim-scoped: a timed debuff landed on MY ally (Hayyan). The ally counterpart of
-                        // on-debuffed (which is targetId === ownerId). Route the reactive repair to that ally
-                        // via damagedAllyId. Excludes the owner (that is on-debuffed) and DoTs (dot-applied),
+                        // Victim-scoped: a timed debuff landed on a same-side unit (Hayyan),
+                        // INCLUDING this owner itself (owner ruling 2026-09-30: "an ally"
+                        // includes the caster) — on-debuffed and on-ally-debuffed now co-fire on
+                        // a self-landed debuff. Route the reactive repair to that unit via
+                        // damagedAllyId. Excludes every opposing actor and DoTs (dot-applied),
                         // matching on-debuffed's debuff-applied-only scoping.
-                        if (isSameSideAlly(e.targetId, ownerId))
+                        if (!isOpposing(e.targetId))
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },
@@ -1330,16 +1355,18 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-attacked':
                     bus.on('attacked', (e) => {
-                        // Ally-scoped: fires when ANY OTHER same-side actor is hit — per HIT
-                        // (the engine emits one event per hit, PR 1). Excludes this owner (own
-                        // hits are on-attacked's job) and every opposing actor, mirroring
-                        // on-ally-destroyed's scoping. triggerCritFilter discriminates on the
-                        // hit's own crit outcome, same contract as on-attacked. roleFilter
-                        // (Graphite) matches the DAMAGED ally's role category; an unknown role
-                        // never matches (conservative — a manual actor with no ship picked keeps
-                        // role-filtered reactions dormant rather than inflating numbers); an
-                        // EMPTY filter array is treated as absent (any ally), not never-match.
-                        if (!isSameSideAlly(e.targetId, ownerId)) return;
+                        // Same-side scoped: fires when ANY same-side actor is hit — per HIT
+                        // (the engine emits one event per hit, PR 1), INCLUDING this owner's own
+                        // hits (owner ruling 2026-09-30: "an ally" includes the caster) — a ship
+                        // carrying both on-attacked and on-ally-attacked fires BOTH on its own
+                        // hit. Only every opposing actor is excluded. triggerCritFilter
+                        // discriminates on the hit's own crit outcome, same contract as
+                        // on-attacked. roleFilter (Graphite) matches the DAMAGED ally's role
+                        // category; an unknown role never matches (conservative — a manual actor
+                        // with no ship picked keeps role-filtered reactions dormant rather than
+                        // inflating numbers); an EMPTY filter array is treated as absent (any
+                        // ally), not never-match.
+                        if (isOpposing(e.targetId)) return;
                         const filter = ra.ability.triggerCritFilter;
                         if (filter === 'crit' && !e.didCrit) return;
                         if (filter === 'non-crit' && e.didCrit) return;
@@ -1435,8 +1462,12 @@ export function registerReactiveListeners(args: {
                 case 'on-ally-destroyed':
                     bus.on('ship-destroyed', (e) => {
                         // Ally-scoped: any OTHER same-side actor's destruction. Exclude this
-                        // owner (own death goes to on-destroyed) AND every opposing actor
-                        // (an opposing actor is never an ally), mirroring on-ally-crit's scoping.
+                        // owner (own death goes to on-destroyed) AND every opposing actor (an
+                        // opposing actor is never an ally). Harvester's text carries no "another"
+                        // qualifier, but the owner ruled this stays excluded regardless: a
+                        // destroyed ship cannot take the extra-action grant, so on-ally-destroyed
+                        // is carved out of the 2026-09-30 "an ally includes the caster" ruling
+                        // alongside on-ally-crit-dot.
                         if (isSameSideAlly(e.actorId, ownerId)) enqueue(intent);
                     });
                     break;
@@ -1649,9 +1680,11 @@ export function registerReactiveListeners(args: {
                     break;
                 case 'on-ally-purged':
                     bus.on('purge-performed', (e) => {
-                        // Victim-scoped: a buff was purged from MY ally (Salvation). Route the
-                        // heal to that ally via damagedAllyId; fromPurgeEvent guards any chained purge.
-                        if (isSameSideAlly(e.targetId, ownerId))
+                        // Victim-scoped: a buff was purged from a same-side unit (Salvation),
+                        // INCLUDING this owner itself (owner ruling 2026-09-30: "an ally"
+                        // includes the caster). Route the heal to that unit via damagedAllyId;
+                        // fromPurgeEvent guards any chained purge.
+                        if (!isOpposing(e.targetId))
                             enqueue({
                                 ...intent,
                                 eventCtx: {

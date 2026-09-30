@@ -232,6 +232,141 @@ describe('C2b-1 T6 Step 1: Salvation heals the purged ally (on-ally-purged)', ()
 });
 
 // =============================================================================
+// Test 1b: Salvation's OWN buff being purged fires on-ally-purged on HERSELF (self included).
+// =============================================================================
+
+describe('C2b-1 T6 Step 1b: Salvation heals HERSELF when her own buff is purged', () => {
+    const SALVATION_HP = 20_000;
+    const SALVATION_HEAL_PCT = 5;
+
+    const selfBuff = (name: string): Ability =>
+        ab({
+            type: 'buff',
+            target: 'self',
+            config: {
+                type: 'buff',
+                buffName: name,
+                parsedEffects: { attack: 10 },
+                stacks: 1,
+                isStackable: false,
+                duration: 99,
+            },
+        });
+
+    const noopActive = (): Ability =>
+        ab({ type: 'damage', target: 'enemy', config: { type: 'damage', multiplier: 100 } });
+
+    const salvationHealAbility = (): Ability =>
+        ab({
+            type: 'heal',
+            target: 'ally', // 'an ally' includes the caster (owner ruling 2026-09-30) → damagedAllyId routing
+            trigger: 'on-ally-purged' as const,
+            config: {
+                type: 'heal',
+                basis: 'hp' as const,
+                pct: SALVATION_HEAL_PCT,
+            },
+        });
+
+    // Salvation buffs herself, then carries the on-ally-purged heal passive. Positioned at T2 so
+    // she is the sole occupant the enemy's row-T scan resolves onto (mirrors the Centurion
+    // ADJACENT-ally technique in counterAttack.integration.test.ts).
+    const salvationSelfBuffed = () => ({
+        id: 'salvation',
+        speed: 100, // acts before the enemy (speed 50) so her buff exists when it purges
+        chargeCount: 0,
+        startCharged: false,
+        selfBuffs: [],
+        enemyDebuffs: [],
+        position: 'T2' as Position,
+        walk: {
+            shipSkills: {
+                slots: [
+                    { slot: 'active' as const, abilities: [selfBuff('Attack Up')] },
+                    { slot: 'passive' as const, abilities: [salvationHealAbility()] },
+                ],
+            },
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defensePenetration: 0,
+                hacking: 0,
+                defence: 0,
+                hp: SALVATION_HP,
+            },
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            hasChargedSkill: false,
+        },
+    });
+
+    // Pinned to row T (like the ADJACENT-ally counter test) so `front` resolves onto Salvation
+    // at T2 — the only occupant of that row — rather than the focus at its M4 default.
+    const purgingEnemyAtRowT = () => ({
+        id: 'enemy-front',
+        stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 50 },
+        chargeCount: 0,
+        startCharged: false,
+        position: 'T1' as Position,
+        target: parsedTarget('front'),
+        pattern: basePattern(),
+        shipSkills: {
+            slots: [
+                {
+                    slot: 'active' as const,
+                    abilities: [
+                        ab({ type: 'purge', target: 'enemy', config: { type: 'purge', count: 5 } }),
+                    ],
+                },
+            ],
+        },
+    });
+
+    it('a buff purged from Salvation herself repairs Salvation for 5% of her Max HP', () => {
+        idc = 0;
+        const input: CombatEngineInput = {
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: { slots: [{ slot: 'active', abilities: [noopActive()] }] },
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            healTargetId: 'salvation',
+            mode: 'healing',
+            speed: 1,
+            position: 'M4',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            teamActors: [salvationSelfBuffed()],
+            enemyAttackers: [purgingEnemyAtRowT()],
+        };
+
+        const result = runCombat(input);
+        const salvationHeal = (result.healing?.rounds ?? []).reduce(
+            (sum, rd) => sum + (rd.perActor.get('salvation')?.directHeal ?? 0),
+            0
+        );
+        expect(salvationHeal).toBe((SALVATION_HP * SALVATION_HEAL_PCT) / 100);
+    });
+});
+
+// =============================================================================
 // Test 2: Sefuba chain (on-enemy-purged → self-heal + purge 1 more) + depth guard.
 // =============================================================================
 

@@ -404,6 +404,36 @@ describe('G PR2 — Centurion self/adjacent-ally counterattack END-TO-END via th
         expect(totalPerTargetDamage(result, 'ally-B4')).toBeGreaterThan(0);
         expect(totalPerTargetDamage(result, 'foe')).toBe(0);
     });
+
+    it('SELF hit does NOT double-retaliate: on-ally-attacked now wakes too but requireDamagedAllyAdjacent blocks it', () => {
+        // Owner ruling 2026-09-30: "an ally" includes the caster, so the on-ally-attacked
+        // listener no longer excludes the owner's own hit up front. Centurion's clause is "this
+        // Unit OR AN ADJACENT ally" — requireDamagedAllyAdjacent reads adjacentAllyIdsFor(ownerId),
+        // which never contains the owner itself, so the second (adjacent-ally) counter still
+        // never wakes on a self-hit. Only the unconditional self `on-attacked` counter fires.
+        // Counted directly via reactive-damage-performed (not perTargetDamage magnitude) so a
+        // regression that doubles the retaliation can't hide behind a summed number.
+        const skills = buildShipAbilities(centurionShip(CENTURION_P2));
+        const bus = createEventBus();
+        const reactive: CombatEvent[] = [];
+        bus.on('reactive-damage-performed', (e) => reactive.push(e as CombatEvent));
+
+        runCombat(
+            counterBase(skills, {
+                bus,
+                numRounds: 1,
+                position: 'M2',
+                healTargetId: 'attacker',
+                mode: 'healing',
+                enemyAttackers: [basicEnemy('foe', 3_000)],
+            })
+        );
+
+        const retaliations = reactive.filter(
+            (e) => e.type === 'reactive-damage-performed' && e.sourceId === 'attacker'
+        );
+        expect(retaliations).toHaveLength(1);
+    });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

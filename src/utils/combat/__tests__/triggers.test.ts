@@ -2313,9 +2313,9 @@ describe('on-ally-attacked listener', () => {
         return intents;
     }
 
-    // (1) ally scoping: another player actor's hit fires; own hits and
-    //     enemy-side targets do not
-    it('fires when ANOTHER player actor is hit, not for own hits or enemy-side targets', () => {
+    // (1) ally scoping: another player actor's hit fires, and so does the owner's own hit
+    //     (owner ruling 2026-09-30: "an ally" includes the caster); enemy-side targets do not
+    it('fires when ANOTHER player actor is hit AND when the owner itself is hit; never for enemy-side targets', () => {
         const ra: ReactiveAbility = { ability: onAllyAttackedBuff(), sourceSlot: 'passive' };
 
         // another player actor ('tank') is hit → enqueue
@@ -2327,12 +2327,14 @@ describe('on-ally-attacked listener', () => {
         expect(allyIntents[0].ownerId).toBe('graphite');
         expect(allyIntents[0].ability.trigger).toBe('on-ally-attacked');
 
-        // the owner itself is hit → NOT an ally hit (on-attacked's job)
+        // the owner itself is hit → an ally hit too (self included) → enqueue
         const ownIntents = emitAllyAttacked(
             [ra],
             [{ type: 'attacked', targetId: 'graphite', attackerId: 'ea1', round: 1 }]
         );
-        expect(ownIntents).toHaveLength(0);
+        expect(ownIntents).toHaveLength(1);
+        expect(ownIntents[0].ownerId).toBe('graphite');
+        expect(ownIntents[0].ability.trigger).toBe('on-ally-attacked');
 
         // an enemy-side actor is hit (player attacking the enemy) → not an ally
         const enemyIntents = emitAllyAttacked(
@@ -3907,17 +3909,19 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
         // hit. The boundary makes the run positional, so `resolvePositionalTarget` honours the
         // `provokedBy` override that the legacy non-positional route ignored entirely. The 3-round
         // ladder that follows is fully determined:
-        //   R1  ea1 attacks the tank (an ALLY of the owner) → the reactive fires → Provoke on ea1
+        //   R1  ea1 attacks the tank (an ally of the owner) → the reactive fires → Provoke on ea1
         //       (duration 2).
-        //   R2  ea1 is provoked → it must attack the PROVOKER, graphite. A hit on the owner itself
-        //       is on-attacked scope, not on-ally-attacked, so the ally listener stays silent and
-        //       no Provoke is re-applied.
-        //   R3  the R1 Provoke has lapsed → ea1 goes back to the tank → the reactive fires again.
-        // So the count is 2 (rounds 1 and 3), not 3, and the missing round is the one the debuff
-        // itself redirected. The load-bearing claim — the debuff routes to the ATTACKING enemy's
-        // own id — is unchanged, and pinning the exact rounds keeps that ladder honest instead of
-        // just relaxing the count.
-        it('100%-crit enemy → Provoke lands on THAT enemy id on every ally-attack turn (per-target routing)', () => {
+        //   R2  ea1 is provoked → it must attack the PROVOKER, graphite. A hit on the owner
+        //       itself is ALSO an ally hit now (owner ruling 2026-09-30: "an ally" includes the
+        //       caster), so the ally listener fires again → Provoke is REFRESHED to duration 2
+        //       (non-stackable), still targeting ea1.
+        //   R3  the R2 refresh kept Provoke alive → ea1 is still provoked → attacks graphite
+        //       again → the reactive fires a third time.
+        // So the count is 3 (every round), and the R2 self-hit keeps ea1 locked onto graphite
+        // for R3 too — the load-bearing claim (the debuff routes to the ATTACKING enemy's own
+        // id) is unchanged, and pinning the exact rounds keeps this ladder honest instead of just
+        // relaxing the count.
+        it('100%-crit enemy → Provoke lands on THAT enemy id on every ally-attack turn, including the owner’s own hit (per-target routing)', () => {
             const events = runScenario({
                 ownerSkills: provokeSkills(),
                 tankRole: 'DEFENDER',
@@ -3929,9 +3933,9 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
                     (e as { buffName?: string }).buffName === 'Provoke'
             ) as Array<{ targetId: string; round: number }>;
             expect(provokes.every((e) => e.targetId === 'ea1')).toBe(true);
-            expect(provokes.map((e) => e.round)).toEqual([1, 3]);
-            // The reason round 2 is missing, pinned rather than assumed: the live Provoke pulled
-            // the enemy onto the owner that round.
+            expect(provokes.map((e) => e.round)).toEqual([1, 2, 3]);
+            // R2's self-hit refresh is what pins ea1 onto graphite for R3 too, instead of
+            // returning to the tank.
             const attackedAt = (
                 events.filter((e) => e.type === 'attacked') as Array<{
                     round: number;
@@ -3941,7 +3945,7 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
             expect(attackedAt).toEqual([
                 [1, 'tank'],
                 [2, 'graphite'],
-                [3, 'tank'],
+                [3, 'graphite'],
             ]);
         });
 
@@ -3960,16 +3964,20 @@ describe('on-ally-attacked engine integration (scenario 16)', () => {
         });
     });
 
-    it('scenario 16d: the heal target OWNING the on-ally-attacked ability does NOT fire on its own hits', () => {
-        // The tank itself carries the reactive; only the tank is ever attacked. Own hits
-        // are on-attacked scope — the ally listener must stay silent the whole run.
+    it('scenario 16d: the heal target OWNING the on-ally-attacked ability fires on its OWN hits too (self included)', () => {
+        // The tank itself carries the reactive; only the tank is ever attacked. "An ally"
+        // includes the caster (owner ruling 2026-09-30), so on-ally-attacked now fires on the
+        // tank's own hits exactly as it would on any other ally's — once per attack turn,
+        // routed back to itself via damagedAllyId.
         const events = runScenario({
             ownerSkills: { slots: [] },
             tankSkills: reactivePlatingSkills(),
             tankRole: 'ATTACKER',
         });
         expect(events.filter((e) => e.type === 'attacked').length).toBe(3);
-        expect(buffsNamed(events, 'Reactive Plating').length).toBe(0);
+        const plating = buffsNamed(events, 'Reactive Plating');
+        expect(plating.length).toBe(3);
+        expect(plating.every((e) => e.actorId === 'tank')).toBe(true);
     });
 });
 

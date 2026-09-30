@@ -218,6 +218,56 @@ describe('Belladonna (player-side) — converts an ally-inflicted Corrosion into
     });
 });
 
+describe('Belladonna (player-side) — her OWN Corrosion infliction converts too (self included)', () => {
+    // "An ally" includes the caster (owner ruling 2026-09-30: only "another/other ally" text
+    // excludes it), so Belladonna's own active casting Corrosion now satisfies
+    // on-ally-debuff-inflicted exactly as an ally's infliction does — no separate ally actor
+    // needed; Belladonna carries both the infliction and the convert-dot passive herself.
+    const belladonnaSelfInflictSkills = (): ShipSkills => ({
+        slots: [
+            { slot: 'active', abilities: [corrosionAbility()] },
+            { slot: 'passive', abilities: [belladonnaConvertDot()] },
+        ],
+    });
+
+    it('high Hacking (~100% convert): her own Corrosion cast ends up converted to Acidic Decay', () => {
+        let enemyActor: CombatActor | undefined;
+        runCombat({
+            enemyAttackers: bareEnemy(),
+            attack: 0,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: belladonnaSelfInflictSkills(),
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+            hacking: 1000, // rate = min(1, 0.1*1000/100) = 1 → guaranteed conversion
+            __testTapActors: (actors) => {
+                enemyActor = actors.find((a) => a.id === BARE_ENEMY_ID);
+            },
+        });
+        if (!enemyActor) throw new Error('__testTapActors never handed out the enemy actor');
+
+        expect(enemyActor.corrosionEntries).toHaveLength(1);
+        const entry = enemyActor.corrosionEntries[0];
+        expect(entry.family).toBe('Acidic Decay');
+        expect(entry.unremovable).toBe(true);
+        expect(entry.tier).toBe(6);
+    });
+});
+
 describe("Belladonna (enemy-side) — team symmetry: an enemy Belladonna converts an enemy ally's Corrosion on a player ship", () => {
     it('the player focus actor ends up with the Acidic Decay stack, not the opposing roster', () => {
         const enemyBelladonna: EnemyAttacker = {

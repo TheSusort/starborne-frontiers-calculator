@@ -646,6 +646,67 @@ describe('Sentinel (player-side) — reactive heal + damage fire on ally crit, n
     });
 });
 
+/** A passive, huge-HP enemy for Sentinel's own-crit test — never dies, never acts meaningfully. */
+const passiveEnemy = (id: string, position: Position): EnemyAttacker => ({
+    id,
+    stats: { attack: 0, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1 },
+    chargeCount: 0,
+    startCharged: false,
+    position,
+    target: parsedTarget('front'),
+    pattern: basePattern(),
+    shipSkills: { slots: [{ slot: 'active', abilities: [noopActive()] }] },
+});
+
+describe('Sentinel (player-side) — reacts to her OWN crit too (self included)', () => {
+    it("Sentinel's own crit repairs herself and deals her reactive damage exactly once (no chain)", () => {
+        // "An ally" includes the caster (owner ruling 2026-09-30): Sentinel IS the attacking
+        // focus here, so her own crit now satisfies on-ally-crit exactly as an ally's crit does.
+        // The reactive damage config carries noCrit: true, so the injected hit itself can never
+        // crit and re-wake this same listener — no infinite chain.
+        const input: CombatEngineInput = {
+            attack: 1000,
+            crit: 100, // guaranteed self-crit
+            critDamage: 100,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [hit()] },
+                    { slot: 'passive', abilities: sentinelPassiveAbilities(2) },
+                ],
+            },
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 20_000,
+            speed: 500,
+            healTargetId: 'attacker',
+            mode: 'healing',
+            position: 'M1',
+            target: parsedTarget('front'),
+            pattern: basePattern(),
+            enemyAttackers: [passiveEnemy('enemy-x', 'M4')],
+        };
+
+        const { result, reactiveDamage, reactiveHeals } = runSentinel(input);
+        expect(totalDirectHeal(result, 'attacker')).toBeGreaterThan(0);
+        const selfHeals = reactiveHeals.filter((e) => e.casterId === 'attacker');
+        expect(selfHeals).toHaveLength(1);
+        const selfDamage = reactiveDamage.filter((e) => e.sourceId === 'attacker');
+        // Exactly one reactive hit per own crit — the noCrit hit cannot itself crit and re-fire.
+        expect(selfDamage).toHaveLength(1);
+    });
+});
+
 describe('Sentinel (enemy-side) — team symmetry: an enemy Sentinel reacts to its OWN crit-ing ally', () => {
     it('heals the crit-ing ENEMY ally and credits reactive damage, never touching a player actor', () => {
         const enemySentinel: EnemyAttacker = {
