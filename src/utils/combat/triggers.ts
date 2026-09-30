@@ -851,6 +851,11 @@ export function registerReactiveListeners(args: {
                     // test), and no OTHER reactive family's debuff output is affected (the brand
                     // is set only at this trigger's own emission sites).
                     bus.on('debuff-applied', (e) => {
+                        // #590 R3: an applied debuff (no hacking roll — Concentrate Fire, Provoke)
+                        // is not "inflicted" by the game's own wording, so it does not wake this
+                        // listener; an undefined `application` (a shape that predates the field)
+                        // is treated as inflicted, matching every corpus fixture's prior behaviour.
+                        if (e.application === 'apply') return;
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction
@@ -862,7 +867,8 @@ export function registerReactiveListeners(args: {
                     });
                     bus.on('dot-applied', (e) => {
                         // An ally's DoT landing counts as a debuff inflicted — same guard as the
-                        // debuff-applied arm above.
+                        // debuff-applied arm above. DoTs carry no `application` field: they are
+                        // always rolled, never unconditionally applied.
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
                             !e.viaOtherAllyDebuffInflictedReaction
@@ -4465,6 +4471,7 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
+                    application: cfg.application,
                     ...(intent.ability.trigger === 'on-debuff-inflicted'
                         ? { viaDebuffInflictedReaction: true as const }
                         : {}),

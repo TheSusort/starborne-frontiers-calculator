@@ -368,6 +368,64 @@ describe('Prophet (player-side) — real kit, the bonus reduces shield absorptio
         // shieldEligible = 10,000 * (1 - 0.21) = 7,900 — 100 LESS absorbed than the baseline.
         expect(absorbed).toBe(7900);
     });
+
+    it('a weaker debuff onto Prophet while a stronger same-family one already holds her never rolls — no resist, no pen gain, no extra action (#590 R1)', () => {
+        // One enemy cast, two clauses in order: 'Defense Down III' lands unconditionally
+        // (application 'apply' — no roll), THEN 'Defense Down II' — same family, weaker tier,
+        // and the target (Prophet) already holds III from the clause just above. Security 1000 /
+        // hacking 0 means the II clause would have been a GUARANTEED resist pre-R1.
+        const enemy: EnemyAttacker = {
+            id: 'e1',
+            stats: {
+                attack: 0,
+                crit: 0,
+                critDamage: 0,
+                defence: 0,
+                hp: 1_000_000,
+                speed: 130,
+                hacking: 0,
+            },
+            chargeCount: 0,
+            startCharged: false,
+            shipSkills: {
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: [
+                            selfShieldAbility(50),
+                            debuffAbility('Defense Down III', 'apply'),
+                            debuffAbility('Defense Down II', 'inflict'),
+                        ],
+                    },
+                ],
+            },
+        };
+        const bus = createEventBus();
+        const debuffsResisted: Extract<CombatEvent, { type: 'debuff-resisted' }>[] = [];
+        const attacks: Extract<CombatEvent, { type: 'attacked' }>[] = [];
+        let enemyActor: CombatActor | undefined;
+        bus.on('debuff-resisted', (e) => debuffsResisted.push(e));
+        bus.on('attacked', (e) => {
+            if (e.attackerId === 'attacker') attacks.push(e);
+        });
+        runCombat({
+            ...BASE(4, 1000),
+            enemyAttackers: [enemy],
+            bus,
+            __testTapActors: (actors) => {
+                enemyActor = actors.find((a) => a.id === 'e1');
+            },
+        });
+        expect(debuffsResisted.some((e) => e.buffName === 'Defense Down II')).toBe(false);
+        // No extra action: exactly her one normal attack this round, not two.
+        expect(attacks).toHaveLength(1);
+        // No pen gain: absorption stays at BASE()'s flat 20% baseline, not 22%
+        // (BASE's shieldPenetration is a fixed test constant across every refit level — see its
+        // own comment — so the R4 baseline here is the same 8,000 the R0 baseline test measures).
+        expect(enemyActor).toBeDefined();
+        const absorbed = 500_000 - (enemyActor?.shieldPool ?? 500_000);
+        expect(absorbed).toBe(8000); // 10,000 * (1 - 0.20)
+    });
 });
 
 describe('Prophet (enemy-side) — team symmetry mirror', () => {

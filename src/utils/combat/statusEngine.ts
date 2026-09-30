@@ -198,16 +198,19 @@ export interface StatusEngine {
      *  its casts, not its timed-buff list. Returns:
      *  - `resistedEnemy`: buffNames of TIMED enemy upserts the landing hook rejected
      *    (so the engine can emit debuff-resisted and record them in the resisted list).
-     *  - `appliedEnemy`: buffNames of TIMED enemy upserts that LANDED this call,
-     *    collected BEFORE the family-rule upsert (so family-absorbed applications
-     *    still count as inflicted — the unit did inflict; family absorption is an
-     *    internal map rule). The engine emits `debuff-applied` once per name here
-     *    (the discrete-infliction event). */
+     *  - `appliedEnemy`: name + application-kind pairs for TIMED enemy upserts that LANDED this
+     *    call, collected BEFORE the family-rule upsert (so family-absorbed applications still
+     *    count as inflicted — the unit did inflict; family absorption is an internal map rule).
+     *    The engine emits `debuff-applied` once per entry here (the discrete-infliction event),
+     *    carrying `application` through so #590 R3's gate can read it. */
     sourceFired(
         sourceId: string,
         slot: 'active' | 'charge',
         round: number
-    ): { resistedEnemy: string[]; appliedEnemy: string[] };
+    ): {
+        resistedEnemy: string[];
+        appliedEnemy: { buffName: string; application?: 'inflict' | 'apply' }[];
+    };
     /** Swap the TIMED-enemy landing hook used by `sourceFired`. The engine resets
      *  this per turn to the ACTING actor's live landing closure (live hacking-vs-target-security
      *  + that actor's affinity), so a scheduled timed enemy upsert fired during `sourceFired`
@@ -1127,7 +1130,10 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         sourceId: string,
         slot: 'active' | 'charge',
         round: number
-    ): { resistedEnemy: string[]; appliedEnemy: string[] } => {
+    ): {
+        resistedEnemy: string[];
+        appliedEnemy: { buffName: string; application?: 'inflict' | 'apply' }[];
+    } => {
         if (round !== lastRound) {
             throw new Error(
                 `StatusEngine.sourceFired called for round ${round}, but the engine is at round ${lastRound}`
@@ -1189,9 +1195,9 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
         // A landed application's buffName is collected BEFORE the family-rule upsert so
         // family-absorbed applications still count as inflicted (the unit did inflict; the
         // family rule is an internal map rule). The engine emits `debuff-applied` once per
-        // name in appliedEnemy (the discrete-infliction event).
+        // entry in appliedEnemy (the discrete-infliction event), carrying `application` through.
         const resistedEnemy: string[] = [];
-        const appliedEnemy: string[] = [];
+        const appliedEnemy: { buffName: string; application?: 'inflict' | 'apply' }[] = [];
         for (const buff of sets.timedEnemy) {
             if (buff.skillSource !== slot) continue;
             // Union helper (not the raw PERSISTENT_STACKING_BUFFS set) so this gate can never
@@ -1215,7 +1221,7 @@ export function createStatusEngine(input: StatusEngineInput): StatusEngine {
             }
             // Collect the name BEFORE the upsert (landed = passed the landing hook,
             // regardless of family absorption / persistent-cap absorption inside upsertBuff).
-            appliedEnemy.push(buff.buffName);
+            appliedEnemy.push({ buffName: buff.buffName, application: buff.application });
             upsertBuff(buff, 'enemy');
         }
         return { resistedEnemy, appliedEnemy };

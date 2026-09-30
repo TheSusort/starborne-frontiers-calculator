@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     createStatusEngine,
     DEFAULT_ENEMY_TARGET,
@@ -536,6 +536,29 @@ describe('createStatusEngine — ability statuses (Task 6)', () => {
                 eng.isOutclassedByExistingFamily('enemy', 'Defense Down II', undefined, 'e1')
             ).toBe(false);
         });
+
+        it('the SCHEDULED (manual-picker) path never draws its landing hook for an outclassed challenger', () => {
+            // Tripwire for the sourceFired roll site: seed the singular default enemy target
+            // with a stronger existing tier (via applyTimedAbilityStatus, no target id → the
+            // default), then fire a weaker same-family scheduled buff through sourceFired with a
+            // SPY landing hook. If the hook is never called, no roll was drawn — the literal
+            // proof this site is gated the same as the other two.
+            const strong = enemyStatus('Defense Down III');
+            const landingHook = vi.fn(() => true);
+            const eng = createStatusEngine({
+                selfBuffs: [],
+                enemyDebuffs: [
+                    makeBuff('Defense Down II', { skillSource: 'active', skillDuration: 2 }),
+                ],
+                landsTimedEnemyApplication: landingHook,
+            });
+            eng.registerAbilityStatuses([strong]);
+            eng.beginRound(1);
+            eng.applyTimedAbilityStatus(1, strong);
+            const result = eng.sourceFired('attacker', 'active', 1);
+            expect(landingHook).not.toHaveBeenCalled();
+            expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [] });
+        });
     });
 
     it('accumulating ability status stacks per-active and excludes from snapshot at 0', () => {
@@ -949,7 +972,7 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         const eng = createStatusEngine({ selfBuffs: [], enemyDebuffs: [debuff] });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: ['Def Down'] });
+        expect(result).toEqual({ resistedEnemy: [], appliedEnemy: [{ buffName: 'Def Down' }] });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);
@@ -979,7 +1002,10 @@ describe('landsTimedEnemyApplication hook (Task 7)', () => {
         });
         eng.beginRound(1);
         const result = eng.sourceFired('attacker', 'active', 1);
-        expect(result).toEqual({ resistedEnemy: ['Armor Break'], appliedEnemy: ['Def Down'] });
+        expect(result).toEqual({
+            resistedEnemy: ['Armor Break'],
+            appliedEnemy: [{ buffName: 'Def Down' }],
+        });
         expect(eng.snapshot().activeEnemyDebuffs).toEqual([
             { buffName: 'Def Down', turnsRemaining: 2 },
         ]);

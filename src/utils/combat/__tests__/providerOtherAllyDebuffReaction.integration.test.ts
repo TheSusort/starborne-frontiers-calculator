@@ -109,10 +109,12 @@ function collectReactiveDamage(input: CombatEngineInput) {
     const bus = createEventBus();
     const reactiveDamage: Extract<CombatEvent, { type: 'reactive-damage-performed' }>[] = [];
     const debuffsApplied: Extract<CombatEvent, { type: 'debuff-applied' }>[] = [];
+    const debuffsResisted: Extract<CombatEvent, { type: 'debuff-resisted' }>[] = [];
     bus.on('reactive-damage-performed', (e) => reactiveDamage.push(e));
     bus.on('debuff-applied', (e) => debuffsApplied.push(e));
+    bus.on('debuff-resisted', (e) => debuffsResisted.push(e));
     runCombat({ ...input, bus });
-    return { reactiveDamage, debuffsApplied };
+    return { reactiveDamage, debuffsApplied, debuffsResisted };
 }
 
 // =============================================================================
@@ -256,6 +258,36 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
         expect(enqueued).toHaveLength(0);
     });
 
+    it('an applied debuff (no hacking roll — Concentrate Fire, Provoke) does not count as inflicted (#590 R3)', () => {
+        const handBus = makeHandBus();
+        const enqueued = registerOwner(handBus, 'provider');
+
+        handBus.emit({
+            type: 'debuff-applied',
+            sourceId: 'curator',
+            targetId: 'e1',
+            round: 1,
+            buffName: 'Concentrate Fire',
+            application: 'apply',
+        });
+        expect(enqueued).toHaveLength(0);
+    });
+
+    it('an inflicted debuff (rolled) still counts — only the applied kind is excluded (#590 R3)', () => {
+        const handBus = makeHandBus();
+        const enqueued = registerOwner(handBus, 'provider');
+
+        handBus.emit({
+            type: 'debuff-applied',
+            sourceId: 'curator',
+            targetId: 'e1',
+            round: 1,
+            buffName: 'Attack Down III',
+            application: 'inflict',
+        });
+        expect(enqueued).toHaveLength(1);
+    });
+
     it('chain-bound — a debuff-applied event branded viaOtherAllyDebuffInflictedReaction is ignored regardless of source', () => {
         const handBus = makeHandBus();
         const enqueuedA = registerOwner(handBus, 'provider-a');
@@ -302,7 +334,12 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         enemyDebuffs: [],
         walk: {
             shipSkills: {
-                slots: [{ slot: 'active', abilities: buffNames.map((n) => debuffAbility(n)) }],
+                slots: [
+                    {
+                        slot: 'active',
+                        abilities: buffNames.map((n) => debuffAbility(n, 'inflict')),
+                    },
+                ],
             },
             stats: {
                 attack: 100,
@@ -357,6 +394,39 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         }
     });
 
+    it('a weaker same-family debuff onto an ally-held stronger one never rolls — Provider hits once, not twice (#590 R1)', () => {
+        const { reactiveDamage, debuffsApplied, debuffsResisted } = collectReactiveDamage({
+            ...BASE(),
+            teamActors: [curatorAlly(['Defense Down III', 'Defense Down II'])],
+        });
+        const providerHits = reactiveDamage.filter((e) => e.sourceId === 'attacker');
+        expect(providerHits).toHaveLength(1);
+        // Neither a landing NOR a resist for the outclassed weaker debuff — the whole
+        // clause behaves as absent, not as a failed roll.
+        expect(debuffsApplied.some((e) => e.buffName === 'Defense Down II')).toBe(false);
+        expect(debuffsResisted.some((e) => e.buffName === 'Defense Down II')).toBe(false);
+    });
+
+    it('a same-tier re-land is a real re-application every cast — 3 casts land 2 debuffs each = 6 Provider hits (#590 R2)', () => {
+        const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
+            ...BASE(),
+            numRounds: 3,
+            teamActors: [curatorAlly(['Attack Down III', 'Crit Power Down III'])],
+        });
+        const providerHits = reactiveDamage.filter((e) => e.sourceId === 'attacker');
+        expect(providerHits).toHaveLength(6);
+        expect(
+            debuffsApplied.filter(
+                (e) => e.sourceId === 'curator' && e.buffName === 'Attack Down III'
+            )
+        ).toHaveLength(3);
+        expect(
+            debuffsApplied.filter(
+                (e) => e.sourceId === 'curator' && e.buffName === 'Crit Power Down III'
+            )
+        ).toHaveLength(3);
+    });
+
     it('R2+: Crit Rate Down II also lands on the enemy Curator debuffed', () => {
         const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
             ...BASE(),
@@ -369,6 +439,39 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
                 (e) => e.sourceId === 'attacker' && e.buffName === 'Crit Rate Down II'
             )
         ).toHaveLength(1);
+    });
+
+    it('an applied debuff (Concentrate Fire) does not fire Provider, an inflicted one in the same fight still does (#590 R3)', () => {
+        const judgeAlly: TeamActorEngineInput = {
+            ...curatorAlly([]),
+            id: 'judge',
+            walk: {
+                ...curatorAlly([]).walk!,
+                shipSkills: {
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [
+                                debuffAbility('Concentrate Fire', 'apply'),
+                                debuffAbility('Attack Down III', 'inflict'),
+                            ],
+                        },
+                    ],
+                },
+            },
+        };
+        const { reactiveDamage, debuffsApplied } = collectReactiveDamage({
+            ...BASE(),
+            teamActors: [judgeAlly],
+        });
+        expect(
+            debuffsApplied.some((e) => e.sourceId === 'judge' && e.buffName === 'Concentrate Fire')
+        ).toBe(true);
+        expect(
+            debuffsApplied.some((e) => e.sourceId === 'judge' && e.buffName === 'Attack Down III')
+        ).toBe(true);
+        const providerHits = reactiveDamage.filter((e) => e.sourceId === 'attacker');
+        expect(providerHits).toHaveLength(1);
     });
 
     // An AoE ally debuff hitting EACH victim is proven precisely and deterministically at the
@@ -448,7 +551,10 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
                 parsedEffects: {},
                 stacks: 1,
                 isStackable: false,
-                application: 'apply',
+                // 'inflict' (rolled, not a guaranteed apply) — this test's subject is REACTION
+                // vs CAST timing, not #590 R3's apply/inflict distinction, and security 0 below
+                // guarantees the roll lands.
+                application: 'inflict',
                 duration: 5,
             },
         };
@@ -516,6 +622,76 @@ describe('Provider (player-side) — real kit, security 0 guarantees every ally 
         expect(providerHits).toHaveLength(1);
         expect(providerHits[0].targetId).toBe(counterDebuff[0].targetId);
     });
+
+    it('a REACTIVE debuff onto an enemy already holding a stronger same-family one never rolls (#590 R1, reactive path)', () => {
+        // AllyReactor (focus, speed 100 — acts before the enemy's speed-10 turn) casts her own
+        // active, landing 'Defense Down III' unconditionally (application 'apply'). The enemy
+        // then attacks her, firing her on-attacked reactive 'Defense Down II' (inflict) back onto
+        // that SAME enemy — now outclassed by the III her own active just landed, so it should
+        // never roll: no debuff-applied, no debuff-resisted for 'Defense Down II'.
+        const ownActiveDebuff: Ability = {
+            id: 'ally-reactor-active-debuff',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-cast',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Defense Down III',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'apply',
+                duration: 5,
+            },
+        };
+        const reactiveCounterDebuff: Ability = {
+            id: 'ally-reactor-counter-weak',
+            type: 'debuff',
+            target: 'enemy',
+            trigger: 'on-attacked',
+            conditions: [],
+            config: {
+                type: 'debuff',
+                buffName: 'Defense Down II',
+                parsedEffects: {},
+                stacks: 1,
+                isStackable: false,
+                application: 'inflict',
+                duration: 5,
+            },
+        };
+        const { debuffsApplied, debuffsResisted } = collectReactiveDamage({
+            enemyAttackers: bareEnemy({ stats: { attack: 10_000, security: 0, hp: 500_000 } }),
+            attack: 100,
+            crit: 0,
+            critDamage: 0,
+            defensePenetration: 0,
+            chargeCount: 0,
+            shipSkills: {
+                slots: [
+                    { slot: 'active', abilities: [ownActiveDebuff] },
+                    { slot: 'passive', abilities: [reactiveCounterDebuff] },
+                ],
+            },
+            numRounds: 1,
+            selfBuffs: [],
+            enemyDebuffs: [],
+            selfDotModifier: 0,
+            defensePenetrationBuff: 0,
+            hasChargedSkill: false,
+            startCharged: false,
+            affinityDamageModifier: 0,
+            affinityCritCap: 100,
+            affinityCritPenalty: 0,
+            defence: 0,
+            hp: 1_000_000_000,
+            speed: 100,
+        });
+        expect(debuffsApplied.some((e) => e.buffName === 'Defense Down III')).toBe(true);
+        expect(debuffsApplied.some((e) => e.buffName === 'Defense Down II')).toBe(false);
+        expect(debuffsResisted.some((e) => e.buffName === 'Defense Down II')).toBe(false);
+    });
 });
 
 describe('Provider (enemy-side) — team symmetry mirror', () => {
@@ -552,7 +728,9 @@ describe('Provider (enemy-side) — team symmetry mirror', () => {
             chargeCount: 0,
             startCharged: false,
             shipSkills: {
-                slots: [{ slot: 'active', abilities: [debuffAbility('Attack Down III')] }],
+                slots: [
+                    { slot: 'active', abilities: [debuffAbility('Attack Down III', 'inflict')] },
+                ],
             },
         };
 
@@ -628,7 +806,12 @@ describe('Two Providers (chain-bound) — the reaction terminates without throwi
             enemyDebuffs: [],
             walk: {
                 shipSkills: {
-                    slots: [{ slot: 'active', abilities: [debuffAbility('Attack Down III')] }],
+                    slots: [
+                        {
+                            slot: 'active',
+                            abilities: [debuffAbility('Attack Down III', 'inflict')],
+                        },
+                    ],
                 },
                 stats: {
                     attack: 100,

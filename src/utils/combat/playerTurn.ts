@@ -1822,8 +1822,20 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // actor that inflicted the debuff. NOT called for recurring/aura per-round re-applications
     // or for every round a standing timed status is active — only at the infliction site.
     // `victimId` is REQUIRED here too — see emitDebuffResisted above.
-    const emitDebuffApplied = (sourceId: string, buffName: string, victimId: string) =>
-        bus.emit({ type: 'debuff-applied', sourceId, targetId: victimId, round: r, buffName });
+    const emitDebuffApplied = (
+        sourceId: string,
+        buffName: string,
+        victimId: string,
+        application?: 'inflict' | 'apply'
+    ) =>
+        bus.emit({
+            type: 'debuff-applied',
+            sourceId,
+            targetId: victimId,
+            round: r,
+            buffName,
+            ...(application !== undefined ? { application } : {}),
+        });
 
     // LIVE per-target debuff-landing chance. The sole producer of
     // landing chance: recomputed each turn from the acting actor's effective hacking (× this
@@ -2051,8 +2063,8 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // no-victim turn has none. The list is provably empty there anyway: the landing hook sourceFired
     // just consulted (`landsTimedEnemyApplicationLive`) rejects every application with no victim.
     if (hasVictim) {
-        for (const buffName of appliedScheduledTimedNames) {
-            emitDebuffApplied(actor.id, buffName, enemy.id);
+        for (const { buffName, application } of appliedScheduledTimedNames) {
+            emitDebuffApplied(actor.id, buffName, enemy.id, application);
         }
     }
     const entry = statusEngine.snapshot(actor.id);
@@ -2345,7 +2357,7 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
     // Seed with the newly-applied SCHEDULED timed enemy debuffs (this actor's own manual
     // lists, owner-scoped): the intersection of the window snapshot with the names that fired
     // this turn (appliedScheduledTimedNames). Empty for enemy attackers (no manual debuffs).
-    const appliedScheduledSet = new Set(appliedScheduledTimedNames);
+    const appliedScheduledSet = new Set(appliedScheduledTimedNames.map(({ buffName }) => buffName));
     const inflictedEnemyDebuffs: ActiveBuff[] = scheduledEnemy.landedEnemyDebuffs.filter((ab) =>
         appliedScheduledSet.has(ab.buffName)
     );
@@ -2488,7 +2500,12 @@ export function runPlayerTurn(args: PlayerTurnArgs): PlayerTurnResult {
                         refreshDisplayRow();
                     },
                     emitEvents: () => {
-                        emitDebuffApplied(actor.id, status.payload.buffName, emitTargetId);
+                        emitDebuffApplied(
+                            actor.id,
+                            status.payload.buffName,
+                            emitTargetId,
+                            status.payload.application
+                        );
                     },
                     victimId: vid,
                     buffName: status.payload.buffName,

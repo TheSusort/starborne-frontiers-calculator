@@ -173,6 +173,14 @@ export type CombatEvent =
           targetId: string;
           round: number;
           buffName: string;
+          /** #590 R3: the landing mechanic this debuff used — `'apply'` lands unconditionally
+           *  (no hacking-vs-security roll; Concentrate Fire, Provoke), `'inflict'` rolled for it.
+           *  Undefined only for a corpus shape that predates this field (treated as rolled — the
+           *  strictly narrower gate at `on-other-ally-debuff-inflicted` is the only consumer that
+           *  cares). `on-other-ally-debuff-inflicted` (Provider — #590) does NOT count an 'apply':
+           *  an applied debuff is not "inflicted" by the game's own wording. `on-debuff-inflicted`
+           *  and `on-ally-debuff-inflicted` are untouched and still count both kinds. */
+          application?: 'inflict' | 'apply';
           viaDebuffInflictedReaction?: true;
           viaAllyDebuffInflictedReaction?: true;
           viaOtherAllyDebuffInflictedReaction?: true;
