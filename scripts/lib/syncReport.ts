@@ -27,7 +27,8 @@ export const syncStatus = (plan: SyncPlan, writeFailures: string[]): SyncStatus 
         plan.metadata.length ||
         plan.idMismatches.length ||
         plan.missingFromCatalogue.length ||
-        plan.pinned.some((p) => p.state === 'catalogue-changed')
+        plan.pinned.some((p) => p.state === 'catalogue-changed') ||
+        plan.patches.some((p) => p.gate?.accepted?.length)
     ) {
         return 'attention';
     }
@@ -82,7 +83,7 @@ const columnsOf = (changes: Change[]): string =>
 const textHoldLabel = (p: RowPatch, hold: TextHold): string => {
     switch (hold) {
         case 'gate':
-            return 'held by the audit gate; new audit findings:';
+            return 'held by the skill gate; new findings:';
         case 'dropped-field':
             return `held: ${DROPPED} (${columnsOf(p.heldText.filter(isDroppedField))})`;
         case 'text-writes-off':
@@ -178,6 +179,24 @@ const renderPinned = (plan: SyncPlan, withText: boolean): string[] => {
     return lines;
 };
 
+/**
+ * Structural changes `--accept-structural` let through, by ship, and every accept-list name that
+ * matched none — a stale or misspelt name is otherwise silent.
+ */
+const renderAccepted = (plan: SyncPlan, ctx: ReportContext): string[] => {
+    const accepted = plan.patches.filter((p) => p.gate?.accepted?.length);
+    const seen = new Set(accepted.map((p) => p.name.toLowerCase()));
+    const unused = (ctx.acceptStructural ?? []).filter((n) => !seen.has(n.toLowerCase()));
+    if (!accepted.length && !unused.length) return [];
+    const lines = ['', `### Accepted structural changes (${accepted.length} ships)`];
+    for (const p of accepted) {
+        lines.push('', p.textHold === 'gate' ? `**${p.name}** — text still held by the skill gate` : `**${p.name}**`);
+        for (const f of p.gate?.accepted ?? []) lines.push(`- ${f}`);
+    }
+    if (unused.length) lines.push('', `--accept-structural names with no structural change: ${unused.join(', ')}`);
+    return lines;
+};
+
 const renderMappingHeld = (plan: SyncPlan): string[] => {
     const lines: string[] = [];
     if (plan.mappingHeld.length) {
@@ -221,6 +240,8 @@ export interface ReportContext {
     mode: 'dry-run' | 'write';
     backupPath: string | null;
     writeFailures: string[];
+    /** The run's `--accept-structural` names, if any. */
+    acceptStructural?: string[];
 }
 
 const renderHeader = (plan: SyncPlan, ctx: ReportContext): string[] => [
@@ -241,10 +262,11 @@ const renderWriteFailures = (ctx: ReportContext): string[] =>
     ctx.writeFailures.length ? ['', `**Write failures:** ${ctx.writeFailures.join(', ')}`] : [];
 
 /** Everything after the applied changes: the sections that need a human. */
-const renderAttention = (plan: SyncPlan, withText: boolean): string[] => [
+const renderAttention = (plan: SyncPlan, ctx: ReportContext, withText: boolean): string[] => [
     ...renderChangedPins(plan),
     ...renderMappingHeld(plan),
     ...renderHeldText(plan, withText),
+    ...renderAccepted(plan, ctx),
     ...renderHeldDrops(plan),
     ...renderPinned(plan, withText),
     ...renderInserts(plan),
@@ -268,7 +290,7 @@ export const renderReport = (plan: SyncPlan, ctx: ReportContext): string => {
             for (const c of p.applied) lines.push(`- ${describeChange(c)}`);
         }
     }
-    lines.push(...renderAttention(plan, true));
+    lines.push(...renderAttention(plan, ctx, true));
     return lines.join('\n') + '\n';
 };
 
@@ -292,7 +314,7 @@ export const renderIssueSummary = (plan: SyncPlan, ctx: ReportContext): string =
             const verb = ctx.mode === 'write' ? 'updated' : 'would be updated';
             lines.push('', `${applied} ships ${verb}; full diff in the job summary and artifact.`);
         }
-        lines.push(...renderAttention(plan, false));
+        lines.push(...renderAttention(plan, ctx, false));
     }
     const body = lines.join('\n') + '\n';
     if (body.length <= ISSUE_SUMMARY_LIMIT) return body;

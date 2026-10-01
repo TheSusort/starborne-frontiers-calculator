@@ -120,6 +120,23 @@ describe('planSync', () => {
     });
 });
 
+describe('planSync — the ship handed to the gate', () => {
+    it("gives the gate a matched ship's role and faction from its template row", () => {
+        const seen: unknown[] = [];
+        const gate: SkillGate = (_n, _b, _a, ship) => (seen.push(ship), { pass: true, newFindings: [] });
+        const supporter: UnitDiff = { template: row('A', { type: 'SUPPORTER', faction: 'TIANCHAO' }), unit: unit(), changes: [text] };
+        planSync(diff({ matched: amongQuiet(supporter) }), [], gate, on);
+        expect(seen).toEqual([{ type: 'SUPPORTER', faction: 'TIANCHAO' }]);
+    });
+
+    it("gives the gate a new ship's role and faction from the catalogue", () => {
+        const seen: unknown[] = [];
+        const gate: SkillGate = (_n, _b, _a, ship) => (seen.push(ship), { pass: true, newFindings: [] });
+        planSync(diff({ matched: [matched('A', [])], newShips: [unit({ type: 'DEBUFFER', faction: 'GELECEK' })] }), [row('A')], gate, on);
+        expect(seen).toEqual([{ type: 'DEBUFFER', faction: 'GELECEK' }]);
+    });
+});
+
 describe('planSync — mapping errors', () => {
     it('writes nothing for a matched unit with mapping errors and records why', () => {
         const { gate, calls } = spyGate();

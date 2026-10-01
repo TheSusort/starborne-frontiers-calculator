@@ -2,7 +2,8 @@
  * Turns a catalogue diff into writes. Pure.
  *
  * Written: base stats (merged into the row's existing base_stats), charge cost, ascension stats,
- * and skill text when `gate` passes. A gate failure holds EVERY text column of that ship (a
+ * and skill text when `gate` passes. The gate gets the ship's role and faction: the template row's
+ * for a matched ship, the catalogue's for a new one. A gate failure holds EVERY text column of that ship (a
  * half-updated kit is worse than an old one) while its other fields still write. Metadata,
  * id mismatches and rows missing from the catalogue are never written — only reported.
  *
@@ -254,7 +255,10 @@ export const planSync = (
             textHold = 'dropped-field';
         } else if (text.length) {
             const current = skillsOf(template);
-            gateResult = gate(template.name, current, withPinnedText(unit.definitionId, current, unit.skills, pins));
+            gateResult = gate(template.name, current, withPinnedText(unit.definitionId, current, unit.skills, pins), {
+                type: template.type,
+                faction: template.faction,
+            });
             if (gateResult.pass) {
                 for (const c of text) patch[c.column] = c.after;
                 applied.push(...text);
@@ -293,7 +297,7 @@ export const planSync = (
             plan.inserts.push({
                 row: insertRowFor(unit),
                 unit,
-                findings: gate(unit.name, EMPTY_SKILLS, unit.skills).newFindings,
+                findings: gate(unit.name, EMPTY_SKILLS, unit.skills, { type: unit.type, faction: unit.faction }).newFindings,
             });
         }
     }

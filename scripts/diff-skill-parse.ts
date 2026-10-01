@@ -13,32 +13,21 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { buildTraceShip } from './lib/traceShipFactory';
-import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import { loadShipSkillRecords, type ShipSkillRecord } from './lib/shipSkillCsv';
-import { canonicalAbilities, diffCorpora, summarizeDiff, type DiffSlot, type SlotParser } from './lib/skillParseDiff';
+import { canonicalAbilities, diffCorpora, summarizeDiff } from './lib/skillParseDiff';
+import { slotParser } from './lib/skillSlotParser';
 import { flagValue } from './lib/cliArgs';
-import type { Ability } from '../src/types/abilities';
 
 const argv = process.argv;
 const from = flagValue(argv, '--from') ?? 'docs/ship-skills.csv';
 const to = flagValue(argv, '--to') ?? 'docs/ship-skills.catalogue.csv';
 
-const parse: SlotParser = (r: ShipSkillRecord, refit) => {
-    const base = buildTraceShip(r.name, { refitLevel: refit });
-    if (!base) throw new Error(`no trace ship for ${r.name}`);
-    const ship = {
-        ...base,
-        activeSkillText: r.active,
-        chargeSkillText: r.charge,
-        chargeSkillCharge: r.chargeCharge,
-        firstPassiveSkillText: r.passives[0] || undefined,
-        secondPassiveSkillText: r.passives[1] || undefined,
-        thirdPassiveSkillText: r.passives[2] || undefined,
-    };
-    const out: Record<DiffSlot, Ability[]> = { active: [], charged: [], passive: [] };
-    for (const s of buildShipAbilities(ship).slots) out[s.slot as DiffSlot] = s.abilities;
-    return out;
-};
+// The base ship (role, stats) comes from docs/ship-data.json, falling back to docs/ship-skills.csv.
+const parse = slotParser((name, refit) => {
+    const base = buildTraceShip(name, { refitLevel: refit });
+    if (!base) throw new Error(`no trace ship for ${name}`);
+    return base;
+});
 
 const dumpOf = (recs: ShipSkillRecord[]) => {
     const out: Record<string, string> = {};

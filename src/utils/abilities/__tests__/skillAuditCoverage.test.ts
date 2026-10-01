@@ -135,3 +135,23 @@ describe('instead-replacement rule', () => {
         expect(rulesFor(text)).toContain('instead-replacement');
     });
 });
+
+describe('findingsForShip reads catalogue status-name spellings', () => {
+    // The parse names the buff by its engine name (Tianchao Precision II); the clause lookup must
+    // find that name in the text, so the text is canonicalised before the audit reads it.
+    const text =
+        'This Unit deals <unit-damage>100% damage</unit-damage>. This Unit gains <unit-skill>Tianchen Precision II</unit-skill> for 2 turns while an ally is in Stealth. It gains <unit-skill>Attack Up I</unit-skill> every turn.';
+
+    it("scopes an ungated finding to the aliased buff's own clause", () => {
+        const findings = findingsForShip({
+            name: 'AuditAliasShip',
+            slots: [{ slot: 'active', text }],
+        });
+        expect(findings).toEqual([
+            expect.objectContaining({
+                rule: 'ungated-effect-with-trigger',
+                clause: 'This Unit gains Tianchao Precision II for 2 turns while an ally is in Stealth.',
+            }),
+        ]);
+    });
+});

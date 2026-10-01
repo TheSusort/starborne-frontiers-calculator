@@ -29,4 +29,9 @@ describe('parseIds', () => {
     it('throws when every entry is blank', () => {
         expect(() => parseIds(' , ')).toThrow();
     });
+
+    it('keeps spaces inside an entry and names the flag it parsed in its error', () => {
+        expect(parseIds('Sha Xing,Gallant', '--accept-structural')).toEqual(['Sha Xing', 'Gallant']);
+        expect(() => parseIds(',', '--accept-structural')).toThrow(/^--accept-structural needs/);
+    });
 });

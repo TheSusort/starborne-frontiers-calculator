@@ -26,6 +26,11 @@ describe('syncStatus', () => {
         expect(syncStatus(plan({ halted: 'x' }), [])).toBe('failed');
         expect(syncStatus(plan(), ['A'])).toBe('failed');
     });
+
+    it('raises accepted structural changes to attention', () => {
+        const accepted = rowPatch({ gate: { pass: true, newFindings: [], accepted: ['passive R0 · lost x'] } });
+        expect(syncStatus(plan({ patches: [accepted] }), [])).toBe('attention');
+    });
 });
 
 describe('renderReport', () => {
@@ -81,7 +86,7 @@ describe('renderReport', () => {
             ctx
         );
         expect(md).toMatch(/\*\*Aegis\*\* — held: the catalogue dropped this field \(charge_skill_text\)/);
-        expect(md).not.toContain('new audit findings');
+        expect(md).not.toContain('held by the skill gate');
         expect(md).toMatch(/### Dropped values held/);
         expect(md).toContain('**Bedrock** charge cost: 4 → ∅ — the catalogue dropped this field');
     });
@@ -98,7 +103,7 @@ describe('renderReport', () => {
             ctx
         );
         expect(md).toMatch(/\*\*Aegis\*\* — held: text writes disabled \(--stats-only run\)/);
-        expect(md).not.toContain('new audit findings');
+        expect(md).not.toContain('held by the skill gate');
     });
 
     it('explains a bulk text hold with its ratio and labels each ship', () => {
@@ -116,7 +121,7 @@ describe('renderReport', () => {
         expect(md).toContain('120/150 matched ships (80%) changed skill text');
         expect(md).toContain('--allow-bulk-text');
         expect(md).toMatch(/\*\*Aegis\*\* — held: bulk-text hold/);
-        expect(md).not.toContain('new audit findings');
+        expect(md).not.toContain('held by the skill gate');
     });
 
     it('lists the image a new ship needs', () => {
@@ -262,7 +267,7 @@ describe('renderIssueSummary', () => {
             }),
             ctx
         );
-        expect(md).toContain('**Curator** — held by the audit gate');
+        expect(md).toContain('**Curator** — held by the skill gate');
         expect(md).toContain('active · base-damage: deals');
         expect(md).toContain('active_skill_text');
         expect(md).not.toContain('OLD_TEXT_BODY');
@@ -318,5 +323,48 @@ describe('renderIssueSummary', () => {
 
     it('leaves a short summary untruncated', () => {
         expect(renderIssueSummary(plan(), ctx)).not.toMatch(/truncated/);
+    });
+});
+
+describe('accepted structural changes', () => {
+    const lost = 'passive R0 · lost buff|self|on-enemy-destroyed|Legion Discipline I';
+    const accepted = rowPatch({
+        name: 'Gallant',
+        applied: [{ kind: 'skill-text', column: 'first_passive_skill_text', before: 'a', after: 'b' }],
+        gate: { pass: true, newFindings: [], accepted: [lost] },
+    });
+    const stillHeld = rowPatch({
+        name: 'Sokol',
+        heldText: [{ kind: 'skill-text', column: 'active_skill_text', before: 'a', after: 'b' }],
+        textHold: 'gate',
+        gate: { pass: false, newFindings: ['active · always-crit: x'], accepted: ['active · gained y'] },
+    });
+    const withAccepts = { ...ctx, acceptStructural: ['Gallant', 'sokol', 'Typo'] };
+
+    it('lists each accepted ship with its structural findings, in the report and the issue summary', () => {
+        for (const md of [renderReport(plan({ patches: [accepted] }), withAccepts), renderIssueSummary(plan({ patches: [accepted] }), withAccepts)]) {
+            expect(md).toMatch(/### Accepted structural changes \(1 ships\)/);
+            expect(md).toContain('**Gallant**');
+            expect(md).toContain(`- ${lost}`);
+        }
+    });
+
+    it('notes an accepted ship whose text another gate still held', () => {
+        const md = renderReport(plan({ patches: [stillHeld] }), withAccepts);
+        expect(md).toMatch(/\*\*Sokol\*\* — text still held by the skill gate/);
+    });
+
+    it('names accept-list entries that matched no structural change', () => {
+        const md = renderReport(plan({ patches: [accepted, stillHeld] }), withAccepts);
+        expect(md).toContain('--accept-structural names with no structural change: Typo');
+    });
+
+    it('renders nothing without an accept list or accepted findings', () => {
+        expect(renderReport(plan(), ctx)).not.toContain('Accepted structural changes');
+    });
+
+    it('labels a gate hold with the skill gate, not the audit alone', () => {
+        const md = renderReport(plan({ patches: [stillHeld] }), ctx);
+        expect(md).toContain('**Sokol** — held by the skill gate; new findings:');
     });
 });

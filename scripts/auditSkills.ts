@@ -14,6 +14,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
 import {
+    canonicaliseStatusNames,
     detectDamageReactionTrigger,
     detectHpCrossingTrigger,
     detectTargetHpGate,
@@ -538,7 +539,9 @@ export function csvAvailable(): boolean {
 export function findingsForShip(ship: ShipRow): Finding[] {
     const findings: Finding[] = [];
     for (const { slot, text } of ship.slots) {
-        const plain = stripTags(text);
+        // The parse names a status by its engine name, and the clause lookups find that name in
+        // `plain`, so `plain` carries engine names too (see `canonicaliseStatusNames`).
+        const plain = stripTags(canonicaliseStatusNames(text));
         const abilities = abilitiesFor(text);
         for (const rule of RULES) {
             if (!rule.keyword(plain)) continue;
