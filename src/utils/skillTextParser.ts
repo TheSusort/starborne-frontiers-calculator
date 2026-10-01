@@ -1434,13 +1434,11 @@ export function detectGrantConditions(
     // Provoked or Taunted"). Subject-aware guard: "against Taunted or Provoked enemies" (Rikra)
     // is an ENEMY state gating a damage bonus — handled by parseEnemyEffectDamageBonus, NOT a
     // self gate on this buff. Skip when the status adjective directly qualifies "enemies".
-    // Ship-kit Wave 3, Task 4: ALSO skip Amartya's "When an enemy defender gains Taunt, this Unit
-    // inflicts Exposed" — subject-first "an enemy ... gains Taunt" is the on-enemy-taunt-gained
-    // REACTIVE TRIGGER phrasing (ENEMY_GAINS_TAUNT_RE), not a self-status gate; without this
-    // exclusion the bare word "Taunt" here would wrongly spawn a `self-buff:'Taunt'` condition
-    // that gates the whole Exposed grant behind Amartya herself having Taunt (never true) — a
-    // regression this task's new phrasing would otherwise introduce into this pre-existing rule.
-    // "enemies affected by Taunt or Provoke" is the same enemy state, worded after the noun.
+    // Also skip the subject-first "When an enemy defender gains Taunt, this Unit inflicts
+    // Exposed" (Amartya): "an enemy ... gains Taunt" is the on-enemy-taunt-gained REACTIVE
+    // TRIGGER (ENEMY_GAINS_TAUNT_RE), not a self-status gate, and reading its bare "Taunt" here
+    // would gate the whole grant behind the caster itself having Taunt. "enemies affected by
+    // Taunt or Provoke" is the same enemy state, worded after the noun.
     const enemyStatusAttributed =
         /(?:taunt(?:ed)?|provoke[ds]?)(?:\s+or\s+(?:taunt(?:ed)?|provoke[ds]?))?\s+enem(?:y|ies)\b/i.test(
             low
@@ -1507,16 +1505,9 @@ const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
 // opposing actor, regardless of WHO caused it (the engine listener keys off the opposing victim).
 // Verified against docs/ship-skills.csv (grep "explod"): Demolisher ("a/A bomb explodes on an
 // enemy") and Valkyrie are the ONLY two rows using "explod" in the whole corpus.
-// Ship-kit W7: the DETONATOR-scoped "detonates a bomb" alternate was SPLIT OUT into
-// SELF_DETONATES_BOMB_RE below — it is a different trigger (on-self-bomb-detonated), fired only
-// when THIS unit actively causes the burst, not on any bomb bursting on an enemy.
-// #345: the effect-agnostic "explodes on (an|the) enemy" alternate was DROPPED. Phase 3 PR-D
-// added it to make Valkyrie's "an Echoing Burst explodes on an enemy" ride this same trigger, on
-// the premise that an Echoing Burst is a "named bomb-type effect". It is not one: it is an
-// accumulate-then-detonate container (see audit/classes.ts), unrelated to the Bomb DoT, and
-// sharing the trigger cost her the two properties her text asks for — her repair fired on any
-// teammate's Bomb, and never on her own burst. It now rides ECHOING_BURST_DETONATE_RE below.
-// Keep this alternate Bomb-specific: it is what Demolisher's splash and charge removal read.
+// The DETONATOR-scoped "detonates a bomb" phrasing is a different trigger
+// (on-self-bomb-detonated) and lives in SELF_DETONATES_BOMB_RE below.
+// Bomb-specific; Echoing Burst rides its own regex (#345).
 // The optional closing tag lets the raw-text position detectors read a tagged
 // "<unit-skill>Bomb</unit-skill> explodes".
 const BOMB_DETONATE_RE = /bomb(?:<\/[^>]+>)?\s+explodes/i;
@@ -2074,15 +2065,13 @@ export function parseExtendDoTTarget(text: string | null | undefined): 'enemy' |
         : 'enemy';
 }
 
-// Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of
-// parseDebuffDurationReduction, and a sibling of EXTEND_DOT_RE (which is DoT-tick-store-only
-// and requires the literal "Damage Over Time" phrase). Two surface forms in the corpus:
+// Generic buff/debuff DURATION EXTENSION — the inverse of parseDebuffDurationReduction, and a
+// sibling of EXTEND_DOT_RE (which is DoT-tick-store-only and requires the literal "Damage Over
+// Time" phrase). Two surface forms:
 //   active voice:  "extends [their] active <Buffs|Debuffs> by N turn(s)"   (Sokol, Ripper)
 //   passive voice: "<buffs|debuffs> [are] extended by N turn(s)"           (Lev)
-// Both carry a negative lookahead for "damage over time" so a row that ALSO has a DoT-extend
-// clause elsewhere in the same (period-scoped) segment never double-matches here — the
-// corpus never combines them on one clause, but the guard is cheap insurance (mirrors the
-// audit rule's own DoT exclusion, per the investigation doc).
+// Both carry a negative lookahead for "damage over time", so a DoT-extend clause in the same
+// period-scoped segment never also matches here (mirrors the audit rule's own DoT exclusion).
 const EXTEND_STATUS_ACTIVE_RE =
     /extends?\b(?![^.]*\bdamage over time\b)[^.]*?\bactive\s+(buffs|debuffs)\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 const EXTEND_STATUS_PASSIVE_RE =
@@ -4882,9 +4871,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                 continue;
             const { start: sentenceStart, text: sentence } = sentenceBoundsAround(plain, m.index);
             if (HEAL_DISQUALIFY_RE.test(sentence)) continue;
-            // Scope both basis resolution and the continuation scan to the match's own
-            // sentence so that a stat phrase or "additional repair" in a LATER sentence
-            // cannot pollute this match's result (Issues 1 & 2). `basisScope` is the
+            // Basis resolution and the continuation scan are scoped to the match's own
+            // sentence, so a stat phrase or "additional repair" in a LATER sentence never
+            // reaches this match's result. `basisScope` is the
             // portion of the sentence from the match's position onward so `resolveHealBasis`
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
@@ -5162,7 +5151,7 @@ export function parseDebuffDurationReduction(
     return out;
 }
 
-// SP-F F3 (Lingshe charged skill): "reduces all Bombs on the enemy targets by N turn(s), Bombs
+// Lingshe's charged skill: "reduces all Bombs on the enemy targets by N turn(s), Bombs
 // reduced to 0 turns by this skill will detonate. This reduction effect requires hacking." A
 // STRUCTURALLY DIFFERENT mechanic from REDUCE_DEBUFF_DURATION_RE above (which explicitly
 // excludes "Bombs" — see its own comment): that regex shrinks the GENERIC debuff store on

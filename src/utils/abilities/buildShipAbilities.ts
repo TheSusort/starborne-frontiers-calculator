@@ -846,7 +846,7 @@ function parseIncomingCritReduction(text: string): number | null {
     return parseFloat(m[1] ?? m[2]);
 }
 
-/** One parsed incoming-damage-reduction directive (epic PR12(C)). `scopes` lists every
+/** One parsed incoming-damage-reduction directive . `scopes` lists every
  *  incoming-reduction ability scope this phrasing should emit (most phrasings are
  *  scope:'direct' only; "all incoming damage"/unscoped phrasings emit BOTH 'direct' and
  *  'dot'). `pct` XOR `hpScaling` — never both. */
@@ -883,7 +883,6 @@ interface ParsedIncomingDamageReduction {
  *    continuous HP-proportional scaling (`hpScaling`, condition 'always'). perUnit = cap/100 so
  *    the reduction reaches exactly `cap`% at 0 HP (the Revenge gear set's self-hp-missing-pct
  *    formula, `hpProportionalScaling` above). No scope word → both 'direct' and 'dot'.
- * Voron, Malvex and Fuying's arms carry their own notes below.
  */
 function parseIncomingDamageReductionPhrasings(text: string): ParsedIncomingDamageReduction[] {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -1282,14 +1281,22 @@ function abilitiesFromText(
         : damageTagPos >= 0
           ? damageTagPos
           : text.search(/<unit-damage>/i);
-    // Combat G PR1: on a PASSIVE, the "When this Unit is directly damaged as a primary target,
-    // it deals X% damage to that enemy" shape (Stalwart) is a reactive COUNTERATTACK, not an
-    // on-cast base damage. Re-type that component to a `counter` ability (on-attacked,
-    // requirePrimaryTarget) when the parsed counter multiplier matches the base damage the tag
-    // carries. Heal/shield/reflect "directly damaged" consequences are not matched by
-    // parseCounterAbilities, so they keep their existing parse. PR2: Nyxen's shield-hit shape
-    // also rides this path (requireShieldHit). Centurion (adjacent-ally) does NOT ride this path
-    // (its retaliate tag carries no "damage" word → mult is 0) — it is pushed separately below.
+    // On a PASSIVE, "When this Unit is directly damaged as a primary target, it deals X% damage
+    // to that enemy" (Stalwart) is a reactive COUNTERATTACK, not an on-cast base damage; the
+    // shield-hit shape (Nyxen) is one too (requireShieldHit). The damage component is re-typed to
+    // a `counter` ability (on-attacked) when the parsed counter multiplier equals the tag's base
+    // damage. Heal/shield/reflect "directly damaged" consequences are not matched by
+    // parseCounterAbilities and keep their own parse. The adjacent-ally retaliate shape
+    // (Centurion) is pushed separately below: its tag carries no "damage" word, so mult is 0.
+    //
+    // The branches below are exclusive:
+    //  1. enemyChargedCastOwnsDamage: no base push; the reaction's damage ability is emitted
+    //     later by the enemy-charged-cast block. out[0] may then be absent or not a damage
+    //     ability, and every out[0] rider/condition attachment below is guarded on
+    //     `out[0]?.ability.type === 'damage'`, so each skips silently instead of attaching to
+    //     the wrong ability.
+    //  2. counter: the counterattack replaces the base damage.
+    //  3. otherwise a base damage ability is pushed FIRST, so it is out[0] for those attachments.
     const counter = slot === 'passive' ? parseCounterAbilities(text) : null;
     // A hit stated in the "when an enemy uses their charged skill" sentence is that reaction's
     // own damage — parseEnemyChargedCastReaction emits it on the on-enemy-charged-cast trigger —

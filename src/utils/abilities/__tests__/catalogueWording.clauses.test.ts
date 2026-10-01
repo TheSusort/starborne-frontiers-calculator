@@ -290,15 +290,30 @@ describe('damage, defence and charge clauses — tagged mechanic phrases are not
             source: 'charge' as const,
             text: 'This Unit grants a <unit-damage>shield equal to 30%</unit-damage> of its max HP and <unit-skill>cleanses 2 debuffs</unit-skill>.',
             phrase: 'cleanses 2 debuffs',
+            // The tagged mechanic phrases are the only clauses, so nothing parses.
+            expectedNames: [] as string[],
+            // The same clause shape plus a real status proves the parser is live on it.
+            control: {
+                text: 'This Unit grants a <unit-damage>shield equal to 30%</unit-damage> of its max HP and <unit-skill>cleanses 2 debuffs</unit-skill> and inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.',
+                name: 'Inferno II',
+            },
         },
         {
             ship: 'Wisteria passive R2',
             source: 'passive2' as const,
             text: "When this Unit inflicts <unit-skill>Corrosion</unit-skill> with a critical hit, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and <unit-skill>extends the newly inflicted</unit-skill> <unit-skill>Corrosion</unit-skill> by 1 turn with the extension chance equal to this Unit's crit power.",
             phrase: 'extends the newly inflicted',
+            expectedNames: ['Inferno II', 'Corrosion'],
+            control: undefined,
         },
-    ])('$ship', ({ source, text, phrase }) => {
+    ])('$ship', ({ source, text, phrase, expectedNames, control }) => {
         const names = parseSkillEffects(text, source).map((e) => e.buffName);
         expect(names).not.toContain(phrase);
+        expect(names).toEqual(expectedNames);
+        if (control) {
+            expect(parseSkillEffects(control.text, source).map((e) => e.buffName)).toContain(
+                control.name
+            );
+        }
     });
 });
