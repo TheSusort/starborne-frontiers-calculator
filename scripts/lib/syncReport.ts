@@ -38,7 +38,7 @@ const describeChange = (c: Change): string => {
     }
 };
 
-/** definition_id mismatches: rendered on every outcome, halted or not — the join itself didn't need the gate to run. */
+/** definition_id mismatches: rendered on every outcome, including a halted run, because they explain why a run halted. */
 const renderIdMismatches = (plan: SyncPlan): string[] => {
     const lines: string[] = [];
     if (plan.idMismatches.length) {
@@ -50,7 +50,7 @@ const renderIdMismatches = (plan: SyncPlan): string[] => {
     return lines;
 };
 
-/** Rows in ship_templates the catalogue no longer has: rendered on every outcome, halted or not. */
+/** Rows in ship_templates the catalogue no longer has: rendered on every outcome, including a halted run, because they explain why a run halted. */
 const renderMissingFromCatalogue = (plan: SyncPlan): string[] => {
     const lines: string[] = [];
     if (plan.missingFromCatalogue.length) {

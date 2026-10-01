@@ -80,7 +80,7 @@ jobs:
               if: steps.seen.outputs.cache-hit != 'true'
               run: echo "status=$(node -p "try{require('./.catalogue-sync-outcome.json').status}catch{'failed'}")" >> "$GITHUB_OUTPUT"
 
-            # Held status is retried on the next scheduled run, so it is not marked as synced.
+            # Held and failed statuses are retried on the next scheduled run, so neither is marked as synced.
             - name: Mark this catalogue state synced
               if: >
                   steps.seen.outputs.cache-hit != 'true' &&
@@ -92,7 +92,10 @@ jobs:
                   key: ${{ steps.manifest.outputs.key }}
 
             - name: File or update the catalogue-sync issue
-              if: steps.seen.outputs.cache-hit != 'true' && steps.outcome.outputs.status != 'clean'
+              if: >
+                  steps.seen.outputs.cache-hit != 'true' &&
+                  steps.outcome.outputs.status != 'clean' &&
+                  !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
               env:
                   GH_TOKEN: ${{ github.token }}
                   STATUS: ${{ steps.outcome.outputs.status }}
@@ -100,7 +103,7 @@ jobs:
               run: |
                   gh label create catalogue-sync --color 5319e7 --description "Unit catalogue sync" --force
                   [ -f sync-report.md ] || echo "Sync crashed before writing a report." > sync-report.md
-                  hash=$(sha256sum sync-report.md | cut -c1-16)
+                  hash=$(grep -v '^Snapshot before writing: ' sync-report.md | sha256sum | cut -c1-16)
                   { echo "<!-- report:$hash -->"; echo "Status: **$STATUS** · [run]($RUN_URL) · snapshot in the run's artifacts"; echo; cat sync-report.md; } > body.md
                   issue=$(gh issue list --label catalogue-sync --state open --json number --jq '.[0].number')
                   if [ -z "$issue" ]; then
