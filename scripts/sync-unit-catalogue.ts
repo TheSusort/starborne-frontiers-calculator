@@ -2,7 +2,7 @@
 /**
  * Syncs ship_templates from the official unit catalogue.
  *
- * Usage: npm run sync:catalogue [-- --write] [--stats-only] [--report <file>] [--issue-body <file>]
+ * Usage: npm run sync:catalogue [-- --write] [--stats-only] [--allow-bulk-text] [--report <file>] [--issue-body <file>]
  *        [--outcome <file>] [--backup-dir <dir>]
  *        npm run sync:catalogue -- --print-cache-key
  *
@@ -10,6 +10,7 @@
  * write (no snapshot, no write), then applies the plan from scripts/lib/catalogueSyncPlan.ts.
  * Restore a snapshot with scripts/restore-ship-templates.ts.
  *
+ * --allow-bulk-text lifts the bulk-text hold (see `planSync`); the scheduled workflow never passes it.
  * --report writes the full report; --issue-body writes the short summary meant for a GitHub issue.
  *
  * Needs SUPABASE_SERVICE_ROLE_KEY (ship_templates is admin-write).
@@ -50,6 +51,7 @@ const main = async (): Promise<SyncStatus> => {
     const templates = raw as unknown as TemplateRow[];
     const plan = planSync(diffCatalogue(units, templates), templates, auditGate, {
         textWrites: !process.argv.includes('--stats-only'),
+        allowBulkText: process.argv.includes('--allow-bulk-text'),
     });
 
     let backupPath: string | null = null;

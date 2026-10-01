@@ -1,13 +1,17 @@
 /** Markdown report and outcome status for one catalogue sync run. Pure. */
 import type { Change } from './catalogueDiff';
 import type { CatalogueManifest } from './catalogueSchema';
-import { isDroppedField, type RowPatch, type SyncPlan, type TextHold } from './catalogueSyncPlan';
+import { isDroppedField, TEXT_CHANGE_HOLD_RATIO, type RowPatch, type SyncPlan, type TextHold } from './catalogueSyncPlan';
 
 export type SyncStatus = 'clean' | 'attention' | 'held' | 'failed';
 
 export const syncStatus = (plan: SyncPlan, writeFailures: string[]): SyncStatus => {
     if (plan.halted || writeFailures.length) return 'failed';
-    if (plan.mappingHeld.length || plan.patches.some((p) => p.heldText.length || p.heldDrops.length)) {
+    if (
+        plan.bulkTextHold ||
+        plan.mappingHeld.length ||
+        plan.patches.some((p) => p.heldText.length || p.heldDrops.length)
+    ) {
         return 'held';
     }
     if (
@@ -64,29 +68,48 @@ const renderMissingFromCatalogue = (plan: SyncPlan): string[] => {
 
 const DROPPED = 'the catalogue dropped this field';
 
+const columnsOf = (changes: Change[]): string =>
+    changes.map((c) => (c.kind === 'skill-text' ? c.column : c.kind)).join(', ');
+
 const textHoldLabel = (p: RowPatch, hold: TextHold): string => {
     switch (hold) {
         case 'gate':
             return 'held by the audit gate; new audit findings:';
-        case 'dropped-field': {
-            const cols = p.heldText.filter(isDroppedField).map((c) => (c.kind === 'skill-text' ? c.column : c.kind));
-            return `held: ${DROPPED} (${cols.join(', ')})`;
-        }
+        case 'dropped-field':
+            return `held: ${DROPPED} (${columnsOf(p.heldText.filter(isDroppedField))})`;
         case 'text-writes-off':
-            return 'held: text writes disabled (--stats-only run)';
+        case 'bulk-text':
+            return `held: ${RUN_WIDE_HOLD[hold]}`;
     }
 };
 
-const columnsOf = (changes: Change[]): string =>
-    changes.map((c) => (c.kind === 'skill-text' ? c.column : c.kind)).join(', ');
+/** Holds that apply to every ship's text at once, rather than being decided ship by ship. */
+const RUN_WIDE_HOLD: Partial<Record<TextHold, string>> = {
+    'text-writes-off': 'text writes disabled (--stats-only run)',
+    'bulk-text': 'bulk-text hold',
+};
+
+const renderBulkTextHold = (plan: SyncPlan): string[] => {
+    if (!plan.bulkTextHold) return [];
+    const { changed, matched } = plan.bulkTextHold;
+    return [
+        '',
+        `**Bulk-text hold:** ${changed}/${matched} matched ships (${Math.round((changed / matched) * 100)}%) changed skill text, over the ${TEXT_CHANGE_HOLD_RATIO * 100}% limit. All text is held and no new ship is inserted; stats still write. Once the parser reads the new text, rerun with \`--allow-bulk-text\`.`,
+    ];
+};
 
 /** `withText` prints each held column's before/after; without it only the column names. */
 const renderHeldText = (plan: SyncPlan, withText: boolean): string[] => {
-    const lines: string[] = [];
+    const lines: string[] = [...renderBulkTextHold(plan)];
     const held = plan.patches.filter((p) => p.heldText.length);
     if (held.length) {
         lines.push('', `### Skill text held (${held.length} ships)`);
+        for (const [hold, label] of Object.entries(RUN_WIDE_HOLD) as [TextHold, string][]) {
+            const names = withText ? [] : held.filter((p) => p.textHold === hold).map((p) => p.name);
+            if (names.length) lines.push('', `Text held for ${names.length} ships — ${label}: ${names.join(', ')}`);
+        }
         for (const p of held) {
+            if (!withText && p.textHold && RUN_WIDE_HOLD[p.textHold]) continue;
             lines.push('', `**${p.name}** — ${textHoldLabel(p, p.textHold ?? 'gate')}`);
             for (const f of p.gate?.newFindings ?? []) lines.push(`- ${f}`);
             if (withText) for (const c of p.heldText) lines.push(`- ${describeChange(c)}`);

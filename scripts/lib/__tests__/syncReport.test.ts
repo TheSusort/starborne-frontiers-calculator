@@ -7,7 +7,7 @@ const manifest = {
     unitsSha256: 'a', statusEffectsSha256: 'b', localeSha256: { en: 'c' },
 };
 const plan = (over: Partial<SyncPlan> = {}): SyncPlan => ({
-    halted: null, patches: [], inserts: [], refusedInserts: [], mappingHeld: [], metadata: [],
+    halted: null, bulkTextHold: null, patches: [], inserts: [], refusedInserts: [], mappingHeld: [], metadata: [],
     idMismatches: [], missingFromCatalogue: [], matchedCount: 150, ...over,
 });
 const rowPatch = (over: Partial<RowPatch> = {}): RowPatch => ({
@@ -22,6 +22,7 @@ describe('syncStatus', () => {
         expect(syncStatus(plan({ patches: [rowPatch({ heldText: [{} as never], textHold: 'gate' })] }), [])).toBe('held');
         expect(syncStatus(plan({ patches: [rowPatch({ heldDrops: [{} as never] })] }), [])).toBe('held');
         expect(syncStatus(plan({ mappingHeld: [{} as never] }), [])).toBe('held');
+        expect(syncStatus(plan({ bulkTextHold: { changed: 2, matched: 3 } }), [])).toBe('held');
         expect(syncStatus(plan({ halted: 'x' }), [])).toBe('failed');
         expect(syncStatus(plan(), ['A'])).toBe('failed');
     });
@@ -97,6 +98,24 @@ describe('renderReport', () => {
             ctx
         );
         expect(md).toMatch(/\*\*Aegis\*\* — held: text writes disabled \(--stats-only run\)/);
+        expect(md).not.toContain('new audit findings');
+    });
+
+    it('explains a bulk text hold with its ratio and labels each ship', () => {
+        const md = renderReport(
+            plan({
+                bulkTextHold: { changed: 120, matched: 150 },
+                patches: [rowPatch({
+                    name: 'Aegis',
+                    heldText: [{ kind: 'skill-text', column: 'active_skill_text', before: 'A', after: 'B' }],
+                    textHold: 'bulk-text',
+                })],
+            }),
+            ctx
+        );
+        expect(md).toContain('120/150 matched ships (80%) changed skill text');
+        expect(md).toContain('--allow-bulk-text');
+        expect(md).toMatch(/\*\*Aegis\*\* — held: bulk-text hold/);
         expect(md).not.toContain('new audit findings');
     });
 
@@ -204,6 +223,21 @@ describe('renderIssueSummary', () => {
             ctx
         );
         for (const s of ['Bedrock', 'Crocus', 'Newcomer', 'Refused', 'Ghost', 'Drifter', 'Relic']) expect(md).toContain(s);
+    });
+
+    it('names ships under a run-wide text hold in one line, not one entry each', () => {
+        const held = (name: string) => rowPatch({
+            name,
+            heldText: [{ kind: 'skill-text', column: 'active_skill_text', before: 'A', after: 'B' }],
+            textHold: 'bulk-text',
+        });
+        const md = renderIssueSummary(
+            plan({ bulkTextHold: { changed: 2, matched: 2 }, patches: [held('Aegis'), held('Bedrock')] }),
+            ctx
+        );
+        expect(md).toContain('2/2 matched ships (100%) changed skill text');
+        expect(md).toMatch(/bulk-text hold[^\n]*: Aegis, Bedrock/);
+        expect(md).not.toContain('**Aegis**');
     });
 
     it('truncates to 60,000 characters with a trailing note', () => {

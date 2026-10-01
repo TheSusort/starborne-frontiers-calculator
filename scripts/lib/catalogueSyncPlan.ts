@@ -12,6 +12,11 @@
  *
  * With `textWrites: false` (a stats-only run) no text is written and no ship is inserted.
  *
+ * When more than TEXT_CHANGE_HOLD_RATIO of matched ships change skill text, the run treats text as
+ * it would on a stats-only run (`bulkTextHold`) unless `allowBulkText` is set: a change that wide
+ * means the catalogue's wording moved under the parser, which the gate cannot see. Stats, charge
+ * cost and refit stats still write.
+ *
  * The whole run halts (writes nothing) when no unit matched a row, or when more than
  * STATS_CHANGE_HALT_RATIO of matched ships change stats: both point at a mapping break.
  */
@@ -20,9 +25,10 @@ import type { CatalogueTemplate, SkillColumns } from './catalogueMapping';
 import { EMPTY_SKILLS, type GateResult, type SkillGate } from './skillTextGate';
 
 export const STATS_CHANGE_HALT_RATIO = 0.25;
+export const TEXT_CHANGE_HOLD_RATIO = 0.25;
 
 /** Why a ship's text was held. `gate` is the only reason under which `RowPatch.gate` is set. */
-export type TextHold = 'gate' | 'dropped-field' | 'text-writes-off';
+export type TextHold = 'gate' | 'dropped-field' | 'text-writes-off' | 'bulk-text';
 
 export interface RowPatch {
     id: string;
@@ -42,6 +48,7 @@ export interface PlannedInsert {
 }
 export interface SyncPlan {
     halted: string | null;
+    bulkTextHold: { changed: number; matched: number } | null;
     patches: RowPatch[];
     inserts: PlannedInsert[];
     refusedInserts: { unit: CatalogueTemplate; reason: string }[];
@@ -97,6 +104,7 @@ const insertRowFor = (unit: CatalogueTemplate): Record<string, unknown> => ({
 
 const emptyPlan = (diff: CatalogueDiff): SyncPlan => ({
     halted: null,
+    bulkTextHold: null,
     patches: [],
     inserts: [],
     refusedInserts: [],
@@ -111,7 +119,7 @@ export const planSync = (
     diff: CatalogueDiff,
     templates: TemplateRow[],
     gate: SkillGate,
-    opts: { textWrites: boolean }
+    opts: { textWrites: boolean; allowBulkText?: boolean }
 ): SyncPlan => {
     const plan = emptyPlan(diff);
     if (diff.matched.length === 0) {
@@ -123,6 +131,10 @@ export const planSync = (
             ...plan,
             halted: `${statsChanged}/${diff.matched.length} matched ships changed stats (limit ${STATS_CHANGE_HALT_RATIO * 100}%)`,
         };
+    }
+    const textChanged = diff.matched.filter((m) => m.changes.some((c) => c.kind === 'skill-text')).length;
+    if (opts.textWrites && !opts.allowBulkText && textChanged / diff.matched.length > TEXT_CHANGE_HOLD_RATIO) {
+        plan.bulkTextHold = { changed: textChanged, matched: diff.matched.length };
     }
 
     for (const { template, unit, changes } of diff.matched) {
@@ -158,6 +170,8 @@ export const planSync = (
         let textHold: TextHold | null = null;
         if (text.length && !opts.textWrites) {
             textHold = 'text-writes-off';
+        } else if (text.length && plan.bulkTextHold) {
+            textHold = 'bulk-text';
         } else if (text.some(isDroppedField)) {
             textHold = 'dropped-field';
         } else if (text.length) {
@@ -189,6 +203,8 @@ export const planSync = (
         const id = templateIdFor(unit.name);
         if (!opts.textWrites) {
             plan.refusedInserts.push({ unit, reason: 'text writes disabled (--stats-only run)' });
+        } else if (plan.bulkTextHold) {
+            plan.refusedInserts.push({ unit, reason: 'bulk-text hold: inserting would write its text' });
         } else if (unit.mappingErrors.length) {
             plan.refusedInserts.push({ unit, reason: unit.mappingErrors.join('; ') });
         } else if (takenIds.has(id)) {

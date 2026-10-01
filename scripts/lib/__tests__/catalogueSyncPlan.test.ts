@@ -29,6 +29,14 @@ const on = { textWrites: true };
 const hp: Change = { kind: 'stats', field: 'hp', before: 1, after: 2 };
 const text: Change = { kind: 'skill-text', column: 'active_skill_text', before: 'A', after: 'A2' };
 
+/** One changed ship among four unchanged ones: under every whole-run ratio threshold. */
+const amongQuiet = (first: UnitDiff): UnitDiff[] => [first, ...['Q1', 'Q2', 'Q3', 'Q4'].map((id) => matched(id, []))];
+const spyGate = () => {
+    const calls: string[] = [];
+    const gate: SkillGate = (name) => (calls.push(name), { pass: true, newFindings: [] });
+    return { gate, calls };
+};
+
 describe('planSync', () => {
     it('halts when nothing matched', () => {
         expect(planSync(diff(), [], pass, on).halted).toMatch(/matched/);
@@ -48,7 +56,7 @@ describe('planSync', () => {
     });
 
     it('writes skill text when the gate passes', () => {
-        const plan = planSync(diff({ matched: [matched('A', [text])] }), [], pass, on);
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [text])) }), [], pass, on);
         expect(plan.patches[0].patch).toEqual({ active_skill_text: 'A2' });
         expect(plan.patches[0].heldText).toEqual([]);
     });
@@ -109,14 +117,6 @@ describe('planSync', () => {
     });
 });
 
-/** One changed ship among four unchanged ones: under every whole-run ratio threshold. */
-const amongQuiet = (first: UnitDiff): UnitDiff[] => [first, ...['Q1', 'Q2', 'Q3', 'Q4'].map((id) => matched(id, []))];
-const spyGate = () => {
-    const calls: string[] = [];
-    const gate: SkillGate = (name) => (calls.push(name), { pass: true, newFindings: [] });
-    return { gate, calls };
-};
-
 describe('planSync — mapping errors', () => {
     it('writes nothing for a matched unit with mapping errors and records why', () => {
         const { gate, calls } = spyGate();
@@ -165,6 +165,59 @@ describe('planSync — a change that would erase a value', () => {
         const fill: Change = { kind: 'skill-text', column: 'charge_skill_text', before: null, after: '' };
         const plan = planSync(diff({ matched: amongQuiet(matched('A', [fill])) }), [], pass, on);
         expect(plan.patches[0]).toMatchObject({ patch: { charge_skill_text: '' }, heldText: [], textHold: null });
+    });
+});
+
+describe('planSync — bulk text hold', () => {
+    const textAndHp = (id: string) => matched(id, [hp, text]);
+
+    it('holds all text, without calling the gate, when over a quarter of matched ships change text', () => {
+        const { gate, calls } = spyGate();
+        const rows = [textAndHp('A'), matched('B', [text]), ...['C', 'D', 'E', 'F', 'G'].map((id) => matched(id, []))];
+        const plan = planSync(diff({ matched: rows }), [], gate, on);
+        expect(calls).toEqual([]);
+        expect(plan.halted).toBeNull();
+        expect(plan.bulkTextHold).toEqual({ changed: 2, matched: 7 });
+        expect(plan.patches[0]).toMatchObject({
+            patch: { base_stats: { hp: 2, shield: 5 } },
+            heldText: [text],
+            textHold: 'bulk-text',
+            gate: null,
+        });
+        expect(plan.patches[1]).toMatchObject({ patch: {}, heldText: [text], textHold: 'bulk-text' });
+    });
+
+    it('refuses new ships during a bulk text hold, without calling the gate', () => {
+        const { gate, calls } = spyGate();
+        const plan = planSync(
+            diff({ matched: [matched('A', [text]), matched('B', [])], newShips: [unit({ name: 'Brand New', definitionId: 'D7' })] }),
+            [row('A'), row('B')],
+            gate,
+            on
+        );
+        expect(calls).toEqual([]);
+        expect(plan.inserts).toEqual([]);
+        expect(plan.refusedInserts[0].reason).toMatch(/bulk-text hold/);
+    });
+
+    it('does not hold at exactly a quarter', () => {
+        const plan = planSync(diff({ matched: [matched('A', [text]), ...['B', 'C', 'D'].map((id) => matched(id, []))] }), [], pass, on);
+        expect(plan.bulkTextHold).toBeNull();
+        expect(plan.patches[0]).toMatchObject({ patch: { active_skill_text: 'A2' }, textHold: null });
+    });
+
+    it('writes bulk text through the gate with allowBulkText', () => {
+        const { gate, calls } = spyGate();
+        const plan = planSync(diff({ matched: [matched('A', [text]), matched('B', [text])] }), [], gate, { textWrites: true, allowBulkText: true });
+        expect(calls).toEqual(['A', 'B']);
+        expect(plan.bulkTextHold).toBeNull();
+        expect(plan.patches.map((p) => p.patch)).toEqual([{ active_skill_text: 'A2' }, { active_skill_text: 'A2' }]);
+    });
+
+    it('reports no bulk hold on a stats-only run', () => {
+        const plan = planSync(diff({ matched: [matched('A', [text])] }), [], pass, { textWrites: false });
+        expect(plan.bulkTextHold).toBeNull();
+        expect(plan.patches[0].textHold).toBe('text-writes-off');
     });
 });
 

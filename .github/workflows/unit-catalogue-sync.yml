@@ -20,7 +20,8 @@ concurrency:
 
 jobs:
     sync:
-        if: vars.CATALOGUE_SYNC_ENABLED == 'true'
+        # A dispatched dry run is allowed before the sync is enabled, to review it first.
+        if: vars.CATALOGUE_SYNC_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
         runs-on: ubuntu-latest
         timeout-minutes: 20
         env:
