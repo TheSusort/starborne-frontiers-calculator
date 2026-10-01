@@ -6,7 +6,12 @@ export const CURRENT_VERSION = '1.71.0';
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [];
+export const UNRELEASED_CHANGES: string[] = [
+    'Ship data: base stats and refit bonuses now match the official catalogue.',
+    'Ship data: Enforcer, Orel and Yazid now have their correct roles.',
+    'Ship data: Suku and Yuyan now have their correct affinities.',
+    'Ship data: Mender and Yin Jian now show their own portraits.',
+];
 
 export const CHANGELOG: ChangelogEntry[] = [
     {
