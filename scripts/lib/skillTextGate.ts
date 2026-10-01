@@ -10,8 +10,8 @@
  *   It catches a reword that changes what the parse produces. A reword that keeps every signature
  *   but changes a config value still passes; the report's per-clause before/after is the record.
  *
- * Ship-level flags (`ignoresStealth`, `doesntBreakStasis`) are not slot abilities, so neither
- * gate sees a change to one.
+ * The non-`slots` fields of `ShipSkills` (ship-level flags) are not compared, so neither gate sees
+ * a change to one.
  */
 import { findingsForShip, type Finding, type ShipRow } from '../auditSkills';
 import type { SkillColumn, SkillColumns } from './catalogueMapping';
@@ -29,6 +29,7 @@ export interface GateResult {
 /** Template fields handed to the parse with the text; the role (`type`) decides some recipients. */
 export interface GateShip {
     type?: string | null;
+    /** Passed for completeness: the slot parse does not read it. */
     faction?: string | null;
 }
 export type SkillGate = (shipName: string, before: SkillColumns, after: SkillColumns, ship?: GateShip) => GateResult;
@@ -81,6 +82,7 @@ export const auditGate: SkillGate = (shipName, before, after) =>
 const isBlankSkills = (skills: SkillColumns): boolean =>
     (Object.keys(SLOT_OF) as SkillColumn[]).every((c) => !skills[c]?.trim());
 
+/** Signatures never carry the charge cost; both sides of a comparison get the same value. */
 const recordOf = (name: string, skills: SkillColumns): ShipSkillRecord => ({
     name,
     active: skills.active_skill_text ?? '',
@@ -137,3 +139,10 @@ export const acceptingFor = (names: Iterable<string>, gate: SkillGate): SkillGat
         return { pass: true, newFindings: [], accepted: [...(r.accepted ?? []), ...r.newFindings] };
     };
 };
+
+/**
+ * The gate the scheduled sync runs: the audit gate, plus the structural gate with the ships named
+ * in `accept` let through (their findings are reported as accepted).
+ */
+export const syncGate = (accept: ReadonlySet<string>): SkillGate =>
+    combineGates(auditGate, acceptingFor(accept, structuralGate));

@@ -155,3 +155,22 @@ describe('findingsForShip reads catalogue status-name spellings', () => {
         ]);
     });
 });
+
+describe('base-damage audit rule keyword', () => {
+    const rules = (text: string) =>
+        findingsForShip({ name: 'RuleProbe', slots: [{ slot: 'passive1', text }] }).map(
+            (f) => f.rule
+        );
+
+    it('does not read "N% damage reduction" as base damage', () => {
+        expect(rules('This Unit has 35% damage reduction from critical hits.')).not.toContain(
+            'base-damage'
+        );
+    });
+
+    it('still flags a real damage clause the parse does not handle', () => {
+        expect(rules('Something unparseable deals 120% damage to the target.')).toContain(
+            'base-damage'
+        );
+    });
+});

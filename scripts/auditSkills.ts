@@ -106,7 +106,7 @@ const RULES: Rule[] = [
     {
         id: 'base-damage',
         severity: 'high',
-        keyword: (t) => /\d+(?:\.\d+)?%\s+damage\b/i.test(t) && !/\bmore\b/i.test(t),
+        keyword: (t) => /\d+(?:\.\d+)?%\s+damage\b(?!\s+reduction)/i.test(t) && !/\bmore\b/i.test(t),
         handled: (a) => hasType(a, 'damage'),
     },
     {

@@ -27,7 +27,7 @@ import { cacheKey, fetchCatalogueIndex, fetchCatalogueUnits } from './lib/catalo
 import { toCatalogueTemplate } from './lib/catalogueMapping';
 import { diffCatalogue, type TemplateRow } from './lib/catalogueDiff';
 import { planSync } from './lib/catalogueSyncPlan';
-import { acceptingFor, auditGate, combineGates, structuralGate } from './lib/skillTextGate';
+import { syncGate } from './lib/skillTextGate';
 import { renderIssueSummary, renderReport, syncStatus, type ReportContext, type SyncStatus } from './lib/syncReport';
 import { backupFileName, buildBackup } from './lib/templateBackup';
 import { flagValue, parseIds } from './lib/cliArgs';
@@ -53,7 +53,7 @@ const main = async (): Promise<SyncStatus> => {
     const units = (await fetchCatalogueUnits(index.slugs)).map(toCatalogueTemplate);
     const raw = await db.selectAll<Record<string, unknown>>('ship_templates', 'select=*&order=id.asc');
     const templates = raw as unknown as TemplateRow[];
-    const gate = combineGates(auditGate, acceptingFor(acceptStructural, structuralGate));
+    const gate = syncGate(acceptStructural);
     const plan = planSync(diffCatalogue(units, templates), templates, gate, {
         textWrites: !process.argv.includes('--stats-only'),
         allowBulkText: process.argv.includes('--allow-bulk-text'),

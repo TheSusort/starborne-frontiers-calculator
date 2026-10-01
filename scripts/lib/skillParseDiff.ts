@@ -1,6 +1,6 @@
 /**
- * Compares how two skill corpora PARSE, slot by slot. The skill gate (`audit:skills`) only finds
- * coverage gaps; this finds every ability lost, gained, retargeted or retriggered between two
+ * Compares how two skill corpora PARSE, slot by slot. The `audit:skills` rules only find coverage
+ * gaps; this compares parses and finds every ability lost, gained, retargeted or retriggered between two
  * texts for the same ship — the instrument for any catalogue text change.
  */
 import type { Ability } from '../../src/types/abilities';

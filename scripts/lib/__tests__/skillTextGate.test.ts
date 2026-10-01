@@ -5,6 +5,7 @@ import {
     structuralGate,
     combineGates,
     acceptingFor,
+    syncGate,
     EMPTY_SKILLS,
     type SkillGate,
 } from '../skillTextGate';
@@ -161,5 +162,26 @@ describe('acceptingFor', () => {
         const audit: SkillGate = () => ({ pass: false, newFindings: ['passive1 · always-crit: x'] });
         const r = combineGates(audit, acceptingFor(['Gallant'], fail))('Gallant', EMPTY_SKILLS, EMPTY_SKILLS);
         expect(r).toEqual({ pass: false, newFindings: ['passive1 · always-crit: x'], accepted: ['passive R0 · lost x'] });
+    });
+});
+
+describe('syncGate', () => {
+    const kill = 'This Unit gains <unit-skill>Legion Discipline I</unit-skill> for 3 turns on kill.';
+    // Replaces the kill buff with a plain attack: a parse change the audit rules do not flag.
+    const replaced = 'This Unit deals <unit-damage>100% damage</unit-damage>.';
+    const alwaysCrit = "This Unit's attacks are always critical.";
+
+    it('holds a pure structural change unless the ship is accepted', () => {
+        expect(syncGate(new Set())('X', skills(kill), skills(replaced)).pass).toBe(false);
+        const r = syncGate(new Set(['X']))('X', skills(kill), skills(replaced));
+        expect(r.pass).toBe(true);
+        expect(r.accepted?.join(' ')).toMatch(/lost buff\|self\|on-enemy-destroyed/);
+    });
+
+    it('holds an audit-only finding, accepted or not', () => {
+        const before = skills(kill);
+        const after = { ...before, second_passive_skill_text: alwaysCrit };
+        expect(syncGate(new Set())('GateTestShip', before, after).pass).toBe(false);
+        expect(syncGate(new Set(['GateTestShip']))('GateTestShip', before, after).pass).toBe(false);
     });
 });

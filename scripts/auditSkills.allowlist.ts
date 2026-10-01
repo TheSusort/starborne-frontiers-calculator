@@ -57,21 +57,6 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Crit rate set to 100% in import data; parser flag would double-count.',
     },
 
-    // ── base-damage: incoming-reduction clause, not an attack (epic PR1) ────────
-    // "gains up to 30% damage reduction as its health decreases" matches the base-damage
-    // keyword regex (contains "N% damage") but is HP-scaled incoming damage reduction, not an
-    // attack — PR1 fixed parseSkillDamage to stop minting a phantom on-cast damage{30} ability
-    // from it. The actual incoming-reduction mechanic is now modeled (epic PR12(C),
-    // hpScaling on the `incoming-reduction` ability config) — this entry stays because the
-    // `base-damage` rule's keyword still matches the "N% damage" substring and the clause is
-    // STILL correctly not a damage ability (it's incoming-reduction instead); the new
-    // `incoming-damage-reduction` rule confirms it IS handled.
-    {
-        ship: 'Tormenter',
-        rules: ['base-damage'],
-        reason: 'passive2 "gains up to 30% damage reduction as its health decreases" is HP-scaled incoming damage reduction, not an attack — modeled via `incoming-reduction`.hpScaling (epic PR12(C)), never a `damage` ability.',
-    },
-
     // ── epic PR12(A): damage-reflection rule — audit-harness scoping false positive ──
     // The audit's `abilitiesFor` helper always parses a slot's text as the ACTIVE skill
     // (scripts/auditSkills.ts:113-117), regardless of the CSV column it came from — there is
