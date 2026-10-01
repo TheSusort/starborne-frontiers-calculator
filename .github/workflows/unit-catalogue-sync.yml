@@ -1,0 +1,114 @@
+name: Unit catalogue sync
+
+on:
+    schedule:
+        - cron: '17 5 * * *'
+    workflow_dispatch:
+        inputs:
+            dry_run:
+                description: 'Report only, write nothing'
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+    issues: write
+
+concurrency:
+    group: unit-catalogue-sync
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        if: vars.CATALOGUE_SYNC_ENABLED == 'true'
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        env:
+            VITE_SUPABASE_URL: ${{ secrets.CATALOGUE_SYNC_SUPABASE_URL }}
+            SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Read catalogue manifest
+              id: manifest
+              run: npx tsx scripts/sync-unit-catalogue.ts --print-cache-key >> "$GITHUB_OUTPUT"
+
+            - name: Skip if this catalogue state was already synced
+              id: seen
+              if: github.event_name == 'schedule'
+              uses: actions/cache/restore@v6
+              with:
+                  path: .catalogue-sync-outcome.json
+                  key: ${{ steps.manifest.outputs.key }}
+                  lookup-only: true
+
+            - name: Sync
+              id: sync
+              if: steps.seen.outputs.cache-hit != 'true'
+              continue-on-error: true
+              run: >
+                  npx tsx scripts/sync-unit-catalogue.ts
+                  ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '--write' }}
+                  --report sync-report.md
+                  --outcome .catalogue-sync-outcome.json
+                  --backup-dir backups
+
+            - name: Job summary
+              if: steps.seen.outputs.cache-hit != 'true'
+              run: cat sync-report.md >> "$GITHUB_STEP_SUMMARY" || echo "no report written" >> "$GITHUB_STEP_SUMMARY"
+
+            - name: Keep snapshot and report
+              if: steps.seen.outputs.cache-hit != 'true'
+              uses: actions/upload-artifact@v7
+              with:
+                  name: catalogue-sync-${{ github.run_id }}
+                  path: |
+                      backups/
+                      sync-report.md
+                  retention-days: 90
+                  if-no-files-found: warn
+
+            - name: Read outcome
+              id: outcome
+              if: steps.seen.outputs.cache-hit != 'true'
+              run: echo "status=$(node -p "try{require('./.catalogue-sync-outcome.json').status}catch{'failed'}")" >> "$GITHUB_OUTPUT"
+
+            # Held status is retried on the next scheduled run, so it is not marked as synced.
+            - name: Mark this catalogue state synced
+              if: >
+                  steps.seen.outputs.cache-hit != 'true' &&
+                  !(github.event_name == 'workflow_dispatch' && inputs.dry_run) &&
+                  (steps.outcome.outputs.status == 'clean' || steps.outcome.outputs.status == 'attention')
+              uses: actions/cache/save@v6
+              with:
+                  path: .catalogue-sync-outcome.json
+                  key: ${{ steps.manifest.outputs.key }}
+
+            - name: File or update the catalogue-sync issue
+              if: steps.seen.outputs.cache-hit != 'true' && steps.outcome.outputs.status != 'clean'
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  STATUS: ${{ steps.outcome.outputs.status }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  gh label create catalogue-sync --color 5319e7 --description "Unit catalogue sync" --force
+                  [ -f sync-report.md ] || echo "Sync crashed before writing a report." > sync-report.md
+                  hash=$(sha256sum sync-report.md | cut -c1-16)
+                  { echo "<!-- report:$hash -->"; echo "Status: **$STATUS** · [run]($RUN_URL) · snapshot in the run's artifacts"; echo; cat sync-report.md; } > body.md
+                  issue=$(gh issue list --label catalogue-sync --state open --json number --jq '.[0].number')
+                  if [ -z "$issue" ]; then
+                      gh issue create --title "Unit catalogue sync needs attention" --label catalogue-sync --body-file body.md
+                  elif ! gh issue view "$issue" --json body,comments --jq '[.body] + [.comments[].body] | join("\n")' | grep -q "report:$hash"; then
+                      gh issue comment "$issue" --body-file body.md
+                  fi
+
+            - name: Fail the job when the sync failed
+              if: steps.outcome.outputs.status == 'failed'
+              run: exit 1
