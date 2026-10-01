@@ -2187,7 +2187,10 @@ function abilitiesFromText(
         // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
         // heal components share the same pct the regex may hit the wrong tag — acceptable, since
         // the position only drives cosmetic editor order (the engine ignores heal types).
-        const healTagPos = text.search(new RegExp(`<unit-damage>(?:[^<]*?)${escNum(h.pct)}%`, 'i'));
+        // The lookbehind keeps "5%" from anchoring inside an earlier tag's "25%".
+        const healTagPos = text.search(
+            new RegExp(`<unit-damage>(?:[^<]*?)(?<![\\d.])${escNum(h.pct)}%`, 'i')
+        );
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
         // Phase 4c PR 1+2: a damage-reaction heal (parser annotation `damageReaction`)

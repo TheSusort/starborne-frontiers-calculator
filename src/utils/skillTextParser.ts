@@ -465,7 +465,7 @@ export function parseInsteadDamageReplacement(
 export function parseOnResistHpDamage(text: string | null | undefined): { pct: number } | null {
     if (!text) return null;
     const re =
-        /when\s+this\s+unit\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+        /when\s+this\s+unit\s+resists\s+a\s+(?:<unit-aid>)?debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
     const m = re.exec(text);
     if (!m) return null;
     const pct = parseFloat(m[1]);
@@ -491,7 +491,7 @@ export function parseOnResistHpDamage(text: string | null | undefined): { pct: n
 export function parseOnResistShieldDamage(text: string | null | undefined): { pct: number } | null {
     if (!text) return null;
     const re =
-        /when\s+an\s+enemy\s+resists\s+a\s+debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+current\s+shield/i;
+        /when\s+an\s+enemy\s+resists\s+a\s+(?:<unit-aid>)?debuff\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+current\s+shield/i;
     const m = re.exec(text);
     if (!m) return null;
     const pct = parseFloat(m[1]);
@@ -516,8 +516,11 @@ export function parseKilledByDirectHpDamage(
 }
 
 // Matches "X% ... for each <phrase>" where no other % sits between the number and
-// "for each". Global so we can skip repair/heal contexts and unknown phrases.
-const CONDITIONAL_RE = /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+([^.,;<]+)/gi;
+// "for each". Global so we can skip repair/heal contexts and unknown phrases. The phrase may
+// open with a tagged noun ("for each <unit-aid>debuff</unit-aid> on the enemy"): group 2 is
+// that noun and group 3 the untagged rest; otherwise group 4 is the whole untagged phrase.
+const CONDITIONAL_RE =
+    /(\d+(?:\.\d+)?)\s*%[^%]*?for each\s+(?:<unit-(?:aid|skill|damage)>([^<]*)<\/unit-(?:aid|skill|damage)>([^.,;<]*)|([^.,;<]+))/gi;
 
 // Flat conditional damage bonus gated by enemy class, e.g. Meiying's "when attacking a
 // Supporter, it additionally deals 90% damage". Anchored at the enemy-type lead-in so the
@@ -572,7 +575,7 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
         // "X% more (direct) damage for each Y" is an outgoing-damage MODIFIER (parseModifiers),
         // not a base-damage scaling — skip so it isn't double-counted on the damage ability.
         if (/\bmore\b/i.test(m[0].split(/for each/i)[0])) continue;
-        const mapped = mapConditionPhrase(m[2]);
+        const mapped = mapConditionPhrase(m[2] !== undefined ? m[2] + m[3] : m[4]);
         if (!mapped) continue;
         // Scope the cap search to the conditional clause onward so an earlier,
         // unrelated "up to X%" elsewhere in the skill text isn't picked up.
