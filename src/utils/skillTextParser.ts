@@ -24,6 +24,7 @@ import type { ShipRoleCategory } from '../constants/shipTypes';
 import { FACTION_NAMES, factionSpellings, type FactionName } from '../constants/factions';
 import { getShipSkillRows } from './ship/skillRows';
 import { CHEAT_DEATH_BUFFS } from './combat/cheatDeathBuffs';
+import { EXPOSED } from './combat/exposedStatus';
 
 /**
  * Represents a parsed segment of skill text
@@ -652,10 +653,11 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
     return null;
 }
 
-// "if Stealthed, … additional … N% damage" — self-buff(Stealth) conditional bonus. Handles both
-// "additionally deals" and the reversed "additional deals" (Yin Jian) word orders.
+// "if Stealthed, … additional … N% damage" / "if it has Stealth it deals an additional N% damage"
+// — self-buff(Stealth) conditional bonus. Handles both "additionally deals" and the reversed
+// "additional deals" (Yin Jian) word orders.
 const SELF_STEALTH_BONUS_RE =
-    /\bif\s+stealthed\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+    /\bif\s+(?:stealthed|it\s+has\s+stealth)\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
 
 // "additional N% damage against <status>[ or <status>] enemies" — status adjectives (Rikra).
 const ENEMY_STATUS_BONUS_RE =
@@ -953,10 +955,11 @@ const GRANT_ENEMY_TYPE_RE = new RegExp(
     'i'
 );
 
-// Negated enemy class: "targeting non-Defenders", "against non-Attackers" → enemy is NOT
-// that type. Scoped to enemy-targeting lead-ins so "non-defender ally" phrasings don't match.
+// Negated enemy class: "targeting non-Defenders", "attack targets non-defenders", "against
+// non-Attackers" → enemy is NOT that type. Scoped to enemy-targeting lead-ins so "non-defender
+// ally" phrasings don't match.
 const NON_ENEMY_TYPE_RE = new RegExp(
-    `(?:targeting|damaging|against)\\s+non-?\\s*(${ENEMY_TYPE_WORD.source})`,
+    `(?:targeting|targets|damaging|against)\\s+non-?\\s*(${ENEMY_TYPE_WORD.source})`,
     'i'
 );
 
@@ -1291,10 +1294,10 @@ export function detectGrantConditions(
         return [{ subject: 'killed-enemy-had-debuff', derivable: true }];
     }
 
-    // Ship-kit Wave 4, Task 3: "If this Unit has Shield" — a self-shield-presence gate
-    // (APEX's charged Disable). Live-derived from the caster's own shieldPool at cast time.
+    // "If this Unit has Shield" / "has an active shield" — a self-shield-presence gate (APEX's
+    // charged Disable). Live-derived from the caster's own shieldPool at cast time.
     // Checked before enemy-type/other rules — no overlap with those phrasings.
-    if (/\bif\s+this\s+unit\s+has\s+shield\b/i.test(low)) {
+    if (/\bif\s+this\s+unit\s+has\s+(?:an\s+active\s+)?shield\b/i.test(low)) {
         return [{ subject: 'self-shield', derivable: true }];
     }
 
@@ -2482,8 +2485,8 @@ const ENEMY_DEBUFFED_RE =
     /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:(?:gets?|is|are|becomes?)\s+debuffed\b|gets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b)/i;
 
 /**
- * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
- * a phrase matching ENEMY_DEBUFFED_RE; otherwise undefined. Position-scoped on the RAW text
+ * Returns 'on-debuff-inflicted' when `anchorPos` falls inside a sentence carrying a phrase
+ * matching ENEMY_DEBUFFED_RE; otherwise undefined. Position-scoped on the RAW text
  * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
  */
 export function detectDebuffInflictedTrigger(
@@ -2926,8 +2929,8 @@ const KILLED_BY_DIRECT_RE =
     /\b(?:when|upon\s+being)\s+(?:killed|destroyed)\s+by\s+direct\b[^.;]*\bdamage\b/i;
 
 /**
- * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
- * a phrase matching KILLED_BY_DIRECT_RE; otherwise undefined.
+ * Returns 'on-destroyed' when `anchorPos` falls inside a sentence carrying a phrase matching
+ * KILLED_BY_DIRECT_RE; otherwise undefined.
  * Position-scoped on the RAW text (mirrors detectEndOfRoundPurgeTrigger).
  * Reference data: docs/ship-skills.csv (Faust).
  */
@@ -3514,16 +3517,16 @@ export function detectHpCrossingTrigger(
     };
 }
 
-// Hermes charged skill: "If the target has less than N% HP" gate on a grant clause. Distinct
-// from the self-subject HP_CROSSING_RE — this reads the TARGET's HP and is a one-shot cast-time
-// gate, not a reactive crossing.
-const TARGET_HP_GATE_RE = /\bif the target has less than\s+(\d+(?:\.\d+)?)\s*%\s*hp\b/i;
+// Hermes charged skill: "If the target / an ally has less than N% HP" gate on a grant clause.
+// Distinct from the self-subject HP_CROSSING_RE — this reads the grant RECIPIENT's HP and is a
+// one-shot cast-time gate, not a reactive crossing.
+const TARGET_HP_GATE_RE = /\bif (?:the target|an ally) has less than\s+(\d+(?:\.\d+)?)\s*%\s*hp\b/i;
 
 /**
- * Hermes: "If the target has less than N% HP" gate on a grant clause. Sentence-scoped at the
- * grant's anchor `pos` (same masked rawSentenceAround as the crossing detector) so the
- * preceding repair/charge sentence — which has no target gate — never co-matches. Returns
- * undefined for any text without "the target". Reference data: docs/ship-skills.csv (Hermes).
+ * Hermes: "If the target has less than N% HP" / "If an ally has less than N% HP" gate on a grant
+ * clause. Sentence-scoped at the grant's anchor `pos` (same masked rawSentenceAround as the
+ * crossing detector) so the preceding repair/charge sentence — which has no target gate — never
+ * co-matches. Returns undefined for any other subject.
  */
 export function detectTargetHpGate(text: string, pos: number): { hpBelowPct: number } | undefined {
     const sentence = rawSentenceAround(text, pos);
@@ -4672,7 +4675,7 @@ const LEECH_HEAL_VERB_RE =
     /\bheals?\s+for\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:the\s+)?damage\s+dealt/gi;
 // A multi-component continuation: "with an additional repair/amount equal to N% of its Defense".
 const HEAL_ADDITIONAL_RE =
-    /an?\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
+    /(?:an?|\bwith)\s+additional\s+(?:repair|amount)\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:its|this\s+unit'?s)\s+(hp|max\s*hp|attack|defense)/gi;
 
 // Leech basis from the sentence tail after the match. ORDER MATTERS: "damage dealt
 // to them/this unit" (Malvex) is damage TAKEN and must be tested before the generic
@@ -4939,14 +4942,14 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                     // Instead-on-crit split (Isha): a sentence with "but when critical(ly)
                     // hit, it instead" carries TWO repair matches — the one INSIDE the
                     // instead-clause gets critFilter 'crit', the base match 'non-crit'
-                    // (mutually exclusive pair; the missing "y" in the live CSV text —
-                    // "criticall hit" — is tolerated). Isha's sentence always matches the
+                    // (mutually exclusive pair; the misspellings "criticall hit" and
+                    // "critcally hit" are tolerated). Isha's sentence always matches the
                     // "directly damaged" alternation FIRST (it precedes the crit-hit
                     // alternation in HEAL_DAMAGE_REACTION_RE), so the instead-clause
                     // handling takes precedence and the crit-hit-trigger branch below is
                     // never reached for Isha.
                     const insteadClause =
-                        /but\s+when\s+criticall?y?\s+hit\b[^.;]*\binstead\b/i.exec(sentence);
+                        /but\s+when\s+criti?call?y?\s+hit\b[^.;]*\binstead\b/i.exec(sentence);
                     const inInstead =
                         insteadClause !== null && m.index - sentenceStart > insteadClause.index;
                     // Pure crit-hit trigger ("when this unit is critically hit, repairs N%"):
@@ -5001,7 +5004,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                     : undefined;
             const requiresHpDamage =
                 leechBasis === 'damage-taken' &&
-                /when\s+taking\s+hp\s+damage\s+and\s+still\s+having\s+shield/i.test(sentence)
+                /when\s+taking\s+hp\s+damage\s+and\s+still\s+having\s+(?:a\s+)?shield/i.test(
+                    sentence
+                )
                     ? true
                     : undefined;
             // PR6b: per-count repair scaling (Oleander/Meatshield). Only plain on-cast repairs
@@ -5849,9 +5854,9 @@ export function canonicalStatusName(name: string): string {
  * and the existing "Reversed Repairs" never change.
  *
  * Every parser pass reads status names off the raw text by position (`findBuffNamePos` and its
- * kin), so the text itself must carry the engine's name: `parseSkillEffects` and
- * `buildShipAbilities` apply this to their input before any pass runs. Display text is not
- * rewritten — `findBuffDescription` resolves an aliased tooltip through `canonicalStatusName`.
+ * kin), so the text itself must carry the engine's name: callers canonicalise their input before
+ * any positional pass. Display text is not rewritten — a tooltip resolves an aliased name
+ * through `canonicalStatusName`.
  */
 export function canonicaliseStatusNames(text: string): string {
     return text.replace(/<unit-skill>(.*?)<\/unit-skill>/g, (whole, name: string) => {
@@ -5905,6 +5910,16 @@ function resolveBuffName(candidate: string): string | undefined {
     }
     return undefined;
 }
+
+/**
+ * Statuses whose own definition ends them at the end of the round (Exposed: "removed after taking
+ * direct damage or at the end of the round"). A cast's "inflict 1 stack of Exposed", with no
+ * duration, lands for 1 turn. A durationless cast grant otherwise parses 'recurring', which the
+ * engine registers as an aura, and Exposed is read only off the timed per-victim store
+ * (`exposedIncomingPct`), so it would never amplify a hit. A reaction's durationless debuff
+ * already lands for 1 turn in the reactive executor, so passives keep 'recurring'.
+ */
+const ROUND_SCOPED_STATUSES: ReadonlySet<string> = new Set([EXPOSED]);
 
 /**
  * Scans forward from startIndex through connector-only text segments and non-text segments,
@@ -6675,9 +6690,14 @@ export function parseSkillEffects(
         // Step 4: Stack detection from immediately preceding text segment
         const stackMatch = STACKS_RE.exec(prevText);
         const stacks = stackMatch ? parseInt(stackMatch[1], 10) : undefined;
-        // Only use 'recurring' from stacks if no finite duration was found
+        // Only use 'recurring' from stacks if no finite duration was found — except a CAST's
+        // durationless stack grant of a round-scoped status (ROUND_SCOPED_STATUSES), which lasts
+        // the 1-turn window its own definition gives it.
         if (stacks !== undefined && duration === null) {
-            duration = 'recurring';
+            duration =
+                (source === 'active' || source === 'charge') && ROUND_SCOPED_STATUSES.has(buffName)
+                    ? 1
+                    : 'recurring';
         }
 
         // Cheat Death (and any CHEAT_DEATH_BUFFS member) is an until-triggered, no-payload

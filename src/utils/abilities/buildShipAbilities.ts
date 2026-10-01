@@ -1288,7 +1288,8 @@ function abilitiesFromText(
     // a `counter` ability (on-attacked) when the parsed counter multiplier equals the tag's base
     // damage. Heal/shield/reflect "directly damaged" consequences are not matched by
     // parseCounterAbilities and keep their own parse. The adjacent-ally retaliate shape
-    // (Centurion) is pushed separately below: its tag carries no "damage" word, so mult is 0.
+    // (Centurion, `counter.allySubject`) is pushed by its own block below whether or not its tag
+    // carries the word "damage"; when it does (mult > 0), branch 2 pushes nothing.
     //
     // The branches below are exclusive:
     //  1. enemyChargedCastOwnsDamage: no base push; the reaction's damage ability is emitted
@@ -1309,25 +1310,28 @@ function abilitiesFromText(
     if (enemyChargedCastOwnsDamage) {
         // Emitted by the enemy-charged-cast block below.
     } else if (mult > 0 && counter && counter.multiplier === mult) {
-        const hits = parseHitCount(text);
-        out.push({
-            ability: {
-                id: nextId(),
-                type: 'counter',
-                target: 'enemy',
-                trigger: 'on-attacked',
-                conditions: [],
-                config: {
+        // An allySubject retaliation is emitted, grouped, by the adjacent-ally counter block.
+        if (!counter.allySubject) {
+            const hits = parseHitCount(text);
+            out.push({
+                ability: {
+                    id: nextId(),
                     type: 'counter',
-                    multiplier: mult,
-                    ...(hits !== undefined ? { hits } : {}),
-                    ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
-                    ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
+                    target: 'enemy',
+                    trigger: 'on-attacked',
+                    conditions: [],
+                    config: {
+                        type: 'counter',
+                        multiplier: mult,
+                        ...(hits !== undefined ? { hits } : {}),
+                        ...(counter.requirePrimaryTarget ? { requirePrimaryTarget: true } : {}),
+                        ...(counter.requireShieldHit ? { requireShieldHit: true } : {}),
+                    },
+                    autoFilled: true,
                 },
-                autoFilled: true,
-            },
-            pos: damagePos >= 0 ? damagePos : MAX_POS,
-        });
+                pos: damagePos >= 0 ? damagePos : MAX_POS,
+            });
+        }
     } else if (mult > 0 || secForBaseGate) {
         const hits = parseHitCount(text);
         const noCrit = parseNoCrit(text);
@@ -1453,23 +1457,18 @@ function abilitiesFromText(
         }
     }
 
-    // Combat G PR2 (Centurion): "When this Unit OR AN ADJACENT ALLY is directly damaged, this
-    // Unit retaliates dealing X%." The retaliate <unit-damage> tag omits "damage" → parseSkillDamage
-    // returns 0 → NOT an on-cast base-damage component, so it cannot ride the re-type path above.
-    // Push it directly as TWO counter abilities: a self counter (on-attacked, any direct hit) +
-    // an adjacent-ally counter (on-ally-attacked, reusing the existing requireDamagedAllyAdjacent
-    // gate). The per-ability guard collapses the per-HIT fan-out within one sub-attack; since the
-    // multi-hit epic's PR6 it does NOT collapse across sub-attacks, so a `hits: N` cast draws N
-    // retaliations — correct, since R1 makes that N separate attacks. Self/ally were also
-    // mutually exclusive per attack back when the `attacked` emit was single-focus. Per-victim
-    // `attacked` emission HAS since landed, so an AoE covering both this unit and an adjacent ally
-    // wakes both abilities in one sub-attack — one incoming attack, two retaliations. Both now
-    // carry the SAME `counterGroupId` so the executor guard collapses them back into one. Keying
-    // the guard on `${ownerId}` instead would have worked here but would also collapse two
-    // genuinely independent counters on some future ship; the group id says exactly what is true,
-    // that these two abilities are one clause. This is a multi-VICTIM defect, not a multi-HIT one
-    // (it reproduces at `hits: 1`), which is why PR6 neither caused nor fixed it. The co-located
-    // "start of combat … attack per adjacent ally" buff parses independently and is unaffected.
+    // Centurion: "When this Unit OR AN ADJACENT ALLY is directly damaged, this Unit retaliates
+    // dealing X% [damage]." This block is the clause's only emitter, with or without the word
+    // "damage" in the tag (the re-type branch above skips an allySubject counter). It pushes TWO
+    // counter abilities: a self counter (on-attacked, any direct hit) + an adjacent-ally counter
+    // (on-ally-attacked, reusing the requireDamagedAllyAdjacent gate). The per-ability guard
+    // collapses the per-HIT fan-out within one sub-attack but not across sub-attacks, so a
+    // `hits: N` cast draws N retaliations — N separate attacks. `attacked` is emitted per victim,
+    // so an AoE covering both this unit and an adjacent ally wakes both abilities in one
+    // sub-attack; both carry the SAME `counterGroupId`, so the executor guard collapses them into
+    // one retaliation. The group id (not the owner id) is the guard key because these two
+    // abilities are one clause, while two independent counters on one ship must not collapse.
+    // The co-located "start of combat … attack per adjacent ally" buff parses independently.
     if (slot === 'passive' && counter && counter.allySubject) {
         const hits = parseHitCount(text);
         // The self ability's own id doubles as the group id — stable, unique, and no extra id
