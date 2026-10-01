@@ -5,6 +5,8 @@ import {
     findBuffDescription,
     parseSkillEffects,
 } from '../../skillTextParser';
+import { buildShipAbilities } from '../buildShipAbilities';
+import type { Ship } from '../../../types/ship';
 import { parseSlot, sigs, canonical, type RewordPair } from './helpers/catalogueWording';
 
 // Pestilence charged is a number row ruled C (R15, user 2026-10-01): the catalogue's
@@ -68,6 +70,20 @@ describe('status and buff names — catalogue wording parses like ours', () => {
         expect(sigs(before)).toContain(expects); // the reference parse is not vacuous
         expect(canonical(parseSlot(slot, next))).toEqual(canonical(before));
     });
+
+    it.each([
+        ['Anjian', PAIRS[0].new],
+        [
+            'Huanying',
+            "This Unit's attack ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects.<br /><br />When this Unit inflicts a <unit-aid>debuff</unit-aid> it gains <unit-skill>Stealth</unit-skill> and <unit-skill>Tianchen Precision I</unit-skill> for 2 turns.",
+        ],
+    ])(
+        '%s: the singular "attack ignore Taunt and Provoke effects" ignores forced targeting',
+        (_ship, text) => {
+            const ship = { refits: [], firstPassiveSkillText: text } as unknown as Ship;
+            expect(buildShipAbilities(ship).ignoresForcedTargeting).toBe(true);
+        }
+    );
 
     it('Anjian: the catalogue spelling builds the buff under the canonical engine name', () => {
         const ANJIAN_NEW = PAIRS[0].new;
