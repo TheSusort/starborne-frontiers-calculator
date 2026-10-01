@@ -17,7 +17,7 @@
 // only includes `src`, so this file is typechecked solely because that test imports it — the
 // test is what keeps both the types and the behaviour honest.
 
-import { execFileSync } from 'node:child_process';
+import { execFileSync, type ExecFileSyncOptions } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -25,7 +25,8 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CHANGELOG_PATH = join(ROOT, 'src/constants/changelog.ts');
 
-const git = (...args: string[]): string => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
+const git = (...args: string[]): string =>
+    execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' }).trim();
 
 /** Three dot-separated integers, or it throws. A malformed version reaches the git tag, the
  *  changelog and the app's "what's new" gate, so nothing downstream re-checks it. */
@@ -56,7 +57,15 @@ export function readCurrentVersion(source: string): string {
 /** A source literal's body carries escape sequences; the runtime string does not. Without this,
  *  `'Pilot\\'s ship'` round-trips through JSON.stringify as a value containing a real backslash,
  *  which the changelog then renders to the reader verbatim. */
-const ESCAPES: Record<string, string> = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' };
+const ESCAPES: Record<string, string> = {
+    n: '\n',
+    t: '\t',
+    r: '\r',
+    b: '\b',
+    f: '\f',
+    v: '\v',
+    '0': '\0',
+};
 
 export function decodeLiteral(raw: string): string {
     return raw.replace(/\\(.)/g, (_, char: string) => ESCAPES[char] ?? char);
@@ -116,6 +125,18 @@ export function rewriteChangelog(source: string, { version, date, changes }: Rel
     return next;
 }
 
+type Run = (file: string, args: string[], options: ExecFileSyncOptions) => unknown;
+
+/**
+ * The release commit runs the husky pre-commit hook — the full suite under the verbose reporter,
+ * megabytes of output. It streams to the terminal rather than through `git()`'s buffer: past
+ * execFileSync's 1 MB `maxBuffer` Node SIGTERMs git, the commit aborts with ENOBUFS, and the
+ * hook's vitest keeps running orphaned with nobody reading its result.
+ */
+export function commitRelease(version: string, run: Run = execFileSync): void {
+    run('git', ['commit', '-m', `chore(release): cut ${version}`], { cwd: ROOT, stdio: 'inherit' });
+}
+
 const isMain = () => git('rev-parse', '--abbrev-ref', 'HEAD') === 'main';
 
 /** True when `production` can fast-forward to `main`. A `production` that does not exist yet is
@@ -173,7 +194,7 @@ function main() {
     execFileSync('npx', ['prettier', '--write', CHANGELOG_PATH], { cwd: ROOT, stdio: 'ignore' });
 
     git('add', CHANGELOG_PATH);
-    git('commit', '-m', `chore(release): cut ${version}`);
+    commitRelease(version);
     git('tag', `v${version}`);
 
     console.log(`Cut ${version} with ${changes.length} change${changes.length === 1 ? '' : 's'}.`);
