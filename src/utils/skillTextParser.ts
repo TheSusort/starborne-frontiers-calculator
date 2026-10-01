@@ -175,10 +175,11 @@ export function extractSkillNames(skillText: string | null | undefined): string[
 // incoming reduction (Fuying x3, Malvex, Voron) — there is no legitimate attack tag for the wider
 // pattern to suppress.
 const LESS_DAMAGE_RE = /\bless\b/i;
-// A tag reading "X% damage" immediately followed by " reduction …" (Tormenter "gains up to 30%
-// damage reduction as its health decreases") is the same incoming-reduction family — the
-// "reduction" noun sits just outside the tag, in the next ~15 chars.
+// "X% damage reduction" is the same incoming-reduction family, whether the "reduction" noun sits
+// just outside the tag ("<unit-damage>30% damage</unit-damage> reduction") or inside it
+// ("<unit-damage>30% damage reduction</unit-damage>").
 const DAMAGE_REDUCTION_FOLLOWING_RE = /^\s*reduction\b/i;
+const DAMAGE_REDUCTION_IN_TAG_RE = /\bdamage\s+reduction\b/i;
 // A bare percentage tag ("<unit-damage>30%</unit-damage>") preceded by "Shield equal to " is a
 // shield-scaling clause ("gains a Shield equal to 30% of the damage dealt", FrontLine) — the
 // nearby word "damage" describes what the SHIELD scales off of, not an attack the tag itself
@@ -209,10 +210,11 @@ export function parseSkillDamage(text: string): number {
         // "X% more (direct) damage" is a passive output MODIFIER, not a base skill
         // multiplier — skip it (parseModifier handles it). e.g. Thresh's passive.
         if (/\bmore\b/i.test(match[1])) continue;
-        // Incoming-damage reduction, either "X% less damage" inside the tag or "X% damage"
-        // immediately followed by "reduction" outside it — not an outgoing attack.
+        // Incoming-damage reduction ("X% less damage", "X% damage reduction" with the noun
+        // inside or just outside the tag) — not an outgoing attack.
         if (LESS_DAMAGE_RE.test(match[1])) continue;
         if (DAMAGE_REDUCTION_FOLLOWING_RE.test(following)) continue;
+        if (DAMAGE_REDUCTION_IN_TAG_RE.test(match[1])) continue;
         // "Shield equal to X%" lead-in immediately before the tag — a shield scaled off damage
         // dealt, not the damage itself.
         const preceding = text.slice(Math.max(0, match.index - 30), match.index);
@@ -273,9 +275,9 @@ export function parseCounterAbilities(
     const plain = stripUnitTags(text).replace(/<br\s*\/?>/gi, '. ');
     // Trigger clause + counter consequence must co-occur in the same sentence.
     // Stalwart: "When this Unit is directly damaged as a primary target, it deals 30% damage
-    // to that enemy …". Anchor the % on the "deals X% damage to that enemy" consequence.
+    // to that/the enemy …". Anchor the % on the "deals X% damage to that/the enemy" consequence.
     const stalwart =
-        /when\s+this\s+unit\s+is\s+directly\s+damaged(?<primary>\s+as\s+a\s+primary\s+target)?[^.;]*?\bit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+to\s+that\s+enemy/i.exec(
+        /when\s+this\s+unit\s+is\s+directly\s+damaged(?<primary>\s+as\s+a\s+primary\s+target)?[^.;]*?\bit\s+deals\s+(\d+(?:\.\d+)?)%\s+damage\s+to\s+(?:that|the)\s+enemy/i.exec(
             plain
         );
     if (stalwart) {
@@ -662,6 +664,11 @@ const ENEMY_STATUS_BONUS_RE =
 // deals 170% …" — Panon's charged, a PR6b "instead"-branch case, NOT an additive enemy bonus).
 const ENEMY_AFFECTED_BONUS_RE =
     /(?:target|enem(?:y|ies))\s+(?:is\s+|are\s+)?affected by\b([^.]*?),[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%/i;
+// "an additional N% damage to enemies affected by <Effect>[ or <Effect>]" — the same enemy-state
+// bonus with the effects named AFTER the amount (Rikra). Matched on RAW text so the <unit-skill>
+// tags delimit the names; the list ends at the first non-tag word.
+const ADDITIONAL_TO_AFFECTED_ENEMIES_RE =
+    /\badditional\s+(?:<unit-damage>)?(\d+(?:\.\d+)?)\s*%\s*damage(?:<\/unit-damage>)?\s+to\s+enem(?:y|ies)\s+affected\s+by\s+((?:<unit-skill>[^<]+<\/unit-skill>(?:\s*,\s*|\s+or\s+|\s+and\s+)?)+)/i;
 
 // "deals X% damage, increased to Y% … against <class>[s]" — Gallant's replacement branch. Matched
 // on stripped text; the trailing [^.]* tolerates the charged "with additional Stasis…" clause.
@@ -701,8 +708,10 @@ function statusAdjectivesToNames(phrase: string): string[] {
 
 /**
  * A conditional damage BONUS gated on the ENEMY carrying an effect, distinct from the
- * self/enemy-class conditionals of {@link parseConditionalDamage}. Two corpus phrasings:
+ * self/enemy-class conditionals of {@link parseConditionalDamage}. Corpus phrasings:
  *  - "additional N% damage against Taunted or Provoked enemies" (Rikra) — status adjectives.
+ *  - "an additional N% damage to enemies affected by <Taunt> or <Provoke>" (Rikra) — tagged
+ *    effect names after the amount.
  *  - "if the target is affected by <Inferno>, deals an additional N% damage" (Wrecker) — a
  *    tagged effect name. The base damage always fires; the bonus is added only when the enemy
  *    has the effect(s) (0 in single-ship DPS mode, live-derived per victim in the combat sim —
@@ -725,6 +734,13 @@ export function parseEnemyEffectDamageBonus(
             x[1].trim()
         );
         if (names.length) return { pct: parseFloat(affectedM[2]), effectNames: names };
+    }
+    const toAffectedM = ADDITIONAL_TO_AFFECTED_ENEMIES_RE.exec(text);
+    if (toAffectedM) {
+        const names = [...toAffectedM[2].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) =>
+            x[1].trim()
+        );
+        if (names.length) return { pct: parseFloat(toAffectedM[1]), effectNames: names };
     }
     return null;
 }
@@ -834,10 +850,10 @@ const ENEMY_REPAIRS_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\b(?:repairs?|performs?\s+
 // Thresh's "removes 1 charge ... and adds 1 charge" matches only the add.
 const SELF_CHARGE_ADD_RE = /\b(?:adds?|gains?)\s+(\d+|a|an)\s+charges?\b/i;
 
-// Rhodium-style form: "adds charges to the Charged Skill equal to the number of
+// Rhodium-style form: "adds charges to the/its Charged Skill equal to the number of
 // buffs on the target" (amount is per-buff = 1). Runs on tag-stripped text.
 const PER_BUFF_CHARGE_RE =
-    /adds?\s+charges?\s+to\s+the\s+charged skill[^.]*equal to the number of/i;
+    /adds?\s+charges?\s+to\s+(?:the|its)\s+charged skill[^.]*equal to the number of/i;
 
 // "removes N charges from the enemy" (on-cast/bomb) OR Zosimos's "decreases that enemy's charge"
 // (decreases by one, no captured number → default amount 1). Curly apostrophes (U+2018/U+2019)
@@ -846,8 +862,10 @@ const PER_BUFF_CHARGE_RE =
 // The quantifier also accepts the unbounded word "all" ("removes all charges from the enemy
 // charged skill", Zenith), which parseChargeRemoval surfaces as amount `'all'` — empty the pool,
 // not a count. `all` precedes `an`/`a` in the alternation so the word is consumed whole.
+// "from the enemies charged skill" is the singular possessive with its apostrophe dropped (one
+// enemy's charged skill), not a plural target.
 export const REMOVE_CHARGE_RE =
-    /\bremoves?\s+(\d+|all|an|a)\s+charges?\s+from the enemy|\bdecreases?\s+that enemy's charge\b/i;
+    /\bremoves?\s+(\d+|all|an|a)\s+charges?\s+from the (?:enemy|enemies\s+charged skill)|\bdecreases?\s+that enemy's charge\b/i;
 
 // "every second repair" — qualifies the Zosimos removal as an every-Nth-event gate.
 const EVERY_SECOND_REPAIR_RE = /every second repair/i;
@@ -1422,10 +1440,15 @@ export function detectGrantConditions(
     // exclusion the bare word "Taunt" here would wrongly spawn a `self-buff:'Taunt'` condition
     // that gates the whole Exposed grant behind Amartya herself having Taunt (never true) — a
     // regression this task's new phrasing would otherwise introduce into this pre-existing rule.
+    // "enemies affected by Taunt or Provoke" is the same enemy state, worded after the noun.
     const enemyStatusAttributed =
         /(?:taunt(?:ed)?|provoke[ds]?)(?:\s+or\s+(?:taunt(?:ed)?|provoke[ds]?))?\s+enem(?:y|ies)\b/i.test(
             low
-        ) || ENEMY_GAINS_TAUNT_RE.test(clause);
+        ) ||
+        /\benem(?:y|ies)\s+(?:affected|effected)\s+by\s+(?:<[^>]+>)?(?:taunt|provoke)\b/i.test(
+            low
+        ) ||
+        ENEMY_GAINS_TAUNT_RE.test(clause);
     const statuses: string[] = [];
     if (!enemyStatusAttributed) {
         if (/\btaunt(ed)?\b/i.test(low)) statuses.push('Taunt');
@@ -1494,7 +1517,9 @@ const STARTS_ROUND_WITH_RE = /\bstarts?\s+(?:each|every|the)\s+round\s+with\b/i;
 // sharing the trigger cost her the two properties her text asks for — her repair fired on any
 // teammate's Bomb, and never on her own burst. It now rides ECHOING_BURST_DETONATE_RE below.
 // Keep this alternate Bomb-specific: it is what Demolisher's splash and charge removal read.
-const BOMB_DETONATE_RE = /bomb explodes/i;
+// The optional closing tag lets the raw-text position detectors read a tagged
+// "<unit-skill>Bomb</unit-skill> explodes".
+const BOMB_DETONATE_RE = /bomb(?:<\/[^>]+>)?\s+explodes/i;
 // APPLIER-scoped Echoing Burst detonation → on-own-echoing-burst-detonated (Valkyrie's self +
 // lowest-HP-ally repair; #345). The optional tag group absorbs the closing </unit-aid> in the raw
 // CSV text ("an <unit-aid>Echoing Burst</unit-aid> explodes on an enemy") so the SAME regex
@@ -2021,6 +2046,10 @@ export function statusEffectCondition(name: string, anyOf = false): Condition {
 // ticking DoTs (Provider's charge). Requires "Damage Over Time" so it doesn't catch generic
 // buff/debuff duration extensions.
 const EXTEND_DOT_RE = /extends?\b[^.]*?\bdamage over time\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+// The passive voice: "all damage over time debuffs/effects are extended by N turn(s)". With no
+// enemy named, "all" spans every enemy the cast hits.
+const EXTEND_ALL_DOT_PASSIVE_RE =
+    /\ball\s+damage over time\s+(?:debuffs|effects)\s+are\s+extended\s+by\s+(\d+)\s+turns?/i;
 
 /**
  * Returns the number of turns a skill extends active Damage Over Time effects by, or null
@@ -2028,8 +2057,21 @@ const EXTEND_DOT_RE = /extends?\b[^.]*?\bdamage over time\b[^.]*?\bby\s+(\d+)\s+
  */
 export function parseExtendDoT(text: string | null | undefined): number | null {
     if (!text) return null;
-    const m = EXTEND_DOT_RE.exec(stripUnitTags(text));
+    const plain = stripUnitTags(text);
+    const m = EXTEND_DOT_RE.exec(plain) ?? EXTEND_ALL_DOT_PASSIVE_RE.exec(plain);
     return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * The recipients of a DoT extension: 'all-enemies' (every enemy the cast hits) for the passive
+ * "all damage over time debuffs are extended" form, else 'enemy'.
+ */
+export function parseExtendDoTTarget(text: string | null | undefined): 'enemy' | 'all-enemies' {
+    if (!text) return 'enemy';
+    const plain = stripUnitTags(text);
+    return !EXTEND_DOT_RE.test(plain) && EXTEND_ALL_DOT_PASSIVE_RE.test(plain)
+        ? 'all-enemies'
+        : 'enemy';
 }
 
 // Ship-kit Wave 4, Task 5: generic buff/debuff DURATION EXTENSION — the inverse of
@@ -2109,8 +2151,12 @@ export function parseExtendStatus(text: string | null | undefined): {
     }
     const plain = stripUnitTags(text);
     const inflicted = EXTEND_STATUS_INFLICTED_RE.exec(plain);
-    const m =
-        inflicted ?? EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? EXTEND_STATUS_PASSIVE_RE.exec(plain);
+    const passive = EXTEND_STATUS_PASSIVE_RE.exec(plain);
+    // "damage over time debuffs are extended" is a DoT extension (parseExtendDoT), not a
+    // generic debuff one.
+    const passiveIsDoT =
+        passive !== null && /\bdamage over time\s+$/i.test(plain.slice(0, passive.index));
+    const m = inflicted ?? EXTEND_STATUS_ACTIVE_RE.exec(plain) ?? (passiveIsDoT ? null : passive);
     if (!m) return null;
     const kind: 'buff' | 'debuff' = m[1].toLowerCase().startsWith('debuff') ? 'debuff' : 'buff';
     return {
@@ -2287,6 +2333,25 @@ export function detectBombDetonatedTrigger(
     return phrasePosTrigger(text, BOMB_DETONATE_RE, anchorPos, 'on-bomb-detonated');
 }
 
+// "deals N% of the Bomb('s) damage", the Bomb name possibly tagged. The share carries no damage
+// tag of its own, so parseSkillDamage never sees it.
+const BOMB_SHARE_DAMAGE_RE =
+    /\bdeals\s+(\d+(?:\.\d+)?)%\s+of\s+the\s+(?:<[^>]+>)?bombs?(?:<\/[^>]+>)?(?:'s)?\s+damage\b/i;
+
+/**
+ * Reads an UNTAGGED bomb-share hit ("deals 100% of the Bomb damage to all adjacent enemies") as
+ * the multiplier of a bomb-detonation splash. Only inside a "when a Bomb explodes" sentence
+ * (detectBombDetonatedTrigger); null otherwise. `pos` is the phrase's raw-text position.
+ */
+export function parseBombShareDamage(
+    text: string | null | undefined
+): { mult: number; pos: number } | null {
+    if (!text) return null;
+    const m = BOMB_SHARE_DAMAGE_RE.exec(text);
+    if (!m || !detectBombDetonatedTrigger(text, m.index)) return null;
+    return { mult: parseFloat(m[1]), pos: m.index };
+}
+
 /**
  * Returns 'on-own-echoing-burst-detonated' when `anchorPos` falls inside the sentence carrying the
  * APPLIER-scoped Echoing Burst detonation phrase ("When an Echoing Burst explodes on an enemy" —
@@ -2320,7 +2385,8 @@ export function detectEchoingBurstDetonatedTrigger(
 // (the same `text.search(...)` position abilitiesFromText computes) falls INSIDE the sentence
 // carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
 // even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
-const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
+// "when it critically repairs" names the same unit: "it" is this Unit, the sentence's subject.
+const CRIT_REPAIR_RE = /when (?:this unit|it) critically repairs (?:an ally|allies)/i;
 // "when an/another ally critically hits" and "when that ally crits" are the same reactive
 // trigger. `on-ally-crit` fires on the owner's own crits too, so "another ally" (which by the
 // ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: there is no
@@ -2876,11 +2942,12 @@ export function detectKilledByDirectDamageTrigger(
 // word matches, so "after damaging an enemy affected by Stasis" does not. Position-scoped
 // (mirrors detectKilledByDirectDamageTrigger).
 const DEAL_DAMAGE_TO_ROLE_RE =
-    /\b(?:when\s+dealing\s+damage\s+to|after\s+damaging)\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
+    /\b(?:when\s+dealing\s+damage\s+to|when\s+this\s+unit\s+deals\s+damage\s+to|after\s+damaging)\s+(?:an?\s+)?(?:defender|attacker|debuffer|supporter)s?\b/i;
 
 /**
  * Returns 'on-deal-damage' when `anchorPos` falls inside the sentence carrying a "when dealing
- * damage to a <Role>" / "after damaging a <Role>" phrase; otherwise undefined.
+ * damage to a <Role>" / "when this Unit deals damage to a <Role>" / "after damaging a <Role>"
+ * phrase; otherwise undefined.
  * Reuses the SAME 'on-deal-damage' trigger Burner's on-deal-damage Inferno rider already
  * drives (triggers.ts) — the owner's own damage-dealing turn, victim-routed via eventCtx.victimId.
  */
@@ -3213,13 +3280,13 @@ export function detectDamageReactionTrigger(
     return undefined;
 }
 
-// SP-E: Voron/Orel "transforms the [incoming direct] damage into a Damage over Time effect
-// lasting for N turns". Deliberately requires the literal "the damage into a" phrase (NOT the
-// looser "is transformed into a") so Meatshield's UNRELATED "damage taken from Protection is
-// transformed into a Damage over Time effect" (a still-unmodelled SP-F-adjacent gap) never
-// matches — corpus-verified: only Voron/Orel (both refit stages) match today.
+// Voron/Orel "transforms the [incoming direct] damage into a Damage over Time effect
+// (lasting for|lasting|for) N turns". Deliberately requires the literal "the damage into a"
+// phrase (NOT the looser "is transformed into a") so Meatshield's UNRELATED "damage taken from
+// Protection is transformed into a Damage over Time effect" (detectProtectionTransformToDot's
+// clause) never matches.
 const TRANSFORM_TO_DOT_RE =
-    /transform\w*\s+the\s+damage\s+into\s+a\s+.*?damage\s+over\s+time\s+effect\b[^.]*?\b(?:lasting\s+for|for)\s+(\d+)\s+turns?\b/i;
+    /transform\w*\s+the\s+damage\s+into\s+a\s+.*?damage\s+over\s+time\s+effect\b[^.]*?\b(?:lasting\s+for|lasting|for)\s+(\d+)\s+turns?\b/i;
 // Orel's gate: "When directly damaged by an enemy affected/effected by Taunt or Provoke, …"
 // (the live CSV spells it "effected", tolerated alongside the correct "affected").
 const ATTACKER_TAUNT_PROVOKE_RE =
@@ -3825,6 +3892,17 @@ const ECC_DAMAGE_RE = /\bdeals?\s+(\d+(?:\.\d+)?)\s*%/i;
 const ECC_SHIELD_OF_DAMAGE_RE =
     /\bshield\s+equal\s+to\s+(\d+(?:\.\d+)?)\s*%\s*of\s+(?:the\s+)?damage\s+dealt/i;
 const ECC_ONCE_PER_ROUND_RE = /\bonce\s+per\s+round\b/i;
+
+/**
+ * Returns 'on-enemy-charged-cast' when `anchorPos` falls inside the sentence carrying the "when an
+ * enemy uses their charged skill" phrase; otherwise undefined. Position-scoped on the RAW text.
+ */
+export function detectEnemyChargedCastTrigger(
+    text: string | null | undefined,
+    anchorPos: number
+): AbilityTrigger | undefined {
+    return phrasePosTrigger(text, ENEMY_USES_CHARGED_RE, anchorPos, 'on-enemy-charged-cast');
+}
 
 /**
  * Parses the "when an enemy uses their charged skill" reaction (Phase 4). Emits full
@@ -4585,11 +4663,24 @@ const HEAL_ADDITIONAL_RE =
 // Leech basis from the sentence tail after the match. ORDER MATTERS: "damage dealt
 // to them/this unit" (Malvex) is damage TAKEN and must be tested before the generic
 // damage-dealt phrasing. No lookbehind (iOS Safari 15).
-function resolveLeechBasis(after: string): 'damage-dealt' | 'damage-taken' | undefined {
+//
+// A bare "of the damage dealt" in a sentence triggered by this unit being directly damaged, with
+// no attack of its own in the sentence ("When directly damaged as a primary target, this Unit
+// gains shield equal to 15% of the damage dealt"), is also damage TAKEN: the incoming hit is the
+// only damage the sentence names.
+const SELF_DIRECTLY_DAMAGED_RE = /^\s*when\s+(?:this\s+unit\s+is\s+)?directly\s+damaged\b/i;
+function resolveLeechBasis(
+    after: string,
+    sentence: string
+): 'damage-dealt' | 'damage-taken' | undefined {
     if (/of\s+the\s+damage\s+taken|damage\s+dealt\s+to\s+(?:them|this\s+unit)/i.test(after)) {
         return 'damage-taken';
     }
-    if (/of\s+(?:the\s+)?damage\s+(?:dealt|it\s+deals)/i.test(after)) return 'damage-dealt';
+    if (/of\s+(?:the\s+)?damage\s+(?:dealt|it\s+deals)/i.test(after)) {
+        return SELF_DIRECTLY_DAMAGED_RE.test(sentence) && !/\bdeals?\b/i.test(sentence)
+            ? 'damage-taken'
+            : 'damage-dealt';
+    }
     return undefined;
 }
 
@@ -4797,7 +4888,7 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
             // portion of the sentence from the match's position onward so `resolveHealBasis`
             // finds the nearest stat phrase rather than one from a different sentence.
             const basisScope = sentence.slice(m.index - sentenceStart);
-            const leechBasis = resolveLeechBasis(basisScope);
+            const leechBasis = resolveLeechBasis(basisScope, sentence);
             const resolved = resolveHealTarget(sentence);
             // Damage-reaction reactive triggers ("when … directly damaged", "when attacked",
             // "when … is hit", "when … takes … damage") on PLAIN heals — Phase 4c: BOTH
@@ -5081,10 +5172,10 @@ export function parseDebuffDurationReduction(
 // always detonates a bomb that reaches <= 0 — see playerTurn.ts's reduceEnemyBombs). Deliberately
 // its own regex/function — do NOT fold into REDUCE_DEBUFF_DURATION_RE.
 const BOMB_COUNTDOWN_REDUCE_RE =
-    /reduces?\s+all\s+bombs\s+on\s+the\s+enemy\s+targets?\s+by\s+(\d+)\s+turns?/i;
+    /reduces?\s+all\s+bombs?\s+on\s+the\s+enemy\s+targets?\s+by\s+(\d+)\s+turns?/i;
 
 /**
- * Parses "reduces all Bombs on the enemy targets by N turn(s)" (Lingshe). Returns the turn
+ * Parses "reduces all Bomb(s) on the enemy targets by N turn(s)" (Lingshe). Returns the turn
  * count, or null when the text carries no such clause. Reference data: docs/ship-skills.csv.
  */
 export function parseBombCountdownReduce(text: string | null | undefined): number | null {
@@ -6424,6 +6515,12 @@ function verbToApplication(verb: string): 'inflict' | 'apply' | undefined {
     return undefined;
 }
 
+const MECHANIC_PHRASE_TAG_RE =
+    /^(?:cleanses?|extends?|adds?|purges?|removes?|reduces?)\s|\bextended\s+by\b/i;
+// The text before a status tag ends in "enemies affected by [<status> or ]".
+const ENEMY_STATE_OBJECT_TAIL_RE =
+    /\benem(?:y|ies)\s+(?:affected|effected)\s+by\s+(?:[^.,;]{1,40}?\s+(?:or|and)\s+)?$/i;
+
 export function parseSkillEffects(
     skillText: string | null | undefined,
     source: SkillSource
@@ -6451,6 +6548,16 @@ export function parseSkillEffects(
         // The trigger clause's own object is not an application (namesTriggerClauseObject).
         const prevText = segments[i - 1]?.type === 'text' ? segments[i - 1].text : '';
         if (namesTriggerClauseObject(prevText)) continue;
+        // A tag around a mechanic phrase ("cleanses 2 debuffs", "extends the newly inflicted",
+        // "extended by 1 turn") names no status; its mechanic has its own parser.
+        if (MECHANIC_PHRASE_TAG_RE.test(buffName)) continue;
+        // A status an ENEMY is in ("… to enemies affected by <Taunt> or <Provoke>") gates the
+        // clause; nothing grants or inflicts it.
+        const precedingText = segments
+            .slice(0, i)
+            .map((x) => x.text)
+            .join('');
+        if (ENEMY_STATE_OBJECT_TAIL_RE.test(precedingText)) continue;
 
         // Step 1: Find application verb
         const verb = findVerb(segments, i);
