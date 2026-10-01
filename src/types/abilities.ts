@@ -1217,6 +1217,15 @@ export interface Ability {
      *  on critting hits, 'non-crit' only on non-critting hits. Absent → fires on any hit.
      *  Isha parses as a mutually exclusive pair (3% non-crit / 6% crit — "instead"). */
     triggerCritFilter?: 'crit' | 'non-crit';
+    /** Landing-mechanic filter for the debuff-inflicted trigger family (on-debuff-inflicted,
+     *  on-ally-debuff-inflicted, on-other-ally-debuff-inflicted, on-ally-debuffed): 'inflict'
+     *  fires only on a hacking-roll infliction, 'apply' only on an unconditional land (no roll —
+     *  Provoke, Concentrate Fire, Disable). Set by the parser from the clause's own verb
+     *  ("inflicts"/"inflicting" → 'inflict', "applies"/"applying" → 'apply'); absent when the
+     *  clause uses neither (a neutral phrasing like "gets debuffed"/"debuffing" — APEX, the
+     *  Insidiousness implant), which fires on any landing, unchanged. A `dot-applied` event always
+     *  counts as an inflict — see `passesApplicationFilter`'s doc in triggers.ts. */
+    triggerApplicationFilter?: 'inflict' | 'apply';
     /** Ally-role filter for on-ally-attacked (Graphite "when an ally attacker or
      *  debuffer is directly damaged"): the reaction fires only when the DAMAGED
      *  ally's ship role matches one of these categories (prefix match over

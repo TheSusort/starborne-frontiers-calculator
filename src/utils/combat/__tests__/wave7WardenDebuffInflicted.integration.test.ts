@@ -9,11 +9,14 @@
  * so "Out. Damage Down II" never appeared, across every qualifying turn.
  *
  * The fix routes it to the existing reactive `on-debuff-inflicted` trigger (parser: present-tense
- * self-subject recognizer). Warden inflicts Provoke every active turn, so Out. Damage Down II now
- * lands on those turns. The follow-up is ITSELF a debuff, so its own debuff-applied is branded
+ * self-subject recognizer). The follow-up is ITSELF a debuff, so its own debuff-applied is branded
  * `viaDebuffInflictedReaction` and the on-debuff-inflicted listener skips it — a precise self-chain
  * guard (else the reaction would re-enter and blow MAX_INTENT_GENERATIONS), while debuffs from
  * other reactive triggers (on-crit/on-attacked) still chain as before.
+ *
+ * Her own clause reads "inflicts" (`triggerApplicationFilter:'inflict'`): her active's Provoke is
+ * an unconditional APPLY (no hacking roll), so it must NOT wake this passive. Only her Corrosion I
+ * (an on-attacked reactive DoT, always rolled — DoTs are never an 'apply') does.
  *
  * Real production kit via buildShipAbilities (mirrors apexSelfShieldGate.integration.test.ts).
  */
@@ -23,7 +26,7 @@ import { createEventBus } from '../events';
 import { buildShipAbilities } from '../../abilities/buildShipAbilities';
 import type { ShipSkills } from '../../../types/abilities';
 import type { Ship } from '../../../types/ship';
-import { bareEnemy } from '../__testutils__/bareRosterFixture';
+import { bareEnemy, attackingEnemy, damageKit } from '../__testutils__/bareRosterFixture';
 
 type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
@@ -54,8 +57,8 @@ const wardenSkills = (): ShipSkills => {
 const OUT_DD = 'Out. Damage Down II';
 
 describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-kit W7)', () => {
-    const makeInput = (): CombatEngineInput => ({
-        enemyAttackers: bareEnemy({ stats: { hp: 10_000_000 } }),
+    const makeInput = (enemyAttackers: CombatEngineInput['enemyAttackers']): CombatEngineInput => ({
+        enemyAttackers,
         attack: 10_000,
         crit: 0,
         critDamage: 0,
@@ -80,20 +83,40 @@ describe('Warden Out. Damage Down II — self-inflicted-debuff reactive (Ship-ki
         mode: 'healing',
     });
 
-    it('player-side: Out. Damage Down II lands (was never dispatched) and does NOT self-chain', () => {
+    it('her Corrosion I (a reactive DoT — always rolled, never an apply) still fires Out. Damage Down II', () => {
         const bus = createEventBus();
         let outDd = 0;
         bus.on('debuff-applied', (e) => {
             if (e.type === 'debuff-applied' && e.sourceId === 'attacker' && e.buffName === OUT_DD)
                 outDd++;
         });
+        // attackingEnemy hits Warden every round, arming her "when directly damaged" Corrosion I —
+        // her only INFLICTED debuff (her active only APPLIES Provoke, see the test below).
         // Completing at all proves no MAX_INTENT_GENERATIONS throw (the self-chain is guarded).
-        const result = runCombat({ ...makeInput(), bus });
+        const result = runCombat({
+            ...makeInput(attackingEnemy({ stats: { hp: 10_000_000 } })),
+            bus,
+        });
         expect(result.rounds).toHaveLength(3);
-        // Fires on Warden's own debuff-inflicting turns — at least once, and BOUNDED (a runaway
-        // self-chain would be caught by the generation cap long before any sane count).
+        // BOUNDED too — a runaway self-chain would be caught by the generation cap long before any
+        // sane count.
         expect(outDd).toBeGreaterThan(0);
         expect(outDd).toBeLessThanOrEqual(3);
+    });
+
+    it('her Provoke-only active (an APPLY, no hacking roll) never fires Out. Damage Down II', () => {
+        const bus = createEventBus();
+        let outDd = 0;
+        bus.on('debuff-applied', (e) => {
+            if (e.type === 'debuff-applied' && e.sourceId === 'attacker' && e.buffName === OUT_DD)
+                outDd++;
+        });
+        // bareEnemy's default attack:0 means Warden is never directly damaged, so Corrosion I
+        // (the only INFLICTED debuff in her kit) never arms — her active still fires every round,
+        // applying Provoke, which must not wake this passive.
+        const result = runCombat({ ...makeInput(bareEnemy({ stats: { hp: 10_000_000 } })), bus });
+        expect(result.rounds).toHaveLength(3);
+        expect(outDd).toBe(0);
     });
 });
 
@@ -114,13 +137,13 @@ describe('Warden Out. Damage Down II — team symmetry (enemy-side Warden inflic
         shipSkills: wardenSkills(),
     });
 
-    const focusInput = (): CombatEngineInput => ({
-        attack: 0,
+    const focusInput = (slots: ShipSkills['slots']): CombatEngineInput => ({
+        attack: 10_000,
         crit: 0,
         critDamage: 0,
         defensePenetration: 0,
         chargeCount: 0,
-        shipSkills: { slots: [{ slot: 'active', abilities: [] }] },
+        shipSkills: { slots },
         numRounds: 3,
         selfBuffs: [],
         enemyDebuffs: [],
@@ -139,20 +162,33 @@ describe('Warden Out. Damage Down II — team symmetry (enemy-side Warden inflic
         enemyAttackers: [enemyWarden()],
     });
 
-    it('an enemy-side Warden inflicts Out. Damage Down II on the player focus, no self-chain', () => {
+    const countOutDd = (sourceId: string) => {
         const bus = createEventBus();
         let outDd = 0;
         bus.on('debuff-applied', (e) => {
-            if (
-                e.type === 'debuff-applied' &&
-                e.sourceId === 'warden-enemy' &&
-                e.buffName === OUT_DD
-            )
+            if (e.type === 'debuff-applied' && e.sourceId === sourceId && e.buffName === OUT_DD)
                 outDd++;
         });
-        const result = runCombat({ ...focusInput(), bus });
+        return { bus, get: () => outDd };
+    };
+
+    it('the focus hitting the enemy Warden arms her Corrosion I, which still fires Out. Damage Down II', () => {
+        const { bus, get } = countOutDd('warden-enemy');
+        // The focus's own damage kit hits the enemy Warden every round, arming her "when directly
+        // damaged" Corrosion I — her only INFLICTED debuff.
+        const result = runCombat({ ...focusInput(damageKit().slots), bus });
         expect(result.rounds).toHaveLength(3);
-        expect(outDd).toBeGreaterThan(0);
-        expect(outDd).toBeLessThanOrEqual(3);
+        expect(get()).toBeGreaterThan(0);
+        expect(get()).toBeLessThanOrEqual(3);
+    });
+
+    it("the enemy Warden's Provoke-only active (an APPLY) never fires Out. Damage Down II on the player focus", () => {
+        const { bus, get } = countOutDd('warden-enemy');
+        // The focus has no active abilities, so the enemy Warden is never directly damaged —
+        // Corrosion I never arms. She still applies Provoke every round, which must not wake
+        // this passive.
+        const result = runCombat({ ...focusInput([{ slot: 'active', abilities: [] }]), bus });
+        expect(result.rounds).toHaveLength(3);
+        expect(get()).toBe(0);
     });
 });
