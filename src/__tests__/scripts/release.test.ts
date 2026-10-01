@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
     assertVersion,
+    commitRelease,
     decodeLiteral,
     nextVersion,
     readCurrentVersion,
@@ -149,5 +150,17 @@ describe('rewriteChangelog', () => {
         expect(() =>
             rewriteChangelog(source, { version: '1.67.0', date: '2026-09-15', changes: ['x'] })
         ).toThrow(/already contains/i);
+    });
+});
+
+describe('commitRelease', () => {
+    it('streams the commit instead of buffering it, so the pre-commit suite cannot overflow it', () => {
+        const run = vi.fn();
+        commitRelease('1.68.0', run);
+        expect(run).toHaveBeenCalledTimes(1);
+        const [file, args, options] = run.mock.calls[0];
+        expect(file).toBe('git');
+        expect(args).toEqual(['commit', '-m', 'chore(release): cut 1.68.0']);
+        expect(options.stdio).toBe('inherit');
     });
 });
