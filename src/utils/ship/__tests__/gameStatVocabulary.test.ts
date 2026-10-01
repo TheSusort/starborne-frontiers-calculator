@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getStatName, statFromGameTriple } from '../gameStatVocabulary';
+import { getStatName, isGameModifierType, statFromGameTriple } from '../gameStatVocabulary';
 
 describe('getStatName', () => {
     it.each([
@@ -60,5 +60,14 @@ describe('statFromGameTriple', () => {
 
     it('returns null for an attribute this app does not model', () => {
         expect(statFromGameTriple('CritResistance', 'Flat', 0.1)).toBeNull();
+    });
+});
+
+describe('isGameModifierType', () => {
+    it('accepts the two modifier types the game sends and nothing else', () => {
+        expect(isGameModifierType('Flat')).toBe(true);
+        expect(isGameModifierType('Percentage')).toBe(true);
+        expect(isGameModifierType('percentage')).toBe(false);
+        expect(isGameModifierType('Multiplier')).toBe(false);
     });
 });

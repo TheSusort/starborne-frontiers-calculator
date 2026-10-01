@@ -129,6 +129,21 @@ describe('toCatalogueTemplate', () => {
         expect(toCatalogueTemplate(unit).mappingErrors).toEqual(['4 passive levels; only 3 columns']);
     });
 
+    it('accepts every ascension row the app\'s stat vocabulary resolves', () => {
+        expect(toCatalogueTemplate(load('crocus')).mappingErrors).toEqual([]);
+        expect(toCatalogueTemplate(load('amartya')).mappingErrors).toEqual([]);
+    });
+
+    it('reports an ascension row with an unknown attribute or modifier type', () => {
+        const unit = load('aegis');
+        unit.ascensionStats[0] = { ...unit.ascensionStats[0], attribute: 'Charisma' };
+        unit.ascensionStats[1] = { ...unit.ascensionStats[1], type: 'Multiplier' };
+        expect(toCatalogueTemplate(unit).mappingErrors).toEqual([
+            'unknown ascension stat "Charisma"/"' + unit.ascensionStats[0].type + '" at refit ' + unit.ascensionStats[0].level,
+            'unknown ascension stat "' + unit.ascensionStats[1].attribute + '"/"Multiplier" at refit ' + unit.ascensionStats[1].level,
+        ]);
+    });
+
     it('keeps ascension stats, or null when the unit has none', () => {
         expect(toCatalogueTemplate(load('aegis')).ascensionStats?.length).toBeGreaterThan(0);
         expect(toCatalogueTemplate({ ...load('aegis'), ascensionStats: [] }).ascensionStats).toBeNull();

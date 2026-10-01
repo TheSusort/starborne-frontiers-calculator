@@ -6,6 +6,7 @@
  * `planSync`).
  * Affinity `None` is antimatter: the catalogue encodes purple as none and never emits `Purple`.
  */
+import { isGameModifierType, statFromGameTriple } from '../../src/utils/ship/gameStatVocabulary';
 import type { CatalogueSkill, CatalogueUnit, Segment } from './catalogueSchema';
 
 export interface TemplateBaseStats {
@@ -145,6 +146,12 @@ export const toCatalogueTemplate = (unit: CatalogueUnit): CatalogueTemplate => {
     const chargedTop = charged ? maxLevel(charged) : null;
     if (chargedTop && chargedTop.chargesRequired === undefined) {
         errors.push('charged skill without chargesRequired');
+    }
+    // Refit stats are read by the app's own resolver (src/utils/ship/referenceShip.ts).
+    for (const row of unit.ascensionStats) {
+        if (!statFromGameTriple(row.attribute, row.type, row.value) || !isGameModifierType(row.type)) {
+            errors.push(`unknown ascension stat "${row.attribute}"/"${row.type}" at refit ${row.level}`);
+        }
     }
     const s = unit.stats;
 
