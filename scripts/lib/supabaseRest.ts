@@ -79,3 +79,31 @@ export const listAuthUsers = async (): Promise<AuthUser[]> => {
         if (body.users.length < PAGE) return users;
     }
 };
+
+const send = async (method: string, path: string, body?: unknown, prefer?: string) => {
+    const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
+        method,
+        headers: headers({
+            'Content-Type': 'application/json',
+            ...(prefer ? { Prefer: prefer } : {}),
+        }),
+        body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${await res.text()}`);
+};
+
+const inList = (ids: string[]) => `in.(${ids.map((id) => `"${id.replace(/"/g, '\\"')}"`).join(',')})`;
+
+/** PATCH one row by id. */
+export const patchRow = (table: string, idColumn: string, id: string, patch: Record<string, unknown>) =>
+    send('PATCH', `${table}?${idColumn}=eq.${encodeURIComponent(id)}`, patch, 'return=minimal');
+
+export const insertRows = (table: string, rows: Record<string, unknown>[]) =>
+    send('POST', table, rows, 'return=minimal');
+
+/** Insert-or-replace on `onConflict` (the primary key column). */
+export const upsertRows = (table: string, rows: Record<string, unknown>[], onConflict: string) =>
+    send('POST', `${table}?on_conflict=${onConflict}`, rows, 'resolution=merge-duplicates,return=minimal');
+
+export const deleteRows = (table: string, idColumn: string, ids: string[]) =>
+    send('DELETE', `${table}?${idColumn}=${encodeURIComponent(inList(ids))}`, undefined, 'return=minimal');
