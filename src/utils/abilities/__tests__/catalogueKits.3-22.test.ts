@@ -228,3 +228,64 @@ describe('3.22 kits — charge, purge and repair clauses', () => {
         expect(only(abilities, 'purge').config).toMatchObject({ count: 1 });
     });
 });
+
+describe('3.22 kits — passives', () => {
+    // The shield-penetration sentence mints nothing: shield penetration is a ship stat carried by
+    // the template data (see the `shield-penetration-innate` audit rule).
+    it('Guardian passive R0: being critically hit grants Binderburg Resilience I', () => {
+        const text =
+            'This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />When this Unit is critically hit, it gains <unit-skill>Binderburg Resilience I</unit-skill> for 1 turn.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(['buff|self|on-attacked|Binderburg Resilience I']);
+        expect(only(abilities, 'buff')).toMatchObject({
+            triggerCritFilter: 'crit',
+            config: { buffName: 'Binderburg Resilience I', duration: 1 },
+        });
+    });
+
+    it('LUXX passive R0: a shield of 20% max HP every turn', () => {
+        const text =
+            'Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(['shield|self|start-of-turn|shield']);
+        expect(only(abilities, 'shield').config).toMatchObject({ pct: 20, basis: 'hp' });
+    });
+
+    // "gains 1 stack of X every turn" is an on-cast buff that stacks per round — the same model
+    // as Sokol's and Butcher's every-turn stacks.
+    it('LUXX passive R2: the 20% shield every turn plus a Blast stack every turn', () => {
+        const text =
+            'Every turn this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP and gains 1 stack of <unit-skill>Blast</unit-skill>.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(
+            sorted(['shield|self|start-of-turn|shield', 'buff|self|on-cast|Blast'])
+        );
+        expect(only(abilities, 'shield').config).toMatchObject({ pct: 20, basis: 'hp' });
+        expect(only(abilities, 'buff').config).toMatchObject({
+            buffName: 'Blast',
+            stackTrigger: 'per-round',
+        });
+    });
+
+    // Ripper's Inferno reaction is not minted. It reacts only to debuffs his active or charged
+    // casts inflict, and the debuff-inflicted trigger has no source-slot filter; minted on that
+    // trigger it would also wake on the Inferno's own landing.
+    it('Ripper passive R0: the Inferno-on-debuff reaction is not minted', () => {
+        const text =
+            'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns.';
+        expect(sigs(parseSlot('passive', text))).toEqual([]);
+    });
+
+    // Only the buff extension is minted, and it fires on every cast: no trigger counts just the
+    // debuffs an active or charged cast inflicts (the R0 note above).
+    it('Ripper passive R2: only the all-allies buff extension is minted', () => {
+        const text =
+            'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(['extend-status|all-allies|on-cast|extend-status']);
+        expect(only(abilities, 'extend-status').config).toMatchObject({
+            statusKind: 'buff',
+            turns: 1,
+        });
+    });
+});
