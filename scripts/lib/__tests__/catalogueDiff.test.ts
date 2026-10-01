@@ -119,3 +119,61 @@ describe('stableStringify', () => {
         expect(stableStringify({ a: 1, b: [{ y: 2, x: 1 }] })).toBe(stableStringify({ b: [{ x: 1, y: 2 }], a: 1 }));
     });
 });
+
+describe('diffCatalogue duplicate join keys', () => {
+    it('throws when two templates share a non-null definition_id', () => {
+        const rows = [
+            row({ id: 'A', name: 'Alpha', definition_id: 'Dupe_Id_1' }),
+            row({ id: 'B', name: 'Beta', definition_id: 'Dupe_Id_1' }),
+        ];
+        expect(() => diffCatalogue([unit()], rows)).toThrow(/Dupe_Id_1/);
+    });
+
+    it('does not throw when two templates share a null definition_id', () => {
+        const rows = [
+            row({ id: 'A', name: 'Alpha', definition_id: null }),
+            row({ id: 'B', name: 'Beta', definition_id: null }),
+        ];
+        expect(() => diffCatalogue([unit()], rows)).not.toThrow();
+    });
+
+    it('throws when two catalogue units share a definitionId', () => {
+        const units = [
+            unit({ definitionId: 'Dupe_Unit_1', name: 'Foo' }),
+            unit({ definitionId: 'Dupe_Unit_1', name: 'Bar' }),
+        ];
+        expect(() => diffCatalogue(units, [row()])).toThrow(/Dupe_Unit_1/);
+    });
+
+    it('throws when two templates share a name after trim/lowercase, regardless of definition_id', () => {
+        const rows = [
+            row({ id: 'A', name: 'Aegis', definition_id: 'Id_A' }),
+            row({ id: 'B', name: ' AEGIS ', definition_id: 'Id_B' }),
+        ];
+        expect(() => diffCatalogue([unit()], rows)).toThrow(/aegis/i);
+    });
+
+    it('resolves exact id matches before the name fallback claims a row', () => {
+        const x = unit(); // exact-matches row() via definitionId
+        const y = unit({ definitionId: 'Other_1', name: 'AEGIS' }); // name-matches row() only
+        const d = diffCatalogue([y, x], [row()]);
+
+        expect(d.matched).toHaveLength(1);
+        expect(d.matched[0].unit).toBe(x);
+        expect(d.matched[0].template.id).toBe('AEGIS');
+        expect(d.idMismatches).toEqual([]);
+        expect(d.newShips).toEqual([y]);
+        expect(d.missingFromCatalogue).toEqual([]);
+    });
+
+    it('does not let a second name-match claim a row already taken by an earlier name-match', () => {
+        const rows = [row({ id: 'AEGIS', name: 'AEGIS', definition_id: 'Id_Only_Row' })];
+        const first = unit({ definitionId: 'First_1', name: 'AEGIS' });
+        const second = unit({ definitionId: 'Second_1', name: 'AEGIS' });
+        const d = diffCatalogue([first, second], rows);
+
+        expect(d.idMismatches).toHaveLength(1);
+        expect(d.idMismatches[0].unit).toBe(first);
+        expect(d.newShips).toEqual([second]);
+    });
+});

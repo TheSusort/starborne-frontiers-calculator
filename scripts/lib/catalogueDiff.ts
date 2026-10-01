@@ -4,6 +4,13 @@
  * Units join rows on `definition_id` (exact, untrimmed). A unit with no id match but a
  * case-insensitive NAME match is an id mismatch: the row exists under a broken id, so inserting
  * it as a new ship would duplicate it. Shield is not a base-stat key and is never compared.
+ *
+ * The join keys must be unambiguous: `diffCatalogue` throws, naming the duplicated key(s), when
+ * two templates share a non-null `definition_id`, two catalogue units share a `definitionId`, or
+ * two templates share a name after `trim().toLowerCase()`. A throw aborts the sync run rather than
+ * guess which row a unit belongs to. Exact id matches resolve before the name fallback runs; a row
+ * claimed either way is never offered again, so a later unit whose name matches an already-claimed
+ * row becomes a new ship candidate instead of a second id mismatch.
  */
 import {
     BASE_STAT_KEYS,
@@ -111,31 +118,68 @@ const diffUnit = (unit: CatalogueTemplate, row: TemplateRow): Change[] => {
     return changes;
 };
 
+/** Throws if `key(item)` repeats across `items`, naming every duplicated key via `describe`. */
+const assertUniqueKeys = <T>(items: T[], key: (item: T) => string | null, describe: (key: string) => string): void => {
+    const seen = new Set<string>();
+    const dupes = new Set<string>();
+    for (const item of items) {
+        const k = key(item);
+        if (k === null) continue;
+        if (seen.has(k)) dupes.add(k);
+        seen.add(k);
+    }
+    if (dupes.size > 0) throw new Error(`diffCatalogue: duplicate ${[...dupes].map(describe).join(', ')}`);
+};
+
 export const diffCatalogue = (
     units: CatalogueTemplate[],
     templates: TemplateRow[]
 ): CatalogueDiff => {
+    assertUniqueKeys(
+        templates,
+        (t) => t.definition_id,
+        (id) => `ship_templates.definition_id "${id}"`
+    );
+    assertUniqueKeys(
+        units,
+        (u) => u.definitionId,
+        (id) => `catalogue unit definitionId "${id}"`
+    );
+    assertUniqueKeys(
+        templates,
+        (t) => t.name.trim().toLowerCase(),
+        (name) => `ship_templates.name "${name}" (after trim/lowercase)`
+    );
+
     const byDefinitionId = new Map<string, TemplateRow>();
     for (const t of templates) if (t.definition_id) byDefinitionId.set(t.definition_id, t);
     const byName = new Map(templates.map((t) => [t.name.trim().toLowerCase(), t]));
     const claimed = new Set<string>();
     const out: CatalogueDiff = { matched: [], newShips: [], idMismatches: [], missingFromCatalogue: [] };
 
+    // Resolve every exact id match first, claiming its row, before any name fallback runs.
+    const unresolved: CatalogueTemplate[] = [];
     for (const unit of units) {
         const exact = byDefinitionId.get(unit.definitionId);
         if (exact) {
             claimed.add(exact.id);
             out.matched.push({ template: exact, unit, changes: diffUnit(unit, exact) });
-            continue;
+        } else {
+            unresolved.push(unit);
         }
+    }
+
+    // Name fallback, skipping rows an exact match or an earlier unit here already claimed.
+    for (const unit of unresolved) {
         const named = byName.get(unit.name.trim().toLowerCase());
-        if (named) {
+        if (named && !claimed.has(named.id)) {
             claimed.add(named.id);
             out.idMismatches.push({ unit, template: named });
-            continue;
+        } else {
+            out.newShips.push(unit);
         }
-        out.newShips.push(unit);
     }
+
     out.missingFromCatalogue = templates.filter((t) => !claimed.has(t.id));
     return out;
 };
