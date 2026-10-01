@@ -44,6 +44,8 @@ const makeDefaultConfig = (type: AbilityType): AbilityConfig => {
             return { type: 'accumulate-detonate', turns: 2, pct: 100 };
         case 'charge':
             return { type: 'charge', amount: 1 };
+        case 'stat-gain':
+            return { type: 'stat-gain', stat: 'shieldPenetration', pct: 1 };
         case 'extra-action':
             return { type: 'extra-action', oncePerRound: false };
         case 'heal':
@@ -131,6 +133,7 @@ const DEFAULT_TARGETS: Record<AbilityType, AbilityTarget> = {
     'detonate-dot': 'enemy',
     'accumulate-detonate': 'enemy',
     charge: 'self',
+    'stat-gain': 'self',
     'extra-action': 'self',
     heal: 'ally',
     shield: 'ally',
@@ -173,6 +176,7 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
     // SP-E: a transform-incoming-to-dot ability, like counter, only ever rides the victim-side
     // `on-attacked` path (see buildShipAbilities.ts's Voron/Orel emit site). SP-E Task E4: a
     // convert-dot ability only ever rides on-ally-debuff-inflicted (Belladonna's emit site).
+    // #591: a stat-gain ability only ever rides on-ally-debuff-resisted (Prophet's emit site).
     trigger:
         type === 'counter' || type === 'transform-incoming-to-dot'
             ? 'on-attacked'
@@ -180,7 +184,9 @@ export const makeDefaultAbility = (type: AbilityType, id: string = nextId()): Ab
               ? 'pre-combat'
               : type === 'convert-dot'
                 ? 'on-ally-debuff-inflicted'
-                : 'on-cast',
+                : type === 'stat-gain'
+                  ? 'on-ally-debuff-resisted'
+                  : 'on-cast',
     conditions: [],
     config: makeDefaultConfig(type),
 });

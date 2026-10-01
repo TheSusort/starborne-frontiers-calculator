@@ -7,6 +7,10 @@ export const CURRENT_VERSION = '1.70.0';
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
 export const UNRELEASED_CHANGES: string[] = [
+    'Combat simulator: a weaker debuff no longer overrides or rolls against a stronger one.',
+    "Combat simulator: Block Debuff no longer triggers resist reactions like Prophet's, Vindicator's or Lockdown's.",
+    'Combat simulator: Prophet gains stacking shield penetration whenever an ally resists.',
+    'Combat simulator: Provider now strikes each enemy another ally inflicts a debuff on.',
     'Combat simulator: skills triggered by "an ally" now also trigger on the ship itself.',
     'Combat simulator: Grif now hits every enemy whose debuff gets cleansed.',
     "AI assistants: can now read one simulated battle's full turn-by-turn log.",

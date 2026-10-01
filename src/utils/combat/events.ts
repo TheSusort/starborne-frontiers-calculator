@@ -158,15 +158,32 @@ export type CombatEvent =
      *  filtered by this flag — see that listener's guard for the scope this leaves open. The brand
      *  bounds only the owner's own `on-ally-debuff-inflicted` output: a ship carrying BOTH an
      *  `on-debuff-inflicted` and an `on-ally-debuff-inflicted` debuff-emitting reaction is bounded
-     *  by neither brand against the other's chain — no corpus ship has that shape. */
+     *  by neither brand against the other's chain — no corpus ship has that shape.
+     *  `viaOtherAllyDebuffInflictedReaction`: the brand for `on-other-ally-debuff-inflicted`
+     *  reactions (Provider's "another ally" — owner-EXCLUDED, unlike the two brands above). That
+     *  listener ignores this brand SOURCE-AGNOSTICALLY (any event carrying it, regardless of
+     *  `sourceId`) rather than only when `sourceId === ownerId`: an owner-excluded trigger's
+     *  `sourceId` can never equal `ownerId` (the same-side-ally guard excludes the owner
+     *  structurally), so the loop risk is CROSS-owner — two ships on this trigger would otherwise
+     *  wake each other's reaction forever. Ignoring the brand unconditionally cuts that ping-pong
+     *  at generation 1; each ship still reacts once to the original, non-reactive infliction. */
     | ({
           type: 'debuff-applied';
           sourceId: string;
           targetId: string;
           round: number;
           buffName: string;
+          /** #590 R3: the landing mechanic this debuff used — `'apply'` lands unconditionally
+           *  (no hacking-vs-security roll; Concentrate Fire, Provoke), `'inflict'` rolled for it.
+           *  Undefined only for a corpus shape that predates this field (treated as rolled — the
+           *  strictly narrower gate at `on-other-ally-debuff-inflicted` is the only consumer that
+           *  cares). `on-other-ally-debuff-inflicted` (Provider — #590) does NOT count an 'apply':
+           *  an applied debuff is not "inflicted" by the game's own wording. `on-debuff-inflicted`
+           *  and `on-ally-debuff-inflicted` are untouched and still count both kinds. */
+          application?: 'inflict' | 'apply';
           viaDebuffInflictedReaction?: true;
           viaAllyDebuffInflictedReaction?: true;
+          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     | ({
           type: 'debuff-resisted';
@@ -180,9 +197,12 @@ export type CombatEvent =
            *  came back a failure. Three unrelated causes emit this one event — a Block-Debuff
            *  auto-resist, an affinity-disadvantage `apply`, and a failed roll — and by emit time
            *  they were indistinguishable, so no consumer could tell "the enemy rolled a resist"
-           *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence) fires
-           *  on the roll only; every other resist consumer (Vindicator, Ravager, Lockdown) stays
-           *  cause-agnostic and ignores this field.
+           *  from "the debuff never had a chance". `on-enemy-debuff-resisted` (Xcellence),
+           *  `on-ally-debuff-resisted` (Prophet — #591) and `on-debuff-resisted` (Prophet's extra
+           *  action, Vindicator, the Lockdown implant — #591) all fire on the roll only: a
+           *  Block-Debuff or affinity auto-resist is not a resist the RESISTER's own reactions
+           *  see. `on-own-debuff-resisted` (Ravager, inflictor-scoped) remains cause-agnostic —
+           *  this field describes what the RESISTER experienced, not the inflictor.
            *
            *  MUST be stamped at the point of decision and passed through — never re-derived at
            *  the emit site. The reactive path deliberately folds immunity INTO its landing
@@ -221,6 +241,9 @@ export type CombatEvent =
            *  so the `on-ally-debuff-inflicted` listener's `dot-applied` arm can skip its own
            *  reaction's output the same way the `debuff-applied` arm does. */
           viaAllyDebuffInflictedReaction?: true;
+          /** The `debuff-applied` sibling's `on-other-ally-debuff-inflicted` brand — see that
+           *  field's doc. */
+          viaOtherAllyDebuffInflictedReaction?: true;
       } & ReactiveStamp)
     /** A heal/shield cast resolved (healing mode only). `targets` lists recipient actor
      *  ids in application order; `amount` is the summed RAW amount across recipients.

@@ -21,6 +21,9 @@ const TYPE_LABELS: Record<AbilityType, string> = {
     'detonate-dot': 'Detonate DoTs',
     'accumulate-detonate': 'Accumulate & Detonate',
     charge: 'Charge',
+    // #591 (Prophet): parser-only, no editor UI yet — placeholder label only, not pickable in a
+    // category (mirrors convert-dot/defense-substitution above).
+    'stat-gain': 'Stat Gain',
     'extra-action': 'Extra Action',
     heal: 'Heal',
     shield: 'Shield',

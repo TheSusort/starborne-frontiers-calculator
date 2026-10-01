@@ -104,7 +104,8 @@ export type ReactiveAbilityType =
     | 'counter' // counter-attack reactive; parsed by parseCounterAbilities
     | 'purge' // purge can be reactive — Sefuba on-enemy-purged chain
     | 'remove-self-buff' // Overload lifecycle: reactive self-buff removal (on kill/repair/debuff)
-    | 'convert-dot'; // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    | 'convert-dot' // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    | 'stat-gain'; // Prophet's permanent shield-pen gain on an ally's resist (#591)
 
 /** Runtime mirror of ReactiveAbilityType for the partition check. */
 const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
@@ -121,6 +122,7 @@ const REACTIVE_ABILITY_TYPES: readonly ReactiveAbilityType[] = [
     'purge', // purge can be reactive — Sefuba on-enemy-purged chain
     'remove-self-buff', // Overload lifecycle: reactive self-buff removal
     'convert-dot', // Belladonna's ally-Corrosion→Acidic-Decay conversion
+    'stat-gain', // Prophet's permanent shield-pen gain on an ally's resist (#591)
 ];
 
 /** A reactive ability registered as a listener, paired with its source slot
@@ -357,8 +359,9 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * RULING (2026-09-30): "an ally" in skill text includes the caster itself; only an explicit
  * "another/other ally" excludes it. `on-ally-debuff-inflicted`, `on-ally-debuffed`, `on-ally-crit`,
  * `on-ally-attacked` and `on-ally-purged` fire on the owner's own qualifying action/state below.
- * `on-ally-crit-dot` (Crocus names "another ally") and `on-ally-destroyed` (a destroyed ship
- * cannot take its own reaction) are carved out and keep excluding the owner via `isSameSideAlly`.
+ * `on-ally-crit-dot` (Crocus names "another ally"), `on-other-ally-debuff-inflicted` (Provider
+ * names "another ally") and `on-ally-destroyed` (a destroyed ship cannot take its own reaction)
+ * are carved out and keep excluding the owner via `isSameSideAlly`.
  *
  *  - on-crit → ability-performed where actorId === ownerId; enqueues once PER ATTACK, never per
  *    target. Every emitter is per-sub-attack, so ONE enqueue per event implements this
@@ -376,6 +379,13 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  *    reaction whose OWN trigger is on-ally-debuff-inflicted cannot re-wake this same listener off
  *    its own output — the guard lives in this listener's own debuff-applied/dot-applied handlers
  *    below; `executeIntent`'s `debuff` branch and `landDotOn` only SET the brand it reads.
+ *  - on-other-ally-debuff-inflicted → debuff-applied OR dot-applied where the source is a
+ *    same-side ally EXCLUDING the owner (`isSameSideAlly`) — Provider's "another ally" text, see
+ *    the ruling above. Stamps eventCtx.debuffVictimId with the debuff's own victim so a damage
+ *    clause and a debuff clause riding this trigger both land on "that enemy". Bounded
+ *    source-agnostically via `viaOtherAllyDebuffInflictedReaction` (see events.ts's doc on that
+ *    flag) rather than the same-owner check on-ally-debuff-inflicted uses, because this trigger's
+ *    owner exclusion makes the loop risk cross-owner, not self.
  *  - on-ally-debuffed → debuff-applied where the TARGET is same-side (not opposing) — owner
  *    included, see the ruling above; the ally counterpart of on-debuffed (Hayyan). Does NOT
  *    subscribe to dot-applied, matching on-debuffed's scoping.
@@ -816,6 +826,56 @@ export function registerReactiveListeners(args: {
                                     victimId: e.targetId,
                                     dotType: e.dotType,
                                 },
+                            });
+                    });
+                    break;
+                case 'on-other-ally-debuff-inflicted':
+                    // Owner-EXCLUDED sibling of on-ally-debuff-inflicted (Provider — #590): the
+                    // skill text says "another/other ally", so isSameSideAlly (not !isOpposing)
+                    // is the gate. eventCtx.debuffVictimId carries the debuff's own victim
+                    // ("that enemy") — read by both the reactive `damage` executor's
+                    // counterTargetId-then-debuffVictimId fallback and the `debuff` executor's
+                    // identical fallback, so a damage clause and a debuff clause riding this same
+                    // trigger both land on the enemy the ally's debuff actually hit.
+                    //
+                    // `viaOtherAllyDebuffInflictedReaction` bounds the chain SOURCE-AGNOSTICALLY,
+                    // unlike on-ally-debuff-inflicted's self-chain guard: that guard only needs to
+                    // skip the OWNER's own output, because an owner-excluded trigger's `sourceId`
+                    // can never equal `ownerId` in the first place (isSameSideAlly excludes it
+                    // structurally). The unbounded risk here is CROSS-owner: two ships on this
+                    // trigger would otherwise wake each other's reaction forever (A's reaction
+                    // lands a debuff → wakes B → B's reaction lands a debuff → wakes A → …).
+                    // Ignoring any event carrying this brand, regardless of who emitted it, cuts
+                    // that ping-pong at generation 1 — each ship still reacts exactly once to the
+                    // original, non-reactive infliction (proven by a two-Provider integration
+                    // test), and no OTHER reactive family's debuff output is affected (the brand
+                    // is set only at this trigger's own emission sites).
+                    bus.on('debuff-applied', (e) => {
+                        // #590 R3: an applied debuff (no hacking roll — Concentrate Fire, Provoke)
+                        // is not "inflicted" by the game's own wording, so it does not wake this
+                        // listener; an undefined `application` (a shape that predates the field)
+                        // is treated as inflicted, matching every corpus fixture's prior behaviour.
+                        if (e.application === 'apply') return;
+                        if (
+                            isSameSideAlly(e.sourceId, ownerId) &&
+                            !e.viaOtherAllyDebuffInflictedReaction
+                        )
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
+                            });
+                    });
+                    bus.on('dot-applied', (e) => {
+                        // An ally's DoT landing counts as a debuff inflicted — same guard as the
+                        // debuff-applied arm above. DoTs carry no `application` field: they are
+                        // always rolled, never unconditionally applied.
+                        if (
+                            isSameSideAlly(e.sourceId, ownerId) &&
+                            !e.viaOtherAllyDebuffInflictedReaction
+                        )
+                            enqueue({
+                                ...intent,
+                                eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
                             });
                     });
                     break;
@@ -1269,6 +1329,12 @@ export function registerReactiveListeners(args: {
                         // downstream (triggers.ts damage branch). all-allies recipient routing
                         // happens in the buff executor.
                         if (e.targetId !== ownerId) return;
+                        // Roll-only (#591): a Block-Debuff auto-resist or an affinity-disadvantage
+                        // `apply` draws no hacking-vs-security gate, so it is not a resist the
+                        // RESISTER's own reactions see — Prophet's R2+ extra action, Vindicator's
+                        // HP-basis retaliation, and the Lockdown implant's Buff Protection grant
+                        // all gate on the roll.
+                        if (e.viaLandingRoll !== true) return;
                         enqueue(
                             e.sourceId !== undefined
                                 ? {
@@ -1355,6 +1421,27 @@ export function registerReactiveListeners(args: {
                                 subAttackIndex: e.subAttackIndex,
                             },
                         });
+                    });
+                    break;
+                case 'on-ally-debuff-resisted':
+                    bus.on('debuff-resisted', (e) => {
+                        // Prophet (#591): "When an ally resists a debuff infliction from an
+                        // enemy" — BOTH ends are scoped, unlike every sibling above. The resister
+                        // (e.targetId) must be same-side, owner INCLUDED — "an ally" includes the
+                        // caster, unlike on-enemy-debuff-resisted's opposing scope.
+                        if (isOpposing(e.targetId)) return;
+                        // The inflictor (e.sourceId) must be OPPOSING — only an enemy's infliction
+                        // counts. An undefined source (a display-only resist with no attributable
+                        // inflictor) can never satisfy "from an enemy".
+                        if (e.sourceId === undefined || !isOpposing(e.sourceId)) return;
+                        // Roll-only — same viaLandingRoll gate as on-enemy-debuff-resisted: a
+                        // Block-Debuff auto-resist or an affinity-disadvantage `apply` draws no
+                        // roll and must not proc.
+                        if (e.viaLandingRoll !== true) return;
+                        // Self-target grant (the owner's own bonus) — no eventCtx capture needed.
+                        // One enqueue per resisted debuff, matching debuff-resisted's existing
+                        // per-debuff cardinality.
+                        enqueue(intent);
                     });
                     break;
                 case 'on-ally-attacked':
@@ -2151,6 +2238,14 @@ export interface IntentExecContext {
      *  fire; the gate blocks once the count reaches the cap. Reset each round in the engine (shared
      *  across both sides, like oncePerRoundConsumed). Absent → no cap is ever enforced. */
     perRoundFireCounts?: Map<string, number>;
+    /** Prophet (#591): adds `pct` percentage points to `ownerId`'s LIVE, per-fight,
+     *  PERMANENTLY-stacking shield-penetration bonus — not a status, never removed. Engine-owned
+     *  (a bare per-actor accumulator alongside `lastTurnCtxByActor`, outside the round loop so it
+     *  survives every round); `attackerShieldPenOf` (engine.ts) is the sole read site, adding this
+     *  on top of the actor's static base. Side-agnostic — the same accumulator serves either side,
+     *  so an enemy-side Prophet stacks identically. Absent → the stat-gain branch is inert (unit
+     *  fixtures / DPS mode). */
+    addShieldPenBonus?: (ownerId: string, pct: number) => void;
 }
 
 /** Build the drain-time condition context from CURRENT engine state. This is a
@@ -3856,6 +3951,16 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
     if (!conditionsMet(gateConditions, drainCtx)) return;
     if (!dealtVictimRoleGateMet(intent, ctx)) return;
 
+    if (cfg.type === 'stat-gain') {
+        // Prophet (#591): a permanent, stacking per-fight bonus — no once-per-round/proc-chance
+        // gate (the ability carries none; every qualifying resist counts). Self-target by
+        // construction (the owner's own bonus), so no recipient resolution is needed. Absent
+        // delegate (unit fixtures / DPS mode) → inert, matching every other engine-owned
+        // accumulator in this file.
+        ctx.addShieldPenBonus?.(intent.ownerId, cfg.pct);
+        return;
+    }
+
     if (cfg.type === 'charge') {
         if (!passesOncePerRoundGate(intent, ctx)) return;
         // A SELF-target charge on a per-hit reactive trigger (on-attacked /
@@ -4300,11 +4405,24 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
             // `applicationTargetIds` is the resolution the loop actually applies to, so it is the
             // only place every route has a real target in hand.
             if (!perVictimOk(applicationTargetId)) continue;
+            const debuffTargetId = applicationTargetId;
+            // #590 R1: a weaker same-family debuff onto a target already holding a stronger one
+            // is never attempted — no roll, no landing, no resist. Checked before Block Debuff so
+            // an outclassed reactive application skips silently rather than surfacing as a
+            // Block-Debuff resist (the whole clause behaves as absent).
+            if (
+                ctx.statusEngine.isOutclassedByExistingFamily(
+                    'enemy',
+                    cfg.buffName,
+                    undefined,
+                    debuffTargetId
+                )
+            )
+                continue;
             // Block Debuff fold: a target carrying Block Debuff auto-resists
             // every incoming timed debuff. Gate immunity into the landing condition so the
             // resist `else` below handles it (no duplicated resist code); `&&` short-circuits
             // when not immune.
-            const debuffTargetId = applicationTargetId;
             const blockedByImmunity = targetCarriesBlockDebuff(ctx.statusEngine, debuffTargetId);
             // #413: computed HERE, beside `blockedByImmunity` and before the `if`, because the
             // `else` below cannot tell which of the two short-circuits sent it there — that fold is
@@ -4353,11 +4471,15 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                     targetId: debuffTargetId,
                     round: ctx.round,
                     buffName: cfg.buffName,
+                    application: cfg.application,
                     ...(intent.ability.trigger === 'on-debuff-inflicted'
                         ? { viaDebuffInflictedReaction: true as const }
                         : {}),
                     ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                         ? { viaAllyDebuffInflictedReaction: true as const }
+                        : {}),
+                    ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
+                        ? { viaOtherAllyDebuffInflictedReaction: true as const }
                         : {}),
                 });
             } else {
@@ -4487,6 +4609,9 @@ export function executeIntent(intent: Intent, rawCtx: IntentExecContext): void {
                 tier: cfg.tier,
                 ...(intent.ability.trigger === 'on-ally-debuff-inflicted'
                     ? { viaAllyDebuffInflictedReaction: true as const }
+                    : {}),
+                ...(intent.ability.trigger === 'on-other-ally-debuff-inflicted'
+                    ? { viaOtherAllyDebuffInflictedReaction: true as const }
                     : {}),
             });
         };
