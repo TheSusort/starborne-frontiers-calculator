@@ -2321,10 +2321,11 @@ export function detectEchoingBurstDetonatedTrigger(
 // carrying the phrase. So an unrelated heal/charge in a DIFFERENT sentence is never mis-triggered,
 // even when it shares the anchor keyword. Reference data: docs/ship-skills.csv.
 const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
-// "when an ally critically hits" (Hermes/Sentinel) and "when that ally crits" (Howler) are the
-// same reactive trigger under two phrasings — verified zero-collateral: across all 147 ships in
-// docs/ship-skills.csv, "ally crit(ically hits/s)" appears ONLY on these three ships.
-const ALLY_CRIT_HIT_RE = /when (?:an|that) ally (?:critically hits|crits)/i;
+// "when an/another ally critically hits" and "when that ally crits" are the same reactive
+// trigger. `on-ally-crit` fires on the owner's own crits too, so "another ally" (which by the
+// ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: no
+// owner-excluded crit trigger exists.
+const ALLY_CRIT_HIT_RE = /when (?:an|another|that) ally (?:critically hits|crits)/i;
 
 /**
  * Returns 'on-ally-critically-repaired' when `anchorPos` (the ability's raw-text anchor position)
@@ -4655,7 +4656,7 @@ function resolveHealTarget(sentence: string): {
     // which is a widening to weigh at that point (the inventory gate in
     // `abilities/__tests__/lowestHpAllySelector.test.ts` is what surfaces it).
     if (
-        /most\s+missing\s+health|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
+        /most\s+missing\s+(?:health|hp)\b|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
             sWithoutKillAntecedent
         )
     )
@@ -4944,9 +4945,9 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
                       : {}),
                 ...(maxPerRound !== undefined ? { maxPerRound } : {}),
             });
-            // Valkyrie: "this Unit and the ally with the lowest ..." — dual recipient → emit a
-            // second SELF entry mirroring the first (5% each, same basis/scope).
-            if (leechBasis && /\bthis\s+unit\s+and\s+the\s+ally\b/i.test(sentence)) {
+            // "this/the Unit and the ally with the lowest ..." (Valkyrie) — dual recipient → emit
+            // a second SELF entry mirroring the first (5% each, same basis/scope).
+            if (leechBasis && /\b(?:this|the)\s+unit\s+and\s+the\s+ally\b/i.test(sentence)) {
                 results.push({
                     kind,
                     pct,
@@ -5975,6 +5976,9 @@ const ALL_ALLIES_RE = /friendly|allies/i;
 const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
+// Statuses only the caster can hold: a receiver-less grant of one routes to self, not to all
+// allies. Lower-case canonical names.
+const SELF_ONLY_GRANT_NAMES: ReadonlySet<string> = new Set(['taunt']);
 // Granting (bestowing) verbs — the caster confers the buff on a (possibly explicit) receiver.
 const GRANT_VERB_RE = /\bgrants?\b|\bgranted\b|\bgranting\b/i;
 // Receiving verbs — the subject (This Unit) takes the buff onto itself; no external receiver.
@@ -6091,7 +6095,9 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *      · bare adjacency receiver ("grants X to all adjacent allies")         → 'adjacent-allies'
  *      · self + adjacency ("grants X to itself and all adjacent allies")     → BOTH of the above
  *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
+ *      · "grants them X" after an "all allies" antecedent in the clause      → 'all-allies'
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
+ *      · NO explicit receiver, self-only status ("This Unit grants Taunt")   → 'self'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
  *
  * Returns a LIST because of that one combined receiver: the caster and its board neighbours are
@@ -6155,8 +6161,14 @@ function detectGrantScopes(
             return SELF_RECEIVER_RE.test(object) ? SELF_AND_ADJACENT : ['adjacent-allies'];
         }
         if (ALL_ALLIES_RE.test(object)) return ['all-allies'];
+        // "repairs … all allies and grants them X": the pronoun receiver points back at the
+        // team named earlier in the same clause, so it is plural.
+        if (/^\s*them\b/.test(object) && /\ball\s+allies\b/.test(subject)) return ['all-allies'];
         if (SINGLE_ALLY_RE.test(object)) return ['ally'];
         if (SELF_RECEIVER_RE.test(object)) return ['self'];
+        // Taunt draws enemy fire to the ship carrying it, so a receiver-less "grants Taunt" is the
+        // caster taking it, exactly like "gains Taunt".
+        if (SELF_ONLY_GRANT_NAMES.has(buffName.toLowerCase())) return ['self'];
         // Receiver-less grant → all players (the locked routing rule).
         return ['all-allies'];
     }
@@ -6292,15 +6304,17 @@ export function detectGrantFactionScope(
     return hits.length > 0 ? hits : undefined;
 }
 
-// "all enemies adjacent to X" must NOT match the plain all-enemies widen. Two flavours:
-//  - "the targeted enemy and all enemies adjacent to it/the enemy" → anchor INCLUDED
+// "all enemies adjacent to X" must NOT match the plain all-enemies widen. Flavours:
+//  - "the targeted enemy and all enemies adjacent to it/the enemy" or "the targeted enemy and
+//    all adjacent enemies" → anchor INCLUDED (tested first, so the bare form below never claims
+//    it)
 //  - "(to) all enemies adjacent to the (original) target"           → anchor EXCLUDED
 //  - "all adjacent enemies" (bare, no "target"/"to" — Demolisher's passive bomb-splash:
 //    "deals 100% of the Bomb's damage to all adjavent enemies") → anchor EXCLUDED, same
 //    scope as the "to ... target" flavour above.
 // Tolerates the docs/ship-skills.csv "adjavent" typo.
 const TARGET_AND_ADJACENT_ENEMY_RE =
-    /targeted\s+enemy\s+and\s+all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:it|the\s+enemy)/i;
+    /targeted\s+enemy\s+and\s+all\s+(?:enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:it|the\s+enemy)|adja[cv]ent\s+enem(?:y|ies))/i;
 const ADJACENT_ENEMY_ONLY_RE =
     /all\s+enem(?:y|ies)\s+adja[cv]ent\s+to\s+(?:the\s+)?(?:original\s+)?target|all\s+adja[cv]ent\s+enem(?:y|ies)/i;
 

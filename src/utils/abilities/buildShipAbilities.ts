@@ -554,9 +554,13 @@ function parseModifiers(text: string): ParsedModifier[] {
     // "X% more critical damage [to <enemy class>]" → crit-damage modifier (Lodolite).
     const critM = plain.match(/(\d+(?:\.\d+)?)%\s+more\s+critical\s+damage/i);
     if (critM) {
-        // Comma-scoped: "This Unit deals X% more critical damage, all allies deal Y%…" are
-        // separate subjects, so don't let the all-ally clause leak into this one.
-        const clause = clauseContaining(plain, critM.index!);
+        // Clause-scoped: "This Unit deals X% more critical damage, all allies deal Y%…" (or
+        // "… and all allies deal Y%…") are separate subjects, so the all-ally clause must not
+        // leak into this one. The "and <allies> deal" conjunction splits like the comma does.
+        const clause =
+            clauseContaining(plain, critM.index!)
+                .split(/\s+and\s+(?=(?:all\s+)?allies\s+deal\b)/i)
+                .find((part) => part.includes(critM[0])) ?? '';
         const isAllyScoped = /friendly|all allies|allies/i.test(clause);
         const conditions: Condition[] = [];
         const typeM = clause.match(
@@ -1098,9 +1102,7 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected.
  *
- * Shields use {@link flipBareSupportShieldTarget} instead — a bare shield co-cast beside an
- * all-allies buff grant routes to `all-allies` (Graphite's Overclock + shield); standalone
- * self shields stay on the caster.
+ * Shields use {@link flipBareSupportShieldTarget} instead, which owns the shield routing rules.
  *
  * Exception (user-verified 2026-06-07): a bare repair whose own sentence is gated on a
  * SELF-DAMAGE condition ("if this unit has been directly damaged this round") is a SELF-heal —
@@ -1186,18 +1188,23 @@ function flipBareSupportTarget(
     return target;
 }
 
-/** Bare shield on a pure-support active/charged co-cast beside an all-allies buff grant routes
- *  to all allies (Graphite: Overclock + shield). Standalone self shields ("gains a shield…")
- *  stay self. Explicit recipients and damage-rider skills are unchanged. */
+/** A bare shield on a pure-support active/charged cast routes to all allies (the engine narrows
+ *  them to the skill's support pattern) when either
+ *   - it is co-cast beside an all-allies buff grant (Graphite: Overclock + shield), or
+ *   - its own verb bestows it ("grants a shield equal to …"): a receiver-less grant goes to all
+ *     allies, the same rule `detectGrantScopes` applies to named buffs.
+ *  A shield the caster receives ("gains a shield…") stays self. Explicit recipients and
+ *  damage-rider skills are unchanged. */
 function flipBareSupportShieldTarget(
     target: 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally',
     explicitTarget: boolean,
     slot: SkillSlot,
     hasDamage: boolean,
-    hasCoCastAllAlliesGrant: boolean
+    hasCoCastAllAlliesGrant: boolean,
+    isBestowedShield: boolean
 ): 'self' | 'ally' | 'all-allies' | 'lowest-hp-ally' {
     if (
-        hasCoCastAllAlliesGrant &&
+        (hasCoCastAllAlliesGrant || isBestowedShield) &&
         !explicitTarget &&
         target === 'self' &&
         (slot === 'active' || slot === 'charged') &&
@@ -2402,7 +2409,9 @@ function abilitiesFromText(
                         h.explicitTarget,
                         slot,
                         mult > 0,
-                        shieldCoCastAllAlliesGrant
+                        shieldCoCastAllAlliesGrant,
+                        h.kind === 'shield' &&
+                            /\bgrant(?:s|ing)?\s+(?:an?\s+)?shield\b/i.test(healSentence)
                     )
                   : h.target;
         // PR6b: per-count repair scaling (Oleander/Meatshield). The count Condition is appended

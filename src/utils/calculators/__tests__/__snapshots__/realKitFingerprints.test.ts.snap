@@ -2502,7 +2502,6 @@ exports[`kit fingerprints > Orel 1`] = `
 {
   "plain": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2513,7 +2512,6 @@ exports[`kit fingerprints > Orel 1`] = `
   ],
   "richEnemy": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",
@@ -2524,7 +2522,6 @@ exports[`kit fingerprints > Orel 1`] = `
   ],
   "wounded": [
     "attack",
-    "buff",
     "buff-expired",
     "buff:charged",
     "charge-changed",

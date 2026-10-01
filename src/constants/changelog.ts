@@ -11,6 +11,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Ship data: Enforcer, Orel and Yazid now have their correct roles.',
     'Ship data: Suku and Yuyan now have their correct affinities.',
     'Ship data: Mender and Yin Jian now show their own portraits.',
+    "Combat simulator: Madax, Orel and Sansi's Taunt now applies only to themselves.",
+    "Combat simulator: AEGIS and Nyxen's charged shield now reaches every ally in range.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [
