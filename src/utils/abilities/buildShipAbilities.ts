@@ -2184,16 +2184,17 @@ function abilitiesFromText(
     const healNoCrit = parseHealNoCrit(text);
     const skillEffectsForSlot = parseSkillEffects(text, slot === 'charged' ? 'charge' : 'active');
     for (const h of parseHealAbilities(text)) {
-        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). If multiple
-        // heal components share the same pct the regex may hit the wrong tag — acceptable, since
-        // the position only drives cosmetic editor order (the engine ignores heal types).
-        // The lookbehind keeps "5%" from anchoring inside an earlier tag's "25%".
+        // Anchor at the tag carrying THIS pct (mirrors the damage anchor convention). The anchor
+        // position selects the heal's trigger: the position-scoped detectors below
+        // (detectStartOfRoundTrigger, detectPreCombatShieldTrigger, detectEveryTurnTrigger,
+        // detectCritRepairTrigger, ...) read the sentence around it. The `(?<![\d.])` lookbehind
+        // stops a smaller pct anchoring inside a larger tagged number (5% inside "25%").
         const healTagPos = text.search(
             new RegExp(`<unit-damage>(?:[^<]*?)(?<![\\d.])${escNum(h.pct)}%`, 'i')
         );
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
-        // Phase 4c PR 1+2: a damage-reaction heal (parser annotation `damageReaction`)
+        // A damage-reaction heal (parser annotation `damageReaction`)
         // rides the live reactive trigger — SELF-subject sentences ("when directly
         // damaged") → on-attacked, ALLY-subject ones (allySubject, Cultivator's "when
         // an ally is directly damaged … repairs 8%") → on-ally-attacked, where the

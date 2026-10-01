@@ -32,4 +32,7 @@ export interface RewordPair {
     new: string;
     /** A signature the parse MUST contain — guards against both texts parsing to nothing. */
     expects: string;
+    /** When set, the OLD parse MUST carry exactly one scaled damage ability with this `perUnit`
+     *  (the per-buff / per-debuff add-on the pair exists to prove survives the rewording). */
+    scalingPerUnit?: number;
 }
