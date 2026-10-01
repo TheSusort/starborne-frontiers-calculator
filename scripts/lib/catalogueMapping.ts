@@ -1,7 +1,9 @@
 /**
  * Maps one catalogue unit onto the `ship_templates` row shape. Pure.
  *
- * An enum value with no mapping is reported in `mappingErrors` and left null — never guessed.
+ * Anything that cannot be mapped faithfully is reported in `mappingErrors` rather than guessed: an
+ * enum value with no mapping is left null, and a unit with any error is never written (see
+ * `planSync`).
  * Affinity `None` is antimatter: the catalogue encodes purple as none and never emits `Purple`.
  */
 import type { CatalogueSkill, CatalogueUnit, Segment } from './catalogueSchema';
@@ -90,10 +92,16 @@ const AFFINITIES: Record<string, string> = {
 const DAMAGE_COLOR = '#EE6F1A';
 const AID_COLOR = '#FFE172';
 
-/** Segments → the tagged text the skill parser reads (`<unit-skill>`/`<unit-damage>`/`<unit-aid>`, `<br />`). */
-export const renderSkillText = (segments: Segment[]): string =>
+/**
+ * Segments → the tagged text the skill parser reads (`<unit-skill>`/`<unit-damage>`/`<unit-aid>`, `<br />`).
+ *
+ * A named effect (`effectId`) with empty text is pushed onto `errors`: the effect's name is
+ * missing from the text. A whitespace-only segment is a separator, never an error.
+ */
+export const renderSkillText = (segments: Segment[], errors: string[] = []): string =>
     segments
         .map((s) => {
+            if (s.effectId && s.text === '') errors.push(`empty named effect "${s.effectId}"`);
             if (s.text.trim() === '') return s.text;
             if (s.effectId) return `<unit-skill>${s.text}</unit-skill>`;
             const color = s.color?.toUpperCase();
@@ -133,8 +141,11 @@ export const toCatalogueTemplate = (unit: CatalogueUnit): CatalogueTemplate => {
     const passives = unit.ascensionSkills[0] ? byLevel(unit.ascensionSkills[0]) : [];
     if (passives.length > 3) errors.push(`${passives.length} passive levels; only 3 columns`);
     const passiveText = (i: number) =>
-        passives[i] ? renderSkillText(passives[i].descriptionSegments) : null;
+        passives[i] ? renderSkillText(passives[i].descriptionSegments, errors) : null;
     const chargedTop = charged ? maxLevel(charged) : null;
+    if (chargedTop && chargedTop.chargesRequired === undefined) {
+        errors.push('charged skill without chargesRequired');
+    }
     const s = unit.stats;
 
     return {
@@ -159,8 +170,8 @@ export const toCatalogueTemplate = (unit: CatalogueUnit): CatalogueTemplate => {
         },
         ascensionStats: unit.ascensionStats.length > 0 ? unit.ascensionStats : null,
         skills: {
-            active_skill_text: active ? renderSkillText(maxLevel(active).descriptionSegments) : null,
-            charge_skill_text: chargedTop ? renderSkillText(chargedTop.descriptionSegments) : null,
+            active_skill_text: active ? renderSkillText(maxLevel(active).descriptionSegments, errors) : null,
+            charge_skill_text: chargedTop ? renderSkillText(chargedTop.descriptionSegments, errors) : null,
             first_passive_skill_text: passiveText(0),
             second_passive_skill_text: passiveText(1),
             third_passive_skill_text: passiveText(2),

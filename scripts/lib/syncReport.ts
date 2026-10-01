@@ -1,13 +1,15 @@
 /** Markdown report and outcome status for one catalogue sync run. Pure. */
 import type { Change } from './catalogueDiff';
 import type { CatalogueManifest } from './catalogueSchema';
-import type { SyncPlan } from './catalogueSyncPlan';
+import { isDroppedField, type RowPatch, type SyncPlan, type TextHold } from './catalogueSyncPlan';
 
 export type SyncStatus = 'clean' | 'attention' | 'held' | 'failed';
 
 export const syncStatus = (plan: SyncPlan, writeFailures: string[]): SyncStatus => {
     if (plan.halted || writeFailures.length) return 'failed';
-    if (plan.patches.some((p) => p.heldText.length)) return 'held';
+    if (plan.mappingHeld.length || plan.patches.some((p) => p.heldText.length || p.heldDrops.length)) {
+        return 'held';
+    }
     if (
         plan.inserts.length ||
         plan.refusedInserts.length ||
@@ -60,6 +62,58 @@ const renderMissingFromCatalogue = (plan: SyncPlan): string[] => {
     return lines;
 };
 
+const DROPPED = 'the catalogue dropped this field';
+
+const textHoldLabel = (p: RowPatch, hold: TextHold): string => {
+    switch (hold) {
+        case 'gate':
+            return 'held by the audit gate; new audit findings:';
+        case 'dropped-field': {
+            const cols = p.heldText.filter(isDroppedField).map((c) => (c.kind === 'skill-text' ? c.column : c.kind));
+            return `held: ${DROPPED} (${cols.join(', ')})`;
+        }
+        case 'text-writes-off':
+            return 'held: text writes disabled (--stats-only run)';
+    }
+};
+
+const renderHeldText = (plan: SyncPlan): string[] => {
+    const lines: string[] = [];
+    const held = plan.patches.filter((p) => p.heldText.length);
+    if (held.length) {
+        lines.push('', `### Skill text held (${held.length} ships)`);
+        for (const p of held) {
+            lines.push('', `**${p.name}** — ${textHoldLabel(p, p.textHold ?? 'gate')}`);
+            for (const f of p.gate?.newFindings ?? []) lines.push(`- ${f}`);
+            for (const c of p.heldText) lines.push(`- ${describeChange(c)}`);
+        }
+    }
+    return lines;
+};
+
+const renderHeldDrops = (plan: SyncPlan): string[] => {
+    const lines: string[] = [];
+    const held = plan.patches.filter((p) => p.heldDrops.length);
+    if (held.length) {
+        lines.push('', `### Dropped values held (${held.length} ships)`);
+        for (const p of held) {
+            for (const c of p.heldDrops) lines.push(`- **${p.name}** ${describeChange(c)} — ${DROPPED}`);
+        }
+    }
+    return lines;
+};
+
+const renderMappingHeld = (plan: SyncPlan): string[] => {
+    const lines: string[] = [];
+    if (plan.mappingHeld.length) {
+        lines.push('', `### Mapping errors — ship not written (${plan.mappingHeld.length})`);
+        for (const m of plan.mappingHeld) {
+            lines.push(`- **${m.template.name}** (\`${m.template.id}\`): ${m.reasons.join('; ')}`);
+        }
+    }
+    return lines;
+};
+
 export const renderReport = (
     plan: SyncPlan,
     ctx: {
@@ -92,15 +146,9 @@ export const renderReport = (
         }
     }
 
-    const held = plan.patches.filter((p) => p.heldText.length);
-    if (held.length) {
-        lines.push('', `### Skill text held by the audit gate (${held.length} ships)`);
-        for (const p of held) {
-            lines.push('', `**${p.name}** — new audit findings:`);
-            for (const f of p.gate?.newFindings ?? []) lines.push(`- ${f}`);
-            for (const c of p.heldText) lines.push(`- ${describeChange(c)}`);
-        }
-    }
+    lines.push(...renderMappingHeld(plan));
+    lines.push(...renderHeldText(plan));
+    lines.push(...renderHeldDrops(plan));
 
     if (plan.inserts.length) {
         lines.push('', `### New ships (${plan.inserts.length}) — need images, targeting and lore by hand`);

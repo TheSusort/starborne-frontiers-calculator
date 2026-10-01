@@ -6,6 +6,10 @@
  * half-updated kit is worse than an old one) while its other fields still write. Metadata,
  * id mismatches and rows missing from the catalogue are never written — only reported.
  *
+ * A matched unit with mapping errors writes nothing at all (`mappingHeld`). A change that would
+ * erase a value (`isDroppedField`) is never written: a dropped charge cost is held on its own,
+ * and a dropped text column holds all of that ship's text, without consulting the gate.
+ *
  * With `textWrites: false` (a stats-only run) no text is written and no ship is inserted.
  *
  * The whole run halts (writes nothing) when no unit matched a row, or when more than
@@ -17,12 +21,18 @@ import { EMPTY_SKILLS, type GateResult, type SkillGate } from './skillTextGate';
 
 export const STATS_CHANGE_HALT_RATIO = 0.25;
 
+/** Why a ship's text was held. `gate` is the only reason under which `RowPatch.gate` is set. */
+export type TextHold = 'gate' | 'dropped-field' | 'text-writes-off';
+
 export interface RowPatch {
     id: string;
     name: string;
     patch: Record<string, unknown>;
     applied: Change[];
     heldText: Change[];
+    textHold: TextHold | null;
+    /** Non-text changes held because they would erase a value. */
+    heldDrops: Change[];
     gate: GateResult | null;
 }
 export interface PlannedInsert {
@@ -35,11 +45,21 @@ export interface SyncPlan {
     patches: RowPatch[];
     inserts: PlannedInsert[];
     refusedInserts: { unit: CatalogueTemplate; reason: string }[];
+    mappingHeld: { template: TemplateRow; unit: CatalogueTemplate; reasons: string[] }[];
     metadata: { template: TemplateRow; change: Change }[];
     idMismatches: CatalogueDiff['idMismatches'];
     missingFromCatalogue: TemplateRow[];
     matchedCount: number;
 }
+
+const isBlank = (v: string | null): boolean => v === null || v.trim() === '';
+
+/** True when a change would turn a present value into null or blank text. */
+export const isDroppedField = (c: Change): boolean => {
+    if (c.kind === 'skill-text') return !isBlank(c.before) && isBlank(c.after);
+    if (c.kind === 'charge-cost') return typeof c.before === 'number' && c.after === null;
+    return false;
+};
 
 /** Same rule as `addShipTemplate` in src/services/shipTemplateProposalService.ts. */
 export const templateIdFor = (name: string): string => name.toUpperCase().replace(/\s+/g, '_');
@@ -80,6 +100,7 @@ const emptyPlan = (diff: CatalogueDiff): SyncPlan => ({
     patches: [],
     inserts: [],
     refusedInserts: [],
+    mappingHeld: [],
     metadata: [],
     idMismatches: diff.idMismatches,
     missingFromCatalogue: diff.missingFromCatalogue,
@@ -105,8 +126,13 @@ export const planSync = (
     }
 
     for (const { template, unit, changes } of diff.matched) {
+        if (unit.mappingErrors.length) {
+            plan.mappingHeld.push({ template, unit, reasons: [...unit.mappingErrors] });
+            continue;
+        }
         const patch: Record<string, unknown> = {};
         const applied: Change[] = [];
+        const heldDrops: Change[] = [];
         const stats = changes.filter((c): c is Change & { kind: 'stats' } => c.kind === 'stats');
         if (stats.length) {
             const merged = { ...template.base_stats };
@@ -115,7 +141,9 @@ export const planSync = (
             applied.push(...stats);
         }
         for (const c of changes) {
-            if (c.kind === 'charge-cost') {
+            if (c.kind === 'charge-cost' && isDroppedField(c)) {
+                heldDrops.push(c);
+            } else if (c.kind === 'charge-cost') {
                 patch.charge_skill_charge = c.after;
                 applied.push(c);
             } else if (c.kind === 'ascension') {
@@ -127,20 +155,32 @@ export const planSync = (
         }
         const text = changes.filter((c): c is Change & { kind: 'skill-text' } => c.kind === 'skill-text');
         let gateResult: GateResult | null = null;
-        let heldText: Change[] = [];
+        let textHold: TextHold | null = null;
         if (text.length && !opts.textWrites) {
-            heldText = text;
+            textHold = 'text-writes-off';
+        } else if (text.some(isDroppedField)) {
+            textHold = 'dropped-field';
         } else if (text.length) {
             gateResult = gate(template.name, skillsOf(template), unit.skills);
             if (gateResult.pass) {
                 for (const c of text) patch[c.column] = c.after;
                 applied.push(...text);
             } else {
-                heldText = text;
+                textHold = 'gate';
             }
         }
-        if (applied.length || heldText.length) {
-            plan.patches.push({ id: template.id, name: template.name, patch, applied, heldText, gate: gateResult });
+        const heldText = textHold ? text : [];
+        if (applied.length || heldText.length || heldDrops.length) {
+            plan.patches.push({
+                id: template.id,
+                name: template.name,
+                patch,
+                applied,
+                heldText,
+                textHold,
+                heldDrops,
+                gate: gateResult,
+            });
         }
     }
 

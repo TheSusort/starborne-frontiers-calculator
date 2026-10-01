@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planSync, templateIdFor } from '../catalogueSyncPlan';
+import { isDroppedField, planSync, templateIdFor } from '../catalogueSyncPlan';
 import type { CatalogueDiff, Change, TemplateRow, UnitDiff } from '../catalogueDiff';
 import type { CatalogueTemplate } from '../catalogueMapping';
 import type { SkillGate } from '../skillTextGate';
@@ -59,6 +59,7 @@ describe('planSync', () => {
         expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 } });
         expect(plan.patches[0].heldText).toEqual([text]);
         expect(plan.patches[0].gate?.pass).toBe(false);
+        expect(plan.patches[0].textHold).toBe('gate');
     });
 
     it('holds all text and refuses inserts when text writes are off, without calling the gate', () => {
@@ -71,7 +72,7 @@ describe('planSync', () => {
             { textWrites: false }
         );
         expect(called).toBe(false);
-        expect(plan.patches[0]).toMatchObject({ patch: {}, heldText: [text], gate: null });
+        expect(plan.patches[0]).toMatchObject({ patch: {}, heldText: [text], textHold: 'text-writes-off', gate: null });
         expect(plan.inserts).toEqual([]);
         expect(plan.refusedInserts[0].reason).toMatch(/stats-only/);
     });
@@ -105,6 +106,76 @@ describe('planSync', () => {
         );
         expect(plan.inserts).toEqual([]);
         expect(plan.refusedInserts.map((r) => r.reason)).toEqual(['unknown faction "Q"', 'id A already exists']);
+    });
+});
+
+/** One changed ship among four unchanged ones: under every whole-run ratio threshold. */
+const amongQuiet = (first: UnitDiff): UnitDiff[] => [first, ...['Q1', 'Q2', 'Q3', 'Q4'].map((id) => matched(id, []))];
+const spyGate = () => {
+    const calls: string[] = [];
+    const gate: SkillGate = (name) => (calls.push(name), { pass: true, newFindings: [] });
+    return { gate, calls };
+};
+
+describe('planSync — mapping errors', () => {
+    it('writes nothing for a matched unit with mapping errors and records why', () => {
+        const { gate, calls } = spyGate();
+        const charge: Change = { kind: 'charge-cost', before: 3, after: 4 };
+        const broken: UnitDiff = {
+            template: row('A'),
+            unit: unit({ mappingErrors: ['empty named effect "X"'] }),
+            changes: [hp, charge, text],
+        };
+        const plan = planSync(diff({ matched: amongQuiet(broken) }), [], gate, on);
+        expect(plan.halted).toBeNull();
+        expect(plan.patches).toEqual([]);
+        expect(calls).toEqual([]);
+        expect(plan.mappingHeld).toEqual([
+            { template: broken.template, unit: broken.unit, reasons: ['empty named effect "X"'] },
+        ]);
+    });
+});
+
+describe('planSync — a change that would erase a value', () => {
+    it('holds a charge cost the catalogue dropped, still writing the ship\'s stats', () => {
+        const drop: Change = { kind: 'charge-cost', before: 4, after: null };
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [hp, drop])) }), [], pass, on);
+        expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 } });
+        expect(plan.patches[0].applied).toEqual([hp]);
+        expect(plan.patches[0].heldDrops).toEqual([drop]);
+    });
+
+    it('still writes a charge cost that goes from null to a number', () => {
+        const add: Change = { kind: 'charge-cost', before: null, after: 4 };
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [add])) }), [], pass, on);
+        expect(plan.patches[0].patch).toEqual({ charge_skill_charge: 4 });
+        expect(plan.patches[0].heldDrops).toEqual([]);
+    });
+
+    it.each([null, '', '   '])('holds ALL of a ship\'s text when one column drops to %j, without calling the gate', (after) => {
+        const { gate, calls } = spyGate();
+        const drop: Change = { kind: 'skill-text', column: 'charge_skill_text', before: 'C', after };
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [hp, text, drop])) }), [], gate, on);
+        expect(calls).toEqual([]);
+        expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 } });
+        expect(plan.patches[0]).toMatchObject({ heldText: [text, drop], textHold: 'dropped-field', gate: null });
+    });
+
+    it('does not treat filling an empty column as a drop', () => {
+        const fill: Change = { kind: 'skill-text', column: 'charge_skill_text', before: null, after: '' };
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [fill])) }), [], pass, on);
+        expect(plan.patches[0]).toMatchObject({ patch: { charge_skill_text: '' }, heldText: [], textHold: null });
+    });
+});
+
+describe('isDroppedField', () => {
+    it('flags a non-empty value going null or blank, and nothing else', () => {
+        expect(isDroppedField({ kind: 'charge-cost', before: 4, after: null })).toBe(true);
+        expect(isDroppedField({ kind: 'charge-cost', before: null, after: null })).toBe(false);
+        expect(isDroppedField({ kind: 'skill-text', column: 'active_skill_text', before: 'A', after: ' ' })).toBe(true);
+        expect(isDroppedField({ kind: 'skill-text', column: 'active_skill_text', before: ' ', after: null })).toBe(false);
+        expect(isDroppedField(text)).toBe(false);
+        expect(isDroppedField(hp)).toBe(false);
     });
 });
 

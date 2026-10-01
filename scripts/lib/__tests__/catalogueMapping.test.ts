@@ -90,6 +90,45 @@ describe('toCatalogueTemplate', () => {
         expect(t.mappingErrors).toEqual(['unknown faction "Brand New Faction"']);
     });
 
+    it('accepts a whitespace-only separator between two named effects', () => {
+        const t = toCatalogueTemplate(load('crocus'));
+        expect(t.skills.charge_skill_text).toContain(
+            '<unit-skill>detonates</unit-skill> <unit-skill>Corrosion</unit-skill>'
+        );
+        expect(t.mappingErrors).toEqual([]);
+    });
+
+    it('reports a named effect with empty text', () => {
+        const unit = load('aegis');
+        const active = unit.skills.find((s) => s.levels[0].kind === 'Active')!;
+        const top = active.levels.reduce((a, b) => (b.level > a.level ? b : a));
+        top.descriptionSegments.push({ text: '', effectId: 'Buff_Ghost' });
+        expect(toCatalogueTemplate(unit).mappingErrors).toEqual(['empty named effect "Buff_Ghost"']);
+    });
+
+    it('reports a charged skill whose max level has no charge cost', () => {
+        const unit = load('crocus');
+        const charged = unit.skills.find((s) => s.levels[0].kind === 'Charged')!;
+        const top = charged.levels.reduce((a, b) => (b.level > a.level ? b : a));
+        delete top.chargesRequired;
+        const t = toCatalogueTemplate(unit);
+        expect(t.chargeSkillCharge).toBeNull();
+        expect(t.mappingErrors).toEqual(['charged skill without chargesRequired']);
+    });
+
+    it('reports more than one passive skill track', () => {
+        const unit = load('amartya');
+        unit.ascensionSkills.push(unit.ascensionSkills[0]);
+        expect(toCatalogueTemplate(unit).mappingErrors).toEqual(['more than one passive skill track']);
+    });
+
+    it('reports more passive levels than there are passive columns', () => {
+        const unit = load('amartya');
+        const track = unit.ascensionSkills[0];
+        track.levels.push({ ...track.levels[0], level: 4 });
+        expect(toCatalogueTemplate(unit).mappingErrors).toEqual(['4 passive levels; only 3 columns']);
+    });
+
     it('keeps ascension stats, or null when the unit has none', () => {
         expect(toCatalogueTemplate(load('aegis')).ascensionStats?.length).toBeGreaterThan(0);
         expect(toCatalogueTemplate({ ...load('aegis'), ascensionStats: [] }).ascensionStats).toBeNull();
