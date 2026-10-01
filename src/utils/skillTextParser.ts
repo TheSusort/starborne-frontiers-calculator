@@ -498,15 +498,16 @@ export function parseOnResistShieldDamage(text: string | null | undefined): { pc
 
 /**
  * "Upon being killed by direct Damage, this Unit deals Damage equal to N% of its max HP"
- * — Paracelsus on-destroyed HP-scaled retaliation. Mirrors parseOnResistHpDamage; the amount
- * rides hpBasisPct (multiplier:0), executed by the reactive-damage executor on on-destroyed.
+ * (the catalogue writes "destroyed" for "killed") — Paracelsus on-destroyed HP-scaled
+ * retaliation. Mirrors parseOnResistHpDamage; the amount rides hpBasisPct (multiplier:0),
+ * executed by the reactive-damage executor on on-destroyed.
  */
 export function parseKilledByDirectHpDamage(
     text: string | null | undefined
 ): { pct: number } | null {
     if (!text) return null;
     const re =
-        /(?:when|upon\s+being)\s+killed\s+by\s+direct\s+damage\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
+        /(?:when|upon\s+being)\s+(?:killed|destroyed)\s+by\s+direct\s+damage\b[^.]*?<unit-damage>(?:damage\s+equal\s+to\s+)?(\d+(?:\.\d+)?)%[^<]*<\/unit-damage>\s*of\s+(?:its|this\s+unit'?s)\s+max\s+hp/i;
     const m = re.exec(text);
     if (!m) return null;
     const pct = parseFloat(m[1]);
@@ -1238,7 +1239,7 @@ export function detectGrantConditions(
     const appliesDebuffGate = /\b(?:appl|inflict)\w*\s+a\s+debuff\b/i.test(low);
     // "after an ally is critically repaired" — a team-dependent reactive trigger (manual).
     const allyCritRepairGate = /\ball(?:y|ies)\b[^.]*\bcritically\s+repaired\b/i.test(low);
-    // Ship-kit W8 Task 13: "killing an enemy WITH A DEBUFF" (Meiying) — the kill trigger's
+    // "killing / destroying an enemy WITH A DEBUFF" (Meiying) — the kill trigger's
     // qualifier. KILL_TRIGGER_RE resolves the TRIGGER (on-enemy-destroyed) elsewhere; this
     // separately gates the GRANTED debuff on the slain enemy having carried a debuff.
     const killedEnemyHadDebuffGate = KILL_WITH_DEBUFF_RE.test(low);
@@ -1538,21 +1539,22 @@ const OWN_CLEANSE_TRIGGER_RE =
 // enemy-buff condition consumer (Amartya/Panon Taunt-style gates use a different phrasing).
 const ENEMY_BUFFED_RE =
     /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b/i;
-// Overload lifecycle (Task 4) — kill/apply-debuff reactive phrasings for buff grants/removals.
-// Kept SEPARATE from the shared ENEMY_DEATH_PHRASING_RE used by parseExtraAction (do NOT broaden
-// that one). "on kill" (Mangler/Butcher), "upon killing an enemy/opponent" (Mangler/Ravager/
-// Asphyxiator/Butcher), "when an enemy dies". Reference data: docs/ship-skills.csv.
+// Enemy-death phrasings that resolve a buff grant/removal, a self charge gain or a self-repair
+// to on-enemy-destroyed. Our wording: "on (a) kill", "killing an enemy/opponent", "when an enemy
+// dies". The official catalogue's: "upon destroying an enemy", "when this Unit destroys an
+// enemy", "when an enemy is destroyed". The "destroys" alternate is anchored on the "this Unit"
+// subject so a rule sentence such as Enforcer's "If an attack destroys an enemy, …" mints no
+// trigger. A bare "destroyed" is NOT an enemy death: it is also the self-death ("when this Unit
+// is destroyed", "destroyed by direct damage") and ally-death ("when an ally is destroyed")
+// vocabulary. Separate from ENEMY_DEATH_PHRASING_RE (the ally-charge bail-out and extra-action
+// trigger), which keeps its own enemy-death list.
 const KILL_TRIGGER_RE =
-    /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies/i;
-// Ship-kit W8 Task 13 (Meiying): "killing an enemy WITH A DEBUFF" — the qualifier
-// KILL_TRIGGER_RE's bare "killing an (enemy|opponent)" alternate drops (that shared regex also
-// feeds the on-enemy-destroyed TRIGGER classification for every OTHER kill-reactive ship —
-// Mangler/Ravager/Butcher/Obsidian/Valiant/Sokol have no such qualifier and must stay ungated).
-// Kept as a SEPARATE regex, consumed only by detectGrantConditions below, so it attaches a
-// gating CONDITION onto the debuff a kill-clause grants without touching trigger resolution any
-// other kill clause shares. Verified corpus-unique to Meiying (docs/ship-skills.csv, grep "with a
-// Debuff").
-const KILL_WITH_DEBUFF_RE = /\bkilling\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
+    /\bon\s+(?:a\s+)?kill\b|killing\s+an\s+(?:enemy|opponent)|when\s+an\s+enemy\s+dies|\bdestroying\s+an\s+(?:enemy|opponent)\b|\bthis\s+unit\s+destroys\s+an\s+enemy\b|\bwhen\s+an\s+enemy\s+is\s+destroyed\b/i;
+// "killing / destroying an enemy WITH A DEBUFF" (Meiying) — the qualifier KILL_TRIGGER_RE drops.
+// Consumed only by detectGrantConditions, where it attaches the `killed-enemy-had-debuff` gating
+// CONDITION to the debuff a kill clause grants; trigger resolution stays with KILL_TRIGGER_RE, so
+// every unqualified kill clause stays ungated.
+const KILL_WITH_DEBUFF_RE = /\b(?:killing|destroying)\s+an\s+enemy\s+with\s+a\s+debuff\b/i;
 // Quixilver R2: "if it has shield equal to 100% of its max HP" → self-shield-full (the caster's
 // OWN shield pool, cast-time). Requires the explicit 100%-of-max-HP wording so a bare "When
 // Shielded" (Malvex's reactive `self-shielded` INCOMING-hit condition — shieldPool > 0, a
@@ -1671,8 +1673,9 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
  *  - "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → 'on-own-cleanse'
  *    (Phase 3 PR-H: Morao's Defense Up II grant).
- *  - "on kill" / "upon killing an enemy" / "when an enemy dies" → 'on-enemy-destroyed'
- *    (Overload lifecycle, Task 4: Mangler/Ravager/Asphyxiator/Butcher).
+ *  - an enemy-death phrasing (KILL_TRIGGER_RE: "on kill" / "upon killing an enemy" / "upon
+ *    destroying an enemy" / "when an enemy dies" …) → 'on-enemy-destroyed' (Mangler/Ravager/
+ *    Asphyxiator/Butcher/Gallant/Medved).
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
  *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
@@ -2597,19 +2600,19 @@ export function detectDestroyedTrigger(
     return phrasePosTrigger(text, DESTROYED_ALLY_REPAIR_RE, anchorPos, 'on-destroyed');
 }
 
-// Rikra's per-kill self-heal phrasing: "for each enemy Unit destroyed by the attack upon
-// killing them" — the object is "them", not "an enemy"/"an opponent", so it does NOT match
-// KILL_TRIGGER_RE's "killing an (enemy|opponent)" alternate. Verified unique to Rikra in
-// docs/ship-skills.csv (grep "killing them"). Kept as a separate, narrowly-scoped alternate
-// rather than broadening the shared KILL_TRIGGER_RE (which also feeds buff-grant/removal
-// trigger resolution elsewhere).
-const ENEMY_DESTROYED_BY_ATTACK_RE = /\bdestroyed\b[^.;]*\bkilling\s+them\b/i;
+// Rikra's per-kill self-heal phrasing: ours "for each enemy Unit destroyed by the attack upon
+// killing them", the catalogue's "for each enemy destroyed by this Unit". Neither matches
+// KILL_TRIGGER_RE (the object is "them"; the catalogue's is passive voice), so they live here,
+// scoped to the self-repair path (detectEnemyDestroyedTrigger), not in the shared KILL_TRIGGER_RE
+// that also resolves buff-grant/removal triggers. "destroyed by this Unit" names the KILLER, so
+// it cannot match a self-death "destroyed by direct damage" clause.
+const ENEMY_DESTROYED_BY_ATTACK_RE =
+    /\bdestroyed\b[^.;]*\bkilling\s+them\b|\benemy\s+destroyed\s+by\s+this\s+unit\b/i;
 
 /**
  * Returns 'on-enemy-destroyed' when `anchorPos` (the ability's raw-text anchor position)
- * falls inside the sentence carrying an enemy-kill phrasing (KILL_TRIGGER_RE's "on kill" /
- * "killing an enemy/opponent" / "when an enemy dies", OR Rikra's "destroyed … killing them"
- * shape); otherwise undefined. Position-scoped on the RAW text (mirrors detectDestroyedTrigger)
+ * falls inside the sentence carrying an enemy-kill phrasing (KILL_TRIGGER_RE, OR Rikra's
+ * ENEMY_DESTROYED_BY_ATTACK_RE shapes); otherwise undefined. Position-scoped on the RAW text (mirrors detectDestroyedTrigger)
  * so an unrelated heal in another sentence isn't co-triggered. This is the SELF-heal-on-
  * ENEMY-death counterpart to detectDestroyedTrigger (self-heal on SELF-death). Reference data:
  * docs/ship-skills.csv (Madax, Rikra).
@@ -2827,11 +2830,12 @@ export function detectRoundStartContinuationTrigger(
         : undefined;
 }
 
-// "… when killed by direct Damage" — Faust on-destroyed purge (killer-targeted, direct-only).
-// Crosses tags; "direct" guards against a future DoT-kill phrasing. Widened (PR-B1) to also
-// match "upon being killed by direct Damage" (Paracelsus's retaliation + ally-buff clause) —
-// the alternation only ADDS a case, so Faust's "when killed by direct Damage" still matches.
-const KILLED_BY_DIRECT_RE = /\b(?:when|upon\s+being)\s+killed\s+by\s+direct\b[^.;]*\bdamage\b/i;
+// SELF death by direct damage → on-destroyed: "when killed by direct Damage" (Faust's purge,
+// killer-targeted) and "upon being killed by direct Damage" (Paracelsus's retaliation + ally
+// buff); the catalogue writes "destroyed" for "killed". Crosses tags; "direct" guards against a
+// DoT-kill phrasing.
+const KILLED_BY_DIRECT_RE =
+    /\b(?:when|upon\s+being)\s+(?:killed|destroyed)\s+by\s+direct\b[^.;]*\bdamage\b/i;
 
 /**
  * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
@@ -4010,12 +4014,10 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     if (ENEMY_REPAIRS_RE.test(plain)) {
         return { amount, condition: 'always', derivable: true, trigger: 'on-enemy-repaired' };
     }
-    // On-kill reactive (Phase 3 PR-B: Obsidian/Valiant): a self charge gain that fires per
-    // enemy kill. Checked alongside the enemy-repair branch, BEFORE the inflict-debuff
-    // classification — the on-enemy-destroyed trigger IS the gate (per-event +amount), same
-    // shape as on-enemy-repaired above. KILL_TRIGGER_RE covers "on kill" / "killing an
-    // enemy/opponent" / "when an enemy dies"; no corpus self-charge ship's text also mentions
-    // debuff-infliction, so ordering relative to that branch is inert.
+    // On-kill reactive (Obsidian/Valiant): a self charge gain that fires per enemy kill.
+    // Checked alongside the enemy-repair branch, BEFORE the inflict-debuff classification — the
+    // on-enemy-destroyed trigger IS the gate (per-event +amount), same shape as
+    // on-enemy-repaired above. KILL_TRIGGER_RE holds the enemy-death phrasings.
     if (KILL_TRIGGER_RE.test(plain)) {
         return { amount, condition: 'always', derivable: true, trigger: 'on-enemy-destroyed' };
     }
@@ -4092,16 +4094,15 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     };
 }
 
-// Liberator (Phase 4b Task 10): an all-allies charge grant gated on the enemy's death —
-// distinct from parseChargeGain's self-targeted contract (which disqualifies "all allies" /
-// "when an enemy dies"). Two real phrasings:
-//   • docs/ship-skills.csv: "When an enemy dies, all allies add N charge to their Charged Skills"
-//   • an older in-game phrasing: "When an enemy dies, this unit grants N charge to all allies"
-// Both forms appear within the same "when an enemy dies …" sentence (no '.' between). The two
-// alternatives below cover "all allies add/gain N" and "grants N charge … all allies".
+// Liberator: an all-allies charge grant gated on the enemy's death — distinct from
+// parseChargeGain's self-targeted contract (which disqualifies "all allies"). The death clause
+// reads "When an enemy dies" (ours) or "When an enemy is destroyed" (the catalogue's). Two grant
+// phrasings follow it in the same sentence (no '.' between):
+//   • "…, all allies add N charge to their Charged Skills"
+//   • an older in-game phrasing: "…, this unit grants N charge to all allies"
 // Returns the per-ally charge amount, or null. Lookbehind-free.
 const ALLY_CHARGE_ON_ENEMY_DEATH_RE =
-    /when an enemy dies[^.]*?(?:all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?|(?:grants?|adds?|gives?)\s+(\d+|a|an)\s+charges?[^.]*?all allies)/i;
+    /when an enemy (?:dies|is destroyed)[^.]*?(?:all allies\s+(?:adds?|gains?)\s+(\d+|a|an)\s+charges?|(?:grants?|adds?|gives?)\s+(\d+|a|an)\s+charges?[^.]*?all allies)/i;
 
 /** Parses Liberator's on-enemy-death "all allies add N charge" grant. Returns `{ amount }`
  *  (per-ally charge count) or null. The trigger is implicitly on-enemy-destroyed. */
@@ -4130,10 +4131,12 @@ const ALLY_CHARGE_GRANT_RE =
     /(?:adds?|grants?|gives?)\s+(\d+|a|an)\s+charges?\s+to\s+(?:their\s+charged\s+skill|the\s+charged\s+skill\s+of\s+all\s+allies)/i;
 // Graphite's gate: "if an enemy (Unit) has Stealth".
 const ALLY_CHARGE_ENEMY_STEALTH_RE = /if\s+an\s+enemy\b[^.]*?\bhas\b[^.]*?\bStealth\b/i;
-// Shared on-enemy-death phrasing. Used both to EXCLUDE Liberator's death-triggered grant
-// from parseAllyChargeGrant (below) and to detect the on-enemy-destroyed extra-action trigger
-// (EXTRA_ACTION_ENEMY_DESTROYED_RE, further down). Alternation order is irrelevant for .test().
-const ENEMY_DEATH_PHRASING_RE = /when an enemy dies|upon a kill|killing an enemy/i;
+// Shared on-enemy-death phrasing (ours and the catalogue's). Used both to EXCLUDE Liberator's
+// death-triggered grant from parseAllyChargeGrant (below) and to detect the on-enemy-destroyed
+// extra-action trigger (EXTRA_ACTION_ENEMY_DESTROYED_RE, further down). Every alternate names an
+// ENEMY's death; the ally-death "an ally is destroyed" is EXTRA_ACTION_ALLY_DESTROYED_RE's.
+const ENEMY_DEATH_PHRASING_RE =
+    /when an enemy dies|upon a kill|killing an enemy|when an enemy is destroyed|destroying an enemy/i;
 
 // Death-triggered ally-charge grants are Liberator's domain (parseAllyChargeOnEnemyDeath +
 // on-enemy-destroyed trigger). Liberator's text ("When an enemy dies, all allies add 1 charge
@@ -4173,14 +4176,14 @@ export function parseAllyChargeGrant(
 // --- Extra actions ("extra End Of Round Action" / "extra action") --------------------
 
 // Phrasings we deliberately DO NOT parse (annotation-only seams): purge-count (purges
-// are not modeled — Tithonus stays disqualified). The on-kill / ally-destroyed phrasings
-// are now MODELED as death-triggered extra actions (Phase 4b Task 10) — detected by
-// EXTRA_ACTION_TRIGGER_RE below, NOT disqualified. The user can still add a disqualified
+// are not modeled — Tithonus stays disqualified). The enemy-death / ally-destroyed phrasings
+// are MODELED as death-triggered extra actions (EXTRA_ACTION_ENEMY_DESTROYED_RE /
+// EXTRA_ACTION_ALLY_DESTROYED_RE below), NOT disqualified. The user can still add a disqualified
 // ability manually in the editor. Reference: docs/ship-skills.csv (Sokol, Harvester, Tithonus).
 const EXTRA_ACTION_DISQUALIFY_RE = /\bpurg/i;
 
-// Death-trigger detection (Phase 4b Task 10) on the matched clause: an on-kill phrasing
-// (Sokol "upon a kill", Liberator "when an enemy dies") → on-enemy-destroyed; an
+// Death-trigger detection on the matched clause: an enemy-death phrasing (Sokol "upon a kill" /
+// "When an enemy is destroyed", Liberator "when an enemy dies") → on-enemy-destroyed; an
 // ally-destroyed phrasing (Harvester) → on-ally-destroyed. Default (no match) → on-cast.
 const EXTRA_ACTION_ENEMY_DESTROYED_RE = ENEMY_DEATH_PHRASING_RE;
 const EXTRA_ACTION_ALLY_DESTROYED_RE = /allied unit is destroyed|ally is destroyed/i;

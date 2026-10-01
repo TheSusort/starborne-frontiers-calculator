@@ -2271,10 +2271,10 @@ function abilitiesFromText(
                 // position-scoped). The parser only emits this all-allies heal when that shape is
                 // present (HEAL_DISQUALIFY_RE lookahead), so the trigger fires it ONLY on death.
                 detectDestroyedTrigger(text, healPos) ??
-                // Madax/Rikra (Phase 3 PR-B): a self-repair anchored in an enemy-kill sentence
-                // ("when an enemy dies" / "destroyed … upon killing them") rides the
-                // on-enemy-destroyed reactive trigger (position-scoped). The ENEMY-death
-                // counterpart to detectDestroyedTrigger's SELF-death case above.
+                // Madax/Rikra: a self-repair anchored in an enemy-kill sentence (the phrasings
+                // detectEnemyDestroyedTrigger's regexes hold) rides the on-enemy-destroyed
+                // reactive trigger (position-scoped). The ENEMY-death counterpart to
+                // detectDestroyedTrigger's SELF-death case above.
                 detectEnemyDestroyedTrigger(text, healPos) ??
                 // Crocus (Phase 3 PR-C): a self-repair anchored in the "when another ally
                 // inflicts a Damage Over Time (DoT) effect with a critical hit" sentence rides
