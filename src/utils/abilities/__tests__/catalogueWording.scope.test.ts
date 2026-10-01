@@ -67,6 +67,14 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more critical damage</unit-damage> to defenders and all allies deal <unit-damage>15% more direct damage</unit-damage> to enemies with <unit-skill>Concentrate Fire</unit-skill>.',
         expects: 'modifier|self|on-cast|modifier',
     },
+    // "grants X to them" and "grants them X" both point back at the "all allies" named earlier.
+    {
+        ship: 'Chimei',
+        slot: 'active',
+        old: 'This Unit <unit-damage>repairs 9%</unit-damage> of its Max HP to all allies and grants <unit-skill>Out. Detonation Damage Up III</unit-skill> and <unit-skill>Attack Up III</unit-skill> to them for 1 turn.',
+        new: 'This Unit <unit-damage>repairs 9%</unit-damage> of its max HP to all allies and grants them <unit-skill>Out. Detonation Damage Up III</unit-skill> and <unit-skill>Attack Up III</unit-skill> for 1 turn.',
+        expects: 'buff|all-allies|on-cast|Attack Up III',
+    },
 ];
 
 describe('target and scope phrases — catalogue wording parses like ours', () => {

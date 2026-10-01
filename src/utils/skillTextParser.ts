@@ -2323,8 +2323,8 @@ export function detectEchoingBurstDetonatedTrigger(
 const CRIT_REPAIR_RE = /when this unit critically repairs (?:an ally|allies)/i;
 // "when an/another ally critically hits" and "when that ally crits" are the same reactive
 // trigger. `on-ally-crit` fires on the owner's own crits too, so "another ally" (which by the
-// ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: no
-// owner-excluded crit trigger exists.
+// ally-includes-self ruling excludes the owner) is read with the owner INCLUDED: there is no
+// owner-excluded trigger for plain crits.
 const ALLY_CRIT_HIT_RE = /when (?:an|another|that) ally (?:critically hits|crits)/i;
 
 /**
@@ -4640,21 +4640,19 @@ function resolveHealTarget(sentence: string): {
     // kill count), not a heal recipient. Strip that antecedent before testing the generic
     // \bthem\b ally signal below so it isn't misread as an ally recipient (Finding B2).
     const sWithoutKillAntecedent = s.replace(/\b(?:killing|destroying)\s+them\b/g, '');
-    // SP-4e: the text NAMES its recipient by live HP — Pallas ("the other ally with the lowest
-    // current health percentage"), Volk ("the ally with the most missing health"), Valkyrie ("the
-    // ally with the lowest current health percentage"). One selector covers all three: "most
-    // missing health" is loose phrasing for lowest HP PERCENTAGE, not absolute missing HP
-    // (user-confirmed 2026-08-20) — do NOT model an absolute basis.
-    // Tested BEFORE the generic singular arm below, because Pallas's sentence matches both.
+    // The text NAMES its recipient by live HP — "the other ally with the lowest current health
+    // percentage", "the ally with the most missing health" / "most missing HP", "the ally with
+    // the lowest current health percentage". One selector covers every form: "most missing
+    // health" (and "most missing HP") is loose phrasing for lowest HP PERCENTAGE, not absolute
+    // missing HP (user-confirmed 2026-08-20) — do NOT model an absolute basis.
+    // Tested BEFORE the generic singular arm below, because a "the other ally … lowest current
+    // health" sentence matches both.
     // Sentence-scoped by the caller, which is the only thing keeping Chimei's over-repair
     // sentence ("the ally with the lowest current health percentage repairs an amount equivalent
     // to the over-repair" — a different, unimplemented mechanic) out of this arm.
-    // NOT load-bearing on today's corpus: the third alternative (`the other ally`) is redundant,
-    // because Pallas — the only ship whose text says it — also carries "lowest current health",
-    // which the second alternative already matches. It stays as the brief prescribed it, but a
-    // future "the other ally" with NO HP phrase would route here rather than to an arbitrary ally,
-    // which is a widening to weigh at that point (the inventory gate in
-    // `abilities/__tests__/lowestHpAllySelector.test.ts` is what surfaces it).
+    // A bare "the other ally" with NO HP phrase also routes here rather than to an arbitrary
+    // ally; the inventory gate in `abilities/__tests__/lowestHpAllySelector.test.ts` surfaces any
+    // ship that reaches this arm.
     if (
         /most\s+missing\s+(?:health|hp)\b|lowest\s+current\s+health(?:\s+percentage)?|\bthe\s+other\s+ally\b/.test(
             sWithoutKillAntecedent
@@ -5976,8 +5974,8 @@ const ALL_ALLIES_RE = /friendly|allies/i;
 const ADJACENT_ALLIES_RE = /\badjacent allies\b/i;
 // A grant whose receiver is explicitly the caster ("grants itself X").
 const SELF_RECEIVER_RE = /\bitself\b/i;
-// Statuses only the caster can hold: a receiver-less grant of one routes to self, not to all
-// allies. Lower-case canonical names.
+// A status a ship only ever grants itself: a receiver-less grant of one routes to self, not to
+// all allies. Lower-case canonical names.
 const SELF_ONLY_GRANT_NAMES: ReadonlySet<string> = new Set(['taunt']);
 // Granting (bestowing) verbs — the caster confers the buff on a (possibly explicit) receiver.
 const GRANT_VERB_RE = /\bgrants?\b|\bgranted\b|\bgranting\b/i;
@@ -6095,7 +6093,7 @@ function findNthOccurrencePos(text: string, name: string, occurrenceIndex: numbe
  *      · bare adjacency receiver ("grants X to all adjacent allies")         → 'adjacent-allies'
  *      · self + adjacency ("grants X to itself and all adjacent allies")     → BOTH of the above
  *      · team receiver ("grants all allies X" / "grants X to all allies")    → 'all-allies'
- *      · "grants them X" after an "all allies" antecedent in the clause      → 'all-allies'
+ *      · "grants them X" / "grants X to them" after an "all allies" antecedent → 'all-allies'
  *      · single-ally receiver ("grants the/an/that ally X", "grants them X") → 'ally'
  *      · NO explicit receiver, self-only status ("This Unit grants Taunt")   → 'self'
  *      · NO explicit receiver ("This Unit grants X")                         → 'all-allies'
@@ -6161,9 +6159,11 @@ function detectGrantScopes(
             return SELF_RECEIVER_RE.test(object) ? SELF_AND_ADJACENT : ['adjacent-allies'];
         }
         if (ALL_ALLIES_RE.test(object)) return ['all-allies'];
-        // "repairs … all allies and grants them X": the pronoun receiver points back at the
-        // team named earlier in the same clause, so it is plural.
-        if (/^\s*them\b/.test(object) && /\ball\s+allies\b/.test(subject)) return ['all-allies'];
+        // "repairs … all allies and grants them X" / "… and grants X to them": the pronoun
+        // receiver points back at the team named earlier in the same clause, so it is plural.
+        if (/^\s*them\b|\bto\s+them\b/.test(object) && /\ball\s+allies\b/.test(subject)) {
+            return ['all-allies'];
+        }
         if (SINGLE_ALLY_RE.test(object)) return ['ally'];
         if (SELF_RECEIVER_RE.test(object)) return ['self'];
         // Taunt draws enemy fire to the ship carrying it, so a receiver-less "grants Taunt" is the

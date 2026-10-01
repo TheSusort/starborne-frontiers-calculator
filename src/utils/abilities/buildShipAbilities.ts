@@ -1099,7 +1099,6 @@ const MAX_POS = Number.MAX_SAFE_INTEGER;
  * so the heal/cleanse routes to the ally, not the caster. Example: Hermes' active "This Unit
  * Repairs 27% of its Max HP." with charged "If the target has less than 40% HP …" — the skill
  * targets an ally. Damage-rider repairs (skill has a damage component → it targets an enemy, the
- * Damage-rider repairs (skill has a damage component → it targets an enemy, the
  * repair is a self rider), passive repairs, and explicit recipients are unaffected.
  *
  * Shields use {@link flipBareSupportShieldTarget} instead, which owns the shield routing rules.
@@ -2384,7 +2383,8 @@ function abilitiesFromText(
             );
         const oncePerCombat =
             reactiveTrigger === 'on-cheat-death-activated' && /once per battle/i.test(healSentence);
-        // Bare support shields route to all-allies (Graphite co-cast); heals use flipBareSupportTarget.
+        // Shields route through flipBareSupportShieldTarget, which owns the rule; heals use
+        // flipBareSupportTarget.
         const healTarget =
             h.kind === 'heal'
                 ? flipBareSupportTarget(
@@ -2395,12 +2395,11 @@ function abilitiesFromText(
                       healSentence,
                       role,
                       // AoE: a bare support-cast heal repairs every ally in the pattern footprint
-                      // (like all-allies buffs), not a single ally. Volk-style explicit "most
-                      // missing health" sets explicitTarget and stays a single recipient — since
-                      // SP-4e Task 3 it is parsed as 'lowest-hp-ally', not 'ally'. (A bare CLEANSE
-                      // still parses as 'ally', but since SP-4e Task 4 that is no longer a
-                      // narrower CAST reach than this 'all-allies' — the two resolve identically
-                      // in `recipientsFor`; see flipBareSupportTarget's `bareActiveScope` doc.)
+                      // (like all-allies buffs), not a single ally. An explicit "most missing
+                      // health" recipient sets explicitTarget and stays a single recipient, parsed
+                      // as 'lowest-hp-ally'. A bare CLEANSE parses as 'ally', which resolves to the
+                      // same cast reach as this 'all-allies' in `recipientsFor`; see
+                      // flipBareSupportTarget's `bareActiveScope` doc.
                       'all-allies'
                   )
                 : h.kind === 'shield'
@@ -2410,8 +2409,7 @@ function abilitiesFromText(
                         slot,
                         mult > 0,
                         shieldCoCastAllAlliesGrant,
-                        h.kind === 'shield' &&
-                            /\bgrant(?:s|ing)?\s+(?:an?\s+)?shield\b/i.test(healSentence)
+                        /\bgrant(?:s|ing)?\s+(?:an?\s+)?shield\b/i.test(healSentence)
                     )
                   : h.target;
         // PR6b: per-count repair scaling (Oleander/Meatshield). The count Condition is appended
