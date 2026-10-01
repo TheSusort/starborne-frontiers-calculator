@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderReport, syncStatus } from '../syncReport';
+import { ISSUE_SUMMARY_LIMIT, renderIssueSummary, renderReport, syncStatus } from '../syncReport';
 import type { RowPatch, SyncPlan } from '../catalogueSyncPlan';
 
 const manifest = {
@@ -140,5 +140,85 @@ describe('renderReport', () => {
         expect(missingIdx).toBeGreaterThan(haltedIdx);
         expect(md).toContain('Ghost');
         expect(md).toContain('Relic');
+    });
+});
+
+describe('renderIssueSummary', () => {
+    const textChange = { kind: 'skill-text' as const, column: 'active_skill_text' as const, before: 'OLD_TEXT_BODY', after: 'NEW_TEXT_BODY' };
+
+    it('counts applied ships in one line and never prints their text', () => {
+        const md = renderIssueSummary(
+            plan({
+                patches: [
+                    rowPatch({ name: 'Aegis', applied: [textChange] }),
+                    rowPatch({ name: 'Bedrock', applied: [{ kind: 'stats', field: 'hp', before: 1, after: 2 }] }),
+                ],
+            }),
+            ctx
+        );
+        expect(md).toContain('2 ships updated; full diff in the job summary and artifact');
+        expect(md).not.toContain('NEW_TEXT_BODY');
+        expect(md).not.toContain('Aegis');
+        expect(md).toContain('3.22.33566');
+    });
+
+    it('omits the timestamped snapshot line', () => {
+        expect(renderIssueSummary(plan(), ctx)).not.toContain('Snapshot before writing');
+        expect(renderIssueSummary(plan(), ctx)).not.toContain('docs/backups/x.json');
+    });
+
+    it('lists held text by ship, reason, findings and columns, without the text', () => {
+        const md = renderIssueSummary(
+            plan({
+                patches: [rowPatch({
+                    name: 'Curator',
+                    heldText: [textChange],
+                    textHold: 'gate',
+                    gate: { pass: false, newFindings: ['active · base-damage: deals'] },
+                })],
+            }),
+            ctx
+        );
+        expect(md).toContain('**Curator** — held by the audit gate');
+        expect(md).toContain('active · base-damage: deals');
+        expect(md).toContain('active_skill_text');
+        expect(md).not.toContain('OLD_TEXT_BODY');
+        expect(md).not.toContain('NEW_TEXT_BODY');
+    });
+
+    it('carries every section that needs a human', () => {
+        const md = renderIssueSummary(
+            plan({
+                patches: [rowPatch({ name: 'Bedrock', heldDrops: [{ kind: 'charge-cost', before: 4, after: null }] })],
+                mappingHeld: [{ template: { id: 'CROCUS', name: 'Crocus' } as never, unit: {} as never, reasons: ['bad'] }],
+                inserts: [{
+                    row: { id: 'NEW' },
+                    unit: { name: 'Newcomer', imageKey: 'XAOC_9', images: { avatar: 'av', bigPortrait: 'big' } } as never,
+                    findings: [],
+                }],
+                refusedInserts: [{ unit: { name: 'Refused', definitionId: 'R1' } as never, reason: 'id R already exists' }],
+                idMismatches: [{ unit: { name: 'Ghost', definitionId: 'new' } as never, template: { id: 'GHOST', name: 'Ghost', definition_id: 'old' } as never }],
+                metadata: [{ template: { name: 'Drifter' } as never, change: { kind: 'metadata', field: 'type', before: 'SUPPORTER', after: 'DEFENDER' } }],
+                missingFromCatalogue: [{ id: 'RELIC', name: 'Relic' } as never],
+            }),
+            ctx
+        );
+        for (const s of ['Bedrock', 'Crocus', 'Newcomer', 'Refused', 'Ghost', 'Drifter', 'Relic']) expect(md).toContain(s);
+    });
+
+    it('truncates to 60,000 characters with a trailing note', () => {
+        const many = Array.from({ length: 3000 }, (_, i) => ({
+            template: { id: `S${i}`, name: `Ship ${i}` } as never,
+            unit: {} as never,
+            reasons: ['x'.repeat(40)],
+        }));
+        const md = renderIssueSummary(plan({ mappingHeld: many }), ctx);
+        expect(md.length).toBeLessThanOrEqual(ISSUE_SUMMARY_LIMIT);
+        expect(ISSUE_SUMMARY_LIMIT).toBe(60_000);
+        expect(md).toMatch(/truncated[^\n]*job summary[^\n]*\n$/);
+    });
+
+    it('leaves a short summary untruncated', () => {
+        expect(renderIssueSummary(plan(), ctx)).not.toMatch(/truncated/);
     });
 });
