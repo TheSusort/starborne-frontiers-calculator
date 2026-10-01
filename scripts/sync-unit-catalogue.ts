@@ -24,11 +24,7 @@ import { planSync } from './lib/catalogueSyncPlan';
 import { auditGate } from './lib/skillTextGate';
 import { renderIssueSummary, renderReport, syncStatus, type ReportContext, type SyncStatus } from './lib/syncReport';
 import { backupFileName, buildBackup } from './lib/templateBackup';
-
-const argValue = (flag: string): string | null => {
-    const i = process.argv.indexOf(flag);
-    return i >= 0 ? (process.argv[i + 1] ?? null) : null;
-};
+import { flagValue } from './lib/cliArgs';
 
 const main = async (): Promise<SyncStatus> => {
     const index = await fetchCatalogueIndex();
@@ -37,10 +33,10 @@ const main = async (): Promise<SyncStatus> => {
         return 'clean';
     }
     const write = process.argv.includes('--write');
-    const reportPath = argValue('--report');
-    const issueBodyPath = argValue('--issue-body');
-    const outcomePath = argValue('--outcome');
-    const backupDir = argValue('--backup-dir') ?? 'docs/backups';
+    const reportPath = flagValue(process.argv, '--report');
+    const issueBodyPath = flagValue(process.argv, '--issue-body');
+    const outcomePath = flagValue(process.argv, '--outcome');
+    const backupDir = flagValue(process.argv, '--backup-dir') ?? 'docs/backups';
 
     // Imported here: the module exits when the service-role env is missing, which
     // --print-cache-key must not need.
@@ -96,7 +92,15 @@ main()
     .then((status) => process.exit(status === 'failed' ? 1 : 0))
     .catch((error) => {
         console.error(error);
-        const outcomePath = argValue('--outcome');
-        if (outcomePath) writeFileSync(outcomePath, JSON.stringify({ status: 'failed' }));
+        // A bad --outcome operand is itself one of the errors `main` can throw (flagValue parses
+        // it inside `main`, so that throw already landed here) — re-parsing it to find where to
+        // write the failure marker can throw again, with nowhere left to report it, so swallow
+        // that case rather than crashing unhandled.
+        try {
+            const outcomePath = flagValue(process.argv, '--outcome');
+            if (outcomePath) writeFileSync(outcomePath, JSON.stringify({ status: 'failed' }));
+        } catch {
+            // no-op: see comment above.
+        }
         process.exit(1);
     });

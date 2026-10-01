@@ -14,19 +14,18 @@
 import { readFileSync } from 'fs';
 import { parseBackup, planRestore } from './lib/templateBackup';
 import { deleteRows, selectAll, upsertRows } from './lib/supabaseRest';
-
-const argValue = (flag: string): string | null => {
-    const i = process.argv.indexOf(flag);
-    return i >= 0 ? (process.argv[i + 1] ?? null) : null;
-};
+import { flagValue, parseIds } from './lib/cliArgs';
 
 const main = async () => {
-    const file = argValue('--file');
+    const file = flagValue(process.argv, '--file');
     if (!file) {
         console.error('--file <backup.json> is required');
         process.exit(1);
     }
-    const ids = argValue('--ids')?.split(',').map((s) => s.trim()).filter(Boolean);
+    // Parsed before the backup file or the DB is touched: a malformed --ids must abort the run,
+    // not silently fall through to "no id filter" (which would select every row).
+    const idsRaw = flagValue(process.argv, '--ids');
+    const ids = idsRaw === null ? undefined : parseIds(idsRaw);
     const backup = parseBackup(readFileSync(file, 'utf8'));
     const current = await selectAll<Record<string, unknown>>('ship_templates', 'select=*&order=id.asc');
     const plan = planRestore(backup, current, { ids, pruneAdded: process.argv.includes('--prune-added') });
