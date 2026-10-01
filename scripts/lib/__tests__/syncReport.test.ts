@@ -8,7 +8,7 @@ const manifest = {
 };
 const plan = (over: Partial<SyncPlan> = {}): SyncPlan => ({
     halted: null, bulkTextHold: null, patches: [], inserts: [], refusedInserts: [], mappingHeld: [], metadata: [],
-    idMismatches: [], missingFromCatalogue: [], matchedCount: 150, ...over,
+    idMismatches: [], missingFromCatalogue: [], matchedCount: 150, pinned: [], ...over,
 });
 const rowPatch = (over: Partial<RowPatch> = {}): RowPatch => ({
     id: 'A', name: 'A', patch: {}, applied: [], heldText: [], textHold: null, heldDrops: [], gate: null, ...over,
@@ -159,6 +159,38 @@ describe('renderReport', () => {
         expect(missingIdx).toBeGreaterThan(haltedIdx);
         expect(md).toContain('Ghost');
         expect(md).toContain('Relic');
+    });
+});
+
+const pins: SyncPlan['pinned'] = [
+    {
+        name: 'Tormenter', column: 'active_skill_text', reason: 'User ruling: also buffs itself', state: 'overrides-catalogue',
+        suppressed: { kind: 'skill-text', column: 'active_skill_text', before: 'OURS_TEXT', after: 'CATALOGUE_TEXT' },
+    },
+    { name: 'Chimei', column: 'first_passive_skill_text', reason: 'User ruling: redirect', state: 'catalogue-agrees', suppressed: null },
+    { name: 'Gone_1', column: 'charge_skill_text', reason: 'User ruling: x', state: 'no-matched-ship', suppressed: null },
+];
+
+describe('pinned text', () => {
+    it('renders every pin under a "Pinned text" heading in the full report, with the text it kept out', () => {
+        const md = renderReport(plan({ pinned: pins }), ctx);
+        expect(md).toMatch(/### Pinned text \(3\)/);
+        expect(md).toMatch(/\*\*Tormenter\*\* active_skill_text — User ruling: also buffs itself/);
+        expect(md).toContain('CATALOGUE_TEXT');
+        expect(md).toMatch(/\*\*Chimei\*\* first_passive_skill_text[^\n]*catalogue text now equals ours/);
+        expect(md).toMatch(/\*\*Gone_1\*\* charge_skill_text[^\n]*no matched ship/);
+    });
+
+    it('lists pins in the issue summary without their text, and leaves the status alone', () => {
+        const md = renderIssueSummary(plan({ pinned: pins }), ctx);
+        expect(md).toContain('### Pinned text (3)');
+        expect(md).toContain('**Tormenter** active_skill_text');
+        expect(md).not.toContain('CATALOGUE_TEXT');
+        expect(syncStatus(plan({ pinned: pins }), [])).toBe('clean');
+    });
+
+    it('renders no heading when nothing is pinned', () => {
+        expect(renderReport(plan(), ctx)).not.toContain('Pinned text');
     });
 });
 

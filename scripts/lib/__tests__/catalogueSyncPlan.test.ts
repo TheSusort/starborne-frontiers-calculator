@@ -3,6 +3,8 @@ import { isDroppedField, planSync, templateIdFor } from '../catalogueSyncPlan';
 import type { CatalogueDiff, Change, TemplateRow, UnitDiff } from '../catalogueDiff';
 import type { CatalogueTemplate } from '../catalogueMapping';
 import type { SkillGate } from '../skillTextGate';
+import type { SkillColumns } from '../catalogueMapping';
+import { TEXT_PINS, withPinnedText, type TextPin } from '../catalogueTextPins';
 
 const pass: SkillGate = () => ({ pass: true, newFindings: [] });
 const fail: SkillGate = () => ({ pass: false, newFindings: ['charged · detonation: x'] });
@@ -218,6 +220,107 @@ describe('planSync — bulk text hold', () => {
         const plan = planSync(diff({ matched: [matched('A', [text])] }), [], pass, { textWrites: false });
         expect(plan.bulkTextHold).toBeNull();
         expect(plan.patches[0].textHold).toBe('text-writes-off');
+    });
+});
+
+describe('planSync — text pins', () => {
+    const pin: TextPin = { definitionId: 'A', column: 'active_skill_text', reason: 'ruled ours' };
+    const passive: Change = { kind: 'skill-text', column: 'first_passive_skill_text', before: 'P', after: 'P2' };
+    /** Ship A with its catalogue unit keyed on the same id, as every matched ship is in production. */
+    const pinnedShip = (changes: Change[], skills: Partial<SkillColumns> = {}): UnitDiff => ({
+        template: row('A', { first_passive_skill_text: 'P' }),
+        unit: unit({
+            definitionId: 'A',
+            skills: { ...unit().skills, first_passive_skill_text: 'P2', ...skills },
+        }),
+        changes,
+    });
+    const afterSpy = () => {
+        const seen: SkillColumns[] = [];
+        const gate: SkillGate = (_name, _before, after) => (seen.push(after), { pass: true, newFindings: [] });
+        return { gate, seen };
+    };
+
+    it('drops a pinned column from the patch, still writes the other columns, and lists the pin', () => {
+        const { gate, seen } = afterSpy();
+        const plan = planSync(diff({ matched: amongQuiet(pinnedShip([hp, text, passive])) }), [], gate, { ...on, pins: [pin] });
+        expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 }, first_passive_skill_text: 'P2' });
+        expect(plan.patches[0].applied).toEqual([hp, passive]);
+        expect(plan.patches[0].heldText).toEqual([]);
+        expect(plan.pinned).toEqual([
+            { name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'overrides-catalogue', suppressed: text },
+        ]);
+        // The gate audits what will be written: our text in the pinned column, the catalogue's elsewhere.
+        expect(seen).toEqual([{ ...unit().skills, active_skill_text: 'A', first_passive_skill_text: 'P2' }]);
+    });
+
+    it('writes nothing and calls no gate when only pinned text changed', () => {
+        const { gate, calls } = spyGate();
+        const plan = planSync(diff({ matched: amongQuiet(pinnedShip([text])) }), [], gate, { ...on, pins: [pin] });
+        expect(calls).toEqual([]);
+        expect(plan.patches).toEqual([]);
+        expect(plan.pinned.map((p) => p.state)).toEqual(['overrides-catalogue']);
+    });
+
+    it('lists a pin whose catalogue text now equals ours', () => {
+        const plan = planSync(
+            diff({ matched: amongQuiet(pinnedShip([], { active_skill_text: 'A', first_passive_skill_text: 'P' })) }),
+            [], pass, { ...on, pins: [pin] }
+        );
+        expect(plan.patches).toEqual([]);
+        expect(plan.pinned).toEqual([
+            { name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'catalogue-agrees', suppressed: null },
+        ]);
+    });
+
+    it('lists a pin no matched ship carries, under its definition id', () => {
+        const plan = planSync(diff({ matched: amongQuiet(matched('A', [])) }), [], pass, {
+            ...on, pins: [{ ...pin, definitionId: 'Gone_1' }],
+        });
+        expect(plan.pinned).toEqual([
+            { name: 'Gone_1', column: 'active_skill_text', reason: 'ruled ours', state: 'no-matched-ship', suppressed: null },
+        ]);
+    });
+
+    it('does not count pinned-only text changes toward the bulk text hold', () => {
+        const two = [pinnedShip([text]), { ...pinnedShip([text]), template: row('B'), unit: unit({ definitionId: 'B' }) }];
+        const rows = [...two, ...['C', 'D', 'E'].map((id) => matched(id, []))];
+        const plan = planSync(diff({ matched: rows }), [], pass, { ...on, pins: [pin, { ...pin, definitionId: 'B' }] });
+        expect(plan.bulkTextHold).toBeNull();
+    });
+
+    it('does not hold the ship when the catalogue drops a pinned column', () => {
+        const drop: Change = { kind: 'skill-text', column: 'active_skill_text', before: 'A', after: null };
+        const plan = planSync(
+            diff({ matched: amongQuiet(pinnedShip([drop, passive], { active_skill_text: null })) }),
+            [], pass, { ...on, pins: [pin] }
+        );
+        expect(plan.patches[0]).toMatchObject({ patch: { first_passive_skill_text: 'P2' }, textHold: null });
+        expect(plan.pinned[0]).toMatchObject({ state: 'overrides-catalogue', suppressed: drop });
+    });
+
+    it('lists the pin on a stats-only run without holding the pinned column as text', () => {
+        const plan = planSync(diff({ matched: amongQuiet(pinnedShip([text, passive])) }), [], pass, { textWrites: false, pins: [pin] });
+        expect(plan.patches[0]).toMatchObject({ heldText: [passive], textHold: 'text-writes-off' });
+        expect(plan.pinned).toHaveLength(1);
+    });
+});
+
+describe('withPinnedText', () => {
+    it('takes the current text for pinned columns of that ship only', () => {
+        const current = { ...unit().skills, active_skill_text: 'OURS', charge_skill_text: 'C' };
+        const catalogue = { ...unit().skills, active_skill_text: 'THEIRS', charge_skill_text: 'C2' };
+        const pins: TextPin[] = [{ definitionId: 'A', column: 'active_skill_text', reason: 'r' }];
+        expect(withPinnedText('A', current, catalogue, pins)).toEqual({ ...catalogue, active_skill_text: 'OURS' });
+        expect(withPinnedText('B', current, catalogue, pins)).toEqual(catalogue);
+    });
+});
+
+describe('TEXT_PINS', () => {
+    it('pins each (ship, column) at most once and dates every reason', () => {
+        const keys = TEXT_PINS.map((p) => `${p.definitionId}::${p.column}`);
+        expect(new Set(keys).size).toBe(keys.length);
+        for (const p of TEXT_PINS) expect(p.reason).toMatch(/\d{4}-\d{2}-\d{2}/);
     });
 });
 

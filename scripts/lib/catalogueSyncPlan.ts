@@ -19,9 +19,16 @@
  *
  * The whole run halts (writes nothing) when no unit matched a row, or when more than
  * STATS_CHANGE_HALT_RATIO of matched ships change stats: both point at a mapping break.
+ *
+ * A pinned column (`opts.pins`, default TEXT_PINS) is removed from a ship's text changes before
+ * anything else reads them: it is never written, never held, never counts toward the bulk-text
+ * ratio, and the gate audits our text in that column. Every pin is listed in `pinned` on every
+ * run that does not halt, including one whose catalogue text equals ours and one no matched ship
+ * carries, so a pin that has gone stale is visible.
  */
-import type { CatalogueDiff, Change, TemplateRow } from './catalogueDiff';
-import type { CatalogueTemplate, SkillColumns } from './catalogueMapping';
+import type { CatalogueDiff, Change, TemplateRow, UnitDiff } from './catalogueDiff';
+import type { CatalogueTemplate, SkillColumn, SkillColumns } from './catalogueMapping';
+import { pinsFor, TEXT_PINS, withPinnedText, type TextPin } from './catalogueTextPins';
 import { EMPTY_SKILLS, type GateResult, type SkillGate } from './skillTextGate';
 
 export const STATS_CHANGE_HALT_RATIO = 0.25;
@@ -46,6 +53,18 @@ export interface PlannedInsert {
     unit: CatalogueTemplate;
     findings: string[];
 }
+/**
+ * One applied pin. `overrides-catalogue`: the catalogue's text differs and `suppressed` is the
+ * change kept out. `catalogue-agrees`: the catalogue's text equals ours. `no-matched-ship`: no
+ * matched ship carries the pin's definition id, and `name` is that id.
+ */
+export interface PinnedSlot {
+    name: string;
+    column: SkillColumn;
+    reason: string;
+    state: 'overrides-catalogue' | 'catalogue-agrees' | 'no-matched-ship';
+    suppressed: Change | null;
+}
 export interface SyncPlan {
     halted: string | null;
     bulkTextHold: { changed: number; matched: number } | null;
@@ -57,6 +76,7 @@ export interface SyncPlan {
     idMismatches: CatalogueDiff['idMismatches'];
     missingFromCatalogue: TemplateRow[];
     matchedCount: number;
+    pinned: PinnedSlot[];
 }
 
 const isBlank = (v: string | null): boolean => v === null || v.trim() === '';
@@ -113,15 +133,46 @@ const emptyPlan = (diff: CatalogueDiff): SyncPlan => ({
     idMismatches: diff.idMismatches,
     missingFromCatalogue: diff.missingFromCatalogue,
     matchedCount: diff.matched.length,
+    pinned: [],
 });
+
+const isPinnedText = (c: Change, pins: TextPin[]): boolean =>
+    c.kind === 'skill-text' && pins.some((p) => p.column === c.column);
+
+/** Each matched ship's changes with its pinned text columns removed, and every pin as a slot. */
+const applyPins = (matched: UnitDiff[], pins: readonly TextPin[]): { matched: UnitDiff[]; pinned: PinnedSlot[] } => {
+    const pinned: PinnedSlot[] = [];
+    const out = matched.map((m) => {
+        const own = pinsFor(m.unit.definitionId, pins);
+        for (const p of own) {
+            const suppressed = m.changes.find((c) => c.kind === 'skill-text' && c.column === p.column) ?? null;
+            pinned.push({
+                name: m.template.name,
+                column: p.column,
+                reason: p.reason,
+                state: suppressed ? 'overrides-catalogue' : 'catalogue-agrees',
+                suppressed,
+            });
+        }
+        return own.length ? { ...m, changes: m.changes.filter((c) => !isPinnedText(c, own)) } : m;
+    });
+    const matchedIds = new Set(matched.map((m) => m.unit.definitionId));
+    for (const p of pins) {
+        if (!matchedIds.has(p.definitionId)) {
+            pinned.push({ name: p.definitionId, column: p.column, reason: p.reason, state: 'no-matched-ship', suppressed: null });
+        }
+    }
+    return { matched: out, pinned };
+};
 
 export const planSync = (
     diff: CatalogueDiff,
     templates: TemplateRow[],
     gate: SkillGate,
-    opts: { textWrites: boolean; allowBulkText?: boolean }
+    opts: { textWrites: boolean; allowBulkText?: boolean; pins?: readonly TextPin[] }
 ): SyncPlan => {
     const plan = emptyPlan(diff);
+    const pins = opts.pins ?? TEXT_PINS;
     if (diff.matched.length === 0) {
         return { ...plan, halted: 'no catalogue unit matched a template' };
     }
@@ -132,12 +183,14 @@ export const planSync = (
             halted: `${statsChanged}/${diff.matched.length} matched ships changed stats (limit ${STATS_CHANGE_HALT_RATIO * 100}%)`,
         };
     }
-    const textChanged = diff.matched.filter((m) => m.changes.some((c) => c.kind === 'skill-text')).length;
-    if (opts.textWrites && !opts.allowBulkText && textChanged / diff.matched.length > TEXT_CHANGE_HOLD_RATIO) {
-        plan.bulkTextHold = { changed: textChanged, matched: diff.matched.length };
+    const { matched, pinned } = applyPins(diff.matched, pins);
+    plan.pinned = pinned;
+    const textChanged = matched.filter((m) => m.changes.some((c) => c.kind === 'skill-text')).length;
+    if (opts.textWrites && !opts.allowBulkText && textChanged / matched.length > TEXT_CHANGE_HOLD_RATIO) {
+        plan.bulkTextHold = { changed: textChanged, matched: matched.length };
     }
 
-    for (const { template, unit, changes } of diff.matched) {
+    for (const { template, unit, changes } of matched) {
         if (unit.mappingErrors.length) {
             plan.mappingHeld.push({ template, unit, reasons: [...unit.mappingErrors] });
             continue;
@@ -175,7 +228,8 @@ export const planSync = (
         } else if (text.some(isDroppedField)) {
             textHold = 'dropped-field';
         } else if (text.length) {
-            gateResult = gate(template.name, skillsOf(template), unit.skills);
+            const current = skillsOf(template);
+            gateResult = gate(template.name, current, withPinnedText(unit.definitionId, current, unit.skills, pins));
             if (gateResult.pass) {
                 for (const c of text) patch[c.column] = c.after;
                 applied.push(...text);

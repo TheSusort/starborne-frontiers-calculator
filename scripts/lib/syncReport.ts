@@ -1,7 +1,14 @@
 /** Markdown report and outcome status for one catalogue sync run. Pure. */
 import type { Change } from './catalogueDiff';
 import type { CatalogueManifest } from './catalogueSchema';
-import { isDroppedField, TEXT_CHANGE_HOLD_RATIO, type RowPatch, type SyncPlan, type TextHold } from './catalogueSyncPlan';
+import {
+    isDroppedField,
+    TEXT_CHANGE_HOLD_RATIO,
+    type PinnedSlot,
+    type RowPatch,
+    type SyncPlan,
+    type TextHold,
+} from './catalogueSyncPlan';
 
 export type SyncStatus = 'clean' | 'attention' | 'held' | 'failed';
 
@@ -131,6 +138,28 @@ const renderHeldDrops = (plan: SyncPlan): string[] => {
     return lines;
 };
 
+const PIN_STATE: Record<PinnedSlot['state'], string> = {
+    'overrides-catalogue': 'kept our text over the catalogue\'s',
+    'catalogue-agrees': 'catalogue text now equals ours; the pin can go',
+    'no-matched-ship': 'no matched ship has this definition_id; fix or drop the pin',
+};
+
+/**
+ * Pins never change the run's status: they are listed so each one is re-read against the
+ * catalogue's current text. `withText` prints the catalogue text a pin kept out.
+ */
+const renderPinned = (plan: SyncPlan, withText: boolean): string[] => {
+    const lines: string[] = [];
+    if (plan.pinned.length) {
+        lines.push('', `### Pinned text (${plan.pinned.length})`);
+        for (const p of plan.pinned) {
+            lines.push(`- **${p.name}** ${p.column} — ${p.reason} (${PIN_STATE[p.state]})`);
+            if (withText && p.suppressed) lines.push(`  - ${describeChange(p.suppressed)}`);
+        }
+    }
+    return lines;
+};
+
 const renderMappingHeld = (plan: SyncPlan): string[] => {
     const lines: string[] = [];
     if (plan.mappingHeld.length) {
@@ -198,6 +227,7 @@ const renderAttention = (plan: SyncPlan, withText: boolean): string[] => [
     ...renderMappingHeld(plan),
     ...renderHeldText(plan, withText),
     ...renderHeldDrops(plan),
+    ...renderPinned(plan, withText),
     ...renderInserts(plan),
     ...renderIdMismatches(plan),
     ...renderMetadata(plan),

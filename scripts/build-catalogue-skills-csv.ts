@@ -4,6 +4,7 @@
  * the official catalogue's text, rendered exactly as `sync:catalogue` would write it
  * (toCatalogueTemplate). Rows keep the current CSV's order and format, so after the cutover's text
  * write `fetch:ship-skills` should reproduce this file byte for byte (ships the gate held aside).
+ * A column pinned in TEXT_PINS keeps the current CSV's text, as the sync keeps it (see `planSync`).
  *
  * Usage: npm run build:catalogue-skills [-- --refresh]
  * The crawl is cached at docs/catalogue-units.json; --refresh re-crawls.
@@ -13,7 +14,8 @@ import 'dotenv/config';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { fetchCatalogueIndex, fetchCatalogueUnits } from './lib/catalogueFetch';
-import { toCatalogueTemplate } from './lib/catalogueMapping';
+import { toCatalogueTemplate, type SkillColumns } from './lib/catalogueMapping';
+import { pinsFor, TEXT_PINS, withPinnedText } from './lib/catalogueTextPins';
 import type { CatalogueUnit } from './lib/catalogueSchema';
 import { loadShipSkillRecords, toCsvField } from './lib/shipSkillCsv';
 
@@ -43,6 +45,7 @@ const main = async () => {
     const lines = [HEADER];
     const unmatched: string[] = [];
     const mappingErrors: string[] = [];
+    const pinnedSlots: string[] = [];
     for (const r of loadShipSkillRecords()) {
         const t = byId.get(idOf.get(r.name) ?? '');
         if (!t) {
@@ -51,7 +54,15 @@ const main = async () => {
             continue;
         }
         if (t.mappingErrors.length) mappingErrors.push(`${r.name}: ${t.mappingErrors.join('; ')}`);
-        const s = t.skills;
+        const current: SkillColumns = {
+            active_skill_text: r.active || null,
+            charge_skill_text: r.charge || null,
+            first_passive_skill_text: r.passives[0] || null,
+            second_passive_skill_text: r.passives[1] || null,
+            third_passive_skill_text: r.passives[2] || null,
+        };
+        for (const p of pinsFor(t.definitionId, TEXT_PINS)) pinnedSlots.push(`${r.name} ${p.column}`);
+        const s = withPinnedText(t.definitionId, current, t.skills, TEXT_PINS);
         lines.push(
             [r.name, s.active_skill_text, t.chargeSkillCharge ?? r.chargeCharge, s.charge_skill_text,
                 s.first_passive_skill_text, s.second_passive_skill_text, s.third_passive_skill_text]
@@ -61,6 +72,7 @@ const main = async () => {
     writeFileSync(OUT, lines.join('\n') + '\n');
     console.log(`Wrote ${lines.length - 1} ships to ${OUT}`);
     if (unmatched.length) console.log(`Kept current text (no catalogue match): ${unmatched.join(', ')}`);
+    if (pinnedSlots.length) console.log(`Kept current text (pinned): ${pinnedSlots.join(', ')}`);
     if (mappingErrors.length) console.log(`Mapping errors:\n  ${mappingErrors.join('\n  ')}`);
 };
 
