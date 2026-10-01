@@ -65,4 +65,26 @@ describe('renderReport', () => {
     it('leads with the halt reason', () => {
         expect(renderReport(plan({ halted: '40/150 matched ships changed stats' }), ctx)).toMatch(/HALTED[^\n]*40\/150/);
     });
+
+    it('still shows join diagnostics after a halt', () => {
+        const md = renderReport(
+            plan({
+                halted: 'no catalogue unit matched a template',
+                idMismatches: [{
+                    unit: { name: 'Ghost', definitionId: 'new-id' } as never,
+                    template: { id: 'GHOST', name: 'Ghost', definition_id: 'old-id' } as never,
+                }],
+                missingFromCatalogue: [{ id: 'RELIC', name: 'Relic' } as never],
+            }),
+            ctx
+        );
+        const haltedIdx = md.indexOf('HALTED');
+        const mismatchIdx = md.indexOf('definition_id mismatches');
+        const missingIdx = md.indexOf('In ship_templates but not in the catalogue');
+        expect(haltedIdx).toBeGreaterThan(-1);
+        expect(mismatchIdx).toBeGreaterThan(haltedIdx);
+        expect(missingIdx).toBeGreaterThan(haltedIdx);
+        expect(md).toContain('Ghost');
+        expect(md).toContain('Relic');
+    });
 });

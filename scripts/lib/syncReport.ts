@@ -38,6 +38,28 @@ const describeChange = (c: Change): string => {
     }
 };
 
+/** definition_id mismatches: rendered on every outcome, halted or not — the join itself didn't need the gate to run. */
+const renderIdMismatches = (plan: SyncPlan): string[] => {
+    const lines: string[] = [];
+    if (plan.idMismatches.length) {
+        lines.push('', '### definition_id mismatches (row matched by name; fix the id)');
+        for (const m of plan.idMismatches) {
+            lines.push(`- **${m.template.name}** (\`${m.template.id}\`): ours ${JSON.stringify(m.template.definition_id)}, catalogue \`${m.unit.definitionId}\``);
+        }
+    }
+    return lines;
+};
+
+/** Rows in ship_templates the catalogue no longer has: rendered on every outcome, halted or not. */
+const renderMissingFromCatalogue = (plan: SyncPlan): string[] => {
+    const lines: string[] = [];
+    if (plan.missingFromCatalogue.length) {
+        lines.push('', '### In ship_templates but not in the catalogue');
+        lines.push(`- ${plan.missingFromCatalogue.map((t) => t.name).join(', ')}`);
+    }
+    return lines;
+};
+
 export const renderReport = (
     plan: SyncPlan,
     ctx: {
@@ -55,6 +77,8 @@ export const renderReport = (
     if (ctx.backupPath) lines.push(`Snapshot before writing: \`${ctx.backupPath}\``);
     if (plan.halted) {
         lines.push('', `**HALTED — nothing written:** ${plan.halted}`);
+        lines.push(...renderIdMismatches(plan));
+        lines.push(...renderMissingFromCatalogue(plan));
         return lines.join('\n') + '\n';
     }
     if (ctx.writeFailures.length) lines.push('', `**Write failures:** ${ctx.writeFailures.join(', ')}`);
@@ -91,19 +115,11 @@ export const renderReport = (
         lines.push('', '### New ships NOT inserted');
         for (const r of plan.refusedInserts) lines.push(`- **${r.unit.name}** (\`${r.unit.definitionId}\`): ${r.reason}`);
     }
-    if (plan.idMismatches.length) {
-        lines.push('', '### definition_id mismatches (row matched by name; fix the id)');
-        for (const m of plan.idMismatches) {
-            lines.push(`- **${m.template.name}** (\`${m.template.id}\`): ours ${JSON.stringify(m.template.definition_id)}, catalogue \`${m.unit.definitionId}\``);
-        }
-    }
+    lines.push(...renderIdMismatches(plan));
     if (plan.metadata.length) {
         lines.push('', '### Metadata drift (report only)');
         for (const m of plan.metadata) lines.push(`- **${m.template.name}** ${describeChange(m.change)}`);
     }
-    if (plan.missingFromCatalogue.length) {
-        lines.push('', '### In ship_templates but not in the catalogue');
-        lines.push(`- ${plan.missingFromCatalogue.map((t) => t.name).join(', ')}`);
-    }
+    lines.push(...renderMissingFromCatalogue(plan));
     return lines.join('\n') + '\n';
 };
