@@ -116,7 +116,8 @@ export function classifyEnemyEffect(name: string): 'buff' | 'debuff' {
  * Finds buff description from the BUFFS constant
  * Handles exact matches and partial matches (e.g., "Corrosion I" matches "Corrosion 1")
  */
-export function findBuffDescription(buffName: string): string | undefined {
+export function findBuffDescription(rawBuffName: string): string | undefined {
+    const buffName = canonicalStatusName(rawBuffName);
     // Try exact match first
     const exactMatch = BUFFS.find((buff) => buff.name === buffName);
     if (exactMatch) return exactMatch.description;
@@ -5800,11 +5801,69 @@ const MAX_SCAN_CHARS = 120;
 const CONJOINED_SELF_GRANT_RE =
     /\b(?:gains?|grants?)\b[^.;]*?\band\s+([A-Z][A-Za-z][A-Za-z. ]*?[A-Za-z0-9])\s+for\s+(\d+)\s+turns?/gi;
 
+/** Catalogue spellings → the name the engine keys on. */
+export const STATUS_NAME_ALIASES: Record<string, string> = {
+    'Tianchen Precision I': 'Tianchao Precision I',
+    'Tianchen Precision II': 'Tianchao Precision II',
+    'Reverse Repairs': 'Reversed Repairs',
+    'Toxic Overflow I': 'Toxic Overflow',
+};
+
+const STATUS_NAME_ALIAS_BY_LOWER = new Map(
+    Object.entries(STATUS_NAME_ALIASES).map(([alias, name]) => [alias.toLowerCase(), name])
+);
+
+/** The engine's name for a status, given any spelling in `STATUS_NAME_ALIASES` (case-insensitive);
+ *  any other name is returned unchanged. */
+export function canonicalStatusName(name: string): string {
+    return STATUS_NAME_ALIAS_BY_LOWER.get(name.trim().toLowerCase()) ?? name;
+}
+
+/**
+ * Rewrites every `<unit-skill>` tag whose WHOLE content is an aliased spelling to the engine's
+ * name. Untagged prose and partial matches are untouched, so the faction word in "Tianchen allies"
+ * and the existing "Reversed Repairs" never change.
+ *
+ * Every parser pass reads status names off the raw text by position (`findBuffNamePos` and its
+ * kin), so the text itself must carry the engine's name: `parseSkillEffects` and
+ * `buildShipAbilities` apply this to their input before any pass runs. Display text is not
+ * rewritten — `findBuffDescription` resolves an aliased tooltip through `canonicalStatusName`.
+ */
+export function canonicaliseStatusNames(text: string): string {
+    return text.replace(/<unit-skill>(.*?)<\/unit-skill>/g, (whole, name: string) => {
+        const canonical = STATUS_NAME_ALIAS_BY_LOWER.get(name.trim().toLowerCase());
+        return canonical ? `<unit-skill>${canonical}</unit-skill>` : whole;
+    });
+}
+
+const SHIP_SKILL_TEXT_FIELDS = [
+    'activeSkillText',
+    'chargeSkillText',
+    'firstPassiveSkillText',
+    'secondPassiveSkillText',
+    'thirdPassiveSkillText',
+] as const;
+
+/** `ship` with `canonicaliseStatusNames` applied to every skill text; the same object when no
+ *  text carries an aliased spelling. */
+export function withCanonicalStatusNames(ship: Ship): Ship {
+    let out: Ship | undefined;
+    for (const field of SHIP_SKILL_TEXT_FIELDS) {
+        const text = ship[field];
+        if (!text) continue;
+        const canonical = canonicaliseStatusNames(text);
+        if (canonical === text) continue;
+        out ??= { ...ship };
+        out[field] = canonical;
+    }
+    return out ?? ship;
+}
+
 // Resolves a candidate buff name (possibly using arabic numerals where BUFFS uses roman numerals)
 // to its canonical BUFFS entry name, or undefined if it isn't a known buff. Mirrors the number↔roman
 // handling in findBuffDescription, but returns the canonical name rather than the description.
 function resolveBuffName(candidate: string): string | undefined {
-    const trimmed = candidate.trim();
+    const trimmed = canonicalStatusName(candidate.trim());
     const exact = BUFFS.find((b) => b.name.toLowerCase() === trimmed.toLowerCase());
     if (exact) return exact.name;
     // Text may use arabic numerals ("Everliving Regeneration 3") where BUFFS uses roman ("III").
@@ -6511,10 +6570,11 @@ const ENEMY_STATE_OBJECT_TAIL_RE =
     /\benem(?:y|ies)\s+(?:affected|effected)\s+by\s+(?:[^.,;]{1,40}?\s+(?:or|and)\s+)?$/i;
 
 export function parseSkillEffects(
-    skillText: string | null | undefined,
+    rawSkillText: string | null | undefined,
     source: SkillSource
 ): SkillEffect[] {
-    if (!skillText) return [];
+    if (!rawSkillText) return [];
+    const skillText = canonicaliseStatusNames(rawSkillText);
 
     const segments = parseSkillText(skillText);
     const effects: SkillEffect[] = [];

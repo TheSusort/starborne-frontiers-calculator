@@ -126,6 +126,7 @@ import {
     detectPurgeStripsShield,
     parseHealNoCrit,
     parseSkillEffects,
+    withCanonicalStatusNames,
     classifyEnemyEffect,
     statusEffectCondition,
     parsePreCombatStatGrants,
@@ -3385,8 +3386,10 @@ function slotForBuffSource(skillSource: SelectedGameBuff['skillSource']): SkillS
     }
 }
 
-export function buildShipAbilities(ship: Ship): ShipSkills {
+export function buildShipAbilities(rawShip: Ship): ShipSkills {
     counter = 0;
+    // Every pass below reads status names off the text by position (canonicaliseStatusNames).
+    const ship = withCanonicalStatusNames(rawShip);
 
     // DoTs are derived at the ship level (active/charge only — no passive DoTs).
     const { activeDoTs, chargedDoTs } = buildDoTAutoFill(ship);
