@@ -222,7 +222,16 @@ const RULES: Rule[] = [
     {
         id: 'dot-application',
         severity: 'high',
-        keyword: (t) => /inflict\w*[^.]*\b(corrosion|inferno|bomb)\b/i.test(t),
+        // A DoT named as a reaction's trigger object ("When this Unit inflicts a Bomb it gains
+        // Stealth") is not applied by that clause — the parser's namesTriggerClauseObject rule —
+        // so it is scrubbed before the keyword test.
+        keyword: (t) =>
+            /inflict\w*[^.]*\b(corrosion|inferno|bomb)\b/i.test(
+                t.replace(
+                    /\b(?:when|after)\s+(?:it|this\s+unit)\s+inflicts\s+(?:an?\s+)?(?:corrosion|inferno|bomb)\b/gi,
+                    ''
+                )
+            ),
         handled: (a) => hasType(a, 'dot'),
     },
     {

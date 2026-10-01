@@ -1597,6 +1597,17 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // this exact phrasing.
 const SELF_INFLICTS_DEBUFF_RE = /\bwhen\s+this\s+unit\s+inflicts\s+(?:a\s+)?debuff/i;
 
+// A status named as the OBJECT of a reaction's own trigger clause — "after it inflicts <Stasis>",
+// "When this Unit inflicts a <Bomb>", "When this Unit inflicts <Corrosion> with a critical hit" —
+// is what the reaction listens for, not something the clause applies, so neither the named-status
+// walk (parseSkillEffects) nor the control-event scan (parseControlInflicts) mints it. Tested on
+// the raw text that ends immediately before the status tag.
+const TRIGGER_CLAUSE_INFLICT_TAIL_RE =
+    /\b(?:when|after)\s+(?:it|this\s+unit)\s+inflicts\s+(?:an?\s+)?$/i;
+function namesTriggerClauseObject(precedingText: string): boolean {
+    return TRIGGER_CLAUSE_INFLICT_TAIL_RE.test(precedingText);
+}
+
 // The literal landing verb in a debuff-infliction reactive clause: "inflict"-family text means a
 // successful hacking-roll infliction (AbilityConfig's `application:'inflict'`), "apply"-family
 // text means an unconditional land with no roll (`application:'apply'` — Provoke, Concentrate
@@ -1631,10 +1642,10 @@ export function detectDebuffInflictionVerb(
     if (!text || !buffName) return undefined;
     return debuffTriggerVerb(resolveBuffClause(text, buffName, occurrenceIndex));
 }
-// "If its debuff is resisted" — Ravager's INFLICTOR-side reaction (the debuff THIS unit
-// inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
-// (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
-const OWN_DEBUFF_RESISTED_RE = /\bits\s+debuff\s+is\s+resisted\b/i;
+// "If its debuff is resisted" / "If this Unit's debuff is resisted" — Ravager's INFLICTOR-side
+// reaction (the debuff THIS unit inflicted got resisted). Distinct from the resister-side "when
+// this Unit resists a debuff" (parseOnResistHpDamage).
+const OWN_DEBUFF_RESISTED_RE = /\b(?:its|this\s+unit['’]?s)\s+debuff\s+is\s+resisted\b/i;
 // SP-F F2: "when an ally [within the Active pattern] has their Shield destroyed" — AEGIS's sole
 // corpus reaction (docs/ship-skills.csv). The loose [^.]*? gaps cross the "within the Active
 // pattern" positional qualifier and any tag text between "ally" and "shield"/"destroyed".
@@ -2037,7 +2048,7 @@ const EXTEND_STATUS_ACTIVE_RE =
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 // Asphyxiator: "After this Unit applies a Debuff with a Critical hit the newly applied Debuff is
-// extended by 1 turn." The two arms above grow every status ALREADY STANDING on the target; this
+// extended by 1 turn" (the catalogue writes "inflicts" / "newly inflicted"). The two arms above grow every status ALREADY STANDING on the target; this
 // one grows only what the cast just inflicted, which is a different scope, not a different
 // mechanic — hence `scope: 'inflicted'`, the same axis `extend-dot` carries for Valerian's twin
 // wording. Tried FIRST, so a hypothetical plural "the newly applied Debuffs are extended" is
@@ -2051,7 +2062,7 @@ const EXTEND_STATUS_PASSIVE_RE =
 // clause with the generic word would otherwise emit BOTH an always-on extend-status and a
 // chance-gated extend-dot for one clause.
 const EXTEND_STATUS_INFLICTED_RE =
-    /\bnewly\s+applied\s+(buff|debuff)s?\b(?![^.]*\b(?:damage over time|crit(?:ical)?\s*power)\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
+    /\bnewly\s+(?:applied|inflicted)\s+(buff|debuff)s?\b(?![^.]*\b(?:damage over time|crit(?:ical)?\s*power)\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 
 // #363 (Fuying): "extends <unit-skill>Stealth</unit-skill> by 1 turn" — a NAMED status, where the
 // two arms above require a literal 'buffs'/'debuffs' token. Matched against the TAGGED text so the
@@ -2139,12 +2150,13 @@ export function parseCritPowerExtend(
     return { turns: parseInt(m[1], 10), condition, scope };
 }
 
-// SP-E, Task E4: "convert the Corrosion into Acidic Decay of the same level, ... 1% per 10
-// Hacking" (Belladonna). Anchored on "of the same level" (not just a lazy `[^.]*?` scan) so the
+// "(has a chance to) convert the Corrosion into Acidic Decay of the same level, ... 1% per 10
+// Hacking" / "converts the Corrosion into …" (Belladonna). The chance comes from the "N% per M
+// Hacking" rate, which both wordings state, so the conversion stays chance-gated. Anchored on "of the same level" (not just a lazy `[^.]*?` scan) so the
 // named-family capture group stops at the right boundary — the family name can be multi-word
 // ("Acidic Decay") and a bare lazy match would otherwise capture only its first word.
 const CONVERT_DOT_RE =
-    /convert\s+the\s+(corrosion|inferno)\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
+    /converts?\s+the\s+(corrosion|inferno)\s+into\s+([\w\s]+?)\s+of\s+the\s+same\s+level[^.]*?(\d+(?:\.\d+)?)%\s+per\s+(\d+)\s+hacking/i;
 
 /**
  * Parses a "convert the <DoT> into <family> of the same level ... N% per M Hacking" clause into
@@ -2190,24 +2202,21 @@ export function detectAllyCritDotTrigger(
     return phrasePosTrigger(text, ALLY_CRIT_DOT_RE, anchorPos, 'on-ally-crit-dot');
 }
 
-// Ship-kit W8 Task 10 (Wisteria): self-subject mirror of ALLY_CRIT_DOT_RE (Crocus's "when an
-// ally inflicts a DoT with a critical hit"). Wisteria's own-cast phrasing instead uses
-// "applying" (not "inflicts a DoT ... with a critical hit") and carries no "ally" subject
-// (self-implied by "This Unit"):
-//  - R0: "This Unit, after applying Corrosion with a Critical hit, inflicts Inferno II for 2
-//    turns."
-//  - R2 (refit-active): "This Unit inflicts Inferno II for 2 turns after applying Corrosion
-//    with a Critical hit and extends the newly applied Corrosion by 1 turn ..."
-// Verified zero-collision across docs/ship-skills.csv: of the 8 ships whose skill text contains
-// "critical hit", Wisteria is the only one pairing "applying ... critical hit" with a
-// same-sentence "inflicts ... for N turns" (Asphyxiator uses "applies" + no re-infliction
-// clause; Valerian/Crocus use "inflicts/inflicting" for the TRIGGER verb, not "applying"). The
-// generic `[^.]*` gap (not `[\w\s]+?`) so this works against BOTH the raw tagged text
-// (phrasePosTrigger's sentence scan) and the stripped text (parseSelfCritDot/
-// parseSelfCritDotEffect below).
-const SELF_CRIT_DOT_RE = /\bafter\s+applying\b[^.]*\bwith\s+a\s+critical\s+hit\b/i;
+// Self-subject mirror of ALLY_CRIT_DOT_RE (Crocus's "when an ally inflicts a DoT with a critical
+// hit"): THIS unit's own crit-cast DoT infliction (Wisteria). Two wordings, both with no "ally"
+// subject:
+//  - "This Unit, after applying Corrosion with a Critical hit, inflicts Inferno II for 2 turns" /
+//    "This Unit inflicts Inferno II for 2 turns after applying Corrosion with a Critical hit …"
+//  - "When this Unit inflicts Corrosion with a critical hit, it also inflicts Inferno II for 2
+//    turns …"
+// The trigger clause's own verb is "applying" or a "when this Unit inflicts" subordinate clause;
+// a plain on-cast "inflicts X with a critical hit" has neither. The generic `[^.]*` gap (not
+// `[\w\s]+?`) so this works against BOTH the raw tagged text (phrasePosTrigger's sentence scan)
+// and the stripped text (parseSelfCritDot/parseSelfCritDotEffect below).
+const SELF_CRIT_DOT_RE =
+    /\b(?:after\s+applying|when\s+this\s+unit\s+inflicts)\b[^.]*\bwith\s+a\s+critical\s+hit\b/i;
 
-/** Whether a skill triggers "after applying a DoT with a Critical hit" (self-scoped, manual). */
+/** Whether a skill triggers on THIS unit's own crit-cast DoT infliction (SELF_CRIT_DOT_RE). */
 export function parseSelfCritDot(text: string | null | undefined): boolean {
     if (!text) return false;
     const plain = stripUnitTags(text);
@@ -2216,7 +2225,7 @@ export function parseSelfCritDot(text: string | null | undefined): boolean {
 
 /**
  * Returns 'on-self-crit-dot' when `anchorPos` (the ability's raw-text anchor position) falls
- * inside the sentence carrying the "after applying <DoT> with a Critical hit" phrase (self-
+ * inside the sentence carrying the SELF_CRIT_DOT_RE phrase (self-
  * scoped — THIS unit's own crit-cast DoT infliction, not an ally's); otherwise undefined.
  * Position-scoped on the RAW text (mirrors detectAllyCritDotTrigger). This is the self-subject
  * sibling of on-ally-crit-dot — see buildShipAbilities' dot-effects branch for the consuming
@@ -2233,7 +2242,7 @@ export function detectSelfCritDotTrigger(
 // Extracts the buffName + duration of the DoT actually INJECTED by the self-crit-dot trigger
 // (e.g. "Inferno II" / 2), in EITHER clause ordering. Deliberately NOT a generic
 // parseSkillEffects tag walk: the trigger clause itself names a DoT ("applying Corrosion with
-// a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — a naive per-tag loop
+// a Critical hit" / "inflicts Corrosion with a critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — a naive per-tag loop
 // (like the on-ally-crit-dot block above) would mint a phantom Corrosion dot from the TRIGGER'S
 // OWN named DoT, which carries no "for N turns" of its own (buildShipAbilities.test.ts's "no
 // phantom Corrosion dot" guard covers exactly this). Anchoring on the "inflicts X for N turns"
@@ -2243,10 +2252,10 @@ export function detectSelfCritDotTrigger(
 const SELF_CRIT_DOT_EFFECT_ORDER_A_RE =
     /\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?\s+after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit/i;
 const SELF_CRIT_DOT_EFFECT_ORDER_B_RE =
-    /after\s+applying\s+[\w\s]+?\s+with\s+a\s+critical\s+hit[^.]*?\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?/i;
+    /(?:after\s+applying|when\s+this\s+unit\s+inflicts)\s+[\w\s]+?\s+with\s+a\s+critical\s+hit[^.]*?\binflicts\s+([\w\s]+?)\s+for\s+(\d+)\s+turns?/i;
 
 /**
- * Parses the DoT actually injected by a "after applying <DoT> with a Critical hit" self-crit
+ * Parses the DoT actually injected by a SELF_CRIT_DOT_RE self-crit
  * trigger (Wisteria: Inferno II / 2 turns), or undefined when absent. See the block comment
  * above for why this is a dedicated extraction rather than a parseSkillEffects tag walk.
  */
@@ -2392,13 +2401,15 @@ export function detectCleanseOncePerRound(
     return sentence !== undefined && CLEANSE_ONCE_PER_ROUND_RE.test(sentence);
 }
 
-// "when an enemy gets/is/becomes debuffed" — a reactive own-infliction trigger (APEX's
-// shield-on-debuff). Matches "debuff" specifically so it does NOT collide with the
-// "when an enemy gets/is buffed" enemy-buff handling (debuffed ≠ buffed). No lookbehind:
-// requiring "debuffed" (not "buffed") is sufficient disambiguation since "buffed" lacks
-// the "de" prefix. Fires on this Unit's OWN inflictions (on-debuff-inflicted), not allies'.
+// "when an enemy gets/is/becomes debuffed" / "when an enemy gets inflicted with a debuff" — a
+// reactive own-infliction trigger (APEX's shield-on-debuff). Matches "debuff" specifically so it
+// does NOT collide with the "when an enemy gets/is buffed" enemy-buff handling (debuffed ≠
+// buffed). The "inflicted with" arm requires the generic "debuff" noun, so a named status
+// ("the primary target is inflicted with Disable") is not a reaction. Scanned on the RAW
+// sentence, so the noun may sit inside a tag. Fires on this Unit's OWN inflictions
+// (on-debuff-inflicted), not allies'.
 const ENEMY_DEBUFFED_RE =
-    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+debuffed\b/i;
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:(?:gets?|is|are|becomes?)\s+debuffed\b|gets?\s+inflicted\s+with\s+an?\s+(?:<[^>]*>\s*)?debuff\b)/i;
 
 /**
  * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
@@ -2510,34 +2521,43 @@ export function parseControlInflicts(
         // control tag WITHIN that match — not the first tag anywhere in the row. A status named
         // in an earlier CONDITION clause ("If the target has <unit-skill>Stasis…") would otherwise
         // pull `pos` back to the wrong clause, mis-ordering the emitted control ability (the
-        // builder sorts emission order by `pos`).
-        const match = c.re.exec(text);
-        if (!match) continue;
-        // Ship-kit W8 Task 7: the <unit-skill> tag is OPTIONAL here too (mirrors STASIS_INFLICT_RE
-        // above) so a bare, untagged inflict (Xcellence's "and Stasis for 2 turn") still locates a
-        // real position instead of falling back to MAX_POS. Only c.re matching at all determines
-        // whether an untagged mention counts as a genuine inflict (Stasis' fallback alternative
-        // requires trailing "for N turns"); this just finds WHERE within that already-confirmed
-        // match the name sits. No effect on the other (still tag-only) control effects, since their
-        // matched text always contains the tag.
+        // builder sorts emission order by `pos`). A match whose tag is the object of a reaction's
+        // trigger clause ("after it inflicts <unit-skill>Stasis") applies nothing — see
+        // namesTriggerClauseObject — so the scan moves on to the next match.
+        //
+        // The <unit-skill> tag is OPTIONAL here too (mirrors STASIS_INFLICT_RE above) so a bare,
+        // untagged inflict (Xcellence's "and Stasis for 2 turn") still locates a real position
+        // instead of falling back to MAX_POS. Only c.re matching at all determines whether an
+        // untagged mention counts as a genuine inflict (Stasis' fallback alternative requires
+        // trailing "for N turns"); the tag search just finds WHERE within that already-confirmed
+        // match the name sits. The other control effects are tag-only, so their matched text
+        // always contains the tag.
         const tagRe = new RegExp(
             `(?:<unit-skill>\\s*)?${c.tag.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
             'i'
         );
-        const tagMatch = tagRe.exec(match[0]);
-        out.push({
-            effect: c.effect,
-            pos: tagMatch ? match.index + tagMatch.index : -1,
-            side: c.side,
-        });
+        const re = new RegExp(c.re.source, c.re.flags.replace('g', '') + 'g');
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(text)) !== null) {
+            const tagMatch = tagRe.exec(match[0]);
+            const pos = tagMatch ? match.index + tagMatch.index : -1;
+            if (pos >= 0 && namesTriggerClauseObject(text.slice(0, pos))) {
+                re.lastIndex = match.index + 1;
+                continue;
+            }
+            out.push({ effect: c.effect, pos, side: c.side });
+            break;
+        }
     }
     return out;
 }
 
-// "when applying Stasis" — the reactive trigger for a grant that procs when THIS unit applies
-// Stasis (Defiant's "gains Shield equal to 30% of its Max HP when applying Stasis"). Position-
-// scoped (mirrors detectDebuffInflictedTrigger); no lookbehind.
-const APPLYING_STASIS_RE = /\bwhen\s+applying\s+stasis\b/i;
+// "when applying Stasis" / "after it inflicts Stasis" — the reactive trigger for a grant that
+// procs when THIS unit applies Stasis (Defiant's "gains a shield equal to 30% of its max HP").
+// Position-scoped on the RAW sentence (mirrors detectDebuffInflictedTrigger), so the status name
+// may be tagged; no lookbehind.
+const APPLYING_STASIS_RE =
+    /\bwhen\s+applying\s+stasis\b|\bafter\s+it\s+inflicts\s+(?:<unit-skill>\s*)?stasis\b/i;
 
 /**
  * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
@@ -2687,8 +2707,9 @@ export function detectAllyPurgedTrigger(
 }
 
 // "When a debuff is inflicted on an ally" — Hayyan p2's second sentence (victim-scoped repair).
-// Corpus-verified: grep docs/ship-skills.csv for "debuff is inflicted on an ally" = Hayyan only.
-const ALLY_DEBUFFED_RE = /\bdebuff\s+is\s+inflicted\s+on\s+an\s+ally\b/i;
+// Scanned on the RAW sentence, so "debuff" may close a tag ("a <unit-aid>debuff</unit-aid> is
+// inflicted on an ally").
+const ALLY_DEBUFFED_RE = /\bdebuff(?:<\/unit-aid>)?\s+is\s+inflicted\s+on\s+an\s+ally\b/i;
 
 /**
  * Returns 'on-ally-debuffed' when `anchorPos` falls inside the sentence carrying the
@@ -3065,6 +3086,10 @@ const ROLE_WORD_TO_CATEGORY: Record<string, ShipRoleCategory> = {
 // "cannont") are NOT crit reactions — scrubbed before the crit-hit test so a when-sentence
 // carrying such a rider (Provider, Grif) never reads as crit-gated.
 const DR_CANNOT_CRIT_RE = /\bcann?on?t\s+criticall?y?\s+hit\b/i;
+// "… inflicts X WITH a critical hit" is the subject LANDING a crit (outgoing — Wisteria's
+// on-self-crit-dot, Crocus's on-ally-crit-dot), not being hit, so it is scrubbed before the
+// self-subject crit-hit test as well.
+const DR_OUTGOING_CRIT_RE = /\bwith\s+a\s+critical\s+hit\b/i;
 // Passive-voice "when … critically hit" (Guardian "When this Unit is critically hit"; the
 // missing "y" in the live CSV's "criticall hit" is tolerated). DISTINCT from the ACTIVE-voice
 // self-crit phrasing ("critically hits/damaging"), which matchesActiveSelfCrit handles and
@@ -3153,7 +3178,7 @@ export function detectDamageReactionTrigger(
     const sentence = rawSentenceAround(text, pos);
     if (sentence === undefined) return undefined;
     const allySubject = DR_ALLY_SUBJECT_RE.test(sentence);
-    const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '');
+    const scrubbed = sentence.replace(DR_CANNOT_CRIT_RE, '').replace(DR_OUTGOING_CRIT_RE, '');
     const roleM = allySubject ? DR_ALLY_ROLES_RE.exec(sentence) : null;
     const roleFilter = roleM
         ? roleM[1]
@@ -4996,7 +5021,8 @@ export function parseHealAbilities(text: string | null | undefined): ParsedHealA
 const REDUCE_DEBUFF_DURATION_RE =
     /reduces?\s+the\s+duration\s+of\s+(?:all\s+)?active\s+debuffs\s+on\s+([^,.]+?)\s+by\s+(\d+)\s+turns?/gi;
 // "On debuff infliction" (Pestilence) — noun-phrase form, distinct from APPLYING_DEBUFF_RE's
-// verb-phrase form ("on inflicting a debuff"). Scoped to the reduction's own sentence.
+// verb-phrase form ("on inflicting a debuff"). Scoped to the reduction's own sentence; the
+// present-tense "When this Unit inflicts a debuff" (SELF_INFLICTS_DEBUFF_RE) is the same gate.
 const ON_DEBUFF_INFLICTION_RE = /\bon\s+debuff\s+infliction\b/i;
 
 export interface ParsedDebuffDurationReduction {
@@ -5010,7 +5036,8 @@ export interface ParsedDebuffDurationReduction {
      *  — no corpus ship carries both. */
     isDamageReaction?: boolean;
     /** Present when the clause is gated on THIS unit inflicting a debuff ("on debuff
-     *  infliction") — buildShipAbilities maps it to trigger 'on-debuff-inflicted' (Pestilence). */
+     *  infliction" / "when this Unit inflicts a debuff") — buildShipAbilities maps it to trigger
+     *  'on-debuff-inflicted' (Pestilence). */
     onDebuffInflicted?: boolean;
 }
 
@@ -5038,7 +5065,7 @@ export function parseDebuffDurationReduction(
             : 'self';
         const { text: sentence } = sentenceBoundsAround(plain, m.index);
         const entry: ParsedDebuffDurationReduction = { turns, target };
-        if (ON_DEBUFF_INFLICTION_RE.test(sentence)) {
+        if (ON_DEBUFF_INFLICTION_RE.test(sentence) || SELF_INFLICTS_DEBUFF_RE.test(sentence)) {
             entry.onDebuffInflicted = true;
         } else if (HEAL_DAMAGE_REACTION_RE.test(sentence)) {
             entry.isDamageReaction = true;
@@ -6411,6 +6438,10 @@ export function parseSkillEffects(
         const occurrenceIndex = buffNameOccurrence.get(buffName) ?? 0;
         buffNameOccurrence.set(buffName, occurrenceIndex + 1);
 
+        // The trigger clause's own object is not an application (namesTriggerClauseObject).
+        const prevText = segments[i - 1]?.type === 'text' ? segments[i - 1].text : '';
+        if (namesTriggerClauseObject(prevText)) continue;
+
         // Step 1: Find application verb
         const verb = findVerb(segments, i);
         if (verb === null || verb === undefined) continue; // skip verb or no verb
@@ -6452,7 +6483,6 @@ export function parseSkillEffects(
         }
 
         // Step 4: Stack detection from immediately preceding text segment
-        const prevText = segments[i - 1]?.type === 'text' ? segments[i - 1].text : '';
         const stackMatch = STACKS_RE.exec(prevText);
         const stacks = stackMatch ? parseInt(stackMatch[1], 10) : undefined;
         // Only use 'recurring' from stacks if no finite duration was found

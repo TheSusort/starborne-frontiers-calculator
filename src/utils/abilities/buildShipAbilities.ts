@@ -1990,18 +1990,17 @@ function abilitiesFromText(
         }
     }
 
-    // Ship-kit W8 Task 10 (Wisteria): self-subject sibling of the Crocus on-ally-crit-dot block
-    // above — "This Unit ... after applying <DoT> with a Critical hit, inflicts <DoT> for N
-    // turns" (R0) / "inflicts <DoT> for N turns after applying <DoT> with a Critical hit ..."
-    // (R2, refit-active). Deliberately NOT reusing the parseSkillEffects tag walk the
-    // on-ally-crit-dot block uses above: Wisteria's own TRIGGER clause names a DoT ("applying
-    // Corrosion with a Critical hit"), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that
-    // walk would mint a phantom Corrosion dot from the trigger's own named DoT (see
-    // parseSelfCritDotEffect's comment; buildShipAbilities.test.ts's "no phantom Corrosion dot"
-    // guard covers exactly this). parseSelfCritDotEffect instead anchors on the "inflicts X for
-    // N turns" clause specifically, in EITHER ordering, so only the genuinely injected DoT
-    // (Inferno II) is ever extracted, landing on the SAME reactive on-self-crit-dot trigger
-    // machinery (see triggers.ts/types/abilities.ts).
+    // Self-subject sibling of the Crocus on-ally-crit-dot block above — THIS unit's own crit-cast
+    // DoT infliction re-inflicts a second DoT (Wisteria: "after applying Corrosion with a Critical
+    // hit, inflicts Inferno II for 2 turns" / "When this Unit inflicts Corrosion with a critical
+    // hit, it also inflicts Inferno II for 2 turns"). Deliberately NOT reusing the
+    // parseSkillEffects tag walk the on-ally-crit-dot block uses above: the TRIGGER clause names a
+    // DoT (Corrosion), and DOT_TIER_MAP carries a bare 'Corrosion' entry — that walk would mint a
+    // phantom Corrosion dot from the trigger's own named DoT (see parseSelfCritDotEffect's
+    // comment; buildShipAbilities.test.ts's "no phantom Corrosion dot" guard covers exactly this).
+    // parseSelfCritDotEffect instead anchors on the "inflicts X for N turns" clause specifically,
+    // in EITHER ordering, so only the genuinely injected DoT (Inferno II) is ever extracted,
+    // landing on the reactive on-self-crit-dot trigger (see triggers.ts/types/abilities.ts).
     const selfCritDotEffect = parseSelfCritDotEffect(text);
     if (selfCritDotEffect) {
         const info = DOT_TIER_MAP[selfCritDotEffect.buffName];
