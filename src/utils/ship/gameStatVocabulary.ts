@@ -48,7 +48,7 @@ export function getStatName(exportStatName: string): StatName | null {
  * The modifier types the game sends. The resolvers below read anything other than
  * `Percentage` as flat, so a caller that must reject an unknown type checks it here first.
  */
-export const GAME_MODIFIER_TYPES = ['Flat', 'Percentage'] as const;
+const GAME_MODIFIER_TYPES = ['Flat', 'Percentage'] as const;
 
 export const isGameModifierType = (modifierType: string): boolean =>
     (GAME_MODIFIER_TYPES as readonly string[]).includes(modifierType);
