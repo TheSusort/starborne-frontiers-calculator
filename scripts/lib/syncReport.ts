@@ -26,7 +26,8 @@ export const syncStatus = (plan: SyncPlan, writeFailures: string[]): SyncStatus 
         plan.refusedInserts.length ||
         plan.metadata.length ||
         plan.idMismatches.length ||
-        plan.missingFromCatalogue.length
+        plan.missingFromCatalogue.length ||
+        plan.pinned.some((p) => p.state === 'catalogue-changed')
     ) {
         return 'attention';
     }
@@ -138,23 +139,40 @@ const renderHeldDrops = (plan: SyncPlan): string[] => {
     return lines;
 };
 
-const PIN_STATE: Record<PinnedSlot['state'], string> = {
+const PIN_STATE: Record<Exclude<PinnedSlot['state'], 'catalogue-changed'>, string> = {
     'overrides-catalogue': 'kept our text over the catalogue\'s',
     'catalogue-agrees': 'catalogue text now equals ours; the pin can go',
     'no-matched-ship': 'no matched ship has this definition_id; fix or drop the pin',
 };
+const SHIP_HELD = 'ship held for mapping errors; nothing written';
+
+const isChangedPin = (p: PinnedSlot): boolean => p.state === 'catalogue-changed';
 
 /**
- * Pins never change the run's status: they are listed so each one is re-read against the
- * catalogue's current text. `withText` prints the catalogue text a pin kept out.
+ * Pins whose catalogue text moved off the text the ruling was made on: the only pins that raise
+ * the run's status. Both texts are printed in every renderer, because re-asking the ruling needs them.
  */
+const renderChangedPins = (plan: SyncPlan): string[] => {
+    const changed = plan.pinned.filter(isChangedPin);
+    if (!changed.length) return [];
+    const lines = ['', `### Pinned text changed since the ruling (${changed.length}) — re-ask the ruling, then update or drop the pin`];
+    for (const p of changed) {
+        lines.push('', `**${p.name}** ${p.column} — ${p.reason}${p.shipHeld ? ` (${SHIP_HELD})` : ''}`);
+        lines.push('', 'Ruled against:', '', fence(p.ruledAgainst), '', 'Catalogue now:', '', fence(p.catalogueText));
+    }
+    return lines;
+};
+
+/** Every other pin, listed so it is re-read each run. `withText` prints the catalogue text it kept out. */
 const renderPinned = (plan: SyncPlan, withText: boolean): string[] => {
     const lines: string[] = [];
-    if (plan.pinned.length) {
-        lines.push('', `### Pinned text (${plan.pinned.length})`);
-        for (const p of plan.pinned) {
-            lines.push(`- **${p.name}** ${p.column} — ${p.reason} (${PIN_STATE[p.state]})`);
-            if (withText && p.suppressed) lines.push(`  - ${describeChange(p.suppressed)}`);
+    const listed = plan.pinned.filter((p) => !isChangedPin(p));
+    if (listed.length) {
+        lines.push('', `### Pinned text (${listed.length})`);
+        for (const p of listed) {
+            const label = p.shipHeld ? SHIP_HELD : PIN_STATE[p.state as keyof typeof PIN_STATE];
+            lines.push(`- **${p.name}** ${p.column} — ${p.reason} (${label})`);
+            if (withText && p.suppressed && !p.shipHeld) lines.push(`  - ${describeChange(p.suppressed)}`);
         }
     }
     return lines;
@@ -224,6 +242,7 @@ const renderWriteFailures = (ctx: ReportContext): string[] =>
 
 /** Everything after the applied changes: the sections that need a human. */
 const renderAttention = (plan: SyncPlan, withText: boolean): string[] => [
+    ...renderChangedPins(plan),
     ...renderMappingHeld(plan),
     ...renderHeldText(plan, withText),
     ...renderHeldDrops(plan),

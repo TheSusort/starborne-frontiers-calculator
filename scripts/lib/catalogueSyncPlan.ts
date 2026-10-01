@@ -24,7 +24,8 @@
  * anything else reads them: it is never written, never held, never counts toward the bulk-text
  * ratio, and the gate audits our text in that column. Every pin is listed in `pinned` on every
  * run that does not halt, including one whose catalogue text equals ours and one no matched ship
- * carries, so a pin that has gone stale is visible.
+ * carries, so a pin that has gone stale is visible. A pin whose catalogue text differs from its
+ * `ruledAgainst` is `catalogue-changed`, which `syncStatus` raises to `attention`.
  */
 import type { CatalogueDiff, Change, TemplateRow, UnitDiff } from './catalogueDiff';
 import type { CatalogueTemplate, SkillColumn, SkillColumns } from './catalogueMapping';
@@ -54,16 +55,22 @@ export interface PlannedInsert {
     findings: string[];
 }
 /**
- * One applied pin. `overrides-catalogue`: the catalogue's text differs and `suppressed` is the
- * change kept out. `catalogue-agrees`: the catalogue's text equals ours. `no-matched-ship`: no
- * matched ship carries the pin's definition id, and `name` is that id.
+ * One applied pin. `catalogue-changed`: the catalogue's text is no longer the text the ruling was
+ * made on (`ruledAgainst`), whatever it now is; the ruling needs re-asking. Otherwise
+ * `overrides-catalogue`: the catalogue's text differs from ours; `catalogue-agrees`: it equals
+ * ours. `no-matched-ship`: no matched ship carries the pin's definition id, and `name` is that id.
+ * `suppressed` is the text change kept out of the patch, if any. `shipHeld`: the ship was held for
+ * mapping errors, so nothing of it is written whatever the pin says.
  */
 export interface PinnedSlot {
     name: string;
     column: SkillColumn;
     reason: string;
-    state: 'overrides-catalogue' | 'catalogue-agrees' | 'no-matched-ship';
+    state: 'catalogue-changed' | 'overrides-catalogue' | 'catalogue-agrees' | 'no-matched-ship';
     suppressed: Change | null;
+    ruledAgainst: string;
+    catalogueText: string | null;
+    shipHeld: boolean;
 }
 export interface SyncPlan {
     halted: string | null;
@@ -146,12 +153,21 @@ const applyPins = (matched: UnitDiff[], pins: readonly TextPin[]): { matched: Un
         const own = pinsFor(m.unit.definitionId, pins);
         for (const p of own) {
             const suppressed = m.changes.find((c) => c.kind === 'skill-text' && c.column === p.column) ?? null;
+            const catalogueText = m.unit.skills[p.column];
             pinned.push({
                 name: m.template.name,
                 column: p.column,
                 reason: p.reason,
-                state: suppressed ? 'overrides-catalogue' : 'catalogue-agrees',
+                state:
+                    catalogueText !== p.ruledAgainst
+                        ? 'catalogue-changed'
+                        : suppressed
+                          ? 'overrides-catalogue'
+                          : 'catalogue-agrees',
                 suppressed,
+                ruledAgainst: p.ruledAgainst,
+                catalogueText,
+                shipHeld: m.unit.mappingErrors.length > 0,
             });
         }
         return own.length ? { ...m, changes: m.changes.filter((c) => !isPinnedText(c, own)) } : m;
@@ -159,7 +175,16 @@ const applyPins = (matched: UnitDiff[], pins: readonly TextPin[]): { matched: Un
     const matchedIds = new Set(matched.map((m) => m.unit.definitionId));
     for (const p of pins) {
         if (!matchedIds.has(p.definitionId)) {
-            pinned.push({ name: p.definitionId, column: p.column, reason: p.reason, state: 'no-matched-ship', suppressed: null });
+            pinned.push({
+                name: p.definitionId,
+                column: p.column,
+                reason: p.reason,
+                state: 'no-matched-ship',
+                suppressed: null,
+                ruledAgainst: p.ruledAgainst,
+                catalogueText: null,
+                shipHeld: false,
+            });
         }
     }
     return { matched: out, pinned };

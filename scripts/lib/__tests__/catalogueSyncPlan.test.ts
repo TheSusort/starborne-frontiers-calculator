@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'fs';
 import { isDroppedField, planSync, templateIdFor } from '../catalogueSyncPlan';
 import type { CatalogueDiff, Change, TemplateRow, UnitDiff } from '../catalogueDiff';
-import type { CatalogueTemplate } from '../catalogueMapping';
+import { toCatalogueTemplate, type CatalogueTemplate, type SkillColumns } from '../catalogueMapping';
+import type { CatalogueUnit } from '../catalogueSchema';
 import type { SkillGate } from '../skillTextGate';
-import type { SkillColumns } from '../catalogueMapping';
 import { TEXT_PINS, withPinnedText, type TextPin } from '../catalogueTextPins';
 
 const pass: SkillGate = () => ({ pass: true, newFindings: [] });
@@ -224,7 +225,7 @@ describe('planSync — bulk text hold', () => {
 });
 
 describe('planSync — text pins', () => {
-    const pin: TextPin = { definitionId: 'A', column: 'active_skill_text', reason: 'ruled ours' };
+    const pin: TextPin = { definitionId: 'A', column: 'active_skill_text', reason: 'ruled ours', ruledAgainst: 'A2' };
     const passive: Change = { kind: 'skill-text', column: 'first_passive_skill_text', before: 'P', after: 'P2' };
     /** Ship A with its catalogue unit keyed on the same id, as every matched ship is in production. */
     const pinnedShip = (changes: Change[], skills: Partial<SkillColumns> = {}): UnitDiff => ({
@@ -247,9 +248,10 @@ describe('planSync — text pins', () => {
         expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 }, first_passive_skill_text: 'P2' });
         expect(plan.patches[0].applied).toEqual([hp, passive]);
         expect(plan.patches[0].heldText).toEqual([]);
-        expect(plan.pinned).toEqual([
-            { name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'overrides-catalogue', suppressed: text },
-        ]);
+        expect(plan.pinned).toEqual([{
+            name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'overrides-catalogue', suppressed: text,
+            ruledAgainst: 'A2', catalogueText: 'A2', shipHeld: false,
+        }]);
         // The gate audits what will be written: our text in the pinned column, the catalogue's elsewhere.
         expect(seen).toEqual([{ ...unit().skills, active_skill_text: 'A', first_passive_skill_text: 'P2' }]);
     });
@@ -262,24 +264,62 @@ describe('planSync — text pins', () => {
         expect(plan.pinned.map((p) => p.state)).toEqual(['overrides-catalogue']);
     });
 
-    it('lists a pin whose catalogue text now equals ours', () => {
+    it('lists a pin whose catalogue text equals ours', () => {
+        const plan = planSync(
+            diff({ matched: amongQuiet(pinnedShip([], { active_skill_text: 'A', first_passive_skill_text: 'P' })) }),
+            [], pass, { ...on, pins: [{ ...pin, ruledAgainst: 'A' }] }
+        );
+        expect(plan.patches).toEqual([]);
+        expect(plan.pinned).toEqual([{
+            name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'catalogue-agrees', suppressed: null,
+            ruledAgainst: 'A', catalogueText: 'A', shipHeld: false,
+        }]);
+    });
+
+    it('marks a pin whose catalogue text moved off the ruled-against text, and still writes nothing to it', () => {
+        const moved: Change = { kind: 'skill-text', column: 'active_skill_text', before: 'A', after: 'A3' };
+        const plan = planSync(
+            diff({ matched: amongQuiet(pinnedShip([moved, passive], { active_skill_text: 'A3' })) }),
+            [], pass, { ...on, pins: [pin] }
+        );
+        expect(plan.patches[0].patch).toEqual({ first_passive_skill_text: 'P2' });
+        expect(plan.pinned).toEqual([{
+            name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'catalogue-changed', suppressed: moved,
+            ruledAgainst: 'A2', catalogueText: 'A3', shipHeld: false,
+        }]);
+    });
+
+    it('marks a pin as changed when the catalogue moved back to our text', () => {
         const plan = planSync(
             diff({ matched: amongQuiet(pinnedShip([], { active_skill_text: 'A', first_passive_skill_text: 'P' })) }),
             [], pass, { ...on, pins: [pin] }
         );
-        expect(plan.patches).toEqual([]);
-        expect(plan.pinned).toEqual([
-            { name: 'A', column: 'active_skill_text', reason: 'ruled ours', state: 'catalogue-agrees', suppressed: null },
-        ]);
+        expect(plan.pinned[0]).toMatchObject({ state: 'catalogue-changed', suppressed: null, catalogueText: 'A' });
+    });
+
+    it('holds the unpinned text when the gate fails, leaving the pinned column out and still listed', () => {
+        const plan = planSync(diff({ matched: amongQuiet(pinnedShip([hp, text, passive])) }), [], fail, { ...on, pins: [pin] });
+        expect(plan.patches[0].patch).toEqual({ base_stats: { hp: 2, shield: 5 } });
+        expect(plan.patches[0]).toMatchObject({ heldText: [passive], textHold: 'gate' });
+        expect(plan.pinned).toHaveLength(1);
+        expect(plan.pinned[0]).toMatchObject({ state: 'overrides-catalogue', suppressed: text });
+    });
+
+    it('flags a pin on a ship held for mapping errors', () => {
+        const broken = { ...pinnedShip([text]), unit: unit({ definitionId: 'A', mappingErrors: ['bad'] }) };
+        const plan = planSync(diff({ matched: amongQuiet(broken) }), [], pass, { ...on, pins: [pin] });
+        expect(plan.mappingHeld).toHaveLength(1);
+        expect(plan.pinned[0]).toMatchObject({ state: 'overrides-catalogue', shipHeld: true });
     });
 
     it('lists a pin no matched ship carries, under its definition id', () => {
         const plan = planSync(diff({ matched: amongQuiet(matched('A', [])) }), [], pass, {
             ...on, pins: [{ ...pin, definitionId: 'Gone_1' }],
         });
-        expect(plan.pinned).toEqual([
-            { name: 'Gone_1', column: 'active_skill_text', reason: 'ruled ours', state: 'no-matched-ship', suppressed: null },
-        ]);
+        expect(plan.pinned).toEqual([{
+            name: 'Gone_1', column: 'active_skill_text', reason: 'ruled ours', state: 'no-matched-ship', suppressed: null,
+            ruledAgainst: 'A2', catalogueText: null, shipHeld: false,
+        }]);
     });
 
     it('does not count pinned-only text changes toward the bulk text hold', () => {
@@ -296,7 +336,7 @@ describe('planSync — text pins', () => {
             [], pass, { ...on, pins: [pin] }
         );
         expect(plan.patches[0]).toMatchObject({ patch: { first_passive_skill_text: 'P2' }, textHold: null });
-        expect(plan.pinned[0]).toMatchObject({ state: 'overrides-catalogue', suppressed: drop });
+        expect(plan.pinned[0]).toMatchObject({ state: 'catalogue-changed', suppressed: drop, catalogueText: null });
     });
 
     it('lists the pin on a stats-only run without holding the pinned column as text', () => {
@@ -310,17 +350,31 @@ describe('withPinnedText', () => {
     it('takes the current text for pinned columns of that ship only', () => {
         const current = { ...unit().skills, active_skill_text: 'OURS', charge_skill_text: 'C' };
         const catalogue = { ...unit().skills, active_skill_text: 'THEIRS', charge_skill_text: 'C2' };
-        const pins: TextPin[] = [{ definitionId: 'A', column: 'active_skill_text', reason: 'r' }];
+        const pins: TextPin[] = [{ definitionId: 'A', column: 'active_skill_text', reason: 'r', ruledAgainst: 'THEIRS' }];
         expect(withPinnedText('A', current, catalogue, pins)).toEqual({ ...catalogue, active_skill_text: 'OURS' });
         expect(withPinnedText('B', current, catalogue, pins)).toEqual(catalogue);
     });
 });
 
 describe('TEXT_PINS', () => {
-    it('pins each (ship, column) at most once and dates every reason', () => {
+    it('pins each (ship, column) at most once, dates every reason and records the text ruled against', () => {
         const keys = TEXT_PINS.map((p) => `${p.definitionId}::${p.column}`);
         expect(new Set(keys).size).toBe(keys.length);
-        for (const p of TEXT_PINS) expect(p.reason).toMatch(/\d{4}-\d{2}-\d{2}/);
+        for (const p of TEXT_PINS) {
+            expect(p.reason).toMatch(/\d{4}-\d{2}-\d{2}/);
+            expect(p.ruledAgainst.trim()).not.toBe('');
+        }
+    });
+
+    // Tripwire: the cached crawl is gitignored, so this runs only where it exists. A failure means
+    // the catalogue's text for a pinned slot moved: re-ask the ruling, then update `ruledAgainst`.
+    const CRAWL = 'docs/catalogue-units.json';
+    it.skipIf(!existsSync(CRAWL))('matches the cached crawl in docs/catalogue-units.json', () => {
+        const units: CatalogueUnit[] = JSON.parse(readFileSync(CRAWL, 'utf8')).units;
+        const byId = new Map(units.map(toCatalogueTemplate).map((t) => [t.definitionId, t]));
+        for (const p of TEXT_PINS) {
+            expect(byId.get(p.definitionId)?.skills[p.column], `${p.definitionId} ${p.column}`).toBe(p.ruledAgainst);
+        }
     });
 });
 

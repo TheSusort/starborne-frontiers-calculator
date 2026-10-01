@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { ISSUE_SUMMARY_LIMIT, renderIssueSummary, renderReport, syncStatus } from '../syncReport';
-import type { RowPatch, SyncPlan } from '../catalogueSyncPlan';
+import type { PinnedSlot, RowPatch, SyncPlan } from '../catalogueSyncPlan';
 
 const manifest = {
     build: '33566', gameVersion: '3.22.33566', unitCount: 150,
@@ -162,14 +162,23 @@ describe('renderReport', () => {
     });
 });
 
-const pins: SyncPlan['pinned'] = [
-    {
-        name: 'Tormenter', column: 'active_skill_text', reason: 'User ruling: also buffs itself', state: 'overrides-catalogue',
+const slot = (over: Partial<PinnedSlot>): PinnedSlot => ({
+    name: 'S', column: 'active_skill_text', reason: 'r', state: 'overrides-catalogue', suppressed: null,
+    ruledAgainst: 'RULED', catalogueText: 'RULED', shipHeld: false, ...over,
+});
+const pins: PinnedSlot[] = [
+    slot({
+        name: 'Tormenter', reason: 'User ruling: also buffs itself', ruledAgainst: 'CATALOGUE_TEXT', catalogueText: 'CATALOGUE_TEXT',
         suppressed: { kind: 'skill-text', column: 'active_skill_text', before: 'OURS_TEXT', after: 'CATALOGUE_TEXT' },
-    },
-    { name: 'Chimei', column: 'first_passive_skill_text', reason: 'User ruling: redirect', state: 'catalogue-agrees', suppressed: null },
-    { name: 'Gone_1', column: 'charge_skill_text', reason: 'User ruling: x', state: 'no-matched-ship', suppressed: null },
+    }),
+    slot({ name: 'Chimei', column: 'first_passive_skill_text', reason: 'User ruling: redirect', state: 'catalogue-agrees' }),
+    slot({ name: 'Gone_1', column: 'charge_skill_text', reason: 'User ruling: x', state: 'no-matched-ship', catalogueText: null }),
 ];
+const drifted = slot({
+    name: 'Drifter', reason: 'User ruling: ours', state: 'catalogue-changed', ruledAgainst: 'RULED_AGAINST_TEXT',
+    catalogueText: 'NEWER_CATALOGUE_TEXT',
+    suppressed: { kind: 'skill-text', column: 'active_skill_text', before: 'OURS', after: 'NEWER_CATALOGUE_TEXT' },
+});
 
 describe('pinned text', () => {
     it('renders every pin under a "Pinned text" heading in the full report, with the text it kept out', () => {
@@ -187,6 +196,29 @@ describe('pinned text', () => {
         expect(md).toContain('**Tormenter** active_skill_text');
         expect(md).not.toContain('CATALOGUE_TEXT');
         expect(syncStatus(plan({ pinned: pins }), [])).toBe('clean');
+    });
+
+    it('raises attention for a pin whose catalogue text changed since the ruling', () => {
+        expect(syncStatus(plan({ pinned: [...pins, drifted] }), [])).toBe('attention');
+    });
+
+    it.each([
+        ['full report', renderReport],
+        ['issue summary', renderIssueSummary],
+    ] as const)('shows a changed pin with the ruled-against and new text in the %s', (_label, render) => {
+        const md = render(plan({ pinned: [...pins, drifted] }), ctx);
+        const heading = md.indexOf('### Pinned text changed since the ruling (1)');
+        expect(heading).toBeGreaterThan(-1);
+        expect(md.indexOf('**Drifter** active_skill_text')).toBeGreaterThan(heading);
+        expect(md).toContain('RULED_AGAINST_TEXT');
+        expect(md).toContain('NEWER_CATALOGUE_TEXT');
+        expect(md).toContain('### Pinned text (3)');
+    });
+
+    it('labels a pin on a ship held for mapping errors as held, not as kept text', () => {
+        const md = renderReport(plan({ pinned: [slot({ name: 'Crocus', shipHeld: true })] }), ctx);
+        expect(md).toMatch(/\*\*Crocus\*\*[^\n]*ship held for mapping errors/);
+        expect(md).not.toContain('kept our text');
     });
 
     it('renders no heading when nothing is pinned', () => {
