@@ -605,13 +605,15 @@ export function parseConditionalDamage(text: string | null | undefined): Conditi
             };
         }
     }
-    // "deals X% damage, but when attacking a <class>, it deals Y% damage" — the same replacement
-    // shape as "increased to" above (IonScorp), just worded with "but … it deals Y%" instead of
-    // "increased to Y%". Modeled identically: base X plus a conditional (Y − X) bonus gated on the
-    // enemy class. Placed alongside incTo — this phrasing has no "additional" either.
-    const butWhen = stripUnitTags(text).match(
-        /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?deals?\s+(\d+(?:\.\d+)?)\s*%/i
-    );
+    // "deals X% damage, but when attacking a <class>, it [instead] deals Y% damage" and "deals X%
+    // damage, if the target is a <class> it instead deals Y% damage" — the same replacement shape
+    // as "increased to" above, worded with a class clause before "deals Y%". Modeled identically:
+    // base X plus a conditional (Y − X) bonus gated on the enemy class. Placed alongside incTo —
+    // these phrasings have no "additional" either.
+    const butWhen =
+        stripUnitTags(text).match(
+            /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*but\s+when\s+(?:attacking|targeting|damaging|against)\s+an?\s+(attacker|defender|debuffer|supporter)s?,?\s*(?:it\s+)?(?:instead\s+)?deals?\s+(\d+(?:\.\d+)?)\s*%/i
+        ) ?? IF_TARGET_IS_CLASS_INSTEAD_RE.exec(stripUnitTags(text));
     if (butWhen) {
         const delta = parseFloat(butWhen[3]) - parseFloat(butWhen[1]);
         if (delta > 0) {
@@ -665,6 +667,10 @@ const ENEMY_STATUS_BONUS_RE =
 // deals 170% …" — Panon's charged, a PR6b "instead"-branch case, NOT an additive enemy bonus).
 const ENEMY_AFFECTED_BONUS_RE =
     /(?:target|enem(?:y|ies))\s+(?:is\s+|are\s+)?affected by\b([^.]*?),[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%/i;
+// "affected by a <unit-skill>control</unit-skill> effect" — the tag names a CATEGORY of statuses,
+// not a status of that name, so ENEMY_AFFECTED_BONUS_RE's capture is no effect list when it holds
+// this shape: no status is named "control", and which statuses form the category is not modelled.
+const STATUS_CATEGORY_RE = /\ban?\s+<unit-skill>[^<]+<\/unit-skill>\s+effects?\b/i;
 // "an additional N% damage to enemies affected by <Effect>[ or <Effect>]" — the same enemy-state
 // bonus with the effects named AFTER the amount (Rikra). Matched on RAW text so the <unit-skill>
 // tags delimit the names; the list ends at the first non-tag word.
@@ -675,6 +681,12 @@ const ADDITIONAL_TO_AFFECTED_ENEMIES_RE =
 // on stripped text; the trailing [^.]* tolerates the charged "with additional Stasis…" clause.
 const INCREASED_TO_ENEMY_TYPE_RE =
     /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*increased to\s*(\d+(?:\.\d+)?)\s*%[^.]*?\bagainst\s+(?:an?\s+)?(attacker|defender|debuffer|supporter)s?\b/i;
+
+// "deals X% damage, if the target is a <class> it instead deals Y%" — a class-gated replacement
+// whose subject is the TARGET, so it never matches a self-gated "this Unit instead deals" branch
+// (parseInsteadDamageReplacement's case). Groups: 1 = X, 2 = class, 3 = Y. Matched on stripped text.
+const IF_TARGET_IS_CLASS_INSTEAD_RE =
+    /(\d+(?:\.\d+)?)\s*%\s*damage,?\s*if\s+the\s+target\s+is\s+an?\s+(attacker|defender|debuffer|supporter),?\s*it\s+instead\s+deals?\s+(\d+(?:\.\d+)?)\s*%/i;
 
 // "additional <Stasis> applied for N turn(s) against <class>[s]" — Gallant's charged conditional
 // control. Verb-after-tag phrasing ("Stasis applied") that STASIS_INFLICT_RE (verb-before)
@@ -730,7 +742,7 @@ export function parseEnemyEffectDamageBonus(
         if (names.length) return { pct: parseFloat(statusM[1]), effectNames: names };
     }
     const affectedM = ENEMY_AFFECTED_BONUS_RE.exec(text);
-    if (affectedM) {
+    if (affectedM && !STATUS_CATEGORY_RE.test(affectedM[1])) {
         const names = [...affectedM[1].matchAll(/<unit-skill>([^<]+)<\/unit-skill>/gi)].map((x) =>
             x[1].trim()
         );
@@ -773,11 +785,11 @@ export function parseDotEntryDamageScaling(
     return { perUnit: pct / n };
 }
 
-// "if/when [this unit|it is] critical[ly hits], … additional[ly] … N% damage" — extra damage
-// dealt on a crit. Covers Crucialis active ("if critical, additionally deals 75%") and its
-// charged "deals and additional" typo phrasing ("when it is critical, deals and additional 190%").
+// "if/when [this unit|it is|a] critical[ly hits], … additional[ly] … N% damage" — extra damage
+// dealt on a crit: "if critical, additionally deals 75%", "when it is critical, deals and
+// additional 190%" (a typo phrasing) and "if a critical hit, deals an additional 90%".
 const CRIT_BONUS_RE =
-    /\b(?:if|when)\s+(?:this\s+(?:unit\s+)?|it\s+is\s+)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
+    /\b(?:if|when)\s+(?:this\s+(?:unit\s+)?|it\s+is\s+|a\s+)?critical(?:ly\s+(?:hits?|damages?))?\b[^.]*?\badditional(?:ly)?\b[^.]*?(\d+(?:\.\d+)?)\s*%\s*damage/i;
 
 // "deals N% damage to <targets> with less/more than X% HP" — the damage itself is gated by an
 // enemy-HP threshold (Judge's "deals 60% damage to all enemies with less than 50% HP"). Scoped
