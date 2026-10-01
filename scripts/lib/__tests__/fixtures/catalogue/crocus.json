@@ -1,0 +1,1532 @@
+{
+ "unit": {
+  "id": "Gelecek_Debuffer_Legendary_2",
+  "slug": "crocus",
+  "name": "Crocus",
+  "rarity": "Legendary",
+  "faction": "Gelecek",
+  "affinity": "Red",
+  "role": "Debuffer",
+  "shipVisualKey": "Gelecek_8",
+  "skins": [],
+  "images": {
+   "avatar": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Gelecek_12_Loot.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "bigPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Gelecek_12_BigPortrait.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "fullPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Gelecek_12_FullPortrait.webp?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D"
+  },
+  "stats": {
+   "CritBoost": 0.18,
+   "CritChance": 0.04,
+   "CritResistance": 0,
+   "Defense": 1984,
+   "DefensePenetration": 0,
+   "HullPoints": 13204,
+   "Initiative": 89,
+   "Manipulation": 115,
+   "Power": 3844,
+   "Security": 16,
+   "ShieldPenetration": 0,
+   "ShieldPoints": 1000000
+  },
+  "ascensionStats": [
+   {
+    "level": 1,
+    "attribute": "Manipulation",
+    "type": "Flat",
+    "value": 60
+   },
+   {
+    "level": 3,
+    "attribute": "Power",
+    "type": "Percentage",
+    "value": 0.15
+   },
+   {
+    "level": 4,
+    "attribute": "Initiative",
+    "type": "Percentage",
+    "value": 0.08
+   },
+   {
+    "level": 4,
+    "attribute": "Manipulation",
+    "type": "Flat",
+    "value": 60
+   },
+   {
+    "level": 5,
+    "attribute": "Defense",
+    "type": "Flat",
+    "value": 1000
+   },
+   {
+    "level": 5,
+    "attribute": "HullPoints",
+    "type": "Flat",
+    "value": 1500
+   },
+   {
+    "level": 6,
+    "attribute": "CritChance",
+    "type": "Flat",
+    "value": 0.15
+   },
+   {
+    "level": 6,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.15
+   }
+  ],
+  "skills": [
+   {
+    "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC",
+    "levels": [
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_1",
+      "level": 1,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "100% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2 turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_2",
+      "level": 2,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "110% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_3",
+      "level": 3,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "120% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_4",
+      "level": 4,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "120% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_5",
+      "level": 5,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "130% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_6",
+      "level": 6,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "140% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_7",
+      "level": 7,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "150% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion I",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 3%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_BASIC_LVL_8",
+      "level": 8,
+      "name": "Acidic Disruptor",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "150% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and inflicts "
+       },
+       {
+        "text": "Corrosion II",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2  turns.\n\nIf an enemy has 3 or more "
+       },
+       {
+        "text": "debuffs",
+        "color": "#FFE172"
+       },
+       {
+        "text": ", this Unit inflicts "
+       },
+       {
+        "text": "Stasis",
+        "effectId": "Stasis"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "operationCategories": [],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_224",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 6%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Stasis",
+        "name": "Stasis",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Prevents the activation of this Units active, charged and passive skills and charge gain. This effects duration is reduced on receiving direct damage."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED",
+    "levels": [
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_1",
+      "level": 1,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "200% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_2",
+      "level": 2,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "210% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_3",
+      "level": 3,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "220% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! . .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_4",
+      "level": 4,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "220% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_5",
+      "level": 5,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "230% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_6",
+      "level": 6,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "230% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_7",
+      "level": 7,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "240% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": "  "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_ACTIVE_CHARGED_LVL_8",
+      "level": 8,
+      "name": "Dark Matter Detonation",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "250% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "detonates",
+        "effectId": "Detonation"
+       },
+       {
+        "text": " "
+       },
+       {
+        "text": "Corrosion",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " effects at "
+       },
+       {
+        "text": "180%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " power."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_36",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": [
+          ". . . . .",
+          " . . . . ! .",
+          ". . . A ! . .",
+          " . . . . ! .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     }
+    ]
+   }
+  ],
+  "ascensionSkills": [
+   {
+    "id": "GELECEK_LEGEND_Debuffer_2_PASSIVE",
+    "levels": [
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_PASSIVE_LVL_1",
+      "level": 1,
+      "name": "Diffusion Reverberation AI",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "When another ally inflicts a "
+       },
+       {
+        "text": "damage over time effect",
+        "effectId": "DoT"
+       },
+       {
+        "text": " with a critical hit, this Unit "
+       },
+       {
+        "text": "repairs itself for 3%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_44",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "GELECEK_LEGEND_Debuffer_2_PASSIVE_LVL_2",
+      "level": 2,
+      "name": "Diffusion Reverberation AI",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "When another ally inflicts a "
+       },
+       {
+        "text": "damage over time effect",
+        "effectId": "DoT"
+       },
+       {
+        "text": " with a critical hit, this Unit "
+       },
+       {
+        "text": "repairs itself for 3%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and inflicts "
+       },
+       {
+        "text": "Corrosion II",
+        "effectId": "Corrosion"
+       },
+       {
+        "text": " for 2 turns on that enemy."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_44",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Corrosion",
+        "name": "Corrosion II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Deals "
+         },
+         {
+          "text": "damage equal to 6%",
+          "color": "#EE6F1A"
+         },
+         {
+          "text": " of the target's max HP every turn, unaffected by Defense and ignores Shields."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

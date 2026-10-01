@@ -1,0 +1,1268 @@
+{
+ "unit": {
+  "id": "Everliving_Debuffer_Legendary_3",
+  "slug": "amartya",
+  "name": "Amartya",
+  "rarity": "Legendary",
+  "faction": "Everliving",
+  "affinity": "Green",
+  "role": "Debuffer",
+  "shipVisualKey": "Everliving_14",
+  "skins": [
+   {
+    "id": "Amartya_Ouroboros",
+    "name": "Ouroboros Amartya",
+    "shipVisualKey": "Everliving_14_Ouroboros"
+   }
+  ],
+  "images": {
+   "avatar": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Everliving_14_Loot.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "bigPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Everliving_14_BigPortrait.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "fullPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Everliving_14_FullPortrait.webp?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D"
+  },
+  "stats": {
+   "CritBoost": 0.3,
+   "CritChance": 0.02,
+   "CritResistance": 0,
+   "Defense": 1964,
+   "DefensePenetration": 0,
+   "HullPoints": 17108,
+   "Initiative": 84,
+   "Manipulation": 103,
+   "Power": 3026,
+   "Security": 12,
+   "ShieldPenetration": 0,
+   "ShieldPoints": 1000000
+  },
+  "ascensionStats": [
+   {
+    "level": 1,
+    "attribute": "Manipulation",
+    "type": "Flat",
+    "value": 60
+   },
+   {
+    "level": 3,
+    "attribute": "Power",
+    "type": "Percentage",
+    "value": 0.15
+   },
+   {
+    "level": 5,
+    "attribute": "Defense",
+    "type": "Flat",
+    "value": 1000
+   },
+   {
+    "level": 5,
+    "attribute": "HullPoints",
+    "type": "Flat",
+    "value": 1500
+   },
+   {
+    "level": 6,
+    "attribute": "CritChance",
+    "type": "Flat",
+    "value": 0.15
+   },
+   {
+    "level": 6,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.15
+   }
+  ],
+  "skills": [
+   {
+    "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED",
+    "levels": [
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_1",
+      "level": 1,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "170% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_2",
+      "level": 2,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "180% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_3",
+      "level": 3,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 3,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "180% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_4",
+      "level": 4,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 3,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "190% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_5",
+      "level": 5,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 2,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "190% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_6",
+      "level": 6,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 2,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "200% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_7",
+      "level": 7,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 2,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "210% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_CHARGED_LVL_8",
+      "level": 8,
+      "name": "Concentrated Energy Beam",
+      "kind": "Charged",
+      "chargesRequired": 2,
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "210% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "purges 1 buff",
+        "effectId": "Purge"
+       },
+       {
+        "text": " from all enemies for every 50% crit power this Unit has."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_139",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     }
+    ]
+   },
+   {
+    "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC",
+    "levels": [
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_1",
+      "level": 1,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "100% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down I",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 25%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_2",
+      "level": 2,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "110% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down I",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 25%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_3",
+      "level": 3,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "120% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down I",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 25%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_4",
+      "level": 4,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "130% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down I",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 25%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_5",
+      "level": 5,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "140% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down I",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 25%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_6",
+      "level": 6,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "140% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down I",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down II",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down I",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 15%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 50%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_7",
+      "level": 7,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "140% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down II",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down II",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 50%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_ACTIVE_BASIC_LVL_8",
+      "level": 8,
+      "name": "Repeater Pulse",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "150% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": ", then inflicts "
+       },
+       {
+        "text": "Defense Down II",
+        "effectId": "Debuff_Stat_DEF"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Inc. Repair Down II",
+        "effectId": "Debuff_Stat_INC_REP"
+       },
+       {
+        "text": " on all enemies for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "deb_138",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_Stat_DEF",
+        "name": "Defense Down II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases Defense by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       },
+       {
+        "effectId": "Debuff_Stat_INC_REP",
+        "name": "Inc. Repair Down II",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases incoming repair by 50%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ],
+  "ascensionSkills": [
+   {
+    "id": "EVERLIVING_LEGEND_Debuffer_3_PASSIVE_1",
+    "levels": [
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_PASSIVE_1_LVL_1",
+      "level": 1,
+      "name": "Anti Plating Rounds",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "When an enemy defender is directly repaired, this Unit inflicts 1 stack of "
+       },
+       {
+        "text": "Defense Shred",
+        "effectId": "Debuff_DEF_Shred"
+       },
+       {
+        "text": " on that defender."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_246",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Special",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_DEF_Shred",
+        "name": "Defense Shred",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases defense by 2%, stackable up to 20 times."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_PASSIVE_1_LVL_2",
+      "level": 2,
+      "name": "Anti Plating Rounds",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "When an enemy defender is directly repaired, this Unit inflicts 1 stack of "
+       },
+       {
+        "text": "Defense Shred",
+        "effectId": "Debuff_DEF_Shred"
+       },
+       {
+        "text": " on that defender.\n\nWhen an enemy defender gains "
+       },
+       {
+        "text": "Taunt",
+        "effectId": "Taunt"
+       },
+       {
+        "text": ", this Unit inflicts 1 stack of "
+       },
+       {
+        "text": "Exposed",
+        "effectId": "Exposed"
+       },
+       {
+        "text": " on that defender."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_246",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Special",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_DEF_Shred",
+        "name": "Defense Shred",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases defense by 2%, stackable up to 20 times."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "EVERLIVING_LEGEND_Debuffer_3_PASSIVE_1_LVL_3",
+      "level": 3,
+      "name": "Anti Plating Rounds",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "When an enemy defender is directly repaired, this Unit inflicts 2 stacks of "
+       },
+       {
+        "text": "Defense Shred",
+        "effectId": "Debuff_DEF_Shred"
+       },
+       {
+        "text": " on that defender.\n\nWhen an enemy defender gains "
+       },
+       {
+        "text": "Taunt",
+        "effectId": "Taunt"
+       },
+       {
+        "text": ", this Unit inflicts 2 stacks of "
+       },
+       {
+        "text": "Exposed",
+        "effectId": "Exposed"
+       },
+       {
+        "text": " on that defender."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_246",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Special",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Debuff_DEF_Shred",
+        "name": "Defense Shred",
+        "kind": "Debuff",
+        "descriptionSegments": [
+         {
+          "text": "Decreases defense by 2%, stackable up to 20 times."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Infliction",
+          "requiresHacking": true
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}

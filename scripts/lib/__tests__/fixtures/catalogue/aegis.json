@@ -1,0 +1,1380 @@
+{
+ "unit": {
+  "id": "Atlas_Supporter_Legendary_1",
+  "slug": "aegis",
+  "name": "AEGIS",
+  "rarity": "Legendary",
+  "faction": "Atlas",
+  "affinity": "None",
+  "role": "Supporter",
+  "shipVisualKey": "Atlas_4",
+  "skins": [],
+  "images": {
+   "avatar": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Atlas_11_Loot.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "bigPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Atlas_11_BigPortrait.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "fullPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/Atlas_11_FullPortrait.webp?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D"
+  },
+  "stats": {
+   "CritBoost": 0.04,
+   "CritChance": 0,
+   "CritResistance": 0,
+   "Defense": 2381,
+   "DefensePenetration": 0,
+   "HullPoints": 17873,
+   "Initiative": 98,
+   "Manipulation": 87,
+   "Power": 2356,
+   "Security": 37,
+   "ShieldPenetration": 0,
+   "ShieldPoints": 1000000
+  },
+  "ascensionStats": [
+   {
+    "level": 1,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.15
+   },
+   {
+    "level": 3,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.15
+   },
+   {
+    "level": 4,
+    "attribute": "Initiative",
+    "type": "Flat",
+    "value": 10
+   },
+   {
+    "level": 4,
+    "attribute": "Security",
+    "type": "Flat",
+    "value": 45
+   },
+   {
+    "level": 5,
+    "attribute": "CritBoost",
+    "type": "Flat",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "CritChance",
+    "type": "Flat",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Initiative",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Manipulation",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Power",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Security",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 6,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.15
+   },
+   {
+    "level": 6,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.15
+   }
+  ],
+  "skills": [
+   {
+    "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC",
+    "levels": [
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_1",
+      "level": 1,
+      "name": "Augmented Shielding Emitter",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 15%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up II",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination II",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 20%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 40."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_2",
+      "level": 2,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 16.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up II",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination II",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 20%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 40."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_3",
+      "level": 3,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 16.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination II",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 20%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_4",
+      "level": 4,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 16.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination II",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 20%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_5",
+      "level": 5,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 18%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination II",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 20%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_6",
+      "level": 6,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 18%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination III",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_7",
+      "level": 7,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 19.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination III",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_BASIC_LVL_8",
+      "level": 8,
+      "name": "Antimatter Shield Link",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 21%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and grants "
+       },
+       {
+        "text": "Hacking Up III",
+        "effectId": "Buff_Stat_DEBUFF_CHANCE"
+       },
+       {
+        "text": " and "
+       },
+       {
+        "text": "Atlas Coordination III",
+        "effectId": "Atlas_Coordination"
+       },
+       {
+        "text": " for 2 turns."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "sup_156",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Atlas_Coordination",
+        "name": "Atlas Coordination III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Attack by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       },
+       {
+        "effectId": "Buff_Stat_DEBUFF_CHANCE",
+        "name": "Hacking Up III",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Hacking by 60."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED",
+    "levels": [
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_1",
+      "level": 1,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 17.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_2",
+      "level": 2,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 20%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_3",
+      "level": 3,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 22.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . . . .",
+          ". . . A ! ! .",
+          " . . . . . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_4",
+      "level": 4,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 5,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 22.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_5",
+      "level": 5,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 22.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_6",
+      "level": 6,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield  equal to 25%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_7",
+      "level": 7,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 27.5%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_ACTIVE_CHARGED_LVL_8",
+      "level": 8,
+      "name": "Cleansing Barrier",
+      "kind": "Charged",
+      "chargesRequired": 4,
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants a "
+       },
+       {
+        "text": "shield equal to 30%",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": " of its max HP and "
+       },
+       {
+        "text": "cleanses 2 debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "def_103",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Self",
+         "side": "Ally",
+         "pattern": [
+          ". . . . .",
+          " . . . ! . .",
+          ". . . A ! ! .",
+          " . . . ! . .",
+          "  . . . . ."
+         ]
+        }
+       }
+      ],
+      "statusEffects": []
+     }
+    ]
+   }
+  ],
+  "ascensionSkills": [
+   {
+    "id": "ATLAS_LEGEND_Supporter_1_PASSIVE",
+    "levels": [
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_PASSIVE_LVL_1",
+      "level": 1,
+      "name": "Emergency Support",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants "
+       },
+       {
+        "text": "Defense Up II",
+        "effectId": "Buff_Stat_DEF"
+       },
+       {
+        "text": " for 1 turn when an ally within the active pattern has their shield destroyed."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_116",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Special",
+         "side": "Ally",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Buff_Stat_DEF",
+        "name": "Defense Up II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Defense by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "id": "ATLAS_LEGEND_Supporter_1_PASSIVE_LVL_2",
+      "level": 2,
+      "name": "Emergency Support",
+      "kind": "Passive",
+      "descriptionSegments": [
+       {
+        "text": "This Unit grants "
+       },
+       {
+        "text": "Defense Up II",
+        "effectId": "Buff_Stat_DEF"
+       },
+       {
+        "text": " for 1 turn and "
+       },
+       {
+        "text": "cleanses all debuffs",
+        "effectId": "Cleanse"
+       },
+       {
+        "text": " when an ally within the active pattern has their shield destroyed."
+       }
+      ],
+      "displayTags": [
+       "Reactive"
+      ],
+      "operationCategories": [
+       "Reactive"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "refit_116",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Special",
+         "side": "Ally",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": [
+       {
+        "effectId": "Buff_Stat_DEF",
+        "name": "Defense Up II",
+        "kind": "Buff",
+        "descriptionSegments": [
+         {
+          "text": "Increases Defense by 30%."
+         }
+        ],
+        "applications": [
+         {
+          "mode": "Other",
+          "requiresHacking": false
+         }
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  ]
+ }
+}
