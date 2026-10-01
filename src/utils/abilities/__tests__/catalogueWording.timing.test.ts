@@ -37,7 +37,8 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit ignores <unit-skill>Stealth</unit-skill> effects.<br /><br />This Unit deals <unit-damage>10% more direct damage</unit-damage> for every enemy with <unit-skill>Stealth</unit-skill>.<br /><br />At the start of each round, this Unit applies <unit-skill>Concentrate Fire</unit-skill> for 1 turn to the enemy with the highest attack.',
         expects: 'debuff|enemy-highest-attack|start-of-round|Concentrate Fire',
     },
-    // Number row: no numbers substituted — old and new carry the same values in a different order.
+    // Crucialis, FrontLine and Defiant: no numbers substituted — old and new carry the same
+    // values in a different order.
     {
         ship: 'Crucialis',
         slot: 'passive',
@@ -45,7 +46,6 @@ const PAIRS: RewordPair[] = [
         new: 'This Unit has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat, this Unit gains a <unit-damage>shield equal to 20%</unit-damage> of its max HP and gains <unit-skill>Atlas Coordination I</unit-skill> for 6 turns.',
         expects: 'shield|self|pre-combat|shield',
     },
-    // Number row: no numbers substituted — old and new carry the same values in a different order.
     {
         ship: 'FrontLine',
         slot: 'passive',
@@ -53,7 +53,6 @@ const PAIRS: RewordPair[] = [
         new: 'This ship has <unit-damage>20% shield penetration</unit-damage>.<br /><br />At the start of combat this Unit gains a <unit-damage>shield equal to 25%</unit-damage> of its max HP and while it has an active shield, it gains 2500 defense.',
         expects: 'conditional-stat|self|on-cast|conditional-stat',
     },
-    // Number row: no numbers substituted — old and new carry the same values in a different order.
     {
         ship: 'Defiant',
         slot: 'passive',
@@ -72,8 +71,8 @@ describe('timing phrases — catalogue wording parses like ours', () => {
 });
 
 // Rows where only one half is a timing phrase: the timing half is pinned here; the other half's
-// rewording ("deals 70% damage to the enemy" counter, "deals 80% damage" enemy-charged reaction)
-// belongs to the clause-rewording family and is not asserted either way.
+// rewording (the "deals 70% damage to the enemy" counter clause and the "deals 80% damage"
+// enemy-charged-cast damage clause) is not asserted either way.
 describe('timing phrases — the timing half of a mixed row', () => {
     it('Stalwart passive R2: "gains 20% attack if its adjacent to a supporter" is the pre-combat grant', () => {
         const text =
@@ -129,6 +128,22 @@ describe('timing phrases — ruled rows', () => {
         expect(s).toContain('buff|self|on-enemy-buffed|Terran Bolster III');
         expect(s).toContain('buff|self|on-enemy-buffed|Core Charge I');
         expect(s).not.toContain('buff|self|on-cast|Core Charge I');
+        expect(s).not.toContain('buff|self|start-of-turn|Terran Bolster III');
         expect(abilities.find((a) => a.type === 'cleanse')?.oncePerRound).toBe(true);
+    });
+});
+
+// An "every turn" Overload stack stays a per-round accumulator on on-cast; the Cobalt every-turn
+// charge branch in parseChargeGain relies on detectReactiveTrigger not turning it into a
+// start-of-turn trigger.
+describe('timing phrases — per-round stacking is kept', () => {
+    it('Butcher passive R0: the every-turn Overload buff stacks per round on on-cast', () => {
+        const text =
+            'This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill>.';
+        const buff = parseSlot('passive', text).find((a) => a.type === 'buff');
+        expect(buff).toMatchObject({
+            trigger: 'on-cast',
+            config: { buffName: 'Overload', stackTrigger: 'per-round' },
+        });
     });
 });

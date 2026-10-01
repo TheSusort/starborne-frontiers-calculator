@@ -1587,13 +1587,13 @@ export function detectTargetShieldGate(clause: string | null | undefined): boole
 }
 // "On inflicting a debuff" / "upon applying a debuff" → on-debuff-inflicted (Butcher Marauder Rage II).
 const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s+(?:a\s+)?debuff/i;
-// Ship-kit W7: present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted
-// (Warden's Out. Damage Down II follow-up). APPLYING_DEBUFF_RE above only matches the gerund
-// ("on inflicting"), so this present-tense form previously fell through to on-cast — landing a
-// passive-slot enemy timed debuff in a dispatch path the engine never fires. SELF-scoped ("this
-// Unit") so it never co-matches an ally/enemy-subject infliction (those are on-ally-debuff-
-// inflicted / on-attacked, resolved elsewhere). Corpus-verified: Warden is the only ship with
-// this exact phrasing.
+// Present-tense SELF-subject "when this Unit inflicts a Debuff" → on-debuff-inflicted.
+// APPLYING_DEBUFF_RE above matches only the gerund ("on inflicting"), so this form needs its own
+// regex; without it a passive-slot enemy timed debuff would resolve to on-cast, a dispatch path
+// the engine never fires for a passive. SELF-scoped ("this Unit") so it never co-matches an
+// ally/enemy-subject infliction (those are on-ally-debuff-inflicted / on-attacked, resolved
+// elsewhere). Consumed by detectReactiveTrigger and the passive-debuff gate near
+// ON_DEBUFF_INFLICTION_RE.
 const SELF_INFLICTS_DEBUFF_RE = /\bwhen\s+this\s+unit\s+inflicts\s+(?:a\s+)?debuff/i;
 
 // A status named as the OBJECT of a reaction's own trigger clause — "after it inflicts <Stasis>",
@@ -1679,15 +1679,14 @@ const ENEMY_GAINS_TAUNT_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bgains?\b[^.]*?\btaun
  *    Down I, Yarrow/Larkspur Gelecek Contagion). LIVE in healing mode (the DPS sim ignores
  *    enemy-action triggers); Grif's NAMELESS damage proc on the same phrasing is handled by
  *    detectEnemyCleanseTrigger (sentence-scoped) since it has no buffName to key on.
- *  - "when an enemy performs a repair" → 'on-enemy-repaired' (Overload lifecycle, Task 4).
+ *  - "when an enemy performs a repair" → 'on-enemy-repaired'.
  *    Checked BEFORE the kill rule so Ruiner's comma-joined grant resolves correctly.
  *  - "when this Unit cleanses a Debuff" / "upon Cleansing a Debuff" → 'on-own-cleanse'
  *    (Phase 3 PR-H: Morao's Defense Up II grant).
- *  - an enemy-death phrasing (KILL_TRIGGER_RE: "on kill" / "upon killing an enemy" / "upon
- *    destroying an enemy" / "when an enemy dies" …) → 'on-enemy-destroyed' (Mangler/Ravager/
- *    Asphyxiator/Butcher/Gallant/Medved).
+ *  - an enemy-death phrasing (KILL_TRIGGER_RE holds the accepted wordings) →
+ *    'on-enemy-destroyed'.
  *  - "on inflicting a debuff" / "upon applying a debuff" → 'on-debuff-inflicted'
- *    (Overload lifecycle, Task 4: Butcher Marauder Rage II).
+ *    (APPLYING_DEBUFF_RE; SELF_INFLICTS_DEBUFF_RE covers the present-tense form).
  *  - "if its debuff is resisted" → 'on-own-debuff-resisted' (PR-B2: Ravager's Hacking Module
  *    Overdrive grant; inflictor-scoped mirror of the resister-side on-debuff-resisted).
  *  - "when an enemy [defender] gains Taunt" → 'on-enemy-taunt-gained' (Ship-kit Wave 3, Task 4:
@@ -2047,7 +2046,8 @@ const EXTEND_STATUS_ACTIVE_RE =
 const EXTEND_STATUS_PASSIVE_RE =
     /\b(buffs|debuffs)\b(?![^.]*\bdamage over time\b)[^.]*?\bextended\b[^.]*?\bby\s+(\d+)\s+turns?/i;
 // Asphyxiator: "After this Unit applies a Debuff with a Critical hit the newly applied Debuff is
-// extended by 1 turn" (the catalogue writes "inflicts" / "newly inflicted"). The two arms above grow every status ALREADY STANDING on the target; this
+// extended by 1 turn" (also worded "inflicts" / "newly inflicted"). The two arms above grow every
+// status ALREADY STANDING on the target; this
 // one grows only what the cast just inflicted, which is a different scope, not a different
 // mechanic — hence `scope: 'inflicted'`, the same axis `extend-dot` carries for Valerian's twin
 // wording. Tried FIRST, so a hypothetical plural "the newly applied Debuffs are extended" is
@@ -2414,7 +2414,7 @@ const ENEMY_DEBUFFED_RE =
 
 /**
  * Returns 'on-debuff-inflicted' when `anchorPos` falls inside the sentence carrying the
- * "when an enemy gets debuffed" phrase; otherwise undefined. Position-scoped on the RAW text
+ * a phrase matching ENEMY_DEBUFFED_RE; otherwise undefined. Position-scoped on the RAW text
  * (mirrors detectCritRepairTrigger). Reference data: docs/ship-skills.csv (APEX).
  */
 export function detectDebuffInflictedTrigger(
@@ -2562,7 +2562,7 @@ const APPLYING_STASIS_RE =
 
 /**
  * Returns 'on-stasis-applied' when `anchorPos` (the ability's raw-text anchor position) falls
- * inside the sentence carrying the "when applying Stasis" phrase; otherwise undefined.
+ * inside a sentence matching APPLYING_STASIS_RE; otherwise undefined.
  * Position-scoped on the RAW text (mirrors detectDebuffInflictedTrigger). Reference data:
  * docs/ship-skills.csv (Defiant passive).
  */
@@ -2804,8 +2804,8 @@ export function detectEndOfRoundDamageTrigger(
 //     Affinity Override"; Nayra p2 "If Isha is on the same team, this Unit also gains Offensive
 //     Affinity Override"). Nayra p1 and Isha's OWN grant already resolve via detectReactiveTrigger
 //     because they share ONE sentence with the round-start phrase; only the split-sentence p2
-//     form needs this fallback. Corpus-verified unique (no other "also gains" sentence in
-//     docs/ship-skills.csv follows a round-start sentence).
+//     form needs this fallback. The detector glues a "then" / "also gains" sentence only when
+//     the preceding sentence is itself round-start.
 const THEN_CONTINUATION_RE = /^\s*then\b/i;
 const ALSO_GAINS_CONTINUATION_RE = /\balso\s+gains?\b/i;
 
@@ -2851,16 +2851,14 @@ export function detectRoundStartContinuationTrigger(
         : undefined;
 }
 
-// SELF death by direct damage → on-destroyed: "when killed by direct Damage" (Faust's purge,
-// killer-targeted) and "upon being killed by direct Damage" (Paracelsus's retaliation + ally
-// buff); the catalogue writes "destroyed" for "killed". Crosses tags; "direct" guards against a
-// DoT-kill phrasing.
+// SELF death by direct damage → on-destroyed: "when/upon being killed by direct Damage" and the
+// "destroyed" wording for "killed". Crosses tags; "direct" guards against a DoT-kill phrasing.
 const KILLED_BY_DIRECT_RE =
     /\b(?:when|upon\s+being)\s+(?:killed|destroyed)\s+by\s+direct\b[^.;]*\bdamage\b/i;
 
 /**
  * Returns 'on-destroyed' when `anchorPos` falls inside the sentence carrying the
- * "when killed by direct Damage" phrase (Faust p1 / p2); otherwise undefined.
+ * a phrase matching KILLED_BY_DIRECT_RE; otherwise undefined.
  * Position-scoped on the RAW text (mirrors detectEndOfRoundPurgeTrigger).
  * Reference data: docs/ship-skills.csv (Faust).
  */
@@ -4066,7 +4064,8 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
     // the turn if it is at full HP" or "Every turn this Unit adds 1 charge … if it is at full HP".
     // The "every turn" alternate is accepted HERE only, beside the full-HP gate: widening
     // START_OF_TURN_CHARGE_RE itself would also reach detectReactiveTrigger, where "gains 1 stack
-    // of Overload every turn" must keep its per-round stacking semantics. Placed after the
+    // of Overload every turn" must keep its per-round stacking semantics (pinned by the Butcher
+    // test in catalogueWording.timing.test.ts). Placed after the
     // inflict/repair reactive branches (those event triggers win if a text carries both).
     // condition 'always' is a placeholder — the real gate is in `conditions`.
     if ((START_OF_TURN_CHARGE_RE.test(low) || EVERY_TURN_RE.test(low)) && AT_FULL_HP_RE.test(low)) {

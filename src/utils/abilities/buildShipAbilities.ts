@@ -2496,27 +2496,22 @@ function abilitiesFromText(
 
     for (const c of parseCleanse(text)) {
         const cleansePos = text.search(/cleanse/i);
-        // Pallas: "when this unit critically repairs an ally, it cleanses 1 debuff from itself" —
-        // the cleanse rides the on-ally-critically-repaired reactive trigger (position-scoped).
-        // Howler (Phase 3 PR-G): "cleanses 1 debuff from an ally when that ally crits an enemy" —
-        // rides on-ally-crit instead (fires on any same-side crit, owner included — see the
-        // 2026-09-30 ruling in triggers.ts's trigger doc block) — routed to the crit-er via
-        // eventCtx.damagedAllyId (triggers.ts on-ally-crit listener).
-        // Purifier (Phase 3 PR-A): a PASSIVE-slot "cleanses N debuff when directly damaged" cleanse
-        // rides on-attacked — the cleanse builder previously derived ONLY the crit-repair reaction,
-        // so a direct-damage cleanse fell through to on-cast. Gated to passive (an active/charged
-        // cleanse is on-cast) and position-scoped, so only a passive cleanse whose own sentence
-        // carries the reaction phrase flips (corpus: Purifier alone — Makoli/Nosorog/Nyxen's
-        // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
-        // Nuqtu: "Cleanses 1 debuff from itself (once per round) ... when an enemy gets buffed"
-        // rides on-enemy-buffed (position-scoped; opposing-scoped trigger). "Every turn this Unit
-        // cleanses 1 debuff, once per round, and when an enemy gains a buff …" is a per-turn
-        // cleanse: the leading "every turn" governs the cleanse and the "when" clause governs only
-        // the grants after it, so the every-turn check runs BEFORE the enemy-buffed one (both are
-        // sentence-scoped and this sentence carries both phrases).
-        // AEGIS (SP-F F2): "cleanses all debuffs when an ally ... has their Shield destroyed"
-        // rides on-ally-shield-destroyed — position-scoped like the siblings above (this loop has
-        // no buff name to resolve a clause on).
+        // A cleanse rides a reactive trigger when ITS OWN sentence carries the reaction phrase
+        // (each detector is position-scoped to the cleanse). Detectors run in this order:
+        //  - crit-repair ("when this unit critically repairs an ally") ->
+        //    on-ally-critically-repaired.
+        //  - ally-crit ("cleanses 1 debuff from an ally when that ally crits an enemy") ->
+        //    on-ally-crit, which fires on any same-side crit (owner included, see triggers.ts's
+        //    trigger doc block) and is routed to the crit-er via eventCtx.damagedAllyId.
+        //  - every-turn ("Every turn this Unit cleanses ...") is a per-turn cleanse: the leading
+        //    "every turn" governs the cleanse and a trailing "when" clause governs only the grants
+        //    after it, so this check runs BEFORE the enemy-buffed one when a sentence carries both.
+        //  - enemy-buffed ("cleanses ... when an enemy gets buffed") -> on-enemy-buffed
+        //    (opposing-scoped trigger).
+        //  - ally-shield-destroyed ("cleanses all debuffs when an ally has their Shield
+        //    destroyed") -> on-ally-shield-destroyed.
+        //  - a PASSIVE-slot cleanse whose sentence carries a direct-damage reaction phrase ->
+        //    on-attacked. An active/charged cleanse is on-cast.
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??

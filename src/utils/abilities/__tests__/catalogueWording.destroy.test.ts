@@ -194,10 +194,18 @@ describe('kill/destroy vocabulary — ruled rows', () => {
     it('Sokol passive R2: "When an enemy is destroyed" grants the extra action on any enemy death', () => {
         const text =
             'This Unit gains 1 stack of <unit-skill>Blast</unit-skill> every turn.<br /><br />When an enemy is destroyed, once per round, this Unit <unit-skill>gains 1 extra action</unit-skill>.';
-        const s = sigs(parseSlot('passive', text));
+        const abilities = parseSlot('passive', text);
+        const s = sigs(abilities);
         expect(s).toContain('extra-action|self|on-enemy-destroyed|extra-action');
         expect(s).not.toContain('extra-action|self|on-cast|extra-action');
+        expect(abilities.find((a) => a.type === 'extra-action')?.config).toMatchObject({
+            oncePerRound: true,
+        });
         // The every-turn Blast stack in the same row keeps accruing per round, not per kill.
         expect(s).toContain('buff|self|on-cast|Blast');
+        expect(abilities.find((a) => a.type === 'buff')?.config).toMatchObject({
+            buffName: 'Blast',
+            stackTrigger: 'per-round',
+        });
     });
 });
