@@ -34,10 +34,46 @@ export const readIndexData = (html: string) => {
 export const cacheKey = (m: CatalogueManifest): string =>
     `catalogue-${m.unitsSha256.slice(0, 16)}-${m.localeSha256.en.slice(0, 16)}-${m.statusEffectsSha256.slice(0, 16)}`;
 
-const fetchText = async (url: string): Promise<string> => {
-    const res = await fetch(url, { headers: HEADERS });
-    if (!res.ok) throw new Error(`${url} -> HTTP ${res.status}`);
-    return res.text();
+const REQUEST_TIMEOUT_MS = 30_000;
+const DEFAULT_ATTEMPTS = 3;
+const DEFAULT_DELAYS_MS = [1_000, 2_000];
+
+/** A 5xx or network/timeout failure: worth retrying. A 4xx is thrown as a plain `Error` instead,
+ *  since the request itself is wrong and a retry would just repeat it. */
+class RetryableFetchError extends Error {}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export interface FetchTextOptions {
+    /** Total calls to `fetch`, including the first. Default 3. */
+    attempts?: number;
+    /** Backoff before each retry, indexed by the attempt that just failed (so `delayMs[0]` runs
+     *  before the second call). The last entry repeats if there are more retries than entries.
+     *  Default [1000, 2000]ms; tests pass near-zero delays to stay fast. */
+    delayMs?: number[];
+}
+
+export const fetchText = async (url: string, options: FetchTextOptions = {}): Promise<string> => {
+    const attempts = options.attempts ?? DEFAULT_ATTEMPTS;
+    const delays = options.delayMs ?? DEFAULT_DELAYS_MS;
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+        try {
+            const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+            if (res.ok) return await res.text();
+            const message = `${url} -> HTTP ${res.status}`;
+            if (res.status >= 500) throw new RetryableFetchError(message);
+            throw new Error(message);
+        } catch (error) {
+            lastError = error;
+            if (!(error instanceof RetryableFetchError) && error instanceof Error && /HTTP \d+/.test(error.message)) {
+                throw error;
+            }
+            if (attempt === attempts - 1) throw error;
+            await sleep(delays[attempt] ?? delays[delays.length - 1]);
+        }
+    }
+    throw lastError;
 };
 
 export const fetchCatalogueIndex = async () => readIndexData(await fetchText(INDEX_URL));
