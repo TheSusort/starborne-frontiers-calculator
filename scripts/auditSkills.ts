@@ -275,7 +275,12 @@ const RULES: Rule[] = [
                 x.conditions.some((c) => c.countComparator === 'eq' && c.countThreshold === 0)
             );
             const hasAnyOfReplacement = dmg.some((x) => x.conditions.some((c) => c.anyOf));
-            return hasNegatedBase && hasAnyOfReplacement;
+            // The defender-gated shape ("if the target is a defender it instead deals N%"): the
+            // base damage carries an `enemy-type` condition and a scaling add-on for the difference.
+            const hasEnemyTypeGatedReplacement = dmg.some((x) =>
+                x.conditions.some((c) => c.subject === 'enemy-type')
+            );
+            return (hasNegatedBase && hasAnyOfReplacement) || hasEnemyTypeGatedReplacement;
         },
     },
     {

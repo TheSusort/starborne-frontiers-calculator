@@ -217,7 +217,10 @@ describe('3.22 kits — charge, purge and repair clauses', () => {
         expect(only(abilities, 'debuff').conditions).toEqual([]);
     });
 
-    it('Sefuba passive R2: purging an enemy buff repairs 8% and purges 1 extra buff', () => {
+    // KNOWN GAP: the text repairs 8% per buff removed. The engine heals a flat 8% per purge
+    // because the on-enemy-purged listener passes no count and no heal reads purge-performed's
+    // count; whether the chained extra purge counts toward the heal is an open question.
+    it('Sefuba passive R2: pins the current flat-8% heal parse (not the per-buff kit) and the 1 extra purge', () => {
         const text =
             'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
         const abilities = parseSlot('passive', text);
@@ -276,8 +279,10 @@ describe('3.22 kits — passives', () => {
         expect(sigs(parseSlot('passive', text))).toEqual([]);
     });
 
-    // Only the buff extension is minted, and it fires on every cast: no trigger counts just the
-    // debuffs an active or charged cast inflicts (the R0 note above).
+    // KNOWN GAP: the extension fires on every cast, including a cast whose debuffs are all
+    // resisted, because no trigger counts just the debuffs an active or charged cast inflicts
+    // (the R0 note above). Whether the extension is per cast or per debuff is pending a user
+    // ruling.
     it('Ripper passive R2: only the all-allies buff extension is minted', () => {
         const text =
             'When this Unit inflicts a <unit-aid>debuff</unit-aid> with its active or charged skills, it also inflicts <unit-skill>Inferno II</unit-skill> for 2 turns and all allies active <unit-skill>buffs are extended by 1 turn</unit-skill>.';
@@ -287,5 +292,23 @@ describe('3.22 kits — passives', () => {
             statusKind: 'buff',
             turns: 1,
         });
+    });
+});
+
+describe('3.22 kits — Akula', () => {
+    // The ignore-Taunt/Provoke and don't-break-Stasis flags live in the passive sentence; the
+    // active and charged texts no longer carry them.
+    it('Akula: the passive alone grants both flags to the ship', () => {
+        const ship = {
+            refits: [],
+            chargeSkillCharge: 4,
+            activeSkillText: 'This Unit deals <unit-damage>160% damage</unit-damage>.',
+            chargeSkillText: 'This Unit deals <unit-damage>220% damage</unit-damage>.',
+            firstPassiveSkillText:
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP.",
+        } as unknown as Ship;
+        const built = buildShipAbilities(ship);
+        expect(built.ignoresForcedTargeting).toBe(true);
+        expect(built.doesntBreakStasis).toBe(true);
     });
 });

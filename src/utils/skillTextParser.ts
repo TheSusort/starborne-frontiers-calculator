@@ -2986,9 +2986,8 @@ export function detectPurgeEnemyTypeCondition(
         : undefined;
 }
 
-// "repaired this round" — the target-repaired-this-round gate (Nayra's charged purge and
-// Stasis/Exposed inflicts, Zosimos's active charge gain). Every reader tests it against the
-// gated clause's own sentence, whose "if" is the gate, so the phrase alone is enough. No
+// "repaired this round" — the target-repaired-this-round gate. Every reader tests it against
+// the gated clause's own sentence, whose "if" is the gate, so the phrase alone is enough. No
 // <unit-…> tags intervene in the phrase.
 const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
 

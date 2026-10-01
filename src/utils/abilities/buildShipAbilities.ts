@@ -2724,11 +2724,10 @@ function abilitiesFromText(
     // damage when hitting a Defender" gate). A passive purge with NO detected trigger is NOT
     // emitted (Sefuba's chain stays on PURGE_MORE_RE below). Purge is enemy-only (no support-flip).
     //
-    // C2b-3 update: Nayra's "if the target was repaired this round, purge all buffs" now emits
-    // with conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
-    // detectRepairedThisRoundCondition below). The engine cast path evaluates this condition;
-    // Task 3 populates targetRepairedThisRound on ConditionContext. Until then the condition
-    // always evaluates false, keeping production byte-identical (no Nayra fixture in any golden).
+    // Nayra's "if the target was repaired this round, purge all buffs" emits with
+    // conditions:[{subject:'target-repaired-this-round', derivable:true}] (see
+    // detectRepairedThisRoundCondition below); the engine cast path evaluates it against
+    // ConditionContext.targetRepairedThisRound.
     //
     // I6: the passive-voice "is Purged of all buffs" form (Lodolite charged) is picked up by
     // detectPassiveVoicePurge, merged in ONLY for the on-cast (active/charged) slots — the
@@ -2788,11 +2787,10 @@ function abilitiesFromText(
         });
     }
 
-    // Sefuba chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged.
-    // Emitted here, separately from the generic loop above. Sefuba's passive sentences carry no
-    // recognized purge trigger (on-attacked/end-of-round/killed-by-direct), so the generic loop's
-    // trigger-detection `continue` skips both of Sefuba p2's parsePurge matches — there is no
-    // double-emit risk. Count: PURGE_MORE_RE capture group 1 (digit or 'a'/'an' → 1).
+    // Chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged. Emitted here,
+    // separately from the generic loop above, which skips any purge sentence without a recognized
+    // trigger, so a chain purge is never emitted twice. Count: PURGE_MORE_RE capture group 1
+    // (digit or 'a'/'an' → 1).
     {
         const purgeMoreMatch = PURGE_MORE_RE.exec(text);
         if (purgeMoreMatch) {

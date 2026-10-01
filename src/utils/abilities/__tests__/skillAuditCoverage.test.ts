@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { collectFindings, csvAvailable, ungatedFinding } from '../../../../scripts/auditSkills';
+import {
+    collectFindings,
+    csvAvailable,
+    findingsForShip,
+    ungatedFinding,
+} from '../../../../scripts/auditSkills';
 import { Ability } from '../../../types/abilities';
 
 /**
@@ -111,5 +116,22 @@ describe('ungatedFinding hp-threshold parity', () => {
         // through to the INTENTIONAL_REACTIVE_RE "hp is below" skip rather than flagging.
         const plain = 'When its HP is below 50%, this Unit gains Attack Up III.';
         expect(ungatedFinding([ungatedBuff('Attack Up III')], plain)).toBeNull();
+    });
+});
+
+describe('instead-replacement rule', () => {
+    const gallant =
+        'This Unit deals <unit-damage>115% damage</unit-damage>, if the target is a defender it instead deals <unit-damage>155% damage</unit-damage>.';
+    const rulesFor = (text: string) =>
+        findingsForShip({ name: 'Probe', slots: [{ slot: 'active', text }] }).map((f) => f.rule);
+
+    it('accepts the defender-gated "instead deals" shape', () => {
+        expect(rulesFor(gallant)).not.toContain('instead-replacement');
+    });
+
+    it('still flags an "instead deals" clause with no modelled gate', () => {
+        const text =
+            'This Unit deals <unit-damage>115% damage</unit-damage>, if it is a full moon it instead deals <unit-damage>155% damage</unit-damage>.';
+        expect(rulesFor(text)).toContain('instead-replacement');
     });
 });
