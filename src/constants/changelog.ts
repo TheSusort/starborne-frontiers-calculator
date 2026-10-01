@@ -1,32 +1,37 @@
 import { ChangelogEntry } from '../types/changelog';
 
-export const CURRENT_VERSION = '1.70.0';
+export const CURRENT_VERSION = '1.71.0';
 
 // Accumulates between releases. `npm run release` folds these into a new ChangelogEntry at the
 // top of CHANGELOG, bumps CURRENT_VERSION and empties this array — all three together, because a
 // bumped version whose entries are still unreleased shows users a what's-new dialog listing
 // nothing. Do it by hand only if that script cannot.
-export const UNRELEASED_CHANGES: string[] = [
-    'Combat simulator: a weaker debuff no longer overrides or rolls against a stronger one.',
-    "Combat simulator: Block Debuff no longer triggers resist reactions like Prophet's, Vindicator's or Lockdown's.",
-    'Combat simulator: Prophet gains stacking shield penetration whenever an ally resists.',
-    'Combat simulator: Provider now strikes each enemy another ally inflicts a debuff on.',
-    'Combat simulator: skills triggered by "an ally" now also trigger on the ship itself.',
-    'Combat simulator: Grif now hits every enemy whose debuff gets cleansed.',
-    "AI assistants: can now read one simulated battle's full turn-by-turn log.",
-    "AI assistants: battle simulations now list each fight's winner and length.",
-    'AI assistants: battle simulations now run 20 fights by default.',
-    'AI assistants: one battle simulation now runs at most 50 fights.',
-    'AI assistants: stat sweeps now take up to 10 steps plus your current value.',
-    'Combat simulator: start- and end-of-round effects now resolve in turn order across teams.',
-    'Combat simulator: Shashou now gains Stealth whenever he damages a Debuffer or Supporter.',
-    'Combat simulator: start-of-combat effects like Cloaking now land before start-of-round ones.',
-    'Combat simulator: enemy "if an enemy has" passives, like Graphite\'s, now check your team.',
-    "Combat simulator: applied debuffs like Provoke no longer trigger 'inflict' passives.",
-    'Combat simulator: Yuyan now gains Stealth only from debuffs she applies.',
-];
+export const UNRELEASED_CHANGES: string[] = [];
 
 export const CHANGELOG: ChangelogEntry[] = [
+    {
+        version: '1.71.0',
+        date: '2026-10-01',
+        changes: [
+            'Combat simulator: a weaker debuff no longer overrides or rolls against a stronger one.',
+            "Combat simulator: Block Debuff no longer triggers resist reactions like Prophet's, Vindicator's or Lockdown's.",
+            'Combat simulator: Prophet gains stacking shield penetration whenever an ally resists.',
+            'Combat simulator: Provider now strikes each enemy another ally inflicts a debuff on.',
+            'Combat simulator: skills triggered by "an ally" now also trigger on the ship itself.',
+            'Combat simulator: Grif now hits every enemy whose debuff gets cleansed.',
+            "AI assistants: can now read one simulated battle's full turn-by-turn log.",
+            "AI assistants: battle simulations now list each fight's winner and length.",
+            'AI assistants: battle simulations now run 20 fights by default.',
+            'AI assistants: one battle simulation now runs at most 50 fights.',
+            'AI assistants: stat sweeps now take up to 10 steps plus your current value.',
+            'Combat simulator: start- and end-of-round effects now resolve in turn order across teams.',
+            'Combat simulator: Shashou now gains Stealth whenever he damages a Debuffer or Supporter.',
+            'Combat simulator: start-of-combat effects like Cloaking now land before start-of-round ones.',
+            'Combat simulator: enemy "if an enemy has" passives, like Graphite\'s, now check your team.',
+            "Combat simulator: applied debuffs like Provoke no longer trigger 'inflict' passives.",
+            'Combat simulator: Yuyan now gains Stealth only from debuffs she applies.',
+        ],
+    },
     {
         version: '1.70.0',
         date: '2026-09-29',
