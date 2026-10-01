@@ -481,9 +481,11 @@ export interface Finding {
 
 // Records every (ship, ruleId) pair for which a finding WOULD have been reported absent the
 // allowlist (i.e. the keyword matched, the parser did NOT handle it, so isAllowed was consulted).
-// Lets `unusedAllowlistEntries` flag allowlist rows that no longer suppress anything (stale) —
+// Lets `unusedAllowlistPairs` flag allowlist rows that no longer suppress anything (stale) —
 // e.g. after the reference CSV is refreshed and a source typo the entry existed for is fixed.
-// Cleared at the start of every `collectFindings` pass so repeated calls don't accumulate.
+// `findingsForShip` records consultations; only `collectFindings` clears the set. So
+// `unusedAllowlistPairs` is accurate only immediately after a `collectFindings` pass — any
+// process that calls `findingsForShip` directly (like the catalogue sync gate) must not rely on it.
 const consultedAllowKeys = new Set<string>();
 // Ship names actually audited in the last pass. Guards `unusedAllowlistPairs` against
 // false-flagging entries for ships the CSV reader DROPPED (multi-line records — see readShips):
