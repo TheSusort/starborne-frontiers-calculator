@@ -22,6 +22,8 @@ export const UNRELEASED_CHANGES: string[] = [
     'Combat simulator: Shashou now gains Stealth whenever he damages a Debuffer or Supporter.',
     'Combat simulator: start-of-combat effects like Cloaking now land before start-of-round ones.',
     'Combat simulator: enemy "if an enemy has" passives, like Graphite\'s, now check your team.',
+    "Combat simulator: applied debuffs like Provoke no longer trigger 'inflict' passives.",
+    'Combat simulator: Yuyan now gains Stealth only from debuffs she applies.',
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

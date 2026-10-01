@@ -66,6 +66,10 @@ export interface ChargeGain {
     // When present, buildShipAbilities uses these verbatim instead of deriving a single
     // condition from `condition`, and they coexist with a (non-reactive-event) trigger.
     conditions?: Condition[];
+    // The clause's own landing verb for an on-debuff-inflicted/on-ally-debuff-inflicted `trigger`
+    // (Ability.triggerApplicationFilter's source) — 'inflict' for both corpus rows today (Hemlock,
+    // Oleander). Undefined for every other `trigger` value.
+    applicationVerb?: 'inflict' | 'apply';
 }
 
 export interface Buff {

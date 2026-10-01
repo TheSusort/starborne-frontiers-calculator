@@ -474,7 +474,40 @@ export function partitionReactiveAbilities(shipSkills: ShipSkills): {
  * owners in input order; within an owner, slot/text order (the per-owner reactiveAbilities are
  * already in slot/text order from partitionReactiveAbilities). Fixed registration order = fixed
  * listener-fire order = fixed intent-enqueue order.
+ *
+ * The debuff-inflicted trigger family (on-debuff-inflicted, on-ally-debuff-inflicted,
+ * on-other-ally-debuff-inflicted, on-ally-debuffed) additionally gates on
+ * `ra.ability.triggerApplicationFilter` via `passesApplicationFilter` below — see that function's
+ * doc for what counts as an inflict vs an apply.
  */
+
+/**
+ * Whether a landed debuff/DoT satisfies a reactive ability's `triggerApplicationFilter` — the
+ * parser-derived split for a clause whose own text says "inflict" (gated by the hacking-vs-
+ * security roll) vs "apply" (lands unconditionally, no roll — Provoke, Concentrate Fire, Disable).
+ *
+ * A `dot-applied` event never carries `application`: every DoT landing site draws a roll
+ * (playerTurn.ts's cast-path `roundDebuffLanded`, its splash arm's hardcoded `'inflict'` decision,
+ * and the reactive single-victim/fan-out arms' own `debuffLandingGate` draws), and no DoT
+ * AbilityConfig variant carries an `application` field at all — so a DoT always counts as an
+ * inflict. A `debuff-applied` event with no `application` is a corpus shape predating #592 and is
+ * likewise treated as an inflict (matching `playerTurn.ts`'s `application === 'apply' ? ... :
+ * debuffLandingGate(...)` branch and `cfg.application !== 'apply'` at this file's reactive debuff
+ * executor — both treat anything other than `'apply'` as a drawn roll).
+ *
+ * `filter === undefined` (a clause with no "inflict"/"apply" verb of its own — APEX's "gets
+ * debuffed", the Insidiousness implant's "debuffing") takes neither reading and passes
+ * unconditionally.
+ */
+function passesApplicationFilter(
+    filter: 'inflict' | 'apply' | undefined,
+    application: 'inflict' | 'apply' | undefined
+): boolean {
+    if (filter === undefined) return true;
+    const inflicted = application !== 'apply';
+    return filter === 'inflict' ? inflicted : !inflicted;
+}
+
 export function registerReactiveListeners(args: {
     bus: CombatEventBus;
     perOwner: { ownerId: string; reactiveAbilities: ReactiveAbility[] }[];
@@ -772,14 +805,28 @@ export function registerReactiveListeners(args: {
                         // damage branch (Insidiousness) hits the enemy this infliction actually
                         // landed on rather than falling through to the first living opposing
                         // actor. Every other consumer of this trigger ignores the field.
-                        if (e.sourceId === ownerId && !e.viaDebuffInflictedReaction)
+                        // `passesApplicationFilter`: Warden's own clause reads "inflicts" (filter
+                        // 'inflict') so her Provoke-only active (an apply) does not wake this
+                        // listener — only her inflicted Corrosion does. Yuyan's sibling clause
+                        // reads "applying" (filter 'apply') and is gated the other way.
+                        if (
+                            e.sourceId === ownerId &&
+                            !e.viaDebuffInflictedReaction &&
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
+                        )
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
                             });
                     });
                     bus.on('dot-applied', (e) => {
-                        if (e.sourceId === ownerId)
+                        if (
+                            e.sourceId === ownerId &&
+                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
+                        )
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, debuffVictimId: e.targetId },
@@ -799,9 +846,16 @@ export function registerReactiveListeners(args: {
                         // debuff-applied/dot-applied, so it never reaches this guard at all). Does
                         // NOT bound a two-ship ping-pong (A's reaction waking B's, B's waking A's
                         // back) — that guard would have to ignore the brand regardless of source.
+                        // Oleander's own clause reads "inflicts" (filter 'inflict' —
+                        // passesApplicationFilter) so an ally's applied Concentrate Fire gives her
+                        // nothing; only an ally's inflicted debuff charges her Charged Skill.
                         if (
                             !isOpposing(e.sourceId) &&
-                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction)
+                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
                         )
                             enqueue({
                                 ...intent,
@@ -814,7 +868,8 @@ export function registerReactiveListeners(args: {
                         // self-chain guard as the debuff-applied arm above.
                         if (
                             !isOpposing(e.sourceId) &&
-                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction)
+                            !(e.sourceId === ownerId && e.viaAllyDebuffInflictedReaction) &&
+                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
                         )
                             enqueue({
                                 ...intent,
@@ -851,14 +906,16 @@ export function registerReactiveListeners(args: {
                     // test), and no OTHER reactive family's debuff output is affected (the brand
                     // is set only at this trigger's own emission sites).
                     bus.on('debuff-applied', (e) => {
-                        // #590 R3: an applied debuff (no hacking roll — Concentrate Fire, Provoke)
-                        // is not "inflicted" by the game's own wording, so it does not wake this
-                        // listener; an undefined `application` (a shape that predates the field)
-                        // is treated as inflicted, matching every corpus fixture's prior behaviour.
-                        if (e.application === 'apply') return;
+                        // Provider's own clause reads "inflicts" (filter 'inflict') — an ally's
+                        // applied Provoke does not wake this listener; passesApplicationFilter's
+                        // doc covers the undefined-filter and undefined-`e.application` defaults.
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction
+                            !e.viaOtherAllyDebuffInflictedReaction &&
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
                         )
                             enqueue({
                                 ...intent,
@@ -867,11 +924,12 @@ export function registerReactiveListeners(args: {
                     });
                     bus.on('dot-applied', (e) => {
                         // An ally's DoT landing counts as a debuff inflicted — same guard as the
-                        // debuff-applied arm above. DoTs carry no `application` field: they are
-                        // always rolled, never unconditionally applied.
+                        // debuff-applied arm above (a DoT always passes an 'inflict' filter; see
+                        // passesApplicationFilter's doc).
                         if (
                             isSameSideAlly(e.sourceId, ownerId) &&
-                            !e.viaOtherAllyDebuffInflictedReaction
+                            !e.viaOtherAllyDebuffInflictedReaction &&
+                            passesApplicationFilter(ra.ability.triggerApplicationFilter, undefined)
                         )
                             enqueue({
                                 ...intent,
@@ -1275,7 +1333,18 @@ export function registerReactiveListeners(args: {
                         // Self-scoped: fires when THIS owner receives a timed debuff. Mirrors
                         // on-attacked's targetId === ownerId scoping. DoTs use dot-applied (not
                         // this event) → Firewall does not fire on DoT application, by design.
-                        if (e.targetId === ownerId) enqueue(intent);
+                        // Firewall's implant text ("when debuffed") names no verb, so it carries
+                        // no triggerApplicationFilter and this call always passes unconditionally
+                        // (passesApplicationFilter's doc) — unchanged from before this trigger
+                        // family's gate existed.
+                        if (
+                            e.targetId === ownerId &&
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
+                        )
+                            enqueue(intent);
                     });
                     break;
                 case 'on-ally-debuffed':
@@ -1284,8 +1353,16 @@ export function registerReactiveListeners(args: {
                         // owner included, see the ruling in the trigger doc block above. Route
                         // the reactive repair to that unit via damagedAllyId. Excludes every
                         // opposing actor and DoTs (dot-applied), matching on-debuffed's
-                        // debuff-applied-only scoping.
-                        if (!isOpposing(e.targetId))
+                        // debuff-applied-only scoping. Hayyan's own clause reads "inflicted"
+                        // (filter 'inflict' — passesApplicationFilter) so an enemy applying
+                        // Provoke to her ally gives her nothing; only an inflicted debuff repairs.
+                        if (
+                            !isOpposing(e.targetId) &&
+                            passesApplicationFilter(
+                                ra.ability.triggerApplicationFilter,
+                                e.application
+                            )
+                        )
                             enqueue({
                                 ...intent,
                                 eventCtx: { ...intent.eventCtx, damagedAllyId: e.targetId },

@@ -1803,6 +1803,7 @@ describe('parseChargeGain', () => {
             condition: 'always',
             derivable: true,
             trigger: 'on-debuff-inflicted',
+            applicationVerb: 'inflict',
         });
     });
 
@@ -1814,6 +1815,7 @@ describe('parseChargeGain', () => {
             condition: 'always',
             derivable: true,
             trigger: 'on-ally-debuff-inflicted',
+            applicationVerb: 'inflict',
         });
     });
 

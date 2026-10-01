@@ -154,6 +154,10 @@ describe('Oleander (player-side) — her OWN debuff infliction also adds a charg
     });
 });
 
+// `application: 'inflict'` — Oleander/Hayyan's reactive triggers are gated inflict-only
+// (triggerApplicationFilter), so an 'apply' debuff here would silently never wake them. Every
+// caster below carries hacking far above the target's default security (100) so the landing
+// roll this now draws is deterministic (100% chance), not a source of flakiness.
 const debuffAbility = (buffName: string): Ability => ({
     id: `deb-${buffName}`,
     type: 'debuff',
@@ -166,7 +170,7 @@ const debuffAbility = (buffName: string): Ability => ({
         parsedEffects: {},
         stacks: 1,
         isStackable: false,
-        application: 'apply', // always lands — isolates the reactive-routing behavior under test
+        application: 'inflict',
         duration: 5,
     },
 });
@@ -199,7 +203,7 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
-                hacking: 100,
+                hacking: 999, // >> the target's default security (100) — a deterministic land
                 defence: 0,
                 hp: 10_000,
             },
@@ -228,7 +232,7 @@ describe('Oleander (player-side) — RoT routes to the inflicting ally, capped o
                 crit: 0,
                 critDamage: 0,
                 defensePenetration: 0,
-                hacking: 100,
+                hacking: 999, // >> the target's default security (100) — a deterministic land
                 defence: 0,
                 hp: 10_000,
             },
@@ -369,7 +373,10 @@ describe('Hayyan RoT-repair — extracted ability shape (mutation guard)', () =>
     });
 });
 
-/** An enemy that lands a timed (non-DoT) debuff on the player focus every round. */
+/** An enemy that lands a timed (non-DoT) debuff on the player focus every round. No explicit
+ *  hacking → the default 200 vs the target's default security 100 is a deterministic 100% land
+ *  (see `liveDebuffLandingChance`), so `application: 'inflict'` (Hayyan's gate requires it) needs
+ *  no stat changes here. */
 const debuffEnemy = (id: string): EnemyAttacker => ({
     id,
     stats: { attack: 1, crit: 0, critDamage: 0, defence: 0, hp: 1_000_000_000, speed: 1000 },
@@ -392,7 +399,7 @@ const debuffEnemy = (id: string): EnemyAttacker => ({
                             parsedEffects: {},
                             stacks: 1,
                             isStackable: false,
-                            application: 'apply',
+                            application: 'inflict',
                             duration: 1,
                         },
                     },

@@ -42,6 +42,7 @@ import {
     detectReactiveTrigger,
     detectAllyInflictsGrantTrigger,
     detectOtherAllyInflictsGrantTrigger,
+    detectDebuffInflictionVerb,
     detectPreCombatBuffTrigger,
     detectPreCombatShieldTrigger,
     detectDamageReactionTrigger,
@@ -109,6 +110,7 @@ import {
     REMOVE_CHARGE_RE,
     ONCE_PER_ALLY_PER_ROUND_RE,
     parseOtherAllyInflictsDebuff,
+    parseOtherAllyInflictsDebuffVerb,
     parseDetonateDoT,
     parseAccumulateDetonate,
     isAccumulateDetonateEffect,
@@ -1745,6 +1747,8 @@ function abilitiesFromText(
     // via eventCtx.debuffVictimId (triggers.ts). The trigger IS the gate, so no manual condition.
     if (parseOtherAllyInflictsDebuff(text) && out[0]?.ability.type === 'damage') {
         out[0].ability.trigger = 'on-other-ally-debuff-inflicted';
+        const verb = parseOtherAllyInflictsDebuffVerb(text);
+        if (verb) out[0].ability.triggerApplicationFilter = verb;
     }
 
     // "deals N% damage to enemies (with|afflicted with) <effect>" — gate the damage on the enemy
@@ -2442,6 +2446,12 @@ function abilitiesFromText(
                 ...(h.damageReaction?.critFilter
                     ? { triggerCritFilter: h.damageReaction.critFilter }
                     : {}),
+                // Hayyan: ALLY_DEBUFFED_RE only ever matches its own literal "debuff is inflicted
+                // on an ally" wording, so on-ally-debuffed is unconditionally an inflict here (no
+                // "applied" counterpart exists for this detector to miss).
+                ...(reactiveTrigger === 'on-ally-debuffed'
+                    ? { triggerApplicationFilter: 'inflict' as const }
+                    : {}),
                 conditions: healConditions,
                 // Recipient STATE filter ("all allies with Stealth repairs 10% …" — Chimei R2).
                 // Read from this heal's OWN sentence, and only for an ally-scoped target: a
@@ -2625,6 +2635,9 @@ function abilitiesFromText(
                 type: 'cleanse',
                 target: dr.target,
                 trigger,
+                // ON_DEBUFF_INFLICTION_RE only ever matches the literal "on debuff infliction"
+                // noun phrase — there is no "application" counterpart for this detector to miss.
+                ...(dr.onDebuffInflicted ? { triggerApplicationFilter: 'inflict' as const } : {}),
                 conditions: [],
                 config: {
                     type: 'cleanse',
@@ -2776,6 +2789,9 @@ function abilitiesFromText(
                 type: 'charge',
                 target: 'self',
                 trigger: reactiveTrigger ?? 'on-cast',
+                ...(charge.applicationVerb
+                    ? { triggerApplicationFilter: charge.applicationVerb }
+                    : {}),
                 conditions,
                 config: { type: 'charge', amount: charge.amount },
                 autoFilled: true,
@@ -3402,6 +3418,12 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                 extendChanceFromCritPower: true,
             };
             ability.trigger = 'on-ally-debuff-inflicted';
+            // Belladonna's clause reads "an ally INFLICTS Corrosion" — hardcoded rather than
+            // routed through detectDebuffInflictionVerb, which is buffName-clause-scoped and
+            // this ability's own buffName names the CONVERSION TARGET ("Acidic Decay"), not the
+            // DoT the trigger clause actually names ("Corrosion"). Belladonna is corpus-unique for
+            // convert-dot, so there is no second ship this could silently mis-tag.
+            ability.triggerApplicationFilter = 'inflict';
             ability.target = 'enemy';
             const convertPos = findBuffNamePos(rowText, buff.buffName);
             pushToSlot(bySlot, slot, [{ ability, pos: convertPos >= 0 ? convertPos : MAX_POS }]);
@@ -3581,6 +3603,20 @@ export function buildShipAbilities(ship: Ship): ShipSkills {
                         c.subject === 'ally-inflicts-debuff'
                     )
             );
+            // The debuff-inflicted trigger family reads this clause's OWN landing verb
+            // (Ability.triggerApplicationFilter's doc) so the reactive listener can tell an
+            // "inflicts" clause (Oleander, Warden, Butcher, Prospect, Torcher) from an "applies"
+            // one (Yuyan) riding the SAME trigger name. Resolved from the same clause the trigger
+            // itself came from, so the two can never disagree.
+            if (
+                rowText &&
+                (reactiveTrigger === 'on-debuff-inflicted' ||
+                    reactiveTrigger === 'on-ally-debuff-inflicted' ||
+                    reactiveTrigger === 'on-other-ally-debuff-inflicted')
+            ) {
+                const verb = detectDebuffInflictionVerb(rowText, buff.buffName, occurrence);
+                if (verb) ability.triggerApplicationFilter = verb;
+            }
             // Oleander's "once per ally per round" RoT grant: a DEDICATED cap (not the plain
             // oncePerRound flag) so a different ally inflicting a debuff still procs even if
             // another ally already consumed the cap this round.

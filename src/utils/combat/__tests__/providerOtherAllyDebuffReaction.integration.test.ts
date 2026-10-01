@@ -146,6 +146,10 @@ describe('on-other-ally-debuff-inflicted — listener wiring', () => {
             type: 'damage',
             target: 'enemy',
             trigger: 'on-other-ally-debuff-inflicted',
+            // Mirrors the real parsed kit: Provider's own clause reads "inflicts", so the parser
+            // sets this — the hand-built fixture must carry it too, or the apply-exclusion tests
+            // below have nothing to gate on.
+            triggerApplicationFilter: 'inflict',
             conditions: [],
             config: { type: 'damage', multiplier: 50, noCrit: true },
         };

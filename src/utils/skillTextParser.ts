@@ -1593,6 +1593,41 @@ const APPLYING_DEBUFF_RE = /\b(?:upon|on|after|when)\s+(?:inflicting|applying)\s
 // inflicted / on-attacked, resolved elsewhere). Corpus-verified: Warden is the only ship with
 // this exact phrasing.
 const SELF_INFLICTS_DEBUFF_RE = /\bwhen\s+this\s+unit\s+inflicts\s+(?:a\s+)?debuff/i;
+
+// The literal landing verb in a debuff-infliction reactive clause: "inflict"-family text means a
+// successful hacking-roll infliction (AbilityConfig's `application:'inflict'`), "apply"-family
+// text means an unconditional land with no roll (`application:'apply'` — Provoke, Concentrate
+// Fire, Disable). Checked "inflict" first; the two families are mutually exclusive in every
+// corpus clause this runs against (each is a single reactive trigger phrase, never both at once).
+const DEBUFF_VERB_RE = /\binflict\w*\b|\bappl(?:y|ies|ying|ied)\b/i;
+/**
+ * Resolves a reactive clause's own landing verb for `Ability.triggerApplicationFilter`. Returns
+ * undefined when the clause uses neither family (a neutral phrasing like "gets debuffed" (APEX)
+ * or "debuffing" (the Insidiousness implant)) — callers leave `triggerApplicationFilter` unset in
+ * that case, so the reactive listener fires on either landing, unchanged.
+ */
+export function debuffTriggerVerb(
+    clause: string | null | undefined
+): 'inflict' | 'apply' | undefined {
+    if (!clause) return undefined;
+    const m = DEBUFF_VERB_RE.exec(clause);
+    if (!m) return undefined;
+    return /^inflict/i.test(m[0]) ? 'inflict' : 'apply';
+}
+/**
+ * `debuffTriggerVerb`, scoped to `buffName`'s own clause (resolveBuffClause) — the verb-detection
+ * counterpart of `detectAllyInflictsGrantTrigger`/`detectOtherAllyInflictsGrantTrigger`, called
+ * alongside them (and `detectReactiveTrigger`) wherever a grant resolves to the debuff-inflicted
+ * trigger family so the field is derived from the SAME clause the trigger itself came from.
+ */
+export function detectDebuffInflictionVerb(
+    text: string | null | undefined,
+    buffName: string,
+    occurrenceIndex = 0
+): 'inflict' | 'apply' | undefined {
+    if (!text || !buffName) return undefined;
+    return debuffTriggerVerb(resolveBuffClause(text, buffName, occurrenceIndex));
+}
 // "If its debuff is resisted" — Ravager's INFLICTOR-side reaction (the debuff THIS unit
 // inflicted got resisted). Distinct from the resister-side "when this Unit resists a debuff"
 // (parseOnResistHpDamage). Corpus-verified: Ravager is the only "its debuff is resisted" row.
@@ -3927,6 +3962,19 @@ export function parseOtherAllyInflictsDebuff(text: string | null | undefined): b
     return !!text && OTHER_ALLY_INFLICTS_DEBUFF_RE.test(stripUnitTags(text));
 }
 
+/** `debuffTriggerVerb`, scoped to the SAME "another/other ally inflicts/applies a debuff" match
+ *  `parseOtherAllyInflictsDebuff` tested for — reads the matched substring itself rather than the
+ *  whole row text, so a later unrelated "inflict"/"apply" elsewhere in the row (Provider's refit
+ *  row also inflicts Crit Rate Down II in a later clause) can never be mistaken for this clause's
+ *  own verb. Undefined when the clause doesn't match at all. */
+export function parseOtherAllyInflictsDebuffVerb(
+    text: string | null | undefined
+): 'inflict' | 'apply' | undefined {
+    if (!text) return undefined;
+    const m = OTHER_ALLY_INFLICTS_DEBUFF_RE.exec(stripUnitTags(text));
+    return m ? debuffTriggerVerb(m[0]) : undefined;
+}
+
 /**
  * Parses a self-targeted Charged-Skill charge gain from skill text. Returns null
  * for ally-grant, enemy-removal, on-kill, and enemy-repair phrasings (out of
@@ -3978,10 +4026,17 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
             condition: 'always',
             derivable: true,
             trigger: 'on-ally-debuff-inflicted',
+            applicationVerb: debuffTriggerVerb(plain),
         };
     }
     if (low.includes('inflict') && low.includes('debuff')) {
-        return { amount, condition: 'always', derivable: true, trigger: 'on-debuff-inflicted' };
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            trigger: 'on-debuff-inflicted',
+            applicationVerb: debuffTriggerVerb(plain),
+        };
     }
 
     // Phase 3 (Cobalt): start-of-turn self-charge gated on full HP. Placed after the
