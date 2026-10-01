@@ -2187,9 +2187,14 @@ function abilitiesFromText(
         // position selects the heal's trigger: the position-scoped detectors below
         // (detectStartOfRoundTrigger, detectPreCombatShieldTrigger, detectEveryTurnTrigger,
         // detectCritRepairTrigger, ...) read the sentence around it. The `(?<![\d.])` lookbehind
-        // stops a smaller pct anchoring inside a larger tagged number (5% inside "25%").
+        // stops a smaller pct anchoring inside a larger tagged number (5% inside "25%"). A tag
+        // naming a penetration stat ("<unit-damage>20% shield penetration</unit-damage>") is never
+        // a repair or shield amount, so the anchor skips it even when its pct is the same.
         const healTagPos = text.search(
-            new RegExp(`<unit-damage>(?:[^<]*?)(?<![\\d.])${escNum(h.pct)}%`, 'i')
+            new RegExp(
+                `<unit-damage>(?![^<]*penetration)(?:[^<]*?)(?<![\\d.])${escNum(h.pct)}%`,
+                'i'
+            )
         );
         const fallbackPos = text.search(h.kind === 'shield' ? /shield/i : /repair/i);
         const healPos = healTagPos >= 0 ? healTagPos : fallbackPos;
@@ -2503,14 +2508,19 @@ function abilitiesFromText(
         // cleanse is on-cast) and position-scoped, so only a passive cleanse whose own sentence
         // carries the reaction phrase flips (corpus: Purifier alone — Makoli/Nosorog/Nyxen's
         // cleanses sit in active/charged slots or a different sentence; Cultivator's is on-own-cleanse).
-        // Nuqtu (Phase 3 PR-I): "Cleanses 1 debuff from itself (once per round) ... when an enemy
-        // gets buffed" rides on-enemy-buffed (position-scoped; opposing-scoped trigger).
+        // Nuqtu: "Cleanses 1 debuff from itself (once per round) ... when an enemy gets buffed"
+        // rides on-enemy-buffed (position-scoped; opposing-scoped trigger). "Every turn this Unit
+        // cleanses 1 debuff, once per round, and when an enemy gains a buff …" is a per-turn
+        // cleanse: the leading "every turn" governs the cleanse and the "when" clause governs only
+        // the grants after it, so the every-turn check runs BEFORE the enemy-buffed one (both are
+        // sentence-scoped and this sentence carries both phrases).
         // AEGIS (SP-F F2): "cleanses all debuffs when an ally ... has their Shield destroyed"
         // rides on-ally-shield-destroyed — position-scoped like the siblings above (this loop has
         // no buff name to resolve a clause on).
         const reactiveTrigger =
             detectCritRepairTrigger(text, cleansePos) ??
             detectAllyCritTrigger(text, cleansePos) ??
+            detectEveryTurnTrigger(text, cleansePos) ??
             detectEnemyBuffedTrigger(text, cleansePos) ??
             detectAllyShieldDestroyedTrigger(text, cleansePos) ??
             (slot === 'passive' &&

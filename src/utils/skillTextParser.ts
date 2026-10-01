@@ -1528,17 +1528,16 @@ const ENEMY_CLEANSE_RE = /\bwhen\s+an?\s+enemy\b[^.]*?\bcleanses?\b[^.]*?\bdebuf
 // Nosorog's "when this Unit removes a Debuff" phrasing is now also covered.
 const OWN_CLEANSE_TRIGGER_RE =
     /\b(?:when\s+this\s+unit\s+cleanses\s+a\s+debuff|(?:when|upon)\s+cleansing\s+a\s+debuff|when\s+this\s+unit\s+removes\s+a\s+debuff)\b/i;
-// Phase 3 PR-I: "when an enemy gets/is/becomes buffed" — Nuqtu's self-cleanse + Terran Bolster
-// III grant. Promoted from a manual, non-derivable `enemy-buff` CONDITION (detectGrantConditions
-// rule 4b below, which the single-ship DPS sim still consumes as a manual toggle — no enemy casts
-// buffs there) to a LIVE reactive trigger for the team simulator. Requires a leading "when" (mirrors
-// ENEMY_DEBUFFED_RE's sibling regex below) to disambiguate from an unrelated later "enemy buffed"
-// mention in a longer sentence. Corpus-verified (docs/ship-skills.csv, grep this exact phrase
-// family): ONLY Nuqtu's two passives (base + refit) match — no collateral on any other ship's
-// "for each buff on the enemy" per-count scaling (Nuqtu's own active/charged text) or any other
-// enemy-buff condition consumer (Amartya/Panon Taunt-style gates use a different phrasing).
+// "when an enemy gets/is/becomes buffed" / "when an enemy gains a buff" — Nuqtu's enemy-buff
+// reaction, a LIVE reactive trigger for the team simulator (the single-ship DPS sim still reads
+// the manual `enemy-buff` CONDITION, detectGrantConditions rule 4b below — no enemy casts buffs
+// there). Requires a leading "when" (mirrors ENEMY_DEBUFFED_RE's sibling regex below) so an
+// unrelated later "enemy buffed" mention in a longer sentence is not a reaction. The "gains"
+// form needs the generic "a buff" noun (tagged or not), so "when an enemy defender gains Taunt"
+// (ENEMY_GAINS_TAUNT_RE) and "for each buff on the enemy" per-count scaling stay out. Tested on
+// raw sentences (detectEnemyBuffedTrigger) and tag-stripped clauses (detectReactiveTrigger).
 const ENEMY_BUFFED_RE =
-    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b/i;
+    /\bwhen\b[^.]*?\benem(?:y|ies)\b[^.]*?\b(?:gets?|is|are|becomes?)\s+buffed\b|\bwhen\s+an?\s+enemy\s+gains\s+an?\s+(?:<unit-\w+>\s*)?buff\b/i;
 // Enemy-death phrasings that resolve a buff grant/removal, a self charge gain or a self-repair
 // to on-enemy-destroyed. Our wording: "on (a) kill", "killing an enemy/opponent", "when an enemy
 // dies". The official catalogue's: "upon destroying an enemy", "when this Unit destroys an
@@ -2381,16 +2380,18 @@ export function detectAllyShieldDestroyedTrigger(
     return phrasePosTrigger(text, ALLY_SHIELD_DESTROYED_RE, anchorPos, 'on-ally-shield-destroyed');
 }
 
-// Nuqtu's self-cleanse "(once per round)" cap — the plain self-scoped Ability.oncePerRound flag
-// (no per-ally/per-enemy dimension; this is a self-target effect). Position-scoped to the
-// cleanse's OWN sentence so an unrelated "once per round" phrase elsewhere in the same passive
-// row could never leak onto this cleanse. Reference data: docs/ship-skills.csv — grep-verified
-// the parenthesized "(once per round)" phrasing appears ONLY on Nuqtu's two passives.
-const CLEANSE_ONCE_PER_ROUND_RE = /\(once per round\)/i;
+// Nuqtu's self-cleanse cap — "(once per round)" or "cleanses 1 debuff, once per round" — the
+// plain self-scoped Ability.oncePerRound flag (no per-ally/per-enemy dimension; this is a
+// self-target effect). Position-scoped to the cleanse's OWN sentence, and the unparenthesised
+// form must follow the cleanse clause directly, so a "once per round" belonging to another
+// clause of the passive does not cap the cleanse.
+const CLEANSE_ONCE_PER_ROUND_RE =
+    /\(once per round\)|\bcleanses?\s+\d+\s+debuffs?(?:<\/unit-\w+>)?,\s*once per round\b/i;
 
 /**
- * Returns true when `anchorPos` falls inside the sentence carrying the "(once per round)"
- * phrase; otherwise false. Position-scoped on the RAW text (mirrors detectEnemyBuffedTrigger).
+ * Returns true when `anchorPos` falls inside a sentence carrying the cleanse's once-per-round cap
+ * (CLEANSE_ONCE_PER_ROUND_RE); otherwise false. Position-scoped on the RAW text (mirrors
+ * detectEnemyBuffedTrigger).
  */
 export function detectCleanseOncePerRound(
     text: string | null | undefined,
@@ -2792,13 +2793,12 @@ export function detectEndOfRoundDamageTrigger(
     return phrasePosTrigger(text, END_OF_ROUND_RE, anchorPos, 'end-of-round');
 }
 
-// Epic PR4: a round-start CONTINUATION sentence with no round-start phrase of its own, whose
-// governing trigger lives in the IMMEDIATELY PRECEDING sentence. Two corpus shapes:
-//   - "Then, deals N% damage …" directly after a "starts each round with <buff> if …" sentence
-//     (Chakara's R2 passive: the buff grant is already correctly start-of-round via
-//     STARTS_ROUND_WITH_RE/findVerb; the trailing damage sentence was not). Lodolite's charged
-//     "Then, the enemy with the most Buffs is Purged" is the ONLY other "Then," in the corpus —
-//     its preceding sentence is a plain on-cast damage clause, so it correctly falls through.
+// A round-start CONTINUATION sentence with no round-start phrase of its own, whose governing
+// trigger lives in the IMMEDIATELY PRECEDING sentence. Two shapes:
+//   - "Then, deals N% damage …" / "Then deals N% damage …" (comma optional) directly after a
+//     round-start sentence — "starts each round with <buff> if …" or "At the start of the round,
+//     if …, it gains <buff>" (Chakara's R2 passive). A "Then" sentence whose preceding sentence
+//     is a plain on-cast clause (Lodolite's charged purge) falls through.
 //   - "… also gains <Buff>" directly after an "At the start of the round, this Unit gains
 //     <Buff>." sentence (Isha p1/p2 "If Nayra is on the same team, it also gains Defensive
 //     Affinity Override"; Nayra p2 "If Isha is on the same team, this Unit also gains Offensive
@@ -2806,7 +2806,7 @@ export function detectEndOfRoundDamageTrigger(
 //     because they share ONE sentence with the round-start phrase; only the split-sentence p2
 //     form needs this fallback. Corpus-verified unique (no other "also gains" sentence in
 //     docs/ship-skills.csv follows a round-start sentence).
-const THEN_CONTINUATION_RE = /^\s*then,/i;
+const THEN_CONTINUATION_RE = /^\s*then\b/i;
 const ALSO_GAINS_CONTINUATION_RE = /\balso\s+gains?\b/i;
 
 export function detectRoundStartContinuationTrigger(
@@ -2957,16 +2957,15 @@ export function detectMostBuffsTarget(text: string | null | undefined, anchorPos
     return sentence !== undefined && MOST_BUFFS_RE.test(sentence);
 }
 
-// "to the highest Speed Enemy" — Chakara's enemy-highest-speed target axis (SP-M M1 Task 6).
-// Crosses <unit-damage> tags. Verified against RAW CSV: '…deals 60% damage to the highest Speed
-// Enemy.'
-const HIGHEST_SPEED_ENEMY_RE = /\bhighest\s+speed\s+enemy\b/i;
+// "to the highest Speed Enemy" / "to the enemy with the highest speed" — Chakara's
+// enemy-highest-speed target axis. Crosses <unit-damage> tags.
+const HIGHEST_SPEED_ENEMY_RE =
+    /\bhighest\s+speed\s+enemy\b|\benemy\s+with\s+the\s+highest\s+speed\b/i;
 
 /**
- * Returns true when `anchorPos` falls inside the sentence carrying the "highest Speed Enemy"
- * phrase (Chakara p4's round-start-continuation damage clause); otherwise false.
+ * Returns true when `anchorPos` falls inside a sentence naming the highest-speed enemy
+ * (HIGHEST_SPEED_ENEMY_RE — Chakara's round-start-continuation damage clause); otherwise false.
  * Position-scoped on the RAW text (mirrors detectMostBuffsTarget's sentence-scoping).
- * Reference data: docs/ship-skills.csv (Chakara).
  */
 export function parseHighestSpeedEnemyTarget(
     text: string | null | undefined,
@@ -2977,18 +2976,17 @@ export function parseHighestSpeedEnemyTarget(
     return sentence !== undefined && HIGHEST_SPEED_ENEMY_RE.test(sentence);
 }
 
-// "the highest attack enemy" — Selenite's enemy-highest-attack target axis (Ship-kit W8 Task 5).
-// Narrowly matched (hyphen-or-space between "highest" and "attack") so it doesn't retarget other
-// ships' plain enemy debuffs that merely co-occur with "Attack" text elsewhere in the sentence.
-// Verified against RAW CSV: '…the highest attack enemy is applied with Concentrate Fire for 1
-// turn.'
-const HIGHEST_ATTACK_ENEMY_RE = /\bhighest[- ]attack\s+enemy\b/i;
+// "the highest attack enemy" / "the enemy with the highest attack" — Selenite's
+// enemy-highest-attack target axis. Both forms name the enemy and the stat together, so a plain
+// enemy debuff that merely co-occurs with "Attack" text elsewhere in the sentence is not
+// retargeted.
+const HIGHEST_ATTACK_ENEMY_RE =
+    /\bhighest[- ]attack\s+enemy\b|\benemy\s+with\s+the\s+highest\s+attack\b/i;
 
 /**
- * Returns true when `anchorPos` falls inside the sentence carrying the "highest attack enemy"
- * phrase (Selenite p3's start-of-round Concentrate Fire debuff); otherwise false.
+ * Returns true when `anchorPos` falls inside a sentence naming the highest-attack enemy
+ * (HIGHEST_ATTACK_ENEMY_RE — Selenite's start-of-round Concentrate Fire debuff); otherwise false.
  * Position-scoped on the RAW text (mirrors parseHighestSpeedEnemyTarget's sentence-scoping).
- * Reference data: docs/ship-skills.csv (Selenite).
  */
 export function parseHighestAttackEnemyTarget(
     text: string | null | undefined,
@@ -3682,24 +3680,21 @@ export function parseDefenseSubstitution(text: string | null | undefined): boole
     return DEFENSE_SUBSTITUTION_RE.test(normalised);
 }
 
-// Wave 4 Task 8 (FrontLine passive): "While Shielded, it gains 2500 additional Defense." A flat-
-// points DEFENSIVE stat grant, gated on the owner CURRENTLY holding a shield — distinct from
-// every existing "additional <stat>" shape in the corpus, which is all percentage-of-a-stat
-// DAMAGE ("additional damage equal to N% of its Defense/Shield", parseSecondaryDamage). Scoped
-// to the "while shielded ... gains N additional defen[cs]e" phrase so it can't false-hit an
-// unrelated "additional damage" sentence elsewhere in the same (<br />-separated) passive text —
-// verified corpus-wide: exactly one ship (FrontLine, in both the R0 and R2 passive columns of the
-// same clause) matches `grep -io "while shielded[^.]*"`/`"additional defen[cs]e[^.]*"` against
-// docs/ship-skills.csv.
+// FrontLine's passive: "While Shielded, it gains 2500 additional Defense." / "while it has an
+// active shield, it gains 2500 defense". A flat-points DEFENSIVE stat grant, gated on the owner
+// CURRENTLY holding a shield — distinct from the percentage-of-a-stat DAMAGE "additional damage
+// equal to N% of its Defense/Shield" (parseSecondaryDamage). Both forms require the "while"
+// shield gate immediately before "gains N … defense", so an unrelated "additional damage" or
+// "if this Unit has an active shield" sentence in the same passive text cannot match.
 const WHILE_SHIELDED_FLAT_DEFENCE_RE =
-    /while\s+shielded[,]?\s+(?:it\s+)?gains\s+(\d+)\s+additional\s+defen[cs]e/i;
+    /while\s+(?:shielded|it\s+has\s+an\s+active\s+shield)[,]?\s+(?:it\s+)?gains\s+(\d+)\s+(?:additional\s+)?defen[cs]e/i;
 
 /**
- * Returns the flat Defense points granted by a "While Shielded, it gains N additional Defense"
- * clause, or undefined if no such clause is present. The build layer (buildShipAbilities) turns
- * this into a `conditional-stat` ability (`condition:'self-shield'`) consumed directly by the
- * engine's `substitutedDefenceFor` defensive-read seam — never through the on-cast ability-fold/
- * executor pipeline (see AbilityType's 'conditional-stat' doc comment).
+ * Returns the flat Defense points granted by a while-shielded clause
+ * (WHILE_SHIELDED_FLAT_DEFENCE_RE), or undefined if no such clause is present. The build layer
+ * (buildShipAbilities) turns this into a `conditional-stat` ability (`condition:'self-shield'`)
+ * consumed directly by the engine's `substitutedDefenceFor` defensive-read seam — never through
+ * the on-cast ability-fold/executor pipeline (see AbilityType's 'conditional-stat' doc comment).
  */
 export function parseWhileShieldedFlatDefence(text: string | null | undefined): number | undefined {
     if (!text) return undefined;
@@ -4067,11 +4062,14 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
         };
     }
 
-    // Phase 3 (Cobalt): start-of-turn self-charge gated on full HP. Placed after the
-    // inflict/repair reactive branches (those event triggers win if a text somehow carries
-    // both; no corpus ship does). condition 'always' is a placeholder — the real gate is in
-    // `conditions`.
-    if (START_OF_TURN_CHARGE_RE.test(low) && AT_FULL_HP_RE.test(low)) {
+    // Cobalt: a start-of-turn self-charge gated on full HP — "adds 1 charge … at the start of
+    // the turn if it is at full HP" or "Every turn this Unit adds 1 charge … if it is at full HP".
+    // The "every turn" alternate is accepted HERE only, beside the full-HP gate: widening
+    // START_OF_TURN_CHARGE_RE itself would also reach detectReactiveTrigger, where "gains 1 stack
+    // of Overload every turn" must keep its per-round stacking semantics. Placed after the
+    // inflict/repair reactive branches (those event triggers win if a text carries both).
+    // condition 'always' is a placeholder — the real gate is in `conditions`.
+    if ((START_OF_TURN_CHARGE_RE.test(low) || EVERY_TURN_RE.test(low)) && AT_FULL_HP_RE.test(low)) {
         return {
             amount,
             condition: 'always',
@@ -5490,15 +5488,15 @@ const PRE_COMBAT_PER_ADJACENT_ATTACK_RE =
 
 // Pattern C: role-gated self grants, both orderings. The stat-list capture is bounded to its
 // own sentence ([^.;]+?) so it can't swallow neighbouring clauses in multi-sentence passives.
-//   C1 trailing gate (Enforcer): "… this Unit gains +15% crit rate and +10% hacking if
-//   adjacent to a supporter."
-//   C2 leading gate (Defiant/Stalwart): "When (this Unit is) adjacent to a Supporter, this
-//   Unit gains 20% HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" verb, so
-//   it never matches this pattern; its "increases that Supporter's Defense by 20%…" clause is
-//   a DIFFERENT shape (a donor grant to the adjacent ally, not a self-gain) — see Pattern D
-//   below (Task 9).
+//   C1 trailing gate: "… this Unit gains +15% crit rate and +10% hacking if adjacent to a
+//   supporter." / "… this Unit gains 20% HP if its adjacent to a supporter." — the gate's
+//   subject ("it is" / "it's" / "its") is optional.
+//   C2 leading gate: "When (this Unit is) adjacent to a Supporter, this Unit gains 20%
+//   HP/Attack." — Madax's "receives 30% more Repairs…" has no "gains" verb, so it never
+//   matches this pattern; its "increases that Supporter's Defense by 20%…" clause is a
+//   DIFFERENT shape (a donor grant to the adjacent ally, not a self-gain) — see Pattern D below.
 const PRE_COMBAT_ROLE_GATE_TRAILING_RE =
-    /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
+    /this unit gains ([^.;]+?)\s+(?:if|when|while)\s+(?:it\s+is\s+|it['’]?s\s+)?adjacent to an?\s+(supporter|defender|attacker|debuffer)\b/gi;
 const PRE_COMBAT_ROLE_GATE_LEADING_RE =
     /when (?:this unit is )?adjacent to an?\s+(supporter|defender|attacker|debuffer),\s*this unit gains ([^.;]+?)(?=[.;]|$)/gi;
 
@@ -5542,8 +5540,7 @@ function preCombatStatFromKeyword(keyword: string): {
 
 /**
  * Parses permanent pre-fight base-stat passives ("At the start of combat, …" grants and
- * role-gated adjacency grants). Reference data: docs/ship-skills.csv — matches exactly
- * Lionheart (A), Centurion (B), Enforcer (C1), Defiant/Stalwart (C2). Timed start-of-combat
+ * role-gated adjacency grants — patterns A–D above). Timed start-of-combat
  * statuses ("gains N stacks of X", "gains a Shield/Taunt…") and Centurion's charged
  * Core-Charge grant have no matching shape here and stay with their existing parsers.
  */
