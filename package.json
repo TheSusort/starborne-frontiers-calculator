@@ -53,7 +53,8 @@
         "audit:gated-buffs": "tsx scripts/auditGatedBuffs.ts",
         "fetch:ship-skills": "tsx scripts/fetch-ship-skills.ts",
         "fetch:ship-data": "tsx scripts/fetch-ship-data.ts",
-        "fetch:ascension-stats": "tsx scripts/fetch-ascension-stats.ts",
+        "sync:catalogue": "tsx scripts/sync-unit-catalogue.ts",
+        "restore:ship-templates": "tsx scripts/restore-ship-templates.ts",
         "audit": "node scripts/audit.mjs",
         "admin:inactive-accounts": "tsx scripts/inactive-accounts.ts",
         "release": "tsx scripts/release.ts"
