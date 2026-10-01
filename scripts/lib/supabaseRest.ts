@@ -3,8 +3,8 @@ import 'dotenv/config';
 /**
  * Plain-fetch access to Supabase's REST surfaces, for admin scripts.
  *
- * Not `@supabase/supabase-js`: its realtime dependency needs a global WebSocket
- * and dies on Node 20, which is what this repo runs.
+ * Not `@supabase/supabase-js`: its realtime dependency needs a global WebSocket, and plain
+ * fetch keeps these scripts free of that requirement.
  */
 
 const url = process.env.VITE_SUPABASE_URL;
@@ -79,3 +79,41 @@ export const listAuthUsers = async (): Promise<AuthUser[]> => {
         if (body.users.length < PAGE) return users;
     }
 };
+
+const send = async (method: string, path: string, body?: unknown, prefer?: string): Promise<Response> => {
+    const res = await fetch(`${baseUrl}/rest/v1/${path}`, {
+        method,
+        headers: headers({
+            'Content-Type': 'application/json',
+            ...(prefer ? { Prefer: prefer } : {}),
+        }),
+        body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`${method} ${path} -> ${res.status} ${await res.text()}`);
+    return res;
+};
+
+const inList = (ids: string[]) => `in.(${ids.map((id) => `"${id.replace(/"/g, '\\"')}"`).join(',')})`;
+
+/** PATCH one row by id. Throws unless exactly one row was updated: a PATCH matching nothing still answers 200. */
+export const patchRow = async (
+    table: string,
+    idColumn: string,
+    id: string,
+    patch: Record<string, unknown>
+): Promise<void> => {
+    const res = await send('PATCH', `${table}?${idColumn}=eq.${encodeURIComponent(id)}`, patch, 'return=representation');
+    const rows: unknown = await res.json();
+    const count = Array.isArray(rows) ? rows.length : 0;
+    if (count !== 1) throw new Error(`PATCH ${table} ${idColumn}=${id} updated ${count} rows, expected 1`);
+};
+
+export const insertRows = (table: string, rows: Record<string, unknown>[]) =>
+    send('POST', table, rows, 'return=minimal');
+
+/** Insert-or-replace on `onConflict` (the primary key column). */
+export const upsertRows = (table: string, rows: Record<string, unknown>[], onConflict: string) =>
+    send('POST', `${table}?on_conflict=${onConflict}`, rows, 'resolution=merge-duplicates,return=minimal');
+
+export const deleteRows = (table: string, idColumn: string, ids: string[]) =>
+    send('DELETE', `${table}?${idColumn}=${encodeURIComponent(inList(ids))}`, undefined, 'return=minimal');

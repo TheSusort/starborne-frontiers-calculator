@@ -1,0 +1,226 @@
+{
+ "unit": {
+  "id": "MPL_Defender_Common_1",
+  "slug": "bedrock",
+  "name": "Bedrock",
+  "rarity": "Common",
+  "faction": "MPL",
+  "affinity": "Blue",
+  "role": "Defender",
+  "shipVisualKey": "MPL_7",
+  "skins": [],
+  "images": {
+   "avatar": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/MPL_1_Loot.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "bigPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/MPL_1_BigPortrait.png?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D",
+   "fullPortrait": "https://starbornemedia.blob.core.windows.net/asset-images/frontiers/units/MPL_1_FullPortrait.webp?sv=2025-07-05&spr=https&st=2026-08-20T10%3A39%3A08Z&se=2040-03-21T10%3A39%3A00Z&sr=c&sp=rl&sig=7rY5vnwL52yUIOHmpnUL4I6gsjM6EdNGZGHgTLo3zP4%3D"
+  },
+  "stats": {
+   "CritBoost": 0.2,
+   "CritChance": 0.03,
+   "CritResistance": 0,
+   "Defense": 2361,
+   "DefensePenetration": 0,
+   "HullPoints": 17223,
+   "Initiative": 57,
+   "Manipulation": 83,
+   "Power": 2108,
+   "Security": 21,
+   "ShieldPenetration": 0,
+   "ShieldPoints": 1000000
+  },
+  "ascensionStats": [
+   {
+    "level": 1,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 2,
+    "attribute": "HullPoints",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 3,
+    "attribute": "Security",
+    "type": "Flat",
+    "value": 15
+   },
+   {
+    "level": 4,
+    "attribute": "Power",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 5,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.05
+   },
+   {
+    "level": 6,
+    "attribute": "Defense",
+    "type": "Percentage",
+    "value": 0.1
+   }
+  ],
+  "skills": [
+   {
+    "id": "MPL_COM_Defender_1_ACTIVE_BASIC",
+    "levels": [
+     {
+      "id": "MPL_COM_Defender_1_ACTIVE_BASIC_LVL_1",
+      "level": 1,
+      "name": "Fragment Launcher",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "50% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_31",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "MPL_COM_Defender_1_ACTIVE_BASIC_LVL_2",
+      "level": 2,
+      "name": "Fragment Launcher",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "60% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_31",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "MPL_COM_Defender_1_ACTIVE_BASIC_LVL_3",
+      "level": 3,
+      "name": "Fragment Launcher",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "75% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_31",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     },
+     {
+      "id": "MPL_COM_Defender_1_ACTIVE_BASIC_LVL_4",
+      "level": 4,
+      "name": "Fragment Launcher",
+      "kind": "Active",
+      "descriptionSegments": [
+       {
+        "text": "This Unit deals "
+       },
+       {
+        "text": "90% damage",
+        "color": "#EE6F1A"
+       },
+       {
+        "text": "."
+       }
+      ],
+      "displayTags": [
+       "Damage"
+      ],
+      "operationCategories": [
+       "Damage"
+      ],
+      "targetingDataIncomplete": true,
+      "iconKey": "a_31",
+      "targetings": [
+       {
+        "labels": [],
+        "targeting": {
+         "shape": "Front",
+         "side": "Enemy",
+         "pattern": []
+        }
+       }
+      ],
+      "statusEffects": []
+     }
+    ]
+   }
+  ],
+  "ascensionSkills": []
+ }
+}

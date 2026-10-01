@@ -1,0 +1,132 @@
+name: Unit catalogue sync
+
+on:
+    schedule:
+        - cron: '17 5 * * *'
+    workflow_dispatch:
+        inputs:
+            dry_run:
+                description: 'Report only, write nothing'
+                type: boolean
+                default: false
+
+permissions:
+    contents: read
+    issues: write
+
+concurrency:
+    group: unit-catalogue-sync
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        # A dispatched dry run is allowed before the sync is enabled, to review it first.
+        if: vars.CATALOGUE_SYNC_ENABLED == 'true' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)
+        runs-on: ubuntu-latest
+        timeout-minutes: 20
+        env:
+            VITE_SUPABASE_URL: ${{ secrets.CATALOGUE_SYNC_SUPABASE_URL }}
+            SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        steps:
+            - uses: actions/checkout@v7
+
+            - uses: actions/setup-node@v7
+              with:
+                  node-version-file: .nvmrc
+                  cache: npm
+
+            - run: npm ci
+
+            - name: Read catalogue manifest
+              id: manifest
+              run: npx tsx scripts/sync-unit-catalogue.ts --print-cache-key >> "$GITHUB_OUTPUT"
+
+            - name: Skip if this catalogue state was already synced
+              id: seen
+              if: github.event_name == 'schedule'
+              uses: actions/cache/restore@v6
+              with:
+                  path: .catalogue-sync-outcome.json
+                  key: ${{ steps.manifest.outputs.key }}
+                  lookup-only: true
+
+            - name: Sync
+              id: sync
+              if: steps.seen.outputs.cache-hit != 'true'
+              continue-on-error: true
+              run: >
+                  npx tsx scripts/sync-unit-catalogue.ts
+                  ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '--write' }}
+                  --report sync-report.md
+                  --issue-body issue-body.md
+                  --outcome .catalogue-sync-outcome.json
+                  --backup-dir backups
+
+            # A step summary over 1 MiB is dropped, so the report is cut short of it; the artifact keeps it whole.
+            - name: Job summary
+              if: steps.seen.outputs.cache-hit != 'true'
+              run: |
+                  if [ -f sync-report.md ]; then
+                      head -c 1000000 sync-report.md >> "$GITHUB_STEP_SUMMARY"
+                      if [ "$(wc -c < sync-report.md)" -gt 1000000 ]; then
+                          printf '\n\n…truncated; the full report is in the run artifact.\n' >> "$GITHUB_STEP_SUMMARY"
+                      fi
+                  else
+                      echo "no report written" >> "$GITHUB_STEP_SUMMARY"
+                  fi
+
+            - name: Keep snapshot and report
+              if: steps.seen.outputs.cache-hit != 'true'
+              uses: actions/upload-artifact@v7
+              with:
+                  name: catalogue-sync-${{ github.run_id }}
+                  path: |
+                      backups/
+                      sync-report.md
+                      issue-body.md
+                  retention-days: 90
+                  if-no-files-found: warn
+
+            - name: Read outcome
+              id: outcome
+              if: steps.seen.outputs.cache-hit != 'true'
+              run: echo "status=$(node -p "try{require('./.catalogue-sync-outcome.json').status}catch{'failed'}")" >> "$GITHUB_OUTPUT"
+
+            - name: File or update the catalogue-sync issue
+              id: issue
+              if: >
+                  steps.seen.outputs.cache-hit != 'true' &&
+                  steps.outcome.outputs.status != 'clean' &&
+                  !(github.event_name == 'workflow_dispatch' && inputs.dry_run)
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  STATUS: ${{ steps.outcome.outputs.status }}
+                  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+              run: |
+                  gh label create catalogue-sync --color 5319e7 --description "Unit catalogue sync" --force
+                  [ -f issue-body.md ] || echo "Sync crashed before writing a report." > issue-body.md
+                  hash=$(sha256sum issue-body.md | cut -c1-16)
+                  { echo "<!-- report:$hash -->"; echo "Status: **$STATUS** · [run]($RUN_URL) · full report in the job summary, snapshot in the run's artifacts"; echo; cat issue-body.md; } > body.md
+                  issue=$(gh issue list --label catalogue-sync --state open --json number --jq '.[0].number')
+                  if [ -z "$issue" ]; then
+                      gh issue create --title "Unit catalogue sync needs attention" --label catalogue-sync --body-file body.md
+                  elif ! gh issue view "$issue" --json body,comments --jq '[.body] + [.comments[].body] | join("\n")' | grep -q "report:$hash"; then
+                      gh issue comment "$issue" --body-file body.md
+                  fi
+
+            # Held and failed statuses are retried on the next scheduled run, so neither is marked as synced.
+            # Nor is a run whose issue filing failed, so the next run files it again.
+            - name: Mark this catalogue state synced
+              if: >
+                  steps.seen.outputs.cache-hit != 'true' &&
+                  !(github.event_name == 'workflow_dispatch' && inputs.dry_run) &&
+                  (steps.outcome.outputs.status == 'clean' || steps.outcome.outputs.status == 'attention') &&
+                  steps.issue.outcome != 'failure'
+              uses: actions/cache/save@v6
+              with:
+                  path: .catalogue-sync-outcome.json
+                  key: ${{ steps.manifest.outputs.key }}
+
+            - name: Fail the job when the sync failed
+              if: steps.outcome.outputs.status == 'failed'
+              run: exit 1

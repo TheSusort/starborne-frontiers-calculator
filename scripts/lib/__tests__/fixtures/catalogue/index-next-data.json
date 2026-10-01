@@ -1,0 +1,53 @@
+{
+ "buildId": "XgQ8KQQL9Xcr0PgYLHlT4",
+ "props": {
+  "pageProps": {
+   "manifest": {
+    "schemaVersion": 1,
+    "build": "33566",
+    "gameVersion": "3.22.33566",
+    "unitCount": 150,
+    "unitsSha256": "73ce9920ab99b1200cf288db10543af3acde3a89722ae8e38795ea8c1d0fd4e0",
+    "statusEffectCount": 188,
+    "statusEffectsSha256": "621f1c942c4191a3121b893e1405e95a5c3797120e251772b36edbbb02848496",
+    "localeSha256": {
+     "ar": "a3a399aec09c7e835f8e5917894794a9b9fbf25999973aa437f989222760f705",
+     "zh-CN": "2394382c1eaaeb3d076f197681e93da602667b32830673181a949ca2f7b176ca",
+     "fr": "8b63a4e9c3d74ea2849cfa6e0e4cea2536bf59615ad28725fb23a9a0a1861c9b",
+     "de": "d37c5a297f6faaeff58e600c48a299ec24365639461814e5bfb7b82f88dc5671",
+     "is": "6923edc31f3f1d94394f50bb9c555b8938af96884b1cc3bb58ab8561fd2134af",
+     "id": "ab6da00575449de5474ece7b9fac6a23183207a5ec6737841c56a01cbb812189",
+     "it": "2245f20b551f06cc67d6f910df8b4df7b5e84d0a8ef68c0f3caa16b2cb144b2d",
+     "ja": "6cdebd37639994e8c0bd6e750c08d7487d6c122d11a65a14fad1c0b5790a80c6",
+     "ko": "b01017c0abe6674cb02204143b0bbc4306f771f37d1f0beaa008e983ba9e33ad",
+     "pl": "fc2d0061634a5c488122f6cd27f32b509df0f2b51dc8556513f24fd4237a10a0",
+     "pt-BR": "75a0a615ead09d069fa6bf811f9a06950330041415a8771c12ed3d50dd80fef9",
+     "pt-PT": "f974003ce7ca5a09193938d9a11a9b63121a6f45f636362b3fd954508db041c0",
+     "ru": "d24715d72e610ea670a286ce23ef8fe5be9f60d323213389ecf26980ef008dd9",
+     "es": "21714e95b171224cab98b0d40df66d5e32113da002367523c6922c4ac27c9d99",
+     "th": "7978bc46e6db9b84d55913b73bf2c458dd988084c239117f93780b2c5db8c21c",
+     "tr": "b3cdd30a064825a8a11b719a571d963f5212bb82f313ced2b0b281238594fe61",
+     "vi": "f868dac385661eefd7998f3a54aafaaadc32ef5e357f96b6c942838644fd5d96",
+     "en": "548406893fd7625157aa8f31c61e71a8e68718638de07f8aac36f7352af7e37e"
+    }
+   },
+   "units": [
+    {
+     "id": "Atlas_Supporter_Legendary_1",
+     "slug": "aegis",
+     "name": "AEGIS"
+    },
+    {
+     "id": "XAOC_Attacker_Legendary_3",
+     "slug": "akula",
+     "name": "Akula"
+    },
+    {
+     "id": "Everliving_Debuffer_Legendary_3",
+     "slug": "amartya",
+     "name": "Amartya"
+    }
+   ]
+  }
+ }
+}
