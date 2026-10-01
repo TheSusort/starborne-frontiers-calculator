@@ -2758,10 +2758,10 @@ export function detectEnemyPurgedTrigger(
 const ALLY_PURGED_RE =
     /\bwhen\b[^.;]*\bbuff\b[^.;]*\bis\b[^.;]*\bpurged\b[^.;]*\bfrom\s+an?\s+ally/i;
 
-// "purges N more buff" — Sefuba p2 chain-purge count extractor.
-// Capture group 1 = digit string or 'a'/'an' (→ count 1). Crosses <unit-aid> tags.
-// Verified: matches 'purges 1</unit-aid> more buff' with group 1 = '1'; no match on p1.
-export const PURGE_MORE_RE = /\bpurges?\s+(\d+|an?)\s*(?:<\/?[^>]*>)?\s*more\b/i;
+// "purges N more buff" / "purges N extra buff" — the chain-purge count of an on-enemy-purged
+// reaction (Sefuba). Capture group 1 = digit string or 'a'/'an' (→ count 1). One tag may sit
+// between the count and the word ("purges 1</unit-aid> more buff").
+export const PURGE_MORE_RE = /\bpurges?\s+(\d+|an?)\s*(?:<\/?[^>]*>)?\s*(?:more|extra)\b/i;
 
 /**
  * Returns 'on-ally-purged' when `anchorPos` falls inside the sentence carrying the
@@ -2986,10 +2986,10 @@ export function detectPurgeEnemyTypeCondition(
         : undefined;
 }
 
-// "repaired this round" — Nayra's charged purge + its Stasis/Exposed inflicts. The
-// gate word ("if"/"when") is already verified by detectGrantConditions' conditional
-// guard / by rawSentenceAround's sentence scoping, so the phrase alone is enough.
-// Corpus-unique to Nayra (verified: 1 row). No <unit-…> tags intervene in the phrase.
+// "repaired this round" — the target-repaired-this-round gate (Nayra's charged purge and
+// Stasis/Exposed inflicts, Zosimos's active charge gain). Every reader tests it against the
+// gated clause's own sentence, whose "if" is the gate, so the phrase alone is enough. No
+// <unit-…> tags intervene in the phrase.
 const REPAIRED_THIS_ROUND_RE = /\brepaired\s+this\s+round\b/i;
 
 // "the enemy with the most buffs" — Rhodium most-buffs target axis. Crosses <unit-aid> tags.
@@ -4164,6 +4164,19 @@ export function parseChargeGain(text: string | null | undefined): ChargeGain | n
                     hpSubject: 'self',
                 },
             ],
+        };
+    }
+
+    // "If the target was repaired this round, this Unit adds 1 charge …" — an on-cast gain gated
+    // on the cast's target having been repaired earlier this round. Read from the charge clause's
+    // own sentence so a repair gate elsewhere in the text cannot reach it. Same `conditions`
+    // escape hatch as the Cobalt branch above (condition:'always' is a placeholder).
+    if (REPAIRED_THIS_ROUND_RE.test(rawSentenceAround(plain, m.index) ?? '')) {
+        return {
+            amount,
+            condition: 'always',
+            derivable: true,
+            conditions: [{ subject: 'target-repaired-this-round', derivable: true }],
         };
     }
 

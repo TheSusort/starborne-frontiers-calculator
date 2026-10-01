@@ -2788,7 +2788,7 @@ function abilitiesFromText(
         });
     }
 
-    // C2b-1 T5: Sefuba chain purge — "purges N more buff from the enemy" on on-enemy-purged.
+    // Sefuba chain purge — "purges N more/extra buff from the enemy" on on-enemy-purged.
     // Emitted here, separately from the generic loop above. Sefuba's passive sentences carry no
     // recognized purge trigger (on-attacked/end-of-round/killed-by-direct), so the generic loop's
     // trigger-detection `continue` skips both of Sefuba p2's parsePurge matches — there is no

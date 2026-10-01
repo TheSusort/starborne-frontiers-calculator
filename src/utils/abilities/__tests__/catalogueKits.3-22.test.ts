@@ -195,3 +195,36 @@ describe('3.22 kits — damage clauses', () => {
         expect(dmg.scaling).toBeUndefined();
     });
 });
+
+describe('3.22 kits — charge, purge and repair clauses', () => {
+    it('Zosimos active: the charge gain is gated on the target having been repaired this round', () => {
+        const text =
+            'This Unit deals <unit-damage>170% damage</unit-damage> and inflicts <unit-skill>Inc. Damage Up II</unit-skill> for 2 turns. If the target was repaired this round, this Unit <unit-skill>adds 1 charge</unit-skill> to its charged skill.';
+        const abilities = parseSlot('active', text);
+        expect(sigs(abilities)).toEqual(
+            sorted([
+                'damage|enemy|on-cast|damage',
+                'debuff|enemy|on-cast|Inc. Damage Up II',
+                'charge|self|on-cast|charge',
+            ])
+        );
+        expect(only(abilities, 'charge')).toMatchObject({
+            config: { amount: 1 },
+            conditions: [{ subject: 'target-repaired-this-round', derivable: true }],
+        });
+        // The repair gate belongs to the charge sentence only.
+        expect(only(abilities, 'damage').conditions).toEqual([]);
+        expect(only(abilities, 'debuff').conditions).toEqual([]);
+    });
+
+    it('Sefuba passive R2: purging an enemy buff repairs 8% and purges 1 extra buff', () => {
+        const text =
+            'When this Unit <unit-skill>purges a buff</unit-skill> from an enemy, it <unit-damage>repairs 8%</unit-damage> of its max HP for each <unit-aid>buff</unit-aid> removed and also <unit-skill>purges 1 extra buff</unit-skill> from the enemy.';
+        const abilities = parseSlot('passive', text);
+        expect(sigs(abilities)).toEqual(
+            sorted(['heal|self|on-enemy-purged|heal', 'purge|enemy|on-enemy-purged|purge'])
+        );
+        expect(only(abilities, 'heal').config).toMatchObject({ pct: 8, basis: 'hp' });
+        expect(only(abilities, 'purge').config).toMatchObject({ count: 1 });
+    });
+});
