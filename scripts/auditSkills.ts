@@ -31,7 +31,7 @@ import {
 // Paths are relative to the repo root (npm run sets cwd there).
 const OUT_PATH = 'docs/skill-audit.md';
 
-interface ShipRow {
+export interface ShipRow {
     name: string;
     slots: { slot: string; text: string }[];
 }
@@ -518,43 +518,46 @@ export function csvAvailable(): boolean {
     return libCsvAvailable(CSV_PATH);
 }
 
+/** Coverage findings for one ship's slots. Records allowlist consultation like `collectFindings`. */
+export function findingsForShip(ship: ShipRow): Finding[] {
+    const findings: Finding[] = [];
+    for (const { slot, text } of ship.slots) {
+        const plain = stripTags(text);
+        const abilities = abilitiesFor(text);
+        for (const rule of RULES) {
+            if (!rule.keyword(plain)) continue;
+            if (rule.handled(abilities, plain)) continue;
+            if (isAllowed(ship.name, rule.id)) continue;
+            findings.push({
+                ship: ship.name,
+                slot,
+                rule: rule.id,
+                severity: rule.severity,
+                clause: plain.trim().slice(0, 160),
+            });
+        }
+
+        const ungated = ungatedFinding(abilities, plain);
+        if (ungated && !isAllowed(ship.name, 'ungated-effect-with-trigger')) {
+            findings.push({
+                ship: ship.name,
+                slot,
+                rule: 'ungated-effect-with-trigger',
+                severity: 'medium',
+                clause: ungated,
+            });
+        }
+    }
+    return findings;
+}
+
 /** Pure pass: every coverage finding across all ships (no I/O side effects beyond reading the CSV). */
 export function collectFindings(): { findings: Finding[]; shipCount: number } {
     consultedAllowKeys.clear();
     auditedShipNames.clear();
     const ships = readShips();
     for (const s of ships) auditedShipNames.add(s.name);
-    const findings: Finding[] = [];
-
-    for (const ship of ships) {
-        for (const { slot, text } of ship.slots) {
-            const plain = stripTags(text);
-            const abilities = abilitiesFor(text);
-            for (const rule of RULES) {
-                if (!rule.keyword(plain)) continue;
-                if (rule.handled(abilities, plain)) continue;
-                if (isAllowed(ship.name, rule.id)) continue;
-                findings.push({
-                    ship: ship.name,
-                    slot,
-                    rule: rule.id,
-                    severity: rule.severity,
-                    clause: plain.trim().slice(0, 160),
-                });
-            }
-
-            const ungated = ungatedFinding(abilities, plain);
-            if (ungated && !isAllowed(ship.name, 'ungated-effect-with-trigger')) {
-                findings.push({
-                    ship: ship.name,
-                    slot,
-                    rule: 'ungated-effect-with-trigger',
-                    severity: 'medium',
-                    clause: ungated,
-                });
-            }
-        }
-    }
+    const findings = ships.flatMap(findingsForShip);
     return { findings, shipCount: ships.length };
 }
 
