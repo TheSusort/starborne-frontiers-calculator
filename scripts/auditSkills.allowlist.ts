@@ -100,6 +100,18 @@ export const ALLOWLIST: AllowEntry[] = [
         reason: 'Shield penetration already filled as a ship stat by import/template data.',
     })),
 
+    // ── defense-penetration-innate: handled at the DATA layer, not the parser ────
+    // "This Unit has X% defense penetration" describes the refit ascension stat (user ruling
+    // 2026-10-02), which the ship's stats already carry; parsing the clause would double-count.
+    // Verified against the official catalogue's ascensionStats: Judge DefensePenetration 0.2 at
+    // level 0 (innate), Ravager 0.1 at level 2. Ravager's entry only suppresses the catalogue
+    // text ("This Unit has 10% defense penetration"); ours reads "ignores 10% of Defense".
+    ...['Judge', 'Ravager'].map((ship) => ({
+        ship,
+        rules: ['defense-penetration-innate'],
+        reason: 'Defense penetration is the refit ascension stat the ship already carries.',
+    })),
+
     // Burst-explosion reference — not an accumulate-detonate application.
     {
         ship: 'Valkyrie',

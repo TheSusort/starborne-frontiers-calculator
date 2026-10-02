@@ -12,7 +12,10 @@
  */
 import { readFileSync, writeFileSync } from 'fs';
 import { pathToFileURL } from 'url';
-import { buildShipAbilities } from '../src/utils/abilities/buildShipAbilities';
+import {
+    buildShipAbilities,
+    UNIT_HAS_DEFENSE_PENETRATION_RE,
+} from '../src/utils/abilities/buildShipAbilities';
 import {
     canonicaliseStatusNames,
     detectDamageReactionTrigger,
@@ -193,11 +196,23 @@ const RULES: Rule[] = [
         severity: 'medium',
         // Epic PR12(B): also matches "bypassing N% of the enemy Defense" (Chakara) — a
         // differently-worded synonym for the same defensePenetration modifier as the
-        // "X% defense penetration" phrasing.
+        // "X% defense penetration" phrasing. The unit-subject "has X% defense penetration" is
+        // `defense-penetration-innate`'s, never this rule's.
         keyword: (t) =>
-            /defense\s+penetration/i.test(t) ||
+            (/defense\s+penetration/i.test(t) && !UNIT_HAS_DEFENSE_PENETRATION_RE.test(t)) ||
             /bypassing\s+\d+(?:\.\d+)?%\s+of\s+the\s+enemy\s+defense/i.test(t),
         handled: (a) => hasModifier(a, 'defensePenetration'),
+    },
+    {
+        id: 'defense-penetration-innate',
+        severity: 'medium',
+        // "This Unit (…) has X% defense penetration". Deliberately NEVER parser-handled: the
+        // clause describes the refit ascension stat, which already reaches the ship's stats
+        // (user ruling 2026-10-02), so parsing it would double-count. The allowlist records the
+        // known ships; a NEW ship matching this keyword should have its ascension stat
+        // verified, then be allowlisted.
+        keyword: (t) => UNIT_HAS_DEFENSE_PENETRATION_RE.test(t),
+        handled: () => false,
     },
     {
         id: 'incoming-damage-reduction',

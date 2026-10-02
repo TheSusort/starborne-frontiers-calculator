@@ -319,3 +319,65 @@ describe('damage, defence and charge clauses — tagged mechanic phrases are not
         }
     });
 });
+
+// User ruling (2026-10-02): "This Unit has N% defense penetration" in passive text DESCRIBES the
+// refit ascension stat (Judge's innate 20%, Ravager's refit-2 10%), which already reaches the
+// ship's stats, so it never mints a modifier of its own. A skill-scoped "This skill has N% defense
+// penetration" (Chakara's charged) is not a ship stat and still mints one.
+describe('damage, defence and charge clauses — defense penetration describes the refit stat', () => {
+    const defPen = (slot: 'active' | 'charged' | 'passive', text: string) =>
+        parseSlot(slot, text).filter(
+            (a) => a.config.type === 'modifier' && a.config.channel === 'defensePenetration'
+        );
+
+    it.each([
+        {
+            label: 'Judge passive R0, our text',
+            text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.',
+        },
+        {
+            label: 'Judge passive R0, catalogue text',
+            text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage>.<br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.',
+        },
+        {
+            label: 'Judge passive R2, our text',
+            text: 'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.<br /><br />This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.',
+        },
+    ])('$label: no defense-penetration modifier; the round-start hit still parses', ({ text }) => {
+        expect(defPen('passive', text)).toEqual([]);
+        const s = sigs(parseSlot('passive', text));
+        expect(s).toContain('damage|all-enemies|start-of-round|damage');
+    });
+
+    it('Judge passive R2: the per-destroyed-enemy damage modifier is the only modifier', () => {
+        const text =
+            'This Unit ignores <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects and has <unit-damage>20% defense penetration</unit-damage><br /><br />At the start of the round, this Unit deals <unit-damage>60% damage</unit-damage> to all enemies with less than 50% HP.<br /><br />This Unit deals <unit-damage>20% more direct damage</unit-damage> for each destroyed enemy, up to max of 100%.';
+        const mods = parseSlot('passive', text).filter((a) => a.type === 'modifier');
+        expect(mods.map((a) => a.config)).toEqual([
+            expect.objectContaining({ type: 'modifier', channel: 'outgoingDamage' }),
+        ]);
+    });
+
+    it('Ravager passive R2: the catalogue text parses like ours, with no modifier', () => {
+        const old =
+            'This Unit ignores 10% of Defense. It gains 1 stack of <unit-skill>Overload</unit-skill> every turn. Upon killing an enemy, it loses <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns. If its debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn.';
+        const next =
+            "This Unit gains 1 stack of <unit-skill>Overload</unit-skill> every turn and, upon destroying an enemy, removes <unit-skill>Overload</unit-skill> and gains <unit-skill>Marauder Rage III</unit-skill> for 3 turns.<br /><br />If this Unit's debuff is resisted, it gains <unit-skill>Hacking Module Overdrive</unit-skill> for 1 turn. This Unit has <unit-damage>10% defense penetration</unit-damage>.";
+        const before = parseSlot('passive', old);
+        expect(sigs(before)).toContain('buff|self|on-own-debuff-resisted|Hacking Module Overdrive');
+        expect(defPen('passive', next)).toEqual([]);
+        expect(sigs(parseSlot('passive', next))).not.toContain('modifier|self|on-cast|modifier');
+        expect(canonical(parseSlot('passive', next))).toEqual(canonical(before));
+    });
+
+    it('Chakara charged: "This skill has 20% defense penetration" still mints the skill-scoped pen', () => {
+        const old =
+            'This Unit deals <unit-damage>220% damage</unit-damage> with an additional amount equal to <unit-damage>100%</unit-damage> of its Defense, bypassing 20% of the enemy Defense, and <unit-aid>purges 1</unit-aid> buff from the enemy.';
+        const next =
+            'This Unit deals <unit-damage>220% damage</unit-damage> with additional damage equal to <unit-damage>100%</unit-damage> of its defense and <unit-skill>purges 1 buff</unit-skill> from the enemy.<br /><br />This skill has <unit-damage>20% defense penetration</unit-damage>.';
+        expect(defPen('charged', next).map((a) => a.config)).toEqual([
+            { type: 'modifier', channel: 'defensePenetration', value: 20, isMultiplicative: false },
+        ]);
+        expect(canonical(parseSlot('charged', next))).toEqual(canonical(parseSlot('charged', old)));
+    });
+});

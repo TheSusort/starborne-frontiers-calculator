@@ -458,6 +458,12 @@ function hpProportionalScaling(
 const MORE_DAMAGE_ROLE_TAIL_RE =
     /^\s+(?:when\s+)?(?:to|against|targeting|damaging|attacking|hitting)\s+(?:an?\s+)?(defender|attacker|debuffer|supporter)s?\b/i;
 
+// "This Unit … has X% defense penetration" / "it has X% defense penetration": the unit's own
+// penetration stat stated in its skill text (tested on the sentence that carries the number).
+// Shared with the skill audit's `defense-penetration-innate` rule (scripts/auditSkills.ts).
+export const UNIT_HAS_DEFENSE_PENETRATION_RE =
+    /\b(?:this\s+unit|it)\b[^.]*?\bhas\s+\d+(?:\.\d+)?%\s+defense penetration\b/i;
+
 /**
  * Detects passive output/stat modifiers in a skill's text. Handles:
  *  - "X% more (direct) damage" → outgoing-damage modifier (self, or all-allies when
@@ -466,7 +472,9 @@ const MORE_DAMAGE_ROLE_TAIL_RE =
  *    a capped scaling modifier instead of a flat bonus.
  *  - "X% defense penetration for each buff it has, up to a max of Y%" → a per-self-buff
  *    scaling defense-penetration modifier (capped).
- *  - flat "has X% defense penetration" → a flat defense-penetration modifier (Judge).
+ *  - flat "This skill has X% defense penetration" / "bypassing X% of the enemy Defense" → a
+ *    flat defense-penetration modifier (Chakara's charged). A unit-subject "This Unit has X%
+ *    defense penetration" describes the refit stat and mints nothing (see the branch below).
  */
 function parseModifiers(text: string): ParsedModifier[] {
     const plain = stripTags(text).replace(/<br\s*\/?>/gi, '. ');
@@ -789,9 +797,18 @@ function parseModifiers(text: string): ParsedModifier[] {
             },
         });
     } else {
-        // flat "has X% defense penetration" (no per-buff scaling) — e.g. Judge passives.
+        // Flat "X% defense penetration" (no per-buff scaling). A unit-subject "This Unit (…) has
+        // X% defense penetration" DESCRIBES the refit ascension stat (user ruling 2026-10-02:
+        // Judge's innate 20%, Ravager's refit-2 10%), which already reaches the ship's stats, so
+        // it mints nothing — a modifier on top would count the penetration twice. A skill-scoped
+        // "This skill has X% defense penetration" is not a ship stat and mints the modifier.
         const flatPenM = plain.match(/(\d+(?:\.\d+)?)%\s+defense penetration(?!\s+for each)/i);
-        if (flatPenM) {
+        const describesShipStat =
+            !!flatPenM &&
+            UNIT_HAS_DEFENSE_PENETRATION_RE.test(sentenceContaining(plain, flatPenM.index!));
+        if (describesShipStat) {
+            // Nothing to mint — see above.
+        } else if (flatPenM) {
             out.push({
                 channel: 'defensePenetration',
                 value: parseFloat(flatPenM[1]),

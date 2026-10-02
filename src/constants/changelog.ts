@@ -15,6 +15,7 @@ export const UNRELEASED_CHANGES: string[] = [
     "Combat simulator: AEGIS and Nyxen's charged shield now reaches every ally in range.",
     'DPS calculator and Effect Index: Security Down III is now available as a debuff.',
     'Combat simulator: Ripper now gains Marauder Rage each time his debuff lands.',
+    "Combat simulator: Judge's defense penetration is no longer counted twice.",
 ];
 
 export const CHANGELOG: ChangelogEntry[] = [

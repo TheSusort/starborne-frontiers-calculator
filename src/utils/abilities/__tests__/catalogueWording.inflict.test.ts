@@ -117,9 +117,8 @@ describe('inflict/apply vocabulary — catalogue wording parses like ours', () =
     });
 });
 
-// Ravager R2's catalogue row also rewords its defense-penetration clause ("This Unit has 10%
-// defense penetration" mints a modifier the old "ignores 10% of Defense" does not), so the slot
-// cannot pair. Its resist reaction is pinned directly.
+// Ravager R2's resist reaction, pinned directly; the full row (including its "This Unit has 10%
+// defense penetration" clause) pairs in catalogueWording.clauses.test.ts.
 describe('inflict/apply vocabulary — resist reaction', () => {
     it('Ravager passive R2: "If this Unit\'s debuff is resisted" grants Hacking Module Overdrive on that resist', () => {
         const text =
