@@ -4534,10 +4534,10 @@ describe('parseStasisBreakExemption', () => {
     const UNGATED = { conditions: [] };
     const SHIELD_GATED = { conditions: [{ subject: 'self-shield', derivable: true }] };
 
-    it('detects Akula curly-apostrophe "don\'t break Stasis" — UNGATED', () => {
+    it('detects Akula "do not reduce Stasis" — UNGATED', () => {
         expect(
             parseStasisBreakExemption(
-                'This Unit’s attacks don’t break Stasis. Increases outgoing direct damage by up to 30% based on the target’s current HP percentage; the higher the percentage, the more the damage.'
+                "This Unit's attacks do not reduce <unit-skill>Stasis</unit-skill>, and also ignore <unit-skill>Taunt</unit-skill> and <unit-skill>Provoke</unit-skill> effects. <br /><br />This Unit <unit-damage>increases outgoing direct damage</unit-damage> based on the enemies current HP, up to <unit-damage>30%</unit-damage> when the enemy is at full HP."
             )
         ).toEqual(UNGATED);
     });
@@ -4834,7 +4834,7 @@ describe('parseChargeRemoval', () => {
     it('on-cast removal — Provider (amount 1)', () => {
         expect(
             parseChargeRemoval(
-                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
             )
         ).toEqual({ amount: 1, trigger: 'on-cast' });
     });
@@ -4895,7 +4895,7 @@ describe('parseChargeRemoval', () => {
         ).toEqual({ amount: 2, trigger: 'on-cast' });
         expect(
             parseChargeRemoval(
-                'This Unit deals 200% damage, removes 1 charge from the enemy, and extends active Damage Over Time effects by 1 turn.'
+                "This Unit deals <unit-damage>200% damage</unit-damage>, <unit-skill>removes 1 charge</unit-skill> from the enemy's charged skill and all <unit-skill>damage over time debuffs</unit-skill> are <unit-skill>extended by 1 turn</unit-skill>."
             )
         ).toEqual({ amount: 1, trigger: 'on-cast' });
         expect(

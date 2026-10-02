@@ -26,10 +26,8 @@ type EnemyAttacker = NonNullable<CombatEngineInput['enemyAttackers']>[number];
 
 // Verbatim docs/ship-skills.csv, Panon second_passive_skill_text (the refit-active row at R4).
 const PANON_P2 =
-    'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, ' +
-    'it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> ' +
-    'to itself for 3 turns.<br /><br />This Unit reduces all incoming damage by 20% when affected by ' +
-    '<unit-skill>Barrier Recharging</unit-skill>.';
+    'If this Unit is directly damaged and does not have <unit-skill>Barrier Recharging</unit-skill>, it gains <unit-skill>Barrier</unit-skill> for 1 turn and applies <unit-skill>Barrier Recharging</unit-skill> to itself for 3 turns.<br /><br />' +
+    'This Unit gains <unit-damage>20% damage reduction</unit-damage> from all sources when affected by <unit-skill>Barrier Recharging</unit-skill>.';
 
 const panonSkills = (): ShipSkills =>
     buildShipAbilities({
